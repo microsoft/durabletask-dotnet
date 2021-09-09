@@ -1,0 +1,51 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31622.56
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DurableTask", "src\DurableTask\DurableTask.csproj", "{666FDFBE-771E-40BD-8CC7-411D040224B1}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{6E392DF7-D89C-409F-AAC0-D90D026451CF}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+		.gitignore = .gitignore
+		submodules\protobuf\protos\orchestrator_service.proto = submodules\protobuf\protos\orchestrator_service.proto
+		README.md = README.md
+	EndProjectSection
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Microsoft.DurableTask.Protobuf", "submodules\protobuf\lib\dotnet\Microsoft.DurableTask.Protobuf.csproj", "{5128E165-9793-4172-B809-11227007E888}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BasicPatterns", "samples\BasicPatterns\BasicPatterns.csproj", "{F9812EB9-A3CD-4E80-8CEA-243AE2AF925F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DurableTask.Sdk.Tests", "test\DurableTask.Sdk.Tests\DurableTask.Sdk.Tests.csproj", "{B56EC428-222E-476E-BE3D-1ADE03B2BDF3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{666FDFBE-771E-40BD-8CC7-411D040224B1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{666FDFBE-771E-40BD-8CC7-411D040224B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{666FDFBE-771E-40BD-8CC7-411D040224B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{666FDFBE-771E-40BD-8CC7-411D040224B1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5128E165-9793-4172-B809-11227007E888}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5128E165-9793-4172-B809-11227007E888}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5128E165-9793-4172-B809-11227007E888}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5128E165-9793-4172-B809-11227007E888}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F9812EB9-A3CD-4E80-8CEA-243AE2AF925F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F9812EB9-A3CD-4E80-8CEA-243AE2AF925F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F9812EB9-A3CD-4E80-8CEA-243AE2AF925F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F9812EB9-A3CD-4E80-8CEA-243AE2AF925F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B56EC428-222E-476E-BE3D-1ADE03B2BDF3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B56EC428-222E-476E-BE3D-1ADE03B2BDF3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B56EC428-222E-476E-BE3D-1ADE03B2BDF3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B56EC428-222E-476E-BE3D-1ADE03B2BDF3}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {E42B951D-3936-42EA-83AD-C65591D76C91}
+	EndGlobalSection
+EndGlobal

@@ -24,7 +24,7 @@ using P = DurableTask.Protobuf;
 
 namespace DurableTask.Grpc;
 
-public class TaskHubGrpcClient : TaskHubClient, IAsyncDisposable
+public class TaskHubGrpcClient : TaskHubClient
 {
     readonly GrpcChannel workerGrpcChannel;
     readonly TaskHubClientServiceClient workerClient;
@@ -41,11 +41,11 @@ public class TaskHubGrpcClient : TaskHubClient, IAsyncDisposable
         this.logger = SdkUtils.GetLogger(builder.loggerFactory);
     }
 
-    public static TaskHubGrpcClient Create() => CreateBuilder().Build();
+    public static TaskHubClient Create() => CreateBuilder().Build();
 
     public static Builder CreateBuilder() => new();
 
-    public async ValueTask DisposeAsync()
+    public override async ValueTask DisposeAsync()
     {
         if (!this.isDisposed)
         {
@@ -105,6 +105,22 @@ public class TaskHubGrpcClient : TaskHubClient, IAsyncDisposable
         await this.workerClient.RaiseEventAsync(request);
     }
 
+
+    public override async Task TerminateAsync(string instanceId, object? output)
+    {
+        if (string.IsNullOrEmpty(instanceId))
+        {
+            throw new ArgumentNullException(nameof(instanceId));
+        }
+
+        string? serializedOutput = this.dataConverter.Serialize(output);
+        await this.workerClient.TerminateInstanceAsync(new P.TerminateRequest
+        {
+            InstanceId = instanceId,
+            Output = serializedOutput,
+        });
+    }
+
     /// <inheritdoc/>
     public override async Task<OrchestrationMetadata> WaitForInstanceStartAsync(
         string instanceId,
@@ -129,7 +145,7 @@ public class TaskHubGrpcClient : TaskHubClient, IAsyncDisposable
             throw new OperationCanceledException($"The {nameof(WaitForInstanceStartAsync)} operation was canceled.", e, cancellationToken);
         }
 
-        return new OrchestrationMetadata(response, this.dataConverter);
+        return new OrchestrationMetadata(response, this.dataConverter, getInputsAndOutputs);
     }
 
     /// <inheritdoc/>
@@ -156,7 +172,7 @@ public class TaskHubGrpcClient : TaskHubClient, IAsyncDisposable
             throw new OperationCanceledException($"The {nameof(WaitForInstanceCompletionAsync)} operation was canceled.", e, cancellationToken);
         }
 
-        return new OrchestrationMetadata(response, this.dataConverter);
+        return new OrchestrationMetadata(response, this.dataConverter, getInputsAndOutputs);
     }
 
     public sealed class Builder

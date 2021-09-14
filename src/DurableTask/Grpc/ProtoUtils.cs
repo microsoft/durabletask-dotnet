@@ -38,15 +38,23 @@ static class ProtoUtils
                     Name = proto.ExecutionStarted.Name,
                     Version = proto.ExecutionStarted.Version,
                     OrchestrationInstance = ConvertOrchestrationInstance(proto.ExecutionStarted.OrchestrationInstance),
-                    ParentInstance = null /* TODO: need to update protobuf schema */,
-                    Correlation = null /* TODO */,
-                    ScheduledStartTime = null /* TODO */,
+                    ParentInstance = proto.ExecutionStarted.ParentInstance == null ? null : new ParentInstance
+                    {
+                        Name = proto.ExecutionStarted.ParentInstance.Name,
+                        Version = proto.ExecutionStarted.ParentInstance.Version,
+                        OrchestrationInstance = ConvertOrchestrationInstance(proto.ExecutionStarted.ParentInstance.OrchestrationInstance),
+                        TaskScheduleId = proto.ExecutionStarted.ParentInstance.TaskScheduledId,
+                    },
+                    Correlation = proto.ExecutionStarted.CorrelationData,
+                    ScheduledStartTime = proto.ExecutionStarted.ScheduledStartTimestamp?.ToDateTime(),
                 };
                 break;
-            ////case P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted:
-            ////    break;
-            ////case P.HistoryEvent.EventTypeOneofCase.ExecutionFailed:
-            ////    break;
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted:
+                historyEvent = new ExecutionCompletedEvent(
+                    proto.EventId,
+                    proto.ExecutionCompleted.Result,
+                    ConvertOrchestrationRuntimeStatus(proto.ExecutionCompleted.OrchestrationStatus));
+                break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated:
                 historyEvent = new ExecutionTerminatedEvent(proto.EventId, proto.ExecutionTerminated.Input);
                 break;
@@ -122,10 +130,28 @@ static class ProtoUtils
                     Name = proto.EventRaised.Name,
                 };
                 break;
-            ////case P.HistoryEvent.EventTypeOneofCase.GenericEvent:
-            ////    break;
-            ////case P.HistoryEvent.EventTypeOneofCase.HistoryState:
-            ////    break;
+            case P.HistoryEvent.EventTypeOneofCase.GenericEvent:
+                historyEvent = new GenericEvent(proto.EventId, proto.GenericEvent.Data);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.HistoryState:
+                historyEvent = new HistoryStateEvent(
+                    proto.EventId,
+                    new OrchestrationState
+                    {
+                        OrchestrationInstance = new OrchestrationInstance
+                        {
+                            InstanceId = proto.HistoryState.OrchestrationState.InstanceId,
+                        },
+                        Name = proto.HistoryState.OrchestrationState.Name,
+                        Version = proto.HistoryState.OrchestrationState.Version,
+                        ScheduledStartTime = proto.HistoryState.OrchestrationState.ScheduledStartTimestamp.ToDateTime(),
+                        CreatedTime = proto.HistoryState.OrchestrationState.CreatedTimestamp.ToDateTime(),
+                        LastUpdatedTime = proto.HistoryState.OrchestrationState.LastUpdatedTimestamp.ToDateTime(),
+                        Input = proto.HistoryState.OrchestrationState.Input,
+                        Output = proto.HistoryState.OrchestrationState.Output,
+                        Status = proto.HistoryState.OrchestrationState.CustomStatus,
+                    });
+                break;
             default:
                 throw new NotImplementedException($"Deserialization of {proto.EventTypeCase} is not implemented.");
         }

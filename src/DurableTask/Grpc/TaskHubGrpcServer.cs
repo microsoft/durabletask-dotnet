@@ -45,7 +45,9 @@ public class TaskHubGrpcServer : IAsyncDisposable
 
     readonly AsyncLock writeChannelLock = new();
 
+    DuplexStream? activeDuplexStream;
     CancellationTokenSource? shutdownTcs;
+    Task? listenLoop;
 
     TaskHubGrpcServer(Builder builder)
     {
@@ -58,53 +60,99 @@ public class TaskHubGrpcServer : IAsyncDisposable
         this.activities = builder.activitiesBuilder.ToImmutable();
     }
 
+    public bool IsConnected => this.activeDuplexStream != null;
+
+    IAsyncStreamReader<P.ExecutionRequest> InputStream
+    {
+        get => this.activeDuplexStream?.ResponseStream ?? throw new InvalidOperationException("The server is not connected.");
+    }
+
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         this.logger.StartingTaskHubServer(this.workerGrpcChannel.Target);
-        DuplexStream stream = await this.ConnectAsync(cancellationToken);
+        await this.ConnectAsync(cancellationToken, isReconnecting: false);
 
         this.shutdownTcs?.Dispose();
         this.shutdownTcs = new CancellationTokenSource();
 
-        _ = Task.Run(() => this.AsyncListenLoop(stream, this.shutdownTcs.Token), CancellationToken.None);
+        this.listenLoop = Task.Run(() => this.AsyncListenLoop(this.shutdownTcs.Token), CancellationToken.None);
     }
 
-    public async Task<DuplexStream> ConnectAsync(CancellationToken cancellationToken)
+    async Task ConnectAsync(CancellationToken cancellationToken, bool isReconnecting)
     {
+        if (this.IsConnected && !isReconnecting)
+        {
+            throw new InvalidOperationException($"This {nameof(TaskHubGrpcServer)} is already connected.");
+        }
+
         // CONSIDER: Wrap this in a custom exception type to abstract away gRPC
-        var stream = this.workerClient.ExecutionStream(cancellationToken: cancellationToken);
-        await stream.RequestStream.WriteAsync(new P.InitOrExecutionResponse { ConnectionString = "*" });
-        return stream;
+        this.activeDuplexStream?.Dispose();
+
+        DateTime logWorkerBusyAfter = DateTime.MinValue;
+        while (true)
+        {
+            // Keep retrying the connection until the cancellation token triggers
+            try
+            {
+                this.activeDuplexStream = this.workerClient.ExecutionStream(cancellationToken: cancellationToken);
+                break;
+            }
+            catch (RpcException e) when (e.StatusCode == StatusCode.ResourceExhausted)
+            {
+                // Another server is already connected to this worker. It might be the current server if
+                // disconnecting and immediately reconnecting. Log a warning and retry.
+                if (DateTime.Now > logWorkerBusyAfter)
+                {
+                    this.logger.WorkerBusy();
+                    logWorkerBusyAfter = DateTime.Now.Add(TimeSpan.FromMinutes(1));
+                }
+
+                await Task.Delay(TimeSpan.FromMilliseconds(500));
+            }
+        }
+
+        await this.activeDuplexStream.RequestStream.WriteAsync(new P.InitOrExecutionResponse { ConnectionString = "*" });
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
+        // Cancel the listen loop and wait for it to complete
+        if (this.IsConnected)
+        {
+            await this.AcquireOutputStream(outputStream => outputStream.CompleteAsync());
+        }
+
         this.shutdownTcs?.Cancel();
-        // TODO: Wait for shutdown to complete?
+
+        await (this.listenLoop?.WaitAsync(cancellationToken) ?? Task.CompletedTask);
     }
 
     async ValueTask IAsyncDisposable.DisposeAsync()
     {
-        await this.StopAsync();
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(30));
+        await this.StopAsync(cts.Token);
         GC.SuppressFinalize(this);
     }
 
-    async void AsyncListenLoop(DuplexStream? stream, CancellationToken shutdownToken)
+    async Task AsyncListenLoop(CancellationToken shutdownToken)
     {
+        bool shouldReconnect = false;
         while (true)
         {
             try
             {
-                if (stream == null)
+                if (!this.IsConnected || shouldReconnect)
                 {
                     // Re-establish the connection to the worker.
-                    stream = await this.ConnectAsync(shutdownToken);
+                    await this.ConnectAsync(shutdownToken, shouldReconnect);
                 }
+
+                shouldReconnect = false;
 
                 // Keep pulling requests from the worker until the worker shuts down.
                 // If there's an exception reading from the stream, then we must reconnect the stream.
                 // Exceptions must not escape this loop or else we'll miss notifications from the worker.
-                await foreach (P.ExecutionRequest request in stream.ResponseStream.ReadAllAsync(shutdownToken))
+                await foreach (P.ExecutionRequest request in this.InputStream.ReadAllAsync(shutdownToken))
                 {
                     // Non-blocking request handler that also catches and logs any exceptions.
                     _ = this.ExceptionHandlingWrapper(request, async () =>
@@ -128,10 +176,8 @@ public class TaskHubGrpcServer : IAsyncDisposable
                                         this.CreateOrchestrationFailedActionResult(e));
                                 }
 
-                                using (await this.writeChannelLock.AcquireAsync())
-                                {
-                                    await stream.RequestStream.WriteAsync(new P.InitOrExecutionResponse { OrchestratorResponse = orchestratorResponse });
-                                }
+                                await this.AcquireOutputStream(stream => stream.WriteAsync(
+                                    new P.InitOrExecutionResponse { OrchestratorResponse = orchestratorResponse }));
                                 break;
                             case P.ExecutionRequest.RequestOneofCase.ActivityRequest:
                                 // This is a request to execute an activity. The response is the output of the activity.
@@ -150,10 +196,8 @@ public class TaskHubGrpcServer : IAsyncDisposable
                                         serializedOutput: this.CreateActivityFailedOutput(e));
                                 }
 
-                                using (await this.writeChannelLock.AcquireAsync())
-                                {
-                                    await stream.RequestStream.WriteAsync(new P.InitOrExecutionResponse { ActivityResponse = activityResponse });
-                                }
+                                await this.AcquireOutputStream(stream => stream.WriteAsync(
+                                    new P.InitOrExecutionResponse { ActivityResponse = activityResponse }));
                                 break;
                             default:
                                 // This request type isn't supported by this SDK.
@@ -165,22 +209,16 @@ public class TaskHubGrpcServer : IAsyncDisposable
             }
             catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
             {
-                // Notify the worker that we're done listening (if it's still there).
-                if (stream != null)
-                {
-                    await stream.RequestStream.CompleteAsync();
-                }
-
                 break;
             }
             catch (RpcException e) when (e.StatusCode == StatusCode.Unavailable)
             {
                 // Something broke our connection to the worker. Log the error and reconnect.
                 this.logger.ConnectionFailed();
-                stream = null;
 
                 // CONSIDER: exponential backoff?
                 await Task.Delay(TimeSpan.FromSeconds(5), CancellationToken.None);
+                shouldReconnect = true;
             }
             catch (Exception e)
             {
@@ -188,6 +226,7 @@ public class TaskHubGrpcServer : IAsyncDisposable
 
                 // CONSIDER: exponential backoff?
                 await Task.Delay(TimeSpan.FromSeconds(1), CancellationToken.None);
+                shouldReconnect = true;
             }
         }
 
@@ -212,6 +251,19 @@ public class TaskHubGrpcServer : IAsyncDisposable
                 request?.ActivityRequest?.OrchestrationInstance?.InstanceId ??
                 string.Empty;
             this.logger.UnexpectedError(instanceId, e.ToString());
+        }
+    }
+
+    async Task AcquireOutputStream(Func<IClientStreamWriter<P.InitOrExecutionResponse>, Task> outputStreamAction)
+    {
+        using (await this.writeChannelLock.AcquireAsync())
+        {
+            if (this.activeDuplexStream?.RequestStream == null)
+            {
+                throw new InvalidOperationException("The server is not connected.");
+            }
+
+            await outputStreamAction(this.activeDuplexStream.RequestStream);
         }
     }
 
@@ -552,6 +604,25 @@ public class TaskHubGrpcServer : IAsyncDisposable
                 return this.innerContext.ScheduleTask<T>(name.Name, name.Version, input);
             }
 
+            public override Task<TResult> CallSubOrchestratorAsync<TResult>(
+                TaskName orchestratorName,
+                string? instanceId = null,
+                object? input = null,
+                TaskOptions? options = null)
+            {
+                if (options != null)
+                {
+                    throw new NotImplementedException($"{nameof(TaskOptions)} are not yet supported.");
+                }
+
+                // TODO: Support for retry options and custom deserialization via TaskOptions
+                return this.innerContext.CreateSubOrchestrationInstance<TResult>(
+                    orchestratorName.Name,
+                    orchestratorName.Version,
+                    instanceId ?? Guid.NewGuid().ToString("N"),
+                    input);
+            }
+
             public override Task CreateTimer(DateTime fireAt, CancellationToken cancellationToken)
             {
                 return this.innerContext.CreateTimer<object>(fireAt, state: null!, cancellationToken);
@@ -613,6 +684,22 @@ public class TaskHubGrpcServer : IAsyncDisposable
             public override void SetCustomStatus(object customStatus)
             {
                 this.customStatus = customStatus;
+            }
+
+            /// <inheritdoc/>
+            public override void ContinueAsNew(object newInput, bool preserveUnprocessedEvents = true)
+            {
+                this.innerContext.ContinueAsNew(newInput);
+
+                if (preserveUnprocessedEvents)
+                {
+                    // Send all the buffered external events to ourself.
+                    OrchestrationInstance instance = new() { InstanceId = this.InstanceId };
+                    foreach ((string eventName, string eventPayload) in this.externalEventBuffer.TakeAll())
+                    {
+                        this.innerContext.SendEvent(instance, eventName, eventPayload);
+                    }
+                }
             }
 
             internal string? GetDeserializedCustomStatus()
@@ -681,6 +768,19 @@ public class TaskHubGrpcServer : IAsyncDisposable
 
                     value = default;
                     return false;
+                }
+
+                public IEnumerable<(string eventName, TValue eventPayload)> TakeAll()
+                {
+                    foreach ((string eventName, Queue<TValue> eventPayloads) in this.buffers)
+                    {
+                        foreach (TValue payload in eventPayloads)
+                        {
+                            yield return (eventName, payload);
+                        }
+                    }
+
+                    this.buffers.Clear();
                 }
             }
         }

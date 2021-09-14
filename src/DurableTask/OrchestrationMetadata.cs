@@ -20,16 +20,21 @@ namespace DurableTask;
 public sealed class OrchestrationMetadata
 {
     readonly IDataConverter dataConverter;
+    readonly bool requestedInputsAndOutputs;
 
-    internal OrchestrationMetadata(P.GetInstanceResponse response, IDataConverter dataConverter)
+    internal OrchestrationMetadata(
+        P.GetInstanceResponse response,
+        IDataConverter dataConverter,
+        bool requestedInputsAndOutputs)
     {
-        this.InstanceId = response.InstanceId;
-        this.RuntimeStatus = (OrchestrationRuntimeStatus)response.OrchestrationStatus;
-        this.CreatedAt = response.CreatedTimestamp.ToDateTimeOffset();
-        this.LastUpdatedAt = response.LastUpdatedTimestamp.ToDateTimeOffset();
-        this.SerializedInput = response.Input;
-        this.SerializedOutput = response.Output;
+        this.InstanceId = response.OrchestrationState.InstanceId;
+        this.RuntimeStatus = (OrchestrationRuntimeStatus)response.OrchestrationState.OrchestrationStatus;
+        this.CreatedAt = response.OrchestrationState.CreatedTimestamp.ToDateTimeOffset();
+        this.LastUpdatedAt = response.OrchestrationState.LastUpdatedTimestamp.ToDateTimeOffset();
+        this.SerializedInput = response.OrchestrationState.Input;
+        this.SerializedOutput = response.OrchestrationState.Output;
         this.dataConverter = dataConverter;
+        this.requestedInputsAndOutputs = requestedInputsAndOutputs;
     }
 
     public string InstanceId { get; }
@@ -52,9 +57,29 @@ public sealed class OrchestrationMetadata
         this.RuntimeStatus == OrchestrationRuntimeStatus.Failed ||
         this.RuntimeStatus == OrchestrationRuntimeStatus.Terminated;
 
-    public T? ReadInputAs<T>() => this.dataConverter.Deserialize<T>(this.SerializedInput);
+    public T? ReadInputAs<T>()
+    {
+        if (!this.requestedInputsAndOutputs)
+        {
+            throw new InvalidOperationException(
+                $"The {nameof(this.ReadInputAs)} method can only be used on {nameof(OrchestrationMetadata)} objects " +
+                "that are fetched with the option to include input data.");
+        }
 
-    public T? ReadOutputAs<T>() => this.dataConverter.Deserialize<T>(this.SerializedOutput);
+        return this.dataConverter.Deserialize<T>(this.SerializedInput);
+    }
+
+    public T? ReadOutputAs<T>()
+    {
+        if (!this.requestedInputsAndOutputs)
+        {
+            throw new InvalidOperationException(
+                $"The {nameof(this.ReadOutputAs)} method can only be used on {nameof(OrchestrationMetadata)} objects " +
+                "that are fetched with the option to include output data.");
+        }
+
+        return this.dataConverter.Deserialize<T>(this.SerializedOutput);
+    }
 
     public override string ToString()
     {

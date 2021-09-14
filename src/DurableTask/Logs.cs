@@ -46,5 +46,8 @@ namespace DurableTask
 
         [LoggerMessage(EventId = 22, Level = LogLevel.Warning, Message = "Connection to the worker failed. Attempting to reconnect.")]
         public static partial void ConnectionFailed(this ILogger logger);
+
+        [LoggerMessage(EventId = 23, Level = LogLevel.Warning, Message = "The worker is busy servicing other clients. Waiting for the worker to become available for a new connection.")]
+        public static partial void WorkerBusy(this ILogger logger);
     }
 }

@@ -90,11 +90,11 @@ public abstract class TaskOrchestrationContext
     /// <remarks>
     /// <para>
     /// External clients can raise events to a waiting orchestration instance using
-    /// the <see cref="TaskHubClient.RaiseEventAsync(string, string, object)"/> method.
+    /// the <see cref="TaskHubClient.RaiseEventAsync"/> method.
     /// </para><para>
     /// If the current orchestrator instance is not yet waiting for an event named <paramref name="eventName"/>,
     /// then the event will be saved in the orchestration instance state and dispatched immediately when
-    /// <see cref="WaitForExternalEvent{T}(string, CancellationToken)"/> is called. This event saving occurs even 
+    /// <see cref="WaitForExternalEvent{T}"/> is called. This event saving occurs even 
     /// if the current orchestrator cancels the wait operation before the event is received.
     /// </para><para>
     /// Orchestrators can wait for the same event name multiple times, so waiting for multiple events with the same name is
@@ -108,6 +108,93 @@ public abstract class TaskOrchestrationContext
     public abstract Task<T> WaitForExternalEvent<T>(string eventName, CancellationToken cancellationToken = default);
 
     public abstract void SetCustomStatus(object customStatus);
+
+    /// <summary>
+    /// Executes a named sub-orchestrator and returns the result.
+    /// </summary>
+    /// <typeparam name="TResult">
+    /// The type into which to deserialize the sub-orchestrator's output.
+    /// </typeparam>
+    /// <inheritdoc cref="CallSubOrchestratorAsync(TaskName, string?, object?)"/>
+    public abstract Task<TResult> CallSubOrchestratorAsync<TResult>(
+        TaskName orchestratorName,
+        string? instanceId = null,
+        object? input = null,
+        TaskOptions? options = null);
+
+    // TODO: Exception documentation for sub-orchestrator failures
+    // TODO: Optional CancellationToken parameter
+    /// <summary>
+    /// Executes a named sub-orchestrator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// In addition to activities, orchestrators can schedule other orchestrators, creating <i>sub-orchestrations</i>.
+    /// A sub-orchestration has its own instance ID, history, and status that is independent of the parent orchestrator that started it.
+    /// </para><para>
+    /// Sub-orchestrations have many benefits:
+    /// <list type="bullet">
+    ///  <item>You can split large orchestrations into a series of smaller sub-orchestrations, making your code more maintainable.</item>
+    ///  <item>You can distribute orchestration logic across multiple compute nodes concurrently, which is useful if your orchestration logic otherwise needs to coordinate a lot of tasks.</item>
+    ///  <item>You can reduce memory usage and CPU overhead by keeping the history of parent orchestrations smaller.</item>
+    /// </list>
+    /// </para><para>
+    /// The return value of a sub-orchestration is its output. If a sub-orchestration fails with an exception, then that exception will be surfaced to the parent orchestration, just like it is when an activity task fails with an exception. Sub-orchestrations also support automatic retry policies.
+    /// </para><para>
+    /// Because sub-orchestrations are independent of their parents, terminating a parent orchestration does not affect any sub-orchestrations.
+    /// You must terminate each sub-orchestration independently using its instance ID, which is specified using the <paramref name="instanceId"/>
+    /// parameter.
+    /// </para>
+    /// </remarks>
+    /// <param name="orchestratorName">The name of the orchestrator to call.</param>
+    /// <param name="instanceId">
+    /// A unique ID to use for the sub-orchestration instance. If not specified, a random instance ID will be generated.
+    /// </param>
+    /// <param name="input">The serializeable input to pass to the sub-orchestrator.</param>
+    /// <param name="options">Additional options that control the execution and processing of the sub-orchestrator.</param>
+    /// <returns>A task that completes when the sub-orchestrator completes or fails.</returns>
+    /// <exception cref="ArgumentException">The specified orchestrator does not exist.</exception>
+    public Task CallSubOrchestratorAsync(
+        TaskName orchestratorName,
+        string? instanceId = null,
+        object? input = null,
+        TaskOptions? options = null)
+    {
+        return this.CallSubOrchestratorAsync<object>(orchestratorName, instanceId, input, options);
+    }
+
+    /// <summary>
+    /// Restarts the orchestration with a new input and clears its history.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method is primarily designed for eternal orchestrations, which are orchestrations that
+    /// may not ever complete. It works by restarting the orchestration, providing it with a new input,
+    /// and truncating the existing orchestration history. It allows an orchestration to continue
+    /// running indefinitely without having its history grow unbounded. The benefits of periodically
+    /// truncating history include decreased memory usage, decreased storage volumes, and shorter orchestrator
+    /// replays when rebuilding state.
+    /// </para><para>
+    /// The results of any incomplete tasks will be discarded when an orchestrator calls
+    /// <see cref="ContinueAsNew"/>. For example, if a timer is scheduled and then <see cref="ContinueAsNew"/>
+    /// is called before the timer fires, the timer event will be discarded. The only exception to this
+    /// is external events. By default, if an external event is received by an orchestration but not yet
+    /// processed, the event is saved in the orchestration state unit it is received by a call to
+    /// <see cref="WaitForExternalEvent{T}"/>. These events will continue to remain in memory even after
+    /// an orchestrator restarts using <see cref="ContinueAsNew"/>. You can disable this behavior and
+    /// remove any saved external events by specifying <c>false</c> for the <paramref name="preserveUnprocessedEvents"/>
+    /// parameter value.
+    /// </para><para>
+    /// Orchestrator functions should return immediately after calling the <see cref="ContinueAsNew"/> method.
+    /// </para>
+    /// </remarks>
+    /// <param name="newInput">The JSON-serializeable input data to re-initialize the instance with.</param>
+    /// <param name="preserveUnprocessedEvents">
+    /// If set to <c>true</c>, re-adds any unprocessed external events into the new execution
+    /// history when the orchestration instance restarts. If <c>false</c>, any unprocessed
+    /// external events will be discarded when the orchestration instance restarts.
+    /// </param>
+    public abstract void ContinueAsNew(object newInput, bool preserveUnprocessedEvents = true);
 
     // TODO: More
 }

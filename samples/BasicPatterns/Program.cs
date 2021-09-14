@@ -37,7 +37,7 @@ TaskHubGrpcServer server = TaskHubGrpcServer.CreateBuilder()
 
 await server.StartAsync();
 
-await using TaskHubGrpcClient client = TaskHubGrpcClient.Create();
+await using TaskHubClient client = TaskHubGrpcClient.Create();
 string instanceId = await client.ScheduleNewOrchestrationInstanceAsync("HelloSequence");
 Console.WriteLine($"Created instance: '{instanceId}'");
 

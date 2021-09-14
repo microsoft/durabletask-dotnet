@@ -18,7 +18,7 @@ using System.Threading.Tasks;
 namespace DurableTask;
 
 // TODO: This class has the same name as DurableTask.Core.TaskHubClient, which will confuse developers. Need to reconcile this somehow.
-public abstract class TaskHubClient
+public abstract class TaskHubClient : IAsyncDisposable
 {
     // TODO: Document all the exceptions (instance exists, etc.)
     /// <summary>
@@ -63,6 +63,31 @@ public abstract class TaskHubClient
     /// <returns>A task that completes when the event notification message has been enqueued.</returns>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="instanceId"/> or <paramref name="eventName"/> is null or empty.</exception>
     public abstract Task RaiseEventAsync(string instanceId, string eventName, object? eventPayload);
+
+    /// <summary>
+    /// Terminates a running orchestration instance and updates its runtime status to <see cref="OrchestrationRuntimeStatus.Terminated"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method internally enqueues a "terminate" message in the task hub. When the task hub worker processes
+    /// this message, it will update the runtime status of the target instance to <see cref="OrchestrationRuntimeStatus.Terminated"/>.
+    /// You can use the <see cref="WaitForInstanceCompletionAsync(string, CancellationToken, bool)"/> to wait for
+    /// the instance to reach the terminated state.
+    /// </para>
+    /// <para>
+    /// Terminating an orchestration instance has no effect on any in-flight activity function executions
+    /// or sub-orchestrations that were started by the terminated instance. Those actions will continue to run
+    /// without interruption. However, their results will be discarded. If you want to terminate sub-orchestrations,
+    /// you must issue separate terminate commands for each sub-orchestration.
+    /// </para><para>
+    /// Attempting to terminate a completed or non-existent orchestration instance is a no-op. In such cases, the task
+    /// hub worker will discard the terminate message and no error will be returned by this method.
+    /// </para>
+    /// </remarks>
+    /// <param name="instanceId">The ID of the orchestration instance to terminate.</param>
+    /// <param name="output">The optional output to set for the terminated orchestration instance.</param>
+    /// <returns>A task that completes when the terminate message is enqueued.</returns>
+    public abstract Task TerminateAsync(string instanceId, object? output);
 
     /// <summary>
     /// Waits for an orchestration to start running and returns a <see cref="OrchestrationMetadata"/>
@@ -119,4 +144,10 @@ public abstract class TaskHubClient
         string instanceId,
         CancellationToken cancellationToken,
         bool getInputsAndOutputs = false);
+
+    /// <summary>
+    /// Disposes any unmanaged resources associated with this <see cref="TaskHubClient"/>.
+    /// </summary>
+    /// <returns>A <see cref="ValueTask"/> that completes when the disposal completes.</returns>
+    public abstract ValueTask DisposeAsync();
 }

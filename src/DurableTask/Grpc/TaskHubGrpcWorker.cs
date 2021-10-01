@@ -22,38 +22,33 @@ using System.Threading.Tasks;
 using DurableTask.Core;
 using DurableTask.Core.Command;
 using DurableTask.Core.History;
-using DurableTask.Grpc;
 using Grpc.Core;
 using Grpc.Net.Client;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using static DurableTask.Protobuf.TaskHubClientService;
-using DuplexStream = Grpc.Core.AsyncDuplexStreamingCall<DurableTask.Protobuf.InitOrExecutionResponse, DurableTask.Protobuf.ExecutionRequest>;
+using static DurableTask.Protobuf.TaskHubSidecarService;
 using P = DurableTask.Protobuf;
 
-namespace DurableTask;
+namespace DurableTask.Grpc;
 
-[Obsolete("Use TaskHubGrpcWorker")]
-public class TaskHubGrpcServer : IAsyncDisposable
+public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
 {
-    readonly GrpcChannel workerGrpcChannel;
-    readonly TaskHubClientServiceClient workerClient;
+    readonly GrpcChannel sidecarGrpcChannel;
+    readonly TaskHubSidecarServiceClient sidecarClient;
     readonly IDataConverter dataConverter;
     readonly ILogger logger;
 
     readonly ImmutableDictionary<TaskName, Func<TaskOrchestration>> orchestrators;
     readonly ImmutableDictionary<TaskName, Func<TaskActivity>> activities;
 
-    readonly AsyncLock writeChannelLock = new();
-
-    DuplexStream? activeDuplexStream;
     CancellationTokenSource? shutdownTcs;
     Task? listenLoop;
 
-    TaskHubGrpcServer(Builder builder)
+    TaskHubGrpcWorker(Builder builder)
     {
-        this.workerGrpcChannel = GrpcChannel.ForAddress(builder.address);
-        this.workerClient = new TaskHubClientServiceClient(this.workerGrpcChannel);
+        this.sidecarGrpcChannel = GrpcChannel.ForAddress(builder.address);
+        this.sidecarClient = new TaskHubSidecarServiceClient(this.sidecarGrpcChannel);
         this.dataConverter = builder.dataConverter;
         this.logger = SdkUtils.GetLogger(builder.loggerFactory);
 
@@ -61,224 +56,182 @@ public class TaskHubGrpcServer : IAsyncDisposable
         this.activities = builder.activitiesBuilder.ToImmutable();
     }
 
-    public bool IsConnected => this.activeDuplexStream != null;
-
-    IAsyncStreamReader<P.ExecutionRequest> InputStream
+    /// <summary>
+    /// Establishes a gRPC connection to the sidecar and starts processing work-items in the background.
+    /// </summary>
+    /// <remarks>
+    /// This method retries continuously to establish a connection to the sidecar. If a connection fails,
+    /// a warning log message will be written and a new connection attempt will be made. This process
+    /// continues until either a connection succeeds or the caller cancels the start operation.
+    /// </remarks>
+    /// <param name="startupCancelToken">
+    /// A cancellation token that can be used to cancel the sidecar connection attempt if it takes too long.
+    /// </param>
+    /// <returns>
+    /// Returns a task that completes when the sidecar connection has been established and the background processing started.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">Thrown if this worker is already started.</exception>
+    public async Task StartAsync(CancellationToken startupCancelToken)
     {
-        get => this.activeDuplexStream?.ResponseStream ?? throw new InvalidOperationException("The server is not connected.");
-    }
-
-    public async Task StartAsync(CancellationToken cancellationToken = default)
-    {
-        this.logger.StartingTaskHubWorker(this.workerGrpcChannel.Target);
-        await this.ConnectAsync(cancellationToken, isReconnecting: false);
-
-        this.shutdownTcs?.Dispose();
-        this.shutdownTcs = new CancellationTokenSource();
-
-        this.listenLoop = Task.Run(() => this.AsyncListenLoop(this.shutdownTcs.Token), CancellationToken.None);
-    }
-
-    async Task ConnectAsync(CancellationToken cancellationToken, bool isReconnecting)
-    {
-        if (this.IsConnected && !isReconnecting)
+        if (this.listenLoop?.IsCompleted == false)
         {
-            throw new InvalidOperationException($"This {nameof(TaskHubGrpcServer)} is already connected.");
+            throw new InvalidOperationException($"This {nameof(TaskHubGrpcWorker)} is already started.");
         }
 
-        // CONSIDER: Wrap this in a custom exception type to abstract away gRPC
-        this.activeDuplexStream?.Dispose();
+        this.logger.StartingTaskHubWorker(this.sidecarGrpcChannel.Target);
 
-        DateTime logWorkerBusyAfter = DateTime.MinValue;
+        // Keep trying to connect until the caller cancels
         while (true)
         {
-            // Keep retrying the connection until the cancellation token triggers
             try
             {
-                this.activeDuplexStream = this.workerClient.ExecutionStream(cancellationToken: cancellationToken);
+                AsyncServerStreamingCall<P.WorkItem>? workItemStream = this.Connect(startupCancelToken);
+
+                this.shutdownTcs?.Dispose();
+                this.shutdownTcs = new CancellationTokenSource();
+
+                this.listenLoop = Task.Run(
+                    () => this.WorkItemListenLoop(workItemStream, this.shutdownTcs.Token),
+                    CancellationToken.None);
                 break;
             }
-            catch (RpcException e) when (e.StatusCode == StatusCode.ResourceExhausted)
+            catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
             {
-                // Another server is already connected to this worker. It might be the current server if
-                // disconnecting and immediately reconnecting. Log a warning and retry.
-                if (DateTime.Now > logWorkerBusyAfter)
-                {
-                    this.logger.WorkerBusy();
-                    logWorkerBusyAfter = DateTime.Now.Add(TimeSpan.FromMinutes(1));
-                }
+                this.logger.SidecarUnavailable(this.sidecarGrpcChannel.Target);
 
-                await Task.Delay(TimeSpan.FromMilliseconds(500));
+                await Task.Delay(TimeSpan.FromSeconds(5), startupCancelToken);
             }
         }
+    }
 
-        await this.activeDuplexStream.RequestStream.WriteAsync(new P.InitOrExecutionResponse { ConnectionString = "*" });
+    /// <inheritdoc cref="StartAsync(CancellationToken)" />
+    /// <param name="timeout">The maximum time to wait for a connection to be established.</param>
+    public async Task StartAsync(TimeSpan timeout)
+    {
+        using CancellationTokenSource cts = new(timeout);
+        await this.StartAsync(cts.Token);
+    }
+
+    AsyncServerStreamingCall<P.WorkItem> Connect(CancellationToken cancellationToken)
+    {
+        return this.sidecarClient.GetWorkItems(new P.GetWorkItemsRequest(), cancellationToken: cancellationToken);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
-        // Cancel the listen loop and wait for it to complete
-        if (this.IsConnected)
-        {
-            await this.AcquireOutputStream(outputStream => outputStream.CompleteAsync());
-        }
-
+        // Cancelling the shutdownTcs causes the background processing to shutdown gracefully.
         this.shutdownTcs?.Cancel();
 
+        // Wait for the listen loop to copmlete
         await (this.listenLoop?.WaitAsync(cancellationToken) ?? Task.CompletedTask);
+
+        // TODO: Wait for any outstanding tasks to complete
     }
 
     async ValueTask IAsyncDisposable.DisposeAsync()
     {
+        // Shutdown with a default timeout of 30 seconds
         using CancellationTokenSource cts = new(TimeSpan.FromSeconds(30));
         try
         {
             await this.StopAsync(cts.Token);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
         }
 
         GC.SuppressFinalize(this);
     }
 
-    async Task AsyncListenLoop(CancellationToken shutdownToken)
+    async Task WorkItemListenLoop(AsyncServerStreamingCall<P.WorkItem> workItemStream, CancellationToken shutdownToken)
     {
-        bool shouldReconnect = false;
+        bool reconnect = false;
+
         while (true)
         {
             try
             {
-                if (!this.IsConnected || shouldReconnect)
+                if (reconnect)
                 {
-                    // Re-establish the connection to the worker.
-                    await this.ConnectAsync(shutdownToken, shouldReconnect);
+                    workItemStream = this.Connect(shutdownToken);
                 }
 
-                shouldReconnect = false;
-
-                // Keep pulling requests from the worker until the worker shuts down.
-                // If there's an exception reading from the stream, then we must reconnect the stream.
-                // Exceptions must not escape this loop or else we'll miss notifications from the worker.
-                await foreach (P.ExecutionRequest request in this.InputStream.ReadAllAsync(shutdownToken))
+                await foreach (P.WorkItem workItem in workItemStream.ResponseStream.ReadAllAsync(shutdownToken))
                 {
-                    // Non-blocking request handler that also catches and logs any exceptions.
-                    _ = this.ExceptionHandlingWrapper(request, async () =>
+                    if (workItem.RequestCase == P.WorkItem.RequestOneofCase.OrchestratorRequest)
                     {
-                        switch (request.RequestCase)
-                        {
-                            case P.ExecutionRequest.RequestOneofCase.OrchestratorRequest:
-                                // This is a request to execute an orchestrator. The response is a list of side-effects
-                                // (actions) that goes back to the worker. If there's an unhandled exception in the
-                                // processing then we must return that back to the worker as an error response.
-                                // TODO: Do we need support for transient/retriable errors?
-                                P.OrchestratorResponse orchestratorResponse;
-                                try
-                                {
-                                    orchestratorResponse = await this.OnRunOrchestratorAsync(request.OrchestratorRequest);
-                                }
-                                catch (Exception e)
-                                {
-                                    OrchestratorExecutionResult? result = this.CreateOrchestrationFailedActionResult(e);
-                                    orchestratorResponse = ProtoUtils.ConstructOrchestratorResponse(
-                                        request.OrchestratorRequest.InstanceId,
-                                        result.CustomStatus,
-                                        result.Actions);
-                                }
-
-                                await this.AcquireOutputStream(stream => stream.WriteAsync(
-                                    new P.InitOrExecutionResponse { OrchestratorResponse = orchestratorResponse }));
-                                break;
-                            case P.ExecutionRequest.RequestOneofCase.ActivityRequest:
-                                // This is a request to execute an activity. The response is the output of the activity.
-                                // If there's an unhandled exception in the processing then we must return a generic
-                                // error response back to the worker.
-                                // TODO: Do we need support for transient/retriable errors?
-                                P.ActivityResponse activityResponse;
-                                try
-                                {
-                                    activityResponse = await this.OnRunActivityAsync(request.ActivityRequest);
-                                }
-                                catch (Exception e)
-                                {
-                                    activityResponse = ProtoUtils.ConstructActivityResponse(
-                                        instanceId: request.ActivityRequest.OrchestrationInstance.InstanceId,
-                                        taskId: request.ActivityRequest.TaskId,
-                                        serializedOutput: this.CreateActivityFailedOutput(e));
-                                }
-
-                                await this.AcquireOutputStream(stream => stream.WriteAsync(
-                                    new P.InitOrExecutionResponse { ActivityResponse = activityResponse }));
-                                break;
-                            default:
-                                // This request type isn't supported by this SDK.
-                                this.logger.UnexpectedWorkItemType(request.RequestCase.ToString());
-                                break;
-                        }
-                    });
+                        this.RunBackgroundTask(workItem, () => this.OnRunOrchestratorAsync(workItem.OrchestratorRequest));
+                    }
+                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
+                    {
+                        this.RunBackgroundTask(workItem, () => this.OnRunActivityAsync(workItem.ActivityRequest));
+                    }
+                    else
+                    {
+                        this.logger.UnexpectedWorkItemType(workItem.RequestCase.ToString());
+                    }
                 }
             }
-            catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+            catch (RpcException) when (shutdownToken.IsCancellationRequested)
             {
+                // Worker is shutting down - let the method exit gracefully
                 break;
             }
-            catch (RpcException e) when (e.StatusCode == StatusCode.Unavailable)
+            catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
             {
-                // Something broke our connection to the worker. Log the error and reconnect.
-                this.logger.ConnectionFailed();
+                // Sidecar is shutting down - retry
+                this.logger.TaskHubWorkerDisconnected(this.sidecarGrpcChannel.Target);
+            }
+            catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
+            {
+                // Sidecar is down - keep retrying
+                this.logger.SidecarUnavailable(this.sidecarGrpcChannel.Target);
+            }
+            catch (Exception ex)
+            {
+                // Unknown failure - retry?
+                this.logger.UnexpectedError(instanceId: string.Empty, details: ex.ToString());
+            }
 
-                // CONSIDER: exponential backoff?
-                await Task.Delay(TimeSpan.FromSeconds(5), CancellationToken.None);
-                shouldReconnect = true;
+            try
+            {
+                // CONSIDER: Exponential backoff
+                await Task.Delay(TimeSpan.FromSeconds(5), shutdownToken);
+            }
+            catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
+            {
+                // Worker is shutting down - let the method exit gracefully
+                break;
+            }
+
+            reconnect = true;
+        }
+    }
+
+    void RunBackgroundTask(P.WorkItem? workItem, Func<Task> handler)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await handler();
+            }
+            catch (OperationCanceledException)
+            {
+                // Shutting down - ignore
             }
             catch (Exception e)
             {
-                this.logger.UnexpectedError(instanceId: string.Empty, e.ToString());
-
-                // CONSIDER: exponential backoff?
-                await Task.Delay(TimeSpan.FromSeconds(1), CancellationToken.None);
-                shouldReconnect = true;
+                string instanceId =
+                    workItem?.OrchestratorRequest?.InstanceId ??
+                    workItem?.ActivityRequest?.OrchestrationInstance?.InstanceId ??
+                    string.Empty;
+                this.logger.UnexpectedError(instanceId, e.ToString());
             }
-        }
-
-        this.logger.TaskHubWorkerDisconnected(this.workerGrpcChannel.Target);
+        });
     }
 
-    async Task ExceptionHandlingWrapper(P.ExecutionRequest? request, Func<Task> handler)
-    {
-        // No exceptions must be allowed to break out of this method
-        try
-        {
-            await handler();
-        }
-        catch (OperationCanceledException)
-        {
-            // Shutting down - ignore
-        }
-        catch (Exception e)
-        {
-            string instanceId =
-                request?.OrchestratorRequest?.InstanceId ?? 
-                request?.ActivityRequest?.OrchestrationInstance?.InstanceId ??
-                string.Empty;
-            this.logger.UnexpectedError(instanceId, e.ToString());
-        }
-    }
-
-    async Task AcquireOutputStream(Func<IClientStreamWriter<P.InitOrExecutionResponse>, Task> outputStreamAction)
-    {
-        using (await this.writeChannelLock.AcquireAsync())
-        {
-            if (this.activeDuplexStream?.RequestStream == null)
-            {
-                throw new InvalidOperationException("The server is not connected.");
-            }
-
-            await outputStreamAction(this.activeDuplexStream.RequestStream);
-        }
-    }
-
-    async Task<P.OrchestratorResponse> OnRunOrchestratorAsync(P.OrchestratorRequest request)
+    async Task OnRunOrchestratorAsync(P.OrchestratorRequest request)
     {
         OrchestrationRuntimeState runtimeState = BuildRuntimeState(request);
         TaskName name = new(runtimeState.Name, runtimeState.Version);
@@ -287,7 +240,7 @@ public class TaskHubGrpcServer : IAsyncDisposable
 
         if (!this.orchestrators.TryGetValue(name, out Func<TaskOrchestration>? factory) || factory == null)
         {
-            // TODO: Send a retryable failure response back to the worker instead of throwing
+            // TODO: Need a way to send the response back to the sidecar
             throw new ArgumentException($"No task orchestration named '{name}' was found.", nameof(request));
         }
 
@@ -323,7 +276,7 @@ public class TaskHubGrpcServer : IAsyncDisposable
             result.Actions);
 
         this.logger.SendingOrchestratorResponse(name, response.InstanceId, response.Actions.Count);
-        return response;
+        await this.sidecarClient.CompleteOrchestratorTaskAsync(response);
     }
 
     OrchestratorExecutionResult CreateOrchestrationFailedActionResult(Exception e)
@@ -353,7 +306,7 @@ public class TaskHubGrpcServer : IAsyncDisposable
             e);
     }
 
-    async Task<P.ActivityResponse> OnRunActivityAsync(P.ActivityRequest request)
+    async Task OnRunActivityAsync(P.ActivityRequest request)
     {
         OrchestrationInstance instance = ProtoUtils.ConvertOrchestrationInstance(request.OrchestrationInstance);
         string rawInput = request.Input;
@@ -378,16 +331,19 @@ public class TaskHubGrpcServer : IAsyncDisposable
         }
         catch (Exception applicationException)
         {
-            output = this.CreateActivityFailedOutput(applicationException, $"The activity '{name}#{request.TaskId}' failed with an unhandled exception.");
+            output = this.CreateActivityFailedOutput(
+                applicationException,
+                $"The activity '{name}#{request.TaskId}' failed with an unhandled exception.");
         }
 
         int outputSize = output != null ? Encoding.UTF8.GetByteCount(output) : 0;
         this.logger.SendingActivityResponse(name, request.TaskId, instance.InstanceId, outputSize);
 
-        return ProtoUtils.ConstructActivityResponse(
-            request.OrchestrationInstance.InstanceId,
+        P.ActivityResponse response = ProtoUtils.ConstructActivityResponse(
+            instance.InstanceId,
             request.TaskId,
             output);
+        await this.sidecarClient.CompleteActivityTaskAsync(response);
     }
 
     static OrchestrationRuntimeState BuildRuntimeState(P.OrchestratorRequest request)
@@ -405,8 +361,8 @@ public class TaskHubGrpcServer : IAsyncDisposable
 
         if (runtimeState.ExecutionStartedEvent == null)
         {
-            // TODO: What's the right way to handle this?
-            throw new RpcException(new Status(StatusCode.InvalidArgument, "The provided orchestration history was incomplete"));
+            // TODO: What's the right way to handle this? Callback to the sidecar with a retriable error request?
+            throw new InvalidOperationException("The provided orchestration history was incomplete");
         }
 
         return runtimeState;
@@ -414,7 +370,7 @@ public class TaskHubGrpcServer : IAsyncDisposable
 
     public static Builder CreateBuilder() => new();
 
-    public sealed class Builder
+    public sealed class Builder : ITaskOrchestrationBuilder
     {
         internal ImmutableDictionary<TaskName, Func<TaskActivity>>.Builder activitiesBuilder =
             ImmutableDictionary.CreateBuilder<TaskName, Func<TaskActivity>>();
@@ -430,9 +386,8 @@ public class TaskHubGrpcServer : IAsyncDisposable
         {
         }
 
-        public TaskHubGrpcServer Build() => new(this);
+        public TaskHubGrpcWorker Build() => new(this);
 
-        // TODO: Overloads for class-based factory types
         public Builder AddTaskOrchestrator(
             TaskName name,
             Func<TaskOrchestrationContext, Task> implementation)
@@ -470,6 +425,7 @@ public class TaskHubGrpcServer : IAsyncDisposable
             return this;
         }
 
+        // TODO: Overloads for class-based factory types
         public Builder AddTaskActivity(
             TaskName name,
             Func<TaskActivityContext, object?> implementation)
@@ -488,7 +444,6 @@ public class TaskHubGrpcServer : IAsyncDisposable
             });
         }
 
-        // TODO: Overloads for class-based factory types
         public Builder AddTaskActivity<T>(
             TaskName name,
             Func<TaskActivityContext, Task<T>> implementation)
@@ -531,6 +486,36 @@ public class TaskHubGrpcServer : IAsyncDisposable
             this.dataConverter = dataConverter ?? throw new ArgumentNullException(nameof(dataConverter));
             return this;
         }
+
+        /// <inheritdoc/>
+        ITaskOrchestrationBuilder ITaskOrchestrationBuilder.AddTaskOrchestrator<T>(TaskName name, Func<TaskOrchestrationContext, Task<T>> implementation)
+        {
+            return this.AddTaskOrchestrator(name, implementation);
+        }
+
+        /// <inheritdoc/>
+        ITaskOrchestrationBuilder ITaskOrchestrationBuilder.AddTaskOrchestrator(TaskName name, Func<TaskOrchestrationContext, Task> implementation)
+        {
+            return this.AddTaskOrchestrator(name, implementation);
+        }
+
+        /// <inheritdoc/>
+        ITaskOrchestrationBuilder ITaskOrchestrationBuilder.AddTaskActivity<T>(TaskName name, Func<TaskActivityContext, Task<T>> implementation)
+        {
+            return this.AddTaskActivity(name, implementation);
+        }
+
+        /// <inheritdoc/>
+        ITaskOrchestrationBuilder ITaskOrchestrationBuilder.AddTaskActivity(TaskName name, Func<TaskActivityContext, object?> implementation)
+        {
+            return this.AddTaskActivity(name, implementation);
+        }
+
+        /// <inheritdoc/>
+        ITaskOrchestrationBuilder ITaskOrchestrationBuilder.AddTaskActivity(TaskName name, Func<TaskActivityContext, Task> implementation)
+        {
+            return this.AddTaskActivity(name, implementation);
+        }
     }
 
     sealed class TaskOrchestrationWrapper<TOutput> : TaskOrchestration
@@ -559,7 +544,7 @@ public class TaskHubGrpcServer : IAsyncDisposable
             //       it won't be consistent with our expected format. We currently work around this
             //       in the gRPC handling code, but ideally we wouldn't need this workaround.
             TOutput? output = await this.wrappedImplementation.Invoke(this.wrapperContext);
-                
+
             // Return the output (if any) as a serialized string.
             return this.dataConverter.Serialize(output);
         }

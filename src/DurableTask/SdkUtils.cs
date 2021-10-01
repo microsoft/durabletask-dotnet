@@ -12,6 +12,7 @@
 //  ----------------------------------------------------------------------------------
 
 using System;
+using DurableTask.Grpc;
 using Microsoft.Extensions.Logging;
 
 namespace DurableTask;
@@ -22,7 +23,7 @@ static class SdkUtils
     internal static readonly IDataConverter DefaultDataConverter = new JsonDataConverter();
 
     /// <summary>
-    /// Helper for validating addresses passed to the <see cref="TaskHubGrpcServer"/> and <see cref="TaskHubGrpcClient"/> types.
+    /// Helper for validating addresses passed to the <see cref="TaskHubGrpcWorker"/> and <see cref="TaskHubGrpcClient"/> types.
     /// </summary>
     /// <param name="address">Expected to be an HTTP address, like http://127.0.0.1:4000.</param>
     /// <returns>Returns the unmodified input as a convenience.</returns>

@@ -12,6 +12,7 @@
 //  ----------------------------------------------------------------------------------
 
 using System;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Google.Protobuf.WellKnownTypes;
@@ -19,7 +20,7 @@ using Grpc.Core;
 using Grpc.Net.Client;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using static DurableTask.Protobuf.TaskHubClientService;
+using static DurableTask.Protobuf.TaskHubSidecarService;
 using P = DurableTask.Protobuf;
 
 namespace DurableTask.Grpc;
@@ -27,7 +28,7 @@ namespace DurableTask.Grpc;
 public class TaskHubGrpcClient : TaskHubClient
 {
     readonly GrpcChannel workerGrpcChannel;
-    readonly TaskHubClientServiceClient workerClient;
+    readonly TaskHubSidecarServiceClient workerClient;
     readonly IDataConverter dataConverter;
     readonly ILogger logger;
 
@@ -36,7 +37,7 @@ public class TaskHubGrpcClient : TaskHubClient
     TaskHubGrpcClient(Builder builder)
     {
         this.workerGrpcChannel = GrpcChannel.ForAddress(builder.address);
-        this.workerClient = new TaskHubClientServiceClient(this.workerGrpcChannel);
+        this.workerClient = new TaskHubSidecarServiceClient(this.workerGrpcChannel);
         this.dataConverter = builder.dataConverter;
         this.logger = SdkUtils.GetLogger(builder.loggerFactory);
     }
@@ -71,6 +72,12 @@ public class TaskHubGrpcClient : TaskHubClient
             InstanceId = instanceId ?? Guid.NewGuid().ToString("N"),
             Input = this.dataConverter.Serialize(input),
         };
+
+        this.logger.SchedulingOrchestration(
+            request.InstanceId,
+            orchestratorName,
+            sizeInBytes: request.Input != null ? Encoding.UTF8.GetByteCount(request.Input) : 0,
+            startTime.GetValueOrDefault(DateTimeOffset.UtcNow));
 
         if (startTime.HasValue)
         {
@@ -113,6 +120,8 @@ public class TaskHubGrpcClient : TaskHubClient
             throw new ArgumentNullException(nameof(instanceId));
         }
 
+        this.logger.TerminatingInstance(instanceId);
+
         string? serializedOutput = this.dataConverter.Serialize(output);
         await this.workerClient.TerminateInstanceAsync(new P.TerminateRequest
         {
@@ -122,11 +131,39 @@ public class TaskHubGrpcClient : TaskHubClient
     }
 
     /// <inheritdoc/>
+    public override async Task<OrchestrationMetadata?> GetInstanceMetadataAsync(
+        string instanceId,
+        bool getInputsAndOutputs = false)
+    {
+        if (string.IsNullOrEmpty(instanceId))
+        {
+            throw new ArgumentNullException(nameof(instanceId));
+        }
+
+        P.GetInstanceResponse response = await this.workerClient.GetInstanceAsync(
+            new P.GetInstanceRequest
+            {
+                InstanceId = instanceId,
+                GetInputsAndOutputs = getInputsAndOutputs,
+            });
+
+        // REVIEW: Should we return a non-null value instead of !exists?
+        if (!response.Exists)
+        {
+            return null;
+        }
+
+        return new OrchestrationMetadata(response, this.dataConverter, getInputsAndOutputs);
+    }
+
+    /// <inheritdoc/>
     public override async Task<OrchestrationMetadata> WaitForInstanceStartAsync(
         string instanceId,
         CancellationToken cancellationToken,
         bool getInputsAndOutputs = false)
     {
+        this.logger.WaitingForInstanceStart(instanceId, getInputsAndOutputs);
+
         P.GetInstanceRequest request = new()
         {
             InstanceId = instanceId,
@@ -154,6 +191,8 @@ public class TaskHubGrpcClient : TaskHubClient
         CancellationToken cancellationToken,
         bool getInputsAndOutputs = false)
     {
+        this.logger.WaitingForInstanceCompletion(instanceId, getInputsAndOutputs);
+        
         P.GetInstanceRequest request = new()
         {
             InstanceId = instanceId,
@@ -199,6 +238,6 @@ public class TaskHubGrpcClient : TaskHubClient
             return this;
         }
 
-        public TaskHubGrpcClient Build() => new(this);
+        public TaskHubClient Build() => new TaskHubGrpcClient(this);
     }
 }

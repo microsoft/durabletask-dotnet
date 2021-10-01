@@ -16,11 +16,23 @@ using System.Collections.Generic;
 using System.Threading;
 using DurableTask;
 using DurableTask.Grpc;
+using Microsoft.Extensions.Logging;
 
 // See https://aka.ms/new-console-template for more information
 Console.WriteLine("Hello, World!");
 
-TaskHubGrpcServer server = TaskHubGrpcServer.CreateBuilder()
+ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
+{
+    builder.SetMinimumLevel(LogLevel.Debug);
+    builder.AddSimpleConsole(options =>
+    {
+        options.SingleLine = true;
+        options.UseUtcTimestamp = true;
+        options.TimestampFormat = "yyyy-mm-ddThh:mm:ss.ffffffZ ";
+    });
+});
+
+TaskHubGrpcWorker server = TaskHubGrpcWorker.CreateBuilder()
     .AddTaskOrchestrator("HelloSequence", async context =>
     {
         var greetings = new List<string>
@@ -33,9 +45,10 @@ TaskHubGrpcServer server = TaskHubGrpcServer.CreateBuilder()
         return greetings;
     })
     .AddTaskActivity("SayHello", context => $"Hello {context.GetInput<string>()}!")
+    .UseLoggerFactory(loggerFactory)
     .Build();
 
-await server.StartAsync();
+await server.StartAsync(timeout: TimeSpan.FromSeconds(30));
 
 await using TaskHubClient client = TaskHubGrpcClient.Create();
 string instanceId = await client.ScheduleNewOrchestrationInstanceAsync("HelloSequence");

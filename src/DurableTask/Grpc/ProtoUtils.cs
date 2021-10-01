@@ -179,9 +179,14 @@ static class ProtoUtils
 
     internal static P.OrchestratorResponse ConstructOrchestratorResponse(
         string instanceId,
+        string? customStatus,
         IEnumerable<OrchestratorAction> actions)
     {
-        var response = new P.OrchestratorResponse { InstanceId = instanceId };
+        var response = new P.OrchestratorResponse
+        {
+            InstanceId = instanceId,
+            CustomStatus = customStatus,
+        };
 
         foreach (OrchestratorAction action in actions)
         {
@@ -249,11 +254,13 @@ static class ProtoUtils
     }
 
     internal static P.ActivityResponse ConstructActivityResponse(
+        string instanceId,
         int taskId,
         string? serializedOutput)
     {
         return new P.ActivityResponse
         {
+            InstanceId = instanceId,
             TaskId = taskId,
             Result = serializedOutput,
         };

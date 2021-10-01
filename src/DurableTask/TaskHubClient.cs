@@ -136,13 +136,29 @@ public abstract class TaskHubClient : IAsyncDisposable
     /// <param name="instanceId">The unique ID of the orchestration instance to wait for.</param>
     /// <param name="cancellationToken">A <see cref="CancellationToken"/> that can be used to cancel the wait operation.</param>
     /// <param name="getInputsAndOutputs">
-    /// Specify <c>true</c> to fetch the orchestration instance's inputs and outputs; <c>false</c> to omit them.
+    /// Specify <c>true</c> to fetch the orchestration instance's inputs and outputs, including custom status metadata; <c>false</c> to omit them.
     /// The default value is <c>false</c> to minimize the serialization cost associated with loading the instance metadata.
     /// </param>
     /// <returns>Returns a <see cref="OrchestrationMetadata"/> record that describes the orchestration instance and its execution status.</returns>
     public abstract Task<OrchestrationMetadata> WaitForInstanceCompletionAsync(
         string instanceId,
         CancellationToken cancellationToken,
+        bool getInputsAndOutputs = false);
+
+    /// <summary>
+    /// Fetches orchestration instance metadata from the durable store.
+    /// </summary>
+    /// <param name="instanceId">The unique ID of the orchestration instance to fetch.</param>
+    /// <param name="getInputsAndOutputs">
+    /// Specify <c>true</c> to fetch the orchestration instance's inputs and outputs, including custom status metadata; <c>false</c> to omit them.
+    /// The default value is <c>false</c> to minimize the serialization cost associated with loading the instance metadata.
+    /// </param>
+    /// <returns>
+    /// Returns a <see cref="OrchestrationMetadata"/> record that describes the orchestration instance and its execution status, or <c>null</c>
+    /// if no instance with ID <paramref name="instanceId"/> exists.
+    /// </returns>
+    public abstract Task<OrchestrationMetadata?> GetInstanceMetadataAsync(
+        string instanceId,
         bool getInputsAndOutputs = false);
 
     /// <summary>

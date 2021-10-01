@@ -21,6 +21,11 @@ namespace DurableTask;
 /// </summary>
 public class JsonDataConverter : IDataConverter
 {
+    static readonly JsonSerializerOptions DefaultOptions = new()
+    {
+        IncludeFields = true,
+    };
+
     /// <summary>
     /// An instance of the <see cref="JsonDataConverter"/> with default configuration.
     /// </summary>
@@ -30,7 +35,14 @@ public class JsonDataConverter : IDataConverter
 
     public JsonDataConverter(JsonSerializerOptions? options = null)
     {
-        this.options = options;
+        if (options != null)
+        {
+            this.options = options;
+        }
+        else
+        {
+            this.options = DefaultOptions;
+        }
     }
 
     public virtual string? Serialize(object? value)

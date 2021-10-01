@@ -33,6 +33,7 @@ public sealed class OrchestrationMetadata
         this.LastUpdatedAt = response.OrchestrationState.LastUpdatedTimestamp.ToDateTimeOffset();
         this.SerializedInput = response.OrchestrationState.Input;
         this.SerializedOutput = response.OrchestrationState.Output;
+        this.SerializedCustomStatus = response.OrchestrationState.CustomStatus;
         this.dataConverter = dataConverter;
         this.requestedInputsAndOutputs = requestedInputsAndOutputs;
     }
@@ -48,6 +49,8 @@ public sealed class OrchestrationMetadata
     public string? SerializedInput { get; }
 
     public string? SerializedOutput { get; }
+    
+    public string? SerializedCustomStatus { get; }
 
     public bool IsRunning =>
         this.RuntimeStatus == OrchestrationRuntimeStatus.Running;
@@ -79,6 +82,18 @@ public sealed class OrchestrationMetadata
         }
 
         return this.dataConverter.Deserialize<T>(this.SerializedOutput);
+    }
+
+    public T? ReadCustomStatusAs<T>()
+    {
+        if (!this.requestedInputsAndOutputs)
+        {
+            throw new InvalidOperationException(
+                $"The {nameof(this.ReadCustomStatusAs)} method can only be used on {nameof(OrchestrationMetadata)} objects " +
+                "that are fetched with the option to include input and output data.");
+        }
+
+        return this.dataConverter.Deserialize<T>(this.SerializedCustomStatus);
     }
 
     public override string ToString()

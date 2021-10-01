@@ -9,15 +9,18 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 	ProjectSection(SolutionItems) = preProject
 		.editorconfig = .editorconfig
 		.gitignore = .gitignore
-		submodules\protobuf\protos\orchestrator_service.proto = submodules\protobuf\protos\orchestrator_service.proto
 		README.md = README.md
 	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Microsoft.DurableTask.Protobuf", "submodules\protobuf\lib\dotnet\Microsoft.DurableTask.Protobuf.csproj", "{5128E165-9793-4172-B809-11227007E888}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BasicPatterns", "samples\BasicPatterns\BasicPatterns.csproj", "{F9812EB9-A3CD-4E80-8CEA-243AE2AF925F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ConsoleApp", "samples\ConsoleApp\ConsoleApp.csproj", "{F9812EB9-A3CD-4E80-8CEA-243AE2AF925F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DurableTask.Sdk.Tests", "test\DurableTask.Sdk.Tests\DurableTask.Sdk.Tests.csproj", "{B56EC428-222E-476E-BE3D-1ADE03B2BDF3}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DurableTask.Sdk.Tests", "test\DurableTask.Sdk.Tests\DurableTask.Sdk.Tests.csproj", "{B56EC428-222E-476E-BE3D-1ADE03B2BDF3}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{7EA86372-16CC-4CBD-B8EF-E0B6BCA3A3E6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebAPI", "samples\WebAPI\WebAPI.csproj", "{BF343A6F-47D8-4514-AEC7-B9C3DA693A83}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -41,9 +44,17 @@ Global
 		{B56EC428-222E-476E-BE3D-1ADE03B2BDF3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B56EC428-222E-476E-BE3D-1ADE03B2BDF3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B56EC428-222E-476E-BE3D-1ADE03B2BDF3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BF343A6F-47D8-4514-AEC7-B9C3DA693A83}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BF343A6F-47D8-4514-AEC7-B9C3DA693A83}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BF343A6F-47D8-4514-AEC7-B9C3DA693A83}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BF343A6F-47D8-4514-AEC7-B9C3DA693A83}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{F9812EB9-A3CD-4E80-8CEA-243AE2AF925F} = {7EA86372-16CC-4CBD-B8EF-E0B6BCA3A3E6}
+		{BF343A6F-47D8-4514-AEC7-B9C3DA693A83} = {7EA86372-16CC-4CBD-B8EF-E0B6BCA3A3E6}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {E42B951D-3936-42EA-83AD-C65591D76C91}

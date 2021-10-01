@@ -107,7 +107,44 @@ public abstract class TaskOrchestrationContext
     /// <returns>A task that completes when the external event is received. The value of the task is the deserialized event payload.</returns>
     public abstract Task<T> WaitForExternalEvent<T>(string eventName, CancellationToken cancellationToken = default);
 
-    public abstract void SetCustomStatus(object customStatus);
+    /// <param name="timeout">The amount of time to wait before cancelling the external event task.</param>
+    /// <inheritdoc cref="WaitForExternalEvent(string, CancellationToken)"/>
+    public async Task<T> WaitForExternalEvent<T>(string eventName, TimeSpan timeout)
+    {
+        // Timeouts are implemented using durable timers.
+        using CancellationTokenSource timerCts = new();
+        Task timeoutTask = this.CreateTimer(timeout, timerCts.Token);
+
+        using CancellationTokenSource eventCts = new();
+        Task<T> externalEventTask = this.WaitForExternalEvent<T>(eventName, eventCts.Token);
+
+        // Wait for either task to complete and then cancel the one that didn't.
+        Task winner = await Task.WhenAny(timeoutTask, externalEventTask);
+        if (winner == externalEventTask)
+        {
+            timerCts.Cancel();
+        }
+        else
+        {
+            eventCts.Cancel();
+        }
+
+        // This will either return the received value or throw if the task was cancelled.
+        return await externalEventTask;
+    }
+
+    /// <summary>
+    /// Assigns a custom status value to the current orchestration.
+    /// </summary>
+    /// <remarks>
+    /// The <paramref name="customStatus"/> value is serialized and stored in orchestration state and will
+    /// be made available to the orchestration status query APIs, such as <see cref="TaskHubClient.GetInstanceMetadata"/>.
+    /// The serialized value must not exceed 16 KB of UTF-16 encoded text.
+    /// </remarks>
+    /// <param name="customStatus">
+    /// A serializeable value to assign as the custom status value or <c>null</c> to clear the custom status.
+    /// </param>
+    public abstract void SetCustomStatus(object? customStatus);
 
     /// <summary>
     /// Executes a named sub-orchestrator and returns the result.
@@ -115,7 +152,7 @@ public abstract class TaskOrchestrationContext
     /// <typeparam name="TResult">
     /// The type into which to deserialize the sub-orchestrator's output.
     /// </typeparam>
-    /// <inheritdoc cref="CallSubOrchestratorAsync(TaskName, string?, object?)"/>
+    /// <inheritdoc cref="CallSubOrchestratorAsync(TaskName, string?, object?, TaskOptions?)"/>
     public abstract Task<TResult> CallSubOrchestratorAsync<TResult>(
         TaskName orchestratorName,
         string? instanceId = null,

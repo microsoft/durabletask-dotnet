@@ -50,15 +50,15 @@ static class SdkUtils
     /// <summary>
     /// Gets a serialized representation of an error payload. The format of this error is considered the standard that all SDKs should adhere to.
     /// </summary>
-    internal static string GetSerializedErrorPayload(IDataConverter dataConverter, string message, Exception e)
+    internal static string GetSerializedErrorPayload(IDataConverter dataConverter, string message, Exception? e = null)
     {
-        return GetSerializedErrorPayload(dataConverter, message, e.ToString());
+        return GetSerializedErrorPayload(dataConverter, message, e?.ToString());
     }
 
     /// <summary>
     /// Gets a serialized representation of an error payload. The format of this error is considered the standard that all SDKs should adhere to.
     /// </summary>
-    internal static string GetSerializedErrorPayload(IDataConverter dataConverter, string message, string fullText)
+    internal static string GetSerializedErrorPayload(IDataConverter dataConverter, string message, string? fullText)
     {
         return dataConverter.Serialize(new OrchestrationFailureDetails(message, fullText));
     }

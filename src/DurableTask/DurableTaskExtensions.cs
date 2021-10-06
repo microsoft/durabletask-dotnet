@@ -30,7 +30,7 @@ public static class DurableTaskExtensions
     /// <returns>Returns the current <see cref="IServiceCollection"/>.</returns>
     public static IServiceCollection AddDurableTask(
         this IServiceCollection serviceCollection,
-        Action<ITaskOrchestrationBuilder> builderAction,
+        Action<ITaskBuilder> builderAction,
         string? sidecarAddress = null)
     {
         // Register the client
@@ -38,11 +38,8 @@ public static class DurableTaskExtensions
 
         return serviceCollection.AddHostedService(services =>
         {
-            // Register the worker
-            TaskHubGrpcWorker.Builder workerBuilder = TaskHubGrpcWorker.CreateBuilder();
-
-            // TODO: Allow activities to participate in dependency resolution (but not orchestrations).
-            builderAction(workerBuilder);
+            TaskHubGrpcWorker.Builder workerBuilder = TaskHubGrpcWorker.CreateBuilder().UseServices(services);
+            workerBuilder.AddTasks(builderAction);
 
             if (sidecarAddress != null)
             {

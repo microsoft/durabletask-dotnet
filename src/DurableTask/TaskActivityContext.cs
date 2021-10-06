@@ -38,5 +38,5 @@ public abstract class TaskActivityContext
     /// </summary>
     /// <typeparam name="T">The type of the activity input. This is used for deserialization.</typeparam>
     /// <returns>Returns the input deserialized into an object of type <c>T</c>.</returns>
-    public abstract T GetInput<T>();
+    public abstract T? GetInput<T>();
 }

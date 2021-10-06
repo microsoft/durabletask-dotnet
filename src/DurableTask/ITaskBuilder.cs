@@ -16,27 +16,30 @@ using System.Threading.Tasks;
 
 namespace DurableTask;
 
-// TODO: Overloads for class-based factory types
 // TODO: Documentation
-public interface ITaskOrchestrationBuilder
+public interface ITaskBuilder
 {
-    public ITaskOrchestrationBuilder AddTaskOrchestrator(
+    public ITaskBuilder AddOrchestrator(
         TaskName name,
         Func<TaskOrchestrationContext, Task> implementation);
 
-    public ITaskOrchestrationBuilder AddTaskOrchestrator<T>(
+    public ITaskBuilder AddOrchestrator<T>(
         TaskName name,
         Func<TaskOrchestrationContext, Task<T>> implementation);
 
-    public ITaskOrchestrationBuilder AddTaskActivity(
+    public ITaskBuilder AddOrchestrator<T>() where T : ITaskOrchestrator;
+
+    public ITaskBuilder AddActivity(
         TaskName name,
         Func<TaskActivityContext, object?> implementation);
 
-    public ITaskOrchestrationBuilder AddTaskActivity(
+    public ITaskBuilder AddActivity(
         TaskName name,
         Func<TaskActivityContext, Task> implementation);
 
-    public ITaskOrchestrationBuilder AddTaskActivity<T>(
+    public ITaskBuilder AddActivity<T>(
         TaskName name,
         Func<TaskActivityContext, Task<T>> implementation);
+
+    public ITaskBuilder AddActivity<T>() where T : ITaskActivity;
 }

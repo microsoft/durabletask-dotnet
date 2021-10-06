@@ -18,4 +18,4 @@ namespace DurableTask;
 /// </summary>
 /// <param name="Message">A summary description of the failure.</param>
 /// <param name="FullText">The full details of the failure, which is often an exception call-stack.</param>
-public record OrchestrationFailureDetails(string Message, string FullText);
+public record OrchestrationFailureDetails(string Message, string? FullText);

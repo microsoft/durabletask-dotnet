@@ -29,7 +29,7 @@ public class OrderProcessingController : ControllerBase
     }
 
     // HTTPie command:
-    // http POST http://localhost:8080/orders/new Item=catfood Quantity=5 Price=6000
+    // http POST http://localhost:8080/orders/new Item=catfood Quantity=5 Price=600
     [HttpPost("new")]
     public async Task<ActionResult> CreateOrder([FromBody] OrderInfo orderInfo)
     {
@@ -40,8 +40,7 @@ public class OrderProcessingController : ControllerBase
 
         // Generate an order ID and start the order processing workflow orchestration
         string orderId = $"{orderInfo.Item}-{Guid.NewGuid().ToString()[..4]}";
-        await this.taskHubClient.ScheduleNewOrchestrationInstanceAsync(
-            orchestratorName: "ProcessOrder",
+        await this.taskHubClient.ScheduleNewProcessOrderOrchestratorInstanceAsync(
             instanceId: orderId,
             input: orderInfo);
 

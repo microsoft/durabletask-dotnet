@@ -33,18 +33,21 @@ ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
 });
 
 TaskHubGrpcWorker server = TaskHubGrpcWorker.CreateBuilder()
-    .AddTaskOrchestrator("HelloSequence", async context =>
+    .AddTasks(tasks =>
     {
-        var greetings = new List<string>
+        tasks.AddOrchestrator("HelloSequence", async context =>
         {
-            await context.CallActivityAsync<string>("SayHello", "Tokyo"),
-            await context.CallActivityAsync<string>("SayHello", "London"),
-            await context.CallActivityAsync<string>("SayHello", "Seattle"),
-        };
+            var greetings = new List<string>
+            {
+                await context.CallActivityAsync<string>("SayHello", "Tokyo"),
+                await context.CallActivityAsync<string>("SayHello", "London"),
+                await context.CallActivityAsync<string>("SayHello", "Seattle"),
+            };
 
-        return greetings;
+            return greetings;
+        });
+        tasks.AddActivity("SayHello", context => $"Hello {context.GetInput<string>()}!");
     })
-    .AddTaskActivity("SayHello", context => $"Hello {context.GetInput<string>()}!")
     .UseLoggerFactory(loggerFactory)
     .Build();
 

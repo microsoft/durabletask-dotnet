@@ -15,6 +15,7 @@ using System;
 
 namespace DurableTask;
 
+// TODO: Add detailed remarks that describe the role of TaskName
 /// <summary>
 /// The name of a durable task.
 /// </summary>
@@ -42,6 +43,9 @@ public struct TaskName : IEquatable<TaskName>
     /// <summary>
     /// Gets the version of the task.
     /// </summary>
+    /// <remarks>
+    /// Task versions are currently experimental and their role may change over time.
+    /// </remarks>
     public string Version { get; }
 
     /// <summary>

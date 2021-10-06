@@ -4,11 +4,20 @@
     <TargetFramework>net6.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)Generated</CompilerGeneratedFilesOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- NOTE: This project reference can be replaced with a nuget package reference -->
     <ProjectReference Include="..\..\src\DurableTask\DurableTask.csproj" />
+  </ItemGroup>
+
+  <!-- Source generation -->
+  <ItemGroup>
+    <!-- Note that this is not a "normal" ProjectReference.
+         It needs the additional 'OutputItemType' and 'ReferenceOutputAssembly' attributes. -->
+    <ProjectReference Include="..\..\src\DurableTask.Generators\DurableTask.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

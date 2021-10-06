@@ -24,6 +24,7 @@ using DurableTask.Core.Command;
 using DurableTask.Core.History;
 using Grpc.Core;
 using Grpc.Net.Client;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -38,9 +39,11 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
     readonly TaskHubSidecarServiceClient sidecarClient;
     readonly IDataConverter dataConverter;
     readonly ILogger logger;
+    readonly IServiceProvider serviceProvider;
+    readonly WorkerContext workerContext;
 
-    readonly ImmutableDictionary<TaskName, Func<TaskOrchestration>> orchestrators;
-    readonly ImmutableDictionary<TaskName, Func<TaskActivity>> activities;
+    readonly ImmutableDictionary<TaskName, Func<WorkerContext, TaskOrchestration>> orchestrators;
+    readonly ImmutableDictionary<TaskName, Func<WorkerContext, TaskActivity>> activities;
 
     CancellationTokenSource? shutdownTcs;
     Task? listenLoop;
@@ -49,11 +52,17 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
     {
         this.sidecarGrpcChannel = GrpcChannel.ForAddress(builder.address);
         this.sidecarClient = new TaskHubSidecarServiceClient(this.sidecarGrpcChannel);
-        this.dataConverter = builder.dataConverter;
-        this.logger = SdkUtils.GetLogger(builder.loggerFactory);
+        this.serviceProvider = builder.services;
+        this.dataConverter = builder.dataConverter; // TODO: Can this come from the IServiceProvider?
+        this.logger = SdkUtils.GetLogger(builder.loggerFactory); // TODO: Can this come from the IServiceProvider?
 
-        this.orchestrators = builder.orchestratorsBuilder.ToImmutable();
-        this.activities = builder.activitiesBuilder.ToImmutable();
+        this.workerContext = new WorkerContext(
+            builder.dataConverter,
+            SdkUtils.GetLogger(builder.loggerFactory),
+            builder.services);
+
+        this.orchestrators = builder.taskProvider.orchestratorsBuilder.ToImmutable();
+        this.activities = builder.taskProvider.activitiesBuilder.ToImmutable();
     }
 
     /// <summary>
@@ -238,19 +247,22 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
 
         this.logger.ReceivedOrchestratorRequest(name, request.InstanceId);
 
-        if (!this.orchestrators.TryGetValue(name, out Func<TaskOrchestration>? factory) || factory == null)
-        {
-            // TODO: Need a way to send the response back to the sidecar
-            throw new ArgumentException($"No task orchestration named '{name}' was found.", nameof(request));
-        }
-
-        TaskOrchestration orchestrator = factory.Invoke();
-        TaskOrchestrationExecutor executor = new(runtimeState, orchestrator, BehaviorOnContinueAsNew.Carryover);
         OrchestratorExecutionResult result;
 
         try
         {
-            result = await executor.ExecuteAsync();
+            TaskOrchestration orchestrator;
+            if (this.orchestrators.TryGetValue(name, out Func<WorkerContext, TaskOrchestration>? factory) && factory != null)
+            {
+                // Both the factory invocation and the ExecuteAsync could involve user code and need to be handled as part of try/catch.
+                orchestrator = factory.Invoke(this.workerContext);
+                TaskOrchestrationExecutor executor = new(runtimeState, orchestrator, BehaviorOnContinueAsNew.Carryover);
+                result = await executor.ExecuteAsync();
+            }
+            else
+            {
+                result = this.CreateOrchestrationFailedActionResult($"No task orchestration named '{name}' was found.");
+            }
         }
         catch (Exception applicationException)
         {
@@ -265,7 +277,7 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
             !string.IsNullOrEmpty(completedAction.Details))
         {
             completedAction.Result = SdkUtils.GetSerializedErrorPayload(
-                this.dataConverter,
+                this.workerContext.DataConverter,
                 "The orchestrator failed with an unhandled exception.",
                 completedAction.Details);
         }
@@ -281,6 +293,13 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
 
     OrchestratorExecutionResult CreateOrchestrationFailedActionResult(Exception e)
     {
+        return this.CreateOrchestrationFailedActionResult(
+            message: "The orchestrator failed with an unhandled exception.",
+            fullText: e.ToString());
+    }
+
+    OrchestratorExecutionResult CreateOrchestrationFailedActionResult(string message, string? fullText = null)
+    {
         return new OrchestratorExecutionResult
         {
             Actions = new[]
@@ -291,14 +310,14 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
                     OrchestrationStatus = OrchestrationStatus.Failed,
                     Result = SdkUtils.GetSerializedErrorPayload(
                         this.dataConverter,
-                        "The orchestrator failed with an unhandled exception.",
-                        e),
+                        message,
+                        fullText),
                 },
             },
         };
     }
 
-    string CreateActivityFailedOutput(Exception e, string? message = null)
+    string CreateActivityFailedOutput(Exception? e = null, string? message = null)
     {
         return SdkUtils.GetSerializedErrorPayload(
             this.dataConverter,
@@ -314,20 +333,23 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
         int inputSize = rawInput != null ? Encoding.UTF8.GetByteCount(rawInput) : 0;
         this.logger.ReceivedActivityRequest(request.Name, request.TaskId, instance.InstanceId, inputSize);
 
-        TaskName name = new(request.Name, request.Version);
-        if (!this.activities.TryGetValue(name, out Func<TaskActivity>? factory) || factory == null)
-        {
-            // TODO: Send a retryable failure response back to the worker instead of throwing
-            throw new ArgumentException($"No task activity named '{name}' was found.", nameof(request));
-        }
-
         TaskContext innerContext = new(instance);
-        TaskActivity activity = factory.Invoke();
+
+        TaskName name = new(request.Name, request.Version);
 
         string output;
         try
         {
-            output = await activity.RunAsync(innerContext, request.Input);
+            if (this.activities.TryGetValue(name, out Func<WorkerContext, TaskActivity>? factory) && factory != null)
+            {
+                // Both the factory invocation and the RunAsync could involve user code and need to be handled as part of try/catch.
+                TaskActivity activity = factory.Invoke(this.workerContext);
+                output = await activity.RunAsync(innerContext, request.Input);
+            }
+            else
+            {
+                output = this.CreateActivityFailedOutput(message: $"No task activity named '{name}' was found.");
+            }
         }
         catch (Exception applicationException)
         {
@@ -370,17 +392,15 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
 
     public static Builder CreateBuilder() => new();
 
-    public sealed class Builder : ITaskOrchestrationBuilder
+    public sealed class Builder
     {
-        internal ImmutableDictionary<TaskName, Func<TaskActivity>>.Builder activitiesBuilder =
-            ImmutableDictionary.CreateBuilder<TaskName, Func<TaskActivity>>();
+        static readonly IServiceProvider EmptyServiceProvider = new ServiceCollection().BuildServiceProvider();
 
-        internal ImmutableDictionary<TaskName, Func<TaskOrchestration>>.Builder orchestratorsBuilder =
-            ImmutableDictionary.CreateBuilder<TaskName, Func<TaskOrchestration>>();
-
-        internal ILoggerFactory loggerFactory = NullLoggerFactory.Instance;
+        internal DefaultTaskBuilder taskProvider = new();
         internal string address = "http://127.0.0.1:4001";
+        internal ILoggerFactory loggerFactory = NullLoggerFactory.Instance;
         internal IDataConverter dataConverter = SdkUtils.DefaultDataConverter;
+        internal IServiceProvider services = EmptyServiceProvider;
 
         internal Builder()
         {
@@ -388,84 +408,9 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
 
         public TaskHubGrpcWorker Build() => new(this);
 
-        public Builder AddTaskOrchestrator(
-            TaskName name,
-            Func<TaskOrchestrationContext, Task> implementation)
+        public Builder UseAddress(string address)
         {
-            return this.AddTaskOrchestrator<object?>(name, async ctx =>
-            {
-                await implementation(ctx);
-                return null;
-            });
-        }
-
-        public Builder AddTaskOrchestrator<T>(
-            TaskName name,
-            Func<TaskOrchestrationContext, Task<T>> implementation)
-        {
-            if (name == default)
-            {
-                throw new ArgumentNullException(nameof(name));
-            }
-
-            if (implementation == null)
-            {
-                throw new ArgumentNullException(nameof(implementation));
-            }
-
-            if (this.orchestratorsBuilder.ContainsKey(name))
-            {
-                throw new ArgumentException($"A task orchestrator named '{name}' is already added.", nameof(name));
-            }
-
-            this.orchestratorsBuilder.Add(
-                name,
-                () => new TaskOrchestrationWrapper<T>(this, name, implementation));
-
-            return this;
-        }
-
-        // TODO: Overloads for class-based factory types
-        public Builder AddTaskActivity(
-            TaskName name,
-            Func<TaskActivityContext, object?> implementation)
-        {
-            return this.AddTaskActivity(name, context => Task.FromResult(implementation(context)));
-        }
-
-        public Builder AddTaskActivity(
-            TaskName name,
-            Func<TaskActivityContext, Task> implementation)
-        {
-            return this.AddTaskActivity<object?>(name, async context =>
-            {
-                await implementation(context);
-                return null;
-            });
-        }
-
-        public Builder AddTaskActivity<T>(
-            TaskName name,
-            Func<TaskActivityContext, Task<T>> implementation)
-        {
-            if (name == default)
-            {
-                throw new ArgumentNullException(nameof(name));
-            }
-
-            if (implementation == null)
-            {
-                throw new ArgumentNullException(nameof(implementation));
-            }
-
-            if (this.activitiesBuilder.ContainsKey(name))
-            {
-                throw new ArgumentException($"A task activity named '{name}' is already added.", nameof(name));
-            }
-
-            this.activitiesBuilder.Add(
-                name,
-                () => new TaskActivityWrapper<T>(this, name, implementation));
+            this.address = SdkUtils.ValidateAddress(address);
             return this;
         }
 
@@ -475,48 +420,161 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
             return this;
         }
 
-        public Builder UseAddress(string address)
-        {
-            this.address = SdkUtils.ValidateAddress(address);
-            return this;
-        }
-
         public Builder UseDataConverter(IDataConverter dataConverter)
         {
             this.dataConverter = dataConverter ?? throw new ArgumentNullException(nameof(dataConverter));
             return this;
         }
 
-        /// <inheritdoc/>
-        ITaskOrchestrationBuilder ITaskOrchestrationBuilder.AddTaskOrchestrator<T>(TaskName name, Func<TaskOrchestrationContext, Task<T>> implementation)
+        public Builder UseServices(IServiceProvider services)
         {
-            return this.AddTaskOrchestrator(name, implementation);
+            this.services = services ?? throw new ArgumentNullException(nameof(services));
+            return this;
         }
 
-        /// <inheritdoc/>
-        ITaskOrchestrationBuilder ITaskOrchestrationBuilder.AddTaskOrchestrator(TaskName name, Func<TaskOrchestrationContext, Task> implementation)
+        public Builder AddTasks(Action<ITaskBuilder> taskProviderAction)
         {
-            return this.AddTaskOrchestrator(name, implementation);
+            taskProviderAction(this.taskProvider);
+            return this;
         }
 
-        /// <inheritdoc/>
-        ITaskOrchestrationBuilder ITaskOrchestrationBuilder.AddTaskActivity<T>(TaskName name, Func<TaskActivityContext, Task<T>> implementation)
+        internal sealed class DefaultTaskBuilder : ITaskBuilder
         {
-            return this.AddTaskActivity(name, implementation);
-        }
+            internal ImmutableDictionary<TaskName, Func<WorkerContext, TaskActivity>>.Builder activitiesBuilder =
+                ImmutableDictionary.CreateBuilder<TaskName, Func<WorkerContext, TaskActivity>>();
 
-        /// <inheritdoc/>
-        ITaskOrchestrationBuilder ITaskOrchestrationBuilder.AddTaskActivity(TaskName name, Func<TaskActivityContext, object?> implementation)
-        {
-            return this.AddTaskActivity(name, implementation);
-        }
+            internal ImmutableDictionary<TaskName, Func<WorkerContext, TaskOrchestration>>.Builder orchestratorsBuilder =
+                ImmutableDictionary.CreateBuilder<TaskName, Func<WorkerContext, TaskOrchestration>>();
 
-        /// <inheritdoc/>
-        ITaskOrchestrationBuilder ITaskOrchestrationBuilder.AddTaskActivity(TaskName name, Func<TaskActivityContext, Task> implementation)
-        {
-            return this.AddTaskActivity(name, implementation);
+            public ITaskBuilder AddOrchestrator(
+                TaskName name,
+                Func<TaskOrchestrationContext, Task> implementation)
+            {
+                return this.AddOrchestrator<object?>(name, async ctx =>
+                {
+                    await implementation(ctx);
+                    return null;
+                });
+            }
+
+            public ITaskBuilder AddOrchestrator<T>(
+                TaskName name,
+                Func<TaskOrchestrationContext, Task<T>> implementation)
+            {
+                if (name == default)
+                {
+                    throw new ArgumentNullException(nameof(name));
+                }
+
+                if (implementation == null)
+                {
+                    throw new ArgumentNullException(nameof(implementation));
+                }
+
+                if (this.orchestratorsBuilder.ContainsKey(name))
+                {
+                    throw new ArgumentException($"A task orchestrator named '{name}' is already added.", nameof(name));
+                }
+
+                this.orchestratorsBuilder.Add(
+                    name,
+                    builder => new TaskOrchestrationWrapper<T>(builder, name, implementation));
+
+                return this;
+            }
+
+            public ITaskBuilder AddOrchestrator<TOrchestrator>() where TOrchestrator : ITaskOrchestrator
+            {
+                string name = GetTaskName(typeof(TOrchestrator));
+                this.orchestratorsBuilder.Add(
+                    name,
+                    workerContext =>
+                    {
+                        // Unlike activities, we don't give orchestrators access to the IServiceProvider collection since
+                        // injected services are inherently non-deterministic. If an orchestrator needs access to a service,
+                        // it should invoke that service through an activity call.
+                        TOrchestrator orchestrator = Activator.CreateInstance<TOrchestrator>();
+                        return new TaskOrchestrationWrapper<object?>(workerContext, name, orchestrator.RunAsync);
+                    });
+                return this;
+            }
+
+            public ITaskBuilder AddActivity(
+                TaskName name,
+                Func<TaskActivityContext, object?> implementation)
+            {
+                return this.AddActivity(name, context => Task.FromResult(implementation(context)));
+            }
+
+            public ITaskBuilder AddActivity(
+                TaskName name,
+                Func<TaskActivityContext, Task> implementation)
+            {
+                return this.AddActivity<object?>(name, async context =>
+                {
+                    await implementation(context);
+                    return null;
+                });
+            }
+
+            public ITaskBuilder AddActivity<T>(
+                TaskName name,
+                Func<TaskActivityContext, Task<T>> implementation)
+            {
+                if (name == default)
+                {
+                    throw new ArgumentNullException(nameof(name));
+                }
+
+                if (implementation == null)
+                {
+                    throw new ArgumentNullException(nameof(implementation));
+                }
+
+                if (this.activitiesBuilder.ContainsKey(name))
+                {
+                    throw new ArgumentException($"A task activity named '{name}' is already added.", nameof(name));
+                }
+
+                this.activitiesBuilder.Add(
+                    name,
+                    workerContext => new TaskActivityWrapper<T>(workerContext, name, implementation));
+                return this;
+            }
+
+            public ITaskBuilder AddActivity<TActivity>() where TActivity : ITaskActivity
+            {
+                string name = GetTaskName(typeof(TActivity));
+                this.activitiesBuilder.Add(
+                    name,
+                    workerContext =>
+                    {
+                        TActivity activity = ActivatorUtilities.CreateInstance<TActivity>(workerContext.Services);
+                        return new TaskActivityWrapper<object?>(workerContext, name, activity.RunAsync);
+                    });
+                return this;
+            }
+
+            static TaskName GetTaskName(Type taskDeclarationType)
+            {
+                // IMPORTANT: This logic needs to be kept consistent with the source generator logic
+                DurableTaskAttribute? attribute = (DurableTaskAttribute?)Attribute.GetCustomAttribute(taskDeclarationType, typeof(DurableTaskAttribute));
+                if (attribute != null)
+                {
+                    return attribute.Name;
+                }
+                else
+                {
+                    return taskDeclarationType.Name;
+                }
+            }
         }
     }
+
+    internal record WorkerContext(
+        IDataConverter DataConverter,
+        ILogger Logger,
+        IServiceProvider Services);
 
     sealed class TaskOrchestrationWrapper<TOutput> : TaskOrchestration
     {
@@ -527,11 +585,11 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
         TaskOrchestrationContextWrapper? wrapperContext;
 
         public TaskOrchestrationWrapper(
-            Builder builder,
+            WorkerContext workerContext,
             TaskName name,
             Func<TaskOrchestrationContext, Task<TOutput>> wrappedImplementation)
         {
-            this.dataConverter = builder.dataConverter;
+            this.dataConverter = workerContext.DataConverter;
             this.name = name;
             this.wrappedImplementation = wrappedImplementation;
         }
@@ -688,7 +746,7 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
                 }
             }
 
-            public override void SetCustomStatus(object customStatus)
+            public override void SetCustomStatus(object? customStatus)
             {
                 this.customStatus = customStatus;
             }
@@ -801,11 +859,11 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
         readonly IDataConverter dataConverter;
 
         public TaskActivityWrapper(
-            Builder builder,
+            WorkerContext workerContext,
             TaskName name,
             Func<TaskActivityContext, Task<TOutput>> implementation)
         {
-            this.dataConverter = builder.dataConverter ?? new JsonDataConverter();
+            this.dataConverter = workerContext.DataConverter ?? JsonDataConverter.Default;
             this.name = name;
             this.wrappedImplementation = implementation;
         }

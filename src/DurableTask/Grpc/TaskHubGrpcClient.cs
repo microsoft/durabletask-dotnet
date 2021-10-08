@@ -18,6 +18,8 @@ using System.Threading.Tasks;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Grpc.Net.Client;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using static DurableTask.Protobuf.TaskHubSidecarService;
@@ -27,19 +29,25 @@ namespace DurableTask.Grpc;
 
 public class TaskHubGrpcClient : TaskHubClient
 {
-    readonly GrpcChannel workerGrpcChannel;
-    readonly TaskHubSidecarServiceClient workerClient;
+    readonly IServiceProvider services;
     readonly IDataConverter dataConverter;
     readonly ILogger logger;
+    readonly IConfiguration? configuration;
+    readonly GrpcChannel sidecarGrpcChannel;
+    readonly TaskHubSidecarServiceClient sidecarClient;
 
     bool isDisposed;
 
     TaskHubGrpcClient(Builder builder)
     {
-        this.workerGrpcChannel = GrpcChannel.ForAddress(builder.address);
-        this.workerClient = new TaskHubSidecarServiceClient(this.workerGrpcChannel);
-        this.dataConverter = builder.dataConverter;
-        this.logger = SdkUtils.GetLogger(builder.loggerFactory);
+        this.services = builder.services ?? SdkUtils.EmptyServiceProvider;
+        this.dataConverter = builder.dataConverter ?? this.services.GetService<IDataConverter>() ?? SdkUtils.DefaultDataConverter;
+        this.logger = SdkUtils.GetLogger(builder.loggerFactory ?? this.services.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance);
+        this.configuration = builder.configuration ?? this.services.GetService<IConfiguration>();
+
+        string sidecarAddress = builder.address ?? SdkUtils.GetSidecarAddress(this.configuration);
+        this.sidecarGrpcChannel = GrpcChannel.ForAddress(sidecarAddress);
+        this.sidecarClient = new TaskHubSidecarServiceClient(this.sidecarGrpcChannel);
     }
 
     public static TaskHubClient Create() => CreateBuilder().Build();
@@ -50,8 +58,8 @@ public class TaskHubGrpcClient : TaskHubClient
     {
         if (!this.isDisposed)
         {
-            await this.workerGrpcChannel.ShutdownAsync();
-            this.workerGrpcChannel.Dispose();
+            await this.sidecarGrpcChannel.ShutdownAsync();
+            this.sidecarGrpcChannel.Dispose();
 
             GC.SuppressFinalize(this);
             this.isDisposed = true;
@@ -85,7 +93,7 @@ public class TaskHubGrpcClient : TaskHubClient
             request.ScheduledStartTimestamp = Timestamp.FromDateTimeOffset(startTime.Value.ToUniversalTime());
         }
 
-        P.CreateInstanceResponse? result = await this.workerClient.StartInstanceAsync(request);
+        P.CreateInstanceResponse? result = await this.sidecarClient.StartInstanceAsync(request);
         return result.InstanceId;
     }
 
@@ -109,7 +117,7 @@ public class TaskHubGrpcClient : TaskHubClient
             Input = this.dataConverter.Serialize(eventPayload),
         };
 
-        await this.workerClient.RaiseEventAsync(request);
+        await this.sidecarClient.RaiseEventAsync(request);
     }
 
 
@@ -123,7 +131,7 @@ public class TaskHubGrpcClient : TaskHubClient
         this.logger.TerminatingInstance(instanceId);
 
         string? serializedOutput = this.dataConverter.Serialize(output);
-        await this.workerClient.TerminateInstanceAsync(new P.TerminateRequest
+        await this.sidecarClient.TerminateInstanceAsync(new P.TerminateRequest
         {
             InstanceId = instanceId,
             Output = serializedOutput,
@@ -140,7 +148,7 @@ public class TaskHubGrpcClient : TaskHubClient
             throw new ArgumentNullException(nameof(instanceId));
         }
 
-        P.GetInstanceResponse response = await this.workerClient.GetInstanceAsync(
+        P.GetInstanceResponse response = await this.sidecarClient.GetInstanceAsync(
             new P.GetInstanceRequest
             {
                 InstanceId = instanceId,
@@ -173,7 +181,7 @@ public class TaskHubGrpcClient : TaskHubClient
         P.GetInstanceResponse response;
         try
         {
-            response = await this.workerClient.WaitForInstanceStartAsync(
+            response = await this.sidecarClient.WaitForInstanceStartAsync(
                 request,
                 cancellationToken: cancellationToken);
         }
@@ -202,7 +210,7 @@ public class TaskHubGrpcClient : TaskHubClient
         P.GetInstanceResponse response;
         try
         {
-            response = await this.workerClient.WaitForInstanceCompletionAsync(
+            response = await this.sidecarClient.WaitForInstanceCompletionAsync(
                 request,
                 cancellationToken: cancellationToken);
         }
@@ -216,13 +224,21 @@ public class TaskHubGrpcClient : TaskHubClient
 
     public sealed class Builder
     {
-        internal ILoggerFactory loggerFactory = NullLoggerFactory.Instance;
-        internal string address = "http://127.0.0.1:4001";
-        internal IDataConverter dataConverter = SdkUtils.DefaultDataConverter;
+        internal IServiceProvider? services;
+        internal ILoggerFactory? loggerFactory;
+        internal IDataConverter? dataConverter;
+        internal IConfiguration? configuration;
+        internal string? address;
 
         public Builder UseLoggerFactory(ILoggerFactory loggerFactory)
         {
             this.loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
+            return this;
+        }
+
+        public Builder UseServices(IServiceProvider services)
+        {
+            this.services = services ?? throw new ArgumentNullException(nameof(services));
             return this;
         }
 
@@ -235,6 +251,12 @@ public class TaskHubGrpcClient : TaskHubClient
         public Builder UseDataConverter(IDataConverter dataConverter)
         {
             this.dataConverter = dataConverter ?? throw new ArgumentNullException(nameof(dataConverter));
+            return this;
+        }
+
+        public Builder UseConfiguration(IConfiguration configuration)
+        {
+            this.configuration = configuration;
             return this;
         }
 

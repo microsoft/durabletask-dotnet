@@ -24,6 +24,7 @@ using DurableTask.Core.Command;
 using DurableTask.Core.History;
 using Grpc.Core;
 using Grpc.Net.Client;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -35,11 +36,12 @@ namespace DurableTask.Grpc;
 
 public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
 {
-    readonly GrpcChannel sidecarGrpcChannel;
-    readonly TaskHubSidecarServiceClient sidecarClient;
+    readonly IServiceProvider services;
     readonly IDataConverter dataConverter;
     readonly ILogger logger;
-    readonly IServiceProvider serviceProvider;
+    readonly IConfiguration? configuration;
+    readonly GrpcChannel sidecarGrpcChannel;
+    readonly TaskHubSidecarServiceClient sidecarClient;
     readonly WorkerContext workerContext;
 
     readonly ImmutableDictionary<TaskName, Func<WorkerContext, TaskOrchestration>> orchestrators;
@@ -50,19 +52,22 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
 
     TaskHubGrpcWorker(Builder builder)
     {
-        this.sidecarGrpcChannel = GrpcChannel.ForAddress(builder.address);
-        this.sidecarClient = new TaskHubSidecarServiceClient(this.sidecarGrpcChannel);
-        this.serviceProvider = builder.services;
-        this.dataConverter = builder.dataConverter; // TODO: Can this come from the IServiceProvider?
-        this.logger = SdkUtils.GetLogger(builder.loggerFactory); // TODO: Can this come from the IServiceProvider?
+        this.services = builder.services ?? SdkUtils.EmptyServiceProvider;
+        this.dataConverter = builder.dataConverter ?? this.services.GetService<IDataConverter>() ?? SdkUtils.DefaultDataConverter;
+        this.logger = SdkUtils.GetLogger(builder.loggerFactory ?? this.services.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance);
+        this.configuration = builder.configuration ?? this.services.GetService<IConfiguration>();
 
         this.workerContext = new WorkerContext(
-            builder.dataConverter,
-            SdkUtils.GetLogger(builder.loggerFactory),
-            builder.services);
+            this.dataConverter,
+            this.logger,
+            this.services);
 
         this.orchestrators = builder.taskProvider.orchestratorsBuilder.ToImmutable();
         this.activities = builder.taskProvider.activitiesBuilder.ToImmutable();
+
+        string sidecarAddress = builder.address ?? SdkUtils.GetSidecarAddress(this.configuration);
+        this.sidecarGrpcChannel = GrpcChannel.ForAddress(sidecarAddress);
+        this.sidecarClient = new TaskHubSidecarServiceClient(this.sidecarGrpcChannel);
     }
 
     /// <summary>
@@ -394,13 +399,12 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
 
     public sealed class Builder
     {
-        static readonly IServiceProvider EmptyServiceProvider = new ServiceCollection().BuildServiceProvider();
-
         internal DefaultTaskBuilder taskProvider = new();
-        internal string address = "http://127.0.0.1:4001";
-        internal ILoggerFactory loggerFactory = NullLoggerFactory.Instance;
-        internal IDataConverter dataConverter = SdkUtils.DefaultDataConverter;
-        internal IServiceProvider services = EmptyServiceProvider;
+        internal ILoggerFactory? loggerFactory;
+        internal IDataConverter? dataConverter;
+        internal IServiceProvider? services;
+        internal IConfiguration? configuration;
+        internal string? address;
 
         internal Builder()
         {
@@ -429,6 +433,12 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
         public Builder UseServices(IServiceProvider services)
         {
             this.services = services ?? throw new ArgumentNullException(nameof(services));
+            return this;
+        }
+
+        public Builder UseConfiguration(IConfiguration configuration)
+        {
+            this.configuration = configuration;
             return this;
         }
 

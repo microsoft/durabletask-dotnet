@@ -13,18 +13,11 @@
 
 using System.Text.Json.Serialization;
 using DurableTask;
-using WebAPI.Orchestrations;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Define the orchestration and activities.
-// TODO: Allow the orchestrators and activities to be auto-discovered via reflection (or codegen if we want to get really crazy)
-builder.Services.AddDurableTask(orchestrationBuilder =>
-    orchestrationBuilder
-        .AddOrchestrator<ProcessOrderOrchestrator>()
-        .AddActivity<CheckInventoryActivity>()
-        .AddActivity<ChargeCustomerActivity>()
-        .AddActivity<CreateShipmentActivity>());
+// Add all the generated tasks
+builder.Services.AddDurableTask(taskBuilder => taskBuilder.AddAllGeneratedTasks());
 
 // Configure the HTTP request pipeline.
 builder.Services.AddControllers().AddJsonOptions(options =>
@@ -35,4 +28,4 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 
 WebApplication app = builder.Build();
 app.MapControllers();
-app.Run("http://localhost:8080");
+app.Run("http://0.0.0.0:8080");

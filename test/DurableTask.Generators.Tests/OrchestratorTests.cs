@@ -58,6 +58,12 @@ public static Task<string> CallMyOrchestratorAsync(
         instanceId,
         input,
         options);
+}
+
+public static ITaskBuilder AddAllGeneratedTasks(this ITaskBuilder builder)
+{
+    builder.AddOrchestrator<MyOrchestrator>();
+    return builder;
 }");
 
         return TestHelpers.RunTestAsync(code, expectedOutput);

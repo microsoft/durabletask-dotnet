@@ -13,19 +13,21 @@
 
 using System;
 using DurableTask.Grpc;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace DurableTask;
 
 static class SdkUtils
 {
-    // WARNING: Changing this could potentially be breaking for in-flight orchestrations.
-    internal static readonly IDataConverter DefaultDataConverter = new JsonDataConverter();
+    internal static readonly IServiceProvider EmptyServiceProvider = new ServiceCollection().BuildServiceProvider();
+    internal static readonly IDataConverter DefaultDataConverter = JsonDataConverter.Default;
 
     /// <summary>
     /// Helper for validating addresses passed to the <see cref="TaskHubGrpcWorker"/> and <see cref="TaskHubGrpcClient"/> types.
     /// </summary>
-    /// <param name="address">Expected to be an HTTP address, like http://127.0.0.1:4000.</param>
+    /// <param name="address">Expected to be an HTTP address, like http://localhost:4000.</param>
     /// <returns>Returns the unmodified input as a convenience.</returns>
     internal static string ValidateAddress(string address)
     {
@@ -61,5 +63,27 @@ static class SdkUtils
     internal static string GetSerializedErrorPayload(IDataConverter dataConverter, string message, string? fullText)
     {
         return dataConverter.Serialize(new OrchestrationFailureDetails(message, fullText));
+    }
+
+    /// <summary>
+    /// Gets the address of the Durable Task sidecar, which is responsible for managing and scheduling durable tasks.
+    /// </summary>
+    /// <param name="configuration">Optional configuration provider for looking up the sidecar address.</param>
+    /// <returns>Returns the configured sidecar address, or http://localhost:4001 if no explicit value is configured.</returns>
+    internal static string GetSidecarAddress(IConfiguration? configuration)
+    {
+        string address = GetSetting(EnvironmentVariables.SidecarAddress, configuration, "http://localhost:4001");
+        return ValidateAddress(address);
+    }
+
+    static string GetSetting(string name, IConfiguration? configuration, string defaultValue)
+    {
+        return configuration?[name] ?? Environment.GetEnvironmentVariable(name) ?? defaultValue;
+    }
+
+    static class EnvironmentVariables
+    {
+        // All environment variables should be prefixed with DURABLETASK_
+        public const string SidecarAddress = "DURABLETASK_SIDECAR_ADDRESS";
     }
 }

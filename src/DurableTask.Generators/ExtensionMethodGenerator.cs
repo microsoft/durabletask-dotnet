@@ -84,6 +84,11 @@ namespace DurableTask
                 AddActivityCallMethod(sourceBuilder, activity);
             }
 
+            AddRegistrationMethodForAllTasks(
+                sourceBuilder,
+                syntaxReceiver.Orchestrators,
+                syntaxReceiver.Activities);
+
             sourceBuilder.AppendLine("    }").AppendLine("}");
 
             context.AddSource("GeneratedDurableTaskExtensions.cs", SourceText.From(sourceBuilder.ToString(), Encoding.UTF8, SourceHashAlgorithm.Sha256));
@@ -93,14 +98,14 @@ namespace DurableTask
         {
             sourceBuilder.AppendLine($@"
         /// <inheritdoc cref=""TaskHubClient.ScheduleNewOrchestrationInstanceAsync""/>
-        public static Task<string> ScheduleNew{orchestrator.Name}InstanceAsync(
+        public static Task<string> ScheduleNew{orchestrator.TaskName}InstanceAsync(
             this TaskHubClient client,
             string? instanceId = null,
             {orchestrator.InputType} input = default,
             DateTimeOffset? startTime = null)
         {{
             return client.ScheduleNewOrchestrationInstanceAsync(
-                ""{orchestrator.Name}"",
+                ""{orchestrator.TaskName}"",
                 instanceId,
                 input,
                 startTime);
@@ -111,14 +116,14 @@ namespace DurableTask
         {
             sourceBuilder.AppendLine($@"
         /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync""/>
-        public static Task<{orchestrator.OutputType}> Call{orchestrator.Name}Async(
+        public static Task<{orchestrator.OutputType}> Call{orchestrator.TaskName}Async(
             this TaskOrchestrationContext context,
             string? instanceId = null,
             {orchestrator.InputType} input = default,
             TaskOptions? options = null)
         {{
             return context.CallSubOrchestratorAsync<{orchestrator.OutputType}>(
-                ""{orchestrator.Name}"",
+                ""{orchestrator.TaskName}"",
                 instanceId,
                 input,
                 options);
@@ -128,9 +133,35 @@ namespace DurableTask
         static void AddActivityCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo activity)
         {
             sourceBuilder.AppendLine($@"
-        public static Task<{activity.OutputType}> Call{activity.Name}Async(this TaskOrchestrationContext ctx, {activity.InputType} input, TaskOptions? options = null)
+        public static Task<{activity.OutputType}> Call{activity.TaskName}Async(this TaskOrchestrationContext ctx, {activity.InputType} input, TaskOptions? options = null)
         {{
-            return ctx.CallActivityAsync<{activity.OutputType}>(""{activity.Name}"", input, options);
+            return ctx.CallActivityAsync<{activity.OutputType}>(""{activity.TaskName}"", input, options);
+        }}");
+        }
+
+        static void AddRegistrationMethodForAllTasks(
+            StringBuilder sourceBuilder,
+            IEnumerable<DurableTaskTypeInfo> orchestrators,
+            IEnumerable<DurableTaskTypeInfo> activities)
+        {
+            sourceBuilder.Append($@"
+        public static ITaskBuilder AddAllGeneratedTasks(this ITaskBuilder builder)
+        {{");
+
+            foreach (DurableTaskTypeInfo taskInfo in orchestrators)
+            {
+                sourceBuilder.Append($@"
+            builder.AddOrchestrator<{taskInfo.TypeName}>();");
+            }
+
+            foreach (DurableTaskTypeInfo taskInfo in activities)
+            {
+                sourceBuilder.Append($@"
+            builder.AddActivity<{taskInfo.TypeName}>();");
+            }
+
+            sourceBuilder.AppendLine($@"
+            return builder;
         }}");
         }
 
@@ -151,12 +182,15 @@ namespace DurableTask
             public void OnVisitSyntaxNode(GeneratorSyntaxContext context)
             {
                 SyntaxNode syntaxNode = context.Node;
-                if (syntaxNode is BaseListSyntax baseList && baseList.Parent is ClassDeclarationSyntax @class)
+                if (syntaxNode is BaseListSyntax baseList && baseList.Parent is TypeDeclarationSyntax typeSyntax)
                 {
+                    // TODO: Validate that the type is not an abstract class
+
                     foreach (BaseTypeSyntax baseType in baseList.Types)
                     {
                         if (baseType.Type is not GenericNameSyntax genericName)
                         {
+                            // This is not the type we're looking for
                             continue;
                         }
 
@@ -173,8 +207,18 @@ namespace DurableTask
                         }
                         else
                         {
+                            // This is not the type we're looking for
                             continue;
                         }
+
+                        string typeName;
+                        if (context.SemanticModel.GetDeclaredSymbol(typeSyntax) is not ISymbol typeSymbol)
+                        {
+                            // Invalid type declaration?
+                            continue;
+                        };
+
+                        typeName = typeSymbol.ToDisplayString();
 
                         string inputType = "object";
                         string outputType = "object";
@@ -192,10 +236,10 @@ namespace DurableTask
                         }
 
                         // By default, the task name is the class name.
-                        string taskName = @class.Identifier.ValueText; // TODO: What if the class has generic type parameters?
+                        string taskName = typeSyntax.Identifier.ValueText; // TODO: What if the class has generic type parameters?;
 
                         // If a [DurableTask(name)] attribute is present, use that as the activity name.
-                        foreach (AttributeSyntax attribute in @class.AttributeLists.SelectMany(list => list.Attributes))
+                        foreach (AttributeSyntax attribute in typeSyntax.AttributeLists.SelectMany(list => list.Attributes))
                         {
                             if (Helpers.TryGetTypeName(context, attribute.Name, out string? attributeName) &&
                                 attributeName == "DurableTask.DurableTaskAttribute" &&
@@ -208,6 +252,7 @@ namespace DurableTask
                         }
 
                         taskList.Add(new DurableTaskTypeInfo(
+                            typeName,
                             taskName,
                             inputType,
                             outputType));
@@ -220,14 +265,20 @@ namespace DurableTask
 
         class DurableTaskTypeInfo
         {
-            public DurableTaskTypeInfo(string name, string inputType, string outputType)
+            public DurableTaskTypeInfo(
+                string taskType,
+                string taskName,
+                string inputType,
+                string outputType)
             {
-                this.Name = name;
+                this.TypeName = taskType;
+                this.TaskName = taskName;
                 this.InputType = inputType;
                 this.OutputType = outputType;
             }
 
-            public string Name { get; }
+            public string TypeName { get; }
+            public string TaskName { get; }
             public string InputType { get; }
             public string OutputType { get; }
         }

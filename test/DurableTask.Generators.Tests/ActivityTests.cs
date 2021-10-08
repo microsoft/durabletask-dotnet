@@ -30,11 +30,17 @@ class MyActivity : TaskActivityBase<int, string>
     protected override string OnRun(int input) => default;
 }";
 
-        string expectedOutput = @"
+        string expectedOutput = TestHelpers.WrapAndFormat(@"
 public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
-}";
+}
+
+public static ITaskBuilder AddAllGeneratedTasks(this ITaskBuilder builder)
+{
+    builder.AddActivity<MyActivity>();
+    return builder;
+}");
 
         return TestHelpers.RunTestAsync(code, expectedOutput);
     }
@@ -57,11 +63,17 @@ namespace MyNS
     public class MyClass { }
 }";
 
-        string expectedOutput = @"
+        string expectedOutput = TestHelpers.WrapAndFormat(@"
 public static Task<MyNS.MyClass> CallMyActivityAsync(this TaskOrchestrationContext ctx, MyNS.MyClass input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<MyNS.MyClass>(""MyActivity"", input, options);
-}";
+}
+
+public static ITaskBuilder AddAllGeneratedTasks(this ITaskBuilder builder)
+{
+    builder.AddActivity<MyActivity>();
+    return builder;
+}");
 
         return TestHelpers.RunTestAsync(code, expectedOutput);
     }
@@ -75,22 +87,28 @@ public static Task<MyNS.MyClass> CallMyActivityAsync(this TaskOrchestrationConte
 using MyNS;
 using DurableTask;
 
-[DurableTask(""MyActivity"")]
-class MyActivityImpl : TaskActivityBase<MyClass, MyClass>
-{
-    protected override MyClass OnRun(MyClass input) => default;
-}
-
 namespace MyNS
 {
+    [DurableTask(""MyActivity"")]
+    class MyActivityImpl : TaskActivityBase<MyClass, MyClass>
+    {
+        protected override MyClass OnRun(MyClass input) => default;
+    }
+
     public class MyClass { }
 }";
 
-        string expectedOutput = @"
+        string expectedOutput = TestHelpers.WrapAndFormat(@"
 public static Task<MyNS.MyClass> CallMyActivityAsync(this TaskOrchestrationContext ctx, MyNS.MyClass input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<MyNS.MyClass>(""MyActivity"", input, options);
-}";
+}
+
+public static ITaskBuilder AddAllGeneratedTasks(this ITaskBuilder builder)
+{
+    builder.AddActivity<MyNS.MyActivityImpl>();
+    return builder;
+}");
 
         return TestHelpers.RunTestAsync(code, expectedOutput);
     }

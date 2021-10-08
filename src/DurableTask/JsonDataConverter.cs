@@ -21,6 +21,7 @@ namespace DurableTask;
 /// </summary>
 public class JsonDataConverter : IDataConverter
 {
+    // WARNING: Changing default serialization options could potentially be breaking for in-flight orchestrations.
     static readonly JsonSerializerOptions DefaultOptions = new()
     {
         IncludeFields = true,

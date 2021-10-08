@@ -1,4 +1,4 @@
-﻿{
+{
   "$schema": "https://json.schemastore.org/launchsettings.json",
   "iisSettings": {
     "windowsAuthentication": false,
@@ -11,13 +11,14 @@
   "profiles": {
     "WebAPI": {
       "commandName": "Project",
-      "dotnetRunMessages": true,
       "launchBrowser": true,
       "launchUrl": "weatherforecast",
-      "applicationUrl": "https://localhost:7217;http://localhost:5217",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
-      }
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "DURABLETASK_SIDECAR_ADDRESS": "http://localhost:4001"
+      },
+      "applicationUrl": "https://localhost:7217;http://localhost:5217",
+      "dotnetRunMessages": true
     },
     "IIS Express": {
       "commandName": "IISExpress",

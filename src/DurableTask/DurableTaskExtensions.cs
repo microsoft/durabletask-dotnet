@@ -14,7 +14,6 @@
 using System;
 using DurableTask.Grpc;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace DurableTask;
 
@@ -46,18 +45,6 @@ public static class DurableTaskExtensions
                 workerBuilder.UseAddress(sidecarAddress);
             }
 
-            ILoggerFactory? loggerFactory = services.GetService<ILoggerFactory>();
-            if (loggerFactory != null)
-            {
-                workerBuilder.UseLoggerFactory(loggerFactory);
-            }
-
-            IDataConverter? dataConverter = services.GetService<IDataConverter>();
-            if (dataConverter != null)
-            {
-                workerBuilder.UseDataConverter(dataConverter);
-            }
-
             TaskHubGrpcWorker worker = workerBuilder.Build();
             return worker;
         });
@@ -81,22 +68,10 @@ public static class DurableTaskExtensions
     {
         return serviceCollection.AddSingleton(services =>
         {
-            TaskHubGrpcClient.Builder clientBuilder = TaskHubGrpcClient.CreateBuilder();
+            TaskHubGrpcClient.Builder clientBuilder = TaskHubGrpcClient.CreateBuilder().UseServices(services);
             if (sidecarAddress != null)
             {
                 clientBuilder.UseAddress(sidecarAddress);
-            }
-
-            ILoggerFactory? loggerFactory = services.GetService<ILoggerFactory>();
-            if (loggerFactory != null)
-            {
-                clientBuilder.UseLoggerFactory(loggerFactory);
-            }
-
-            IDataConverter? dataConverter = services.GetService<IDataConverter>();
-            if (dataConverter != null)
-            {
-                clientBuilder.UseDataConverter(dataConverter);
             }
 
             return clientBuilder.Build();

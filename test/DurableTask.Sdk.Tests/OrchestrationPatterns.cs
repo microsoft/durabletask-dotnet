@@ -54,31 +54,31 @@ public class OrchestrationPatterns : IDisposable
     }
 
     /// <summary>
-    /// Creates a <see cref="TaskHubGrpcWorker"/> configured to output logs to xunit logging infrastructure.
+    /// Creates a <see cref="DurableTaskGrpcWorker"/> configured to output logs to xunit logging infrastructure.
     /// </summary>
-    TaskHubGrpcWorker.Builder CreateWorkerBuilder()
+    DurableTaskGrpcWorker.Builder CreateWorkerBuilder()
     {
-        return TaskHubGrpcWorker.CreateBuilder().UseLoggerFactory(this.loggerFactory);
+        return DurableTaskGrpcWorker.CreateBuilder().UseLoggerFactory(this.loggerFactory);
     }
 
     /// <summary>
-    /// Creates a <see cref="TaskHubGrpcClient"/> configured to output logs to xunit logging infrastructure.
+    /// Creates a <see cref="DurableTaskGrpcClient"/> configured to output logs to xunit logging infrastructure.
     /// </summary>
-    TaskHubClient CreateTaskHubClient()
+    DurableTaskClient CreateDurableTaskClient()
     {
-        return TaskHubGrpcClient.CreateBuilder().UseLoggerFactory(this.loggerFactory).Build();
+        return DurableTaskGrpcClient.CreateBuilder().UseLoggerFactory(this.loggerFactory).Build();
     }
 
     [Fact]
     public async Task EmptyOrchestration()
     {
         TaskName orchestratorName = nameof(EmptyOrchestration);
-        await using TaskHubGrpcWorker server = this.CreateWorkerBuilder()
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
             .AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, ctx => Task.FromResult<object?>(null)))
             .Build();
         await server.StartAsync(this.TimeoutToken);
 
-        TaskHubClient client = this.CreateTaskHubClient();
+        DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
 
@@ -93,12 +93,12 @@ public class OrchestrationPatterns : IDisposable
         TaskName orchestratorName = nameof(SingleTimer);
         TimeSpan delay = TimeSpan.FromSeconds(3);
 
-        await using TaskHubGrpcWorker server = this.CreateWorkerBuilder()
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
             .AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, ctx => ctx.CreateTimer(delay, CancellationToken.None)))
             .Build();
         await server.StartAsync(this.TimeoutToken);
 
-        TaskHubClient client = this.CreateTaskHubClient();
+        DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
 
@@ -114,7 +114,7 @@ public class OrchestrationPatterns : IDisposable
     public async Task IsReplaying()
     {
         TaskName orchestratorName = nameof(IsReplaying);
-        await using TaskHubGrpcWorker server = this.CreateWorkerBuilder()
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
             .AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
             {
                 var list = new List<bool>();
@@ -128,7 +128,7 @@ public class OrchestrationPatterns : IDisposable
             .Build();
         await server.StartAsync(this.TimeoutToken);
 
-        TaskHubClient client = this.CreateTaskHubClient();
+        DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
             instanceId,
@@ -149,7 +149,7 @@ public class OrchestrationPatterns : IDisposable
         TaskName orchestratorName = nameof(CurrentDateTimeUtc);
         TaskName echoActivityName = "Echo";
 
-        await using TaskHubGrpcWorker server = this.CreateWorkerBuilder()
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
             .AddTasks(tasks => tasks
                 .AddOrchestrator(orchestratorName, async ctx =>
                 {
@@ -173,7 +173,7 @@ public class OrchestrationPatterns : IDisposable
             .Build();
         await server.StartAsync(this.TimeoutToken);
 
-        TaskHubClient client = this.CreateTaskHubClient();
+        DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
             instanceId,
@@ -190,14 +190,14 @@ public class OrchestrationPatterns : IDisposable
         TaskName orchestratorName = nameof(SingleActivity);
         TaskName sayHelloActivityName = "SayHello";
 
-        await using TaskHubGrpcWorker server = this.CreateWorkerBuilder()
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
             .AddTasks(tasks => tasks
                 .AddOrchestrator(orchestratorName, ctx => ctx.CallActivityAsync<string>(sayHelloActivityName, ctx.GetInput<string>()))
                 .AddActivity(sayHelloActivityName, ctx => $"Hello, {ctx.GetInput<string>()}!"))
             .Build();
         await server.StartAsync(this.TimeoutToken);
 
-        TaskHubClient client = this.CreateTaskHubClient();
+        DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
         OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
             instanceId,
@@ -214,7 +214,7 @@ public class OrchestrationPatterns : IDisposable
         TaskName orchestratorName = nameof(ActivityChain);
         TaskName plusOneActivityName = "PlusOne";
 
-        await using TaskHubGrpcWorker server = this.CreateWorkerBuilder()
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
             .AddTasks(tasks => tasks
                 .AddOrchestrator(orchestratorName, async ctx =>
                 {
@@ -230,7 +230,7 @@ public class OrchestrationPatterns : IDisposable
             .Build();
         await server.StartAsync(this.TimeoutToken);
 
-        TaskHubClient client = this.CreateTaskHubClient();
+        DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
         OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
             instanceId,
@@ -247,12 +247,12 @@ public class OrchestrationPatterns : IDisposable
         string errorMessage = "Kah-BOOOOOM!!!";
 
         TaskName orchestratorName = nameof(OrchestratorException);
-        await using TaskHubGrpcWorker server = this.CreateWorkerBuilder()
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
             .AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, ctx => throw new Exception(errorMessage)))
             .Build();
         await server.StartAsync(this.TimeoutToken);
 
-        TaskHubClient client = this.CreateTaskHubClient();
+        DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
             instanceId,
@@ -274,7 +274,7 @@ public class OrchestrationPatterns : IDisposable
         TaskName orchestratorName = nameof(ActivityFanOut);
         TaskName toStringActivity = "ToString";
 
-        await using TaskHubGrpcWorker server = this.CreateWorkerBuilder()
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
             .AddTasks(tasks => tasks
                 .AddOrchestrator(orchestratorName, async ctx =>
                 {
@@ -293,7 +293,7 @@ public class OrchestrationPatterns : IDisposable
             .Build();
         await server.StartAsync(this.TimeoutToken);
 
-        TaskHubClient client = this.CreateTaskHubClient();
+        DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
             instanceId,
@@ -312,7 +312,7 @@ public class OrchestrationPatterns : IDisposable
     public async Task ExternalEvents(int eventCount)
     {
         TaskName orchestratorName = nameof(ExternalEvents);
-        await using TaskHubGrpcWorker server = this.CreateWorkerBuilder()
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
             .AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
             {
                 List<int> events = new();
@@ -326,7 +326,7 @@ public class OrchestrationPatterns : IDisposable
             .Build();
         await server.StartAsync(this.TimeoutToken);
 
-        TaskHubClient client = this.CreateTaskHubClient();
+        DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
 
         // To ensure consistency, wait for the instance to start before sending the events
@@ -356,12 +356,12 @@ public class OrchestrationPatterns : IDisposable
     public async Task Termination()
     {
         TaskName orchestrationName = nameof(Termination);
-        await using TaskHubGrpcWorker server = this.CreateWorkerBuilder()
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
             .AddTasks(tasks => tasks.AddOrchestrator(orchestrationName, ctx => ctx.CreateTimer(TimeSpan.FromSeconds(3), CancellationToken.None)))
             .Build();
         await server.StartAsync(this.TimeoutToken);
 
-        TaskHubClient client = this.CreateTaskHubClient();
+        DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestrationName);
         OrchestrationMetadata metadata = await client.WaitForInstanceStartAsync(instanceId, this.TimeoutToken);
 
@@ -387,7 +387,7 @@ public class OrchestrationPatterns : IDisposable
     {
         TaskName orchestratorName = nameof(ContinueAsNew);
 
-        await using TaskHubGrpcWorker server = this.CreateWorkerBuilder()
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
             .AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
             {
                 int input = ctx.GetInput<int>();
@@ -402,7 +402,7 @@ public class OrchestrationPatterns : IDisposable
             .Build();
         await server.StartAsync(this.TimeoutToken);
 
-        TaskHubClient client = this.CreateTaskHubClient();
+        DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
             instanceId,
@@ -418,7 +418,7 @@ public class OrchestrationPatterns : IDisposable
     {
         TaskName orchestratorName = nameof(SubOrchestration);
 
-        await using TaskHubGrpcWorker server = this.CreateWorkerBuilder()
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
             .AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
             {
                 int input = ctx.GetInput<int>();
@@ -435,7 +435,7 @@ public class OrchestrationPatterns : IDisposable
             .Build();
         await server.StartAsync(this.TimeoutToken);
 
-        TaskHubClient client = this.CreateTaskHubClient();
+        DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 1);
         OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
             instanceId,
@@ -450,7 +450,7 @@ public class OrchestrationPatterns : IDisposable
     public async Task SetCustomStatus()
     {
         TaskName orchestratorName = nameof(SetCustomStatus);
-        await using TaskHubGrpcWorker server = this.CreateWorkerBuilder()
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
             .AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
             {
                 ctx.SetCustomStatus("Started!");
@@ -461,7 +461,7 @@ public class OrchestrationPatterns : IDisposable
             .Build();
         await server.StartAsync(this.TimeoutToken);
 
-        TaskHubClient client = this.CreateTaskHubClient();
+        DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
 
         // To ensure consistency, wait for the instance to start before sending the events

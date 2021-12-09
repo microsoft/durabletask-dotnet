@@ -39,7 +39,7 @@ namespace DurableTask.Grpc;
 /// <summary>
 /// Task hub worker that connects to a sidecar process over gRPC to execute orchestrator and activity events.
 /// </summary>
-public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
+public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
 {
     static readonly Google.Protobuf.WellKnownTypes.Empty EmptyMessage = new();
 
@@ -57,7 +57,7 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
     CancellationTokenSource? shutdownTcs;
     Task? listenLoop;
 
-    TaskHubGrpcWorker(Builder builder)
+    DurableTaskGrpcWorker(Builder builder)
     {
         this.services = builder.services ?? SdkUtils.EmptyServiceProvider;
         this.dataConverter = builder.dataConverter ?? this.services.GetService<IDataConverter>() ?? SdkUtils.DefaultDataConverter;
@@ -97,7 +97,7 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
     {
         if (this.listenLoop?.IsCompleted == false)
         {
-            throw new InvalidOperationException($"This {nameof(TaskHubGrpcWorker)} is already started.");
+            throw new InvalidOperationException($"This {nameof(DurableTaskGrpcWorker)} is already started.");
         }
 
         this.logger.StartingTaskHubWorker(this.sidecarGrpcChannel.Target);
@@ -414,7 +414,7 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
         {
         }
 
-        public TaskHubGrpcWorker Build() => new(this);
+        public DurableTaskGrpcWorker Build() => new(this);
 
         public Builder UseAddress(string address)
         {

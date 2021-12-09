@@ -110,7 +110,7 @@ public abstract class TaskOrchestrationContext
     /// <remarks>
     /// <para>
     /// External clients can raise events to a waiting orchestration instance using
-    /// the <see cref="TaskHubClient.RaiseEventAsync"/> method.
+    /// the <see cref="DurableTaskClient.RaiseEventAsync"/> method.
     /// </para><para>
     /// If the current orchestrator instance is not yet waiting for an event named <paramref name="eventName"/>,
     /// then the event will be saved in the orchestration instance state and dispatched immediately when
@@ -158,7 +158,7 @@ public abstract class TaskOrchestrationContext
     /// </summary>
     /// <remarks>
     /// The <paramref name="customStatus"/> value is serialized and stored in orchestration state and will
-    /// be made available to the orchestration status query APIs, such as <see cref="TaskHubClient.GetInstanceMetadata"/>.
+    /// be made available to the orchestration status query APIs, such as <see cref="DurableTaskClient.GetInstanceMetadata"/>.
     /// The serialized value must not exceed 16 KB of UTF-16 encoded text.
     /// </remarks>
     /// <param name="customStatus">

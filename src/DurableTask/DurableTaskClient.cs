@@ -17,8 +17,8 @@ using System.Threading.Tasks;
 
 namespace DurableTask;
 
-// TODO: This class has the same name as DurableTask.Core.TaskHubClient, which will confuse developers. Need to reconcile this somehow.
-public abstract class TaskHubClient : IAsyncDisposable
+// TODO: Class documentation
+public abstract class DurableTaskClient : IAsyncDisposable
 {
     // TODO: Document all the exceptions (instance exists, etc.)
     /// <summary>
@@ -162,7 +162,7 @@ public abstract class TaskHubClient : IAsyncDisposable
         bool getInputsAndOutputs = false);
 
     /// <summary>
-    /// Disposes any unmanaged resources associated with this <see cref="TaskHubClient"/>.
+    /// Disposes any unmanaged resources associated with this <see cref="DurableTaskClient"/>.
     /// </summary>
     /// <returns>A <see cref="ValueTask"/> that completes when the disposal completes.</returns>
     public abstract ValueTask DisposeAsync();

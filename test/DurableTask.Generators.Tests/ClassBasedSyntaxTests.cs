@@ -38,9 +38,9 @@ class MyOrchestrator : TaskOrchestratorBase<int, string>
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
-/// <inheritdoc cref=""TaskHubClient.ScheduleNewOrchestrationInstanceAsync""/>
+/// <inheritdoc cref=""DurableTaskClient.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
-    this TaskHubClient client,
+    this DurableTaskClient client,
     string? instanceId = null,
     int input = default,
     DateTimeOffset? startTime = null)

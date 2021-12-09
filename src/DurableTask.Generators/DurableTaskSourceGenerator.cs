@@ -172,9 +172,9 @@ namespace DurableTask
         static void AddOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator)
         {
             sourceBuilder.AppendLine($@"
-        /// <inheritdoc cref=""TaskHubClient.ScheduleNewOrchestrationInstanceAsync""/>
+        /// <inheritdoc cref=""DurableTaskClient.ScheduleNewOrchestrationInstanceAsync""/>
         public static Task<string> ScheduleNew{orchestrator.TaskName}InstanceAsync(
-            this TaskHubClient client,
+            this DurableTaskClient client,
             string? instanceId = null,
             {orchestrator.InputDefaultType} input = default,
             DateTimeOffset? startTime = null)

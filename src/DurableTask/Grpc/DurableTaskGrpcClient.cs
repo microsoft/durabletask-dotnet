@@ -27,7 +27,7 @@ using P = DurableTask.Protobuf;
 
 namespace DurableTask.Grpc;
 
-public class TaskHubGrpcClient : TaskHubClient
+public class DurableTaskGrpcClient : DurableTaskClient
 {
     readonly IServiceProvider services;
     readonly IDataConverter dataConverter;
@@ -38,7 +38,7 @@ public class TaskHubGrpcClient : TaskHubClient
 
     bool isDisposed;
 
-    TaskHubGrpcClient(Builder builder)
+    DurableTaskGrpcClient(Builder builder)
     {
         this.services = builder.services ?? SdkUtils.EmptyServiceProvider;
         this.dataConverter = builder.dataConverter ?? this.services.GetService<IDataConverter>() ?? SdkUtils.DefaultDataConverter;
@@ -50,7 +50,7 @@ public class TaskHubGrpcClient : TaskHubClient
         this.sidecarClient = new TaskHubSidecarServiceClient(this.sidecarGrpcChannel);
     }
 
-    public static TaskHubClient Create() => CreateBuilder().Build();
+    public static DurableTaskClient Create() => CreateBuilder().Build();
 
     public static Builder CreateBuilder() => new();
 
@@ -260,6 +260,6 @@ public class TaskHubGrpcClient : TaskHubClient
             return this;
         }
 
-        public TaskHubClient Build() => new TaskHubGrpcClient(this);
+        public DurableTaskClient Build() => new DurableTaskGrpcClient(this);
     }
 }

@@ -25,7 +25,7 @@ static class SdkUtils
     internal static readonly IDataConverter DefaultDataConverter = JsonDataConverter.Default;
 
     /// <summary>
-    /// Helper for validating addresses passed to the <see cref="TaskHubGrpcWorker"/> and <see cref="TaskHubGrpcClient"/> types.
+    /// Helper for validating addresses passed to the <see cref="DurableTaskGrpcWorker"/> and <see cref="DurableTaskGrpcClient"/> types.
     /// </summary>
     /// <param name="address">Expected to be an HTTP address, like http://localhost:4000.</param>
     /// <returns>Returns the unmodified input as a convenience.</returns>

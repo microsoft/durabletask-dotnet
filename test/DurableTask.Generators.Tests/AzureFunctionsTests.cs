@@ -108,7 +108,7 @@ public static async Task<{outputType}> MyActivity([ActivityTrigger] {defaultInpu
 
     /// <summary>
     /// Verifies that using the class-based syntax for authoring orchestrations generates 
-    /// type-safe <see cref="TaskHubClient"/> and <see cref="TaskOrchestrationContext"/> 
+    /// type-safe <see cref="DurableTaskClient"/> and <see cref="TaskOrchestrationContext"/> 
     /// extension methods as well as <see cref="OrchestrationTriggerAttribute"/> function triggers.
     /// </summary>
     /// <param name="inputType">The activity input type.</param>
@@ -148,9 +148,9 @@ public static async Task<string> MyOrchestrator([OrchestrationTrigger] string or
     return await DurableOrchestrator.LoadAndRunAsync<{inputType}, {outputType}>(orchestratorState, singletonMyOrchestrator);
 }}
 
-/// <inheritdoc cref=""TaskHubClient.ScheduleNewOrchestrationInstanceAsync""/>
+/// <inheritdoc cref=""DurableTaskClient.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
-    this TaskHubClient client,
+    this DurableTaskClient client,
     string? instanceId = null,
     {defaultInputType} input = default,
     DateTimeOffset? startTime = null)

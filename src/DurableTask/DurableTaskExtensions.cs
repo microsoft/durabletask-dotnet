@@ -37,7 +37,7 @@ public static class DurableTaskExtensions
 
         return serviceCollection.AddHostedService(services =>
         {
-            TaskHubGrpcWorker.Builder workerBuilder = TaskHubGrpcWorker.CreateBuilder().UseServices(services);
+            DurableTaskGrpcWorker.Builder workerBuilder = DurableTaskGrpcWorker.CreateBuilder().UseServices(services);
             workerBuilder.AddTasks(builderAction);
 
             if (sidecarAddress != null)
@@ -45,18 +45,18 @@ public static class DurableTaskExtensions
                 workerBuilder.UseAddress(sidecarAddress);
             }
 
-            TaskHubGrpcWorker worker = workerBuilder.Build();
+            DurableTaskGrpcWorker worker = workerBuilder.Build();
             return worker;
         });
     }
 
     /// <summary>
-    /// Adds a singleton <see cref="TaskHubClient"/> to the provided <see cref="IServiceCollection"/>.
+    /// Adds a singleton <see cref="DurableTaskClient"/> to the provided <see cref="IServiceCollection"/>.
     /// </summary>
     /// <remarks>
     /// Use this method when the the orchestration logic lives in a separate application.
     /// If your orchestration logic lives in the same application, then you should instead use the
-    /// <see cref="AddDurableTask"/> method, which configures a <see cref="TaskHubClient"/> in
+    /// <see cref="AddDurableTask"/> method, which configures a <see cref="DurableTaskClient"/> in
     /// addition to the orchestration logic.
     /// </remarks>
     /// <param name="serviceCollection">The <see cref="IServiceCollection"/> to configure.</param>
@@ -68,7 +68,7 @@ public static class DurableTaskExtensions
     {
         return serviceCollection.AddSingleton(services =>
         {
-            TaskHubGrpcClient.Builder clientBuilder = TaskHubGrpcClient.CreateBuilder().UseServices(services);
+            DurableTaskGrpcClient.Builder clientBuilder = DurableTaskGrpcClient.CreateBuilder().UseServices(services);
             if (sidecarAddress != null)
             {
                 clientBuilder.UseAddress(sidecarAddress);

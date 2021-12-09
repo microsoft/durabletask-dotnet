@@ -21,11 +21,11 @@ namespace WebAPI.Controllers;
 [ApiController]
 public class OrderProcessingController : ControllerBase
 {
-    readonly TaskHubClient taskHubClient;
+    readonly DurableTaskClient durableTaskClient;
 
-    public OrderProcessingController(TaskHubClient taskHubClient)
+    public OrderProcessingController(DurableTaskClient durableTaskClient)
     {
-        this.taskHubClient = taskHubClient;
+        this.durableTaskClient = durableTaskClient;
     }
 
     // HTTPie command:
@@ -40,7 +40,7 @@ public class OrderProcessingController : ControllerBase
 
         // Generate an order ID and start the order processing workflow orchestration
         string orderId = $"{orderInfo.Item}-{Guid.NewGuid().ToString()[..4]}";
-        await this.taskHubClient.ScheduleNewProcessOrderOrchestratorInstanceAsync(
+        await this.durableTaskClient.ScheduleNewProcessOrderOrchestratorInstanceAsync(
             instanceId: orderId,
             input: orderInfo);
 
@@ -55,7 +55,7 @@ public class OrderProcessingController : ControllerBase
     [HttpGet("{orderId}")]
     public async Task<ActionResult> GetOrderStatus(string orderId)
     {
-        OrchestrationMetadata? metadata = await this.taskHubClient.GetInstanceMetadataAsync(
+        OrchestrationMetadata? metadata = await this.durableTaskClient.GetInstanceMetadataAsync(
             instanceId: orderId,
             getInputsAndOutputs: true);
 

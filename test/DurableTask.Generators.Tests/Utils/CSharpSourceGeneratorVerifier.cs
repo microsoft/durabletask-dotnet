@@ -20,7 +20,7 @@ using Microsoft.CodeAnalysis.CSharp.Testing;
 using Microsoft.CodeAnalysis.Testing;
 using Microsoft.CodeAnalysis.Testing.Verifiers;
 
-namespace DurableTask.Generators.Tests;
+namespace DurableTask.Generators.Tests.Utils;
 
 // Mostly copy/pasted from the Microsoft Source Generators testing documentation
 public static class CSharpSourceGeneratorVerifier<TSourceGenerator> where TSourceGenerator : ISourceGenerator, new()
@@ -29,10 +29,10 @@ public static class CSharpSourceGeneratorVerifier<TSourceGenerator> where TSourc
     {
         public Test()
         {
-            // See https://www.nuget.org/packages/Microsoft.NETCore.App.Ref/6.0.0-preview.4.21253.7
+            // See https://www.nuget.org/packages/Microsoft.NETCore.App.Ref/6.0.0
             this.ReferenceAssemblies = new ReferenceAssemblies(
                 targetFramework: "net6.0",
-                referenceAssemblyPackage: new PackageIdentity("Microsoft.NETCore.App.Ref", "6.0.0-rc.1.21451.13"),
+                referenceAssemblyPackage: new PackageIdentity("Microsoft.NETCore.App.Ref", "6.0.0"),
                 referenceAssemblyPath: Path.Combine("ref", "net6.0"));
         }
 

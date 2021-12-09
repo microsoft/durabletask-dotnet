@@ -11,22 +11,22 @@
 //  limitations under the License.
 //  ----------------------------------------------------------------------------------
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using DurableTask.Generators.AzureFunctions;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace DurableTask.Generators
+namespace DurableTask.Generators.AzureFunctions
 {
-    static class Helpers
+    public static class SyntaxNodeUtility
     {
-        // Specific to Azure Functions
         public static bool TryGetFunctionName(SemanticModel model, MethodDeclarationSyntax method, out string? functionName)
         {
-            if (TryGetAttributeByName(method, "FunctionName", out AttributeSyntax functionNameAttribute))
+            if (TryGetAttributeByName(method, "Function", out AttributeSyntax? functionNameAttribute) && functionNameAttribute != null)
             {
-                if (functionNameAttribute?.ArgumentList?.Arguments.Count == 1)
+                if (functionNameAttribute.ArgumentList?.Arguments.Count == 1)
                 {
                     ExpressionSyntax expression = functionNameAttribute.ArgumentList.Arguments.First().Expression;
                     functionName = model.GetConstantValue(expression).Value?.ToString();
@@ -107,6 +107,37 @@ namespace DurableTask.Generators
             return true;
         }
 
+        internal static bool TryGetParameter(
+            MethodDeclarationSyntax method,
+            DurableFunctionKind kind,
+            out TypedParameter? parameter)
+        {
+            foreach (var methodParam in method.ParameterList.Parameters)
+            {
+                if (methodParam.Type == null)
+                {
+                    continue;
+                }
+
+                foreach (AttributeListSyntax list in methodParam.AttributeLists)
+                {
+                    foreach (AttributeSyntax attribute in list.Attributes)
+                    {
+                        string attributeName = attribute.Name.ToString();
+                        if ((kind == DurableFunctionKind.Activity && attributeName == "ActivityTrigger") ||
+                            (kind == DurableFunctionKind.Orchestration && attributeName == "OrchestratorTrigger"))
+                        {
+                            parameter = new TypedParameter(methodParam.Type, methodParam.Identifier.ToString());
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            parameter = null;
+            return false;
+        }
+
         public static bool TryGetParameters(SemanticModel model, MethodDeclarationSyntax method, out List<TypedParameter> parameters)
         {
             parameters = null;
@@ -161,10 +192,10 @@ namespace DurableTask.Generators
             return true;
         }
 
-        private static bool TryGetAttributeByName(MethodDeclarationSyntax method, string attributeName, out AttributeSyntax attribute)
+        static bool TryGetAttributeByName(MethodDeclarationSyntax method, string attributeName, out AttributeSyntax? attribute)
         {
             attribute = method.AttributeLists.SelectMany(a => a.Attributes).FirstOrDefault(a => a.Name.NormalizeWhitespace().ToFullString().Equals(attributeName));
-            return (attribute != null);
+            return attribute != null;
         }
 
         private static InvocationExpressionSyntax FindGetInputInvocation(MethodDeclarationSyntax method)
@@ -301,6 +332,5 @@ namespace DurableTask.Generators
 
             return true;
         }
-
     }
 }

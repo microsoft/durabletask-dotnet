@@ -14,29 +14,32 @@
 namespace DurableTask;
 
 /// <summary>
-/// Abstract base class for task activity context.
+/// Interface for task activity context objects.
 /// </summary>
 /// <remarks>
-/// A new instance of <see cref="TaskActivityContext"/> is passed as a parameter to each
+/// A new instance of <see cref="ITaskActivityContext"/> is passed as a parameter to each
 /// task activity execution. It includes basic information such as the name of the activity, the
 /// ID of the invoking orchestration instance, and a method for reading the activity input.
 /// </remarks>
-public abstract class TaskActivityContext
+public interface ITaskActivityContext
 {
+    // IMPORTANT: This interface is implemented in the output of source generators, so any changes
+    //            to the interface may also need to be reflected in the source generator output.
+
     /// <summary>
     /// Gets the name of the task activity.
     /// </summary>
-    public abstract TaskName Name { get; }
+    public TaskName Name { get; }
 
     /// <summary>
     /// Gets the unique ID of the current orchestration instance.
     /// </summary>
-    public abstract string InstanceId { get; }
+    public string InstanceId { get; }
 
     /// <summary>
     /// Gets the task activity's input.
     /// </summary>
     /// <typeparam name="T">The type of the activity input. This is used for deserialization.</typeparam>
     /// <returns>Returns the input deserialized into an object of type <c>T</c>.</returns>
-    public abstract T? GetInput<T>();
+    public T? GetInput<T>();
 }

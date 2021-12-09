@@ -26,6 +26,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="0.1.0-alpha" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\DurableTask.Generators\DurableTask.Generators.csproj" />
     <ProjectReference Include="..\..\src\DurableTask\DurableTask.csproj" />
   </ItemGroup>

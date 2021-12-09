@@ -11,11 +11,24 @@
 //  limitations under the License.
 //  ----------------------------------------------------------------------------------
 
-namespace DurableTask;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-/// <summary>
-/// Record that represents the details of an orchestration instance failure.
-/// </summary>
-/// <param name="Message">A summary description of the failure.</param>
-/// <param name="Details">The full details of the failure, which is often an exception call-stack.</param>
-public record OrchestrationFailureDetails(string Message, string? Details);
+namespace DurableTask.Generators.AzureFunctions
+{
+    public class TypedParameter
+    {
+        public TypeSyntax Type { get; }
+        public string Name { get; }
+
+        public TypedParameter(TypeSyntax type, string name)
+        {
+            this.Type = type;
+            this.Name = name;
+        }
+
+        public override string ToString()
+        {
+            return $"{this.Type} {this.Name}";
+        }
+    }
+}

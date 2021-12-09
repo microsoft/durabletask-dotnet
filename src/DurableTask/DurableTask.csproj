@@ -4,20 +4,25 @@
     <TargetFramework>net6.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>../../key.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
+  <!-- Package info -->
   <PropertyGroup>
     <Company>Microsoft Corporation</Company>
     <Product>Durable Task SDK</Product>
-    <FileVersion>3.0.0</FileVersion>
-    <Version>$(FileVersion)-preview</Version>
     <PackageId>Microsoft.DurableTask</PackageId>
     <Title>Durable Task .NET SDK</Title>
     <Description>.NET SDK for the Durable Task Framework.</Description>
     <PackageTags>Microsoft Durable Task Orchestration Workflow Activity Reliable</PackageTags>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <!-- Analyzer bugs showing up as warnings. This can be removed when .NET 6 is GA.-->
-    <NoWarn>CA2252</NoWarn>
+  </PropertyGroup>
+
+  <!-- Version info -->
+  <PropertyGroup>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionSuffix>alpha</VersionSuffix>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,9 +32,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Server.Kestrel" Version="2.2.0" />
     <PackageReference Include="Microsoft.AspNetCore.Hosting" Version="2.2.7" />
+    <PackageReference Include="System.Collections.Concurrent" Version="4.3.0" />
     <PackageReference Include="System.Collections.Immutable" Version="5.0.0" />
     <PackageReference Include="Grpc.AspNetCore.Server" Version="2.38.0" />
-    <PackageReference Include="Microsoft.Azure.DurableTask.Core" Version="2.7.0-private" />
+    <PackageReference Include="Microsoft.Azure.DurableTask.Core" Version="2.7.0-ooproc.1" />
   </ItemGroup>
 
   <ItemGroup>

@@ -25,21 +25,21 @@ public interface ITaskBuilder
 
     public ITaskBuilder AddOrchestrator<T>(
         TaskName name,
-        Func<TaskOrchestrationContext, Task<T>> implementation);
+        Func<TaskOrchestrationContext, Task<T?>> implementation);
 
     public ITaskBuilder AddOrchestrator<T>() where T : ITaskOrchestrator;
 
     public ITaskBuilder AddActivity(
         TaskName name,
-        Func<TaskActivityContext, object?> implementation);
+        Func<ITaskActivityContext, object?> implementation);
 
     public ITaskBuilder AddActivity(
         TaskName name,
-        Func<TaskActivityContext, Task> implementation);
+        Func<ITaskActivityContext, Task> implementation);
 
     public ITaskBuilder AddActivity<T>(
         TaskName name,
-        Func<TaskActivityContext, Task<T>> implementation);
+        Func<ITaskActivityContext, Task<T?>> implementation);
 
     public ITaskBuilder AddActivity<T>() where T : ITaskActivity;
 }

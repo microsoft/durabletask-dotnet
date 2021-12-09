@@ -19,18 +19,18 @@ namespace DurableTask;
 // TODO: Move to separate file
 public interface ITaskActivity
 {
-    Task<object?> RunAsync(TaskActivityContext context);
+    Task<object?> RunAsync(ITaskActivityContext context);
 }
 
 public abstract class TaskActivityBase<TInput, TOutput> : ITaskActivity
 {
-    protected internal TaskActivityContext Context { get; internal set; } = NullActivityContext.Instance;
+    protected internal ITaskActivityContext Context { get; internal set; } = NullActivityContext.Instance;
 
     protected virtual Task<TOutput?> OnRunAsync(TInput? input) => Task.FromResult(this.OnRun(input));
 
     protected virtual TOutput? OnRun(TInput? input) => throw this.DefaultNotImplementedException();
 
-    async Task<object?> ITaskActivity.RunAsync(TaskActivityContext context)
+    async Task<object?> ITaskActivity.RunAsync(ITaskActivityContext context)
     {
         this.Context = context;
         TInput? input = context.GetInput<TInput>();
@@ -43,15 +43,15 @@ public abstract class TaskActivityBase<TInput, TOutput> : ITaskActivity
         return new NotImplementedException($"{this.GetType().Name} needs to override {nameof(this.OnRun)} or {nameof(this.OnRunAsync)} with an implementation.");
     }
 
-    class NullActivityContext : TaskActivityContext
+    class NullActivityContext : ITaskActivityContext
     {
         public static NullActivityContext Instance { get; } = new NullActivityContext();
 
-        public override TaskName Name => string.Empty;
+        public TaskName Name => string.Empty;
 
-        public override string InstanceId => string.Empty;
+        public string InstanceId => string.Empty;
 
-        public override T GetInput<T>() => throw new NotImplementedException();
+        public T GetInput<T>() => throw new NotImplementedException();
     }
 }
 

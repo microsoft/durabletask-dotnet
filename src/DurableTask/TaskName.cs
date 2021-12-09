@@ -124,6 +124,13 @@ public struct TaskName : IEquatable<TaskName>
     /// <returns>The name and optional version of the current <see cref="TaskName"/> instance.</returns>
     public override string ToString()
     {
-        return this.Name;
+        if (string.IsNullOrEmpty(this.Version))
+        {
+            return this.Name;
+        }
+        else
+        {
+            return this.Name + ":" + this.Version;
+        }
     }
 }

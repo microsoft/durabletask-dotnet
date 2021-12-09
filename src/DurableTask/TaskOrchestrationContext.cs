@@ -69,12 +69,32 @@ public abstract class TaskOrchestrationContext
     /// <returns>Returns the input deserialized into an object of type <c>T</c>.</returns>
     public abstract T? GetInput<T>();
 
+    // TODO: Summary and detailed remarks
+    /// <param name="name">The name of the activity to call.</param>
+    /// <param name="input">The serializeable input to pass to the activity.</param>
+    /// <param name="options">Additional options that control the execution and processing of the activity.</param>
+    /// <returns>A task that completes when the activity completes or fails.</returns>
+    /// <exception cref="ArgumentException">The specified orchestrator does not exist.</exception>
     public virtual Task CallActivityAsync(TaskName name, object? input = null, TaskOptions? options = null)
     {
         return this.CallActivityAsync<object>(name, input, options);
     }
 
+    /// <returns>A task that completes when the activity completes or fails. The result of the task is the activity's return value.</returns>
+    /// <inheritdoc cref="CallActivityAsync"/>
     public abstract Task<T> CallActivityAsync<T>(TaskName name, object? input = null, TaskOptions? options = null);
+
+    // TODO: Summary
+    /// <remarks>
+    /// <para>
+    /// Unlike named activities, anonymous activities are triggered in local memory and always run in the same process
+    /// space as the calling orchestrators. If a machine failure occurs before the anonymous activity completes, then
+    /// the previous orchestration execution will be re-run to re-schedule the anonymous activity.
+    /// </para>
+    /// </remarks>
+    /// <inheritdoc cref="CallActivityAsync{T}"/>
+    [Obsolete("This method is not yet fully implemented")]
+    public abstract Task<T> CallActivityAsync<T>(Func<object?, T> activityLambda, object? input = null, TaskOptions? options = null);
 
     public virtual Task CreateTimer(TimeSpan delay, CancellationToken cancellationToken)
     {

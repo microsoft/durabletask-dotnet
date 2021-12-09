@@ -265,7 +265,7 @@ public class OrchestrationPatterns : IDisposable
 
         OrchestrationFailureDetails? failureDetails = metadata.ReadOutputAs<OrchestrationFailureDetails>();
         Assert.NotNull(failureDetails);
-        Assert.Contains(errorMessage, failureDetails!.FullText);
+        Assert.Contains(errorMessage, failureDetails!.Details);
     }
 
     [Fact]

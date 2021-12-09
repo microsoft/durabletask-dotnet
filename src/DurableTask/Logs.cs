@@ -19,14 +19,17 @@ namespace DurableTask
     // NOTE: Trying to make logs consistent with https://github.com/Azure/durabletask/blob/main/src/DurableTask.Core/Logging/LogEvents.cs.
     static partial class Logs
     {
-        [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Task hub worker is connecting to {address}.")]
+        [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Task hub worker is connecting to sidecar at {address}.")]
         public static partial void StartingTaskHubWorker(this ILogger logger, string address);
 
         [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Task hub worker has disconnected from {address}.")]
-        public static partial void TaskHubWorkerDisconnected(this ILogger logger, string address);
+        public static partial void SidecarDisconnected(this ILogger logger, string address);
 
         [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "The sidecar at address {address} is unavailable. Will continue retrying.")]
         public static partial void SidecarUnavailable(this ILogger logger, string address);
+
+        [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Sidecar work-item streaming connection established.")]
+        public static partial void EstablishedWorkItemConnection(this ILogger logger);
 
         [LoggerMessage(EventId = 10, Level = LogLevel.Debug, Message = "{instanceId}: Received request for '{name}' orchestrator.")]
         public static partial void ReceivedOrchestratorRequest(this ILogger logger, string name, string instanceId);

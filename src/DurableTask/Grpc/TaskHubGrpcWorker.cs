@@ -12,6 +12,7 @@
 //  ----------------------------------------------------------------------------------
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
@@ -34,8 +35,14 @@ using P = DurableTask.Protobuf;
 
 namespace DurableTask.Grpc;
 
+// TODO: Rather than making this a top-level class, users should use TaskHubWorker.CreateBuilder().UseGrpc(address) or something similar to opt-into gRPC.
+/// <summary>
+/// Task hub worker that connects to a sidecar process over gRPC to execute orchestrator and activity events.
+/// </summary>
 public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
 {
+    static readonly Google.Protobuf.WellKnownTypes.Empty EmptyMessage = new();
+
     readonly IServiceProvider services;
     readonly IDataConverter dataConverter;
     readonly ILogger logger;
@@ -60,7 +67,8 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
         this.workerContext = new WorkerContext(
             this.dataConverter,
             this.logger,
-            this.services);
+            this.services,
+            new ConcurrentDictionary<string, TaskActivity>(StringComparer.OrdinalIgnoreCase));
 
         this.orchestrators = builder.taskProvider.orchestratorsBuilder.ToImmutable();
         this.activities = builder.taskProvider.activitiesBuilder.ToImmutable();
@@ -99,7 +107,7 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
         {
             try
             {
-                AsyncServerStreamingCall<P.WorkItem>? workItemStream = this.Connect(startupCancelToken);
+                AsyncServerStreamingCall<P.WorkItem>? workItemStream = await this.ConnectAsync(startupCancelToken);
 
                 this.shutdownTcs?.Dispose();
                 this.shutdownTcs = new CancellationTokenSource();
@@ -126,8 +134,13 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
         await this.StartAsync(cts.Token);
     }
 
-    AsyncServerStreamingCall<P.WorkItem> Connect(CancellationToken cancellationToken)
+    async Task<AsyncServerStreamingCall<P.WorkItem>> ConnectAsync(CancellationToken cancellationToken)
     {
+        // Ping the sidecar to make sure it's up and listening.
+        await this.sidecarClient.HelloAsync(EmptyMessage, cancellationToken: cancellationToken);
+        this.logger.EstablishedWorkItemConnection();
+
+        // Get the stream for receiving work-items
         return this.sidecarClient.GetWorkItems(new P.GetWorkItemsRequest(), cancellationToken: cancellationToken);
     }
 
@@ -167,7 +180,7 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
             {
                 if (reconnect)
                 {
-                    workItemStream = this.Connect(shutdownToken);
+                    workItemStream = await this.ConnectAsync(shutdownToken);
                 }
 
                 await foreach (P.WorkItem workItem in workItemStream.ResponseStream.ReadAllAsync(shutdownToken))
@@ -194,7 +207,7 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
             catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
             {
                 // Sidecar is shutting down - retry
-                this.logger.TaskHubWorkerDisconnected(this.sidecarGrpcChannel.Target);
+                this.logger.SidecarDisconnected(this.sidecarGrpcChannel.Target);
             }
             catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
             {
@@ -305,21 +318,7 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
 
     OrchestratorExecutionResult CreateOrchestrationFailedActionResult(string message, string? fullText = null)
     {
-        return new OrchestratorExecutionResult
-        {
-            Actions = new[]
-            {
-                new OrchestrationCompleteOrchestratorAction
-                {
-                    Id = -1,
-                    OrchestrationStatus = OrchestrationStatus.Failed,
-                    Result = SdkUtils.GetSerializedErrorPayload(
-                        this.dataConverter,
-                        message,
-                        fullText),
-                },
-            },
-        };
+        return OrchestratorExecutionResult.ForFailure(message, fullText);
     }
 
     string CreateActivityFailedOutput(Exception? e = null, string? message = null)
@@ -349,6 +348,11 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
             {
                 // Both the factory invocation and the RunAsync could involve user code and need to be handled as part of try/catch.
                 TaskActivity activity = factory.Invoke(this.workerContext);
+                output = await activity.RunAsync(innerContext, request.Input);
+            }
+            else if (this.workerContext.DynamicActivities.TryGetValue(name, out TaskActivity? activity))
+            {
+                // TODO: Need to do work in the worker that ensures 
                 output = await activity.RunAsync(innerContext, request.Input);
             }
             else
@@ -469,7 +473,7 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
 
             public ITaskBuilder AddOrchestrator<T>(
                 TaskName name,
-                Func<TaskOrchestrationContext, Task<T>> implementation)
+                Func<TaskOrchestrationContext, Task<T?>> implementation)
             {
                 if (name == default)
                 {
@@ -488,7 +492,7 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
 
                 this.orchestratorsBuilder.Add(
                     name,
-                    builder => new TaskOrchestrationWrapper<T>(builder, name, implementation));
+                    workerContext => new TaskOrchestrationWrapper<T>(workerContext, name, implementation));
 
                 return this;
             }
@@ -511,14 +515,14 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
 
             public ITaskBuilder AddActivity(
                 TaskName name,
-                Func<TaskActivityContext, object?> implementation)
+                Func<ITaskActivityContext, object?> implementation)
             {
                 return this.AddActivity(name, context => Task.FromResult(implementation(context)));
             }
 
             public ITaskBuilder AddActivity(
                 TaskName name,
-                Func<TaskActivityContext, Task> implementation)
+                Func<ITaskActivityContext, Task> implementation)
             {
                 return this.AddActivity<object?>(name, async context =>
                 {
@@ -529,7 +533,7 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
 
             public ITaskBuilder AddActivity<T>(
                 TaskName name,
-                Func<TaskActivityContext, Task<T>> implementation)
+                Func<ITaskActivityContext, Task<T?>> implementation)
             {
                 if (name == default)
                 {
@@ -584,357 +588,6 @@ public class TaskHubGrpcWorker : IHostedService, IAsyncDisposable
     internal record WorkerContext(
         IDataConverter DataConverter,
         ILogger Logger,
-        IServiceProvider Services);
-
-    sealed class TaskOrchestrationWrapper<TOutput> : TaskOrchestration
-    {
-        readonly TaskName name;
-        readonly Func<TaskOrchestrationContext, Task<TOutput>> wrappedImplementation;
-        readonly IDataConverter dataConverter;
-
-        TaskOrchestrationContextWrapper? wrapperContext;
-
-        public TaskOrchestrationWrapper(
-            WorkerContext workerContext,
-            TaskName name,
-            Func<TaskOrchestrationContext, Task<TOutput>> wrappedImplementation)
-        {
-            this.dataConverter = workerContext.DataConverter;
-            this.name = name;
-            this.wrappedImplementation = wrappedImplementation;
-        }
-
-        public override async Task<string?> Execute(OrchestrationContext innerContext, string rawInput)
-        {
-            this.wrapperContext = new(innerContext, this.name, rawInput, this.dataConverter);
-
-            // NOTE: If this throws, the error response will be generated by DurableTask.Core. However,
-            //       it won't be consistent with our expected format. We currently work around this
-            //       in the gRPC handling code, but ideally we wouldn't need this workaround.
-            TOutput? output = await this.wrappedImplementation.Invoke(this.wrapperContext);
-
-            // Return the output (if any) as a serialized string.
-            return this.dataConverter.Serialize(output);
-        }
-
-        public override string? GetStatus()
-        {
-            return this.wrapperContext?.GetDeserializedCustomStatus();
-        }
-
-        public override void RaiseEvent(OrchestrationContext context, string name, string input)
-        {
-            this.wrapperContext?.CompleteExternalEvent(name, input);
-        }
-
-        sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
-        {
-            readonly Dictionary<string, IEventSource> externalEventSources = new(StringComparer.OrdinalIgnoreCase);
-            readonly NamedQueue<string> externalEventBuffer = new();
-
-            readonly OrchestrationContext innerContext;
-            readonly TaskName name;
-            readonly string rawInput;
-            readonly IDataConverter dataConverter;
-
-            object? customStatus;
-
-            public TaskOrchestrationContextWrapper(
-                OrchestrationContext innerContext,
-                TaskName name,
-                string rawInput,
-                IDataConverter dataConverter)
-            {
-                this.innerContext = innerContext;
-                this.name = name;
-                this.rawInput = rawInput;
-                this.dataConverter = dataConverter;
-            }
-
-            public override TaskName Name => this.name;
-
-            public override string InstanceId => this.innerContext.OrchestrationInstance.InstanceId;
-
-            public override bool IsReplaying => this.innerContext.IsReplaying;
-
-            public override DateTime CurrentDateTimeUtc => this.innerContext.CurrentUtcDateTime;
-
-            public override T GetInput<T>()
-            {
-                if (this.rawInput == null)
-                {
-                    return default!;
-                }
-
-                return this.dataConverter.Deserialize<T>(this.rawInput)!;
-            }
-
-            public override Task<T> CallActivityAsync<T>(
-                TaskName name,
-                object? input = null,
-                TaskOptions? options = null)
-            {
-                // TODO: Retry options
-                return this.innerContext.ScheduleTask<T>(name.Name, name.Version, input);
-            }
-
-            public override Task<TResult> CallSubOrchestratorAsync<TResult>(
-                TaskName orchestratorName,
-                string? instanceId = null,
-                object? input = null,
-                TaskOptions? options = null)
-            {
-                if (options != null)
-                {
-                    throw new NotImplementedException($"{nameof(TaskOptions)} are not yet supported.");
-                }
-
-                // TODO: Support for retry options and custom deserialization via TaskOptions
-                return this.innerContext.CreateSubOrchestrationInstance<TResult>(
-                    orchestratorName.Name,
-                    orchestratorName.Version,
-                    instanceId ?? Guid.NewGuid().ToString("N"),
-                    input);
-            }
-
-            public override Task CreateTimer(DateTime fireAt, CancellationToken cancellationToken)
-            {
-                return this.innerContext.CreateTimer<object>(fireAt, state: null!, cancellationToken);
-            }
-
-            public override Task<T> WaitForExternalEvent<T>(string eventName, CancellationToken cancellationToken = default)
-            {
-                // Return immediately if this external event has already arrived.
-                if (this.externalEventBuffer.TryTake(eventName, out string? bufferedEventPayload))
-                {
-                    return Task.FromResult(this.dataConverter.Deserialize<T>(bufferedEventPayload));
-                }
-
-                // Create a task completion source that will be set when the external event arrives.
-                EventTaskCompletionSource<T> eventSource = new();
-                if (this.externalEventSources.TryGetValue(eventName, out IEventSource? existing))
-                {
-                    if (existing.EventType != typeof(T))
-                    {
-                        throw new ArgumentException($"Events with the same name must have the same type argument. Expected {existing.EventType.FullName}.");
-                    }
-
-                    existing.Next = eventSource;
-                }
-                else
-                {
-                    this.externalEventSources.Add(eventName, eventSource);
-                }
-
-                cancellationToken.Register(() => eventSource.TrySetCanceled(cancellationToken));
-                return eventSource.Task;
-            }
-
-            public void CompleteExternalEvent(string eventName, string rawEventPayload)
-            {
-                if (this.externalEventSources.TryGetValue(eventName, out IEventSource? waiter))
-                {
-                    object? value = this.dataConverter.Deserialize(rawEventPayload, waiter.EventType);
-
-                    // Events are completed in FIFO order. Remove the key if the last event was delivered.
-                    if (waiter.Next == null)
-                    {
-                        this.externalEventSources.Remove(eventName);
-                    }
-                    else
-                    {
-                        this.externalEventSources[eventName] = waiter.Next;
-                    }
-
-                    waiter.TrySetResult(value);
-                }
-                else
-                {
-                    // The orchestrator isn't waiting for this event (yet?). Save it in case
-                    // the orchestrator wants it later.
-                    this.externalEventBuffer.Add(eventName, rawEventPayload);
-                }
-            }
-
-            public override void SetCustomStatus(object? customStatus)
-            {
-                this.customStatus = customStatus;
-            }
-
-            /// <inheritdoc/>
-            public override void ContinueAsNew(object newInput, bool preserveUnprocessedEvents = true)
-            {
-                this.innerContext.ContinueAsNew(newInput);
-
-                if (preserveUnprocessedEvents)
-                {
-                    // Send all the buffered external events to ourself.
-                    OrchestrationInstance instance = new() { InstanceId = this.InstanceId };
-                    foreach ((string eventName, string eventPayload) in this.externalEventBuffer.TakeAll())
-                    {
-                        this.innerContext.SendEvent(instance, eventName, eventPayload);
-                    }
-                }
-            }
-
-            internal string? GetDeserializedCustomStatus()
-            {
-                return this.dataConverter.Serialize(this.customStatus);
-            }
-
-            class EventTaskCompletionSource<T> : TaskCompletionSource<T>, IEventSource
-            {
-                /// <inheritdoc/>
-                public Type EventType => typeof(T);
-
-                /// <inheritdoc/>
-                public IEventSource? Next { get; set; }
-
-                /// <inheritdoc/>
-                void IEventSource.TrySetResult(object result) => this.TrySetResult((T)result);
-            }
-
-            interface IEventSource
-            {
-                /// <summary>
-                /// The type of the event stored in the completion source.
-                /// </summary>
-                Type EventType { get; }
-
-                /// <summary>
-                /// The next task completion source in the stack.
-                /// </summary>
-                IEventSource? Next { get; set; }
-
-                /// <summary>
-                /// Tries to set the result on tcs.
-                /// </summary>
-                /// <param name="result">The result.</param>
-                void TrySetResult(object result);
-            }
-
-            class NamedQueue<TValue>
-            {
-                readonly Dictionary<string, Queue<TValue>> buffers = new(StringComparer.OrdinalIgnoreCase);
-
-                public void Add(string name, TValue value)
-                {
-                    if (!this.buffers.TryGetValue(name, out Queue<TValue>? queue))
-                    {
-                        queue = new Queue<TValue>();
-                        this.buffers[name] = queue;
-                    }
-
-                    queue.Enqueue(value);
-                }
-
-                public bool TryTake(string name, [NotNullWhen(true)] out TValue? value)
-                {
-                    if (this.buffers.TryGetValue(name, out Queue<TValue>? queue))
-                    {
-                        value = queue.Dequeue()!;
-                        if (queue.Count == 0)
-                        {
-                            this.buffers.Remove(name);
-                        }
-
-                        return true;
-                    }
-
-                    value = default;
-                    return false;
-                }
-
-                public IEnumerable<(string eventName, TValue eventPayload)> TakeAll()
-                {
-                    foreach ((string eventName, Queue<TValue> eventPayloads) in this.buffers)
-                    {
-                        foreach (TValue payload in eventPayloads)
-                        {
-                            yield return (eventName, payload);
-                        }
-                    }
-
-                    this.buffers.Clear();
-                }
-            }
-        }
-    }
-
-    sealed class TaskActivityWrapper<TOutput> : TaskActivity
-    {
-        readonly TaskName name;
-        readonly Func<TaskActivityContext, Task<TOutput>> wrappedImplementation;
-
-        readonly IDataConverter dataConverter;
-
-        public TaskActivityWrapper(
-            WorkerContext workerContext,
-            TaskName name,
-            Func<TaskActivityContext, Task<TOutput>> implementation)
-        {
-            this.dataConverter = workerContext.DataConverter ?? JsonDataConverter.Default;
-            this.name = name;
-            this.wrappedImplementation = implementation;
-        }
-
-        public override async Task<string?> RunAsync(TaskContext coreContext, string rawInput)
-        {
-            string? sanitizedInput = StripArrayCharacters(rawInput);
-            TaskActivityContextWrapper contextWrapper = new(coreContext, this.name, sanitizedInput, this.dataConverter);
-            object? output = await this.wrappedImplementation.Invoke(contextWrapper);
-
-            // Return the output (if any) as a serialized string.
-            string? serializedOutput = output != null ? this.dataConverter.Serialize(output) : null;
-            return serializedOutput;
-        }
-
-        static string? StripArrayCharacters(string? input)
-        {
-            if (input != null && input.StartsWith('[') && input.EndsWith(']'))
-            {
-                // Strip the outer bracket characters
-                return input[1..^1];
-            }
-
-            return input;
-        }
-
-        // Not used/called
-        public override string Run(TaskContext context, string input) => throw new NotImplementedException();
-
-        sealed class TaskActivityContextWrapper : TaskActivityContext
-        {
-            readonly TaskContext innerContext;
-            readonly TaskName name;
-            readonly string? rawInput;
-            readonly IDataConverter dataConverter;
-
-            public TaskActivityContextWrapper(
-                TaskContext taskContext,
-                TaskName name,
-                string? rawInput,
-                IDataConverter dataConverter)
-            {
-                this.innerContext = taskContext;
-                this.name = name;
-                this.rawInput = rawInput;
-                this.dataConverter = dataConverter;
-            }
-
-            public override TaskName Name => this.name;
-
-            public override string InstanceId => this.innerContext.OrchestrationInstance.InstanceId;
-
-            public override T GetInput<T>()
-            {
-                if (this.rawInput == null)
-                {
-                    return default!;
-                }
-
-                return this.dataConverter.Deserialize<T>(this.rawInput)!;
-            }
-        }
-    }
+        IServiceProvider Services,
+        ConcurrentDictionary<string, TaskActivity> DynamicActivities) : IWorkerContext;
 }

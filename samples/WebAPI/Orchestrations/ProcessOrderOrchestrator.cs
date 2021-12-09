@@ -18,7 +18,7 @@ namespace WebAPI.Orchestrations;
 
 public class ProcessOrderOrchestrator : TaskOrchestratorBase<OrderInfo, OrderStatus>
 {
-    protected override async Task<OrderStatus> OnRunAsync(OrderInfo? orderInfo)
+    protected override async Task<OrderStatus> OnRunAsync(TaskOrchestrationContext context, OrderInfo? orderInfo)
     {
         if (orderInfo == null)
         {
@@ -28,12 +28,12 @@ public class ProcessOrderOrchestrator : TaskOrchestratorBase<OrderInfo, OrderSta
 
         // Call the following activity operations in sequence.
         OrderStatus orderStatus = new();
-        if (await this.Context.CallCheckInventoryAsync(orderInfo))
+        if (await context.CallCheckInventoryAsync(orderInfo))
         {
             // Orders over $1,000 require manual approval. We use a custom status
             // value to communicate this back to the client application.
             bool requiresApproval = orderInfo.Price > 1000.00;
-            this.Context.SetCustomStatus(new { requiresApproval });
+            context.SetCustomStatus(new { requiresApproval });
 
             if (requiresApproval)
             {
@@ -44,7 +44,7 @@ public class ProcessOrderOrchestrator : TaskOrchestratorBase<OrderInfo, OrderSta
                 {
                     // Wait for the client application to send an approval event.
                     // Auto-reject if an approval isn't received in 10 seconds.
-                    approvalEvent = await this.Context.WaitForExternalEvent<ApprovalEvent>(
+                    approvalEvent = await context.WaitForExternalEvent<ApprovalEvent>(
                         eventName: "Approve",
                         timeout: TimeSpan.FromSeconds(10));
                 }
@@ -60,8 +60,8 @@ public class ProcessOrderOrchestrator : TaskOrchestratorBase<OrderInfo, OrderSta
                 }
             }
 
-            await this.Context.CallChargeCustomerAsync(orderInfo);
-            await this.Context.CallCreateShipmentAsync(orderInfo);
+            await context.CallChargeCustomerAsync(orderInfo);
+            await context.CallCreateShipmentAsync(orderInfo);
 
             return orderStatus;
         }

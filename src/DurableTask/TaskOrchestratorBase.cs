@@ -23,15 +23,12 @@ public interface ITaskOrchestrator
 
 public abstract class TaskOrchestratorBase<TInput, TOutput> : ITaskOrchestrator
 {
-    protected internal TaskOrchestrationContext Context { get; internal set; } = default!;
-
-    protected abstract Task<TOutput> OnRunAsync(TInput? input);
+    protected abstract Task<TOutput> OnRunAsync(TaskOrchestrationContext context, TInput? input);
 
     async Task<object?> ITaskOrchestrator.RunAsync(TaskOrchestrationContext context)
     {
-        this.Context = context;
         TInput? input = context.GetInput<TInput>();
-        object? output = await this.OnRunAsync(input);
+        object? output = await this.OnRunAsync(context, input);
         return output;
     }
 }

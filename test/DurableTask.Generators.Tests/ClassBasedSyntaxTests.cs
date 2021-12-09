@@ -32,7 +32,7 @@ using DurableTask;
 [DurableTask(nameof(MyOrchestrator))]
 class MyOrchestrator : TaskOrchestratorBase<int, string>
 {
-    protected override Task<string> OnRunAsync(int input) => Task.FromResult(string.Empty);
+    protected override Task<string> OnRunAsync(TaskOrchestrationContext ctx, int input) => Task.FromResult(string.Empty);
 }";
 
         string expectedOutput = TestHelpers.WrapAndFormat(

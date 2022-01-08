@@ -1,15 +1,5 @@
-﻿// ----------------------------------------------------------------------------------
-// Copyright Microsoft Corporation
-// Licensed under the Apache License, Version 2.0 (the "License").
-// You may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// ----------------------------------------------------------------------------------
+﻿// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 
 using System.Threading.Tasks;
 using DurableTask.Generators.Tests.Utils;
@@ -66,7 +56,7 @@ public static Task<string> CallMyOrchestratorAsync(
         options);
 }
 
-public static ITaskBuilder AddAllGeneratedTasks(this ITaskBuilder builder)
+public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistry builder)
 {
     builder.AddOrchestrator<MyOrchestrator>();
     return builder;
@@ -80,6 +70,70 @@ public static ITaskBuilder AddAllGeneratedTasks(this ITaskBuilder builder)
     }
 
     [Fact]
+    public Task Orchestrators_Inheritance()
+    {
+        string code = @"
+using System.Threading.Tasks;
+using DurableTask;
+
+[DurableTask(nameof(MyOrchestrator))]
+sealed class MyOrchestrator : MyOrchestratorBase
+{
+    protected override Task<string> OnRunAsync(TaskOrchestrationContext ctx, int input) => Task.FromResult(this.X);
+}
+
+abstract class MyOrchestratorBase : TaskOrchestratorBase<int, string>
+{
+    public virtual string X => ""Foo"";
+}";
+
+        // NOTE: Same output as Orchestrators_PrimitiveTypes
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            methodList: @"
+/// <inheritdoc cref=""DurableTaskClient.ScheduleNewOrchestrationInstanceAsync""/>
+public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
+    this DurableTaskClient client,
+    string? instanceId = null,
+    int input = default,
+    DateTimeOffset? startTime = null)
+{
+    return client.ScheduleNewOrchestrationInstanceAsync(
+        ""MyOrchestrator"",
+        instanceId,
+        input,
+        startTime);
+}
+
+/// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync""/>
+public static Task<string> CallMyOrchestratorAsync(
+    this TaskOrchestrationContext context,
+    string? instanceId = null,
+    int input = default,
+    TaskOptions? options = null)
+{
+    return context.CallSubOrchestratorAsync<string>(
+        ""MyOrchestrator"",
+        instanceId,
+        input,
+        options);
+}
+
+public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistry builder)
+{
+    builder.AddOrchestrator<MyOrchestrator>();
+    return builder;
+}");
+
+        return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: false);
+
+    }
+
+    [Fact]
     public Task Activities_PrimitiveTypes()
     {
         string code = @"
@@ -88,7 +142,7 @@ using DurableTask;
 [DurableTask(nameof(MyActivity))]
 class MyActivity : TaskActivityBase<int, string>
 {
-    protected override string OnRun(int input) => default;
+    protected override string OnRun(TaskActivityContext context, int input) => default;
 }";
 
         string expectedOutput = TestHelpers.WrapAndFormat(
@@ -99,7 +153,7 @@ public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx
     return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
 }
 
-public static ITaskBuilder AddAllGeneratedTasks(this ITaskBuilder builder)
+public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistry builder)
 {
     builder.AddActivity<MyActivity>();
     return builder;
@@ -122,7 +176,7 @@ using DurableTask;
 [DurableTask(nameof(MyActivity))]
 class MyActivity : TaskActivityBase<MyClass, MyClass>
 {
-    protected override MyClass OnRun(MyClass input) => default;
+    protected override MyClass OnRun(TaskActivityContext context, MyClass input) => default;
 }
 
 namespace MyNS
@@ -138,7 +192,7 @@ public static Task<MyNS.MyClass> CallMyActivityAsync(this TaskOrchestrationConte
     return ctx.CallActivityAsync<MyNS.MyClass>(""MyActivity"", input, options);
 }
 
-public static ITaskBuilder AddAllGeneratedTasks(this ITaskBuilder builder)
+public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistry builder)
 {
     builder.AddActivity<MyActivity>();
     return builder;
@@ -165,7 +219,7 @@ namespace MyNS
     [DurableTask(""MyActivity"")]
     class MyActivityImpl : TaskActivityBase<MyClass, MyClass>
     {
-        protected override MyClass OnRun(MyClass input) => default;
+        protected override MyClass OnRun(TaskActivityContext context, MyClass input) => default;
     }
 
     public class MyClass { }
@@ -179,9 +233,47 @@ public static Task<MyNS.MyClass> CallMyActivityAsync(this TaskOrchestrationConte
     return ctx.CallActivityAsync<MyNS.MyClass>(""MyActivity"", input, options);
 }
 
-public static ITaskBuilder AddAllGeneratedTasks(this ITaskBuilder builder)
+public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistry builder)
 {
     builder.AddActivity<MyNS.MyActivityImpl>();
+    return builder;
+}");
+
+        return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: false);
+    }
+
+    [Fact]
+    public Task Activities_Inheritance()
+    {
+        string code = @"
+using DurableTask;
+
+[DurableTask(nameof(MyActivity))]
+class MyActivity : MyActivityBase
+{
+    protected override string OnRun(TaskActivityContext context, int input) => default;
+}
+
+abstract class MyActivityBase : TaskActivityBase<int, string>
+{
+}";
+
+        // NOTE: Same output as Activities_PrimitiveTypes
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            methodList: @"
+public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
+{
+    return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
+}
+
+public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistry builder)
+{
+    builder.AddActivity<MyActivity>();
     return builder;
 }");
 

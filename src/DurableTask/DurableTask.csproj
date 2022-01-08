@@ -4,6 +4,8 @@
     <TargetFramework>net6.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
+    <DebugType>embedded</DebugType>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>../../key.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
@@ -21,7 +23,7 @@
 
   <!-- Version info -->
   <PropertyGroup>
-    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionPrefix>0.2.0</VersionPrefix>
     <VersionSuffix>alpha</VersionSuffix>
   </PropertyGroup>
 
@@ -35,11 +37,12 @@
     <PackageReference Include="System.Collections.Concurrent" Version="4.3.0" />
     <PackageReference Include="System.Collections.Immutable" Version="5.0.0" />
     <PackageReference Include="Grpc.AspNetCore.Server" Version="2.38.0" />
-    <PackageReference Include="Microsoft.Azure.DurableTask.Core" Version="2.7.0-ooproc.1" />
+    <PackageReference Include="Microsoft.Azure.DurableTask.Core" Version="2.7.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\submodules\protobuf\lib\dotnet\Microsoft.DurableTask.Protobuf.csproj" />
+    <ProjectReference Include="..\DurableTask.Generators\DurableTask.Generators.csproj" />
   </ItemGroup>
 
 </Project>

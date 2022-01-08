@@ -1,15 +1,5 @@
-﻿//  ----------------------------------------------------------------------------------
-//  Copyright Microsoft Corporation
-//  Licensed under the Apache License, Version 2.0 (the "License");
-//  you may not use this file except in compliance with the License.
-//  You may obtain a copy of the License at
-//  http://www.apache.org/licenses/LICENSE-2.0
-//  Unless required by applicable law or agreed to in writing, software
-//  distributed under the License is distributed on an "AS IS" BASIS,
-//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//  See the License for the specific language governing permissions and
-//  limitations under the License.
-//  ----------------------------------------------------------------------------------
+﻿// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 
 using System;
 using System.Threading;
@@ -61,13 +51,6 @@ public abstract class TaskOrchestrationContext
     /// <c>true</c> if the orchestrator is currently replaying a previous execution; otherwise <c>false</c>.
     /// </value>
     public abstract bool IsReplaying { get; }
-
-    /// <summary>
-    /// Gets the task orchestration's input.
-    /// </summary>
-    /// <typeparam name="T">The type of the orchestration input. This is used for deserialization.</typeparam>
-    /// <returns>Returns the input deserialized into an object of type <c>T</c>.</returns>
-    public abstract T? GetInput<T>();
 
     // TODO: Summary and detailed remarks
     /// <param name="name">The name of the activity to call.</param>

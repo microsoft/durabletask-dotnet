@@ -1,15 +1,5 @@
-﻿//  ----------------------------------------------------------------------------------
-//  Copyright Microsoft Corporation
-//  Licensed under the Apache License, Version 2.0 (the "License");
-//  you may not use this file except in compliance with the License.
-//  You may obtain a copy of the License at
-//  http://www.apache.org/licenses/LICENSE-2.0
-//  Unless required by applicable law or agreed to in writing, software
-//  distributed under the License is distributed on an "AS IS" BASIS,
-//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//  See the License for the specific language governing permissions and
-//  limitations under the License.
-//  ----------------------------------------------------------------------------------
+﻿// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 
 using System;
 using DurableTask.Grpc;
@@ -24,12 +14,12 @@ public static class DurableTaskExtensions
     /// Adds Durable Task orchestration processing capabilities to the current application.
     /// </summary>
     /// <param name="serviceCollection">The <see cref="IServiceCollection"/> to configure.</param>
-    /// <param name="builderAction">A builder callback that allows you to configure the orchestration logic.</param>
+    /// <param name="registryAction">A callback that allows you to register orchestrators and activities.</param>
     /// <param name="sidecarAddress">The address of the Durable Task sidecar endpoint.</param>
     /// <returns>Returns the current <see cref="IServiceCollection"/>.</returns>
     public static IServiceCollection AddDurableTask(
         this IServiceCollection serviceCollection,
-        Action<ITaskBuilder> builderAction,
+        Action<IDurableTaskRegistry> registryAction,
         string? sidecarAddress = null)
     {
         // Register the client
@@ -38,7 +28,7 @@ public static class DurableTaskExtensions
         return serviceCollection.AddHostedService(services =>
         {
             DurableTaskGrpcWorker.Builder workerBuilder = DurableTaskGrpcWorker.CreateBuilder().UseServices(services);
-            workerBuilder.AddTasks(builderAction);
+            workerBuilder.AddTasks(registryAction);
 
             if (sidecarAddress != null)
             {

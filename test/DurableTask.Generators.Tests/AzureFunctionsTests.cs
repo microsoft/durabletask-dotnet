@@ -1,17 +1,6 @@
-﻿// ----------------------------------------------------------------------------------
-// Copyright Microsoft Corporation
-// Licensed under the Apache License, Version 2.0 (the "License").
-// You may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// ----------------------------------------------------------------------------------
+﻿// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 
-using System;
 using System.Threading.Tasks;
 using DurableTask.Generators.Tests.Utils;
 using Microsoft.Azure.Functions.Worker;
@@ -28,7 +17,6 @@ public class AzureFunctionsTests
     public async Task Activities_SimpleFunctionTrigger()
     {
         string code = @"
-using Microsoft.Azure.Functions.DurableTask;
 using Microsoft.Azure.Functions.Worker;
 using DurableTask;
 
@@ -77,7 +65,7 @@ using DurableTask;
 [DurableTask(nameof(MyActivity))]
 public class MyActivity : TaskActivityBase<{inputType}, {outputType}>
 {{
-    protected override {outputType} OnRun({inputType} input) => default!;
+    protected override {outputType} OnRun(TaskActivityContext context, {inputType} input) => default!;
 }}";
 
         string expectedOutput = TestHelpers.WrapAndFormat(
@@ -92,8 +80,8 @@ public static Task<{outputType}> CallMyActivityAsync(this TaskOrchestrationConte
 public static async Task<{outputType}> MyActivity([ActivityTrigger] {defaultInputType} input, string instanceId, FunctionContext executionContext)
 {{
     ITaskActivity activity = ActivatorUtilities.CreateInstance<MyActivity>(executionContext.InstanceServices);
-    ITaskActivityContext context = new GeneratedActivityContext(""MyActivity"", instanceId, input);
-    object? result = await activity.RunAsync(context);
+    TaskActivityContext context = new GeneratedActivityContext(""MyActivity"", instanceId);
+    object? result = await activity.RunAsync(context, input);
     return ({outputType})result!;
 }}
 {TestHelpers.DeIndent(DurableTaskSourceGenerator.GetGeneratedActivityContextCode(), spacesToRemove: 8)}",
@@ -114,7 +102,7 @@ public static async Task<{outputType}> MyActivity([ActivityTrigger] {defaultInpu
     /// <param name="inputType">The activity input type.</param>
     /// <param name="outputType">The activity output type.</param>
     [Theory]
-    [InlineData("int", "string")]
+    [InlineData("int", "string?")]
     [InlineData("string", "int")]
     [InlineData("(int, int)", "(double, double)")]
     [InlineData("DateTime?", "DateTimeOffset?")]
@@ -134,7 +122,7 @@ namespace MyNS
     [DurableTask(nameof(MyOrchestrator))]
     public class MyOrchestrator : TaskOrchestratorBase<{inputType}, {outputType}>
     {{
-        protected override Task<{outputType}> OnRunAsync({defaultInputType} input) => throw new NotImplementedException();
+        protected override Task<{outputType}> OnRunAsync(TaskOrchestrationContext ctx, {defaultInputType} input) => throw new NotImplementedException();
     }}
 }}";
         string expectedOutput = TestHelpers.WrapAndFormat(
@@ -143,9 +131,93 @@ namespace MyNS
 static readonly MyNS.MyOrchestrator singletonMyOrchestrator = new MyNS.MyOrchestrator();
 
 [Function(nameof(MyOrchestrator))]
-public static async Task<string> MyOrchestrator([OrchestrationTrigger] string orchestratorState)
+public static string MyOrchestrator([OrchestrationTrigger] string orchestratorState)
 {{
-    return await DurableOrchestrator.LoadAndRunAsync<{inputType}, {outputType}>(orchestratorState, singletonMyOrchestrator);
+    return DurableOrchestrator.LoadAndRun(orchestratorState, singletonMyOrchestrator);
+}}
+
+/// <inheritdoc cref=""DurableTaskClient.ScheduleNewOrchestrationInstanceAsync""/>
+public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
+    this DurableTaskClient client,
+    string? instanceId = null,
+    {defaultInputType} input = default,
+    DateTimeOffset? startTime = null)
+{{
+    return client.ScheduleNewOrchestrationInstanceAsync(
+        ""MyOrchestrator"",
+        instanceId,
+        input,
+        startTime);
+}}
+
+/// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync""/>
+public static Task<{outputType}> CallMyOrchestratorAsync(
+    this TaskOrchestrationContext context,
+    string? instanceId = null,
+    {defaultInputType} input = default,
+    TaskOptions? options = null)
+{{
+    return context.CallSubOrchestratorAsync<{outputType}>(
+        ""MyOrchestrator"",
+        instanceId,
+        input,
+        options);
+}}",
+            isDurableFunctions: true);
+
+        await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: true);
+    }
+
+
+    /// <summary>
+    /// Verifies that using the class-based syntax for authoring orchestrations generates 
+    /// type-safe <see cref="DurableTaskClient"/> and <see cref="TaskOrchestrationContext"/> 
+    /// extension methods as well as <see cref="OrchestrationTriggerAttribute"/> function triggers.
+    /// </summary>
+    /// <param name="inputType">The activity input type.</param>
+    /// <param name="outputType">The activity output type.</param>
+    [Theory]
+    [InlineData("int", "string?")]
+    [InlineData("string", "int")]
+    [InlineData("(int, int)", "(double, double)")]
+    [InlineData("DateTime?", "DateTimeOffset?")]
+    public async Task Orchestrators_ClassBasedSyntax_Inheritance(string inputType, string outputType)
+    {
+        // Nullable reference types need to be used for input expressions
+        string defaultInputType = TestHelpers.GetDefaultInputType(inputType);
+
+        string code = $@"
+#nullable enable
+using System;
+using System.Threading.Tasks;
+using DurableTask;
+
+namespace MyNS
+{{
+    [DurableTask]
+    public class MyOrchestrator : MyOrchestratorBase
+    {{
+        protected override Task<{outputType}> OnRunAsync(TaskOrchestrationContext ctx, {defaultInputType} input) => throw new NotImplementedException();
+    }}
+
+    public abstract class MyOrchestratorBase : TaskOrchestratorBase<{inputType}, {outputType}>
+    {{
+    }}
+}}";
+        // Same output as Orchestrators_ClassBasedSyntax
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            methodList: $@"
+static readonly MyNS.MyOrchestrator singletonMyOrchestrator = new MyNS.MyOrchestrator();
+
+[Function(nameof(MyOrchestrator))]
+public static string MyOrchestrator([OrchestrationTrigger] string orchestratorState)
+{{
+    return DurableOrchestrator.LoadAndRun(orchestratorState, singletonMyOrchestrator);
 }}
 
 /// <inheritdoc cref=""DurableTaskClient.ScheduleNewOrchestrationInstanceAsync""/>

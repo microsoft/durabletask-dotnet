@@ -1,15 +1,5 @@
-﻿//  ----------------------------------------------------------------------------------
-//  Copyright Microsoft Corporation
-//  Licensed under the Apache License, Version 2.0 (the "License");
-//  you may not use this file except in compliance with the License.
-//  You may obtain a copy of the License at
-//  http://www.apache.org/licenses/LICENSE-2.0
-//  Unless required by applicable law or agreed to in writing, software
-//  distributed under the License is distributed on an "AS IS" BASIS,
-//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//  See the License for the specific language governing permissions and
-//  limitations under the License.
-//  ----------------------------------------------------------------------------------
+﻿// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 
 using System;
 using System.Collections.Generic;
@@ -18,6 +8,7 @@ using System.Linq;
 using System.Text;
 using DurableTask.Generators.AzureFunctions;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
@@ -163,9 +154,9 @@ namespace DurableTask
         {
             sourceBuilder.AppendLine($@"
         [Function(nameof({orchestrator.TaskName}))]
-        public static async Task<string> {orchestrator.TaskName}([OrchestrationTrigger] string orchestratorState)
+        public static string {orchestrator.TaskName}([OrchestrationTrigger] string orchestratorState)
         {{
-            return await DurableOrchestrator.LoadAndRunAsync<{orchestrator.InputType}, {orchestrator.OutputType}>(orchestratorState, singleton{orchestrator.TaskName});
+            return DurableOrchestrator.LoadAndRun(orchestratorState, singleton{orchestrator.TaskName});
         }}");
         }
 
@@ -232,8 +223,8 @@ namespace DurableTask
         public static async Task<{activity.OutputType}> {activity.TaskName}([ActivityTrigger] {activity.InputDefaultType} input, string instanceId, FunctionContext executionContext)
         {{
             ITaskActivity activity = ActivatorUtilities.CreateInstance<{activity.TypeName}>(executionContext.InstanceServices);
-            ITaskActivityContext context = new GeneratedActivityContext(""{activity.TaskName}"", instanceId, input);
-            object? result = await activity.RunAsync(context);
+            TaskActivityContext context = new GeneratedActivityContext(""{activity.TaskName}"", instanceId);
+            object? result = await activity.RunAsync(context, input);
             return ({activity.OutputType})result!;
         }}");
         }
@@ -249,22 +240,17 @@ namespace DurableTask
 
         // This is public so that it can be called by unit test code.
         public static string GetGeneratedActivityContextCode() => $@"
-        sealed class GeneratedActivityContext : ITaskActivityContext
+        sealed class GeneratedActivityContext : TaskActivityContext
         {{
-            readonly object? input;
-
-            public GeneratedActivityContext(TaskName name, string instanceId, object? input)
+            public GeneratedActivityContext(TaskName name, string instanceId)
             {{
                 this.Name = name;
                 this.InstanceId = instanceId;
-                this.input = input;
             }}
 
-            public TaskName Name {{ get; }}
+            public override TaskName Name {{ get; }}
 
-            public string InstanceId {{ get; }}
-
-            public T? GetInput<T>() => (T?)(this.input ?? default);
+            public override string InstanceId {{ get; }}
         }}";
 
         static void AddRegistrationMethodForAllTasks(
@@ -273,7 +259,7 @@ namespace DurableTask
             IEnumerable<DurableTaskTypeInfo> activities)
         {
             sourceBuilder.Append($@"
-        public static ITaskBuilder AddAllGeneratedTasks(this ITaskBuilder builder)
+        public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistry builder)
         {{");
 
             foreach (DurableTaskTypeInfo taskInfo in orchestrators)
@@ -305,6 +291,7 @@ namespace DurableTask
 
             public void OnVisitSyntaxNode(GeneratorSyntaxContext context)
             {
+                // Check for Azure Functions syntax
                 if (context.Node is MethodDeclarationSyntax method &&
                     DurableFunction.TryParse(context.SemanticModel, method, out DurableFunction? function) &&
                     function != null)
@@ -314,81 +301,92 @@ namespace DurableTask
                     return;
                 }
 
-                if (context.Node is BaseListSyntax baseList && baseList.Parent is TypeDeclarationSyntax typeSyntax)
+                // Check for class-based syntax
+                if (context.Node is not AttributeSyntax attribute)
                 {
-                    // TODO: Validate that the type is not an abstract class
+                    return;
+                }
 
-                    foreach (BaseTypeSyntax baseType in baseList.Types)
+                ITypeSymbol? attributeType = context.SemanticModel.GetTypeInfo(attribute.Name).Type;
+                if (attributeType?.ToString() != "DurableTask.DurableTaskAttribute")
+                {
+                    return;
+                }
+
+                if (attribute.Parent is not AttributeListSyntax list || list.Parent is not ClassDeclarationSyntax classDeclaration)
+                {
+                    // TODO: Issue a warning that the [DurableTask] attribute was found in a place it wasn't expected.
+                    return;
+                }
+
+                // Verify that the attribute is being used on a non-abstract class
+                if (classDeclaration.Modifiers.Any(SyntaxKind.AbstractKeyword))
+                {
+                    // TODO: Issue a warning that you can't use [DurableTask] on abstract classes
+                    return;
+                }
+
+                if (context.SemanticModel.GetDeclaredSymbol(classDeclaration) is not ITypeSymbol classType)
+                {
+                    // Invalid type declaration?
+                    return;
+                }
+
+                string className = classType.ToDisplayString();
+
+                List<DurableTaskTypeInfo>? taskList = null;
+                INamedTypeSymbol? taskType = null;
+
+                INamedTypeSymbol? baseType = classType.BaseType;
+                while (baseType != null)
+                {
+                    if (baseType.ContainingAssembly.Name == "DurableTask")
                     {
-                        if (baseType.Type is not GenericNameSyntax genericName)
-                        {
-                            // This is not the type we're looking for
-                            continue;
-                        }
-
-                        // TODO: Find a way to use the semantic model to do this so that we can support
-                        //       custom base types that derive from our special base types.
-                        List<DurableTaskTypeInfo> taskList;
-                        if (genericName.Identifier.ValueText == "TaskActivityBase")
+                        if (baseType.Name == "TaskActivityBase")
                         {
                             taskList = this.activities;
+                            taskType = baseType;
+                            break;
                         }
-                        else if (genericName.Identifier.ValueText == "TaskOrchestratorBase")
+                        else if (baseType.Name == "TaskOrchestratorBase")
                         {
                             taskList = this.orchestrators;
+                            taskType = baseType;
+                            break;
                         }
-                        else
-                        {
-                            // This is not the type we're looking for
-                            continue;
-                        }
-
-                        string typeName;
-                        if (context.SemanticModel.GetDeclaredSymbol(typeSyntax) is not ISymbol typeSymbol)
-                        {
-                            // Invalid type declaration?
-                            continue;
-                        };
-
-                        typeName = typeSymbol.ToDisplayString();
-
-                        ITypeSymbol? inputType = null;
-                        ITypeSymbol? outputType = null;
-                        if (genericName.TypeArgumentList.Arguments.Count > 0)
-                        {
-                            inputType = context.SemanticModel.GetTypeInfo(genericName.TypeArgumentList.Arguments[0]).Type;
-                        }
-
-                        if (genericName.TypeArgumentList.Arguments.Count > 1)
-                        {
-                            outputType = context.SemanticModel.GetTypeInfo(genericName.TypeArgumentList.Arguments[1]).Type;
-                        }
-
-                        // By default, the task name is the class name.
-                        string taskName = typeSyntax.Identifier.ValueText; // TODO: What if the class has generic type parameters?;
-
-                        // If a [DurableTask(name)] attribute is present, use that as the activity name.
-                        foreach (AttributeSyntax attribute in typeSyntax.AttributeLists.SelectMany(list => list.Attributes))
-                        {
-                            ITypeSymbol? attributeType = context.SemanticModel.GetTypeInfo(attribute.Name).Type;
-                            if (attributeType?.ToString() == "DurableTask.DurableTaskAttribute" &&
-                                attribute.ArgumentList?.Arguments.Count > 0)
-                            {
-                                ExpressionSyntax expression = attribute.ArgumentList.Arguments[0].Expression;
-                                taskName = context.SemanticModel.GetConstantValue(expression).ToString();
-                                break;
-                            }
-                        }
-
-                        taskList.Add(new DurableTaskTypeInfo(
-                            typeName,
-                            taskName,
-                            inputType,
-                            outputType));
-
-                        break;
                     }
+
+                    baseType = baseType.BaseType;
                 }
+
+                if (taskList == null || taskType == null)
+                {
+                    // TODO: Issue a warning that [DurableTask] can only be used with activity and orchestration-derived classes
+                    return;
+                }
+
+                if (taskType.TypeParameters.Length <= 1)
+                {
+                    // We expect that the base class will always have at least two type parameters
+                    return;
+                }
+
+                ITypeSymbol inputType = taskType.TypeArguments.First();
+                ITypeSymbol outputType = taskType.TypeArguments.Last();
+
+                // By default, the task name is the class name.
+                string taskName = classType.Name; // TODO: What if the class has generic type parameters?
+                if (attribute.ArgumentList?.Arguments.Count > 0)
+                {
+                    ExpressionSyntax expression = attribute.ArgumentList.Arguments[0].Expression;
+                    taskName = context.SemanticModel.GetConstantValue(expression).ToString();
+                }
+
+                taskList.Add(new DurableTaskTypeInfo(
+                    className,
+                    taskName,
+                    inputType,
+                    outputType));
             }
         }
 

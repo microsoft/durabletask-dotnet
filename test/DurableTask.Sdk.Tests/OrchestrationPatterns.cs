@@ -1,15 +1,5 @@
-//  ----------------------------------------------------------------------------------
-//  Copyright Microsoft Corporation
-//  Licensed under the Apache License, Version 2.0 (the "License");
-//  you may not use this file except in compliance with the License.
-//  You may obtain a copy of the License at
-//  http://www.apache.org/licenses/LICENSE-2.0
-//  Unless required by applicable law or agreed to in writing, software
-//  distributed under the License is distributed on an "AS IS" BASIS,
-//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//  See the License for the specific language governing permissions and
-//  limitations under the License.
-//  ----------------------------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 
 using System;
 using System.Collections.Generic;
@@ -169,7 +159,7 @@ public class OrchestrationPatterns : IDisposable
 
                     return currentDate1 != currentDate2;
                 })
-                .AddActivity(echoActivityName, ctx => ctx.GetInput<object>()))
+                .AddActivity<object, object>(echoActivityName, (ctx, input) => input))
             .Build();
         await server.StartAsync(this.TimeoutToken);
 
@@ -192,8 +182,32 @@ public class OrchestrationPatterns : IDisposable
 
         await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
             .AddTasks(tasks => tasks
-                .AddOrchestrator(orchestratorName, ctx => ctx.CallActivityAsync<string>(sayHelloActivityName, ctx.GetInput<string>()))
-                .AddActivity(sayHelloActivityName, ctx => $"Hello, {ctx.GetInput<string>()}!"))
+                .AddOrchestrator<string, string>(orchestratorName, (ctx, input) => ctx.CallActivityAsync<string?>(sayHelloActivityName, input))
+                .AddActivity<string, string>(sayHelloActivityName, (ctx, name) => $"Hello, {name}!"))
+            .Build();
+        await server.StartAsync(this.TimeoutToken);
+
+        DurableTaskClient client = this.CreateDurableTaskClient();
+        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
+        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
+            instanceId,
+            this.TimeoutToken,
+            getInputsAndOutputs: true);
+        Assert.NotNull(metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.Equal("Hello, World!", metadata.ReadOutputAs<string>());
+    }
+
+    [Fact]
+    public async Task SingleActivity_Async()
+    {
+        TaskName orchestratorName = nameof(SingleActivity);
+        TaskName sayHelloActivityName = "SayHello";
+
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
+            .AddTasks(tasks => tasks
+                .AddOrchestrator<string, string>(orchestratorName, (ctx, input) => ctx.CallActivityAsync<string?>(sayHelloActivityName, input))
+                .AddActivity<string, string>(sayHelloActivityName, async (ctx, name) => await Task.FromResult($"Hello, {name}!")))
             .Build();
         await server.StartAsync(this.TimeoutToken);
 
@@ -226,7 +240,7 @@ public class OrchestrationPatterns : IDisposable
 
                     return value;
                 })
-                .AddActivity(plusOneActivityName, ctx => ctx.GetInput<int>() + 1))
+                .AddActivity<int, int>(plusOneActivityName, (ctx, input) => input + 1))
             .Build();
         await server.StartAsync(this.TimeoutToken);
 
@@ -289,7 +303,7 @@ public class OrchestrationPatterns : IDisposable
                     Array.Reverse(results);
                     return results;
                 })
-                .AddActivity(toStringActivity, ctx => ctx.GetInput<object>()!.ToString()))
+                .AddActivity<object, string>(toStringActivity, (ctx, input) => input!.ToString()))
             .Build();
         await server.StartAsync(this.TimeoutToken);
 
@@ -388,9 +402,8 @@ public class OrchestrationPatterns : IDisposable
         TaskName orchestratorName = nameof(ContinueAsNew);
 
         await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
-            .AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
+            .AddTasks(tasks => tasks.AddOrchestrator<int, int>(orchestratorName, async (ctx, input) =>
             {
-                int input = ctx.GetInput<int>();
                 if (input < 10)
                 {
                     await ctx.CreateTimer(TimeSpan.Zero, CancellationToken.None);
@@ -419,10 +432,8 @@ public class OrchestrationPatterns : IDisposable
         TaskName orchestratorName = nameof(SubOrchestration);
 
         await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
-            .AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
+            .AddTasks(tasks => tasks.AddOrchestrator<int, int>(orchestratorName, async (ctx, input) =>
             {
-                int input = ctx.GetInput<int>();
-
                 int result = 5;
                 if (input < 3)
                 {

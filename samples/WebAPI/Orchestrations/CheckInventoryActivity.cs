@@ -1,4 +1,7 @@
-﻿namespace WebAPI.Orchestrations
+﻿// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+namespace WebAPI.Orchestrations
 {
     using DurableTask;
     using WebAPI.Models;
@@ -14,7 +17,7 @@
             this.logger = logger;
         }
 
-        protected override bool OnRun(OrderInfo? orderInfo)
+        protected override bool OnRun(TaskActivityContext context, OrderInfo? orderInfo)
         {
             if (orderInfo == null)
             {
@@ -23,7 +26,7 @@
 
             this.logger.LogInformation(
                 "{instanceId}: Checking inventory for '{item}'...found some!",
-                this.Context.InstanceId,
+                context.InstanceId,
                 orderInfo.Item);
             return true;
         }

@@ -1,16 +1,7 @@
-﻿// ----------------------------------------------------------------------------------
-// Copyright Microsoft Corporation
-// Licensed under the Apache License, Version 2.0 (the "License").
-// You may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// ----------------------------------------------------------------------------------
+﻿// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 
+using System;
 using System.Threading.Tasks;
 
 namespace DurableTask;
@@ -18,17 +9,23 @@ namespace DurableTask;
 // TODO: Move to separate file
 public interface ITaskOrchestrator
 {
-    Task<object?> RunAsync(TaskOrchestrationContext context);
+    Type InputType { get; }
+    Type OutputType { get; }
+
+    Task<object?> RunAsync(TaskOrchestrationContext context, object? input);
 }
 
 public abstract class TaskOrchestratorBase<TInput, TOutput> : ITaskOrchestrator
 {
-    protected abstract Task<TOutput> OnRunAsync(TaskOrchestrationContext context, TInput? input);
+    Type ITaskOrchestrator.InputType => typeof(TInput);
+    Type ITaskOrchestrator.OutputType => typeof(TOutput);
 
-    async Task<object?> ITaskOrchestrator.RunAsync(TaskOrchestrationContext context)
+    protected abstract Task<TOutput?> OnRunAsync(TaskOrchestrationContext context, TInput? input);
+
+    async Task<object?> ITaskOrchestrator.RunAsync(TaskOrchestrationContext context, object? input)
     {
-        TInput? input = context.GetInput<TInput>();
-        object? output = await this.OnRunAsync(context, input);
+        TInput? typedInput = (TInput?)(input ?? default(TInput));
+        TOutput? output = await this.OnRunAsync(context, typedInput);
         return output;
     }
 }

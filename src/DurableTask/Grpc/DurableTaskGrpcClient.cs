@@ -25,6 +25,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
     readonly IConfiguration? configuration;
     readonly GrpcChannel sidecarGrpcChannel;
     readonly TaskHubSidecarServiceClient sidecarClient;
+    readonly bool ownsChannel;
 
     bool isDisposed;
 
@@ -35,8 +36,19 @@ public class DurableTaskGrpcClient : DurableTaskClient
         this.logger = SdkUtils.GetLogger(builder.loggerFactory ?? this.services.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance);
         this.configuration = builder.configuration ?? this.services.GetService<IConfiguration>();
 
-        string sidecarAddress = builder.address ?? SdkUtils.GetSidecarAddress(this.configuration);
-        this.sidecarGrpcChannel = GrpcChannel.ForAddress(sidecarAddress);
+        if (builder.channel != null)
+        {
+            // Use the channel from the builder, which was given to us by the app (thus we don't own it and can't dispose it)
+            this.sidecarGrpcChannel = builder.channel;
+            this.ownsChannel = false;
+        }
+        else
+        {
+            // We have to create our own channel and are responsible for disposing it
+            this.sidecarGrpcChannel = GrpcChannel.ForAddress(builder.address ?? SdkUtils.GetSidecarAddress(this.configuration));
+            this.ownsChannel = true;
+        }
+        
         this.sidecarClient = new TaskHubSidecarServiceClient(this.sidecarGrpcChannel);
     }
 
@@ -48,8 +60,11 @@ public class DurableTaskGrpcClient : DurableTaskClient
     {
         if (!this.isDisposed)
         {
-            await this.sidecarGrpcChannel.ShutdownAsync();
-            this.sidecarGrpcChannel.Dispose();
+            if (this.ownsChannel)
+            {
+                await this.sidecarGrpcChannel.ShutdownAsync();
+                this.sidecarGrpcChannel.Dispose();
+            }
 
             GC.SuppressFinalize(this);
             this.isDisposed = true;
@@ -218,6 +233,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
         internal ILoggerFactory? loggerFactory;
         internal IDataConverter? dataConverter;
         internal IConfiguration? configuration;
+        internal GrpcChannel? channel;
         internal string? address;
 
         public Builder UseLoggerFactory(ILoggerFactory loggerFactory)
@@ -235,6 +251,23 @@ public class DurableTaskGrpcClient : DurableTaskClient
         public Builder UseAddress(string address)
         {
             this.address = SdkUtils.ValidateAddress(address);
+            return this;
+        }
+
+        /// <summary>
+        /// Configures a <see cref="GrpcChannel"/> to use for communicating with the sidecar process.
+        /// </summary>
+        /// <remarks>
+        /// This builder method allows you to provide your own gRPC channel for communicating with the Durable Task
+        /// sidecar service. Channels provided using this method won't be disposed when the client is disposed.
+        /// Rather, the caller remains responsible for shutting down the channel after disposing the client.
+        /// </remarks>
+        /// <param name="channel">The gRPC channel to use.</param>
+        /// <returns>Returns this <see cref="Builder"/> instance.</returns>
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="channel"/> is <c>null</c>.</exception>
+        public Builder UseGrpcChannel(GrpcChannel channel)
+        {
+            this.channel = channel ?? throw new ArgumentNullException(nameof(channel));
             return this;
         }
 

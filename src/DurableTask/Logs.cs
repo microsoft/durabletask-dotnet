@@ -24,8 +24,8 @@ namespace DurableTask
         [LoggerMessage(EventId = 10, Level = LogLevel.Debug, Message = "{instanceId}: Received request for '{name}' orchestrator.")]
         public static partial void ReceivedOrchestratorRequest(this ILogger logger, string name, string instanceId);
 
-        [LoggerMessage(EventId = 11, Level = LogLevel.Debug, Message = "{instanceId}: Sending {count} actions for '{name}' orchestrator.")]
-        public static partial void SendingOrchestratorResponse(this ILogger logger, string name, string instanceId, int count);
+        [LoggerMessage(EventId = 11, Level = LogLevel.Debug, Message = "{instanceId}: Sending {count} action(s) [{actionsList}] for '{name}' orchestrator.")]
+        public static partial void SendingOrchestratorResponse(this ILogger logger, string name, string instanceId, int count, string actionsList);
 
         [LoggerMessage(EventId = 12, Level = LogLevel.Warning, Message = "{instanceId}: '{name}' orchestrator failed with an unhandled exception: {details}.")]
         public static partial void OrchestratorFailed(this ILogger logger, string name, string instanceId, string details);

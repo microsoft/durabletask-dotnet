@@ -38,10 +38,10 @@
     <PackageReference Include="System.Collections.Immutable" Version="5.0.0" />
     <PackageReference Include="Grpc.AspNetCore.Server" Version="2.38.0" />
     <PackageReference Include="Microsoft.Azure.DurableTask.Core" Version="2.7.0" />
+    <PackageReference Include="Microsoft.DurableTask.Sidecar.Protobuf" Version="0.1.0-alpha" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\submodules\protobuf\lib\dotnet\Microsoft.DurableTask.Protobuf.csproj" />
     <ProjectReference Include="..\DurableTask.Generators\DurableTask.Generators.csproj" />
   </ItemGroup>
 

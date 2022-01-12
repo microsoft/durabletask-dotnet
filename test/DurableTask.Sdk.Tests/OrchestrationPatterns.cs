@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using DurableTask.Grpc;
+using DurableTask.Sdk.Tests;
 using DurableTask.Sdk.Tests.Logging;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -16,12 +17,15 @@ using Xunit.Abstractions;
 
 namespace DurableTask.Tests;
 
-public class OrchestrationPatterns : IDisposable
+public class OrchestrationPatterns : IClassFixture<GrpcSidecarFixture>, IDisposable
 {
     readonly CancellationTokenSource testTimeoutSource = new(Debugger.IsAttached ? TimeSpan.FromMinutes(5) : TimeSpan.FromSeconds(10));
     readonly ILoggerFactory loggerFactory;
 
-    public OrchestrationPatterns(ITestOutputHelper output)
+    // Documentation on xunit test fixtures: https://xunit.net/docs/shared-context
+    readonly GrpcSidecarFixture sidecarFixture;
+
+    public OrchestrationPatterns(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
     {
         TestLogProvider logProvider = new(output);
         this.loggerFactory = LoggerFactory.Create(builder =>
@@ -29,6 +33,7 @@ public class OrchestrationPatterns : IDisposable
             builder.AddProvider(logProvider);
             builder.SetMinimumLevel(LogLevel.Debug);
         });
+        this.sidecarFixture = sidecarFixture;
     }
 
     /// <summary>
@@ -48,7 +53,7 @@ public class OrchestrationPatterns : IDisposable
     /// </summary>
     DurableTaskGrpcWorker.Builder CreateWorkerBuilder()
     {
-        return DurableTaskGrpcWorker.CreateBuilder().UseLoggerFactory(this.loggerFactory);
+        return this.sidecarFixture.GetWorkerBuilder().UseLoggerFactory(this.loggerFactory);
     }
 
     /// <summary>
@@ -56,7 +61,7 @@ public class OrchestrationPatterns : IDisposable
     /// </summary>
     DurableTaskClient CreateDurableTaskClient()
     {
-        return DurableTaskGrpcClient.CreateBuilder().UseLoggerFactory(this.loggerFactory).Build();
+        return this.sidecarFixture.GetClientBuilder().UseLoggerFactory(this.loggerFactory).Build();
     }
 
     [Fact]

@@ -133,7 +133,7 @@ static readonly MyNS.MyOrchestrator singletonMyOrchestrator = new MyNS.MyOrchest
 [Function(nameof(MyOrchestrator))]
 public static string MyOrchestrator([OrchestrationTrigger] string orchestratorState)
 {{
-    return DurableOrchestrator.LoadAndRun(orchestratorState, singletonMyOrchestrator);
+    return OrchestrationRunner.LoadAndRun(orchestratorState, singletonMyOrchestrator);
 }}
 
 /// <inheritdoc cref=""DurableTaskClient.ScheduleNewOrchestrationInstanceAsync""/>
@@ -217,7 +217,7 @@ static readonly MyNS.MyOrchestrator singletonMyOrchestrator = new MyNS.MyOrchest
 [Function(nameof(MyOrchestrator))]
 public static string MyOrchestrator([OrchestrationTrigger] string orchestratorState)
 {{
-    return DurableOrchestrator.LoadAndRun(orchestratorState, singletonMyOrchestrator);
+    return OrchestrationRunner.LoadAndRun(orchestratorState, singletonMyOrchestrator);
 }}
 
 /// <inheritdoc cref=""DurableTaskClient.ScheduleNewOrchestrationInstanceAsync""/>

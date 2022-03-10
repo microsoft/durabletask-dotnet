@@ -125,13 +125,26 @@ public class TaskOrchestrationShim : TaskOrchestration
 
         public override DateTime CurrentDateTimeUtc => this.innerContext.CurrentUtcDateTime;
 
-        public override Task<T> CallActivityAsync<T>(
+        public override async Task<T> CallActivityAsync<T>(
             TaskName name,
             object? input = null,
             TaskOptions? options = null)
         {
-            // TODO: Retry options
-            return this.innerContext.ScheduleTask<T>(name.Name, name.Version, input);
+            try
+            {
+                // TODO: Retry options
+                return await this.innerContext.ScheduleTask<T>(name.Name, name.Version, input);
+            }
+            catch (DurableTask.Core.Exceptions.TaskFailedException coreTfe)
+            {
+                // Hide the core DTFx types and instead use our own
+                throw new TaskFailedException(
+                    taskName: name,
+                    taskId: coreTfe.ScheduleId,
+                    errorName: coreTfe.FailureDetails?.ErrorName ?? "(unknown)",
+                    errorMessage: coreTfe.FailureDetails?.ErrorMessage ?? "(unknown)",
+                    errorDetails: coreTfe.FailureDetails?.ErrorDetails);
+            }
         }
 
         [Obsolete("This method is not yet fully implemented")]

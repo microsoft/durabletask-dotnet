@@ -227,6 +227,12 @@ public class DurableTaskGrpcClient : DurableTaskClient
         return new OrchestrationMetadata(response, this.dataConverter, getInputsAndOutputs);
     }
 
+    /// <inheritdoc/>
+    public override Task<PurgeResult> PurgeInstanceMetadataAsync(string instanceId, CancellationToken cancellation = default)
+    {
+        throw new NotImplementedException();
+    }
+
     public sealed class Builder
     {
         internal IServiceProvider? services;

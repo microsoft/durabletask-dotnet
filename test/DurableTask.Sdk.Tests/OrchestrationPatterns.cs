@@ -3,66 +3,22 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using DurableTask.Grpc;
 using DurableTask.Sdk.Tests;
-using DurableTask.Sdk.Tests.Logging;
-using Microsoft.Extensions.Logging;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace DurableTask.Tests;
 
-public class OrchestrationPatterns : IClassFixture<GrpcSidecarFixture>, IDisposable
+public class OrchestrationPatterns : IntegrationTestBase
 {
-    readonly CancellationTokenSource testTimeoutSource = new(Debugger.IsAttached ? TimeSpan.FromMinutes(5) : TimeSpan.FromSeconds(10));
-    readonly ILoggerFactory loggerFactory;
-
-    // Documentation on xunit test fixtures: https://xunit.net/docs/shared-context
-    readonly GrpcSidecarFixture sidecarFixture;
-
     public OrchestrationPatterns(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
-    {
-        TestLogProvider logProvider = new(output);
-        this.loggerFactory = LoggerFactory.Create(builder =>
-        {
-            builder.AddProvider(logProvider);
-            builder.SetMinimumLevel(LogLevel.Debug);
-        });
-        this.sidecarFixture = sidecarFixture;
-    }
-
-    /// <summary>
-    /// Gets a <see cref="CancellationToken"/> that triggers after a default test timeout period.
-    /// The actual timeout value is increased if a debugger is attached to the test process.
-    /// </summary>
-    public CancellationToken TimeoutToken => this.testTimeoutSource.Token;
-
-    void IDisposable.Dispose()
-    {
-        this.testTimeoutSource.Dispose();
-        GC.SuppressFinalize(this);
-    }
-
-    /// <summary>
-    /// Creates a <see cref="DurableTaskGrpcWorker"/> configured to output logs to xunit logging infrastructure.
-    /// </summary>
-    DurableTaskGrpcWorker.Builder CreateWorkerBuilder()
-    {
-        return this.sidecarFixture.GetWorkerBuilder().UseLoggerFactory(this.loggerFactory);
-    }
-
-    /// <summary>
-    /// Creates a <see cref="DurableTaskGrpcClient"/> configured to output logs to xunit logging infrastructure.
-    /// </summary>
-    DurableTaskClient CreateDurableTaskClient()
-    {
-        return this.sidecarFixture.GetClientBuilder().UseLoggerFactory(this.loggerFactory).Build();
-    }
+        : base(output, sidecarFixture)
+    { }
 
     [Fact]
     public async Task EmptyOrchestration()
@@ -284,7 +240,8 @@ public class OrchestrationPatterns : IClassFixture<GrpcSidecarFixture>, IDisposa
 
         OrchestrationFailureDetails? failureDetails = metadata.ReadOutputAs<OrchestrationFailureDetails>();
         Assert.NotNull(failureDetails);
-        Assert.Contains(errorMessage, failureDetails!.Details);
+        Assert.Equal(typeof(Exception).FullName, failureDetails!.ErrorName);
+        Assert.Contains(errorMessage, failureDetails!.ErrorDetails);
     }
 
     [Fact]

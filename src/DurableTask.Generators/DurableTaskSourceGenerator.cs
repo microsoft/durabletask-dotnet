@@ -156,7 +156,7 @@ namespace DurableTask
         [Function(nameof({orchestrator.TaskName}))]
         public static string {orchestrator.TaskName}([OrchestrationTrigger] string orchestratorState)
         {{
-            return DurableOrchestrator.LoadAndRun(orchestratorState, singleton{orchestrator.TaskName});
+            return OrchestrationRunner.LoadAndRun(orchestratorState, singleton{orchestrator.TaskName});
         }}");
         }
 

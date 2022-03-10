@@ -54,7 +54,7 @@ public abstract class TaskOrchestrationContext
 
     // TODO: Summary and detailed remarks
     /// <param name="name">The name of the activity to call.</param>
-    /// <param name="input">The serializeable input to pass to the activity.</param>
+    /// <param name="input">The serializable input to pass to the activity.</param>
     /// <param name="options">Additional options that control the execution and processing of the activity.</param>
     /// <returns>A task that completes when the activity completes or fails.</returns>
     /// <exception cref="ArgumentException">The specified orchestrator does not exist.</exception>
@@ -106,7 +106,7 @@ public abstract class TaskOrchestrationContext
     /// </remarks>
     /// <param name="name">The name of the event to wait for. Event names are case-insensitive. External event names can be reused any number of times; they are not required to be unique.</param>
     /// <param name="cancelToken">A <c>CancellationToken</c> to use to abort waiting for the event.</param>
-    /// <typeparam name="T">Any serializeable type that represents the event payload.</typeparam>
+    /// <typeparam name="T">Any serializable type that represents the event payload.</typeparam>
     /// <returns>A task that completes when the external event is received. The value of the task is the deserialized event payload.</returns>
     public abstract Task<T> WaitForExternalEvent<T>(string eventName, CancellationToken cancellationToken = default);
 
@@ -145,7 +145,7 @@ public abstract class TaskOrchestrationContext
     /// The serialized value must not exceed 16 KB of UTF-16 encoded text.
     /// </remarks>
     /// <param name="customStatus">
-    /// A serializeable value to assign as the custom status value or <c>null</c> to clear the custom status.
+    /// A serializable value to assign as the custom status value or <c>null</c> to clear the custom status.
     /// </param>
     public abstract void SetCustomStatus(object? customStatus);
 
@@ -190,7 +190,7 @@ public abstract class TaskOrchestrationContext
     /// <param name="instanceId">
     /// A unique ID to use for the sub-orchestration instance. If not specified, a random instance ID will be generated.
     /// </param>
-    /// <param name="input">The serializeable input to pass to the sub-orchestrator.</param>
+    /// <param name="input">The serializable input to pass to the sub-orchestrator.</param>
     /// <param name="options">Additional options that control the execution and processing of the sub-orchestrator.</param>
     /// <returns>A task that completes when the sub-orchestrator completes or fails.</returns>
     /// <exception cref="ArgumentException">The specified orchestrator does not exist.</exception>
@@ -228,7 +228,7 @@ public abstract class TaskOrchestrationContext
     /// Orchestrator functions should return immediately after calling the <see cref="ContinueAsNew"/> method.
     /// </para>
     /// </remarks>
-    /// <param name="newInput">The JSON-serializeable input data to re-initialize the instance with.</param>
+    /// <param name="newInput">The JSON-serializable input data to re-initialize the instance with.</param>
     /// <param name="preserveUnprocessedEvents">
     /// If set to <c>true</c>, re-adds any unprocessed external events into the new execution
     /// history when the orchestration instance restarts. If <c>false</c>, any unprocessed

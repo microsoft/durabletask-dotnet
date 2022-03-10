@@ -2,11 +2,15 @@
 // Licensed under the MIT License.
 
 using System;
+using System.Buffers;
+using System.Buffers.Text;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Command;
 using DurableTask.Core.History;
+using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using P = DurableTask.Protobuf;
 
@@ -65,8 +69,9 @@ static class ProtoUtils
                 historyEvent = new TaskFailedEvent(
                     proto.EventId,
                     proto.TaskFailed.TaskScheduledId,
-                    proto.TaskFailed.Reason,
-                    proto.TaskFailed.Details);
+                    reason: null,  /* not supported */
+                    details: null, /* not supported */
+                    ConvertFailureDetails(proto.TaskFailed.FailureDetails));
                 break;
             case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated:
                 historyEvent = new SubOrchestrationInstanceCreatedEvent(proto.EventId)
@@ -87,8 +92,8 @@ static class ProtoUtils
                 historyEvent = new SubOrchestrationInstanceFailedEvent(
                     proto.EventId,
                     proto.SubOrchestrationInstanceFailed.TaskScheduledId,
-                    proto.SubOrchestrationInstanceFailed.Reason,
-                    proto.SubOrchestrationInstanceFailed.Details);
+                    reason: null  /* not supported */,
+                    details: null /* not supported */);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TimerCreated:
                 historyEvent = new TimerCreatedEvent(
@@ -215,6 +220,11 @@ static class ProtoUtils
                     break;
                 case OrchestratorActionType.SendEvent:
                     var sendEventAction = (SendEventOrchestratorAction)action;
+                    if (sendEventAction.Instance == null)
+                    {
+                        throw new ArgumentException($"{nameof(SendEventOrchestratorAction)} cannot have a null Instance property!");
+                    }
+
                     protoAction.SendEvent = new P.SendEventAction
                     {
                         Instance = ConvertOrchestrationInstance(sendEventAction.Instance),
@@ -227,14 +237,24 @@ static class ProtoUtils
                     protoAction.CompleteOrchestration = new P.CompleteOrchestrationAction
                     {
                         CarryoverEvents =
-                            {
-                                // TODO
-                            },
+                        {
+                            // TODO
+                        },
                         Details = completeAction.Details,
                         NewVersion = completeAction.NewVersion,
                         OrchestrationStatus = ConvertOrchestrationRuntimeStatus(completeAction.OrchestrationStatus),
                         Result = completeAction.Result,
                     };
+
+                    if (completeAction.OrchestrationStatus == OrchestrationStatus.Failed)
+                    {
+                        protoAction.CompleteOrchestration.FailureDetails = new P.TaskFailureDetails
+                        {
+                            ErrorName = completeAction.FailureDetails?.ErrorName,
+                            ErrorMessage = completeAction.FailureDetails?.ErrorMessage,
+                            ErrorDetails = completeAction.FailureDetails?.ErrorDetails,
+                        };
+                    }
                     break;
                 default:
                     throw new NotImplementedException($"Unknown orchestrator action: {action.OrchestratorActionType}");
@@ -291,5 +311,45 @@ static class ProtoUtils
             InstanceId = instance.InstanceId,
             ExecutionId = instance.ExecutionId,
         };
+    }
+
+    static FailureDetails? ConvertFailureDetails(P.TaskFailureDetails? failureDetails)
+    {
+        if (failureDetails == null)
+        {
+            return null;
+        }
+
+        return new FailureDetails(
+            failureDetails.ErrorName,
+            failureDetails.ErrorMessage,
+            failureDetails.ErrorDetails);
+    }
+
+    internal static T Base64Decode<T>(string encodedMessage, MessageParser parser) where T : IMessage
+    {
+        // Decode the base64 in a way that doesn't allocate a byte[] on each request
+        int encodedByteCount = Encoding.UTF8.GetByteCount(encodedMessage);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(encodedByteCount);
+        try
+        {
+            // The Base64 APIs require first converting the string into UTF-8 bytes. We then
+            // do an in-place conversion from base64 UTF-8 bytes to protobuf bytes so that
+            // we can finally decode the protobuf request.
+            Encoding.UTF8.GetBytes(encodedMessage, 0, encodedMessage.Length, buffer, 0);
+            OperationStatus status = Base64.DecodeFromUtf8InPlace(
+                buffer.AsSpan(0, encodedByteCount),
+                out int bytesWritten);
+            if (status != OperationStatus.Done)
+            {
+                throw new ArgumentException($"Failed to base64-decode the '{typeof(T).Name}' payload: {status}", nameof(encodedMessage));
+            }
+
+            return (T)parser.ParseFrom(buffer, 0, bytesWritten);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 }

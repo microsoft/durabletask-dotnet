@@ -7,6 +7,9 @@ using P = DurableTask.Protobuf;
 
 namespace DurableTask;
 
+/// <summary>
+/// Represents a snapshot of an orchestration instance's current state.
+/// </summary>
 public sealed class OrchestrationMetadata
 {
     readonly IDataConverter dataConverter;
@@ -17,6 +20,7 @@ public sealed class OrchestrationMetadata
         IDataConverter dataConverter,
         bool requestedInputsAndOutputs)
     {
+        this.Name = response.OrchestrationState.Name;
         this.InstanceId = response.OrchestrationState.InstanceId;
         this.RuntimeStatus = (OrchestrationRuntimeStatus)response.OrchestrationState.OrchestrationStatus;
         this.CreatedAt = response.OrchestrationState.CreatedTimestamp.ToDateTimeOffset();
@@ -26,25 +30,76 @@ public sealed class OrchestrationMetadata
         this.SerializedCustomStatus = response.OrchestrationState.CustomStatus;
         this.dataConverter = dataConverter;
         this.requestedInputsAndOutputs = requestedInputsAndOutputs;
+
+        this.FailureDetails = new OrchestrationFailureDetails(
+            response.OrchestrationState.FailureDetails.ErrorName,
+            response.OrchestrationState.FailureDetails.ErrorMessage,
+            response.OrchestrationState.FailureDetails.ErrorDetails);
     }
 
+    /// <summary>
+    /// Gets the name of the orchestration.
+    /// </summary>
+    public string Name { get; }
+
+    /// <summary>
+    /// Gets the unique ID of the orchestration instance.
+    /// </summary>
     public string InstanceId { get; }
 
+    /// <summary>
+    /// Gets the current runtime status of the orchestration instance at the time this object was fetched.
+    /// </summary>
     public OrchestrationRuntimeStatus RuntimeStatus { get; }
 
+    /// <summary>
+    /// Gets the orchestration instance's creation time in UTC.
+    /// </summary>
     public DateTimeOffset CreatedAt { get; }
 
+    /// <summary>
+    /// Gets the orchestration instance's last updated time in UTC.
+    /// </summary>
     public DateTimeOffset LastUpdatedAt { get; }
 
+    /// <summary>
+    /// Gets the orchestration instance's serialized input, if any, as a string value.
+    /// </summary>
     public string? SerializedInput { get; }
 
+    /// <summary>
+    /// Gets the orchestration instance's serialized output, if any, as a string value.
+    /// </summary>
     public string? SerializedOutput { get; }
-    
+
+    /// <summary>
+    /// Gets the orchestration instance's serialized custom status, if any, as a string value.
+    /// </summary>
     public string? SerializedCustomStatus { get; }
 
+    /// <summary>
+    /// Gets the failure details, if any, for the orchestration instance.
+    /// </summary>
+    /// <remarks>
+    /// This property contains data only if the orchestration is in the <see cref="OrchestrationRuntimeStatus.Failed"/> state,
+    /// and only if this instance metadata was fetched with the option to include output data.
+    /// </remarks>
+    public OrchestrationFailureDetails? FailureDetails { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the orchestration instance was running at the time this object was fetched.
+    /// </summary>
     public bool IsRunning =>
         this.RuntimeStatus == OrchestrationRuntimeStatus.Running;
 
+    /// <summary>
+    /// Gets a value indicating whether the orchestration instance was completed at the time this object was fetched.
+    /// </summary>
+    /// <remarks>
+    /// An orchestration instance is considered completed when its <see cref="RuntimeStatus"/> value is
+    /// <see cref="OrchestrationRuntimeStatus.Completed"/>, <see cref="OrchestrationRuntimeStatus.Failed"/>,
+    /// or <see cref="Terminated"/>.
+    /// </remarks>
     public bool IsCompleted =>
         this.RuntimeStatus == OrchestrationRuntimeStatus.Completed ||
         this.RuntimeStatus == OrchestrationRuntimeStatus.Failed ||
@@ -88,7 +143,7 @@ public sealed class OrchestrationMetadata
 
     public override string ToString()
     {
-        StringBuilder sb = new($"[ID: '{this.InstanceId}', RuntimeStatus: {this.RuntimeStatus}, CreatedAt: {this.CreatedAt:s}, LastUpdatedAt: {this.LastUpdatedAt:s}");
+        StringBuilder sb = new($"[Name: '{this.Name}', ID: '{this.InstanceId}', RuntimeStatus: {this.RuntimeStatus}, CreatedAt: {this.CreatedAt:s}, LastUpdatedAt: {this.LastUpdatedAt:s}");
         if (this.SerializedInput != null)
         {
             sb.Append(", Input: '").Append(GetTrimmedPayload(this.SerializedInput)).Append('\'');

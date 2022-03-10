@@ -16,7 +16,7 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// </summary>
     /// <param name="orchestratorName">The name of the orchestrator to schedule.</param>
     /// <param name="instanceId">The ID of the orchestration instance to schedule. If not specified, a random GUID value is used.</param>
-    /// <param name="input">The optional input to pass to the scheduled orchestration instance. This must be a serializeable value.</param>
+    /// <param name="input">The optional input to pass to the scheduled orchestration instance. This must be a serializable value.</param>
     /// <param name="startTime">The time when the orchestration instance should start executing. If not specified, the orchestration instance will be scheduled immediately.</param>
     /// <returns>Returns the instance ID of the scheduled orchestration instance.</returns>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="orchestratorName"/> is empty.</exception>
@@ -49,7 +49,7 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// </remarks>
     /// <param name="instanceId">The ID of the orchestration instance that will handle the event.</param>
     /// <param name="eventName">The name of the event. Event names are case-insensitive.</param>
-    /// <param name="eventPayload">The serializeable data payload to include with the event.</param>
+    /// <param name="eventPayload">The serializable data payload to include with the event.</param>
     /// <returns>A task that completes when the event notification message has been enqueued.</returns>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="instanceId"/> or <paramref name="eventName"/> is null or empty.</exception>
     public abstract Task RaiseEventAsync(string instanceId, string eventName, object? eventPayload);
@@ -150,6 +150,31 @@ public abstract class DurableTaskClient : IAsyncDisposable
     public abstract Task<OrchestrationMetadata?> GetInstanceMetadataAsync(
         string instanceId,
         bool getInputsAndOutputs = false);
+
+    /// <summary>
+    /// Purges orchestration instance metadata from the durable store.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method can be used to permanently delete orchestration metadata from the underlying storage provider,
+    /// including any stored inputs, outputs, and orchestration history records. This is often useful for implementing
+    /// data retension policies and for keeping storage costs minimal. Only orchestration instances in the 
+    /// <see cref="OrchestrationRuntimeStatus.Completed"/>, <see cref="OrchestrationRuntimeStatus.Failed"/>, or
+    /// <see cref="OrchestrationRuntimeStatus.Terminated"/> state can be purged.
+    /// </para><para>
+    /// If <paramref name="instanceId"/> is not found in the data store, or if the instance is found but not in a terminal
+    /// state, then the returned <see cref="PurgeResult"/> object will have a <see cref="PurgeResult.PurgedInstanceCount"/>
+    /// value of <c>0</c>. Otherwise, the existing data will be purged and <see cref="PurgeResult.PurgedInstanceCount"/> will be <c>1</c>.
+    /// </para>
+    /// </remarks>
+    /// <param name="instanceId">The unique ID of the orchestration instance to purge.</param>
+    /// <param name="cancellation">A <see cref="CancellationToken"/> that can be used to cancel the purge operation.</param>
+    /// <returns>
+    /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target instance
+    /// was successfully purged.
+    /// </returns>
+    public abstract Task<PurgeResult> PurgeInstanceMetadataAsync(string instanceId, CancellationToken cancellation = default);
 
     /// <summary>
     /// Disposes any unmanaged resources associated with this <see cref="DurableTaskClient"/>.

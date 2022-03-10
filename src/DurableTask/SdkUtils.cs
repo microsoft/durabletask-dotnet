@@ -40,22 +40,6 @@ static class SdkUtils
     internal static ILogger GetLogger(ILoggerFactory loggerFactory) => loggerFactory.CreateLogger("DurableTask.Sdk");
 
     /// <summary>
-    /// Gets a serialized representation of an error payload. The format of this error is considered the standard that all SDKs should adhere to.
-    /// </summary>
-    internal static string GetSerializedErrorPayload(IDataConverter dataConverter, string message, Exception? e = null)
-    {
-        return GetSerializedErrorPayload(dataConverter, message, e?.ToString());
-    }
-
-    /// <summary>
-    /// Gets a serialized representation of an error payload. The format of this error is considered the standard that all SDKs should adhere to.
-    /// </summary>
-    internal static string GetSerializedErrorPayload(IDataConverter dataConverter, string message, string? fullText)
-    {
-        return dataConverter.Serialize(new OrchestrationFailureDetails(message, fullText));
-    }
-
-    /// <summary>
     /// Gets the address of the Durable Task sidecar, which is responsible for managing and scheduling durable tasks.
     /// </summary>
     /// <param name="configuration">Optional configuration provider for looking up the sidecar address.</param>

@@ -34,7 +34,6 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
         this.sidecarFixture = sidecarFixture;
     }
 
-
     /// <summary>
     /// Gets a <see cref="CancellationToken"/> that triggers after a default test timeout period.
     /// The actual timeout value is increased if a debugger is attached to the test process.

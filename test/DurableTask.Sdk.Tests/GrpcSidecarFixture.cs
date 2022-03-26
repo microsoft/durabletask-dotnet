@@ -15,9 +15,10 @@ using Microsoft.Extensions.Logging;
 
 namespace DurableTask.Sdk.Tests;
 
-public class GrpcSidecarFixture : IDisposable
+public sealed class GrpcSidecarFixture : IDisposable
 {
-    const string ListenAddress = "http://127.0.0.1:4002";
+    // Use a random port number to allow multiple instances to run in parallel
+    readonly string listenAddress = $"http://127.0.0.1:{Random.Shared.Next(30000, 40000)}";
 
     readonly IWebHost host;
     readonly GrpcChannel sidecarChannel;
@@ -33,7 +34,7 @@ public class GrpcSidecarFixture : IDisposable
                 // https://docs.microsoft.com/en-us/aspnet/core/grpc/troubleshoot?view=aspnetcore-3.0
                 options.ConfigureEndpointDefaults(listenOptions => listenOptions.Protocols = HttpProtocols.Http2);
             })
-            .UseUrls(ListenAddress)
+            .UseUrls(this.listenAddress)
             .ConfigureServices(services =>
             {
                 services.AddGrpc();
@@ -53,14 +54,13 @@ public class GrpcSidecarFixture : IDisposable
 
         this.host.Start();
 
-        this.sidecarChannel = GrpcChannel.ForAddress(ListenAddress);
+        this.sidecarChannel = GrpcChannel.ForAddress(this.listenAddress);
     }
 
     public DurableTaskGrpcWorker.Builder GetWorkerBuilder()
     {
         // The gRPC channel is reused across tests to avoid the overhead of creating new connections (which is very slow)
         return DurableTaskGrpcWorker.CreateBuilder().UseGrpcChannel(this.sidecarChannel);
-
     }
 
     public DurableTaskGrpcClient.Builder GetClientBuilder()

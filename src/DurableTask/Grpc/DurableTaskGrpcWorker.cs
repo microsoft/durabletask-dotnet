@@ -57,8 +57,7 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
         this.workerContext = new WorkerContext(
             this.dataConverter,
             this.logger,
-            this.services,
-            new ConcurrentDictionary<string, TaskActivity>(StringComparer.OrdinalIgnoreCase));
+            this.services);
 
         this.orchestrators = builder.taskProvider.orchestratorsBuilder.ToImmutable();
         this.activities = builder.taskProvider.activitiesBuilder.ToImmutable();
@@ -296,8 +295,9 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
             {
                 failureDetails = new P.TaskFailureDetails
                 {
-                    ErrorName = "OrchestratorTaskNotFound",
+                    ErrorType = "OrchestratorTaskNotFound",
                     ErrorMessage = $"No orchestrator task named '{name}' was found.",
+                    IsNonRetriable = true,
                 };
             }
         }
@@ -305,12 +305,7 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
         {
             // This is not expected: Normally TaskOrchestrationExecutor handles exceptions in user code.
             this.logger.OrchestratorFailed(name, request.InstanceId, unexpected.ToString());
-            failureDetails = new P.TaskFailureDetails
-            {
-                ErrorName = unexpected.GetType().FullName,
-                ErrorMessage = $"An internal error occurred in the orchestrator execution pipeline: {unexpected.Message}",
-                ErrorDetails = unexpected.ToString(),
-            };
+            failureDetails = ProtoUtils.ToTaskFailureDetails(unexpected);
         }
 
         P.OrchestratorResponse response;
@@ -403,17 +398,13 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
                 TaskActivity activity = factory.Invoke(this.workerContext);
                 output = await activity.RunAsync(innerContext, request.Input);
             }
-            else if (this.workerContext.DynamicActivities.TryGetValue(name, out TaskActivity? activity))
-            {
-                // TODO: Need to do work in the worker that ensures 
-                output = await activity.RunAsync(innerContext, request.Input);
-            }
             else
             {
                 failureDetails = new P.TaskFailureDetails
                 {
-                    ErrorName = "ActivityTaskNotFound",
+                    ErrorType = "ActivityTaskNotFound",
                     ErrorMessage = $"No activity task named '{name}' was found.",
+                    IsNonRetriable = true,
                 };
             }
         }
@@ -421,19 +412,16 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
         {
             failureDetails = new P.TaskFailureDetails
             {
-                ErrorName = applicationException.GetType().FullName,
+                ErrorType = applicationException.GetType().FullName,
                 ErrorMessage = applicationException.Message,
-                ErrorDetails = applicationException.ToString(),
+                StackTrace = applicationException.StackTrace,
             };
         }
 
         int outputSizeInBytes = 0;
         if (failureDetails != null)
         {
-            outputSizeInBytes =
-                Encoding.UTF8.GetByteCount(failureDetails.ErrorName ?? "") +
-                Encoding.UTF8.GetByteCount(failureDetails.ErrorMessage ?? "") +
-                Encoding.UTF8.GetByteCount(failureDetails.ErrorDetails ?? "");
+            outputSizeInBytes = ProtoUtils.GetApproximateByteCount(failureDetails);
         }
         else if (output != null)
         {
@@ -689,10 +677,4 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
             }
         }
     }
-
-    internal record WorkerContext(
-        IDataConverter DataConverter,
-        ILogger Logger,
-        IServiceProvider Services,
-        ConcurrentDictionary<string, TaskActivity> DynamicActivities) : IWorkerContext;
 }

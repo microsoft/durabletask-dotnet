@@ -217,34 +217,6 @@ public class OrchestrationPatterns : IntegrationTestBase
     }
 
     [Fact]
-    public async Task OrchestratorException()
-    {
-        string errorMessage = "Kah-BOOOOOM!!!";
-
-        TaskName orchestratorName = nameof(OrchestratorException);
-        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
-            .AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, ctx => throw new Exception(errorMessage)))
-            .Build();
-        await server.StartAsync(this.TimeoutToken);
-
-        DurableTaskClient client = this.CreateDurableTaskClient();
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
-
-        Assert.NotNull(metadata);
-        Assert.Equal(instanceId, metadata.InstanceId);
-        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
-
-        OrchestrationFailureDetails? failureDetails = metadata.ReadOutputAs<OrchestrationFailureDetails>();
-        Assert.NotNull(failureDetails);
-        Assert.Equal(typeof(Exception).FullName, failureDetails!.ErrorName);
-        Assert.Contains(errorMessage, failureDetails!.ErrorDetails);
-    }
-
-    [Fact]
     public async Task ActivityFanOut()
     {
         TaskName orchestratorName = nameof(ActivityFanOut);

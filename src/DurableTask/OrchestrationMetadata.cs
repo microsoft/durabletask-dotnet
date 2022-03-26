@@ -3,6 +3,7 @@
 
 using System;
 using System.Text;
+using DurableTask.Grpc;
 using P = DurableTask.Protobuf;
 
 namespace DurableTask;
@@ -28,13 +29,9 @@ public sealed class OrchestrationMetadata
         this.SerializedInput = response.OrchestrationState.Input;
         this.SerializedOutput = response.OrchestrationState.Output;
         this.SerializedCustomStatus = response.OrchestrationState.CustomStatus;
+        this.FailureDetails = ProtoUtils.ConvertTaskFailureDetails(response.OrchestrationState?.FailureDetails);
         this.dataConverter = dataConverter;
         this.requestedInputsAndOutputs = requestedInputsAndOutputs;
-
-        this.FailureDetails = new OrchestrationFailureDetails(
-            response.OrchestrationState.FailureDetails.ErrorName,
-            response.OrchestrationState.FailureDetails.ErrorMessage,
-            response.OrchestrationState.FailureDetails.ErrorDetails);
     }
 
     /// <summary>
@@ -84,7 +81,7 @@ public sealed class OrchestrationMetadata
     /// This property contains data only if the orchestration is in the <see cref="OrchestrationRuntimeStatus.Failed"/> state,
     /// and only if this instance metadata was fetched with the option to include output data.
     /// </remarks>
-    public OrchestrationFailureDetails? FailureDetails { get; }
+    public TaskFailureDetails? FailureDetails { get; }
 
     /// <summary>
     /// Gets a value indicating whether the orchestration instance was running at the time this object was fetched.
@@ -152,6 +149,15 @@ public sealed class OrchestrationMetadata
         if (this.SerializedOutput != null)
         {
             sb.Append(", Output: '").Append(GetTrimmedPayload(this.SerializedOutput)).Append('\'');
+        }
+
+        if (this.FailureDetails != null)
+        {
+            sb.Append(", FailureDetails: '")
+                .Append(this.FailureDetails.ErrorType)
+                .Append(" - ")
+                .Append(GetTrimmedPayload(this.FailureDetails.ErrorMessage))
+                .Append('\'');
         }
 
         return sb.Append(']').ToString();

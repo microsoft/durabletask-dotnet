@@ -93,7 +93,8 @@ static class ProtoUtils
                     proto.EventId,
                     proto.SubOrchestrationInstanceFailed.TaskScheduledId,
                     reason: null  /* not supported */,
-                    details: null /* not supported */);
+                    details: null /* not supported */,
+                    ConvertFailureDetails(proto.SubOrchestrationInstanceFailed.FailureDetails));
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TimerCreated:
                 historyEvent = new TimerCreatedEvent(
@@ -248,12 +249,7 @@ static class ProtoUtils
 
                     if (completeAction.OrchestrationStatus == OrchestrationStatus.Failed)
                     {
-                        protoAction.CompleteOrchestration.FailureDetails = new P.TaskFailureDetails
-                        {
-                            ErrorName = completeAction.FailureDetails?.ErrorName,
-                            ErrorMessage = completeAction.FailureDetails?.ErrorMessage,
-                            ErrorDetails = completeAction.FailureDetails?.ErrorDetails,
-                        };
+                        protoAction.CompleteOrchestration.FailureDetails = ConvertFailureDetails(completeAction.FailureDetails);
                     }
                     break;
                 default:
@@ -321,9 +317,87 @@ static class ProtoUtils
         }
 
         return new FailureDetails(
-            failureDetails.ErrorName,
+            failureDetails.ErrorType,
             failureDetails.ErrorMessage,
-            failureDetails.ErrorDetails);
+            failureDetails.StackTrace,
+            ConvertFailureDetails(failureDetails.InnerFailure),
+            failureDetails.IsNonRetriable);
+    }
+
+    internal static TaskFailureDetails? ConvertTaskFailureDetails(P.TaskFailureDetails? failureDetails)
+    {
+        if (failureDetails == null)
+        {
+            return null;
+        }
+
+        return new TaskFailureDetails(
+            failureDetails.ErrorType,
+            failureDetails.ErrorMessage,
+            failureDetails.StackTrace,
+            ConvertTaskFailureDetails(failureDetails.InnerFailure));
+    }
+
+    static P.TaskFailureDetails? ConvertFailureDetails(FailureDetails? failureDetails)
+    {
+        if (failureDetails == null)
+        {
+            return null;
+        }
+
+        return new P.TaskFailureDetails
+        {
+            ErrorType = failureDetails.ErrorType ?? "(unkown)",
+            ErrorMessage = failureDetails.ErrorMessage ?? "(unkown)",
+            StackTrace = failureDetails.StackTrace,
+            IsNonRetriable = failureDetails.IsNonRetriable,
+            InnerFailure = ConvertFailureDetails(failureDetails.InnerFailure),
+        };
+    }
+
+    internal static P.TaskFailureDetails? ToTaskFailureDetails(Exception? e)
+    {
+        if (e == null)
+        {
+            return null;
+        }
+
+        return new P.TaskFailureDetails
+        {
+            ErrorType = e.GetType().FullName,
+            ErrorMessage = e.Message,
+            StackTrace = e.StackTrace,
+            InnerFailure = ToTaskFailureDetails(e.InnerException),
+        };
+    }
+
+    internal static int GetApproximateByteCount(P.TaskFailureDetails failureDetails)
+    {
+        // Protobuf strings are always UTF-8: https://developers.google.com/protocol-buffers/docs/proto3#scalar
+        Encoding encoding = Encoding.UTF8;
+
+        int byteCount = 0;
+        if (failureDetails.ErrorType != null)
+        {
+            byteCount += encoding.GetByteCount(failureDetails.ErrorType);
+        }
+
+        if (failureDetails.ErrorMessage != null)
+        {
+            byteCount += encoding.GetByteCount(failureDetails.ErrorMessage);
+        }
+
+        if (failureDetails.StackTrace != null)
+        {
+            byteCount += encoding.GetByteCount(failureDetails.StackTrace);
+        }
+
+        if (failureDetails.InnerFailure != null)
+        {
+            byteCount += GetApproximateByteCount(failureDetails.InnerFailure);
+        }
+
+        return byteCount;
     }
 
     internal static T Base64Decode<T>(string encodedMessage, MessageParser parser) where T : IMessage

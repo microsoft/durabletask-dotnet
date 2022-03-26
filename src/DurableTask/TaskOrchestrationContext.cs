@@ -4,6 +4,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace DurableTask;
 
@@ -236,5 +237,44 @@ public abstract class TaskOrchestrationContext
     /// </param>
     public abstract void ContinueAsNew(object newInput, bool preserveUnprocessedEvents = true);
 
-    // TODO: More
+    /// <summary>
+    /// Returns an instance of <see cref="ILogger"/> that is replay-safe, meaning that the logger only
+    /// writes logs when the orchestrator is not replaying previous history.
+    /// </summary>
+    /// <remarks>
+    /// This method wraps the provider <paramref name="logger"/> instance with a new <see cref="ILogger"/>
+    /// implementation that only writes log messages when <see cref="this.IsReplaying"/> is <c>false</c>.
+    /// The resulting logger can be used normally in orchestrator code without needing to worry about duplicate
+    /// log messages caused by orchestrator replays.
+    /// </remarks>
+    /// <param name="logger">The <see cref="ILogger"/> to be wrapped for use by the orchestration.</param>
+    /// <returns>An instance of <see cref="ILogger"/> that wraps the specified <paramref name="logger"/>.</returns>
+    public ILogger CreateReplaySafeLogger(ILogger logger)
+    {
+        return new ReplaySafeLogger(this, logger);
+    }
+
+    class ReplaySafeLogger : ILogger
+    {
+        readonly TaskOrchestrationContext context;
+        readonly ILogger logger;
+
+        internal ReplaySafeLogger(TaskOrchestrationContext context, ILogger logger)
+        {
+            this.context = context ?? throw new ArgumentNullException(nameof(context));
+            this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
+        public IDisposable BeginScope<TState>(TState state) => this.logger.BeginScope(state);
+
+        public bool IsEnabled(LogLevel logLevel) => this.logger.IsEnabled(logLevel);
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (!this.context.IsReplaying)
+            {
+                this.logger.Log(logLevel, eventId, state, exception, formatter);
+            }
+        }
+    }
 }

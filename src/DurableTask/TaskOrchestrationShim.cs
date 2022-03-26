@@ -7,15 +7,14 @@ using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 using DurableTask.Core;
+using Microsoft.Extensions.Logging;
 
 namespace DurableTask;
 
-// TODO: This is public only because it's needed for Functions. Consider
-//       a design that doesn't require this type to be public.
-public class TaskOrchestrationShim<TInput, TOutput> : TaskOrchestrationShim
+class TaskOrchestrationShim<TInput, TOutput> : TaskOrchestrationShim
 {
     public TaskOrchestrationShim(
-        IWorkerContext workerContext,
+        WorkerContext workerContext,
         TaskName name,
         Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> implementation)
         : base(workerContext, name, new FuncTaskOrchestrator<TInput, TOutput>(implementation))
@@ -23,45 +22,16 @@ public class TaskOrchestrationShim<TInput, TOutput> : TaskOrchestrationShim
     }
 }
 
-// TODO: Move to its own file
-/// <summary>
-/// Implementation of <see cref="TaskOrchestratorBase{TInput, TOutput}"/> that uses
-/// a <see cref="Func{T, TResult}"/> delegate as its implementation.
-/// </summary>
-/// <typeparam name="TInput">The orchestrator input type.</typeparam>
-/// <typeparam name="TOutput">The orchestrator output type.</typeparam>
-public class FuncTaskOrchestrator<TInput, TOutput> : TaskOrchestratorBase<TInput, TOutput>
-{
-    readonly Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> implementation;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="FuncTaskOrchestrator{TInput, TOutput}"/> class.
-    /// </summary>
-    /// <param name="implementation">The orchestrator function.</param>
-    public FuncTaskOrchestrator(Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> implementation)
-    {
-        this.implementation = implementation;
-    }
-
-    /// <inheritdoc/>
-    protected override Task<TOutput?> OnRunAsync(TaskOrchestrationContext context, TInput? input)
-    {
-        return this.implementation(context, input);
-    }
-}
-
-// TODO: This is public only because it's needed for Functions. Consider
-//       a design that doesn't require this type to be public.
-public class TaskOrchestrationShim : TaskOrchestration
+class TaskOrchestrationShim : TaskOrchestration
 {
     readonly TaskName name;
     readonly ITaskOrchestrator implementation;
-    readonly IWorkerContext workerContext;
+    readonly WorkerContext workerContext;
 
     TaskOrchestrationContextWrapper? wrapperContext;
 
     public TaskOrchestrationShim(
-        IWorkerContext workerContext,
+        WorkerContext workerContext,
         TaskName name,
         ITaskOrchestrator implementation)
     {
@@ -103,18 +73,20 @@ public class TaskOrchestrationShim : TaskOrchestration
 
         readonly OrchestrationContext innerContext;
         readonly TaskName name;
-        readonly IWorkerContext workerContext;
+        readonly WorkerContext workerContext;
+        readonly ILogger orchestratorLogger;
 
         object? customStatus;
 
         public TaskOrchestrationContextWrapper(
             OrchestrationContext innerContext,
             TaskName name,
-            IWorkerContext workerContext)
+            WorkerContext workerContext)
         {
             this.innerContext = innerContext;
             this.name = name;
             this.workerContext = workerContext;
+            this.orchestratorLogger = this.CreateReplaySafeLogger(workerContext.Logger);
         }
 
         public override TaskName Name => this.name;
@@ -130,20 +102,47 @@ public class TaskOrchestrationShim : TaskOrchestration
             object? input = null,
             TaskOptions? options = null)
         {
+            // Since the input parameter takes any object, it's possible that callers may accidentally provide a TaskOptions parameter here
+            // when the actually meant to provide TaskOptions for the optional options parameter.
+            if (input is TaskOptions && options == null)
+            {
+                throw new ArgumentException(
+                    $"A {nameof(TaskOptions)} value was provided for the activity input but no value was provided for {nameof(options)}. " + 
+                    $"Did you actually mean to provide a {nameof(TaskOptions)} value for the {nameof(options)} parameter?",
+                    nameof(input));
+            }
+
             try
             {
-                // TODO: Retry options
-                return await this.innerContext.ScheduleTask<T>(name.Name, name.Version, input);
+                // TODO: Cancellation (https://github.com/microsoft/durabletask-dotnet/issues/7)
+                // TODO: DataConverter?
+
+                if (options?.RetryPolicy != null)
+                {
+                    return await this.innerContext.ScheduleWithRetry<T>(
+                        name.Name,
+                        name.Version,
+                        options.RetryPolicy.ToDurableTaskCoreRetryOptions(),
+                        input);
+                }
+                else if (options?.RetryHandler != null)
+                {
+                    return await this.InvokeWithCustomRetryHandler(
+                        () => this.innerContext.ScheduleTask<T>(name.Name, name.Version, input),
+                        name.Name,
+                        options.RetryHandler,
+                        options.CancellationToken);
+                }
+                else
+                {
+                    return await this.innerContext.ScheduleTask<T>(name.Name, name.Version, input);
+                }
+
             }
-            catch (DurableTask.Core.Exceptions.TaskFailedException coreTfe)
+            catch (DurableTask.Core.Exceptions.TaskFailedException e)
             {
                 // Hide the core DTFx types and instead use our own
-                throw new TaskFailedException(
-                    taskName: name,
-                    taskId: coreTfe.ScheduleId,
-                    errorName: coreTfe.FailureDetails?.ErrorName ?? "(unknown)",
-                    errorMessage: coreTfe.FailureDetails?.ErrorMessage ?? "(unknown)",
-                    errorDetails: coreTfe.FailureDetails?.ErrorDetails);
+                throw new TaskFailedException(name, e.ScheduleId, e);
             }
         }
 
@@ -183,25 +182,54 @@ public class TaskOrchestrationShim : TaskOrchestration
             }
         }
 
-        public override Task<TResult> CallSubOrchestratorAsync<TResult>(
+        public override async Task<TResult> CallSubOrchestratorAsync<TResult>(
             TaskName orchestratorName,
             string? instanceId = null,
             object? input = null,
             TaskOptions? options = null)
         {
-            if (options != null)
-            {
-                throw new NotImplementedException($"{nameof(TaskOptions)} are not yet supported.");
-            }
-
             // TODO: Check to see if this orchestrator is defined
 
-            // TODO: Support for retry options and custom deserialization via TaskOptions
-            return this.innerContext.CreateSubOrchestrationInstance<TResult>(
-                orchestratorName.Name,
-                orchestratorName.Version,
-                instanceId ?? Guid.NewGuid().ToString("N"),
-                input);
+            // TODO: IDataConverter
+
+            instanceId ??= Guid.NewGuid().ToString("N");
+
+            try
+            {
+                if (options?.RetryPolicy != null)
+                {
+                    return await this.innerContext.CreateSubOrchestrationInstanceWithRetry<TResult>(
+                        orchestratorName.Name,
+                        orchestratorName.Version,
+                        options.RetryPolicy.ToDurableTaskCoreRetryOptions(),
+                        input);
+                }
+                else if (options?.RetryHandler != null)
+                {
+                    return await this.InvokeWithCustomRetryHandler(
+                        () => this.innerContext.CreateSubOrchestrationInstance<TResult>(
+                            orchestratorName.Name,
+                            orchestratorName.Version,
+                            instanceId,
+                            input),
+                        orchestratorName.Name,
+                        options.RetryHandler,
+                        options.CancellationToken);
+                }
+                else
+                {
+                    return await this.innerContext.CreateSubOrchestrationInstance<TResult>(
+                        orchestratorName.Name,
+                        orchestratorName.Version,
+                        instanceId,
+                        input);
+                }
+            }
+            catch (DurableTask.Core.Exceptions.SubOrchestrationFailedException e)
+            {
+                // Hide the core DTFx types and instead use our own
+                throw new TaskFailedException(orchestratorName, e.ScheduleId, e);
+            }
         }
 
         public override Task CreateTimer(DateTime fireAt, CancellationToken cancellationToken)
@@ -287,6 +315,58 @@ public class TaskOrchestrationShim : TaskOrchestration
         internal string? GetDeserializedCustomStatus()
         {
             return this.workerContext.DataConverter.Serialize(this.customStatus);
+        }
+
+        async Task<T> InvokeWithCustomRetryHandler<T>(
+            Func<Task<T>> action,
+            string taskName,
+            AsyncRetryHandler retryHandler,
+            CancellationToken cancellationToken)
+        {
+            DateTime startTime = this.CurrentDateTimeUtc;
+            int failureCount = 0;
+
+            while (true)
+            {
+                try
+                {
+                    return await action();
+                }
+                catch (DurableTask.Core.Exceptions.OrchestrationException e)
+                {
+                    // Some failures are not retriable, like failures for missing activities or sub-orchestrations
+                    if (e.FailureDetails?.IsNonRetriable == true)
+                    {
+                        throw;
+                    }
+
+                    failureCount++;
+
+                    this.orchestratorLogger.RetryingTask(
+                        this.InstanceId,
+                        taskName,
+                        attempt: failureCount);
+
+                    RetryContext retryContext = new(
+                        this,
+                        failureCount,
+                        TaskFailureDetails.FromCoreException(e),
+                        this.CurrentDateTimeUtc.Subtract(startTime),
+                        cancellationToken);
+
+                    bool keepRetrying = await retryHandler(retryContext);
+                    if (!keepRetrying)
+                    {
+                        throw;
+                    }
+
+                    if (failureCount == int.MaxValue)
+                    {
+                        // Integer overflow safety check
+                        throw;
+                    }
+                }
+            }
         }
 
         class EventTaskCompletionSource<T> : TaskCompletionSource<T>, IEventSource

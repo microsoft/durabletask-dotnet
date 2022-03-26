@@ -48,7 +48,6 @@ namespace DurableTask
         [LoggerMessage(EventId = 23, Level = LogLevel.Warning, Message = "The worker is busy servicing other clients. Waiting for the worker to become available for a new connection.")]
         public static partial void WorkerBusy(this ILogger logger);
 
-        // Management APIs
         [LoggerMessage(EventId = 40, Level = LogLevel.Information, Message = "Scheduling new {name} orchestration with instance ID '{instanceId}' and {sizeInBytes} bytes of input data.")]
         public static partial void SchedulingOrchestration(this ILogger logger, string instanceId, string name, int sizeInBytes, DateTimeOffset startTime);
 
@@ -62,5 +61,8 @@ namespace DurableTask
 
         [LoggerMessage(EventId = 44, Level = LogLevel.Information, Message = "Terminating instance '{instanceId}'.")]
         public static partial void TerminatingInstance(this ILogger logger, string instanceId);
+
+        [LoggerMessage(EventId = 55, Level = LogLevel.Information, Message = "{instanceId}: Evaluating custom retry handler for failed '{name}' task. Attempt = {attempt}.")]
+        public static partial void RetryingTask(this ILogger logger, string instanceId, string name, int attempt);
     }
 }

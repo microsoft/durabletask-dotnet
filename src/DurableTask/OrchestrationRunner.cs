@@ -2,16 +2,16 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Buffers;
-using System.Buffers.Text;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using DurableTask.Core;
 using DurableTask.Core.History;
 using DurableTask.Grpc;
 using Google.Protobuf;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using P = DurableTask.Protobuf;
 
 namespace DurableTask;
@@ -19,7 +19,6 @@ namespace DurableTask;
 
 public static class OrchestrationRunner
 {
-
     /// <summary>
     /// Deserializes orchestration history from <paramref name="encodedOrchestratorRequest"/> and uses it to execute the orchestrator function
     /// code pointed to by <paramref name="orchestratorFunc"/>.
@@ -28,9 +27,13 @@ public static class OrchestrationRunner
     /// <typeparam name="TOutput">The type of the orchestrator function output. This type must be serializeable to JSON.</typeparam>
     /// <param name="encodedOrchestratorRequest">The encoded protobuf payload representing an orchestration execution request. This is a base64-encoded string.</param>
     /// <param name="orchestratorFunc">A function that implements the orchestrator logic.</param>
+    /// <param name="services">Optional <see cref="IServiceProvider"/> from which injected dependencies can be retrieved.</param>
     /// <returns>Returns a serialized set of orchestrator actions that should be used as the return value of the orchestrator function trigger.</returns>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="encodedOrchestratorRequest"/> or <paramref name="orchestratorFunc"/> is <c>null</c>.</exception>
-    public static string LoadAndRun<TInput, TOutput>(string encodedOrchestratorRequest, Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> orchestratorFunc)
+    public static string LoadAndRun<TInput, TOutput>(
+        string encodedOrchestratorRequest,
+        Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> orchestratorFunc,
+        IServiceProvider? services = null)
     {
         if (orchestratorFunc == null)
         {
@@ -38,7 +41,7 @@ public static class OrchestrationRunner
         }
 
         FuncTaskOrchestrator<TInput, TOutput> orchestrator = new(orchestratorFunc);
-        return LoadAndRun(encodedOrchestratorRequest, orchestrator);
+        return LoadAndRun(encodedOrchestratorRequest, orchestrator, services);
     }
 
     /// <summary>
@@ -47,10 +50,11 @@ public static class OrchestrationRunner
     /// </summary>
     /// <param name="encodedOrchestratorRequest">The encoded protobuf payload representing an orchestration execution request. This is a base64-encoded string.</param>
     /// <param name="implementation">An <see cref="ITaskOrchestrator"/> implementation that defines the orchestrator logic.</param>
+    /// <param name="services">Optional <see cref="IServiceProvider"/> from which injected dependencies can be retrieved.</param>
     /// <returns>Returns a serialized set of orchestrator actions that should be used as the return value of the orchestrator function trigger.</returns>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="encodedOrchestratorRequest"/> or <paramref name="implementation"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentException">Thrown if <paramref name="encodedOrchestratorRequest"/> contains invalid data.</exception>
-    public static string LoadAndRun(string encodedOrchestratorRequest, ITaskOrchestrator implementation)
+    public static string LoadAndRun(string encodedOrchestratorRequest, ITaskOrchestrator implementation, IServiceProvider? services = null)
     {
         if (string.IsNullOrEmpty(encodedOrchestratorRequest))
         {
@@ -69,7 +73,11 @@ public static class OrchestrationRunner
         List<HistoryEvent> pastEvents = request.PastEvents.Select(ProtoUtils.ConvertHistoryEvent).ToList();
         IEnumerable<HistoryEvent> newEvents = request.NewEvents.Select(ProtoUtils.ConvertHistoryEvent);
 
-        SimpleWorkerContext workerContext = new(JsonDataConverter.Default);
+        IDataConverter dataConverter = services?.GetService<IDataConverter>() ?? SdkUtils.DefaultDataConverter;
+        ILoggerFactory loggerFactory = services?.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance;
+        ILogger logger = SdkUtils.GetLogger(loggerFactory);
+
+        WorkerContext workerContext = new(dataConverter, logger, services ?? SdkUtils.EmptyServiceProvider);
 
         // Re-construct the orchestration state from the history.
         // New events must be added using the AddEvent method.
@@ -91,15 +99,5 @@ public static class OrchestrationRunner
             result.Actions);
         byte[] responseBytes = response.ToByteArray();
         return Convert.ToBase64String(responseBytes);
-    }
-
-    sealed class SimpleWorkerContext : IWorkerContext
-    {
-        public SimpleWorkerContext(IDataConverter dataConverter)
-        {
-            this.DataConverter = dataConverter;
-        }
-
-        public IDataConverter DataConverter { get; }
     }
 }

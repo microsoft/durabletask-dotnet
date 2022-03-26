@@ -154,9 +154,9 @@ namespace DurableTask
         {
             sourceBuilder.AppendLine($@"
         [Function(nameof({orchestrator.TaskName}))]
-        public static string {orchestrator.TaskName}([OrchestrationTrigger] string orchestratorState)
+        public static string {orchestrator.TaskName}([OrchestrationTrigger] string orchestratorState, FunctionContext executionContext)
         {{
-            return OrchestrationRunner.LoadAndRun(orchestratorState, singleton{orchestrator.TaskName});
+            return OrchestrationRunner.LoadAndRun(orchestratorState, singleton{orchestrator.TaskName}, executionContext.InstanceServices);
         }}");
         }
 

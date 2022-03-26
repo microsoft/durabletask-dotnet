@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System;
+using DurableTask.Converters;
 using DurableTask.Grpc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

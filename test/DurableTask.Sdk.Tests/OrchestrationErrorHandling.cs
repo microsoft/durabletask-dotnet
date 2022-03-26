@@ -53,8 +53,8 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
 
         Assert.NotNull(metadata.FailureDetails);
-        OrchestrationFailureDetails failureDetails = metadata.FailureDetails!;
-        Assert.Equal(typeof(TaskFailedException).FullName, failureDetails.ErrorName);
+        TaskFailureDetails failureDetails = metadata.FailureDetails!;
+        Assert.Equal(typeof(TaskFailedException).FullName, failureDetails.ErrorType);
 
         // Expecting something like:
         //    "The activity 'FaultyActivity' (#0) failed with an unhandled exception: Kah-BOOOOOM!!!"
@@ -63,10 +63,10 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         Assert.Contains(activityName, failureDetails.ErrorMessage);
         Assert.Contains(errorMessage, failureDetails.ErrorMessage);
 
-        // A callstack for the orchestration is expected in the error details (not the activity callstack).
-        Assert.NotNull(failureDetails.ErrorDetails);
-        Assert.Contains(nameof(MyOrchestrationImpl), failureDetails.ErrorDetails);
-        Assert.DoesNotContain(nameof(MyActivityImpl), failureDetails.ErrorDetails);
+        // A callstack for the orchestration is expected (but not the activity callstack).
+        Assert.NotNull(failureDetails.StackTrace);
+        Assert.Contains(nameof(MyOrchestrationImpl), failureDetails.StackTrace);
+        Assert.DoesNotContain(nameof(MyActivityImpl), failureDetails.StackTrace);
     }
 
     /// <summary>
@@ -87,8 +87,10 @@ public class OrchestrationErrorHandling : IntegrationTestBase
             .AddTasks(tasks =>
                 tasks.AddOrchestrator(orchestratorName, ctx =>
                 {
-                    expectedCallstack = Environment.StackTrace;
-                    throw new Exception(errorMessage);
+                    // The Environment.StackTrace and throw statements need to be on the same line
+                    // to keep line numbers consistent between the expected stack trace and the actual stack trace.
+                    // Also need to remove the top frame from Environment.StackTrace.
+                    expectedCallstack = Environment.StackTrace.Replace("at System.Environment.get_StackTrace()", string.Empty).TrimStart(); throw new Exception(errorMessage);
                 }))
             .Build();
         await server.StartAsync(this.TimeoutToken);
@@ -105,29 +107,288 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
 
         Assert.NotNull(metadata.FailureDetails);
-        OrchestrationFailureDetails failureDetails = metadata.FailureDetails!;
-        Assert.Equal(typeof(Exception).FullName, failureDetails.ErrorName);
+        TaskFailureDetails failureDetails = metadata.FailureDetails!;
+        Assert.Equal(typeof(Exception).FullName, failureDetails.ErrorType);
         Assert.Equal(errorMessage, failureDetails.ErrorMessage);
-        Assert.NotNull(failureDetails.ErrorDetails);
+        Assert.NotNull(failureDetails.StackTrace);
         Assert.NotNull(expectedCallstack);
-        Assert.Contains(expectedCallstack![..300], failureDetails.ErrorDetails);
+        Assert.Contains(expectedCallstack![..300], failureDetails.StackTrace);
     }
 
-    /////// <summary>
-    /////// Tests retry policies for activity calls.
-    /////// </summary>
-    ////[Fact]
-    ////public async Task RetryActivityFailures()
-    ////{
-    ////    throw new NotImplementedException();
-    ////}
+    /// <summary>
+    /// Tests retry policies for activity calls.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(10)]
+    public async Task RetryActivityFailures(int expectedNumberOfAttempts)
+    {
+        string errorMessage = "Kah-BOOOOOM!!!"; // Use an obviously fake error message to avoid confusion when debugging
 
-    /////// <summary>
-    /////// Tests retry policies for sub-orchestrations.
-    /////// </summary>
-    ////[Fact]
-    ////public async Task RetrySubOrchestrationFailures()
-    ////{
-    ////    throw new NotImplementedException();
-    ////}
+        TaskOptions retryOptions = TaskOptions.FromRetryPolicy(new RetryPolicy(
+            expectedNumberOfAttempts,
+            firstRetryInterval: TimeSpan.FromMilliseconds(1)));
+
+        int actualNumberOfAttempts = 0;
+
+        TaskName orchestratorName = "BustedOrchestration";
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
+            .AddTasks(tasks =>
+                tasks.AddOrchestrator(orchestratorName, async ctx =>
+                {
+                    await ctx.CallActivityAsync("Foo", options: retryOptions);
+                })
+                .AddActivity("Foo", context =>
+                {
+                    actualNumberOfAttempts++;
+                    throw new Exception(errorMessage);
+                }))
+            .Build();
+        await server.StartAsync(this.TimeoutToken);
+
+        DurableTaskClient client = this.CreateDurableTaskClient();
+        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
+            instanceId,
+            this.TimeoutToken,
+            getInputsAndOutputs: true);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+        Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(10)]
+    public async Task RetryActivityFailuresCustomLogic(int expectedNumberOfAttempts)
+    {
+        string errorMessage = "Kah-BOOOOOM!!!"; // Use an obviously fake error message to avoid confusion when debugging
+
+        int retryHandlerCalls = 0;
+        TaskOptions retryOptions = TaskOptions.FromRetryHandler(retryContext =>
+        {
+            // This is technically orchestrator code that gets replayed, like everything else
+            if (!retryContext.OrchestrationContext.IsReplaying)
+            {
+                retryHandlerCalls++;
+            }
+
+            // IsCausedBy is supposed to handle exception inheritance; fail if it doesn't
+            if (!retryContext.LastFailure.IsCausedBy<Exception>())
+            {
+                return false;
+            }
+
+            // This handler only works with ApplicationException
+            if (!retryContext.LastFailure.IsCausedBy<ApplicationException>())
+            {
+                return false;
+            }
+
+            // Quit after N attempts
+            return retryContext.LastAttemptNumber < expectedNumberOfAttempts;
+        });
+
+        int actualNumberOfAttempts = 0;
+
+        TaskName orchestratorName = "BustedOrchestration";
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
+            .AddTasks(tasks =>
+                tasks.AddOrchestrator(orchestratorName, async ctx =>
+                {
+                    await ctx.CallActivityAsync("Foo", options: retryOptions);
+                })
+                .AddActivity("Foo", context =>
+                {
+                    actualNumberOfAttempts++;
+                    throw new ApplicationException(errorMessage);
+                }))
+            .Build();
+        await server.StartAsync(this.TimeoutToken);
+
+        DurableTaskClient client = this.CreateDurableTaskClient();
+        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
+            instanceId,
+            this.TimeoutToken,
+            getInputsAndOutputs: true);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+        Assert.Equal(expectedNumberOfAttempts, retryHandlerCalls);
+        Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
+    }
+
+    /// <summary>
+    /// Tests retry policies for sub-orchestration calls.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(10)]
+    public async Task RetrySubOrchestrationFailures(int expectedNumberOfAttempts)
+    {
+        string errorMessage = "Kah-BOOOOOM!!!"; // Use an obviously fake error message to avoid confusion when debugging
+
+        TaskOptions retryOptions = TaskOptions.FromRetryPolicy(new RetryPolicy(
+            expectedNumberOfAttempts,
+            firstRetryInterval: TimeSpan.FromMilliseconds(1)));
+
+        int actualNumberOfAttempts = 0;
+
+        TaskName orchestratorName = "OrchestrationWithBustedSubOrchestrator";
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
+            .AddTasks(tasks =>
+                tasks.AddOrchestrator(orchestratorName, async ctx =>
+                {
+                    await ctx.CallSubOrchestratorAsync("BustedSubOrchestrator", options: retryOptions);
+                })
+                .AddOrchestrator("BustedSubOrchestrator", context =>
+                {
+                    actualNumberOfAttempts++;
+                    throw new ApplicationException(errorMessage);
+                }))
+            .Build();
+        await server.StartAsync(this.TimeoutToken);
+
+        DurableTaskClient client = this.CreateDurableTaskClient();
+        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
+            instanceId,
+            this.TimeoutToken,
+            getInputsAndOutputs: true);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+        Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(10)]
+    public async Task RetrySubOrchestratorFailuresCustomLogic(int expectedNumberOfAttempts)
+    {
+        string errorMessage = "Kah-BOOOOOM!!!"; // Use an obviously fake error message to avoid confusion when debugging
+
+        int retryHandlerCalls = 0;
+        TaskOptions retryOptions = TaskOptions.FromRetryHandler(retryContext =>
+        {
+            // This is technically orchestrator code that gets replayed, like everything else
+            if (!retryContext.OrchestrationContext.IsReplaying)
+            {
+                retryHandlerCalls++;
+            }
+
+            // IsCausedBy is supposed to handle exception inheritance; fail if it doesn't
+            if (!retryContext.LastFailure.IsCausedBy<Exception>())
+            {
+                return false;
+            }
+
+            // This handler only works with ApplicationException
+            if (!retryContext.LastFailure.IsCausedBy<ApplicationException>())
+            {
+                return false;
+            }
+
+            // Quit after N attempts
+            return retryContext.LastAttemptNumber < expectedNumberOfAttempts;
+        });
+
+        int actualNumberOfAttempts = 0;
+
+        TaskName orchestratorName = "OrchestrationWithBustedSubOrchestrator";
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
+            .AddTasks(tasks =>
+                tasks.AddOrchestrator(orchestratorName, async ctx =>
+                {
+                    await ctx.CallSubOrchestratorAsync("BustedSubOrchestrator", options: retryOptions);
+                })
+                .AddOrchestrator("BustedSubOrchestrator", context =>
+                {
+                    actualNumberOfAttempts++;
+                    throw new ApplicationException(errorMessage);
+                }))
+            .Build();
+        await server.StartAsync(this.TimeoutToken);
+
+        DurableTaskClient client = this.CreateDurableTaskClient();
+        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
+            instanceId,
+            this.TimeoutToken,
+            getInputsAndOutputs: true);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+        Assert.Equal(expectedNumberOfAttempts, retryHandlerCalls);
+        Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TaskNotFoundErrorsAreNotRetried(bool activity)
+    {
+        int retryHandlerCalls = 0;
+        TaskOptions retryOptions = TaskOptions.FromRetryHandler(retryContext =>
+        {
+            retryHandlerCalls++;
+            return false;
+        });
+
+        TaskName orchestratorName = "OrchestrationWithMissingTask";
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
+            .AddTasks(tasks =>
+                tasks.AddOrchestrator(orchestratorName, async ctx =>
+                {
+                    if (activity)
+                    {
+                        await ctx.CallActivityAsync("Bogus", options: retryOptions);
+                    }
+                    else
+                    {
+                        await ctx.CallSubOrchestratorAsync("Bogus", options: retryOptions);
+                    }
+                }))
+            .Build();
+        await server.StartAsync(this.TimeoutToken);
+
+        DurableTaskClient client = this.CreateDurableTaskClient();
+        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
+            instanceId,
+            this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+
+        // The retry handler should never get called for a missing activity or sub-orchestrator exception
+        Assert.Equal(0, retryHandlerCalls);
+    }
+
+    [Fact]
+    public void ThrowsIfRetryPolicyAndThenHandler()
+    {
+        Assert.Throws<InvalidOperationException>(() => TaskOptions.CreateBuilder()
+            .UseRetryPolicy(new RetryPolicy(3, TimeSpan.FromHours(1)))
+            .UseRetryHandler(_ => true));
+    }
+    
+    [Fact]
+    public void ThrowsIfRetryHandlerAndThenPolicy()
+    {
+        Assert.Throws<InvalidOperationException>(() => TaskOptions.CreateBuilder()
+            .UseRetryHandler(_ => true)
+            .UseRetryPolicy(new RetryPolicy(3, TimeSpan.FromHours(1))));
+    }
 }

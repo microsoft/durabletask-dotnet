@@ -50,6 +50,6 @@ public sealed class TaskFailedException : Exception
     {
         // NOTE: Some integration tests depend on the format of this exception message.
         string subMessage = cause.FailureDetails?.ErrorMessage ?? cause.Message;
-        return $"Activity task '{taskName}' (#{taskId}) failed with an unhandled exception: {subMessage}";
+        return $"Task '{taskName}' (#{taskId}) failed with an unhandled exception: {subMessage}";
     }
 }

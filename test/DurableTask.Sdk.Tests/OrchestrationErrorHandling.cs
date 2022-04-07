@@ -375,20 +375,4 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         // The retry handler should never get called for a missing activity or sub-orchestrator exception
         Assert.Equal(0, retryHandlerCalls);
     }
-
-    [Fact]
-    public void ThrowsIfRetryPolicyAndThenHandler()
-    {
-        Assert.Throws<InvalidOperationException>(() => TaskOptions.CreateBuilder()
-            .UseRetryPolicy(new RetryPolicy(3, TimeSpan.FromHours(1)))
-            .UseRetryHandler(_ => true));
-    }
-    
-    [Fact]
-    public void ThrowsIfRetryHandlerAndThenPolicy()
-    {
-        Assert.Throws<InvalidOperationException>(() => TaskOptions.CreateBuilder()
-            .UseRetryHandler(_ => true)
-            .UseRetryPolicy(new RetryPolicy(3, TimeSpan.FromHours(1))));
-    }
 }

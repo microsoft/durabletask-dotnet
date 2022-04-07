@@ -38,7 +38,7 @@ public class TaskOptions
     /// <returns>Returns a newly created <see cref="TaskOptions"/> object.</returns>
     public static TaskOptions FromRetryPolicy(RetryPolicy policy, CancellationToken cancellationToken = default)
     {
-        return CreateBuilder().UseRetryPolicy(policy).UseCancellationToken(cancellationToken).Build();
+        return CreateBuilder().WithRetryStrategy(policy).WithCancellationToken(cancellationToken).Build();
     }
 
     /// <summary>
@@ -49,7 +49,7 @@ public class TaskOptions
     /// <returns>Returns a newly created <see cref="TaskOptions"/> object.</returns>
     public static TaskOptions FromRetryHandler(RetryHandler retryHandler, CancellationToken cancellationToken = default)
     {
-        return CreateBuilder().UseRetryHandler(retryHandler).UseCancellationToken(cancellationToken).Build();
+        return CreateBuilder().WithRetryStrategy(retryHandler).WithCancellationToken(cancellationToken).Build();
     }
 
     /// <summary>
@@ -58,7 +58,7 @@ public class TaskOptions
     /// <inheritdoc cref="FromRetryHandler(RetryHandler, CancellationToken)"/>
     public static TaskOptions FromRetryHandler(AsyncRetryHandler retryHandler, CancellationToken cancellationToken = default)
     {
-        return CreateBuilder().UseRetryHandler(retryHandler).UseCancellationToken(cancellationToken).Build();
+        return CreateBuilder().WithRetryStrategy(retryHandler).WithCancellationToken(cancellationToken).Build();
     }
 
     /// <summary>
@@ -83,24 +83,19 @@ public class TaskOptions
         /// </summary>
         /// <param name="policy">The task retry policy to configure.</param>
         /// <returns>Returns the current <see cref="Builder"/> object.</returns>
-        /// <exception cref="InvalidOperationException">Thrown if a <see cref="RetryHandler"/> was already configured for this <see cref="Builder"/>.</exception>
-        public Builder UseRetryPolicy(RetryPolicy policy)
+        public Builder WithRetryStrategy(RetryPolicy policy)
         {
-            if (this.RetryHandler != null)
-            {
-                throw new InvalidOperationException("You can configure a retry policy or a retry handler, but not both.");
-            }
-
             this.RetryPolicy = policy;
+            this.RetryHandler = null;
             return this;
         }
 
-        /// <inheritdoc cref="UseRetryHandler(AsyncRetryHandler)"/>
-        public Builder UseRetryHandler(RetryHandler handler)
+        /// <inheritdoc cref="WithRetryStrategy(AsyncRetryHandler)"/>
+        public Builder WithRetryStrategy(RetryHandler handler)
         {
             // Synchronous handlers are wrapped in an async handler so that we only have
             // to keep track of a single handler assignment.
-            return this.UseRetryHandler(retryContext => Task.FromResult(handler(retryContext)));
+            return this.WithRetryStrategy(retryContext => Task.FromResult(handler(retryContext)));
         }
 
         /// <summary>
@@ -108,15 +103,10 @@ public class TaskOptions
         /// </summary>
         /// <param name="handler">The handler to invoke when deciding whether to retry a failed orchestrator task.</param>
         /// <returns>Returns the current <see cref="Builder"/> object.</returns>
-        /// <exception cref="InvalidOperationException">Thrown if a <see cref="RetryHandler"/> was already configured for this <see cref="Builder"/>.</exception>
-        public Builder UseRetryHandler(AsyncRetryHandler handler)
+        public Builder WithRetryStrategy(AsyncRetryHandler handler)
         {
-            if (this.RetryPolicy != null)
-            {
-                throw new InvalidOperationException("You can configure a retry policy or a retry handler, but not both.");
-            }
-
             this.RetryHandler = handler;
+            this.RetryPolicy = null;
             return this;
         }
 
@@ -130,7 +120,7 @@ public class TaskOptions
         /// </remarks>
         /// <param name="cancellationToken">The cancellation token to use for cancelling task execution.</param>
         /// <returns>Returns the current <see cref="Builder"/> object.</returns>
-        public Builder UseCancellationToken(CancellationToken cancellationToken)
+        public Builder WithCancellationToken(CancellationToken cancellationToken)
         {
             if (cancellationToken != default)
             {

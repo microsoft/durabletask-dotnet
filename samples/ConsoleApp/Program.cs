@@ -22,7 +22,7 @@ ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
     });
 });
 
-DurableTaskGrpcWorker server = DurableTaskGrpcWorker.CreateBuilder()
+DurableTaskGrpcWorker worker = DurableTaskGrpcWorker.CreateBuilder()
     .AddTasks(tasks =>
     {
         tasks.AddOrchestrator("HelloSequence", async context =>
@@ -41,7 +41,7 @@ DurableTaskGrpcWorker server = DurableTaskGrpcWorker.CreateBuilder()
     .UseLoggerFactory(loggerFactory)
     .Build();
 
-await server.StartAsync(timeout: TimeSpan.FromSeconds(30));
+await worker.StartAsync(timeout: TimeSpan.FromSeconds(30));
 
 await using DurableTaskClient client = DurableTaskGrpcClient.Create();
 string instanceId = await client.ScheduleNewOrchestrationInstanceAsync("HelloSequence");

@@ -5,7 +5,6 @@
     <Nullable>enable</Nullable>
     <IsRoslynComponent>true</IsRoslynComponent>
     <LangVersion>10.0</LangVersion>
-    <Version>0.2.0</Version>
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>../../key.snk</AssemblyOriginatorKeyFile>
 
@@ -21,6 +20,12 @@
     <Title>Durable Task .NET SDK Source Generators</Title>
     <Description>.NET Source Generators for the Durable Task Framework.</Description>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <!-- Version info -->
+  <PropertyGroup>
+    <VersionPrefix>0.2.0</VersionPrefix>
+    <VersionSuffix>alpha</VersionSuffix>
   </PropertyGroup>
 
   <ItemGroup>

@@ -2,11 +2,15 @@
 // Licensed under the MIT License.
 
 using System;
+using System.Buffers;
+using System.Buffers.Text;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Command;
 using DurableTask.Core.History;
+using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using P = DurableTask.Protobuf;
 
@@ -65,8 +69,9 @@ static class ProtoUtils
                 historyEvent = new TaskFailedEvent(
                     proto.EventId,
                     proto.TaskFailed.TaskScheduledId,
-                    proto.TaskFailed.Reason,
-                    proto.TaskFailed.Details);
+                    reason: null,  /* not supported */
+                    details: null, /* not supported */
+                    ConvertFailureDetails(proto.TaskFailed.FailureDetails));
                 break;
             case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated:
                 historyEvent = new SubOrchestrationInstanceCreatedEvent(proto.EventId)
@@ -87,8 +92,9 @@ static class ProtoUtils
                 historyEvent = new SubOrchestrationInstanceFailedEvent(
                     proto.EventId,
                     proto.SubOrchestrationInstanceFailed.TaskScheduledId,
-                    proto.SubOrchestrationInstanceFailed.Reason,
-                    proto.SubOrchestrationInstanceFailed.Details);
+                    reason: null  /* not supported */,
+                    details: null /* not supported */,
+                    ConvertFailureDetails(proto.SubOrchestrationInstanceFailed.FailureDetails));
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TimerCreated:
                 historyEvent = new TimerCreatedEvent(
@@ -215,6 +221,11 @@ static class ProtoUtils
                     break;
                 case OrchestratorActionType.SendEvent:
                     var sendEventAction = (SendEventOrchestratorAction)action;
+                    if (sendEventAction.Instance == null)
+                    {
+                        throw new ArgumentException($"{nameof(SendEventOrchestratorAction)} cannot have a null Instance property!");
+                    }
+
                     protoAction.SendEvent = new P.SendEventAction
                     {
                         Instance = ConvertOrchestrationInstance(sendEventAction.Instance),
@@ -227,14 +238,19 @@ static class ProtoUtils
                     protoAction.CompleteOrchestration = new P.CompleteOrchestrationAction
                     {
                         CarryoverEvents =
-                            {
-                                // TODO
-                            },
+                        {
+                            // TODO
+                        },
                         Details = completeAction.Details,
                         NewVersion = completeAction.NewVersion,
                         OrchestrationStatus = ConvertOrchestrationRuntimeStatus(completeAction.OrchestrationStatus),
                         Result = completeAction.Result,
                     };
+
+                    if (completeAction.OrchestrationStatus == OrchestrationStatus.Failed)
+                    {
+                        protoAction.CompleteOrchestration.FailureDetails = ConvertFailureDetails(completeAction.FailureDetails);
+                    }
                     break;
                 default:
                     throw new NotImplementedException($"Unknown orchestrator action: {action.OrchestratorActionType}");
@@ -291,5 +307,123 @@ static class ProtoUtils
             InstanceId = instance.InstanceId,
             ExecutionId = instance.ExecutionId,
         };
+    }
+
+    static FailureDetails? ConvertFailureDetails(P.TaskFailureDetails? failureDetails)
+    {
+        if (failureDetails == null)
+        {
+            return null;
+        }
+
+        return new FailureDetails(
+            failureDetails.ErrorType,
+            failureDetails.ErrorMessage,
+            failureDetails.StackTrace,
+            ConvertFailureDetails(failureDetails.InnerFailure),
+            failureDetails.IsNonRetriable);
+    }
+
+    internal static TaskFailureDetails? ConvertTaskFailureDetails(P.TaskFailureDetails? failureDetails)
+    {
+        if (failureDetails == null)
+        {
+            return null;
+        }
+
+        return new TaskFailureDetails(
+            failureDetails.ErrorType,
+            failureDetails.ErrorMessage,
+            failureDetails.StackTrace,
+            ConvertTaskFailureDetails(failureDetails.InnerFailure));
+    }
+
+    static P.TaskFailureDetails? ConvertFailureDetails(FailureDetails? failureDetails)
+    {
+        if (failureDetails == null)
+        {
+            return null;
+        }
+
+        return new P.TaskFailureDetails
+        {
+            ErrorType = failureDetails.ErrorType ?? "(unkown)",
+            ErrorMessage = failureDetails.ErrorMessage ?? "(unkown)",
+            StackTrace = failureDetails.StackTrace,
+            IsNonRetriable = failureDetails.IsNonRetriable,
+            InnerFailure = ConvertFailureDetails(failureDetails.InnerFailure),
+        };
+    }
+
+    internal static P.TaskFailureDetails? ToTaskFailureDetails(Exception? e)
+    {
+        if (e == null)
+        {
+            return null;
+        }
+
+        return new P.TaskFailureDetails
+        {
+            ErrorType = e.GetType().FullName,
+            ErrorMessage = e.Message,
+            StackTrace = e.StackTrace,
+            InnerFailure = ToTaskFailureDetails(e.InnerException),
+        };
+    }
+
+    internal static int GetApproximateByteCount(P.TaskFailureDetails failureDetails)
+    {
+        // Protobuf strings are always UTF-8: https://developers.google.com/protocol-buffers/docs/proto3#scalar
+        Encoding encoding = Encoding.UTF8;
+
+        int byteCount = 0;
+        if (failureDetails.ErrorType != null)
+        {
+            byteCount += encoding.GetByteCount(failureDetails.ErrorType);
+        }
+
+        if (failureDetails.ErrorMessage != null)
+        {
+            byteCount += encoding.GetByteCount(failureDetails.ErrorMessage);
+        }
+
+        if (failureDetails.StackTrace != null)
+        {
+            byteCount += encoding.GetByteCount(failureDetails.StackTrace);
+        }
+
+        if (failureDetails.InnerFailure != null)
+        {
+            byteCount += GetApproximateByteCount(failureDetails.InnerFailure);
+        }
+
+        return byteCount;
+    }
+
+    internal static T Base64Decode<T>(string encodedMessage, MessageParser parser) where T : IMessage
+    {
+        // Decode the base64 in a way that doesn't allocate a byte[] on each request
+        int encodedByteCount = Encoding.UTF8.GetByteCount(encodedMessage);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(encodedByteCount);
+        try
+        {
+            // The Base64 APIs require first converting the string into UTF-8 bytes. We then
+            // do an in-place conversion from base64 UTF-8 bytes to protobuf bytes so that
+            // we can finally decode the protobuf request.
+            Encoding.UTF8.GetBytes(encodedMessage, 0, encodedMessage.Length, buffer, 0);
+            OperationStatus status = Base64.DecodeFromUtf8InPlace(
+                buffer.AsSpan(0, encodedByteCount),
+                out int bytesWritten);
+            if (status != OperationStatus.Done)
+            {
+                throw new ArgumentException($"Failed to base64-decode the '{typeof(T).Name}' payload: {status}", nameof(encodedMessage));
+            }
+
+            return (T)parser.ParseFrom(buffer, 0, bytesWritten);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 }

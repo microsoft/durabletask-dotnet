@@ -57,8 +57,7 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
         this.workerContext = new WorkerContext(
             this.dataConverter,
             this.logger,
-            this.services,
-            new ConcurrentDictionary<string, TaskActivity>(StringComparer.OrdinalIgnoreCase));
+            this.services);
 
         this.orchestrators = builder.taskProvider.orchestratorsBuilder.ToImmutable();
         this.activities = builder.taskProvider.activitiesBuilder.ToImmutable();
@@ -270,10 +269,14 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
         OrchestrationRuntimeState runtimeState = BuildRuntimeState(request);
         TaskName name = new(runtimeState.Name, runtimeState.Version);
 
-        this.logger.ReceivedOrchestratorRequest(name, request.InstanceId);
+        this.logger.ReceivedOrchestratorRequest(
+            name,
+            request.InstanceId,
+            runtimeState.PastEvents.Count,
+            runtimeState.NewEvents.Count);
 
-        OrchestratorExecutionResult result;
-
+        OrchestratorExecutionResult? result = null;
+        P.TaskFailureDetails? failureDetails = null;
         try
         {
             TaskOrchestration orchestrator;
@@ -281,36 +284,57 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
             {
                 // Both the factory invocation and the ExecuteAsync could involve user code and need to be handled as part of try/catch.
                 orchestrator = factory.Invoke(this.workerContext);
-                TaskOrchestrationExecutor executor = new(runtimeState, orchestrator, BehaviorOnContinueAsNew.Carryover);
+                TaskOrchestrationExecutor executor = new(
+                    runtimeState,
+                    orchestrator,
+                    BehaviorOnContinueAsNew.Carryover,
+                    ErrorPropagationMode.UseFailureDetails);
                 result = executor.Execute();
             }
             else
             {
-                result = this.CreateOrchestrationFailedActionResult($"No task orchestration named '{name}' was found.");
+                failureDetails = new P.TaskFailureDetails
+                {
+                    ErrorType = "OrchestratorTaskNotFound",
+                    ErrorMessage = $"No orchestrator task named '{name}' was found.",
+                    IsNonRetriable = true,
+                };
             }
         }
-        catch (Exception applicationException)
+        catch (Exception unexpected)
         {
-            this.logger.OrchestratorFailed(name, request.InstanceId, applicationException.ToString());
-            result = this.CreateOrchestrationFailedActionResult(applicationException);
+            // This is not expected: Normally TaskOrchestrationExecutor handles exceptions in user code.
+            this.logger.OrchestratorFailed(name, request.InstanceId, unexpected.ToString());
+            failureDetails = ProtoUtils.ToTaskFailureDetails(unexpected);
         }
 
-        // TODO: This is a workaround that allows us to change how the exception is presented to the user.
-        //       Need to move this workaround into DurableTask.Core as a breaking change.
-        if (result.Actions.FirstOrDefault(a => a.OrchestratorActionType == OrchestratorActionType.OrchestrationComplete) is OrchestrationCompleteOrchestratorAction completedAction &&
-            completedAction.OrchestrationStatus == OrchestrationStatus.Failed &&
-            !string.IsNullOrEmpty(completedAction.Details))
+        P.OrchestratorResponse response;
+        if (result != null)
         {
-            completedAction.Result = SdkUtils.GetSerializedErrorPayload(
-                this.workerContext.DataConverter,
-                "The orchestrator failed with an unhandled exception.",
-                completedAction.Details);
+            response = ProtoUtils.ConstructOrchestratorResponse(
+                request.InstanceId,
+                result.CustomStatus,
+                result.Actions);
         }
-
-        P.OrchestratorResponse response = ProtoUtils.ConstructOrchestratorResponse(
-            request.InstanceId,
-            result.CustomStatus,
-            result.Actions);
+        else
+        {
+            // This is the case for failures that happened *outside* the orchestrator executor
+            response = new P.OrchestratorResponse
+            {
+                InstanceId = request.InstanceId,
+                Actions =
+                {
+                    new P.OrchestratorAction
+                    {
+                        CompleteOrchestration = new P.CompleteOrchestrationAction
+                        {
+                            OrchestrationStatus = P.OrchestrationStatus.Failed,
+                            FailureDetails = failureDetails,
+                        },
+                    },
+                },
+            };
+        }
 
         this.logger.SendingOrchestratorResponse(
             name,
@@ -352,14 +376,6 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
         return OrchestratorExecutionResult.ForFailure(message, fullText);
     }
 
-    string CreateActivityFailedOutput(Exception? e = null, string? message = null)
-    {
-        return SdkUtils.GetSerializedErrorPayload(
-            this.dataConverter,
-            message ?? "The activity failed with an unhandled exception.",
-            e);
-    }
-
     async Task OnRunActivityAsync(P.ActivityRequest request)
     {
         OrchestrationInstance instance = ProtoUtils.ConvertOrchestrationInstance(request.OrchestrationInstance);
@@ -372,7 +388,8 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
 
         TaskName name = new(request.Name, request.Version);
 
-        string output;
+        string? output = null;
+        P.TaskFailureDetails? failureDetails = null;
         try
         {
             if (this.activities.TryGetValue(name, out Func<WorkerContext, TaskActivity>? factory) && factory != null)
@@ -381,30 +398,47 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
                 TaskActivity activity = factory.Invoke(this.workerContext);
                 output = await activity.RunAsync(innerContext, request.Input);
             }
-            else if (this.workerContext.DynamicActivities.TryGetValue(name, out TaskActivity? activity))
-            {
-                // TODO: Need to do work in the worker that ensures 
-                output = await activity.RunAsync(innerContext, request.Input);
-            }
             else
             {
-                output = this.CreateActivityFailedOutput(message: $"No task activity named '{name}' was found.");
+                failureDetails = new P.TaskFailureDetails
+                {
+                    ErrorType = "ActivityTaskNotFound",
+                    ErrorMessage = $"No activity task named '{name}' was found.",
+                    IsNonRetriable = true,
+                };
             }
         }
         catch (Exception applicationException)
         {
-            output = this.CreateActivityFailedOutput(
-                applicationException,
-                $"The activity '{name}#{request.TaskId}' failed with an unhandled exception.");
+            failureDetails = new P.TaskFailureDetails
+            {
+                ErrorType = applicationException.GetType().FullName,
+                ErrorMessage = applicationException.Message,
+                StackTrace = applicationException.StackTrace,
+            };
         }
 
-        int outputSize = output != null ? Encoding.UTF8.GetByteCount(output) : 0;
-        this.logger.SendingActivityResponse(name, request.TaskId, instance.InstanceId, outputSize);
+        int outputSizeInBytes = 0;
+        if (failureDetails != null)
+        {
+            outputSizeInBytes = ProtoUtils.GetApproximateByteCount(failureDetails);
+        }
+        else if (output != null)
+        {
+            outputSizeInBytes = Encoding.UTF8.GetByteCount(output);
+        }
 
-        P.ActivityResponse response = ProtoUtils.ConstructActivityResponse(
-            instance.InstanceId,
-            request.TaskId,
-            output);
+        string successOrFailure = failureDetails != null ? "failure" : "success";
+        this.logger.SendingActivityResponse(successOrFailure, name, request.TaskId, instance.InstanceId, outputSizeInBytes);
+
+        P.ActivityResponse response = new()
+        {
+            InstanceId = instance.InstanceId,
+            TaskId = request.TaskId,
+            Result = output,
+            FailureDetails = failureDetails,
+        };
+
         await this.sidecarClient.CompleteActivityTaskAsync(response);
     }
 
@@ -569,6 +603,20 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
                 return this;
             }
 
+            public IDurableTaskRegistry AddActivity(TaskName name, Action<TaskActivityContext> implementation)
+            {
+                return this.AddActivity<object?, object?>(name, (context, _) =>
+                {
+                    implementation(context);
+                    return null!;
+                });
+            }
+
+            public IDurableTaskRegistry AddActivity(TaskName name, Func<TaskActivityContext, Task> implementation)
+            {
+                return this.AddActivity<object, object?>(name, (context, input) => implementation(context));
+            }
+
             public IDurableTaskRegistry AddActivity<TInput, TOutput>(
                 TaskName name,
                 Func<TaskActivityContext, TInput?, TOutput?> implementation)
@@ -629,10 +677,4 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
             }
         }
     }
-
-    internal record WorkerContext(
-        IDataConverter DataConverter,
-        ILogger Logger,
-        IServiceProvider Services,
-        ConcurrentDictionary<string, TaskActivity> DynamicActivities) : IWorkerContext;
 }

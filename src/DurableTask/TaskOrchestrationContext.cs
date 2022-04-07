@@ -4,6 +4,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace DurableTask;
 
@@ -54,7 +55,7 @@ public abstract class TaskOrchestrationContext
 
     // TODO: Summary and detailed remarks
     /// <param name="name">The name of the activity to call.</param>
-    /// <param name="input">The serializeable input to pass to the activity.</param>
+    /// <param name="input">The serializable input to pass to the activity.</param>
     /// <param name="options">Additional options that control the execution and processing of the activity.</param>
     /// <returns>A task that completes when the activity completes or fails.</returns>
     /// <exception cref="ArgumentException">The specified orchestrator does not exist.</exception>
@@ -106,7 +107,7 @@ public abstract class TaskOrchestrationContext
     /// </remarks>
     /// <param name="name">The name of the event to wait for. Event names are case-insensitive. External event names can be reused any number of times; they are not required to be unique.</param>
     /// <param name="cancelToken">A <c>CancellationToken</c> to use to abort waiting for the event.</param>
-    /// <typeparam name="T">Any serializeable type that represents the event payload.</typeparam>
+    /// <typeparam name="T">Any serializable type that represents the event payload.</typeparam>
     /// <returns>A task that completes when the external event is received. The value of the task is the deserialized event payload.</returns>
     public abstract Task<T> WaitForExternalEvent<T>(string eventName, CancellationToken cancellationToken = default);
 
@@ -145,7 +146,7 @@ public abstract class TaskOrchestrationContext
     /// The serialized value must not exceed 16 KB of UTF-16 encoded text.
     /// </remarks>
     /// <param name="customStatus">
-    /// A serializeable value to assign as the custom status value or <c>null</c> to clear the custom status.
+    /// A serializable value to assign as the custom status value or <c>null</c> to clear the custom status.
     /// </param>
     public abstract void SetCustomStatus(object? customStatus);
 
@@ -190,7 +191,7 @@ public abstract class TaskOrchestrationContext
     /// <param name="instanceId">
     /// A unique ID to use for the sub-orchestration instance. If not specified, a random instance ID will be generated.
     /// </param>
-    /// <param name="input">The serializeable input to pass to the sub-orchestrator.</param>
+    /// <param name="input">The serializable input to pass to the sub-orchestrator.</param>
     /// <param name="options">Additional options that control the execution and processing of the sub-orchestrator.</param>
     /// <returns>A task that completes when the sub-orchestrator completes or fails.</returns>
     /// <exception cref="ArgumentException">The specified orchestrator does not exist.</exception>
@@ -228,7 +229,7 @@ public abstract class TaskOrchestrationContext
     /// Orchestrator functions should return immediately after calling the <see cref="ContinueAsNew"/> method.
     /// </para>
     /// </remarks>
-    /// <param name="newInput">The JSON-serializeable input data to re-initialize the instance with.</param>
+    /// <param name="newInput">The JSON-serializable input data to re-initialize the instance with.</param>
     /// <param name="preserveUnprocessedEvents">
     /// If set to <c>true</c>, re-adds any unprocessed external events into the new execution
     /// history when the orchestration instance restarts. If <c>false</c>, any unprocessed
@@ -236,5 +237,44 @@ public abstract class TaskOrchestrationContext
     /// </param>
     public abstract void ContinueAsNew(object newInput, bool preserveUnprocessedEvents = true);
 
-    // TODO: More
+    /// <summary>
+    /// Returns an instance of <see cref="ILogger"/> that is replay-safe, meaning that the logger only
+    /// writes logs when the orchestrator is not replaying previous history.
+    /// </summary>
+    /// <remarks>
+    /// This method wraps the provider <paramref name="logger"/> instance with a new <see cref="ILogger"/>
+    /// implementation that only writes log messages when <see cref="this.IsReplaying"/> is <c>false</c>.
+    /// The resulting logger can be used normally in orchestrator code without needing to worry about duplicate
+    /// log messages caused by orchestrator replays.
+    /// </remarks>
+    /// <param name="logger">The <see cref="ILogger"/> to be wrapped for use by the orchestration.</param>
+    /// <returns>An instance of <see cref="ILogger"/> that wraps the specified <paramref name="logger"/>.</returns>
+    public ILogger CreateReplaySafeLogger(ILogger logger)
+    {
+        return new ReplaySafeLogger(this, logger);
+    }
+
+    class ReplaySafeLogger : ILogger
+    {
+        readonly TaskOrchestrationContext context;
+        readonly ILogger logger;
+
+        internal ReplaySafeLogger(TaskOrchestrationContext context, ILogger logger)
+        {
+            this.context = context ?? throw new ArgumentNullException(nameof(context));
+            this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
+        public IDisposable BeginScope<TState>(TState state) => this.logger.BeginScope(state);
+
+        public bool IsEnabled(LogLevel logLevel) => this.logger.IsEnabled(logLevel);
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (!this.context.IsReplaying)
+            {
+                this.logger.Log(logLevel, eventId, state, exception, formatter);
+            }
+        }
+    }
 }

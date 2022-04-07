@@ -47,13 +47,29 @@ public interface IDurableTaskRegistry
     public IDurableTaskRegistry AddOrchestrator<T>() where T : ITaskOrchestrator;
 
     /// <summary>
-    /// Registers an activity as an synchronous (blocking) lambda function.
+    /// Registers an activity as a synchronous (blocking) lambda function that doesn't take any input nor returns any output.
     /// </summary>
-    /// <typeparam name="TInput">The input type of the activity.</typeparam>
-    /// <typeparam name="TOutput">The output type of the activity.</typeparam>
     /// <param name="name">The name of the activity.</param>
     /// <param name="implementation">The lambda function to invoke when the activity is called.</param>
     /// <returns>Returns this <see cref="IDurableTaskRegistry"/> instance.</returns>
+    public IDurableTaskRegistry AddActivity(
+        TaskName name,
+        Action<TaskActivityContext> implementation);
+
+    /// <summary>
+    /// Registers an activity as an asynchronous (non-blocking) lambda function.
+    /// </summary>
+    /// <inheritdoc cref="AddActivity(TaskName, Action{TaskActivityContext})"/>
+    public IDurableTaskRegistry AddActivity(
+        TaskName name,
+        Func<TaskActivityContext, Task> implementation);
+
+    /// <summary>
+    /// Registers an activity as an synchronous (blocking) lambda function with an input and an output.
+    /// </summary>
+    /// <typeparam name="TInput">The input type of the activity.</typeparam>
+    /// <typeparam name="TOutput">The output type of the activity.</typeparam>
+    /// <inheritdoc cref="AddActivity(TaskName, Action{TaskActivityContext})"/>
     public IDurableTaskRegistry AddActivity<TInput, TOutput>(
         TaskName name,
         Func<TaskActivityContext, TInput?, TOutput?> implementation);

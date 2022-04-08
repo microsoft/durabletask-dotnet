@@ -5,7 +5,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace DurableTask;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// A declarative retry policy that can be configured for activity or sub-orchestration calls.
@@ -126,14 +126,14 @@ public class RetryPolicy
     /// </summary>
     public Func<Exception, Task<bool>>? HandleAsync { get; set; }
 
-    internal DurableTask.Core.RetryOptions ToDurableTaskCoreRetryOptions()
+    internal global::DurableTask.Core.RetryOptions ToDurableTaskCoreRetryOptions()
     {
         // The legacy framework doesn't support Timeout.InfiniteTimeSpan so we have to convert that
         // to TimeSpan.MaxValue when encountered.
         static TimeSpan ConvertInfiniteTimeSpans(TimeSpan timeout) =>
             timeout == Timeout.InfiniteTimeSpan ? TimeSpan.MaxValue : timeout;
 
-        return new DurableTask.Core.RetryOptions(this.FirstRetryInterval, this.MaxNumberOfAttempts)
+        return new global::DurableTask.Core.RetryOptions(this.FirstRetryInterval, this.MaxNumberOfAttempts)
         {
             BackoffCoefficient = this.BackoffCoefficient,
             MaxRetryInterval = ConvertInfiniteTimeSpans(this.MaxRetryInterval),

@@ -4,7 +4,7 @@
 using System;
 using System.Text.Json;
 
-namespace DurableTask.Converters;
+namespace Microsoft.DurableTask.Converters;
 
 /// <summary>
 /// An implementation of <see cref="IDataConverter"/> that uses System.Text.Json APIs for data serialization.

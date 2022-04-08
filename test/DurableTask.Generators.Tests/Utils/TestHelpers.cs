@@ -11,7 +11,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace DurableTask.Generators.Tests.Utils;
+namespace Microsoft.DurableTask.Generators.Tests.Utils;
 
 static class TestHelpers
 {
@@ -77,7 +77,7 @@ using Microsoft.Extensions.DependencyInjection;";
 #nullable enable
 {usings}
 
-namespace DurableTask
+namespace Microsoft.DurableTask
 {{
     public static class {generatedClassName}
     {{

@@ -4,7 +4,7 @@
 using System;
 using Microsoft.Extensions.Logging;
 
-namespace DurableTask.Sdk.Tests.Logging;
+namespace Microsoft.DurableTask.Tests.Logging;
 
 public class LogEntry
 {

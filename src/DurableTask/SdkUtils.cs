@@ -2,13 +2,13 @@
 // Licensed under the MIT License.
 
 using System;
-using DurableTask.Converters;
-using DurableTask.Grpc;
+using Microsoft.DurableTask.Converters;
+using Microsoft.DurableTask.Grpc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace DurableTask;
+namespace Microsoft.DurableTask;
 
 static class SdkUtils
 {

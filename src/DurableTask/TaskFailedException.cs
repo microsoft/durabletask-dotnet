@@ -4,7 +4,7 @@
 using System;
 using DurableTask.Core.Exceptions;
 
-namespace DurableTask;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Exception that gets thrown when when a durable task, such as an activity or a sub-orchestration, fails with an unhandled exception.

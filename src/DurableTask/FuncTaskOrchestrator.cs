@@ -4,7 +4,7 @@
 using System;
 using System.Threading.Tasks;
 
-namespace DurableTask;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Implementation of <see cref="TaskOrchestratorBase{TInput, TOutput}"/> that uses

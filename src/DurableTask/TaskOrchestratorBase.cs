@@ -4,7 +4,7 @@
 using System;
 using System.Threading.Tasks;
 
-namespace DurableTask;
+namespace Microsoft.DurableTask;
 
 // TODO: Move to separate file
 public interface ITaskOrchestrator

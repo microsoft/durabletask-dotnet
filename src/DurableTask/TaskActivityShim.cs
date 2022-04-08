@@ -5,7 +5,7 @@ using System;
 using System.Threading.Tasks;
 using DurableTask.Core;
 
-namespace DurableTask;
+namespace Microsoft.DurableTask;
 
 class TaskActivityShim<TInput, TOutput> : TaskActivityShim
 {

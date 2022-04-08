@@ -3,7 +3,7 @@
 
 using System;
 
-namespace DurableTask;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Record that represents the details of a task failure.
@@ -40,7 +40,7 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
         return this.exceptionType != null && typeof(T).IsAssignableFrom(this.exceptionType);
     }
 
-    internal static TaskFailureDetails FromCoreException(DurableTask.Core.Exceptions.OrchestrationException e)
+    internal static TaskFailureDetails FromCoreException(global::DurableTask.Core.Exceptions.OrchestrationException e)
     {
         return new TaskFailureDetails(
             e.FailureDetails?.ErrorType ?? "(unknown)",

@@ -23,7 +23,7 @@
 
   <!-- Version info -->
   <PropertyGroup>
-    <VersionPrefix>0.2.0</VersionPrefix>
+    <VersionPrefix>0.3.0</VersionPrefix>
     <VersionSuffix>alpha</VersionSuffix>
   </PropertyGroup>
 
@@ -36,13 +36,13 @@
     <PackageReference Include="Microsoft.AspNetCore.Server.Kestrel" Version="2.2.0" />
     <PackageReference Include="Microsoft.AspNetCore.Hosting" Version="2.2.7" />
     <PackageReference Include="Microsoft.Azure.DurableTask.Core" Version="2.8.0" />
-    <PackageReference Include="Microsoft.DurableTask.Sidecar.Protobuf" Version="0.2.0" />
+    <PackageReference Include="Microsoft.DurableTask.Sidecar.Protobuf" Version="0.3.0" />
     <PackageReference Include="System.Collections.Concurrent" Version="4.3.0" />
     <PackageReference Include="System.Collections.Immutable" Version="5.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DurableTask.Generators\DurableTask.Generators.csproj" />
+    <ProjectReference Include="..\DurableTask.Generators\Microsoft.DurableTask.Generators.csproj" />
   </ItemGroup>
 
 </Project>

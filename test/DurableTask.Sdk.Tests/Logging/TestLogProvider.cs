@@ -8,7 +8,7 @@ using System.Linq;
 using Microsoft.Extensions.Logging;
 using Xunit.Abstractions;
 
-namespace DurableTask.Sdk.Tests.Logging;
+namespace Microsoft.DurableTask.Tests.Logging;
 
 public sealed class TestLogProvider : ILoggerProvider
 {

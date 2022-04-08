@@ -3,7 +3,7 @@
 
 using System;
 
-namespace DurableTask;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Enum describing the status of the orchestration

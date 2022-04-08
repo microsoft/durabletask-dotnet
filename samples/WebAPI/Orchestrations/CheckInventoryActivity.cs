@@ -1,11 +1,11 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask;
+using WebAPI.Models;
+
 namespace WebAPI.Orchestrations
 {
-    using DurableTask;
-    using WebAPI.Models;
-
     [DurableTask("CheckInventory")]
     public class CheckInventoryActivity : TaskActivityBase<OrderInfo, bool>
     {

@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace DurableTask.Generators.AzureFunctions
+namespace Microsoft.DurableTask.Generators.AzureFunctions
 {
     public enum DurableFunctionKind
     {

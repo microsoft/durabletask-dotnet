@@ -4,7 +4,7 @@
 using System;
 using System.Threading.Tasks;
 
-namespace DurableTask;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Defines methods for registering orchestrators and activities with a host.

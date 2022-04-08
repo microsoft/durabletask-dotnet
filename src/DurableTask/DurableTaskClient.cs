@@ -5,7 +5,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace DurableTask;
+namespace Microsoft.DurableTask;
 
 // TODO: Class documentation
 public abstract class DurableTaskClient : IAsyncDisposable

@@ -6,13 +6,13 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
-using DurableTask.Generators.AzureFunctions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using Microsoft.DurableTask.Generators.AzureFunctions;
 
-namespace DurableTask.Generators
+namespace Microsoft.DurableTask.Generators
 {
     [Generator]
     public class DurableTaskSourceGenerator : ISourceGenerator
@@ -82,7 +82,7 @@ using Microsoft.Extensions.DependencyInjection;");
 
             sourceBuilder.Append(@"
 
-namespace DurableTask
+namespace Microsoft.DurableTask
 {
     public static class GeneratedDurableTaskExtensions
     {");
@@ -308,7 +308,7 @@ namespace DurableTask
                 }
 
                 ITypeSymbol? attributeType = context.SemanticModel.GetTypeInfo(attribute.Name).Type;
-                if (attributeType?.ToString() != "DurableTask.DurableTaskAttribute")
+                if (attributeType?.ToString() != "Microsoft.DurableTask.DurableTaskAttribute")
                 {
                     return;
                 }
@@ -340,7 +340,7 @@ namespace DurableTask
                 INamedTypeSymbol? baseType = classType.BaseType;
                 while (baseType != null)
                 {
-                    if (baseType.ContainingAssembly.Name == "DurableTask")
+                    if (baseType.ContainingAssembly.Name == "Microsoft.DurableTask")
                     {
                         if (baseType.Name == "TaskActivityBase")
                         {

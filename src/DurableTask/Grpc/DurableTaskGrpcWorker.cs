@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -10,7 +9,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using DurableTask.Core;
-using DurableTask.Core.Command;
 using DurableTask.Core.History;
 using Grpc.Core;
 using Grpc.Net.Client;
@@ -22,7 +20,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using static DurableTask.Protobuf.TaskHubSidecarService;
 using P = DurableTask.Protobuf;
 
-namespace DurableTask.Grpc;
+namespace Microsoft.DurableTask.Grpc;
 
 // TODO: Rather than making this a top-level class, users should use TaskHubWorker.CreateBuilder().UseGrpc(address) or something similar to opt-into gRPC.
 /// <summary>

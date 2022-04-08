@@ -3,17 +3,17 @@
 
 using System;
 using DurableTask.Core;
-using DurableTask.Grpc;
-using DurableTask.Sidecar;
-using DurableTask.Sidecar.Grpc;
 using Grpc.Net.Client;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.DurableTask.Grpc;
+using Microsoft.DurableTask.Sidecar;
+using Microsoft.DurableTask.Sidecar.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace DurableTask.Sdk.Tests;
+namespace Microsoft.DurableTask.Tests;
 
 public sealed class GrpcSidecarFixture : IDisposable
 {

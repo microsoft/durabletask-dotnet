@@ -4,8 +4,8 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
-using DurableTask;
-using DurableTask.Grpc;
+using Microsoft.DurableTask;
+using Microsoft.DurableTask.Grpc;
 using Microsoft.Extensions.Logging;
 
 // See https://aka.ms/new-console-template for more information

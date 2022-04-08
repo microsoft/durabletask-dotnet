@@ -3,7 +3,7 @@
 
 using System;
 
-namespace DurableTask;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Indicates that the attributed class represents a durable task.

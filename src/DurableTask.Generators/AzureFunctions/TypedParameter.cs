@@ -3,7 +3,7 @@
 
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace DurableTask.Generators.AzureFunctions
+namespace Microsoft.DurableTask.Generators.AzureFunctions
 {
     public class TypedParameter
     {

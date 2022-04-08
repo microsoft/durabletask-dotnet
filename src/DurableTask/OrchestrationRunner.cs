@@ -7,15 +7,14 @@ using System.Linq;
 using System.Threading.Tasks;
 using DurableTask.Core;
 using DurableTask.Core.History;
-using DurableTask.Grpc;
+using Microsoft.DurableTask.Grpc;
 using Google.Protobuf;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using P = DurableTask.Protobuf;
 
-namespace DurableTask;
-
+namespace Microsoft.DurableTask;
 
 public static class OrchestrationRunner
 {

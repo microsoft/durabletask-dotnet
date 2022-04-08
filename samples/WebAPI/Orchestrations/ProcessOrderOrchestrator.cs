@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using DurableTask;
+using Microsoft.DurableTask;
 using WebAPI.Models;
 
 namespace WebAPI.Orchestrations;

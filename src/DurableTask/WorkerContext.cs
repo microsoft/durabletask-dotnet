@@ -4,7 +4,7 @@
 using System;
 using Microsoft.Extensions.Logging;
 
-namespace DurableTask;
+namespace Microsoft.DurableTask;
 
 record WorkerContext(
     IDataConverter DataConverter,

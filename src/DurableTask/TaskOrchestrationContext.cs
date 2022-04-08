@@ -6,7 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 
-namespace DurableTask;
+namespace Microsoft.DurableTask;
 
 // TODO: Summary and detailed description in the remarks
 public abstract class TaskOrchestrationContext

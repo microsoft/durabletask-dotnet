@@ -3,10 +3,10 @@
 
 using System;
 using System.Text;
-using DurableTask.Grpc;
+using Microsoft.DurableTask.Grpc;
 using P = DurableTask.Protobuf;
 
-namespace DurableTask;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Represents a snapshot of an orchestration instance's current state.

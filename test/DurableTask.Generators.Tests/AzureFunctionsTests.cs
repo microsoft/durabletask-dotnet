@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 using System.Threading.Tasks;
-using DurableTask.Generators.Tests.Utils;
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.DurableTask.Generators.Tests.Utils;
 using Xunit;
 
-namespace DurableTask.Generators.Tests;
+namespace Microsoft.DurableTask.Generators.Tests;
 
 public class AzureFunctionsTests
 {
@@ -18,7 +18,7 @@ public class AzureFunctionsTests
     {
         string code = @"
 using Microsoft.Azure.Functions.Worker;
-using DurableTask;
+using Microsoft.DurableTask;
 
 public class Calculator
 {
@@ -60,7 +60,7 @@ public static Task<int> CallIdentityAsync(this TaskOrchestrationContext ctx, int
         string code = $@"
 using System;
 using System.Threading.Tasks;
-using DurableTask;
+using Microsoft.DurableTask;
 
 [DurableTask(nameof(MyActivity))]
 public class MyActivity : TaskActivityBase<{inputType}, {outputType}>
@@ -115,7 +115,7 @@ public static async Task<{outputType}> MyActivity([ActivityTrigger] {defaultInpu
 #nullable enable
 using System;
 using System.Threading.Tasks;
-using DurableTask;
+using Microsoft.DurableTask;
 
 namespace MyNS
 {{
@@ -194,7 +194,7 @@ public static Task<{outputType}> CallMyOrchestratorAsync(
 #nullable enable
 using System;
 using System.Threading.Tasks;
-using DurableTask;
+using Microsoft.DurableTask;
 
 namespace MyNS
 {{

@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 using System.Threading.Tasks;
-using DurableTask.Generators.Tests.Utils;
+using Microsoft.DurableTask.Generators.Tests.Utils;
 using Xunit;
 
-namespace DurableTask.Generators.Tests;
+namespace Microsoft.DurableTask.Generators.Tests;
 
 public class ClassBasedSyntaxTests
 {
@@ -17,7 +17,7 @@ public class ClassBasedSyntaxTests
     {
         string code = @"
 using System.Threading.Tasks;
-using DurableTask;
+using Microsoft.DurableTask;
 
 [DurableTask(nameof(MyOrchestrator))]
 class MyOrchestrator : TaskOrchestratorBase<int, string>
@@ -74,7 +74,7 @@ public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistr
     {
         string code = @"
 using System.Threading.Tasks;
-using DurableTask;
+using Microsoft.DurableTask;
 
 [DurableTask(nameof(MyOrchestrator))]
 sealed class MyOrchestrator : MyOrchestratorBase
@@ -137,7 +137,7 @@ public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistr
     public Task Activities_PrimitiveTypes()
     {
         string code = @"
-using DurableTask;
+using Microsoft.DurableTask;
 
 [DurableTask(nameof(MyActivity))]
 class MyActivity : TaskActivityBase<int, string>
@@ -171,7 +171,7 @@ public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistr
     {
         string code = @"
 using MyNS;
-using DurableTask;
+using Microsoft.DurableTask;
 
 [DurableTask(nameof(MyActivity))]
 class MyActivity : TaskActivityBase<MyClass, MyClass>
@@ -212,7 +212,7 @@ public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistr
         // The [DurableTask] attribute is expected to override the activity class name
         string code = @"
 using MyNS;
-using DurableTask;
+using Microsoft.DurableTask;
 
 namespace MyNS
 {
@@ -250,7 +250,7 @@ public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistr
     public Task Activities_Inheritance()
     {
         string code = @"
-using DurableTask;
+using Microsoft.DurableTask;
 
 [DurableTask(nameof(MyActivity))]
 class MyActivity : MyActivityBase

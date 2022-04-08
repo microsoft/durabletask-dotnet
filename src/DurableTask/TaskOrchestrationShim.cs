@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 using DurableTask.Core;
 using Microsoft.Extensions.Logging;
 
-namespace DurableTask;
+namespace Microsoft.DurableTask;
 
 class TaskOrchestrationShim<TInput, TOutput> : TaskOrchestrationShim
 {
@@ -135,7 +135,7 @@ class TaskOrchestrationShim : TaskOrchestration
                 }
 
             }
-            catch (DurableTask.Core.Exceptions.TaskFailedException e)
+            catch (global::DurableTask.Core.Exceptions.TaskFailedException e)
             {
                 // Hide the core DTFx types and instead use our own
                 throw new TaskFailedException(name, e.ScheduleId, e);
@@ -221,7 +221,7 @@ class TaskOrchestrationShim : TaskOrchestration
                         input);
                 }
             }
-            catch (DurableTask.Core.Exceptions.SubOrchestrationFailedException e)
+            catch (global::DurableTask.Core.Exceptions.SubOrchestrationFailedException e)
             {
                 // Hide the core DTFx types and instead use our own
                 throw new TaskFailedException(orchestratorName, e.ScheduleId, e);
@@ -328,7 +328,7 @@ class TaskOrchestrationShim : TaskOrchestration
                 {
                     return await action();
                 }
-                catch (DurableTask.Core.Exceptions.OrchestrationException e)
+                catch (global::DurableTask.Core.Exceptions.OrchestrationException e)
                 {
                     // Some failures are not retriable, like failures for missing activities or sub-orchestrations
                     if (e.FailureDetails?.IsNonRetriable == true)

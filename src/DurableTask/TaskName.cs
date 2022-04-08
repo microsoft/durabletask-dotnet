@@ -3,7 +3,7 @@
 
 using System;
 
-namespace DurableTask;
+namespace Microsoft.DurableTask;
 
 // TODO: Add detailed remarks that describe the role of TaskName
 /// <summary>

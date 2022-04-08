@@ -3,11 +3,11 @@
 
 using System;
 using System.Threading.Tasks;
-using DurableTask.Grpc;
+using Microsoft.DurableTask.Grpc;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace DurableTask.Sdk.Tests;
+namespace Microsoft.DurableTask.Tests;
 
 /// <summary>
 /// Integration tests that are designed to exercise the error handling and retry functionality

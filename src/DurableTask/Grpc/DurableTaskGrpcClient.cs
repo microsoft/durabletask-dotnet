@@ -15,7 +15,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using static DurableTask.Protobuf.TaskHubSidecarService;
 using P = DurableTask.Protobuf;
 
-namespace DurableTask.Grpc;
+namespace Microsoft.DurableTask.Grpc;
 
 public class DurableTaskGrpcClient : DurableTaskClient
 {

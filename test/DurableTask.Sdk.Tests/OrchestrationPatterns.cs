@@ -7,12 +7,11 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using DurableTask.Grpc;
-using DurableTask.Sdk.Tests;
+using Microsoft.DurableTask.Grpc;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace DurableTask.Tests;
+namespace Microsoft.DurableTask.Tests;
 
 public class OrchestrationPatterns : IntegrationTestBase
 {

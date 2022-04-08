@@ -7,7 +7,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace DurableTask.Generators.AzureFunctions
+namespace Microsoft.DurableTask.Generators.AzureFunctions
 {
     public static class SyntaxNodeUtility
     {
@@ -61,7 +61,7 @@ namespace DurableTask.Generators.AzureFunctions
             return false;
         }
 
-        public static bool TryGetRequiredNamespaces(SemanticModel model, List<TypeSyntax> types, out HashSet<string> requiredNamespaces)
+        public static bool TryGetRequiredNamespaces(SemanticModel model, List<TypeSyntax> types, out HashSet<string>? requiredNamespaces)
         {
             requiredNamespaces = new HashSet<string>();
 
@@ -74,15 +74,19 @@ namespace DurableTask.Generators.AzureFunctions
                 if (toProcess is PredefinedTypeSyntax)
                     continue;
 
-                var typeInfo = model.GetTypeInfo(toProcess);
+                TypeInfo typeInfo = model.GetTypeInfo(toProcess);
+                if (typeInfo.Type == null)
+                {
+                    return false;
+                }
 
-                if (!(toProcess is PredefinedTypeSyntax) && typeInfo.Type.ContainingNamespace.IsGlobalNamespace)
+                if (toProcess is not PredefinedTypeSyntax && typeInfo.Type.ContainingNamespace.IsGlobalNamespace)
                 {
                     requiredNamespaces = null;
                     return false;
                 }
 
-                requiredNamespaces.Add(typeInfo.Type.ContainingNamespace.ToDisplayString());
+                requiredNamespaces.Add(typeInfo.Type!.ContainingNamespace.ToDisplayString());
 
                 if (toProcess is GenericNameSyntax genericType)
                 {
@@ -127,56 +131,15 @@ namespace DurableTask.Generators.AzureFunctions
             return false;
         }
 
-        public static bool TryGetParameters(SemanticModel model, MethodDeclarationSyntax method, out List<TypedParameter> parameters)
+        public static bool TryGetQualifiedTypeName(SemanticModel model, MethodDeclarationSyntax method, out string? fullTypeName)
         {
-            parameters = null;
-            var invocation = FindGetInputInvocation(method);
-
-            List<string> parameterNames;
-            List<TypeSyntax> parameterTypes;
-
-            if (IsAssignmentExpression(invocation))
+            var symbol = model.GetEnclosingSymbol(method.SpanStart);
+            if (symbol == null)
             {
-                // var (a, b) = context.GetInput<(X, Y)>();
-                var assignment = GetAssignment(invocation);
-
-                if (!TryGetParameterNames(assignment, out parameterNames))
-                    return false;
-
-                if (!TryGetParameterTypes(assignment, out parameterTypes))
-                    return false;
-            }
-            else if (IsLocalDeclarationExpression(invocation))
-            {
-                // var a = context.GetInput<X>();
-                var localDeclaration = GetLocalDeclaration(invocation);
-
-                if (!TryGetParameterNames(localDeclaration, out parameterNames))
-                    return false;
-
-                if (!TryGetParameterTypes(localDeclaration, out parameterTypes))
-                    return false;
-            }
-            else
-            {
-                // It is possible for the function to require no input parameters
-                parameterNames = new List<string>();
-                parameterTypes = new List<TypeSyntax>();
-            }
-
-            if (parameterNames?.Count != parameterTypes?.Count)
-            {
-                parameters = null;
+                fullTypeName = null;
                 return false;
             }
 
-            parameters = parameterTypes.Select((t, i) => new TypedParameter(t, parameterNames[i])).ToList();
-            return true;
-        }
-
-        public static bool TryGetQualifiedTypeName(SemanticModel model, MethodDeclarationSyntax method, out string fullTypeName)
-        {
-            var symbol = model.GetEnclosingSymbol(method.SpanStart);
             fullTypeName = $@"{symbol.ToDisplayString()}.{method.Identifier}";
             return true;
         }
@@ -185,141 +148,6 @@ namespace DurableTask.Generators.AzureFunctions
         {
             attribute = method.AttributeLists.SelectMany(a => a.Attributes).FirstOrDefault(a => a.Name.NormalizeWhitespace().ToFullString().Equals(attributeName));
             return attribute != null;
-        }
-
-        private static InvocationExpressionSyntax FindGetInputInvocation(MethodDeclarationSyntax method)
-        {
-            var invocations = method.DescendantNodes().OfType<InvocationExpressionSyntax>();
-
-            return invocations.FirstOrDefault(inv => (inv.Expression is MemberAccessExpressionSyntax memberAccess) &&
-                                            (memberAccess.Name is GenericNameSyntax name) &&
-                                            (name.Identifier.Text == "GetInput"));
-        }
-
-        private static bool TryGetParameterNames(AssignmentExpressionSyntax assignment, out List<string> parameterNames)
-        {
-            if (assignment.Left is DeclarationExpressionSyntax declaration)
-            {
-                if (declaration.Designation is ParenthesizedVariableDesignationSyntax designation)
-                {
-                    parameterNames = designation.Variables.Select(v => v.ToString()).ToList();
-                    return true;
-                }
-            }
-
-            parameterNames = null;
-            return false;
-        }
-
-        private static bool TryGetParameterNames(LocalDeclarationStatementSyntax local, out List<string> parameterNames)
-        {
-            if (local.Declaration.Variables.Count == 1)
-            {
-                parameterNames = new List<string>() { local.Declaration.Variables.First().Identifier.ToFullString().Trim() };
-                return true;
-            }
-
-            parameterNames = null;
-            return false;
-        }
-
-        private static bool TryGetParameterTypes(AssignmentExpressionSyntax assignment, out List<TypeSyntax> parameterTypes)
-        {
-            if (assignment.Right is InvocationExpressionSyntax invocation)
-            {
-                return TryGetParameterTypes(invocation, out parameterTypes);
-            }
-
-            parameterTypes = null;
-            return false;
-        }
-
-        private static bool TryGetParameterTypes(LocalDeclarationStatementSyntax local, out List<TypeSyntax> parameterTypes)
-        {
-            var variables = local.Declaration.Variables;
-
-            if (variables.Count == 1)
-            {
-                if (variables.First().Initializer.Value is InvocationExpressionSyntax invocation)
-                {
-                    TryGetParameterTypes(invocation, out parameterTypes);
-                    return true;
-                }
-            }
-
-            parameterTypes = null;
-            return false;
-        }
-
-        private static bool IsAssignmentExpression(InvocationExpressionSyntax invocation)
-        {
-            return invocation?.Parent is AssignmentExpressionSyntax;
-        }
-
-        private static AssignmentExpressionSyntax GetAssignment(InvocationExpressionSyntax invocation)
-        {
-            return invocation.Parent as AssignmentExpressionSyntax;
-        }
-
-        private static bool IsLocalDeclarationExpression(InvocationExpressionSyntax invocation)
-        {
-            if (!(invocation?.Parent is EqualsValueClauseSyntax equals))
-                return false;
-
-            if (!(equals.Parent is VariableDeclaratorSyntax variableDeclarator))
-                return false;
-
-            if (!(variableDeclarator.Parent is VariableDeclarationSyntax variableDeclaration))
-                return false;
-
-            return variableDeclaration.Parent is LocalDeclarationStatementSyntax;
-        }
-
-        private static LocalDeclarationStatementSyntax GetLocalDeclaration(InvocationExpressionSyntax invocation)
-        {
-            if (!(invocation.Parent is EqualsValueClauseSyntax equals))
-                return null;
-
-            if (!(equals.Parent is VariableDeclaratorSyntax variableDeclarator))
-                return null;
-
-            if (!(variableDeclarator.Parent is VariableDeclarationSyntax variableDeclaration))
-                return null;
-
-            return variableDeclaration.Parent as LocalDeclarationStatementSyntax;
-        }
-
-        private static bool TryGetParameterTypes(InvocationExpressionSyntax invocation, out List<TypeSyntax> parameterTypes)
-        {
-            parameterTypes = new List<TypeSyntax>();
-
-            if (!(invocation.Expression is MemberAccessExpressionSyntax expression))
-                return false;
-
-            if (!(expression.Name is GenericNameSyntax name))
-                return false;
-
-            var argumentList = name.TypeArgumentList;
-
-            var arguments = argumentList.Arguments;
-
-            if (arguments.Count != 1)
-                return false;
-
-            var argument = arguments.First();
-
-            if (argument is IdentifierNameSyntax identifier)      // context.GetInput<MyType>()
-                parameterTypes.Add(identifier);
-            else if (argument is PredefinedTypeSyntax predefined) // context.GetInput<int>()
-                parameterTypes.Add(predefined);
-            else if (argument is GenericNameSyntax generic)       // context.GetInput<List<int>>()
-                parameterTypes.Add(generic);
-            else if (argument is TupleTypeSyntax tupleArgument)   // context.GetInput<(X,Y,Z)>()
-                parameterTypes.AddRange(tupleArgument.Elements.Select(e => e.Type));
-            else
-                return false;
-
-            return true;
         }
     }
 }

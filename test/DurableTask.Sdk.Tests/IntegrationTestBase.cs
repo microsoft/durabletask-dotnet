@@ -4,13 +4,13 @@
 using System;
 using System.Diagnostics;
 using System.Threading;
-using DurableTask.Grpc;
-using DurableTask.Sdk.Tests.Logging;
+using Microsoft.DurableTask.Grpc;
+using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.Extensions.Logging;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace DurableTask.Sdk.Tests;
+namespace Microsoft.DurableTask.Tests;
 
 /// <summary>
 /// Base class for integration tests that use a in-process sidecar for executing orchestrations.

@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 using System;
-using DurableTask.Grpc;
+using Microsoft.DurableTask.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace DurableTask;
+namespace Microsoft.DurableTask;
 
 public static class DurableTaskExtensions
 {

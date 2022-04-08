@@ -57,7 +57,7 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                 return false;
             }
 
-            if (!SyntaxNodeUtility.TryGetQualifiedTypeName(model, method, out string fullTypeName))
+            if (!SyntaxNodeUtility.TryGetQualifiedTypeName(model, method, out string? fullTypeName))
             {
                 return false;
             }
@@ -66,14 +66,14 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
             usedTypes.Add(returnType);
             usedTypes.Add(parameter.Type);
 
-            if (!SyntaxNodeUtility.TryGetRequiredNamespaces(model, usedTypes, out HashSet<string> requiredNamespaces))
+            if (!SyntaxNodeUtility.TryGetRequiredNamespaces(model, usedTypes, out HashSet<string>? requiredNamespaces))
             {
                 return false;
             }
 
-            requiredNamespaces.UnionWith(GetRequiredGlobalNamespaces());
+            requiredNamespaces!.UnionWith(GetRequiredGlobalNamespaces());
 
-            function = new DurableFunction(fullTypeName, name, kind, parameter, returnType, requiredNamespaces);
+            function = new DurableFunction(fullTypeName!, name, kind, parameter, returnType, requiredNamespaces);
             return true;
         }
 

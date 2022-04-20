@@ -4,7 +4,7 @@
 using System;
 using System.Text;
 using Microsoft.DurableTask.Grpc;
-using P = DurableTask.Protobuf;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask;
 

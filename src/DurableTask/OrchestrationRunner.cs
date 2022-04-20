@@ -12,7 +12,7 @@ using Google.Protobuf;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using P = DurableTask.Protobuf;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask;
 

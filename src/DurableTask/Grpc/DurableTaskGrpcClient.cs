@@ -12,8 +12,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using static DurableTask.Protobuf.TaskHubSidecarService;
-using P = DurableTask.Protobuf;
+using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Grpc;
 

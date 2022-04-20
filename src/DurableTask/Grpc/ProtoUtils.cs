@@ -12,7 +12,7 @@ using DurableTask.Core.Command;
 using DurableTask.Core.History;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
-using P = DurableTask.Protobuf;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Grpc;
 

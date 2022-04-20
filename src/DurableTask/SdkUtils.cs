@@ -38,7 +38,7 @@ static class SdkUtils
         return address;
     }
 
-    internal static ILogger GetLogger(ILoggerFactory loggerFactory) => loggerFactory.CreateLogger("DurableTask.Sdk");
+    internal static ILogger GetLogger(ILoggerFactory loggerFactory) => loggerFactory.CreateLogger("Microsoft.DurableTask");
 
     /// <summary>
     /// Gets the address of the Durable Task sidecar, which is responsible for managing and scheduling durable tasks.

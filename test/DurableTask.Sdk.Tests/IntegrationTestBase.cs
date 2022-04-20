@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using Microsoft.DurableTask.Grpc;
@@ -18,6 +19,7 @@ namespace Microsoft.DurableTask.Tests;
 public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposable
 {
     readonly CancellationTokenSource testTimeoutSource = new(Debugger.IsAttached ? TimeSpan.FromMinutes(5) : TimeSpan.FromSeconds(10));
+    readonly TestLogProvider logProvider;
     readonly ILoggerFactory loggerFactory;
 
     // Documentation on xunit test fixtures: https://xunit.net/docs/shared-context
@@ -25,10 +27,10 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
 
     public IntegrationTestBase(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
     {
-        TestLogProvider logProvider = new(output);
+        this.logProvider = new(output);
         this.loggerFactory = LoggerFactory.Create(builder =>
         {
-            builder.AddProvider(logProvider);
+            builder.AddProvider(this.logProvider);
             builder.SetMinimumLevel(LogLevel.Debug);
         });
         this.sidecarFixture = sidecarFixture;
@@ -60,5 +62,14 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
     protected DurableTaskClient CreateDurableTaskClient()
     {
         return this.sidecarFixture.GetClientBuilder().UseLoggerFactory(this.loggerFactory).Build();
+    }
+
+    protected IReadOnlyCollection<LogEntry> GetLogs()
+    {
+        // NOTE: Renaming the log category is a breaking change!
+        const string ExpectedCategoryName = "Microsoft.DurableTask";
+        bool foundCategory = this.logProvider.TryGetLogs(ExpectedCategoryName, out IReadOnlyCollection<LogEntry> logs);
+        Assert.True(foundCategory);
+        return logs;
     }
 }

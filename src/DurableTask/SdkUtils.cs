@@ -2,6 +2,10 @@
 // Licensed under the MIT License.
 
 using System;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using System.Threading;
+using Grpc.Core;
 using Microsoft.DurableTask.Converters;
 using Microsoft.DurableTask.Grpc;
 using Microsoft.Extensions.Configuration;
@@ -13,7 +17,7 @@ namespace Microsoft.DurableTask;
 static class SdkUtils
 {
     internal static readonly IServiceProvider EmptyServiceProvider = new ServiceCollection().BuildServiceProvider();
-    internal static readonly IDataConverter DefaultDataConverter = JsonDataConverter.Default;
+    internal static readonly DataConverter DefaultDataConverter = JsonDataConverter.Default;
 
     /// <summary>
     /// Helper for validating addresses passed to the <see cref="DurableTaskGrpcWorker"/> and <see cref="DurableTaskGrpcClient"/> types.
@@ -24,7 +28,7 @@ static class SdkUtils
     {
         if (string.IsNullOrEmpty(address))
         {
-            ArgumentNullException.ThrowIfNull(address, nameof(address));
+            throw new ArgumentException("The address value cannot be null or empty", nameof(address));
         }
         else if (!Uri.TryCreate(address, UriKind.Absolute, out Uri? uri))
         {
@@ -54,6 +58,21 @@ static class SdkUtils
     static string GetSetting(string name, IConfiguration? configuration, string defaultValue)
     {
         return configuration?[name] ?? Environment.GetEnvironmentVariable(name) ?? defaultValue;
+    }
+
+    internal static async IAsyncEnumerable<T> ReadAllAsync<T>(
+        this IAsyncStreamReader<T> reader,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
+
+        while (await reader.MoveNext(cancellationToken).ConfigureAwait(false))
+        {
+            yield return reader.Current;
+        }
     }
 
     static class EnvironmentVariables

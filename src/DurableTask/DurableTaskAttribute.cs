@@ -10,9 +10,8 @@ namespace Microsoft.DurableTask;
 /// </summary>
 /// <remarks>
 /// This attribute is meant to be used on class definitions that derive from
-/// <see cref="TaskOrchestratorBase{TInput, TOutput}"/> or
-/// <see cref="TaskActivityBase{TInput, TOutput}"/>. It is used specifically
-/// by build-time source generators to generate type-safe methods for invoking
+/// <see cref="TaskOrchestratorBase{TInput, TOutput}"/> or <see cref="TaskActivityBase{TInput, TOutput}"/>.
+/// It is used specifically by build-time source generators to generate type-safe methods for invoking
 /// orchestratos or activities.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]

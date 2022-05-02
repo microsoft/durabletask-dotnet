@@ -7,9 +7,9 @@ using System.Text.Json;
 namespace Microsoft.DurableTask.Converters;
 
 /// <summary>
-/// An implementation of <see cref="IDataConverter"/> that uses System.Text.Json APIs for data serialization.
+/// An implementation of <see cref="DataConverter"/> that uses System.Text.Json APIs for data serialization.
 /// </summary>
-public class JsonDataConverter : IDataConverter
+public class JsonDataConverter : DataConverter
 {
     // WARNING: Changing default serialization options could potentially be breaking for in-flight orchestrations.
     static readonly JsonSerializerOptions DefaultOptions = new()
@@ -36,12 +36,12 @@ public class JsonDataConverter : IDataConverter
         }
     }
 
-    public virtual string? Serialize(object? value)
+    public override string? Serialize(object? value)
     {
         return value != null ? JsonSerializer.Serialize(value, this.options) : null;
     }
 
-    public virtual object? Deserialize(string? data, Type targetType)
+    public override object? Deserialize(string? data, Type targetType)
     {
         return data != null ? JsonSerializer.Deserialize(data, targetType, this.options) : null;
     }

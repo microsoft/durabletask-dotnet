@@ -31,7 +31,7 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
     static readonly Google.Protobuf.WellKnownTypes.Empty EmptyMessage = new();
 
     readonly IServiceProvider services;
-    readonly IDataConverter dataConverter;
+    readonly DataConverter dataConverter;
     readonly ILogger logger;
     readonly IConfiguration? configuration;
     readonly GrpcChannel sidecarGrpcChannel;
@@ -48,7 +48,7 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
     DurableTaskGrpcWorker(Builder builder)
     {
         this.services = builder.services ?? SdkUtils.EmptyServiceProvider;
-        this.dataConverter = builder.dataConverter ?? this.services.GetService<IDataConverter>() ?? SdkUtils.DefaultDataConverter;
+        this.dataConverter = builder.dataConverter ?? this.services.GetService<DataConverter>() ?? SdkUtils.DefaultDataConverter;
         this.logger = SdkUtils.GetLogger(builder.loggerFactory ?? this.services.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance);
         this.configuration = builder.configuration ?? this.services.GetService<IConfiguration>();
 
@@ -147,7 +147,7 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
         // Cancelling the shutdownTcs causes the background processing to shutdown gracefully.
         this.shutdownTcs?.Cancel();
 
-        // Wait for the listen loop to copmlete
+        // Wait for the listen loop to complete
         await (this.listenLoop?.WaitAsync(cancellationToken) ?? Task.CompletedTask);
 
         // TODO: Wait for any outstanding tasks to complete
@@ -468,7 +468,7 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
     {
         internal DefaultTaskBuilder taskProvider = new();
         internal ILoggerFactory? loggerFactory;
-        internal IDataConverter? dataConverter;
+        internal DataConverter? dataConverter;
         internal IServiceProvider? services;
         internal IConfiguration? configuration;
         internal string? address;
@@ -509,7 +509,7 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
             return this;
         }
 
-        public Builder UseDataConverter(IDataConverter dataConverter)
+        public Builder UseDataConverter(DataConverter dataConverter)
         {
             this.dataConverter = dataConverter ?? throw new ArgumentNullException(nameof(dataConverter));
             return this;

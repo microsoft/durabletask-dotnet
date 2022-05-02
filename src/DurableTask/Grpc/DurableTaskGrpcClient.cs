@@ -20,7 +20,7 @@ namespace Microsoft.DurableTask.Grpc;
 public class DurableTaskGrpcClient : DurableTaskClient
 {
     readonly IServiceProvider services;
-    readonly IDataConverter dataConverter;
+    readonly DataConverter dataConverter;
     readonly ILogger logger;
     readonly IConfiguration? configuration;
     readonly GrpcChannel sidecarGrpcChannel;
@@ -32,7 +32,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
     DurableTaskGrpcClient(Builder builder)
     {
         this.services = builder.services ?? SdkUtils.EmptyServiceProvider;
-        this.dataConverter = builder.dataConverter ?? this.services.GetService<IDataConverter>() ?? SdkUtils.DefaultDataConverter;
+        this.dataConverter = builder.dataConverter ?? this.services.GetService<DataConverter>() ?? SdkUtils.DefaultDataConverter;
         this.logger = SdkUtils.GetLogger(builder.loggerFactory ?? this.services.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance);
         this.configuration = builder.configuration ?? this.services.GetService<IConfiguration>();
 
@@ -237,7 +237,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
     {
         internal IServiceProvider? services;
         internal ILoggerFactory? loggerFactory;
-        internal IDataConverter? dataConverter;
+        internal DataConverter? dataConverter;
         internal IConfiguration? configuration;
         internal GrpcChannel? channel;
         internal string? address;
@@ -277,7 +277,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
             return this;
         }
 
-        public Builder UseDataConverter(IDataConverter dataConverter)
+        public Builder UseDataConverter(DataConverter dataConverter)
         {
             this.dataConverter = dataConverter ?? throw new ArgumentNullException(nameof(dataConverter));
             return this;

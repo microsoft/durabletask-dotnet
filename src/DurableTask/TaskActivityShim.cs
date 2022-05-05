@@ -10,7 +10,7 @@ namespace Microsoft.DurableTask;
 class TaskActivityShim<TInput, TOutput> : TaskActivityShim
 {
     public TaskActivityShim(
-        IDataConverter dataConverter,
+        DataConverter dataConverter,
         TaskName name,
         Func<TaskActivityContext, TInput?, Task<TOutput?>> implementation)
         : base(dataConverter, name, new LambdaActivity(implementation))
@@ -36,11 +36,11 @@ class TaskActivityShim<TInput, TOutput> : TaskActivityShim
 class TaskActivityShim : TaskActivity
 {
     readonly ITaskActivity implementation;
-    readonly IDataConverter dataConverter;
+    readonly DataConverter dataConverter;
     readonly TaskName name;
 
     public TaskActivityShim(
-        IDataConverter dataConverter,
+        DataConverter dataConverter,
         TaskName name,
         ITaskActivity implementation)
     {

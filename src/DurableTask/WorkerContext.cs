@@ -7,6 +7,6 @@ using Microsoft.Extensions.Logging;
 namespace Microsoft.DurableTask;
 
 record WorkerContext(
-    IDataConverter DataConverter,
+    DataConverter DataConverter,
     ILogger Logger,
     IServiceProvider Services);

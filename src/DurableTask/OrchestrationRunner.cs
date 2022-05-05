@@ -72,7 +72,7 @@ public static class OrchestrationRunner
         List<HistoryEvent> pastEvents = request.PastEvents.Select(ProtoUtils.ConvertHistoryEvent).ToList();
         IEnumerable<HistoryEvent> newEvents = request.NewEvents.Select(ProtoUtils.ConvertHistoryEvent);
 
-        IDataConverter dataConverter = services?.GetService<IDataConverter>() ?? SdkUtils.DefaultDataConverter;
+        DataConverter dataConverter = services?.GetService<DataConverter>() ?? SdkUtils.DefaultDataConverter;
         ILoggerFactory loggerFactory = services?.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance;
         ILogger logger = SdkUtils.GetLogger(loggerFactory);
 

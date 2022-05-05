@@ -13,12 +13,12 @@ namespace Microsoft.DurableTask;
 /// </summary>
 public sealed class OrchestrationMetadata
 {
-    readonly IDataConverter dataConverter;
+    readonly DataConverter dataConverter;
     readonly bool requestedInputsAndOutputs;
 
     internal OrchestrationMetadata(
         P.GetInstanceResponse response,
-        IDataConverter dataConverter,
+        DataConverter dataConverter,
         bool requestedInputsAndOutputs)
     {
         this.Name = response.OrchestrationState.Name;
@@ -168,7 +168,7 @@ public sealed class OrchestrationMetadata
         const int MaxLength = 50;
         if (payload.Length > MaxLength)
         {
-            return string.Concat(payload.AsSpan(0, MaxLength), "...");
+            return string.Concat(payload[..MaxLength], "...");
         }
 
         return payload;

@@ -11,7 +11,6 @@ using System.Threading.Tasks;
 using DurableTask.Core;
 using DurableTask.Core.History;
 using Grpc.Core;
-using Grpc.Net.Client;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -34,7 +33,7 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
     readonly DataConverter dataConverter;
     readonly ILogger logger;
     readonly IConfiguration? configuration;
-    readonly GrpcChannel sidecarGrpcChannel;
+    readonly Channel sidecarGrpcChannel;
     readonly bool ownsChannel;
     readonly TaskHubSidecarServiceClient sidecarClient;
     readonly WorkerContext workerContext;
@@ -69,7 +68,10 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
         else
         {
             // We have to create our own channel and are responsible for disposing it
-            this.sidecarGrpcChannel = GrpcChannel.ForAddress(builder.address ?? SdkUtils.GetSidecarAddress(this.configuration));
+            this.sidecarGrpcChannel = new Channel(
+                builder.hostname ?? SdkUtils.GetSidecarHost(this.configuration),
+                builder.port ?? SdkUtils.GetSidecarPort(this.configuration),
+                ChannelCredentials.Insecure);
             this.ownsChannel = true;
         }
 
@@ -168,7 +170,6 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
         if (this.ownsChannel)
         {
             await this.sidecarGrpcChannel.ShutdownAsync();
-            this.sidecarGrpcChannel.Dispose();
         }
 
         GC.SuppressFinalize(this);
@@ -471,8 +472,9 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
         internal DataConverter? dataConverter;
         internal IServiceProvider? services;
         internal IConfiguration? configuration;
-        internal string? address;
-        internal GrpcChannel? channel;
+        internal string? hostname;
+        internal int? port;
+        internal Channel? channel;
 
         internal Builder()
         {
@@ -480,14 +482,15 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
 
         public DurableTaskGrpcWorker Build() => new(this);
 
-        public Builder UseAddress(string address)
+        public Builder UseAddress(string hostname, int? port = null)
         {
-            this.address = SdkUtils.ValidateAddress(address);
+            this.hostname = hostname;
+            this.port = port;
             return this;
         }
 
         /// <summary>
-        /// Configures a <see cref="GrpcChannel"/> to use for communicating with the sidecar process.
+        /// Configures a <see cref="Channel"/> to use for communicating with the sidecar process.
         /// </summary>
         /// <remarks>
         /// This builder method allows you to provide your own gRPC channel for communicating with the Durable Task
@@ -497,7 +500,7 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
         /// <param name="channel">The gRPC channel to use.</param>
         /// <returns>Returns this <see cref="Builder"/> instance.</returns>
         /// <exception cref="ArgumentNullException">Thrown if <paramref name="channel"/> is <c>null</c>.</exception>
-        public Builder UseGrpcChannel(GrpcChannel channel)
+        public Builder UseGrpcChannel(Channel channel)
         {
             this.channel = channel ?? throw new ArgumentNullException(nameof(channel));
             return this;

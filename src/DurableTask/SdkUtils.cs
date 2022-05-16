@@ -49,10 +49,21 @@ static class SdkUtils
     /// </summary>
     /// <param name="configuration">Optional configuration provider for looking up the sidecar address.</param>
     /// <returns>Returns the configured sidecar address, or http://localhost:4001 if no explicit value is configured.</returns>
-    internal static string GetSidecarAddress(IConfiguration? configuration)
+    internal static string GetSidecarHost(IConfiguration? configuration)
     {
-        string address = GetSetting(EnvironmentVariables.SidecarAddress, configuration, "http://localhost:4001");
-        return ValidateAddress(address);
+        string host = GetSetting(EnvironmentVariables.SidecarHost, configuration, "127.0.0.1");
+        return host;
+    }
+
+    internal static int GetSidecarPort(IConfiguration? configuration)
+    {
+        string portSetting = GetSetting(EnvironmentVariables.SidecarPort, configuration, "4001");
+        if (!int.TryParse(portSetting, out int port))
+        {
+            throw new InvalidOperationException($"The value '{portSetting}' is not a valid port number.");
+        }
+
+        return port;
     }
 
     static string GetSetting(string name, IConfiguration? configuration, string defaultValue)
@@ -78,6 +89,7 @@ static class SdkUtils
     static class EnvironmentVariables
     {
         // All environment variables should be prefixed with DURABLETASK_
-        public const string SidecarAddress = "DURABLETASK_SIDECAR_ADDRESS";
+        public const string SidecarHost = "DURABLETASK_SIDECAR_HOST";
+        public const string SidecarPort = "DURABLETASK_SIDECAR_PORT";
     }
 }

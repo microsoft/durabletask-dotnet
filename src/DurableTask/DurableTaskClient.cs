@@ -21,7 +21,7 @@ namespace Microsoft.DurableTask;
 /// ensure any owned network resources are properly released, instances of <see cref="DurableTaskClient"/> should be
 /// disposed when they are no longer needed.
 /// </para><para>
-/// Instances of this class are expected to be safe for multi-threaded apps. You can therefore safely cache instances
+/// Instances of this class are expected to be safe for multithreaded apps. You can therefore safely cache instances
 /// of this class and reuse them across multiple contexts. Caching these objects is useful to improve overall 
 /// performance.
 /// </para>
@@ -53,7 +53,7 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// </para>
     /// </remarks>
     /// <param name="orchestratorName">The name of the orchestrator to schedule.</param>
-    /// <param name="instanceId">The ID of the orchestration instance to schedule. If not specified, a random GUID value is used.</param>
+    /// <param name="instanceId">The unique ID of the orchestration instance to schedule. If not specified, a random GUID value is used.</param>
     /// <param name="input">The optional input to pass to the scheduled orchestration instance. This must be a serializable value.</param>
     /// <param name="startTime">
     /// The time when the orchestration instance should start executing. If not specified or if a date-time in the past 
@@ -88,7 +88,7 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// allowed. Each external event received by an orchestrator will complete just one task returned by the
     /// <see cref="TaskOrchestrationContext.WaitForExternalEvent{T}(string, CancellationToken)"/> method.
     /// </para><para>
-    /// External events for a completed or non-existent orchestration instance will be silently discarded.
+    /// Raised events for a completed or non-existent orchestration instance will be silently discarded.
     /// </para>
     /// </remarks>
     /// <param name="instanceId">The ID of the orchestration instance that will handle the event.</param>
@@ -112,6 +112,8 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// or sub-orchestrations that were started by the terminated instance. Those actions will continue to run
     /// without interruption. However, their results will be discarded. If you want to terminate sub-orchestrations,
     /// you must issue separate terminate commands for each sub-orchestration instance.
+    /// </para><para>
+    /// At the time of writing, there is no way to terminate an in-flight activity execution.
     /// </para><para>
     /// Attempting to terminate a completed or non-existent orchestration instance will fail silently.
     /// </para>
@@ -181,6 +183,8 @@ public abstract class DurableTaskClient : IAsyncDisposable
         string instanceId,
         bool getInputsAndOutputs = false);
 
+    // TODO: Multi-instance query
+
     /// <summary>
     /// Purges orchestration instance metadata from the durable store.
     /// </summary>
@@ -188,7 +192,7 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// <para>
     /// This method can be used to permanently delete orchestration metadata from the underlying storage provider,
     /// including any stored inputs, outputs, and orchestration history records. This is often useful for implementing
-    /// data retension policies and for keeping storage costs minimal. Only orchestration instances in the 
+    /// data retention policies and for keeping storage costs minimal. Only orchestration instances in the 
     /// <see cref="OrchestrationRuntimeStatus.Completed"/>, <see cref="OrchestrationRuntimeStatus.Failed"/>, or
     /// <see cref="OrchestrationRuntimeStatus.Terminated"/> state can be purged.
     /// </para><para>
@@ -206,6 +210,12 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// was successfully purged.
     /// </returns>
     public abstract Task<PurgeResult> PurgeInstanceMetadataAsync(string instanceId, CancellationToken cancellation = default);
+
+    // TODO: Multi-instance purge
+
+    // TODO: Create task hub
+
+    // TODO: Delete task hub
 
     /// <summary>
     /// Disposes any unmanaged resources associated with this <see cref="DurableTaskClient"/>.

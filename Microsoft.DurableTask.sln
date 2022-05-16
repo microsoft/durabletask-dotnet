@@ -33,6 +33,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Microsoft.DurableTask.Gener
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{49BB7008-CA04-4631-91DB-63F7F94DD424}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetFxConsoleApp", "samples\NetFxConsoleApp\NetFxConsoleApp.csproj", "{7B983DDB-68F7-4E50-9ED1-F1860736A117}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -63,6 +65,8 @@ Global
 		{F4FA624E-4938-44AA-87A5-5C1E1F387F90}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F4FA624E-4938-44AA-87A5-5C1E1F387F90}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F4FA624E-4938-44AA-87A5-5C1E1F387F90}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7B983DDB-68F7-4E50-9ED1-F1860736A117}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7B983DDB-68F7-4E50-9ED1-F1860736A117}.Release|Any CPU.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -74,6 +78,7 @@ Global
 		{BF343A6F-47D8-4514-AEC7-B9C3DA693A83} = {7EA86372-16CC-4CBD-B8EF-E0B6BCA3A3E6}
 		{A330B024-7530-4556-B334-B0744C0EBB6D} = {49BB7008-CA04-4631-91DB-63F7F94DD424}
 		{F4FA624E-4938-44AA-87A5-5C1E1F387F90} = {44960EF6-0203-4799-954A-CBAF1E3962C9}
+		{7B983DDB-68F7-4E50-9ED1-F1860736A117} = {7EA86372-16CC-4CBD-B8EF-E0B6BCA3A3E6}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {E42B951D-3936-42EA-83AD-C65591D76C91}

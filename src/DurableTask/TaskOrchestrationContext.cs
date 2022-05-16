@@ -30,7 +30,7 @@ public abstract class TaskOrchestrationContext
     /// execution. It is a deterministic, replay-safe replacement for existing .NET APIs for getting
     /// the curren time, such as <see cref="DateTime.UtcNow"/> and <see cref="DateTimeOffset.UtcNow"/>.
     /// </remarks>
-    public abstract DateTime CurrentDateTimeUtc { get; }
+    public abstract DateTime CurrentUtcDateTime { get; }
 
     /// <summary>
     /// Gets a value indicating whether the orchestrator is currently replaying a previous execution.
@@ -82,7 +82,7 @@ public abstract class TaskOrchestrationContext
 
     public virtual Task CreateTimer(TimeSpan delay, CancellationToken cancellationToken)
     {
-        DateTime fireAt = this.CurrentDateTimeUtc.Add(delay);
+        DateTime fireAt = this.CurrentUtcDateTime.Add(delay);
         return this.CreateTimer(fireAt, cancellationToken);
     }
 

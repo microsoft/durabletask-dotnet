@@ -13,6 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using P = Microsoft.DurableTask.Protobuf;
+using Microsoft.DurableTask.Options;
 
 namespace Microsoft.DurableTask;
 
@@ -78,8 +79,13 @@ public static class OrchestrationRunner
         DataConverter dataConverter = services?.GetService<DataConverter>() ?? SdkUtils.DefaultDataConverter;
         ILoggerFactory loggerFactory = services?.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance;
         ILogger logger = SdkUtils.GetLogger(loggerFactory);
+        TimerOptions timerOptions = TimerOptions.Default; // TODO: Support loading timer options from configuration
 
-        WorkerContext workerContext = new(dataConverter, logger, services ?? SdkUtils.EmptyServiceProvider);
+        WorkerContext workerContext = new(
+            dataConverter,
+            logger,
+            services ?? SdkUtils.EmptyServiceProvider,
+            timerOptions);
 
         // Re-construct the orchestration state from the history.
         // New events must be added using the AddEvent method.

@@ -3,7 +3,7 @@
 
 using System;
 using DurableTask.Core;
-using Grpc.Net.Client;
+using Grpc.Core;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -18,10 +18,11 @@ namespace Microsoft.DurableTask.Tests;
 public sealed class GrpcSidecarFixture : IDisposable
 {
     // Use a random port number to allow multiple instances to run in parallel
-    readonly string listenAddress = $"http://127.0.0.1:{Random.Shared.Next(30000, 40000)}";
+    const string ListenHost = "127.0.0.1";
+    readonly int ListenPort = Random.Shared.Next(30000, 40000);
 
     readonly IWebHost host;
-    readonly GrpcChannel sidecarChannel;
+    readonly Channel sidecarChannel;
 
     public GrpcSidecarFixture()
     {
@@ -34,7 +35,7 @@ public sealed class GrpcSidecarFixture : IDisposable
                 // https://docs.microsoft.com/en-us/aspnet/core/grpc/troubleshoot?view=aspnetcore-3.0
                 options.ConfigureEndpointDefaults(listenOptions => listenOptions.Protocols = HttpProtocols.Http2);
             })
-            .UseUrls(this.listenAddress)
+            .UseUrls($"http://{ListenHost}:{this.ListenPort}")
             .ConfigureServices(services =>
             {
                 services.AddGrpc();
@@ -54,7 +55,7 @@ public sealed class GrpcSidecarFixture : IDisposable
 
         this.host.Start();
 
-        this.sidecarChannel = GrpcChannel.ForAddress(this.listenAddress);
+        this.sidecarChannel = new Channel(ListenHost, this.ListenPort, ChannelCredentials.Insecure);
     }
 
     public DurableTaskGrpcWorker.Builder GetWorkerBuilder()
@@ -72,7 +73,6 @@ public sealed class GrpcSidecarFixture : IDisposable
     public void Dispose()
     {
         this.sidecarChannel.ShutdownAsync().GetAwaiter().GetResult();
-        this.sidecarChannel.Dispose();
 
         this.host.StopAsync().GetAwaiter().GetResult();
         this.host.Dispose();

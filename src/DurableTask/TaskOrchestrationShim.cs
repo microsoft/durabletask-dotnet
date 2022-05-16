@@ -63,6 +63,9 @@ class TaskOrchestrationShim : TaskOrchestration
 
     sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     {
+        // WARNING: Changing this may be breaking for in-flight orchestrations.
+        static TimeSpan MaximumTimerInterval { get; } = TimeSpan.FromDays(3);
+
         readonly Dictionary<string, IEventSource> externalEventSources = new(StringComparer.OrdinalIgnoreCase);
         readonly NamedQueue<string> externalEventBuffer = new();
         readonly Queue<Action> localActivityCalls = new();
@@ -91,7 +94,7 @@ class TaskOrchestrationShim : TaskOrchestration
 
         public override bool IsReplaying => this.innerContext.IsReplaying;
 
-        public override DateTime CurrentDateTimeUtc => this.innerContext.CurrentUtcDateTime;
+        public override DateTime CurrentUtcDateTime => this.innerContext.CurrentUtcDateTime;
 
         public override async Task<T> CallActivityAsync<T>(
             TaskName name,
@@ -228,9 +231,13 @@ class TaskOrchestrationShim : TaskOrchestration
             }
         }
 
-        public override Task CreateTimer(DateTime fireAt, CancellationToken cancellationToken)
+        public override async Task CreateTimer(DateTime fireAt, CancellationToken cancellationToken)
         {
-            return this.innerContext.CreateTimer<object>(fireAt, state: null!, cancellationToken);
+            // Make sure we're always operating in UTC
+            DateTime finalFireAtUtc = fireAt.ToUniversalTime();
+
+            // TODO: Break long timers into multiple smaller timers
+            await this.innerContext.CreateTimer<object>(finalFireAtUtc, state: null!, cancellationToken);
         }
 
         public override Task<T> WaitForExternalEvent<T>(string eventName, CancellationToken cancellationToken = default)
@@ -261,7 +268,7 @@ class TaskOrchestrationShim : TaskOrchestration
             return eventSource.Task;
         }
 
-        public void CompleteExternalEvent(string eventName, string rawEventPayload)
+        internal void CompleteExternalEvent(string eventName, string rawEventPayload)
         {
             if (this.externalEventSources.TryGetValue(eventName, out IEventSource? waiter))
             {
@@ -319,7 +326,7 @@ class TaskOrchestrationShim : TaskOrchestration
             AsyncRetryHandler retryHandler,
             CancellationToken cancellationToken)
         {
-            DateTime startTime = this.CurrentDateTimeUtc;
+            DateTime startTime = this.CurrentUtcDateTime;
             int failureCount = 0;
 
             while (true)
@@ -347,7 +354,7 @@ class TaskOrchestrationShim : TaskOrchestration
                         this,
                         failureCount,
                         TaskFailureDetails.FromCoreException(e),
-                        this.CurrentDateTimeUtc.Subtract(startTime),
+                        this.CurrentUtcDateTime.Subtract(startTime),
                         cancellationToken);
 
                     bool keepRetrying = await retryHandler(retryContext);

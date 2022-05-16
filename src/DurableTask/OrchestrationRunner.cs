@@ -53,7 +53,10 @@ public static class OrchestrationRunner
     /// <returns>Returns a serialized set of orchestrator actions that should be used as the return value of the orchestrator function trigger.</returns>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="encodedOrchestratorRequest"/> or <paramref name="implementation"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentException">Thrown if <paramref name="encodedOrchestratorRequest"/> contains invalid data.</exception>
-    public static string LoadAndRun(string encodedOrchestratorRequest, ITaskOrchestrator implementation, IServiceProvider? services = null)
+    public static string LoadAndRun(
+        string encodedOrchestratorRequest,
+        ITaskOrchestrator implementation,
+        IServiceProvider? services = null)
     {
         if (string.IsNullOrEmpty(encodedOrchestratorRequest))
         {

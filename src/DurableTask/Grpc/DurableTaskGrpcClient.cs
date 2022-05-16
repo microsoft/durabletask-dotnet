@@ -7,7 +7,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
-using Grpc.Net.Client;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -23,7 +22,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
     readonly DataConverter dataConverter;
     readonly ILogger logger;
     readonly IConfiguration? configuration;
-    readonly GrpcChannel sidecarGrpcChannel;
+    readonly Channel sidecarGrpcChannel;
     readonly TaskHubSidecarServiceClient sidecarClient;
     readonly bool ownsChannel;
 
@@ -45,7 +44,10 @@ public class DurableTaskGrpcClient : DurableTaskClient
         else
         {
             // We have to create our own channel and are responsible for disposing it
-            this.sidecarGrpcChannel = GrpcChannel.ForAddress(builder.address ?? SdkUtils.GetSidecarAddress(this.configuration));
+            this.sidecarGrpcChannel = new Channel(
+                builder.hostname ?? SdkUtils.GetSidecarHost(this.configuration),
+                builder.port ?? SdkUtils.GetSidecarPort(this.configuration),
+                ChannelCredentials.Insecure);
             this.ownsChannel = true;
         }
         
@@ -63,7 +65,6 @@ public class DurableTaskGrpcClient : DurableTaskClient
             if (this.ownsChannel)
             {
                 await this.sidecarGrpcChannel.ShutdownAsync();
-                this.sidecarGrpcChannel.Dispose();
             }
 
             GC.SuppressFinalize(this);
@@ -239,8 +240,9 @@ public class DurableTaskGrpcClient : DurableTaskClient
         internal ILoggerFactory? loggerFactory;
         internal DataConverter? dataConverter;
         internal IConfiguration? configuration;
-        internal GrpcChannel? channel;
-        internal string? address;
+        internal Channel? channel;
+        internal string? hostname;
+        internal int? port;
 
         public Builder UseLoggerFactory(ILoggerFactory loggerFactory)
         {
@@ -254,9 +256,10 @@ public class DurableTaskGrpcClient : DurableTaskClient
             return this;
         }
 
-        public Builder UseAddress(string address)
+        public Builder UseAddress(string hostname, int? port = null)
         {
-            this.address = SdkUtils.ValidateAddress(address);
+            this.hostname = hostname;
+            this.port = port;
             return this;
         }
 
@@ -271,7 +274,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
         /// <param name="channel">The gRPC channel to use.</param>
         /// <returns>Returns this <see cref="Builder"/> instance.</returns>
         /// <exception cref="ArgumentNullException">Thrown if <paramref name="channel"/> is <c>null</c>.</exception>
-        public Builder UseGrpcChannel(GrpcChannel channel)
+        public Builder UseGrpcChannel(Channel channel)
         {
             this.channel = channel ?? throw new ArgumentNullException(nameof(channel));
             return this;

@@ -103,14 +103,14 @@ public class OrchestrationPatterns : IntegrationTestBase
             .AddTasks(tasks => tasks
                 .AddOrchestrator(orchestratorName, async ctx =>
                 {
-                    DateTime currentDate1 = ctx.CurrentDateTimeUtc;
+                    DateTime currentDate1 = ctx.CurrentUtcDateTime;
                     DateTime originalDate1 = await ctx.CallActivityAsync<DateTime>(echoActivityName, currentDate1);
                     if (currentDate1 != originalDate1)
                     {
                         return false;
                     }
 
-                    DateTime currentDate2 = ctx.CurrentDateTimeUtc;
+                    DateTime currentDate2 = ctx.CurrentUtcDateTime;
                     DateTime originalDate2 = await ctx.CallActivityAsync<DateTime>(echoActivityName, currentDate2);
                     if (currentDate2 != originalDate2)
                     {

@@ -8,9 +8,6 @@ using Microsoft.DurableTask;
 using Microsoft.DurableTask.Grpc;
 using Microsoft.Extensions.Logging;
 
-// See https://aka.ms/new-console-template for more information
-Console.WriteLine("Hello, World!");
-
 ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
 {
     builder.SetMinimumLevel(LogLevel.Debug);

@@ -4,6 +4,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using DurableTask.Core;
@@ -72,6 +74,7 @@ class TaskOrchestrationShim : TaskOrchestration
         readonly WorkerContext workerContext;
         readonly ILogger orchestratorLogger;
 
+        int newGuidCounter;
         object? customStatus;
 
         public TaskOrchestrationContextWrapper(
@@ -188,7 +191,7 @@ class TaskOrchestrationShim : TaskOrchestration
 
             // TODO: IDataConverter
 
-            instanceId ??= Guid.NewGuid().ToString("N");
+            instanceId ??= this.NewGuid().ToString("N");
 
             try
             {
@@ -321,6 +324,62 @@ class TaskOrchestrationShim : TaskOrchestration
                     this.innerContext.SendEvent(instance, eventName, eventPayload);
                 }
             }
+        }
+
+        public override Guid NewGuid()
+        {
+            static void SwapByteArrayValues(byte[] byteArray)
+            {
+                SwapByteArrayElements(byteArray, 0, 3);
+                SwapByteArrayElements(byteArray, 1, 2);
+                SwapByteArrayElements(byteArray, 4, 5);
+                SwapByteArrayElements(byteArray, 6, 7);
+            }
+
+            static void SwapByteArrayElements(byte[] byteArray, int left, int right)
+            {
+                byte temp = byteArray[left];
+                byteArray[left] = byteArray[right];
+                byteArray[right] = temp;
+            }
+
+            const string DnsNamespaceValue = "9e952958-5e33-4daf-827f-2fa12937b875";
+            const int DeterministicGuidVersion = 5;
+
+            Guid namespaceValueGuid = Guid.Parse(DnsNamespaceValue);
+
+            // The name is a combination of the instance ID, the current orchestrator date/time, and a counter.
+            string guidNameValue = string.Concat(
+                this.InstanceId,
+                "_",
+                this.CurrentUtcDateTime.ToString("o"),
+                "_",
+                this.newGuidCounter.ToString());
+
+            this.newGuidCounter++;
+
+            byte[] nameByteArray = Encoding.UTF8.GetBytes(guidNameValue);
+            byte[] namespaceValueByteArray = namespaceValueGuid.ToByteArray();
+            SwapByteArrayValues(namespaceValueByteArray);
+
+            byte[] hashByteArray;
+            using (HashAlgorithm hashAlgorithm = SHA1.Create())
+            {
+                hashAlgorithm.TransformBlock(namespaceValueByteArray, 0, namespaceValueByteArray.Length, null, 0);
+                hashAlgorithm.TransformFinalBlock(nameByteArray, 0, nameByteArray.Length);
+                hashByteArray = hashAlgorithm.Hash;
+            }
+
+            byte[] newGuidByteArray = new byte[16];
+            Array.Copy(hashByteArray, 0, newGuidByteArray, 0, 16);
+
+            int versionValue = DeterministicGuidVersion;
+            newGuidByteArray[6] = (byte)((newGuidByteArray[6] & 0x0F) | (versionValue << 4));
+            newGuidByteArray[8] = (byte)((newGuidByteArray[8] & 0x3F) | 0x80);
+
+            SwapByteArrayValues(newGuidByteArray);
+
+            return new Guid(newGuidByteArray);
         }
 
         internal string? GetDeserializedCustomStatus()

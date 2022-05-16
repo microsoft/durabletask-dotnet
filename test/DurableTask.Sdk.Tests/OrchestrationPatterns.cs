@@ -466,6 +466,57 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal(eventPayload, metadata.ReadCustomStatusAs<(string, int)>());
     }
 
+    [Fact]
+    public async Task NewGuidTest()
+    {
+        TaskName orchestratorName = nameof(ContinueAsNew);
+        TaskName echoActivityName = "Echo";
+
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
+            .AddTasks(tasks => tasks
+                .AddOrchestrator<int, bool>(orchestratorName, async (ctx, input) =>
+                {
+                    // Test 1: Ensure two consequitively created GUIDs are unique
+                    Guid currentGuid0 = ctx.NewGuid();
+                    Guid currentGuid1 = ctx.NewGuid();
+                    if (currentGuid0 == currentGuid1)
+                    {
+                        return false;
+                    }
+
+                    // Test 2: Ensure that the same GUID values are created on each replay
+                    Guid originalGuid1 = await ctx.CallActivityAsync<Guid>(echoActivityName, currentGuid1);
+                    if (currentGuid1 != originalGuid1)
+                    {
+                        return false;
+                    }
+
+                    // Test 3: Ensure that the same GUID values are created on each replay even after an await
+                    Guid currentGuid2 = ctx.NewGuid();
+                    Guid originalGuid2 = await ctx.CallActivityAsync<Guid>(echoActivityName, currentGuid2);
+                    if (currentGuid2 != originalGuid2)
+                    {
+                        return false;
+                    }
+
+                    // Test 4: Finish confirming that every generated GUID is unique
+                    return currentGuid1 != currentGuid2;
+                })
+                .AddActivity<Guid, Guid>(echoActivityName, (ctx, input) => input))
+            .Build();
+        await server.StartAsync(this.TimeoutToken);
+
+        DurableTaskClient client = this.CreateDurableTaskClient();
+        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
+            instanceId,
+            this.TimeoutToken,
+            getInputsAndOutputs: true);
+        Assert.NotNull(metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.True(metadata.ReadOutputAs<bool>());
+    }
+
     // TODO: Test for multiple external events with the same name
     // TODO: Test for ContinueAsNew with external events that carry over
     // TODO: Test for catching activity exceptions of specific types

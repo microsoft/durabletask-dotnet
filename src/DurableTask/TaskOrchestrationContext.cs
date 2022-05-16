@@ -238,6 +238,17 @@ public abstract class TaskOrchestrationContext
     public abstract void ContinueAsNew(object newInput, bool preserveUnprocessedEvents = true);
 
     /// <summary>
+    /// Creates a new GUID that is safe for replay within an orchestration or operation.
+    /// </summary>
+    /// <remarks>
+    /// The default implementation of this method creates a name-based UUID V5 using the algorithm from RFC 4122 §4.3.
+    /// The name input used to generate this value is a combination of the orchestration instance ID, the current time,
+    /// and an internally managed sequence number.
+    /// </remarks>
+    /// <returns>The new <see cref="Guid"/> value.</returns>
+    public abstract Guid NewGuid();
+
+    /// <summary>
     /// Returns an instance of <see cref="ILogger"/> that is replay-safe, meaning that the logger only
     /// writes logs when the orchestrator is not replaying previous history.
     /// </summary>

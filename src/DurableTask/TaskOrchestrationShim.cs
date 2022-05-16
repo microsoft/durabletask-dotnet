@@ -63,9 +63,6 @@ class TaskOrchestrationShim : TaskOrchestration
 
     sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     {
-        // WARNING: Changing this may be breaking for in-flight orchestrations.
-        static TimeSpan MaximumTimerInterval { get; } = TimeSpan.FromDays(3);
-
         readonly Dictionary<string, IEventSource> externalEventSources = new(StringComparer.OrdinalIgnoreCase);
         readonly NamedQueue<string> externalEventBuffer = new();
         readonly Queue<Action> localActivityCalls = new();
@@ -236,7 +233,18 @@ class TaskOrchestrationShim : TaskOrchestration
             // Make sure we're always operating in UTC
             DateTime finalFireAtUtc = fireAt.ToUniversalTime();
 
-            // TODO: Break long timers into multiple smaller timers
+            // Longer timers are broken down into smaller timers. For example, if fireAt is 7 days from now
+            // and the max interval is 3 days, there will be two 3-day timers and a single one-day timer.
+            // This is primarily to support backends that don't support infinite timers, like Azure Storage.
+            TimeSpan maximumTimerInterval = this.workerContext.TimerOptions.MaximumTimerInterval;
+            TimeSpan remainingTime = finalFireAtUtc.Subtract(this.CurrentUtcDateTime);
+            while (remainingTime > maximumTimerInterval && !cancellationToken.IsCancellationRequested)
+            {
+                DateTime nextFireAt = this.CurrentUtcDateTime.Add(maximumTimerInterval);
+                await this.innerContext.CreateTimer<object>(nextFireAt, state: null!, cancellationToken);
+                remainingTime = finalFireAtUtc.Subtract(this.CurrentUtcDateTime);
+            }
+
             await this.innerContext.CreateTimer<object>(finalFireAtUtc, state: null!, cancellationToken);
         }
 

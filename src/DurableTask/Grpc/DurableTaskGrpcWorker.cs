@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using DurableTask.Core;
 using DurableTask.Core.History;
 using Grpc.Core;
+using Microsoft.DurableTask.Options;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -54,7 +55,8 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
         this.workerContext = new WorkerContext(
             this.dataConverter,
             this.logger,
-            this.services);
+            this.services,
+            builder.timerOptions ?? TimerOptions.Default);
 
         this.orchestrators = builder.taskProvider.orchestratorsBuilder.ToImmutable();
         this.activities = builder.taskProvider.activitiesBuilder.ToImmutable();
@@ -472,6 +474,7 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
         internal DataConverter? dataConverter;
         internal IServiceProvider? services;
         internal IConfiguration? configuration;
+        internal TimerOptions? timerOptions;
         internal string? hostname;
         internal int? port;
         internal Channel? channel;
@@ -527,6 +530,12 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
         public Builder UseConfiguration(IConfiguration configuration)
         {
             this.configuration = configuration;
+            return this;
+        }
+
+        public Builder UseTimerOptions(TimerOptions timerOptions)
+        {
+            this.timerOptions = timerOptions;
             return this;
         }
 

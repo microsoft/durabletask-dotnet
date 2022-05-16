@@ -8,6 +8,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.DurableTask.Grpc;
+using Microsoft.DurableTask.Options;
+using Microsoft.DurableTask.Tests.Logging;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -58,6 +60,37 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         // Verify that the delay actually happened
         Assert.True(metadata.CreatedAt.Add(delay) <= metadata.LastUpdatedAt);
+    }
+
+    [Fact]
+    public async Task LongTimer()
+    {
+        TaskName orchestratorName = nameof(SingleTimer);
+        TimeSpan delay = TimeSpan.FromSeconds(7);
+        TimeSpan timerInterval = TimeSpan.FromSeconds(3);
+        const int ExpectedTimers = 3; // two for 3 seconds and one for 1 second
+
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
+            .UseTimerOptions(new TimerOptions { MaximumTimerInterval = timerInterval })
+            .AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, ctx => ctx.CreateTimer(delay, CancellationToken.None)))
+            .Build();
+        await server.StartAsync(this.TimeoutToken);
+
+        DurableTaskClient client = this.CreateDurableTaskClient();
+        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+
+        // Verify that the delay actually happened
+        Assert.True(metadata.CreatedAt.Add(delay) <= metadata.LastUpdatedAt);
+
+        // Verify that the correct number of timers were created
+        IReadOnlyCollection<LogEntry> logs = this.GetLogs();
+        int timersCreated = logs.Count(log => log.Message.Contains("CreateTimer"));
+        Assert.Equal(ExpectedTimers, timersCreated);
     }
 
     [Fact]

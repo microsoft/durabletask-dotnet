@@ -7,8 +7,13 @@ using DurableTask.Core.Exceptions;
 namespace Microsoft.DurableTask;
 
 /// <summary>
-/// Exception that gets thrown when when a durable task, such as an activity or a sub-orchestration, fails with an unhandled exception.
+/// Exception that gets thrown when when a durable task, such as an activity or a sub-orchestration, fails with an
+/// unhandled exception.
 /// </summary>
+/// <remarks>
+/// Detailed information associated with a particular task failure, including exception details, can be found in the 
+/// <see cref="FailureDetails"/> property.
+/// </remarks>
 public sealed class TaskFailedException : Exception
 {
     internal TaskFailedException(string taskName, int taskId, OrchestrationException cause)
@@ -27,10 +32,16 @@ public sealed class TaskFailedException : Exception
     /// <summary>
     /// Gets the ID of the failed task.
     /// </summary>
+    /// <remarks>
+    /// Each durable task (activities, timers, sub-orchestrations, etc.) scheduled by a task orchestrator has an
+    /// auto-incremeting ID associated with it. This is used to distinguish tasks from one another, even if, for
+    /// example, they are tasks that call the same activity. This ID can therefore be used to more easily correlate a
+    /// specific task failure to a specific task.
+    /// </remarks>
     public int TaskId { get; }
 
     /// <summary>
-    /// Gets the details of the task failure.
+    /// Gets the details of the task failure, including exception information.
     /// </summary>
     public TaskFailureDetails FailureDetails { get; }
 
@@ -43,7 +54,10 @@ public sealed class TaskFailedException : Exception
     /// and therefore doesn't support base types.
     /// </remarks>
     /// <typeparam name="T">The type of exception to test against.</typeparam>
-    /// <returns>Returns <c>true</c> if the <see cref="ErrorType"/> value matches <typeparamref name="T"/>; <c>false</c> otherwise.</returns>
+    /// <returns>
+    /// Returns <c>true</c> if the <see cref="FailureDetails"/>'s <see cref="TaskFailureDetails.ErrorType"/> value
+    /// matches <typeparamref name="T"/>; <c>false</c> otherwise.
+    /// </returns>
     public bool IsCausedByException<T>() where T : Exception => this.FailureDetails.ErrorType == typeof(T).FullName;
 
     static string GetExceptionMessage(string taskName, int taskId, OrchestrationException cause)

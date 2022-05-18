@@ -13,11 +13,13 @@ public class TimerOptions
     internal static TimerOptions Default { get; set; } = new();
 
     /// <summary>
-    /// Sets the maximum timer interval for the <see cref="TaskOrchestrationContext.CreateTimer"/> method.
+    /// Sets the maximum timer interval for the
+    /// <see cref="TaskOrchestrationContext.CreateTimer(TimeSpan, System.Threading.CancellationToken)"/> method.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The default maximum timer interval is 3 days. If a <see cref="TaskOrchestrationContext.CreateTimer"/> call 
+    /// The default maximum timer interval is 3 days. If a
+    /// <see cref="TaskOrchestrationContext.CreateTimer(TimeSpan, System.Threading.CancellationToken)"/> call 
     /// specifies a 7-day timer, it will be implemented using three separate timers: two for 3 days and one for 1 day.
     /// </para><para>
     /// Long timers are broken up into smaller timers to support certain types of backend storage providers which have 

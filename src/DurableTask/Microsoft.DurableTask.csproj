@@ -8,6 +8,7 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>../../key.snk</AssemblyOriginatorKeyFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
   <!-- Package info -->

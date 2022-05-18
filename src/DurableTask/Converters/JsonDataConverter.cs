@@ -24,7 +24,7 @@ public class JsonDataConverter : DataConverter
 
     readonly JsonSerializerOptions? options;
 
-    public JsonDataConverter(JsonSerializerOptions? options = null)
+    JsonDataConverter(JsonSerializerOptions? options = null)
     {
         if (options != null)
         {
@@ -36,11 +36,13 @@ public class JsonDataConverter : DataConverter
         }
     }
 
+    /// <inheritdoc/>
     public override string? Serialize(object? value)
     {
         return value != null ? JsonSerializer.Serialize(value, this.options) : null;
     }
 
+    /// <inheritdoc/>
     public override object? Deserialize(string? data, Type targetType)
     {
         return data != null ? JsonSerializer.Deserialize(data, targetType, this.options) : null;

@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <AzureFunctionsVersion>v4</AzureFunctionsVersion>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.5.0-preview2" OutputItemType="Analyzer" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="1.8.0-preview3" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="0.4.0-beta" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.0.13" />
+  </ItemGroup>
+
+  <!-- These project dependencies are not required in real apps because they're pulled in automatically by Microsoft.Azure.Functions.Worker.Extensions.DurableTask -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DurableTask.Generators\Microsoft.DurableTask.Generators.csproj" OutputItemType="Analyzer"/>
+    <ProjectReference Include="..\..\src\DurableTask\Microsoft.DurableTask.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="host.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="local.settings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+</Project>

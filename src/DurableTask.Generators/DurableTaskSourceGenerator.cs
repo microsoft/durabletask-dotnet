@@ -92,7 +92,7 @@ namespace Microsoft.DurableTask
                 foreach (DurableTaskTypeInfo orchestrator in receiver.Orchestrators)
                 {
                     sourceBuilder.AppendLine($@"
-        static readonly {orchestrator.TypeName} singleton{orchestrator.TaskName} = new {orchestrator.TypeName}();");
+        static readonly ITaskOrchestrator singleton{orchestrator.TaskName} = new {orchestrator.TypeName}();");
                 }
             }
 
@@ -154,9 +154,10 @@ namespace Microsoft.DurableTask
         {
             sourceBuilder.AppendLine($@"
         [Function(nameof({orchestrator.TaskName}))]
-        public static string {orchestrator.TaskName}([OrchestrationTrigger] string orchestratorState, FunctionContext executionContext)
+        public static Task<{orchestrator.OutputType}> {orchestrator.TaskName}([OrchestrationTrigger] TaskOrchestrationContext context)
         {{
-            return OrchestrationRunner.LoadAndRun(orchestratorState, singleton{orchestrator.TaskName}, executionContext.InstanceServices);
+            return singleton{orchestrator.TaskName}.RunAsync(context, context.GetInput<{orchestrator.InputType}>())
+                .ContinueWith(t => ({orchestrator.OutputType})(t.Result ?? default({orchestrator.OutputType})!), TaskContinuationOptions.ExecuteSynchronously);
         }}");
         }
 

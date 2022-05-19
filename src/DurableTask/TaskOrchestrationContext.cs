@@ -55,6 +55,17 @@ public abstract class TaskOrchestrationContext
     /// <c>true</c> if the orchestrator is currently replaying a previous execution; otherwise <c>false</c>.
     /// </value>
     public abstract bool IsReplaying { get; }
+    
+    // NOTE: This API is redundant and may be removed in a future version.
+    /// <summary>
+    /// Gets the deserialized input of the orchestrator.
+    /// </summary>
+    /// <typeparam name="T">The expected type of the orchestrator input.</typeparam>
+    /// <returns>
+    /// Returns the deserialized input as an object of type <typeparamref name="T"/> or <c>null</c> if no input was
+    /// provided.
+    /// </returns>
+    public abstract T? GetInput<T>();
 
     /// <summary>
     /// Asynchronously invokes an activity by name and with the specified input value.

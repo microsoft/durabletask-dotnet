@@ -128,12 +128,13 @@ namespace MyNS
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
-static readonly MyNS.MyOrchestrator singletonMyOrchestrator = new MyNS.MyOrchestrator();
+static readonly ITaskOrchestrator singletonMyOrchestrator = new MyNS.MyOrchestrator();
 
 [Function(nameof(MyOrchestrator))]
-public static string MyOrchestrator([OrchestrationTrigger] string orchestratorState, FunctionContext executionContext)
+public static Task<{outputType}> MyOrchestrator([OrchestrationTrigger] TaskOrchestrationContext context)
 {{
-    return OrchestrationRunner.LoadAndRun(orchestratorState, singletonMyOrchestrator, executionContext.InstanceServices);
+    return singletonMyOrchestrator.RunAsync(context, context.GetInput<{inputType}>())
+        .ContinueWith(t => ({outputType})(t.Result ?? default({outputType})!), TaskContinuationOptions.ExecuteSynchronously);
 }}
 
 /// <inheritdoc cref=""DurableTaskClient.ScheduleNewOrchestrationInstanceAsync""/>
@@ -212,12 +213,13 @@ namespace MyNS
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
-static readonly MyNS.MyOrchestrator singletonMyOrchestrator = new MyNS.MyOrchestrator();
+static readonly ITaskOrchestrator singletonMyOrchestrator = new MyNS.MyOrchestrator();
 
 [Function(nameof(MyOrchestrator))]
-public static string MyOrchestrator([OrchestrationTrigger] string orchestratorState, FunctionContext executionContext)
+public static Task<{outputType}> MyOrchestrator([OrchestrationTrigger] TaskOrchestrationContext context)
 {{
-    return OrchestrationRunner.LoadAndRun(orchestratorState, singletonMyOrchestrator, executionContext.InstanceServices);
+    return singletonMyOrchestrator.RunAsync(context, context.GetInput<{inputType}>())
+        .ContinueWith(t => ({outputType})(t.Result ?? default({outputType})!), TaskContinuationOptions.ExecuteSynchronously);
 }}
 
 /// <inheritdoc cref=""DurableTaskClient.ScheduleNewOrchestrationInstanceAsync""/>

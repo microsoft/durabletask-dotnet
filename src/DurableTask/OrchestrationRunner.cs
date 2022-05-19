@@ -17,6 +17,18 @@ using Microsoft.DurableTask.Options;
 
 namespace Microsoft.DurableTask;
 
+/// <summary>
+/// Helper class for invoking orchestration's directly, without building a <see cref="DurableTaskGrpcWorker"/> instance.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This static class can be used to execute orchestration logic directly. In order to use it for this purpose, the
+/// caller must provide orchestration state as serialized protobuf bytes.
+/// </para><para>
+/// The Azure Functions .NET worker extension is the primary intended user of this class, where orchestration state
+/// is provided by trigger bindings.
+/// </para>
+/// </remarks>
 public static class OrchestrationRunner
 {
     /// <summary>

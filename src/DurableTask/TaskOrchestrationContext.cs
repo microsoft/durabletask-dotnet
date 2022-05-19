@@ -8,7 +8,10 @@ using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask;
 
-// TODO: Summary and detailed description in the remarks
+/// <summary>
+/// Context object used by orchestrators to perform actions such as scheduling tasks, durable timers, waiting for
+/// external events, and for getting basic information about the current orchestration.
+/// </summary>
 public abstract class TaskOrchestrationContext
 {
     /// <summary>
@@ -53,12 +56,40 @@ public abstract class TaskOrchestrationContext
     /// </value>
     public abstract bool IsReplaying { get; }
 
-    // TODO: Summary and detailed remarks
+    /// <summary>
+    /// Asynchronously invokes an activity by name and with the specified input value.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Activities are the basic unit of work in a durable task orchestration. Unlike orchestrators, which are not
+    /// allowed to do any I/O or call non-deterministic APIs, activities have no implementation restrictions.
+    /// </para><para>
+    /// An activity may execute in the local machine or a remote machine. The exact behavior depends on the underlying
+    /// storage provider, which is responsible for distributing tasks across machines. In general, you should never make
+    /// any assumptions about where an activity will run. You should also assume at-least-once execution guarantees for
+    /// activities, meaning that an activity may be executed twice if, for example, there is a process failure before
+    /// the activities result is saved into storage.
+    /// </para><para>
+    /// Both the inputs and outputs of activities are serialized and stored in durable storage. It's highly recommended
+    /// to not include any sensitive data in activity inputs or outputs. It's also recommended to not use large payloads
+    /// for activity inputs and outputs, which can result in expensive serialization and network utilization. For data
+    /// that cannot be cheaply or safely persisted to storage, it's recommended to instead pass <em>references</em> 
+    /// (for example, a URL to a storage blog) to the data and have activities fetch the data directly as part of their
+    /// implementation.
+    /// </para>
+    /// </remarks>
     /// <param name="name">The name of the activity to call.</param>
     /// <param name="input">The serializable input to pass to the activity.</param>
     /// <param name="options">Additional options that control the execution and processing of the activity.</param>
     /// <returns>A task that completes when the activity completes or fails.</returns>
     /// <exception cref="ArgumentException">The specified orchestrator does not exist.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if the calling thread is anything other than the main orchestrator thread.
+    /// </exception>
+    /// <exception cref="TaskFailedException">
+    /// The activity failed with an unhandled exception. The details of the failure can be found in the
+    /// <see cref="TaskFailedException.FailureDetails"/> property.
+    /// </exception>
     public virtual Task CallActivityAsync(TaskName name, object? input = null, TaskOptions? options = null)
     {
         return this.CallActivityAsync<object>(name, input, options);
@@ -68,7 +99,9 @@ public abstract class TaskOrchestrationContext
     /// <inheritdoc cref="CallActivityAsync"/>
     public abstract Task<T> CallActivityAsync<T>(TaskName name, object? input = null, TaskOptions? options = null);
 
-    // TODO: Summary
+    /// <summary>
+    /// Asynchronously invokes an activity function on the current machine.
+    /// </summary>
     /// <remarks>
     /// <para>
     /// Unlike named activities, anonymous activities are triggered in local memory and always run in the same process
@@ -76,41 +109,79 @@ public abstract class TaskOrchestrationContext
     /// the previous orchestration execution will be re-run to re-schedule the anonymous activity.
     /// </para>
     /// </remarks>
-    /// <inheritdoc cref="CallActivityAsync{T}"/>
+    /// <inheritdoc cref="CallActivityAsync{T}(TaskName, object?, TaskOptions?)"/>
     [Obsolete("This method is not yet fully implemented")]
     public abstract Task<T> CallActivityAsync<T>(Func<object?, T> activityLambda, object? input = null, TaskOptions? options = null);
 
+    /// <summary>
+    /// Creates a durable timer that expires after the specified delay.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// All durable timers created using this method must either expire or be cancelled using the
+    /// <paramref name="cancellationToken"/> before the orchestrator can complete. If unexpired timers exist when the
+    /// orchestration completes, it will remain in the "Running" state until the scheduled expiration time.
+    /// </para><para>
+    /// Specifying a long delay (for example, a delay of a few days or more) may result in the creation of multiple,
+    /// internally-managed durable timers. The orchestration code doesn't need to be aware of this behavior. However,
+    /// it may be visible in framework logs and the stored history state.
+    /// </para>
+    /// </remarks>
+    /// <param name="delay">The amount of time before the timer should expire.</param>
+    /// <param name="cancellationToken">Used to cancel the durable timer.</param>
+    /// <returns>A task that completes when the durable timer expires.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if the calling thread is anything other than the main orchestrator thread.
+    /// </exception>
     public virtual Task CreateTimer(TimeSpan delay, CancellationToken cancellationToken)
     {
         DateTime fireAt = this.CurrentUtcDateTime.Add(delay);
         return this.CreateTimer(fireAt, cancellationToken);
     }
 
+    /// <summary>
+    /// Creates a durable timer that expires at a set date and time.
+    /// </summary>
+    /// <param name="fireAt">The time at which the timer should expire.</param>
+    /// <param name="cancellationToken">Used to cancel the durable timer.</param>
+    /// <inheritdoc cref="CreateTimer(TimeSpan, CancellationToken)"/>
     public abstract Task CreateTimer(DateTime fireAt, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Waits for an event to be raised with name <paramref name="name"/> and returns the event data.
+    /// Waits for an event to be raised with name <paramref name="eventName"/> and returns the event data.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// External clients can raise events to a waiting orchestration instance using
-    /// the <see cref="DurableTaskClient.RaiseEventAsync"/> method.
+    /// External clients can raise events to a waiting orchestration instance using the 
+    /// <see cref="DurableTaskClient.RaiseEventAsync"/> method.
     /// </para><para>
     /// If the current orchestrator instance is not yet waiting for an event named <paramref name="eventName"/>,
-    /// then the event will be saved in the orchestration instance state and dispatched immediately when
-    /// <see cref="WaitForExternalEvent{T}"/> is called. This event saving occurs even 
-    /// if the current orchestrator cancels the wait operation before the event is received.
+    /// then the event will be saved in the orchestration instance state and dispatched immediately when this method is
+    /// called. This event saving occurs even if the current orchestrator cancels the wait operation before the event is
+    /// received.
     /// </para><para>
-    /// Orchestrators can wait for the same event name multiple times, so waiting for multiple events with the same name is
-    /// allowed. Each external event received by an orchestrator will complete just one task returned by this method.
+    /// Orchestrators can wait for the same event name multiple times, so waiting for multiple events with the same name
+    /// is allowed. Each external event received by an orchestrator will complete just one task returned by this method.
     /// </para>
     /// </remarks>
-    /// <param name="name">The name of the event to wait for. Event names are case-insensitive. External event names can be reused any number of times; they are not required to be unique.</param>
-    /// <param name="cancelToken">A <c>CancellationToken</c> to use to abort waiting for the event.</param>
+    /// <param name="eventName">
+    /// The name of the event to wait for. Event names are case-insensitive. External event names can be reused any
+    /// number of times; they are not required to be unique.
+    /// </param>
+    /// <param name="cancellationToken">A <c>CancellationToken</c> to use to abort waiting for the event.</param>
     /// <typeparam name="T">Any serializable type that represents the event payload.</typeparam>
-    /// <returns>A task that completes when the external event is received. The value of the task is the deserialized event payload.</returns>
+    /// <returns>
+    /// A task that completes when the external event is received. The value of the task is the deserialized event payload.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if the calling thread is anything other than the main orchestrator thread.
+    /// </exception>
     public abstract Task<T> WaitForExternalEvent<T>(string eventName, CancellationToken cancellationToken = default);
 
+    /// <param name="eventName">
+    /// The name of the event to wait for. Event names are case-insensitive. External event names can be reused any
+    /// number of times; they are not required to be unique.
+    /// </param>
     /// <param name="timeout">The amount of time to wait before cancelling the external event task.</param>
     /// <inheritdoc cref="WaitForExternalEvent(string, CancellationToken)"/>
     public async Task<T> WaitForExternalEvent<T>(string eventName, TimeSpan timeout)
@@ -142,12 +213,16 @@ public abstract class TaskOrchestrationContext
     /// </summary>
     /// <remarks>
     /// The <paramref name="customStatus"/> value is serialized and stored in orchestration state and will
-    /// be made available to the orchestration status query APIs, such as <see cref="DurableTaskClient.GetInstanceMetadata"/>.
-    /// The serialized value must not exceed 16 KB of UTF-16 encoded text.
+    /// be made available to the orchestration status query APIs, such as
+    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync(string, bool)"/>. The serialized value must not exceed
+    /// 16 KB of UTF-16 encoded text.
     /// </remarks>
     /// <param name="customStatus">
     /// A serializable value to assign as the custom status value or <c>null</c> to clear the custom status.
     /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if the calling thread is anything other than the main orchestrator thread.
+    /// </exception>
     public abstract void SetCustomStatus(object? customStatus);
 
     /// <summary>
@@ -163,8 +238,6 @@ public abstract class TaskOrchestrationContext
         object? input = null,
         TaskOptions? options = null);
 
-    // TODO: Exception documentation for sub-orchestrator failures
-    // TODO: Optional CancellationToken parameter
     /// <summary>
     /// Executes a named sub-orchestrator.
     /// </summary>
@@ -195,6 +268,13 @@ public abstract class TaskOrchestrationContext
     /// <param name="options">Additional options that control the execution and processing of the sub-orchestrator.</param>
     /// <returns>A task that completes when the sub-orchestrator completes or fails.</returns>
     /// <exception cref="ArgumentException">The specified orchestrator does not exist.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if the calling thread is anything other than the main orchestrator thread.
+    /// </exception>
+    /// <exception cref="TaskFailedException">
+    /// The activity failed with an unhandled exception. The details of the failure can be found in the
+    /// <see cref="TaskFailedException.FailureDetails"/> property.
+    /// </exception>
     public Task CallSubOrchestratorAsync(
         TaskName orchestratorName,
         string? instanceId = null,
@@ -221,8 +301,8 @@ public abstract class TaskOrchestrationContext
     /// is called before the timer fires, the timer event will be discarded. The only exception to this
     /// is external events. By default, if an external event is received by an orchestration but not yet
     /// processed, the event is saved in the orchestration state unit it is received by a call to
-    /// <see cref="WaitForExternalEvent{T}"/>. These events will continue to remain in memory even after
-    /// an orchestrator restarts using <see cref="ContinueAsNew"/>. You can disable this behavior and
+    /// <see cref="WaitForExternalEvent{T}(string, CancellationToken)"/>. These events will continue to remain in memory
+    /// even after an orchestrator restarts using <see cref="ContinueAsNew"/>. You can disable this behavior and
     /// remove any saved external events by specifying <c>false</c> for the <paramref name="preserveUnprocessedEvents"/>
     /// parameter value.
     /// </para><para>
@@ -254,7 +334,7 @@ public abstract class TaskOrchestrationContext
     /// </summary>
     /// <remarks>
     /// This method wraps the provider <paramref name="logger"/> instance with a new <see cref="ILogger"/>
-    /// implementation that only writes log messages when <see cref="this.IsReplaying"/> is <c>false</c>.
+    /// implementation that only writes log messages when <see cref="IsReplaying"/> is <c>false</c>.
     /// The resulting logger can be used normally in orchestrator code without needing to worry about duplicate
     /// log messages caused by orchestrator replays.
     /// </remarks>

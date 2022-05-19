@@ -77,7 +77,7 @@ public interface IDurableTaskRegistry
     /// <summary>
     /// Registers an activity as an asynchronous (non-blocking) lambda function.
     /// </summary>
-    /// <inheritdoc cref="AddActivity{TInput, TOutput}"/>
+    /// <inheritdoc cref="AddActivity{TInput, TOutput}(TaskName, Func{TaskActivityContext, TInput, TOutput})"/>
     public IDurableTaskRegistry AddActivity<TInput, TOutput>(
         TaskName name,
         Func<TaskActivityContext, TInput?, Task<TOutput?>> implementation);

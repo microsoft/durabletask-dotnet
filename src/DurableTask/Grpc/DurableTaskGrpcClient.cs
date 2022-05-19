@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
+using Microsoft.DurableTask.Converters;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -16,6 +17,9 @@ using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Grpc;
 
+/// <summary>
+/// Durable Task client implementation that uses gRPC to connect to a remote "sidecar" process.
+/// </summary>
 public class DurableTaskGrpcClient : DurableTaskClient
 {
     readonly IServiceProvider services;
@@ -54,10 +58,23 @@ public class DurableTaskGrpcClient : DurableTaskClient
         this.sidecarClient = new TaskHubSidecarServiceClient(this.sidecarGrpcChannel);
     }
 
+    /// <summary>
+    /// Creates a new instance of the <see cref="DurableTaskGrpcClient"/> class with default configuration.
+    /// </summary>
+    /// <remarks>
+    /// You can use the <see cref="CreateBuilder"/> method to create client with non-default configuration.
+    /// </remarks>
+    /// <returns>Returns a new instance of the <see cref="DurableTaskGrpcClient"/> class.</returns>
     public static DurableTaskClient Create() => CreateBuilder().Build();
 
+    /// <summary>
+    /// Creates a new instance of the <see cref="Builder"/> class, which can be used to construct customized
+    /// <see cref="DurableTaskClient"/> instances.
+    /// </summary>
+    /// <returns>Returns a new <see cref="Builder"/> object.</returns>
     public static Builder CreateBuilder() => new();
 
+    /// <inheritdoc/>
     public override async ValueTask DisposeAsync()
     {
         if (!this.isDisposed)
@@ -126,7 +143,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
         await this.sidecarClient.RaiseEventAsync(request);
     }
 
-
+    /// <inheritdoc/>
     public override async Task TerminateAsync(string instanceId, object? output)
     {
         if (string.IsNullOrEmpty(instanceId))
@@ -234,6 +251,9 @@ public class DurableTaskGrpcClient : DurableTaskClient
         throw new NotImplementedException();
     }
 
+    /// <summary>
+    /// Builder object for constructing customized <see cref="DurableTaskClient"/> instances.
+    /// </summary>
     public sealed class Builder
     {
         internal IServiceProvider? services;
@@ -244,18 +264,47 @@ public class DurableTaskGrpcClient : DurableTaskClient
         internal string? hostname;
         internal int? port;
 
+        /// <summary>
+        /// Configures a logger factory to be used by the client.
+        /// </summary>
+        /// <remarks>
+        /// Use this method to configure a logger factory explicitly. Otherwise, the client creation process will try
+        /// to discover a logger factory from dependency-injected services (see the 
+        /// <see cref="UseServices(IServiceProvider)"/> method).
+        /// </remarks>
+        /// <param name="loggerFactory">
+        /// The logger factory to use or <c>null</c> to rely on default logging configuration.
+        /// </param>
+        /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
         public Builder UseLoggerFactory(ILoggerFactory loggerFactory)
         {
-            this.loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
+            this.loggerFactory = loggerFactory;
             return this;
         }
 
+        /// <summary>
+        /// Configures a dependency-injection service provider to use when constructing the client.
+        /// </summary>
+        /// <param name="services">
+        /// The dependency-injection service provider to configure or <c>null</c> to disable service discovery.</param>
+        /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
         public Builder UseServices(IServiceProvider services)
         {
-            this.services = services ?? throw new ArgumentNullException(nameof(services));
+            this.services = services;
             return this;
         }
 
+        /// <summary>
+        /// Explicitly configures the gRPC endpoint to connect to, including the hostname and port.
+        /// </summary>
+        /// <remarks>
+        /// If not specified, the client creation process will try to resolve the endpoint from configuration (see
+        /// the <see cref="UseConfiguration(IConfiguration)"/> method). Otherwise, 127.0.0.0:4001 will be used as the
+        /// default gRPC endpoint address.
+        /// </remarks>
+        /// <param name="hostname">The hostname of the target gRPC endpoint. The default value is "127.0.0.1".</param>
+        /// <param name="port">The port number of the target gRPC endpoint. The default value is 4001.</param>
+        /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
         public Builder UseAddress(string hostname, int? port = null)
         {
             this.hostname = hostname;
@@ -264,7 +313,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
         }
 
         /// <summary>
-        /// Configures a <see cref="GrpcChannel"/> to use for communicating with the sidecar process.
+        /// Configures a gRPC <see cref="Channel"/> to use for communicating with the sidecar process.
         /// </summary>
         /// <remarks>
         /// This builder method allows you to provide your own gRPC channel for communicating with the Durable Task
@@ -272,26 +321,43 @@ public class DurableTaskGrpcClient : DurableTaskClient
         /// Rather, the caller remains responsible for shutting down the channel after disposing the client.
         /// </remarks>
         /// <param name="channel">The gRPC channel to use.</param>
-        /// <returns>Returns this <see cref="Builder"/> instance.</returns>
-        /// <exception cref="ArgumentNullException">Thrown if <paramref name="channel"/> is <c>null</c>.</exception>
+        /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
         public Builder UseGrpcChannel(Channel channel)
         {
-            this.channel = channel ?? throw new ArgumentNullException(nameof(channel));
+            this.channel = channel;
             return this;
         }
 
+        /// <summary>
+        /// Configures a data converter to use when reading and writing orchestration data payloads.
+        /// </summary>
+        /// <remarks>
+        /// The default behavior is to use the <see cref="JsonDataConverter"/>.
+        /// </remarks>
+        /// <param name="dataConverter">The data converter to use.</param>
+        /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
         public Builder UseDataConverter(DataConverter dataConverter)
         {
-            this.dataConverter = dataConverter ?? throw new ArgumentNullException(nameof(dataConverter));
+            this.dataConverter = dataConverter;
             return this;
         }
 
+        /// <summary>
+        /// Configures a configuration source to use when initializing the <see cref="DurableTaskClient"/> instance.
+        /// </summary>
+        /// <param name="configuration">The configuration source to use.</param>
+        /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
         public Builder UseConfiguration(IConfiguration configuration)
         {
             this.configuration = configuration;
             return this;
         }
 
+        /// <summary>
+        /// Initializes a new <see cref="DurableTaskClient"/> object with the settings specified in the current
+        /// builder object.
+        /// </summary>
+        /// <returns>A new <see cref="DurableTaskClient"/> object.</returns>
         public DurableTaskClient Build() => new DurableTaskGrpcClient(this);
     }
 }

@@ -22,7 +22,7 @@ public abstract class DataConverter
     /// </summary>
     /// <param name="value">The value to be serialized.</param>
     /// <returns>
-    /// Returns a serialized <c>string</c> representation of <paramref name="value"/> or <c>null</c> if the input is null.
+    /// Returns a text representation of <paramref name="value"/> or <c>null</c> if the input is null.
     /// </returns>
     [return: NotNullIfNotNull("value")]
     public abstract string? Serialize(object? value);
@@ -31,6 +31,7 @@ public abstract class DataConverter
     /// Deserializes <paramref name="data"/> into an object of type <paramref name="targetType"/>.
     /// </summary>
     /// <param name="data">The text data to be deserialized.</param>
+    /// <param name="targetType">The type to deserialize the text data into.</param>
     /// <returns>
     /// Returns a deserialized object or <c>null</c> if the input is null.
     /// </returns>

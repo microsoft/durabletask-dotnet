@@ -7,9 +7,11 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Microsoft.DurableTask;
 
+/// <summary>
+/// Extension methods for adding Durable Task support to .NET hosted services, such as ASP.NET Core hosts.
+/// </summary>
 public static class DurableTaskExtensions
 {
-    // TODO: Detailed remarks documentation, including example code.
     /// <summary>
     /// Adds Durable Task orchestration processing capabilities to the current application.
     /// </summary>

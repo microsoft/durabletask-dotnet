@@ -9,8 +9,14 @@ using P = Microsoft.DurableTask.Protobuf;
 namespace Microsoft.DurableTask;
 
 /// <summary>
-/// Represents a snapshot of an orchestration instance's current state.
+/// Represents a snapshot of an orchestration instance's current state, including metadata.
 /// </summary>
+/// <remarks>
+/// Instances of this class are produced by methods in the <see cref="DurableTaskClient"/> class, such as
+/// <see cref="DurableTaskClient.GetInstanceMetadataAsync"/>,
+/// <see cref="DurableTaskClient.WaitForInstanceStartAsync"/> and
+/// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync"/>.
+/// </remarks>
 public sealed class OrchestrationMetadata
 {
     readonly DataConverter dataConverter;
@@ -78,16 +84,15 @@ public sealed class OrchestrationMetadata
     /// Gets the failure details, if any, for the orchestration instance.
     /// </summary>
     /// <remarks>
-    /// This property contains data only if the orchestration is in the <see cref="OrchestrationRuntimeStatus.Failed"/> state,
-    /// and only if this instance metadata was fetched with the option to include output data.
+    /// This property contains data only if the orchestration is in the <see cref="OrchestrationRuntimeStatus.Failed"/>
+    /// state, and only if this instance metadata was fetched with the option to include output data.
     /// </remarks>
     public TaskFailureDetails? FailureDetails { get; }
 
     /// <summary>
     /// Gets a value indicating whether the orchestration instance was running at the time this object was fetched.
     /// </summary>
-    public bool IsRunning =>
-        this.RuntimeStatus == OrchestrationRuntimeStatus.Running;
+    public bool IsRunning => this.RuntimeStatus == OrchestrationRuntimeStatus.Running;
 
     /// <summary>
     /// Gets a value indicating whether the orchestration instance was completed at the time this object was fetched.
@@ -95,13 +100,27 @@ public sealed class OrchestrationMetadata
     /// <remarks>
     /// An orchestration instance is considered completed when its <see cref="RuntimeStatus"/> value is
     /// <see cref="OrchestrationRuntimeStatus.Completed"/>, <see cref="OrchestrationRuntimeStatus.Failed"/>,
-    /// or <see cref="Terminated"/>.
+    /// or <see cref="OrchestrationRuntimeStatus.Terminated"/>.
     /// </remarks>
     public bool IsCompleted =>
         this.RuntimeStatus == OrchestrationRuntimeStatus.Completed ||
         this.RuntimeStatus == OrchestrationRuntimeStatus.Failed ||
         this.RuntimeStatus == OrchestrationRuntimeStatus.Terminated;
 
+    /// <summary>
+    /// Deserializes the orchestration's input into an object of the specified type.
+    /// </summary>
+    /// <remarks>
+    /// This method can only be used when inputs and outputs are explicitly requested from the 
+    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync"/> or 
+    /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync"/> method that produced this
+    /// <see cref="OrchestrationMetadata"/> object.
+    /// </remarks>
+    /// <typeparam name="T">The type to deserialize the orchestration input into.</typeparam>
+    /// <returns>Returns the deserialized input value.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if this metadata object was fetched without the option to read inputs and outputs.
+    /// </exception>
     public T? ReadInputAs<T>()
     {
         if (!this.requestedInputsAndOutputs)
@@ -114,6 +133,20 @@ public sealed class OrchestrationMetadata
         return this.dataConverter.Deserialize<T>(this.SerializedInput);
     }
 
+    /// <summary>
+    /// Deserializes the orchestration's output into an object of the specified type.
+    /// </summary>
+    /// <remarks>
+    /// This method can only be used when inputs and outputs are explicitly requested from the 
+    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync"/> or 
+    /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync"/> method that produced this
+    /// <see cref="OrchestrationMetadata"/> object.
+    /// </remarks>
+    /// <typeparam name="T">The type to deserialize the orchestration output into.</typeparam>
+    /// <returns>Returns the deserialized output value.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if this metadata object was fetched without the option to read inputs and outputs.
+    /// </exception>
     public T? ReadOutputAs<T>()
     {
         if (!this.requestedInputsAndOutputs)
@@ -126,6 +159,20 @@ public sealed class OrchestrationMetadata
         return this.dataConverter.Deserialize<T>(this.SerializedOutput);
     }
 
+    /// <summary>
+    /// Deserializes the orchestration's custom status value into an object of the specified type.
+    /// </summary>
+    /// <remarks>
+    /// This method can only be used when inputs and outputs are explicitly requested from the 
+    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync"/> or 
+    /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync"/> method that produced this
+    /// <see cref="OrchestrationMetadata"/> object.
+    /// </remarks>
+    /// <typeparam name="T">The type to deserialize the orchestration' custom status into.</typeparam>
+    /// <returns>Returns the deserialized custom status value.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if this metadata object was fetched without the option to read inputs and outputs.
+    /// </exception>
     public T? ReadCustomStatusAs<T>()
     {
         if (!this.requestedInputsAndOutputs)
@@ -138,6 +185,10 @@ public sealed class OrchestrationMetadata
         return this.dataConverter.Deserialize<T>(this.SerializedCustomStatus);
     }
 
+    /// <summary>
+    /// Generates a user-friendly string representation of the current metadata object.
+    /// </summary>
+    /// <returns>A user-friendly string representation of the current metadata object.</returns>
     public override string ToString()
     {
         StringBuilder sb = new($"[Name: '{this.Name}', ID: '{this.InstanceId}', RuntimeStatus: {this.RuntimeStatus}, CreatedAt: {this.CreatedAt:s}, LastUpdatedAt: {this.LastUpdatedAt:s}");

@@ -177,11 +177,19 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// <summary>
     /// Fetches orchestration instance metadata from the configured durable store.
     /// </summary>
+    /// <remarks>
+    /// You can use the <paramref name="getInputsAndOutputs"/> parameter to determine whether to fetch input and
+    /// output data for the target orchestration instance. If your code doesn't require access to this data, it's
+    /// recommended that you set this parameter to <c>false</c> to minimize the network bandwidth, serialization, and
+    /// memory costs associated with fetching the instance metadata.
+    /// </remarks>
     /// <param name="instanceId">The unique ID of the orchestration instance to fetch.</param>
+    /// <param name="getInputsAndOutputs">
+    /// Specify <c>true</c> to fetch the orchestration instance's inputs, outputs, and custom status, or <c>false</c> to
+    /// omit them.
+    /// </param>
     /// <inheritdoc cref="WaitForInstanceStartAsync(string, CancellationToken, bool)"/>
-    public abstract Task<OrchestrationMetadata?> GetInstanceMetadataAsync(
-        string instanceId,
-        bool getInputsAndOutputs = false);
+    public abstract Task<OrchestrationMetadata?> GetInstanceMetadataAsync(string instanceId, bool getInputsAndOutputs);
 
     // TODO: Multi-instance query
 

@@ -13,17 +13,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask;
 
-class TaskOrchestrationShim<TInput, TOutput> : TaskOrchestrationShim
-{
-    public TaskOrchestrationShim(
-        WorkerContext workerContext,
-        TaskName name,
-        Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> implementation)
-        : base(workerContext, name, new FuncTaskOrchestrator<TInput, TOutput>(implementation))
-    {
-    }
-}
-
 class TaskOrchestrationShim : TaskOrchestration
 {
     readonly TaskName name;
@@ -44,9 +33,9 @@ class TaskOrchestrationShim : TaskOrchestration
 
     public override async Task<string?> Execute(OrchestrationContext innerContext, string rawInput)
     {
-        this.wrapperContext = new(innerContext, this.name, this.workerContext);
-
         object? input = this.workerContext.DataConverter.Deserialize(rawInput, this.implementation.InputType);
+        
+        this.wrapperContext = new(innerContext, this.name, this.workerContext, input);
         object? output = await this.implementation.RunAsync(this.wrapperContext, input);
 
         // Return the output (if any) as a serialized string.
@@ -73,6 +62,7 @@ class TaskOrchestrationShim : TaskOrchestration
         readonly TaskName name;
         readonly WorkerContext workerContext;
         readonly ILogger orchestratorLogger;
+        readonly object? deserializedInput;
 
         int newGuidCounter;
         object? customStatus;
@@ -80,12 +70,14 @@ class TaskOrchestrationShim : TaskOrchestration
         public TaskOrchestrationContextWrapper(
             OrchestrationContext innerContext,
             TaskName name,
-            WorkerContext workerContext)
+            WorkerContext workerContext,
+            object? deserializedInput)
         {
             this.innerContext = innerContext;
             this.name = name;
             this.workerContext = workerContext;
             this.orchestratorLogger = this.CreateReplaySafeLogger(workerContext.Logger);
+            this.deserializedInput = deserializedInput;
         }
 
         public override TaskName Name => this.name;
@@ -95,6 +87,8 @@ class TaskOrchestrationShim : TaskOrchestration
         public override bool IsReplaying => this.innerContext.IsReplaying;
 
         public override DateTime CurrentUtcDateTime => this.innerContext.CurrentUtcDateTime;
+
+        public override T GetInput<T>() => (T)this.deserializedInput!;
 
         public override async Task<T> CallActivityAsync<T>(
             TaskName name,
@@ -515,5 +509,16 @@ class TaskOrchestrationShim : TaskOrchestration
                 this.buffers.Clear();
             }
         }
+    }
+}
+
+class TaskOrchestrationShim<TInput, TOutput> : TaskOrchestrationShim
+{
+    public TaskOrchestrationShim(
+        WorkerContext workerContext,
+        TaskName name,
+        Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> implementation)
+        : base(workerContext, name, new FuncTaskOrchestrator<TInput, TOutput>(implementation))
+    {
     }
 }

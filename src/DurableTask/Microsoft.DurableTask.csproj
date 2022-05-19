@@ -2,20 +2,13 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <LangVersion>latest</LangVersion>
-    <Nullable>enable</Nullable>
-    <DebugType>embedded</DebugType>
-    <EmbedUntrackedSources>true</EmbedUntrackedSources>
-    <SignAssembly>true</SignAssembly>
-    <AssemblyOriginatorKeyFile>../../key.snk</AssemblyOriginatorKeyFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
   <!-- Package info -->
   <PropertyGroup>
-    <Company>Microsoft Corporation</Company>
-    <Product>Durable Task SDK</Product>
     <PackageId>Microsoft.DurableTask</PackageId>
+    <Product>Durable Task .NET SDK</Product>
     <Title>Durable Task .NET SDK</Title>
     <Description>.NET SDK for the Durable Task Framework.</Description>
     <PackageTags>Microsoft Durable Task Orchestration Workflow Activity Reliable</PackageTags>
@@ -26,6 +19,9 @@
   <PropertyGroup>
     <VersionPrefix>0.4.0</VersionPrefix>
     <VersionSuffix>beta</VersionSuffix>
+
+    <!-- FileVersionRevision is expected to be set by the CI. -->
+    <FileVersion Condition="'$(FileVersionRevision)' != ''">$(VersionPrefix).$(FileVersionRevision)</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

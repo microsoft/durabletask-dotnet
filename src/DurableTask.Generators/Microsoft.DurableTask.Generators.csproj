@@ -2,11 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <Nullable>enable</Nullable>
     <IsRoslynComponent>true</IsRoslynComponent>
-    <LangVersion>10.0</LangVersion>
-    <SignAssembly>true</SignAssembly>
-    <AssemblyOriginatorKeyFile>../../key.snk</AssemblyOriginatorKeyFile>
 
     <!-- Do not include the generator as a lib dependency -->
     <IncludeBuildOutput>false</IncludeBuildOutput>
@@ -14,7 +10,6 @@
   
     <!-- Package info -->
   <PropertyGroup>
-    <Company>Microsoft Corporation</Company>
     <PackageId>Microsoft.DurableTask.Generators</PackageId>
     <Product>Durable Task .NET SDK Source Generators</Product>
     <Title>Durable Task .NET SDK Source Generators</Title>

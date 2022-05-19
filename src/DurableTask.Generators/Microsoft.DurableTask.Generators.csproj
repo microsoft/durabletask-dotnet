@@ -21,6 +21,9 @@
   <PropertyGroup>
     <VersionPrefix>0.4.0</VersionPrefix>
     <VersionSuffix>beta</VersionSuffix>
+
+    <!-- FileVersionRevision is expected to be set by the CI. -->
+    <FileVersion Condition="'$(FileVersionRevision)' != ''">$(VersionPrefix).$(FileVersionRevision)</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

@@ -36,6 +36,13 @@ To get started, add the [Microsoft.Azure.Functions.Worker.Extensions.DurableTask
 You can then use the following code to define a simple "Hello, cities" durable orchestration, triggered by an HTTP request.
 
 ```csharp
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.DurableTask;
+using Microsoft.Extensions.Logging;
+
+namespace IsolatedFunctionApp1.Untyped;
+
 static class HelloSequenceUntyped
 {
     [Function(nameof(StartHelloCitiesUntyped))]
@@ -81,6 +88,13 @@ A new feature in this version of Durable Functions for .NET Isolated is the abil
 The source generators also generate type-safe extention methods on the `client` and `context` objects, removing the need to reference other activities or orchestrations by name, or to use type parameters to declare the return type. The following sample demonstrates the same "Hello cities!" orchestration using the class-based syntax and source-generated extension methods.
 
 ```csharp
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.DurableTask;
+using Microsoft.Extensions.Logging;
+
+namespace IsolatedFunctionApp1.Typed;
+
 public static class HelloCitiesTypedStarter
 {
     [Function(nameof(StartHelloCitiesTyped))]

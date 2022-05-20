@@ -341,7 +341,7 @@ namespace Microsoft.DurableTask
                 INamedTypeSymbol? baseType = classType.BaseType;
                 while (baseType != null)
                 {
-                    if (baseType.ContainingAssembly.Name == "Microsoft.DurableTask")
+                    if (baseType.ContainingAssembly.Name == "Microsoft.DurableTask.Client")
                     {
                         if (baseType.Name == "TaskActivityBase")
                         {

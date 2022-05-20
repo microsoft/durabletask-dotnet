@@ -3,13 +3,14 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AssemblyName>Microsoft.DurableTask.Client</AssemblyName>
   </PropertyGroup>
 
   <!-- Package info -->
   <PropertyGroup>
-    <PackageId>Microsoft.DurableTask</PackageId>
-    <Product>Durable Task .NET SDK</Product>
-    <Title>Durable Task .NET SDK</Title>
+    <PackageId>Microsoft.DurableTask.Client</PackageId>
+    <Product>Durable Task .NET Client SDK</Product>
+    <Title>Durable Task .NET Client SDK</Title>
     <Description>.NET SDK for the Durable Task Framework.</Description>
     <PackageTags>Microsoft Durable Task Orchestration Workflow Activity Reliable</PackageTags>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>

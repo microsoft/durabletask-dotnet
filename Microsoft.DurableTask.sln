@@ -9,6 +9,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "misc", "misc", "{6E392DF7-D
 	ProjectSection(SolutionItems) = preProject
 		.editorconfig = .editorconfig
 		.gitignore = .gitignore
+		azure-pipelines-release.yml = azure-pipelines-release.yml
 		CHANGELOG.md = CHANGELOG.md
 		key.snk = key.snk
 		LICENSE = LICENSE
@@ -32,10 +33,13 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Microsoft.DurableTask.Generators.Tests", "test\DurableTask.Generators.Tests\Microsoft.DurableTask.Generators.Tests.csproj", "{F4FA624E-4938-44AA-87A5-5C1E1F387F90}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{49BB7008-CA04-4631-91DB-63F7F94DD424}"
+	ProjectSection(SolutionItems) = preProject
+		src\Directory.Build.props = src\Directory.Build.props
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetFxConsoleApp", "samples\NetFxConsoleApp\NetFxConsoleApp.csproj", "{7B983DDB-68F7-4E50-9ED1-F1860736A117}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AzureFunctionsApp", "samples\AzureFunctionsApp\AzureFunctionsApp.csproj", "{F3034DB3-90E3-4142-A68B-8B39E6BB991B}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AzureFunctionsApp", "samples\AzureFunctionsApp\AzureFunctionsApp.csproj", "{F3034DB3-90E3-4142-A68B-8B39E6BB991B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

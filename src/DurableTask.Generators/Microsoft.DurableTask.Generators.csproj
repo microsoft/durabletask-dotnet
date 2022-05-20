@@ -19,7 +19,7 @@
 
   <!-- Version info -->
   <PropertyGroup>
-    <VersionPrefix>0.4.0</VersionPrefix>
+    <VersionPrefix>0.4.1</VersionPrefix>
     <VersionSuffix>beta</VersionSuffix>
 
     <!-- FileVersionRevision is expected to be set by the CI. -->

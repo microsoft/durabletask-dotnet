@@ -1,19 +1,22 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using DurableTask.Core;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask;
 
-class TaskOrchestrationShim : TaskOrchestration
+/// <summary>
+/// Shim orchestration implementation that wraps the Durable Task Framework execution engine.
+/// </summary>
+/// <remarks>
+/// This class is intended for use with alternate .NET-based durable task runtimes. It's not intended for use
+/// in application code.
+/// </remarks>
+public class TaskOrchestrationShim : TaskOrchestration
 {
     readonly TaskName name;
     readonly ITaskOrchestrator implementation;
@@ -21,6 +24,12 @@ class TaskOrchestrationShim : TaskOrchestration
 
     TaskOrchestrationContextWrapper? wrapperContext;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TaskOrchestrationShim"/> class.
+    /// </summary>
+    /// <param name="workerContext"></param>
+    /// <param name="name"></param>
+    /// <param name="implementation"></param>
     public TaskOrchestrationShim(
         WorkerContext workerContext,
         TaskName name,
@@ -31,6 +40,7 @@ class TaskOrchestrationShim : TaskOrchestration
         this.implementation = implementation;
     }
 
+    /// <inheritdoc/>
     public override async Task<string?> Execute(OrchestrationContext innerContext, string rawInput)
     {
         object? input = this.workerContext.DataConverter.Deserialize(rawInput, this.implementation.InputType);
@@ -42,11 +52,13 @@ class TaskOrchestrationShim : TaskOrchestration
         return this.workerContext.DataConverter.Serialize(output);
     }
 
+    /// <inheritdoc/>
     public override string? GetStatus()
     {
         return this.wrapperContext?.GetDeserializedCustomStatus();
     }
 
+    /// <inheritdoc/>
     public override void RaiseEvent(OrchestrationContext context, string name, string input)
     {
         this.wrapperContext?.CompleteExternalEvent(name, input);

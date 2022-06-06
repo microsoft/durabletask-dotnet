@@ -27,9 +27,9 @@ public class TaskOrchestrationShim : TaskOrchestration
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskOrchestrationShim"/> class.
     /// </summary>
-    /// <param name="workerContext"></param>
-    /// <param name="name"></param>
-    /// <param name="implementation"></param>
+    /// <param name="workerContext">Context from the worker to make available to the orchestration runtime.</param>
+    /// <param name="name">The name of the orchestration.</param>
+    /// <param name="implementation">The orchestration's implementation.</param>
     public TaskOrchestrationShim(
         WorkerContext workerContext,
         TaskName name,

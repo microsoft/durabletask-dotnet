@@ -40,44 +40,48 @@ public sealed class OrchestrationMetadata
         this.requestedInputsAndOutputs = requestedInputsAndOutputs;
     }
 
-    /// <summary>
-    /// Gets the name of the orchestration.
-    /// </summary>
+    /// <summary>Gets the name of the orchestration.</summary>
+    /// <value>The name of the orchestration.</value>
     public string Name { get; }
 
-    /// <summary>
-    /// Gets the unique ID of the orchestration instance.
-    /// </summary>
+    /// <summary>Gets the unique ID of the orchestration instance.</summary>
+    /// <value>The unique ID of the orchestration instance.</value>
     public string InstanceId { get; }
 
     /// <summary>
     /// Gets the current runtime status of the orchestration instance at the time this object was fetched.
     /// </summary>
+    /// <value>The runtime status of the orchestration instance at the time this object was fetched</value>
     public OrchestrationRuntimeStatus RuntimeStatus { get; }
 
     /// <summary>
     /// Gets the orchestration instance's creation time in UTC.
     /// </summary>
+    /// <value>The orchestration instance's creation time in UTC.</value>
     public DateTimeOffset CreatedAt { get; }
 
     /// <summary>
     /// Gets the orchestration instance's last updated time in UTC.
     /// </summary>
+    /// <value>The orchestration instance's last updated time in UTC.</value>
     public DateTimeOffset LastUpdatedAt { get; }
 
     /// <summary>
     /// Gets the orchestration instance's serialized input, if any, as a string value.
     /// </summary>
+    /// <value>The serialized orchestration input or <c>null</c>.</value>
     public string? SerializedInput { get; }
 
     /// <summary>
     /// Gets the orchestration instance's serialized output, if any, as a string value.
     /// </summary>
+    /// <value>The serialized orchestration output or <c>null</c>.</value>
     public string? SerializedOutput { get; }
 
     /// <summary>
     /// Gets the orchestration instance's serialized custom status, if any, as a string value.
     /// </summary>
+    /// <value>The serialized custom status or <c>null</c>.</value>
     public string? SerializedCustomStatus { get; }
 
     /// <summary>
@@ -87,11 +91,13 @@ public sealed class OrchestrationMetadata
     /// This property contains data only if the orchestration is in the <see cref="OrchestrationRuntimeStatus.Failed"/>
     /// state, and only if this instance metadata was fetched with the option to include output data.
     /// </remarks>
+    /// <value>The failure details if the orchestration was in a failed state; <c>null</c> otherwise.</value>
     public TaskFailureDetails? FailureDetails { get; }
 
     /// <summary>
     /// Gets a value indicating whether the orchestration instance was running at the time this object was fetched.
     /// </summary>
+    /// <value><c>true</c> if the orchestration was in a running state; <c>false</c> otherwise.</value>
     public bool IsRunning => this.RuntimeStatus == OrchestrationRuntimeStatus.Running;
 
     /// <summary>
@@ -102,6 +108,7 @@ public sealed class OrchestrationMetadata
     /// <see cref="OrchestrationRuntimeStatus.Completed"/>, <see cref="OrchestrationRuntimeStatus.Failed"/>,
     /// or <see cref="OrchestrationRuntimeStatus.Terminated"/>.
     /// </remarks>
+    /// <value><c>true</c> if the orchestration was in a terminal state; <c>false</c> otherwise.</value>
     public bool IsCompleted =>
         this.RuntimeStatus == OrchestrationRuntimeStatus.Completed ||
         this.RuntimeStatus == OrchestrationRuntimeStatus.Failed ||

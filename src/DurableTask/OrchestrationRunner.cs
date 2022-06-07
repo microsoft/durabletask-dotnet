@@ -1,24 +1,20 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using DurableTask.Core;
 using DurableTask.Core.History;
-using Microsoft.DurableTask.Grpc;
 using Google.Protobuf;
+using Microsoft.DurableTask.Grpc;
+using Microsoft.DurableTask.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using P = Microsoft.DurableTask.Protobuf;
-using Microsoft.DurableTask.Options;
 
 namespace Microsoft.DurableTask;
 
 /// <summary>
-/// Helper class for invoking orchestration's directly, without building a <see cref="DurableTaskGrpcWorker"/> instance.
+/// Helper class for invoking orchestrations directly, without building a <see cref="DurableTaskGrpcWorker"/> instance.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -32,15 +28,15 @@ namespace Microsoft.DurableTask;
 public static class OrchestrationRunner
 {
     /// <summary>
-    /// Deserializes orchestration history from <paramref name="encodedOrchestratorRequest"/> and uses it to execute the orchestrator function
+    /// Loads orchestration history from <paramref name="encodedOrchestratorRequest"/> and uses it to execute the orchestrator function
     /// code pointed to by <paramref name="orchestratorFunc"/>.
     /// </summary>
-    /// <typeparam name="TInput">The type of the orchestrator function input. This type must be deserializeable from JSON.</typeparam>
-    /// <typeparam name="TOutput">The type of the orchestrator function output. This type must be serializeable to JSON.</typeparam>
-    /// <param name="encodedOrchestratorRequest">The encoded protobuf payload representing an orchestration execution request. This is a base64-encoded string.</param>
+    /// <typeparam name="TInput">The type of the orchestrator function input. This type must be deserializable from JSON.</typeparam>
+    /// <typeparam name="TOutput">The type of the orchestrator function output. This type must be serializable to JSON.</typeparam>
+    /// <param name="encodedOrchestratorRequest">The base64-encoded protobuf payload representing an orchestration execution request.</param>
     /// <param name="orchestratorFunc">A function that implements the orchestrator logic.</param>
     /// <param name="services">Optional <see cref="IServiceProvider"/> from which injected dependencies can be retrieved.</param>
-    /// <returns>Returns a serialized set of orchestrator actions that should be used as the return value of the orchestrator function trigger.</returns>
+    /// <returns>Returns a base64-encoded set of orchestrator actions to be interpreted by the external orchestration engine.</returns>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="encodedOrchestratorRequest"/> or <paramref name="orchestratorFunc"/> is <c>null</c>.</exception>
     public static string LoadAndRun<TInput, TOutput>(
         string encodedOrchestratorRequest,

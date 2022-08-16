@@ -18,15 +18,17 @@ class TaskOrchestrationShim : TaskOrchestration
     readonly TaskName name;
     readonly ITaskOrchestrator implementation;
     readonly WorkerContext workerContext;
+    readonly OrchestrationRuntimeState runtimeState;
 
     TaskOrchestrationContextWrapper? wrapperContext;
 
     public TaskOrchestrationShim(
-        WorkerContext workerContext,
+        OrchestrationInvocationContext context,
         TaskName name,
         ITaskOrchestrator implementation)
     {
-        this.workerContext = workerContext;
+        this.workerContext = context.WorkerContext;
+        this.runtimeState = context.RuntimeState;
         this.name = name;
         this.implementation = implementation;
     }
@@ -35,7 +37,7 @@ class TaskOrchestrationShim : TaskOrchestration
     {
         object? input = this.workerContext.DataConverter.Deserialize(rawInput, this.implementation.InputType);
         
-        this.wrapperContext = new(innerContext, this.name, this.workerContext, input);
+        this.wrapperContext = new(innerContext, this.name, this.workerContext, this.runtimeState, input);
         object? output = await this.implementation.RunAsync(this.wrapperContext, input);
 
         // Return the output (if any) as a serialized string.
@@ -61,6 +63,7 @@ class TaskOrchestrationShim : TaskOrchestration
         readonly OrchestrationContext innerContext;
         readonly TaskName name;
         readonly WorkerContext workerContext;
+        readonly OrchestrationRuntimeState runtimeState;
         readonly ILogger orchestratorLogger;
         readonly object? deserializedInput;
 
@@ -71,11 +74,13 @@ class TaskOrchestrationShim : TaskOrchestration
             OrchestrationContext innerContext,
             TaskName name,
             WorkerContext workerContext,
+            OrchestrationRuntimeState runtimeState,
             object? deserializedInput)
         {
             this.innerContext = innerContext;
             this.name = name;
             this.workerContext = workerContext;
+            this.runtimeState = runtimeState;
             this.orchestratorLogger = this.CreateReplaySafeLogger(workerContext.Logger);
             this.deserializedInput = deserializedInput;
         }
@@ -83,6 +88,7 @@ class TaskOrchestrationShim : TaskOrchestration
         public override TaskName Name => this.name;
 
         public override string InstanceId => this.innerContext.OrchestrationInstance.InstanceId;
+        public override ParentInstance? Parent => this.runtimeState.ExecutionStartedEvent?.ParentInstance;
 
         public override bool IsReplaying => this.innerContext.IsReplaying;
 
@@ -515,10 +521,10 @@ class TaskOrchestrationShim : TaskOrchestration
 class TaskOrchestrationShim<TInput, TOutput> : TaskOrchestrationShim
 {
     public TaskOrchestrationShim(
-        WorkerContext workerContext,
+        OrchestrationInvocationContext context,
         TaskName name,
         Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> implementation)
-        : base(workerContext, name, new FuncTaskOrchestrator<TInput, TOutput>(implementation))
+        : base(context, name, new FuncTaskOrchestrator<TInput, TOutput>(implementation))
     {
     }
 }

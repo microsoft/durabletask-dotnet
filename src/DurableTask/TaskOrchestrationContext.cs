@@ -4,6 +4,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using DurableTask.Core;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask;
@@ -23,6 +24,11 @@ public abstract class TaskOrchestrationContext
     /// Gets the unique ID of the current orchestration instance.
     /// </summary>
     public abstract string InstanceId { get; }
+
+    /// <summary>
+    /// Gets the parent instance. Null if no parent orchestration.
+    /// </summary>
+    public abstract ParentInstance? Parent { get; }
 
     /// <summary>
     /// Gets the current orchestration time in UTC.

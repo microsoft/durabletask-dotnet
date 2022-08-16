@@ -109,7 +109,7 @@ public static class OrchestrationRunner
 
         TaskName orchestratorName = new(runtimeState.Name, runtimeState.Version);
 
-        TaskOrchestrationShim orchestrator = new(workerContext, orchestratorName, implementation);
+        TaskOrchestrationShim orchestrator = new(new(workerContext, runtimeState), orchestratorName, implementation);
         TaskOrchestrationExecutor executor = new(runtimeState, orchestrator, BehaviorOnContinueAsNew.Carryover);
         OrchestratorExecutionResult result = executor.Execute();
 

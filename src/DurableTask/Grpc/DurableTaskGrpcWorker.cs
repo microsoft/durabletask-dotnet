@@ -40,7 +40,7 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
     readonly TaskHubSidecarServiceClient sidecarClient;
     readonly WorkerContext workerContext;
 
-    readonly ImmutableDictionary<TaskName, Func<WorkerContext, TaskOrchestration>> orchestrators;
+    readonly ImmutableDictionary<TaskName, Func<OrchestrationInvocationContext, TaskOrchestration>> orchestrators;
     readonly ImmutableDictionary<TaskName, Func<WorkerContext, TaskActivity>> activities;
 
     CancellationTokenSource? shutdownTcs;
@@ -288,10 +288,10 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
         try
         {
             TaskOrchestration orchestrator;
-            if (this.orchestrators.TryGetValue(name, out Func<WorkerContext, TaskOrchestration>? factory) && factory != null)
+            if (this.orchestrators.TryGetValue(name, out Func<OrchestrationInvocationContext, TaskOrchestration>? factory) && factory != null)
             {
                 // Both the factory invocation and the ExecuteAsync could involve user code and need to be handled as part of try/catch.
-                orchestrator = factory.Invoke(this.workerContext);
+                orchestrator = factory.Invoke(new(this.workerContext, runtimeState));
                 TaskOrchestrationExecutor executor = new(
                     runtimeState,
                     orchestrator,
@@ -623,8 +623,8 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
             internal ImmutableDictionary<TaskName, Func<WorkerContext, TaskActivity>>.Builder activitiesBuilder =
                 ImmutableDictionary.CreateBuilder<TaskName, Func<WorkerContext, TaskActivity>>();
 
-            internal ImmutableDictionary<TaskName, Func<WorkerContext, TaskOrchestration>>.Builder orchestratorsBuilder =
-                ImmutableDictionary.CreateBuilder<TaskName, Func<WorkerContext, TaskOrchestration>>();
+            internal ImmutableDictionary<TaskName, Func<OrchestrationInvocationContext, TaskOrchestration>>.Builder orchestratorsBuilder =
+                ImmutableDictionary.CreateBuilder<TaskName, Func<OrchestrationInvocationContext, TaskOrchestration>>();
 
             public IDurableTaskRegistry AddOrchestrator(
                 TaskName name,
@@ -665,7 +665,7 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
 
                 this.orchestratorsBuilder.Add(
                     name,
-                    workerContext => new TaskOrchestrationShim<TInput, TOutput>(workerContext, name, implementation));
+                    context => new TaskOrchestrationShim<TInput, TOutput>(context, name, implementation));
 
                 return this;
             }

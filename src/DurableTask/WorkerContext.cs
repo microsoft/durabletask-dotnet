@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System;
+using DurableTask.Core;
 using Microsoft.DurableTask.Options;
 using Microsoft.Extensions.Logging;
 
@@ -12,3 +13,5 @@ record WorkerContext(
     ILogger Logger,
     IServiceProvider Services,
     TimerOptions TimerOptions);
+
+record struct OrchestrationInvocationContext(WorkerContext WorkerContext, OrchestrationRuntimeState RuntimeState);

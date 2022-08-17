@@ -26,7 +26,7 @@ public abstract class TaskOrchestrationContext
     public abstract string InstanceId { get; }
 
     /// <summary>
-    /// Gets the parent instance or <c>null</c> if no parent orchestration.
+    /// Gets the parent instance or <c>null</c> if there is no parent orchestration.
     /// </summary>
     public abstract ParentInstance? Parent { get; }
 

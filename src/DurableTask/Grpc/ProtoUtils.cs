@@ -11,6 +11,7 @@ using DurableTask.Core;
 using DurableTask.Core.Command;
 using DurableTask.Core.History;
 using Google.Protobuf;
+using Google.Protobuf.Collections;
 using Google.Protobuf.WellKnownTypes;
 using P = Microsoft.DurableTask.Protobuf;
 
@@ -99,12 +100,12 @@ static class ProtoUtils
             case P.HistoryEvent.EventTypeOneofCase.TimerCreated:
                 historyEvent = new TimerCreatedEvent(
                     proto.EventId,
-                    ConvertTimestamp(proto.TimerCreated.FireAt));
+                    proto.TimerCreated.FireAt.ToDateTime());
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TimerFired:
                 historyEvent = new TimerFiredEvent(
                     eventId: -1,
-                    ConvertTimestamp(proto.TimerFired.FireAt))
+                    proto.TimerFired.FireAt.ToDateTime())
                 {
                     TimerId = proto.TimerFired.TimerId,
                 };
@@ -155,13 +156,11 @@ static class ProtoUtils
                 throw new NotImplementedException($"Deserialization of {proto.EventTypeCase} is not implemented.");
         }
 
-        historyEvent.Timestamp = ConvertTimestamp(proto.Timestamp);
+        historyEvent.Timestamp = proto.Timestamp.ToDateTime();
         return historyEvent;
     }
 
-    static DateTime ConvertTimestamp(Timestamp ts) => ts.ToDateTime();
-
-    static Timestamp ConvertTimestamp(DateTime dateTime)
+    internal static Timestamp ToTimestamp(this DateTime dateTime)
     {
         // The protobuf libraries require timestamps to be in UTC
         if (dateTime.Kind == DateTimeKind.Unspecified)
@@ -175,6 +174,29 @@ static class ProtoUtils
 
         return Timestamp.FromDateTime(dateTime);
     }
+
+    internal static Timestamp? ToTimestamp(this DateTime? dateTime)
+        => dateTime.HasValue ? dateTime.Value.ToTimestamp() : null;
+
+    internal static Timestamp ToTimestamp(this DateTimeOffset dateTime) => Timestamp.FromDateTimeOffset(dateTime);
+
+    internal static Timestamp? ToTimestamp(this DateTimeOffset? dateTime)
+        => dateTime.HasValue ? dateTime.Value.ToTimestamp() : null;
+
+#pragma warning disable 0618
+    internal static P.OrchestrationStatus ToGrpcStatus(this OrchestrationRuntimeStatus status)
+        => status switch
+        {
+            OrchestrationRuntimeStatus.Canceled => P.OrchestrationStatus.Canceled,
+            OrchestrationRuntimeStatus.Completed => P.OrchestrationStatus.Completed,
+            OrchestrationRuntimeStatus.ContinuedAsNew => P.OrchestrationStatus.ContinuedAsNew,
+            OrchestrationRuntimeStatus.Failed => P.OrchestrationStatus.Failed,
+            OrchestrationRuntimeStatus.Pending => P.OrchestrationStatus.Pending,
+            OrchestrationRuntimeStatus.Running => P.OrchestrationStatus.Running,
+            OrchestrationRuntimeStatus.Terminated => P.OrchestrationStatus.Terminated,
+            _ => throw new ArgumentOutOfRangeException("Unexpected value", nameof(status)),
+        };
+#pragma warning restore 0618
 
     internal static P.OrchestratorResponse ConstructOrchestratorResponse(
         string instanceId,
@@ -216,7 +238,7 @@ static class ProtoUtils
                     var createTimerAction = (CreateTimerOrchestratorAction)action;
                     protoAction.CreateTimer = new P.CreateTimerAction
                     {
-                        FireAt = ConvertTimestamp(createTimerAction.FireAt),
+                        FireAt = createTimerAction.FireAt.ToTimestamp(),
                     };
                     break;
                 case OrchestratorActionType.SendEvent:

@@ -247,43 +247,39 @@ public class DurableTaskGrpcClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override async Task<PurgeResult> PurgeInstanceMetadataAsync(string instanceId, CancellationToken cancellation = default)
+    public override Task<PurgeResult> PurgeInstanceMetadataAsync(string instanceId, CancellationToken cancellation = default)
     {
         this.logger.PurgingInstanceMetadata(instanceId);
-
-        try
-        {
-            P.PurgeInstancesRequest request = new() { InstanceId = instanceId };
-            P.PurgeInstancesResponse response = await this.sidecarClient.PurgeInstancesAsync(request, cancellationToken: cancellation);
-            return new PurgeResult(response.DeletedInstanceCount);
-        }
-        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
-        {
-            throw new OperationCanceledException($"The {nameof(PurgeInstanceMetadataAsync)} operation was canceled.", e, cancellation);
-        }
+        
+        P.PurgeInstancesRequest request = new() { InstanceId = instanceId };
+        return this.PurgeInstancesCoreAsync(request, cancellation);
     }
 
     /// <inheritdoc/>
-    public override async Task<PurgeResult> PurgeInstancesAsync(PurgeInstancesFilter filter, CancellationToken cancellation = default)
+    public override Task<PurgeResult> PurgeInstancesAsync(PurgeInstancesFilter filter, CancellationToken cancellation = default)
     {
         this.logger.PurgingInstances(filter);
+        P.PurgeInstancesRequest request = new()
+        {
+            PurgeInstanceFilter = new()
+            {
+                CreatedTimeFrom = filter?.CreatedFrom.ToTimestamp(),
+                CreatedTimeTo = filter?.CreatedTo.ToTimestamp(),
+            },
+        };
 
+        if (filter?.Statuses is not null)
+        {
+            request.PurgeInstanceFilter.RuntimeStatus.AddRange(filter.Statuses.Select(x => x.ToGrpcStatus()));
+        }
+
+        return this.PurgeInstancesCoreAsync(request, cancellation);
+    }
+
+    private async Task<PurgeResult> PurgeInstancesCoreAsync(P.PurgeInstancesRequest request, CancellationToken cancellation = default)
+    {
         try
         {
-            P.PurgeInstancesRequest request = new()
-            {
-                PurgeInstanceFilter = new()
-                {
-                    CreatedTimeFrom = filter?.CreatedFrom.ToTimestamp(),
-                    CreatedTimeTo = filter?.CreatedTo.ToTimestamp(),
-                },
-            };
-
-            if (filter?.Statuses is not null)
-            {
-                request.PurgeInstanceFilter.RuntimeStatus.AddRange(filter.Statuses.Select(x => x.ToGrpcStatus()));
-            }
-
             P.PurgeInstancesResponse response = await this.sidecarClient.PurgeInstancesAsync(request, cancellationToken: cancellation);
             return new PurgeResult(response.DeletedInstanceCount);
         }

@@ -2,7 +2,7 @@
 
 ## v0.5.0-beta
 
-- Adds `PurgeInstancesMetadataAsync` nad `PurgeInstancesAsync` support and implementation to `DurableTaskGrpcClient`
+- Adds `PurgeInstancesMetadataAsync` and `PurgeInstancesAsync` support and implementation to `DurableTaskGrpcClient`
 
 ### Breaking changes
 

@@ -8,7 +8,7 @@ namespace Microsoft.DurableTask;
 /// <summary>
 /// Non-generated helpers for <see cref="ILogger" />.
 /// </summary>
-internal static class LogHelpers
+static class LogHelpers
 {
     public static void PurgingInstances(this ILogger logger, PurgeInstancesFilter filter)
     {

@@ -276,7 +276,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
         return this.PurgeInstancesCoreAsync(request, cancellation);
     }
 
-    private async Task<PurgeResult> PurgeInstancesCoreAsync(P.PurgeInstancesRequest request, CancellationToken cancellation = default)
+    async Task<PurgeResult> PurgeInstancesCoreAsync(P.PurgeInstancesRequest request, CancellationToken cancellation = default)
     {
         try
         {

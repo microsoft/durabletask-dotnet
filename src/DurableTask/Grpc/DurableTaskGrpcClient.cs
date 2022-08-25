@@ -185,7 +185,55 @@ public class DurableTaskGrpcClient : DurableTaskClient
             return null;
         }
 
-        return new OrchestrationMetadata(response, this.dataConverter, getInputsAndOutputs);
+        return new OrchestrationMetadata(response.OrchestrationState, this.dataConverter, getInputsAndOutputs);
+    }
+
+    /// <inheritdoc/>
+    public override AsyncPageable<OrchestrationMetadata> GetInstances(OrchestrationQuery? query = null)
+    {
+        return Pageable.Create(async (continuation, pageSize, cancellation) =>
+        {
+            P.QueryInstancesRequest request = new()
+            {
+                Query = new P.InstanceQuery
+                {
+                    CreatedTimeFrom = query?.CreatedFrom?.ToTimestamp(),
+                    CreatedTimeTo = query?.CreatedTo?.ToTimestamp(),
+                    FetchInputsAndOutputs = query?.FetchInputsAndOutputs ?? false,
+                    InstanceIdPrefix = query?.InstanceIdPrefix,
+                    MaxInstanceCount = pageSize ?? query?.PageSize ?? OrchestrationQuery.DefaultPageSize,
+                    ContinuationToken = continuation ?? query?.ContinuationToken,
+                },
+            };
+
+            if (query?.Statuses is not null)
+            {
+                request.Query.RuntimeStatus.AddRange(query.Statuses.Select(x => x.ToGrpcStatus()));
+            }
+
+            if (query?.TaskHubNames is not null)
+            {
+                request.Query.TaskHubNames.AddRange(query.TaskHubNames);
+            }
+
+            try
+            {
+
+                P.QueryInstancesResponse response = await this.sidecarClient.QueryInstancesAsync(
+                    request, cancellationToken: cancellation);
+
+                bool getInputsAndOutputs = query?.FetchInputsAndOutputs ?? false;
+                IReadOnlyList<OrchestrationMetadata> values = response.OrchestrationState
+                    .Select(x => new OrchestrationMetadata(x, this.dataConverter, getInputsAndOutputs))
+                    .ToList();
+
+                return new Pageable.Page<OrchestrationMetadata>(values, response.ContinuationToken);
+            }
+            catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+            {
+                throw new OperationCanceledException($"The {nameof(GetInstances)} operation was canceled.", e, cancellation);
+            }
+        });
     }
 
     /// <inheritdoc/>
@@ -214,7 +262,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
             throw new OperationCanceledException($"The {nameof(WaitForInstanceStartAsync)} operation was canceled.", e, cancellationToken);
         }
 
-        return new OrchestrationMetadata(response, this.dataConverter, getInputsAndOutputs);
+        return new OrchestrationMetadata(response.OrchestrationState, this.dataConverter, getInputsAndOutputs);
     }
 
     /// <inheritdoc/>
@@ -243,7 +291,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
             throw new OperationCanceledException($"The {nameof(WaitForInstanceCompletionAsync)} operation was canceled.", e, cancellationToken);
         }
 
-        return new OrchestrationMetadata(response, this.dataConverter, getInputsAndOutputs);
+        return new OrchestrationMetadata(response.OrchestrationState, this.dataConverter, getInputsAndOutputs);
     }
 
     /// <inheritdoc/>

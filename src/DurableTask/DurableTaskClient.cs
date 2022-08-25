@@ -191,7 +191,12 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// <inheritdoc cref="WaitForInstanceStartAsync(string, CancellationToken, bool)"/>
     public abstract Task<OrchestrationMetadata?> GetInstanceMetadataAsync(string instanceId, bool getInputsAndOutputs);
 
-    // TODO: Multi-instance query
+    /// <summary>
+    /// Queries orchestration instances 
+    /// </summary>
+    /// <param name="filter">Filters down the instances included in the query.</param>
+    /// <returns></returns>
+    public abstract AsyncPageable<OrchestrationMetadata> GetInstances(OrchestrationQuery? filter = null);
 
     /// <summary>
     /// Purges orchestration instance metadata from the durable store.

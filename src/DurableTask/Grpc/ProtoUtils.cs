@@ -183,7 +183,7 @@ static class ProtoUtils
     internal static Timestamp? ToTimestamp(this DateTimeOffset? dateTime)
         => dateTime.HasValue ? dateTime.Value.ToTimestamp() : null;
 
-#pragma warning disable 0618
+#pragma warning disable 0618 // Referencing Obsolete member. This is intention as we are only converting it.
     internal static P.OrchestrationStatus ToGrpcStatus(this OrchestrationRuntimeStatus status)
         => status switch
         {
@@ -196,7 +196,7 @@ static class ProtoUtils
             OrchestrationRuntimeStatus.Terminated => P.OrchestrationStatus.Terminated,
             _ => throw new ArgumentOutOfRangeException("Unexpected value", nameof(status)),
         };
-#pragma warning restore 0618
+#pragma warning restore 0618 // Referencing Obsolete member.
 
     internal static P.OrchestratorResponse ConstructOrchestratorResponse(
         string instanceId,

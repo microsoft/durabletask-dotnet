@@ -219,7 +219,16 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// </returns>
     public abstract Task<PurgeResult> PurgeInstanceMetadataAsync(string instanceId, CancellationToken cancellation = default);
 
-    // TODO: Multi-instance purge
+    /// <summary>
+    /// Purges orchestration instances metadata from the durable store.
+    /// </summary>
+    /// <param name="filter">The filter for which orchestrations to purge.</param>
+    /// <param name="cancellation">A <see cref="CancellationToken"/> that can be used to cancel the purge operation.</param>
+    /// <returns>
+    /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged.
+    /// </returns>
+    public abstract Task<PurgeResult> PurgeInstancesAsync(PurgeInstancesFilter filter, CancellationToken cancellation = default);
 
     // TODO: Create task hub
 

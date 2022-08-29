@@ -68,6 +68,18 @@ namespace Microsoft.DurableTask
         [LoggerMessage(EventId = 44, Level = LogLevel.Information, Message = "Terminating instance '{instanceId}'.")]
         public static partial void TerminatingInstance(this ILogger logger, string instanceId);
 
+        [LoggerMessage(EventId = 45, Level = LogLevel.Information, Message = "Purging instance metadata '{instanceId}'.")]
+        public static partial void PurgingInstanceMetadata(this ILogger logger, string instanceId);
+
+        [LoggerMessage(EventId = 46, Level = LogLevel.Information, Message = "Purging instances with filter: {{ CreatedFrom = {createdFrom}, CreatedTo = {createdTo}, Statuses = {statuses} }}")]
+        public static partial void PurgingInstances(this ILogger logger, DateTimeOffset? createdFrom, DateTimeOffset? createdTo, string? statuses);
+
+        public static void PurgingInstances(this ILogger logger, PurgeInstancesFilter filter)
+        {
+            string? statuses = filter?.Statuses is null ? null : string.Join("|", filter.Statuses);
+            PurgingInstances(logger, filter?.CreatedFrom, filter?.CreatedTo, statuses);
+        }
+
         [LoggerMessage(EventId = 55, Level = LogLevel.Information, Message = "{instanceId}: Evaluating custom retry handler for failed '{name}' task. Attempt = {attempt}.")]
         public static partial void RetryingTask(this ILogger logger, string instanceId, string name, int attempt);
     }

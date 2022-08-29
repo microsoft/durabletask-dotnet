@@ -5,6 +5,7 @@ using System;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Google.Protobuf.Collections;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.DurableTask.Converters;
@@ -248,7 +249,44 @@ public class DurableTaskGrpcClient : DurableTaskClient
     /// <inheritdoc/>
     public override Task<PurgeResult> PurgeInstanceMetadataAsync(string instanceId, CancellationToken cancellation = default)
     {
-        throw new NotImplementedException();
+        this.logger.PurgingInstanceMetadata(instanceId);
+        
+        P.PurgeInstancesRequest request = new() { InstanceId = instanceId };
+        return this.PurgeInstancesCoreAsync(request, cancellation);
+    }
+
+    /// <inheritdoc/>
+    public override Task<PurgeResult> PurgeInstancesAsync(PurgeInstancesFilter filter, CancellationToken cancellation = default)
+    {
+        this.logger.PurgingInstances(filter);
+        P.PurgeInstancesRequest request = new()
+        {
+            PurgeInstanceFilter = new()
+            {
+                CreatedTimeFrom = filter?.CreatedFrom.ToTimestamp(),
+                CreatedTimeTo = filter?.CreatedTo.ToTimestamp(),
+            },
+        };
+
+        if (filter?.Statuses is not null)
+        {
+            request.PurgeInstanceFilter.RuntimeStatus.AddRange(filter.Statuses.Select(x => x.ToGrpcStatus()));
+        }
+
+        return this.PurgeInstancesCoreAsync(request, cancellation);
+    }
+
+    async Task<PurgeResult> PurgeInstancesCoreAsync(P.PurgeInstancesRequest request, CancellationToken cancellation = default)
+    {
+        try
+        {
+            P.PurgeInstancesResponse response = await this.sidecarClient.PurgeInstancesAsync(request, cancellationToken: cancellation);
+            return new PurgeResult(response.DeletedInstanceCount);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException($"The {nameof(PurgeInstancesAsync)} operation was canceled.", e, cancellation);
+        }
     }
 
     /// <summary>

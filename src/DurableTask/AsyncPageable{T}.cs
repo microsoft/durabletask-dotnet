@@ -25,13 +25,13 @@ public abstract class AsyncPageable<T> : IAsyncEnumerable<T>
     /// respected.
     /// </param>
     /// <returns>An async enumerable of pages.</returns>
-    public abstract IAsyncEnumerable<Pageable.Page<T>> AsPages(
+    public abstract IAsyncEnumerable<Page<T>> AsPages(
         string? continuationToken = default, int? pageSizeHint = default);
 
     /// <inheritdoc/>
     public async IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        await foreach (Pageable.Page<T> page in this.AsPages()
+        await foreach (Page<T> page in this.AsPages()
             .ConfigureAwait(false).WithCancellation(cancellationToken))
         {
             foreach (T value in page)

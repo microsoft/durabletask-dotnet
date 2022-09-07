@@ -227,7 +227,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
                     .Select(x => new OrchestrationMetadata(x, this.dataConverter, getInputsAndOutputs))
                     .ToList();
 
-                return new Pageable.Page<OrchestrationMetadata>(values, response.ContinuationToken);
+                return new Page<OrchestrationMetadata>(values, response.ContinuationToken);
             }
             catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
             {

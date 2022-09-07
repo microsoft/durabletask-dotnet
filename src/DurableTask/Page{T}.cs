@@ -11,6 +11,9 @@ namespace Microsoft.DurableTask;
 public sealed class Page<T> : IReadOnlyList<T>
     where T : notnull
 {
+    // This code was adopted from Azure SDK Page.
+    // https://github.com/Azure/azure-sdk-for-net/blob/e811f016a3655e4b29a23c71f84d59f34fe01233/sdk/core/Azure.Core/src/Page.cs
+
     readonly IReadOnlyList<T> values;
 
     /// <summary>

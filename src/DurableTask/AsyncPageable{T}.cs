@@ -11,6 +11,7 @@ public abstract class AsyncPageable<T> : IAsyncEnumerable<T>
     where T : notnull
 {
     // This code was adapted from Azure SDK AsyncPageable.
+    // https://github.com/Azure/azure-sdk-for-net/blob/e811f016a3655e4b29a23c71f84d59f34fe01233/sdk/core/Azure.Core/src/AsyncPageable.cs
 
     /// <summary>
     /// Enumerate the values a <see cref="Page{T}" /> at a time.

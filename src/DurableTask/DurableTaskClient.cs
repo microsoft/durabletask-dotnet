@@ -194,9 +194,9 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// <summary>
     /// Queries orchestration instances 
     /// </summary>
-    /// <param name="filter">Filters down the instances included in the query.</param>
-    /// <returns></returns>
-    public abstract AsyncPageable<OrchestrationMetadata> GetInstances(OrchestrationQuery? filter = null);
+    /// <param name="query">Filters down the instances included in the query.</param>
+    /// <returns>An async pageable of the query results.</returns>
+    public abstract AsyncPageable<OrchestrationMetadata> GetInstances(OrchestrationQuery? query = null);
 
     /// <summary>
     /// Purges orchestration instance metadata from the durable store.

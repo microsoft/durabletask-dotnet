@@ -10,7 +10,8 @@ namespace Microsoft.DurableTask;
 /// </summary>
 static class Pageable
 {
-    // This code was adapted from Azure SDK AsyncPageable.
+    // This code was adapted from Azure SDK PageResponseEnumerator.
+    // https://github.com/Azure/azure-sdk-for-net/blob/e811f016a3655e4b29a23c71f84d59f34fe01233/sdk/core/Azure.Core/src/Shared/PageResponseEnumerator.cs
     // TODO: Add Pageable<T> (non-async) when/if it becomes relevant.
 
     /// <summary>

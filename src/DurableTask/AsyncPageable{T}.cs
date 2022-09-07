@@ -13,14 +13,14 @@ public abstract class AsyncPageable<T> : IAsyncEnumerable<T>
     // This code was adapted from Azure SDK AsyncPageable.
 
     /// <summary>
-    /// Enumerate the values a <see cref="Pageable.Page{T}" /> at a time.
+    /// Enumerate the values a <see cref="Page{T}" /> at a time.
     /// </summary>
     /// <param name="continuationToken">
     /// A continuation token indicating where to resume paging or null to begin paging from the
     /// beginning.
     /// </param>
     /// <param name="pageSizeHint">
-    /// The number of items per <see cref="Pageable.Page{T}"/> that should be requested
+    /// The number of items per <see cref="Page{T}"/> that should be requested
     /// (from service operations that support it). It's not guaranteed that the value will be
     /// respected.
     /// </param>

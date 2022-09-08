@@ -1,10 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
 using Microsoft.DurableTask.Grpc;
 using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.Extensions.Logging;

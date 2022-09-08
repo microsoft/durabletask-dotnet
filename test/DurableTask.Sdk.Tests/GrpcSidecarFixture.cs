@@ -1,7 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
 using DurableTask.Core;
 using Grpc.Core;
 using Microsoft.AspNetCore.Builder;

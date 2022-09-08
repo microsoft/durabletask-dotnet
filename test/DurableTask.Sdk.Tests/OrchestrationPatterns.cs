@@ -1,12 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.DurableTask.Grpc;
 using Microsoft.DurableTask.Options;
 using Microsoft.DurableTask.Tests.Logging;

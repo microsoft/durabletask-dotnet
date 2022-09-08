@@ -19,8 +19,7 @@ static class Pageable
     /// </summary>
     /// <typeparam name="T">The type of the value.</typeparam>
     /// <param name="pageFunc">The callback to fetch additional pages.</param>
-    /// <returns></returns>
-    /// <exception cref="ArgumentNullException"></exception>
+    /// <returns>An async pageable.</returns>
     public static AsyncPageable<T> Create<T>(Func<string?, CancellationToken, Task<Page<T>>> pageFunc)
         where T : notnull
     {
@@ -37,8 +36,7 @@ static class Pageable
     /// </summary>
     /// <typeparam name="T">The type of the value.</typeparam>
     /// <param name="pageFunc">The callback to fetch additional pages.</param>
-    /// <returns></returns>
-    /// <exception cref="ArgumentNullException"></exception>
+    /// <returns>An async pageable.</returns>
     public static AsyncPageable<T> Create<T>(Func<string?, int?, CancellationToken, Task<Page<T>>> pageFunc)
         where T : notnull
     {
@@ -71,8 +69,9 @@ static class Pageable
         {
             do
             {
-                Page<T> page = await this.pageFunc(continuationToken, pageSizeHint, cancellation)
-                    .ConfigureAwait(false);
+                // TODO: Do we need to support customizing ConfigureAwait(bool) here?
+                // ConfigureAwait(false) makes this unusable in orchestrations.
+                Page<T> page = await this.pageFunc(continuationToken, pageSizeHint, cancellation);
                 yield return page;
                 continuationToken = page.ContinuationToken;
             }

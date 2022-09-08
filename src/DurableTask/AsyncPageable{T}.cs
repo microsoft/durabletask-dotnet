@@ -35,7 +35,7 @@ public abstract class AsyncPageable<T> : IAsyncEnumerable<T>
         // TODO: ConfigureAwait(false)? This may cause issues when used in an orchestration.
         await foreach (Page<T> page in this.AsPages().WithCancellation(cancellationToken))
         {
-            foreach (T value in page)
+            foreach (T value in page.Values)
             {
                 yield return value;
             }

@@ -43,7 +43,7 @@ public class PageableTests
 
         List<Page<string>> pages = await pageable.AsPages(start?.ToString(), pageSize).ToListAsync();
         pages.Should().HaveCount((int)Math.Ceiling((15.0 - (start ?? 0)) / (pageSize ?? 3)));
-        pages.SelectMany(x => x).Should().BeEquivalentTo(expected);
+        pages.SelectMany(x => x.Values).Should().BeEquivalentTo(expected);
         counter.Callbacks.Should().Be(pages.Count);
     }
 

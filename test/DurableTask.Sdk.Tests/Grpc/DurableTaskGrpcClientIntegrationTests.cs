@@ -128,6 +128,10 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         List<OrchestrationMetadata> left = resumedPages.SelectMany(p => p.Values).ToList();
         List<OrchestrationMetadata> right = pages.Skip(2).SelectMany(p => p.Values).ToList();
         left.Should().BeEquivalentTo(right, cfg => cfg.Including(x => x.InstanceId).Including(x => x.CreatedAt));
+
+        Page<OrchestrationMetadata> page = await pageable.AsPages(pageSizeHint: 10).FirstAsync();
+        page.Values.Should().HaveCount(10);
+        page.ContinuationToken.Should().Be("10");
     }
 
     async Task<DurableTaskGrpcWorker> StartAsync()

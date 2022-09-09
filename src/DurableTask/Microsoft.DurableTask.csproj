@@ -47,7 +47,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Microsoft.DurableTask.Tests" Key="$(MicrosoftPublicKey)" />
+    <InternalsVisibleTo Include="Microsoft.DurableTask.Tests" Key="$(StrongNamePublicKey)" />
   </ItemGroup>
 
 </Project>

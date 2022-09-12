@@ -41,11 +41,9 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         DurableTaskClient client = this.CreateDurableTaskClient();
 
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(OrchestrationName, input: shouldThrow);
-        OrchestrationMetadata? metadata = await client.GetInstanceMetadataAsync(instanceId, false);
-        AssertMetadata(metadata!, instanceId, OrchestrationRuntimeStatus.Pending);
 
         await client.WaitForInstanceStartAsync(instanceId, default);
-        metadata = await client.GetInstanceMetadataAsync(instanceId, false);
+        OrchestrationMetadata? metadata = await client.GetInstanceMetadataAsync(instanceId, false);
         AssertMetadata(metadata!, instanceId, OrchestrationRuntimeStatus.Running);
 
         await client.RaiseEventAsync(instanceId, "event", default);
@@ -63,7 +61,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             using (new AssertionScope())
             {
                 metadata.Name.Should().Be(OrchestrationName);
-                metadata.InstanceId.Should().StartWith("expected-");
+                metadata.InstanceId.Should().StartWith("GetInstances_EndToEnd-");
                 metadata.RuntimeStatus.Should().Be(status);
 
                 // InMemoryOrchestrationService always returns these in a query.
@@ -89,12 +87,8 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         await ForEachAsync(x => client.ScheduleNewOrchestrationInstanceAsync(OrchestrationName, x, input: false));
         AsyncPageable<OrchestrationMetadata> pageable = client.GetInstances(query);
 
-        List<OrchestrationMetadata> metadata = await pageable.ToListAsync();
-        metadata.Should().HaveCount(2)
-            .And.AllSatisfy(m => AssertMetadata(m, OrchestrationRuntimeStatus.Pending));
-
         await ForEachAsync(x => client.WaitForInstanceStartAsync(x, default));
-        metadata = await pageable.ToListAsync();
+        List<OrchestrationMetadata> metadata = await pageable.ToListAsync();
         metadata.Should().HaveCount(2)
             .And.AllSatisfy(m => AssertMetadata(m, OrchestrationRuntimeStatus.Running));
 

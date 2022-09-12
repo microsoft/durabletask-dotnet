@@ -125,7 +125,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
 
         Page<OrchestrationMetadata> page = await pageable.AsPages(pageSizeHint: 10).FirstAsync();
         page.Values.Should().HaveCount(10);
-        page.ContinuationToken.Should().Be("10");
+        page.ContinuationToken.Should().NotBeNull();
     }
 
     async Task<DurableTaskGrpcWorker> StartAsync()

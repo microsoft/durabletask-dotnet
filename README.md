@@ -21,16 +21,16 @@ The following nuget packages are available for download.
 
 ## Usage with Azure Functions
 
-This SDK can be used to build Durable Functions apps that run in the [Azure Functions .NET Isolatd worker process](https://docs.microsoft.com/azure/azure-functions/dotnet-isolated-process-guide).
+This SDK can be used to build Durable Functions apps that run in the [Azure Functions .NET Isolated worker process](https://docs.microsoft.com/azure/azure-functions/dotnet-isolated-process-guide).
 
 To get started, add the [Microsoft.Azure.Functions.Worker.Extensions.DurableTask](https://www.nuget.org/packages//Microsoft.Azure.Functions.Worker.Extensions.DurableTask) nuget package to your Function app project. Make sure you're using the latest .NET Worker SDK packages.
 
 ```xml
   <ItemGroup>
-    <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="1.8.0-preview3" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="1.8.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="0.4.1-beta" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.0.13" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.5.0-preview2" OutputItemType="Analyzer" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.7.0" />
   </ItemGroup>
 ```
 
@@ -86,7 +86,7 @@ You can find the full sample file, including detailed comments, at [samples/Azur
 
 A new feature in this version of Durable Functions for .NET Isolated is the ability to define orchestrators and activities as classes instead of as functions. When using the class-based syntax, source generators are used to generate function definitions behind the scenes to instantiate and invoke your classes.
 
-The source generators also generate type-safe extention methods on the `client` and `context` objects, removing the need to reference other activities or orchestrations by name, or to use type parameters to declare the return type. The following sample demonstrates the same "Hello cities!" orchestration using the class-based syntax and source-generated extension methods.
+The source generators also generate type-safe extension methods on the `client` and `context` objects, removing the need to reference other activities or orchestrations by name, or to use type parameters to declare the return type. The following sample demonstrates the same "Hello cities!" orchestration using the class-based syntax and source-generated extension methods.
 
 ```csharp
 using Microsoft.Azure.Functions.Worker;

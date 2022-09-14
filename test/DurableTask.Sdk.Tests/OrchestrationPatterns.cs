@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.DurableTask.Grpc;
@@ -515,6 +516,43 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.NotNull(metadata);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.True(metadata.ReadOutputAs<bool>());
+    }
+
+    [Fact]
+    public async Task SpecialSerialization()
+    {
+        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
+            .AddTasks(tasks => tasks
+                .AddOrchestrator<JsonNode, JsonNode>("SpecialSerialization_Orchestration", (ctx, input) =>
+                {
+                    if (input is null)
+                    {
+                        throw new ArgumentNullException(nameof(input));
+                    }
+
+                    return ctx.CallActivityAsync<JsonNode?>("SpecialSerialization_Activity", input);
+                })
+                .AddActivity<JsonNode, JsonNode>("SpecialSerialization_Activity", (ctx, input) =>
+                {
+                    if (input is not null)
+                    {
+                        input["newProperty"] = "new value";
+                    }
+
+                    return Task.FromResult(input);
+                }))
+            .Build();
+        await server.StartAsync(this.TimeoutToken);
+
+        DurableTaskClient client = this.CreateDurableTaskClient();
+        JsonNode input = new JsonObject() { ["originalProperty"] = "original value" };
+        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync("SpecialSerialization_Orchestration", input: input);
+        OrchestrationMetadata result = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken, getInputsAndOutputs: true);
+        JsonNode? output = result.ReadOutputAs<JsonNode>();
+
+        Assert.NotNull(output);
+        Assert.Equal("original value", output?["originalProperty"]?.ToString());
+        Assert.Equal("new value", output?["newProperty"]?.ToString());
     }
 
     // TODO: Test for multiple external events with the same name

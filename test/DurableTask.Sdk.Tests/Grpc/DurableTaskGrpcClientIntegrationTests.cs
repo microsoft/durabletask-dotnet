@@ -65,15 +65,17 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
                 metadata.RuntimeStatus.Should().Be(status);
 
                 // InMemoryOrchestrationService always returns these in a query.
-                // metadata.FailureDetails.Should().BeNull();
-                // metadata.SerializedInput.Should().BeNull();
-                // metadata.SerializedOutput.Should().BeNull();
+                // The NotBeNull() here is to force this test failure when correct behavior
+                // is added, so we remember to change bellow to "NotNull()".
+                metadata.FailureDetails.Should().NotBeNull();
+                metadata.SerializedInput.Should().NotBeNull();
+                metadata.SerializedOutput.Should().NotBeNull();
             }
         }
 
         OrchestrationQuery query = new() { InstanceIdPrefix = "GetInstances_EndToEnd" };
 
-        static async Task ForEachAsync(Func<string, Task> func)
+        static async Task ForEachOrchestrationAsync(Func<string, Task> func)
         {
             await func("GetInstances_EndToEnd-1");
             await func("GetInstances_EndToEnd-2");
@@ -82,21 +84,24 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         await using DurableTaskGrpcWorker server = await this.StartAsync();
         DurableTaskClient client = this.CreateDurableTaskClient();
 
+        // Enqueue an extra orchestration which we will verify is NOT present.
         string notIncluded = await client.ScheduleNewOrchestrationInstanceAsync(OrchestrationName, input: false);
 
-        await ForEachAsync(x => client.ScheduleNewOrchestrationInstanceAsync(OrchestrationName, x, input: false));
+        await ForEachOrchestrationAsync(x => client.ScheduleNewOrchestrationInstanceAsync(OrchestrationName, x, input: false));
         AsyncPageable<OrchestrationMetadata> pageable = client.GetInstances(query);
 
-        await ForEachAsync(x => client.WaitForInstanceStartAsync(x, default));
+        await ForEachOrchestrationAsync(x => client.WaitForInstanceStartAsync(x, default));
         List<OrchestrationMetadata> metadata = await pageable.ToListAsync();
         metadata.Should().HaveCount(2)
-            .And.AllSatisfy(m => AssertMetadata(m, OrchestrationRuntimeStatus.Running));
+            .And.AllSatisfy(m => AssertMetadata(m, OrchestrationRuntimeStatus.Running))
+            .And.NotContain(x => string.Equals(x.InstanceId, notIncluded, StringComparison.OrdinalIgnoreCase));
 
-        await ForEachAsync(x => client.RaiseEventAsync(x, "event", default));
-        await ForEachAsync(x => client.WaitForInstanceCompletionAsync(x, default));
+        await ForEachOrchestrationAsync(x => client.RaiseEventAsync(x, "event", default));
+        await ForEachOrchestrationAsync(x => client.WaitForInstanceCompletionAsync(x, default));
         metadata = await pageable.ToListAsync();
         metadata.Should().HaveCount(2)
-            .And.AllSatisfy(m => AssertMetadata(m, OrchestrationRuntimeStatus.Completed));
+            .And.AllSatisfy(m => AssertMetadata(m, OrchestrationRuntimeStatus.Completed))
+            .And.NotContain(x => string.Equals(x.InstanceId, notIncluded, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

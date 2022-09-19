@@ -63,13 +63,12 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
                 metadata.Name.Should().Be(OrchestrationName);
                 metadata.InstanceId.Should().StartWith("GetInstances_EndToEnd-");
                 metadata.RuntimeStatus.Should().Be(status);
+                metadata.FailureDetails.Should().BeNull();
 
                 // InMemoryOrchestrationService always returns these in a query.
                 // The NotBeNull() here is to force this test failure when correct behavior
                 // is added, so we remember to change bellow to "NotNull()".
-                metadata.FailureDetails.Should().BeNull();
                 metadata.SerializedInput.Should().NotBeNull();
-
                 if (status == OrchestrationRuntimeStatus.Completed)
                 {
                     metadata.SerializedOutput.Should().NotBeNull();

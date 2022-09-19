@@ -46,4 +46,8 @@
     <ProjectReference Include="..\DurableTask.Generators\Microsoft.DurableTask.Generators.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.DurableTask.Tests" Key="$(StrongNamePublicKey)" />
+  </ItemGroup>
+
 </Project>

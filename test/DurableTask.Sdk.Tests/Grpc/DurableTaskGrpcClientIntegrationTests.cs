@@ -67,7 +67,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
 
                 // InMemoryOrchestrationService always returns these in a query.
                 // The NotBeNull() here is to force this test failure when correct behavior
-                // is added, so we remember to change bellow to "NotNull()".
+                // is added, so we remember to change bellow to "BeNull()".
                 metadata.SerializedInput.Should().NotBeNull();
                 if (status == OrchestrationRuntimeStatus.Completed)
                 {

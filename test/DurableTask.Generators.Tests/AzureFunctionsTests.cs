@@ -42,6 +42,36 @@ public static Task<int> CallIdentityAsync(this TaskOrchestrationContext ctx, int
             isDurableFunctions: true);
     }
 
+    [Fact]
+    public async Task Activities_SimpleFunctionTrigger_TaskReturning()
+    {
+        string code = @"
+using System.Threading.Tasks;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.DurableTask;
+
+public class Calculator
+{
+    [Function(""Identity"")]
+    public Task<int> IdentityAsync([ActivityTrigger] int input) => Task.FromResult(input);
+}";
+
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            methodList: @"
+public static Task<int> CallIdentityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
+{
+    return ctx.CallActivityAsync<int>(""Identity"", input, options);
+}",
+            isDurableFunctions: true);
+
+        await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: true);
+    }
+
     /// <summary>
     /// Verifies that using the class-based activity syntax generates a <see cref="TaskOrchestrationContext"/>
     /// extension method as well as an <see cref="ActivityTriggerAttribute"/> function definition.
@@ -172,7 +202,6 @@ public static Task<{outputType}> CallMyOrchestratorAsync(
             expectedOutput,
             isDurableFunctions: true);
     }
-
 
     /// <summary>
     /// Verifies that using the class-based syntax for authoring orchestrations generates 

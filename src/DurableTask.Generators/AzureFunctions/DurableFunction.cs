@@ -9,7 +9,7 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
 {
     public enum DurableFunctionKind
     {
-        Unknonwn,
+        Unknown,
         Orchestration,
         Activity
     }
@@ -50,6 +50,14 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
             if (!SyntaxNodeUtility.TryGetReturnType(method, out TypeSyntax returnType))
             {
                 return false;
+            }
+
+            INamedTypeSymbol taskSymbol = model.Compilation.GetTypeByMetadataName("System.Threading.Tasks.Task`1")!;
+            INamedTypeSymbol returnSymbol = (INamedTypeSymbol)model.GetTypeInfo(returnType).Type!;
+            if (SymbolEqualityComparer.Default.Equals(returnSymbol.OriginalDefinition, taskSymbol))
+            {
+                // this is a Task<T> return value, lets pull out the generic.
+                returnType = ((GenericNameSyntax)returnType).TypeArgumentList.Arguments[0];
             }
 
             if (!SyntaxNodeUtility.TryGetParameter(method, kind, out TypedParameter? parameter) || parameter == null)

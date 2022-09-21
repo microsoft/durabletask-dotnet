@@ -1,8 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Collections.Generic;
-using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -13,17 +11,23 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
     {
         public static bool TryGetFunctionName(SemanticModel model, MethodDeclarationSyntax method, out string? functionName)
         {
+            functionName = null;
             if (TryGetAttributeByName(method, "Function", out AttributeSyntax? functionNameAttribute) && functionNameAttribute != null)
             {
                 if (functionNameAttribute.ArgumentList?.Arguments.Count == 1)
                 {
                     ExpressionSyntax expression = functionNameAttribute.ArgumentList.Arguments.First().Expression;
-                    functionName = model.GetConstantValue(expression).Value?.ToString();
-                    return functionName != null;
+                    Optional<object?> constant = model.GetConstantValue(expression);
+                    if (!constant.HasValue)
+                    {
+                        return false;
+                    }
+
+                    functionName = constant.ToString();
+                    return true;
                 }
             }
 
-            functionName = null;
             return false;
         }
 
@@ -57,7 +61,7 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                 }
             }
 
-            kind = DurableFunctionKind.Unknonwn;
+            kind = DurableFunctionKind.Unknown;
             return false;
         }
 

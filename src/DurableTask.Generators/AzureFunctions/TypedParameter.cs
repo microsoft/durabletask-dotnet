@@ -1,26 +1,25 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+using Microsoft.CodeAnalysis;
 
 namespace Microsoft.DurableTask.Generators.AzureFunctions
 {
     public class TypedParameter
     {
-        public TypeSyntax Type { get; }
-        public string ResolvedType { get; }
+        public INamedTypeSymbol Type { get; }
         public string Name { get; }
 
-        public TypedParameter(TypeSyntax type, string resolvedType, string name)
+        public TypedParameter(INamedTypeSymbol type, string name)
         {
             this.Type = type;
-            this.ResolvedType = resolvedType;
             this.Name = name;
         }
 
         public override string ToString()
         {
-            return $"{this.ResolvedType} {this.Name}";
+            return $"{SyntaxNodeUtility.GetRenderedTypeExpression(this.Type, false)} {this.Name}";
         }
     }
 }

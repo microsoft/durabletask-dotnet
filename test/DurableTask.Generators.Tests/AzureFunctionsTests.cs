@@ -86,16 +86,16 @@ namespace AzureFunctionsTests
     public class Calculator
     {
         [Function(""Identity"")]
-        public int Identity([ActivityTrigger] Input input) => input.Value;
+        public Task<Input> Identity([ActivityTrigger] Input input) => Task.FromResult(input);
     }
 }";
 
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
-public static Task<int> CallIdentityAsync(this TaskOrchestrationContext ctx, AzureFunctionsTests.Input input, TaskOptions? options = null)
+public static Task<AzureFunctionsTests.Input> CallIdentityAsync(this TaskOrchestrationContext ctx, AzureFunctionsTests.Input input, TaskOptions? options = null)
 {
-    return ctx.CallActivityAsync<int>(""Identity"", input, options);
+    return ctx.CallActivityAsync<AzureFunctionsTests.Input>(""Identity"", input, options);
 }",
             isDurableFunctions: true);
 

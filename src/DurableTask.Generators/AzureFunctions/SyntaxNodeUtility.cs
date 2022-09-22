@@ -65,40 +65,36 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
             return false;
         }
 
-        public static bool TryGetRequiredNamespaces(SemanticModel model, List<TypeSyntax> types, out HashSet<string>? requiredNamespaces)
+        public static bool TryGetRequiredNamespaces(List<INamedTypeSymbol> types, out HashSet<string>? requiredNamespaces)
         {
             requiredNamespaces = new HashSet<string>();
 
-            var remaining = new Queue<TypeSyntax>(types);
+            var remaining = new Queue<INamedTypeSymbol>(types);
 
             while (remaining.Any())
             {
-                TypeSyntax toProcess = remaining.Dequeue();
-
-                if (toProcess is PredefinedTypeSyntax)
-                {
-                    continue;
-                }
-
-                TypeInfo typeInfo = model.GetTypeInfo(toProcess);
-                if (typeInfo.Type == null)
+                INamedTypeSymbol typeInfo = remaining.Dequeue();
+                if (typeInfo is null)
                 {
                     return false;
                 }
 
-                if (toProcess is not PredefinedTypeSyntax && typeInfo.Type.ContainingNamespace.IsGlobalNamespace)
+                if (typeInfo.ContainingNamespace.IsGlobalNamespace)
                 {
                     requiredNamespaces = null;
                     return false;
                 }
 
-                requiredNamespaces.Add(typeInfo.Type!.ContainingNamespace.ToDisplayString());
+                requiredNamespaces.Add(typeInfo.ContainingNamespace.ToDisplayString());
 
-                if (toProcess is GenericNameSyntax genericType)
+                if (typeInfo.IsGenericType)
                 {
-                    foreach (var typeArgument in genericType.TypeArgumentList.Arguments)
+                    foreach (ITypeSymbol typeArgument in typeInfo.TypeArguments)
                     {
-                        remaining.Enqueue(typeArgument);
+                        if (typeArgument is INamedTypeSymbol named)
+                        {
+                            remaining.Enqueue(named);
+                        }
                     }
                 }
             }
@@ -128,9 +124,11 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                             (kind == DurableFunctionKind.Orchestration && attributeName == "OrchestratorTrigger"))
                         {
                             TypeInfo info = model.GetTypeInfo(methodParam.Type);
-                            string resolvedType = GetRenderedTypeExpression(info.Type, false);
-                            parameter = new TypedParameter(methodParam.Type, resolvedType, methodParam.Identifier.ToString());
-                            return true;
+                            if (info.Type is INamedTypeSymbol named)
+                            {
+                                parameter = new TypedParameter(named, methodParam.Identifier.ToString());
+                                return true;
+                            }
                         }
                     }
                 }

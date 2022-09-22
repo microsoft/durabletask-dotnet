@@ -60,7 +60,7 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                 returnType = ((GenericNameSyntax)returnType).TypeArgumentList.Arguments[0];
             }
 
-            if (!SyntaxNodeUtility.TryGetParameter(method, kind, out TypedParameter? parameter) || parameter == null)
+            if (!SyntaxNodeUtility.TryGetParameter(model, method, kind, out TypedParameter? parameter) || parameter == null)
             {
                 return false;
             }

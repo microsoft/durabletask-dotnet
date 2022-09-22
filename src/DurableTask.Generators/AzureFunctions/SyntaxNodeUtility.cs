@@ -7,7 +7,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Microsoft.DurableTask.Generators.AzureFunctions
 {
-    public static class SyntaxNodeUtility
+    static class SyntaxNodeUtility
     {
         public static bool TryGetFunctionName(SemanticModel model, MethodDeclarationSyntax method, out string? functionName)
         {
@@ -39,11 +39,11 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
 
         public static bool TryGetFunctionKind(MethodDeclarationSyntax method, out DurableFunctionKind kind)
         {
-            var parameters = method.ParameterList.Parameters;
+            SeparatedSyntaxList<ParameterSyntax> parameters = method.ParameterList.Parameters;
 
             foreach (var parameterSyntax in parameters)
             {
-                var parameterAttributes = parameterSyntax.AttributeLists.SelectMany(a => a.Attributes);
+                IEnumerable<AttributeSyntax> parameterAttributes = parameterSyntax.AttributeLists.SelectMany(a => a.Attributes);
 
                 foreach (var attribute in parameterAttributes)
                 {
@@ -73,10 +73,12 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
 
             while (remaining.Any())
             {
-                var toProcess = remaining.Dequeue();
+                TypeSyntax toProcess = remaining.Dequeue();
 
                 if (toProcess is PredefinedTypeSyntax)
+                {
                     continue;
+                }
 
                 TypeInfo typeInfo = model.GetTypeInfo(toProcess);
                 if (typeInfo.Type == null)
@@ -104,12 +106,13 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
             return true;
         }
 
-        internal static bool TryGetParameter(
+        public static bool TryGetParameter(
+            SemanticModel model,
             MethodDeclarationSyntax method,
             DurableFunctionKind kind,
             out TypedParameter? parameter)
         {
-            foreach (var methodParam in method.ParameterList.Parameters)
+            foreach (ParameterSyntax methodParam in method.ParameterList.Parameters)
             {
                 if (methodParam.Type == null)
                 {
@@ -124,7 +127,9 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                         if ((kind == DurableFunctionKind.Activity && attributeName == "ActivityTrigger") ||
                             (kind == DurableFunctionKind.Orchestration && attributeName == "OrchestratorTrigger"))
                         {
-                            parameter = new TypedParameter(methodParam.Type, methodParam.Identifier.ToString());
+                            TypeInfo info = model.GetTypeInfo(methodParam.Type);
+                            string resolvedType = GetRenderedTypeExpression(info.Type, false);
+                            parameter = new TypedParameter(methodParam.Type, resolvedType, methodParam.Identifier.ToString());
                             return true;
                         }
                     }
@@ -137,7 +142,7 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
 
         public static bool TryGetQualifiedTypeName(SemanticModel model, MethodDeclarationSyntax method, out string? fullTypeName)
         {
-            var symbol = model.GetEnclosingSymbol(method.SpanStart);
+            ISymbol? symbol = model.GetEnclosingSymbol(method.SpanStart);
             if (symbol == null)
             {
                 fullTypeName = null;
@@ -146,6 +151,27 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
 
             fullTypeName = $@"{symbol.ToDisplayString()}.{method.Identifier}";
             return true;
+        }
+
+        public static string GetRenderedTypeExpression(ITypeSymbol? symbol, bool supportsNullable)
+        {
+            if (symbol == null)
+            {
+                return supportsNullable ? "object?" : "object";
+            }
+
+            if (supportsNullable && symbol.IsReferenceType && symbol.NullableAnnotation != NullableAnnotation.Annotated)
+            {
+                symbol = symbol.WithNullableAnnotation(NullableAnnotation.Annotated);
+            }
+
+            string expression = symbol.ToString();
+            if (expression.StartsWith("System.") && symbol.ContainingNamespace.Name == "System")
+            {
+                expression = expression.Substring("System.".Length);
+            }
+
+            return expression;
         }
 
         static bool TryGetAttributeByName(MethodDeclarationSyntax method, string attributeName, out AttributeSyntax? attribute)

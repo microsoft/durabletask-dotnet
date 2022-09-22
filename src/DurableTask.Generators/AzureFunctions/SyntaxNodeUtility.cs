@@ -11,7 +11,6 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
     {
         public static bool TryGetFunctionName(SemanticModel model, MethodDeclarationSyntax method, out string? functionName)
         {
-            functionName = null;
             if (TryGetAttributeByName(method, "Function", out AttributeSyntax? functionNameAttribute) && functionNameAttribute != null)
             {
                 if (functionNameAttribute.ArgumentList?.Arguments.Count == 1)
@@ -20,6 +19,7 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                     Optional<object?> constant = model.GetConstantValue(expression);
                     if (!constant.HasValue)
                     {
+                        functionName = null;
                         return false;
                     }
 
@@ -28,6 +28,7 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                 }
             }
 
+            functionName = null;
             return false;
         }
 

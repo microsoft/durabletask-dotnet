@@ -1,15 +1,13 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Collections.Generic;
-using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Microsoft.DurableTask.Generators.AzureFunctions
 {
-    public static class SyntaxNodeUtility
+    static class SyntaxNodeUtility
     {
         public static bool TryGetFunctionName(SemanticModel model, MethodDeclarationSyntax method, out string? functionName)
         {
@@ -18,8 +16,15 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                 if (functionNameAttribute.ArgumentList?.Arguments.Count == 1)
                 {
                     ExpressionSyntax expression = functionNameAttribute.ArgumentList.Arguments.First().Expression;
-                    functionName = model.GetConstantValue(expression).Value?.ToString();
-                    return functionName != null;
+                    Optional<object?> constant = model.GetConstantValue(expression);
+                    if (!constant.HasValue)
+                    {
+                        functionName = null;
+                        return false;
+                    }
+
+                    functionName = constant.ToString();
+                    return true;
                 }
             }
 
@@ -35,11 +40,11 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
 
         public static bool TryGetFunctionKind(MethodDeclarationSyntax method, out DurableFunctionKind kind)
         {
-            var parameters = method.ParameterList.Parameters;
+            SeparatedSyntaxList<ParameterSyntax> parameters = method.ParameterList.Parameters;
 
             foreach (var parameterSyntax in parameters)
             {
-                var parameterAttributes = parameterSyntax.AttributeLists.SelectMany(a => a.Attributes);
+                IEnumerable<AttributeSyntax> parameterAttributes = parameterSyntax.AttributeLists.SelectMany(a => a.Attributes);
 
                 foreach (var attribute in parameterAttributes)
                 {
@@ -57,42 +62,40 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                 }
             }
 
-            kind = DurableFunctionKind.Unknonwn;
+            kind = DurableFunctionKind.Unknown;
             return false;
         }
 
-        public static bool TryGetRequiredNamespaces(SemanticModel model, List<TypeSyntax> types, out HashSet<string>? requiredNamespaces)
+        public static bool TryGetRequiredNamespaces(List<INamedTypeSymbol> types, out HashSet<string>? requiredNamespaces)
         {
             requiredNamespaces = new HashSet<string>();
 
-            var remaining = new Queue<TypeSyntax>(types);
+            var remaining = new Queue<INamedTypeSymbol>(types);
 
             while (remaining.Any())
             {
-                var toProcess = remaining.Dequeue();
-
-                if (toProcess is PredefinedTypeSyntax)
-                    continue;
-
-                TypeInfo typeInfo = model.GetTypeInfo(toProcess);
-                if (typeInfo.Type == null)
+                INamedTypeSymbol typeInfo = remaining.Dequeue();
+                if (typeInfo is null)
                 {
                     return false;
                 }
 
-                if (toProcess is not PredefinedTypeSyntax && typeInfo.Type.ContainingNamespace.IsGlobalNamespace)
+                if (typeInfo.ContainingNamespace.IsGlobalNamespace)
                 {
                     requiredNamespaces = null;
                     return false;
                 }
 
-                requiredNamespaces.Add(typeInfo.Type!.ContainingNamespace.ToDisplayString());
+                requiredNamespaces.Add(typeInfo.ContainingNamespace.ToDisplayString());
 
-                if (toProcess is GenericNameSyntax genericType)
+                if (typeInfo.IsGenericType)
                 {
-                    foreach (var typeArgument in genericType.TypeArgumentList.Arguments)
+                    foreach (ITypeSymbol typeArgument in typeInfo.TypeArguments)
                     {
-                        remaining.Enqueue(typeArgument);
+                        if (typeArgument is INamedTypeSymbol named)
+                        {
+                            remaining.Enqueue(named);
+                        }
                     }
                 }
             }
@@ -100,12 +103,13 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
             return true;
         }
 
-        internal static bool TryGetParameter(
+        public static bool TryGetParameter(
+            SemanticModel model,
             MethodDeclarationSyntax method,
             DurableFunctionKind kind,
             out TypedParameter? parameter)
         {
-            foreach (var methodParam in method.ParameterList.Parameters)
+            foreach (ParameterSyntax methodParam in method.ParameterList.Parameters)
             {
                 if (methodParam.Type == null)
                 {
@@ -120,8 +124,12 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                         if ((kind == DurableFunctionKind.Activity && attributeName == "ActivityTrigger") ||
                             (kind == DurableFunctionKind.Orchestration && attributeName == "OrchestratorTrigger"))
                         {
-                            parameter = new TypedParameter(methodParam.Type, methodParam.Identifier.ToString());
-                            return true;
+                            TypeInfo info = model.GetTypeInfo(methodParam.Type);
+                            if (info.Type is INamedTypeSymbol named)
+                            {
+                                parameter = new TypedParameter(named, methodParam.Identifier.ToString());
+                                return true;
+                            }
                         }
                     }
                 }
@@ -133,7 +141,7 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
 
         public static bool TryGetQualifiedTypeName(SemanticModel model, MethodDeclarationSyntax method, out string? fullTypeName)
         {
-            var symbol = model.GetEnclosingSymbol(method.SpanStart);
+            ISymbol? symbol = model.GetEnclosingSymbol(method.SpanStart);
             if (symbol == null)
             {
                 fullTypeName = null;
@@ -142,6 +150,27 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
 
             fullTypeName = $@"{symbol.ToDisplayString()}.{method.Identifier}";
             return true;
+        }
+
+        public static string GetRenderedTypeExpression(ITypeSymbol? symbol, bool supportsNullable)
+        {
+            if (symbol == null)
+            {
+                return supportsNullable ? "object?" : "object";
+            }
+
+            if (supportsNullable && symbol.IsReferenceType && symbol.NullableAnnotation != NullableAnnotation.Annotated)
+            {
+                symbol = symbol.WithNullableAnnotation(NullableAnnotation.Annotated);
+            }
+
+            string expression = symbol.ToString();
+            if (expression.StartsWith("System.") && symbol.ContainingNamespace.Name == "System")
+            {
+                expression = expression.Substring("System.".Length);
+            }
+
+            return expression;
         }
 
         static bool TryGetAttributeByName(MethodDeclarationSyntax method, string attributeName, out AttributeSyntax? attribute)

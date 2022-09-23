@@ -1,7 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Threading.Tasks;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.DurableTask.Generators.Tests.Utils;
 using Xunit;
@@ -32,6 +31,71 @@ public class Calculator
 public static Task<int> CallIdentityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<int>(""Identity"", input, options);
+}",
+            isDurableFunctions: true);
+
+        await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: true);
+    }
+
+    [Fact]
+    public async Task Activities_SimpleFunctionTrigger_TaskReturning()
+    {
+        string code = @"
+using System.Threading.Tasks;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.DurableTask;
+
+public class Calculator
+{
+    [Function(""Identity"")]
+    public Task<int> IdentityAsync([ActivityTrigger] int input) => Task.FromResult(input);
+}";
+
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            methodList: @"
+public static Task<int> CallIdentityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
+{
+    return ctx.CallActivityAsync<int>(""Identity"", input, options);
+}",
+            isDurableFunctions: true);
+
+        await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: true);
+    }
+
+    [Fact]
+    public async Task Activities_SimpleFunctionTrigger_CustomType()
+    {
+        string code = @"
+using System.Threading.Tasks;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.DurableTask;
+
+namespace AzureFunctionsTests
+{
+    public record Input(int Value);
+
+    public class Calculator
+    {
+        [Function(""Identity"")]
+        public Task<Input> Identity([ActivityTrigger] Input input) => Task.FromResult(input);
+    }
+}";
+
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            methodList: @"
+public static Task<AzureFunctionsTests.Input> CallIdentityAsync(this TaskOrchestrationContext ctx, AzureFunctionsTests.Input input, TaskOptions? options = null)
+{
+    return ctx.CallActivityAsync<AzureFunctionsTests.Input>(""Identity"", input, options);
 }",
             isDurableFunctions: true);
 
@@ -172,7 +236,6 @@ public static Task<{outputType}> CallMyOrchestratorAsync(
             expectedOutput,
             isDurableFunctions: true);
     }
-
 
     /// <summary>
     /// Verifies that using the class-based syntax for authoring orchestrations generates 

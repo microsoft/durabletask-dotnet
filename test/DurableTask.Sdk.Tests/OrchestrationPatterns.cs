@@ -56,8 +56,8 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
 
-        // Verify that the delay actually happened
-        Assert.True(metadata.CreatedAt.Add(delay) <= metadata.LastUpdatedAt);
+        // Verify that the delay actually happened with a 1 second variation
+        Assert.True(metadata.CreatedAt.Add(delay) <= metadata.LastUpdatedAt.AddSeconds(1));
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
 
         // Verify that the delay actually happened
-        Assert.True(metadata.CreatedAt.Add(delay) <= metadata.LastUpdatedAt);
+        Assert.True(metadata.CreatedAt.Add(delay) <= metadata.LastUpdatedAt.AddSeconds(1));
 
         // Verify that the correct number of timers were created
         IReadOnlyCollection<LogEntry> logs = this.GetLogs();

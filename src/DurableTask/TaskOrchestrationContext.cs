@@ -167,7 +167,8 @@ public abstract class TaskOrchestrationContext
     /// <remarks>
     /// <para>
     /// External clients can raise events to a waiting orchestration instance using the 
-    /// <see cref="DurableTaskClient.RaiseEventAsync"/> method.
+    /// <see cref="DurableTaskClient.RaiseEventAsync"/> method. Similarly, orchestrations can raise events to other
+    /// orchestrations using the <see cref="SendEvent"/> method.
     /// </para><para>
     /// If the current orchestrator instance is not yet waiting for an event named <paramref name="eventName"/>,
     /// then the event will be saved in the orchestration instance state and dispatched immediately when this method is
@@ -221,6 +222,21 @@ public abstract class TaskOrchestrationContext
         // This will either return the received value or throw if the task was cancelled.
         return await externalEventTask;
     }
+
+    /// <summary>
+    /// Raises an external event for the specified orchestration instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>The target orchestration can handle the sent event using the
+    /// <see cref="WaitForExternalEvent{T}(string, CancellationToken)"/> method.
+    /// </para><para>
+    /// If the target orchestration doesn't exist, the event will be silently dropped.
+    /// </para>
+    /// </remarks>
+    /// <param name="instanceId">The ID of the orchestration instance to send the event to.</param>
+    /// <param name="eventName">The name of the event to wait for. Event names are case-insensitive.</param>
+    /// <param name="payload">The serializable payload of the external event.</param>
+    public abstract void SendEvent(string instanceId, string eventName, object payload);
 
     /// <summary>
     /// Assigns a custom status value to the current orchestration.

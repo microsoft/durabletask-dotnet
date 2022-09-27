@@ -7,10 +7,29 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <Platform Condition="'$(Platform)' == ''">AnyCPU</Platform>
+    <RepoRoot>$(MSBuildThisFileDirectory)</RepoRoot>
+    <OutRoot>$(RepoRoot)$([MSBuild]::EnsureTrailingSlash(out/$(SubOutRoot)))</OutRoot>
+    <EngRoot>$(RepoRoot)eng/</EngRoot>
+    <SrcRoot>$(RepoRoot)src/</SrcRoot>
+    <BaseOutputPath>$(OutRoot)bin/</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(OutRoot)obj/$(MSBuildProjectName)/</BaseIntermediateOutputPath>
+    <IntermediateOutputPath>$(BaseIntermediateOutputPath)$(Configuration)/</IntermediateOutputPath>
+    <SubOutputPath Condition="'$(SubOutputPath)' == ''">$(MSBuildProjectName)/</SubOutputPath>
+    <OutputPath>$(BaseOutputPath)$(Configuration)/$([MSBuild]::EnsureTrailingSlash($(SubOutputPath)))</OutputPath>
+    <PackageOutputPath>$(OutRoot)pkg/</PackageOutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <IsTestProject Condition="$(MSBuildProjectName.Contains('Test'))">true</IsTestProject>
+  </PropertyGroup>
+
   <!-- Signing -->
   <PropertyGroup>
     <SignAssembly>true</SignAssembly>
-    <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)eng/key.snk</AssemblyOriginatorKeyFile>
+    <AssemblyOriginatorKeyFile>$(EngRoot)key.snk</AssemblyOriginatorKeyFile>
     <StrongNamePublicKey>00240000048000009400000006020000002400005253413100040000010001000505410141442095e0b0466df68ac32d158abdf0bd9cf26407d7a9d20b93656530556f23979f20b067628b9baee75fc6bba5c349519585a2852c1843bc61d74c4cbf9d80429cbdcbf609ea70fd62061eb65f40a6c9d505dd71cb119ef51f589a014d3b56159abbc38825fafbd119b6e97ebd9a5f3862a5c06220c680a6ac9eec</StrongNamePublicKey>
   </PropertyGroup>
 

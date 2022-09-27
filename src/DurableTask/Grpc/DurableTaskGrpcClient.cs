@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Text;
+using Google.Protobuf.Collections;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.DurableTask.Converters;
@@ -181,7 +182,55 @@ public class DurableTaskGrpcClient : DurableTaskClient
             return null;
         }
 
-        return new OrchestrationMetadata(response, this.dataConverter, getInputsAndOutputs);
+        return new OrchestrationMetadata(response.OrchestrationState, this.dataConverter, getInputsAndOutputs);
+    }
+
+    /// <inheritdoc/>
+    public override AsyncPageable<OrchestrationMetadata> GetInstances(OrchestrationQuery? query = null)
+    {
+        return Pageable.Create(async (continuation, pageSize, cancellation) =>
+        {
+            P.QueryInstancesRequest request = new()
+            {
+                Query = new P.InstanceQuery
+                {
+                    CreatedTimeFrom = query?.CreatedFrom?.ToTimestamp(),
+                    CreatedTimeTo = query?.CreatedTo?.ToTimestamp(),
+                    FetchInputsAndOutputs = query?.FetchInputsAndOutputs ?? false,
+                    InstanceIdPrefix = query?.InstanceIdPrefix,
+                    MaxInstanceCount = pageSize ?? query?.PageSize ?? OrchestrationQuery.DefaultPageSize,
+                    ContinuationToken = continuation ?? query?.ContinuationToken,
+                },
+            };
+
+            if (query?.Statuses is not null)
+            {
+                request.Query.RuntimeStatus.AddRange(query.Statuses.Select(x => x.ToGrpcStatus()));
+            }
+
+            if (query?.TaskHubNames is not null)
+            {
+                request.Query.TaskHubNames.AddRange(query.TaskHubNames);
+            }
+
+            try
+            {
+
+                P.QueryInstancesResponse response = await this.sidecarClient.QueryInstancesAsync(
+                    request, cancellationToken: cancellation);
+
+                bool getInputsAndOutputs = query?.FetchInputsAndOutputs ?? false;
+                IReadOnlyList<OrchestrationMetadata> values = response.OrchestrationState
+                    .Select(x => new OrchestrationMetadata(x, this.dataConverter, getInputsAndOutputs))
+                    .ToList();
+
+                return new Page<OrchestrationMetadata>(values, response.ContinuationToken);
+            }
+            catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+            {
+                throw new OperationCanceledException($"The {nameof(GetInstances)} operation was canceled.", e, cancellation);
+            }
+        });
     }
 
     /// <inheritdoc/>
@@ -210,7 +259,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
             throw new OperationCanceledException($"The {nameof(WaitForInstanceStartAsync)} operation was canceled.", e, cancellationToken);
         }
 
-        return new OrchestrationMetadata(response, this.dataConverter, getInputsAndOutputs);
+        return new OrchestrationMetadata(response.OrchestrationState, this.dataConverter, getInputsAndOutputs);
     }
 
     /// <inheritdoc/>
@@ -239,13 +288,50 @@ public class DurableTaskGrpcClient : DurableTaskClient
             throw new OperationCanceledException($"The {nameof(WaitForInstanceCompletionAsync)} operation was canceled.", e, cancellationToken);
         }
 
-        return new OrchestrationMetadata(response, this.dataConverter, getInputsAndOutputs);
+        return new OrchestrationMetadata(response.OrchestrationState, this.dataConverter, getInputsAndOutputs);
     }
 
     /// <inheritdoc/>
     public override Task<PurgeResult> PurgeInstanceMetadataAsync(string instanceId, CancellationToken cancellation = default)
     {
-        throw new NotImplementedException();
+        this.logger.PurgingInstanceMetadata(instanceId);
+        
+        P.PurgeInstancesRequest request = new() { InstanceId = instanceId };
+        return this.PurgeInstancesCoreAsync(request, cancellation);
+    }
+
+    /// <inheritdoc/>
+    public override Task<PurgeResult> PurgeInstancesAsync(PurgeInstancesFilter filter, CancellationToken cancellation = default)
+    {
+        this.logger.PurgingInstances(filter);
+        P.PurgeInstancesRequest request = new()
+        {
+            PurgeInstanceFilter = new()
+            {
+                CreatedTimeFrom = filter?.CreatedFrom.ToTimestamp(),
+                CreatedTimeTo = filter?.CreatedTo.ToTimestamp(),
+            },
+        };
+
+        if (filter?.Statuses is not null)
+        {
+            request.PurgeInstanceFilter.RuntimeStatus.AddRange(filter.Statuses.Select(x => x.ToGrpcStatus()));
+        }
+
+        return this.PurgeInstancesCoreAsync(request, cancellation);
+    }
+
+    async Task<PurgeResult> PurgeInstancesCoreAsync(P.PurgeInstancesRequest request, CancellationToken cancellation = default)
+    {
+        try
+        {
+            P.PurgeInstancesResponse response = await this.sidecarClient.PurgeInstancesAsync(request, cancellationToken: cancellation);
+            return new PurgeResult(response.DeletedInstanceCount);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException($"The {nameof(PurgeInstancesAsync)} operation was canceled.", e, cancellation);
+        }
     }
 
     /// <summary>

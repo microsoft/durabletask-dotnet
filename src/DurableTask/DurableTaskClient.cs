@@ -191,7 +191,12 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// <inheritdoc cref="WaitForInstanceStartAsync(string, CancellationToken, bool)"/>
     public abstract Task<OrchestrationMetadata?> GetInstanceMetadataAsync(string instanceId, bool getInputsAndOutputs);
 
-    // TODO: Multi-instance query
+    /// <summary>
+    /// Queries orchestration instances 
+    /// </summary>
+    /// <param name="query">Filters down the instances included in the query.</param>
+    /// <returns>An async pageable of the query results.</returns>
+    public abstract AsyncPageable<OrchestrationMetadata> GetInstances(OrchestrationQuery? query = null);
 
     /// <summary>
     /// Purges orchestration instance metadata from the durable store.
@@ -219,7 +224,16 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// </returns>
     public abstract Task<PurgeResult> PurgeInstanceMetadataAsync(string instanceId, CancellationToken cancellation = default);
 
-    // TODO: Multi-instance purge
+    /// <summary>
+    /// Purges orchestration instances metadata from the durable store.
+    /// </summary>
+    /// <param name="filter">The filter for which orchestrations to purge.</param>
+    /// <param name="cancellation">A <see cref="CancellationToken"/> that can be used to cancel the purge operation.</param>
+    /// <returns>
+    /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged.
+    /// </returns>
+    public abstract Task<PurgeResult> PurgeInstancesAsync(PurgeInstancesFilter filter, CancellationToken cancellation = default);
 
     // TODO: Create task hub
 

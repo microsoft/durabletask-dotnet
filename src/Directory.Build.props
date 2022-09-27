@@ -1,13 +1,10 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project>
+
+  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory)../, $(_DirectoryBuildPropsFile)))/$(_DirectoryBuildPropsFile)"
+    Condition=" '$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory)../, $(_DirectoryBuildPropsFile)))' != '' " />
 
   <!-- Common build settings -->
   <PropertyGroup>
-    <LangVersion>10.0</LangVersion>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <SignAssembly>true</SignAssembly>
-    <AssemblyOriginatorKeyFile>../../key.snk</AssemblyOriginatorKeyFile>
     <DebugType>embedded</DebugType>
     <Company>Microsoft Corporation</Company>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
@@ -31,4 +28,5 @@
       <PackagePath>content/SBOM</PackagePath>
     </Content>
   </ItemGroup>
+
 </Project>

@@ -59,7 +59,6 @@ class TaskActivityShim : TaskActivity
         return serializedOutput;
     }
 
-
     // Not used/called
     public override string Run(TaskContext context, string input) => throw new NotImplementedException();
 

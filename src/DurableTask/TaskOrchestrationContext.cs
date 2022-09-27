@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using DurableTask.Core;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask;
@@ -22,13 +23,18 @@ public abstract class TaskOrchestrationContext
     public abstract string InstanceId { get; }
 
     /// <summary>
+    /// Gets the parent instance or <c>null</c> if there is no parent orchestration.
+    /// </summary>
+    public abstract ParentInstance? Parent { get; }
+
+    /// <summary>
     /// Gets the current orchestration time in UTC.
     /// </summary>
     /// <remarks>
     /// The current orchestration time is stored in the orchestration history and this API will
     /// return the same value each time it is called from a particular point in the orchestration's
     /// execution. It is a deterministic, replay-safe replacement for existing .NET APIs for getting
-    /// the curren time, such as <see cref="DateTime.UtcNow"/> and <see cref="DateTimeOffset.UtcNow"/>.
+    /// the current time, such as <see cref="DateTime.UtcNow"/> and <see cref="DateTimeOffset.UtcNow"/>.
     /// </remarks>
     public abstract DateTime CurrentUtcDateTime { get; }
 

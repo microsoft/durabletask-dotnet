@@ -23,19 +23,19 @@ public sealed class OrchestrationMetadata
     readonly bool requestedInputsAndOutputs;
 
     internal OrchestrationMetadata(
-        P.GetInstanceResponse response,
+        P.OrchestrationState state,
         DataConverter dataConverter,
         bool requestedInputsAndOutputs)
     {
-        this.Name = response.OrchestrationState.Name;
-        this.InstanceId = response.OrchestrationState.InstanceId;
-        this.RuntimeStatus = (OrchestrationRuntimeStatus)response.OrchestrationState.OrchestrationStatus;
-        this.CreatedAt = response.OrchestrationState.CreatedTimestamp.ToDateTimeOffset();
-        this.LastUpdatedAt = response.OrchestrationState.LastUpdatedTimestamp.ToDateTimeOffset();
-        this.SerializedInput = response.OrchestrationState.Input;
-        this.SerializedOutput = response.OrchestrationState.Output;
-        this.SerializedCustomStatus = response.OrchestrationState.CustomStatus;
-        this.FailureDetails = ProtoUtils.ConvertTaskFailureDetails(response.OrchestrationState?.FailureDetails);
+        this.Name = state.Name;
+        this.InstanceId = state.InstanceId;
+        this.RuntimeStatus = (OrchestrationRuntimeStatus)state.OrchestrationStatus;
+        this.CreatedAt = state.CreatedTimestamp.ToDateTimeOffset();
+        this.LastUpdatedAt = state.LastUpdatedTimestamp.ToDateTimeOffset();
+        this.SerializedInput = state.Input;
+        this.SerializedOutput = state.Output;
+        this.SerializedCustomStatus = state.CustomStatus;
+        this.FailureDetails = ProtoUtils.ConvertTaskFailureDetails(state?.FailureDetails);
         this.dataConverter = dataConverter;
         this.requestedInputsAndOutputs = requestedInputsAndOutputs;
     }

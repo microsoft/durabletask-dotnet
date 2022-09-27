@@ -10,6 +10,4 @@
     </None>
   </ItemGroup>
 
-  <Import Project="$(EngRoot)build/InternalsVisibleTo.targets" />
-
 </Project>

@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="$(SrcRoot)Grpc\Worker\Grpc.Worker.csproj" />
+  </ItemGroup>
+
+</Project>

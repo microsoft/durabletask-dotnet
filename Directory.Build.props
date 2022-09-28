@@ -7,6 +7,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!-- Assembly name and namespace -->
+  <PropertyGroup Condition="!$(MSBuildProjectName.StartsWith('Microsoft.DurableTask'))">
+    <TopLevelNamespace Condition="'$(TopLevelNamespace)' == ''">Microsoft.DurableTask</TopLevelNamespace>
+    <AssemblyName>$(TopLevelNamespace).$(MSBuildProjectName)</AssemblyName>
+    <RootNamespace Condition="'$(RootNamespace)' == ''">$(AssemblyName)</RootNamespace>
+  </PropertyGroup>
+
   <PropertyGroup>
     <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
     <Platform Condition="'$(Platform)' == ''">AnyCPU</Platform>
@@ -20,10 +27,6 @@
     <SubOutputPath Condition="'$(SubOutputPath)' == ''">$(MSBuildProjectName)/</SubOutputPath>
     <OutputPath>$(BaseOutputPath)$(Configuration)/$([MSBuild]::EnsureTrailingSlash($(SubOutputPath)))</OutputPath>
     <PackageOutputPath>$(OutRoot)pkg/</PackageOutputPath>
-  </PropertyGroup>
-
-  <PropertyGroup>
-    <IsTestProject Condition="$(MSBuildProjectName.Contains('Test'))">true</IsTestProject>
   </PropertyGroup>
 
   <!-- Signing -->

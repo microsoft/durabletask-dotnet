@@ -8,4 +8,12 @@
     <FileVersion Condition="'$(FileVersionRevision)' != ''">$(VersionPrefix).$(FileVersionRevision)</FileVersion>
   </PropertyGroup>
 
+  <ItemGroup Condition="'$(IncludeShared)' != 'false'">
+    <Compile Include="$(SrcRoot)Shared/**/*.cs" LinkBase="Shared" Visible="false" />
+    <EmbeddedResource Include="$(SrcRoot)Shared/**/*.resx" LinkBase="Shared" Visible="false">
+      <RecursiveNamespace>$([System.String]::Copy('%(RecursiveDir)').Replace($([System.IO.Path]::DirectorySeparatorChar.ToString()), '.'))</RecursiveNamespace>
+      <LogicalName>Shared.%(RecursiveNamespace)%(Filename).resources</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
 </Project>

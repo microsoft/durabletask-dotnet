@@ -4,6 +4,7 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <AssemblyName>Microsoft.DurableTask.Client</AssemblyName>
+    <IncludeShared>false</IncludeShared>
   </PropertyGroup>
 
   <!-- Package info -->

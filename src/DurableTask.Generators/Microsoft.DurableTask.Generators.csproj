@@ -7,6 +7,7 @@
     <!-- Do not include the generator as a lib dependency -->
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <IncludeShared>false</IncludeShared>
   </PropertyGroup>
   
     <!-- Package info -->

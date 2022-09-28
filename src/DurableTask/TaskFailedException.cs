@@ -1,7 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
 using DurableTask.Core.Exceptions;
 
 namespace Microsoft.DurableTask;
@@ -34,7 +33,7 @@ public sealed class TaskFailedException : Exception
     /// </summary>
     /// <remarks>
     /// Each durable task (activities, timers, sub-orchestrations, etc.) scheduled by a task orchestrator has an
-    /// auto-incremeting ID associated with it. This is used to distinguish tasks from one another, even if, for
+    /// auto-incrementing ID associated with it. This is used to distinguish tasks from one another, even if, for
     /// example, they are tasks that call the same activity. This ID can therefore be used to more easily correlate a
     /// specific task failure to a specific task.
     /// </remarks>

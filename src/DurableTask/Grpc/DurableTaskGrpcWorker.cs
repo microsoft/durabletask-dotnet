@@ -274,19 +274,21 @@ public class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
 
     async Task OnRunOrchestratorAsync(P.OrchestratorRequest request)
     {
-        OrchestrationRuntimeState runtimeState = BuildRuntimeState(request);
-        TaskName name = new(runtimeState.Name, runtimeState.Version);
-
-        this.logger.ReceivedOrchestratorRequest(
-            name,
-            request.InstanceId,
-            runtimeState.PastEvents.Count,
-            runtimeState.NewEvents.Count);
-
         OrchestratorExecutionResult? result = null;
         P.TaskFailureDetails? failureDetails = null;
+        TaskName name = new("(unknown)");
+
         try
         {
+            OrchestrationRuntimeState runtimeState = BuildRuntimeState(request);
+            name = new(runtimeState.Name, runtimeState.Version);
+
+            this.logger.ReceivedOrchestratorRequest(
+                name,
+                request.InstanceId,
+                runtimeState.PastEvents.Count,
+                runtimeState.NewEvents.Count);
+
             TaskOrchestration orchestrator;
             if (this.orchestrators.TryGetValue(name, out Func<OrchestrationInvocationContext, TaskOrchestration>? factory) && factory != null)
             {

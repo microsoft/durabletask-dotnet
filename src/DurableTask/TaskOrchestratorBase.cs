@@ -1,8 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask;
@@ -40,7 +38,7 @@ public interface ITaskOrchestrator
 /// </summary>
 /// <remarks>
 /// <para>
-///  Task orchestrators describe how actions are executed and the order in which actions are executed. Orchestrator's
+///  Task orchestrators describe how actions are executed and the order in which actions are executed. Orchestrators
 ///  don't call into external services or do complex computation directly. Rather, they delegate these tasks to
 ///  <em>activities</em>, which perform the actual work.
 /// </para>
@@ -58,7 +56,7 @@ public interface ITaskOrchestrator
 /// </para>
 /// <para>
 ///   Orchestrators may be replayed multiple times to rebuild their local state after being reloaded into memory.
-///   Orchestrator code must therefore be <em>deterministic</em> to ensure no unexpected side-effects from execution
+///   Orchestrator code must therefore be <em>deterministic</em> to ensure no unexpected side effects from execution
 ///   replay. To account for this behavior, there are several coding constraints to be aware of:
 ///   <list type="bullet">
 ///     <item>

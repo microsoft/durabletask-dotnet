@@ -204,3 +204,10 @@ csharp_style_namespace_declarations = file_scoped:silent
 
 # https://marketplace.visualstudio.com/items?itemName=PaulHarrington.EditorGuidelinesPreview
 guidelines = 120
+
+csharp_style_prefer_method_group_conversion = true:silent
+[*.{cs,vb}]
+dotnet_style_operator_placement_when_wrapping = beginning_of_line
+tab_width = 4
+indent_size = 4
+end_of_line = crlf

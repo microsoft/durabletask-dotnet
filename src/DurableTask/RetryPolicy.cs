@@ -1,10 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace Microsoft.DurableTask;
 
 /// <summary>
@@ -15,11 +11,11 @@ public class RetryPolicy
     /// <summary>
     /// Initializes a new instance of the <see cref="RetryPolicy"/> class.
     /// </summary>
-    /// <param name="maxNumberOfAttempts">The maximum number of attempts. Must be 1 or greater.</param>
+    /// <param name="maxNumberOfAttempts">The maximum number of task invocation attempts. Must be 1 or greater.</param>
     /// <param name="firstRetryInterval">The amount of time to delay between the first and second attempt.</param>
     /// <param name="backoffCoefficient">The exponential backoff coefficient used to determine the delay between subsequent retries. Must be 1.0 or greater.</param>
     /// <param name="maxRetryInterval">The maximum time to delay between attempts, regardless of <paramref name="backoffCoefficient"/>.</param>
-    /// <param name="retryTimeout">Tthe overall timeout for retries.</param>
+    /// <param name="retryTimeout">The overall timeout for retries.</param>
     /// <remarks>
     /// The value <see cref="Timeout.InfiniteTimeSpan"/> can be used to specify an unlimited timeout for <paramref name="maxRetryInterval"/> or <paramref name="retryTimeout"/>.
     /// </remarks>

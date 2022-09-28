@@ -1,9 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using DurableTask.Core;
 using Microsoft.Extensions.Logging;
 
@@ -51,7 +48,7 @@ public abstract class TaskOrchestrationContext
     /// that are stored in the orchestration history. One the orchestrator reaches the point in the orchestrator
     /// where it's no longer replaying existing history, the <see cref="IsReplaying"/> property will return <c>false</c>.
     /// </para><para>
-    /// You can use this property if you have logic that needs to run only when *not* replaying. For example,
+    /// You can use this property if you have logic that needs to run only when <em>not</em> replaying. For example,
     /// certain types of application logging may become too noisy when duplicated as part of replay. The
     /// application code could check to see whether the function is being replayed and then issue the log statements
     /// when this value is <c>false</c>.
@@ -90,7 +87,7 @@ public abstract class TaskOrchestrationContext
     /// Both the inputs and outputs of activities are serialized and stored in durable storage. It's highly recommended
     /// to not include any sensitive data in activity inputs or outputs. It's also recommended to not use large payloads
     /// for activity inputs and outputs, which can result in expensive serialization and network utilization. For data
-    /// that cannot be cheaply or safely persisted to storage, it's recommended to instead pass <em>references</em> 
+    /// that cannot be cheaply or safely persisted to storage, it's recommended to instead pass <em>references</em>
     /// (for example, a URL to a storage blog) to the data and have activities fetch the data directly as part of their
     /// implementation.
     /// </para>
@@ -170,7 +167,8 @@ public abstract class TaskOrchestrationContext
     /// <remarks>
     /// <para>
     /// External clients can raise events to a waiting orchestration instance using the 
-    /// <see cref="DurableTaskClient.RaiseEventAsync"/> method.
+    /// <see cref="DurableTaskClient.RaiseEventAsync"/> method. Similarly, orchestrations can raise events to other
+    /// orchestrations using the <see cref="SendEvent"/> method.
     /// </para><para>
     /// If the current orchestrator instance is not yet waiting for an event named <paramref name="eventName"/>,
     /// then the event will be saved in the orchestration instance state and dispatched immediately when this method is
@@ -224,6 +222,21 @@ public abstract class TaskOrchestrationContext
         // This will either return the received value or throw if the task was cancelled.
         return await externalEventTask;
     }
+
+    /// <summary>
+    /// Raises an external event for the specified orchestration instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>The target orchestration can handle the sent event using the
+    /// <see cref="WaitForExternalEvent{T}(string, CancellationToken)"/> method.
+    /// </para><para>
+    /// If the target orchestration doesn't exist, the event will be silently dropped.
+    /// </para>
+    /// </remarks>
+    /// <param name="instanceId">The ID of the orchestration instance to send the event to.</param>
+    /// <param name="eventName">The name of the event to wait for. Event names are case-insensitive.</param>
+    /// <param name="payload">The serializable payload of the external event.</param>
+    public abstract void SendEvent(string instanceId, string eventName, object payload);
 
     /// <summary>
     /// Assigns a custom status value to the current orchestration.
@@ -323,7 +336,7 @@ public abstract class TaskOrchestrationContext
     /// remove any saved external events by specifying <c>false</c> for the <paramref name="preserveUnprocessedEvents"/>
     /// parameter value.
     /// </para><para>
-    /// Orchestrator functions should return immediately after calling the <see cref="ContinueAsNew"/> method.
+    /// Orchestrator implementations should complete immediately after calling the <see cref="ContinueAsNew"/> method.
     /// </para>
     /// </remarks>
     /// <param name="newInput">The JSON-serializable input data to re-initialize the instance with.</param>

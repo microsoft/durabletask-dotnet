@@ -6,7 +6,7 @@ using System;
 namespace Microsoft.DurableTask;
 
 /// <summary>
-/// Enum describing the status of the orchestration
+/// Enum describing the runtime status of the orchestration.
 /// </summary>
 public enum OrchestrationRuntimeStatus
 {

@@ -12,7 +12,7 @@ namespace Microsoft.DurableTask;
 /// This class is intended for use with alternate .NET-based durable task runtimes. It's not intended for use
 /// in application code.
 /// </remarks>
-public partial class TaskOrchestrationShim : TaskOrchestration
+partial class TaskOrchestrationShim : TaskOrchestration
 {
     readonly TaskName name;
     readonly ITaskOrchestrator implementation;

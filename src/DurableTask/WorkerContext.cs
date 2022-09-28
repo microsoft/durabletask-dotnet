@@ -14,7 +14,7 @@ namespace Microsoft.DurableTask;
 /// <param name="Logger">The logger to use for emitting logs.</param>
 /// <param name="Services">The dependency-injection service provider.</param>
 /// <param name="TimerOptions">Optional. The configuration options for durable timers.</param>
-public record WorkerContext(
+record WorkerContext(
     DataConverter DataConverter,
     ILogger Logger,
     IServiceProvider Services,
@@ -25,6 +25,6 @@ public record WorkerContext(
 /// </summary>
 /// <param name="WorkerContext">The worker context.</param>
 /// <param name="RuntimeState">The orchestration runtime state.</param>
-public record struct OrchestrationInvocationContext(
+record struct OrchestrationInvocationContext(
     WorkerContext WorkerContext,
     OrchestrationRuntimeState RuntimeState);

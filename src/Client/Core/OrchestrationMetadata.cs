@@ -38,7 +38,7 @@ public sealed class OrchestrationMetadata
 
     /// <summary>
     /// Gets the data converter used to deserialized the serialized data on this instance.
-    /// The will only be present when inputs and outputs are requested, <c>null</c> otherwise.
+    /// This will only be present when inputs and outputs are requested, <c>null</c> otherwise.
     /// </summary>
     /// <value>The optional data converter.</value>
     public DataConverter? DataConverter { get; init; }

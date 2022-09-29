@@ -42,37 +42,37 @@ public sealed class OrchestrationMetadata
     /// Gets the current runtime status of the orchestration instance at the time this object was fetched.
     /// </summary>
     /// <value>The runtime status of the orchestration instance at the time this object was fetched</value>
-    public OrchestrationRuntimeStatus RuntimeStatus { get; }
+    public OrchestrationRuntimeStatus RuntimeStatus { get; init; }
 
     /// <summary>
     /// Gets the orchestration instance's creation time in UTC.
     /// </summary>
     /// <value>The orchestration instance's creation time in UTC.</value>
-    public DateTimeOffset CreatedAt { get; }
+    public DateTimeOffset CreatedAt { get; init; }
 
     /// <summary>
     /// Gets the orchestration instance's last updated time in UTC.
     /// </summary>
     /// <value>The orchestration instance's last updated time in UTC.</value>
-    public DateTimeOffset LastUpdatedAt { get; }
+    public DateTimeOffset LastUpdatedAt { get; init; }
 
     /// <summary>
     /// Gets the orchestration instance's serialized input, if any, as a string value.
     /// </summary>
     /// <value>The serialized orchestration input or <c>null</c>.</value>
-    public string? SerializedInput { get; }
+    public string? SerializedInput { get; init; }
 
     /// <summary>
     /// Gets the orchestration instance's serialized output, if any, as a string value.
     /// </summary>
     /// <value>The serialized orchestration output or <c>null</c>.</value>
-    public string? SerializedOutput { get; }
+    public string? SerializedOutput { get; init; }
 
     /// <summary>
     /// Gets the orchestration instance's serialized custom status, if any, as a string value.
     /// </summary>
     /// <value>The serialized custom status or <c>null</c>.</value>
-    public string? SerializedCustomStatus { get; }
+    public string? SerializedCustomStatus { get; init; }
 
     /// <summary>
     /// Gets the failure details, if any, for the orchestration instance.
@@ -82,7 +82,7 @@ public sealed class OrchestrationMetadata
     /// state, and only if this instance metadata was fetched with the option to include output data.
     /// </remarks>
     /// <value>The failure details if the orchestration was in a failed state; <c>null</c> otherwise.</value>
-    public TaskFailureDetails? FailureDetails { get; }
+    public TaskFailureDetails? FailureDetails { get; init; }
 
     /// <summary>
     /// Gets a value indicating whether the orchestration instance was running at the time this object was fetched.

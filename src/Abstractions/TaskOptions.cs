@@ -26,7 +26,7 @@ public class TaskOptions
     public CancellationToken CancellationToken { get; }
 
     /// <summary>
-    /// Gets the retry handler.
+    /// Gets the retry handler that was configured for this <see cref="TaskOptions"/> instance.
     /// </summary>
     public AsyncRetryHandler? RetryHandler { get; }
 

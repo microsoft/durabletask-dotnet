@@ -2,7 +2,6 @@
 
   <PropertyGroup>
     <SubOutRoot>samples/</SubOutRoot>
-    <IsSampleProject>true</IsSampleProject>
     <TopLevelNamespace>Samples</TopLevelNamespace>
   </PropertyGroup>
 

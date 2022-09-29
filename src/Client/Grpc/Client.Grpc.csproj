@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <PackageDescription>The gRPC client for the DurableTask Framework (DTFx).</PackageDescription>
+    <PackageDescription>The gRPC client for the Durable Task Framework.</PackageDescription>
   </PropertyGroup>
 
   <!-- Version info -->

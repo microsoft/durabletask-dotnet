@@ -3,7 +3,6 @@
 
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.DurableTask.Generators.Tests.Utils;
-using Xunit;
 
 namespace Microsoft.DurableTask.Generators.Tests;
 

@@ -1,9 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Threading.Tasks;
 using Microsoft.DurableTask.Generators.Tests.Utils;
-using Xunit;
 
 namespace Microsoft.DurableTask.Generators.Tests;
 

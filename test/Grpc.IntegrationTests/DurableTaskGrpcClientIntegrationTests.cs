@@ -4,7 +4,6 @@
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.DurableTask.Tests;
-using Xunit;
 using Xunit.Abstractions;
 
 namespace Microsoft.DurableTask.Grpc.Tests;

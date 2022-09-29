@@ -1,10 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -46,7 +43,7 @@ namespace Microsoft.DurableTask.Generators
         public void Execute(GeneratorExecutionContext context)
         {
             // This generator also supports Durable Functions for .NET isolated, but we only generate Functions-specific
-            // code if we find the Durable Functions extention listed in the set of referenced assembly names.
+            // code if we find the Durable Functions extension listed in the set of referenced assembly names.
             bool isDurableFunctions = context.Compilation.ReferencedAssemblyNames.Any(
                 assembly => assembly.Name.Equals("Microsoft.Azure.Functions.Worker.Extensions.DurableTask", StringComparison.OrdinalIgnoreCase));
 

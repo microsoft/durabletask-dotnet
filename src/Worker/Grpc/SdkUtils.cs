@@ -46,7 +46,7 @@ static class SdkUtils
 
     internal class EmptyServiceProvider : IServiceProvider
     {
-        public static EmptyServiceProvider Instance => new();
+        public static EmptyServiceProvider Instance { get; } = new();
 
         public object? GetService(Type serviceType) => null;
     }

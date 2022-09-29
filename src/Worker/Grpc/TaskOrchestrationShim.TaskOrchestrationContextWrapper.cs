@@ -262,6 +262,11 @@ partial class TaskOrchestrationShim
             }
         }
 
+        public override void SendEvent(string instanceId, string eventName, object eventData)
+        {
+            this.innerContext.SendEvent(new OrchestrationInstance { InstanceId = instanceId }, eventName, eventData);
+        }
+
         public override void SetCustomStatus(object? customStatus)
         {
             this.customStatus = customStatus;

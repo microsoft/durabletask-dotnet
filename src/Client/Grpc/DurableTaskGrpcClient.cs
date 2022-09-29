@@ -413,9 +413,14 @@ public class DurableTaskGrpcClient : DurableTaskClient
         /// Configures a gRPC <see cref="Channel"/> to use for communicating with the sidecar process.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// This builder method allows you to provide your own gRPC channel for communicating with the Durable Task
         /// sidecar service. Channels provided using this method won't be disposed when the client is disposed.
         /// Rather, the caller remains responsible for shutting down the channel after disposing the client.
+        /// </para><para>
+        /// If not specified, a gRPC channel will be created automatically for each constructed
+        /// <see cref="DurableTaskGrpcClient"/> instance.
+        /// </para>
         /// </remarks>
         /// <param name="channel">The gRPC channel to use.</param>
         /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>

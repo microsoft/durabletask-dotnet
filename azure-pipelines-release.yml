@@ -22,22 +22,19 @@ steps:
 
 # Start by restoring all the dependencies. This needs to be its own task.
 - task: DotNetCoreCLI@2
-  displayName: 'Restore nuget dependencies'
+  displayName: 'Restore'
   inputs:
     command: restore
     verbosityRestore: Minimal
-    projects: 'src/**/*.csproj'
+    projects: 'src/dirs.proj'
 
-# Build the entire solution. This will also build all the tests, which
-# isn't strictly necessary...
-- task: VSBuild@1
+# Build source directory
+- task: DotNetCoreCLI@2
   displayName: 'Build'
   inputs:
-    solution: 'src/**/*.csproj'
-    vsVersion: 'latest'
-    logFileVerbosity: minimal
-    configuration: Release
-    msbuildArgs: /p:FileVersionRevision=$(Build.BuildId) /p:ContinuousIntegrationBuild=true
+    command: build
+    arguments: --no-restore -p:FileVersionRevision=$(Build.BuildId) -p:ContinuousIntegrationBuild=true
+    projects: 'src/dirs.proj'
 
 # Authenticode sign all the DLLs with the Microsoft certificate.
 # This appears to be an in-place signing job, which is convenient.
@@ -88,7 +85,7 @@ steps:
     configuration: Release
     nobuild: true
     packDirectory: $(build.artifactStagingDirectory)
-    packagesToPack: 'src/**/*.csproj'
+    packagesToPack: 'src/dirs.proj'
 
 # Digitally sign all the nuget packages with the Microsoft certificate.
 # This appears to be an in-place signing job, which is convenient.

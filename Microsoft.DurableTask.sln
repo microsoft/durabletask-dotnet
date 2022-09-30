@@ -1,67 +1,66 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.30114.105
+# Visual Studio Version 17
+VisualStudioVersion = 17.3.32901.215
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{8AFC9781-F6F1-4696-BB4A-9ED7CA9D612B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Abstractions", "src\Abstractions\Abstractions.csproj", "{B12489CB-B7E5-497B-8F0C-F87F678947C3}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Abstractions", "src\Abstractions\Abstractions.csproj", "{B12489CB-B7E5-497B-8F0C-F87F678947C3}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Worker", "Worker", "{5B448FF6-EC42-491D-A22E-1DC8B618E6D5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Worker", "src\Worker\Core\Worker.csproj", "{B0EB48BE-E4F7-4F50-B8BD-5C6172A7A584}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Worker", "src\Worker\Core\Worker.csproj", "{B0EB48BE-E4F7-4F50-B8BD-5C6172A7A584}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Worker.Grpc", "src\Worker\Grpc\Worker.Grpc.csproj", "{CCA111DD-001F-4FBB-97C7-69BF32BE6A91}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Worker.Grpc", "src\Worker\Grpc\Worker.Grpc.csproj", "{CCA111DD-001F-4FBB-97C7-69BF32BE6A91}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Client", "Client", "{1C217BB2-CE16-41CC-9D47-0FC0DB60BDB3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.Grpc", "src\Client\Grpc\Client.Grpc.csproj", "{7161E5EC-BB61-4671-B91C-EE0F1E95D832}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Client.Grpc", "src\Client\Grpc\Client.Grpc.csproj", "{7161E5EC-BB61-4671-B91C-EE0F1E95D832}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client", "src\Client\Core\Client.csproj", "{4133A1ED-7B45-480A-AE77-E9A3B34A95B5}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Client", "src\Client\Core\Client.csproj", "{4133A1ED-7B45-480A-AE77-E9A3B34A95B5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Generators", "src\Generators\Generators.csproj", "{DC9A3770-E66C-4CE9-833B-8647AAF5EFF2}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Generators", "src\Generators\Generators.csproj", "{DC9A3770-E66C-4CE9-833B-8647AAF5EFF2}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{E5637F81-2FB9-4CD7-900D-455363B142A7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Generators.Tests", "test\Generators.Tests\Generators.Tests.csproj", "{F0677197-A9AC-4B98-8E99-CE525EDC07E2}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Generators.Tests", "test\Generators.Tests\Generators.Tests.csproj", "{F0677197-A9AC-4B98-8E99-CE525EDC07E2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Abstractions.Tests", "test\Abstractions.Tests\Abstractions.Tests.csproj", "{B055F421-29B8-4D9A-BE75-E91DB167FBEC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Abstractions.Tests", "test\Abstractions.Tests\Abstractions.Tests.csproj", "{B055F421-29B8-4D9A-BE75-E91DB167FBEC}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Worker", "Worker", "{51DC98A3-0193-4C66-964B-C26C748E25B6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Worker.Tests", "test\Worker\Core.Tests\Worker.Tests.csproj", "{3666FFB5-68E3-4173-AAB6-699E517EF9B0}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Worker.Tests", "test\Worker\Core.Tests\Worker.Tests.csproj", "{3666FFB5-68E3-4173-AAB6-699E517EF9B0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Worker.Grpc.Tests", "test\Worker\Grpc.Tests\Worker.Grpc.Tests.csproj", "{AF74325F-2E27-4D6B-A795-74145CA21557}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Worker.Grpc.Tests", "test\Worker\Grpc.Tests\Worker.Grpc.Tests.csproj", "{AF74325F-2E27-4D6B-A795-74145CA21557}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Client", "Client", "{5AD837BC-78F3-4543-8AA3-DF74D0DF94C0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.Tests", "test\Client\Core.Tests\Client.Tests.csproj", "{96255537-3600-4E90-96EA-420AA72F9DE4}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Client.Tests", "test\Client\Core.Tests\Client.Tests.csproj", "{96255537-3600-4E90-96EA-420AA72F9DE4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.Grpc.Tests", "test\Client\Grpc.Tests\Client.Grpc.Tests.csproj", "{6652A050-BB1B-427E-A897-6D23AC1E5CDC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Client.Grpc.Tests", "test\Client\Grpc.Tests\Client.Grpc.Tests.csproj", "{6652A050-BB1B-427E-A897-6D23AC1E5CDC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestHelpers", "test\TestHelpers\TestHelpers.csproj", "{B9ED9368-D869-4F38-9E39-F907DB7F39F9}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TestHelpers", "test\TestHelpers\TestHelpers.csproj", "{B9ED9368-D869-4F38-9E39-F907DB7F39F9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Grpc.IntegrationTests", "test\Grpc.IntegrationTests\Grpc.IntegrationTests.csproj", "{7825CFEA-2923-4C44-BA36-8E16259B9777}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Grpc.IntegrationTests", "test\Grpc.IntegrationTests\Grpc.IntegrationTests.csproj", "{7825CFEA-2923-4C44-BA36-8E16259B9777}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{EFF7632B-821E-4CFC-B4A0-ED4B24296B17}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AzureFunctionsApp", "samples\AzureFunctionsApp\AzureFunctionsApp.csproj", "{848FC5BD-4A99-4A0D-9099-9597700AA7BC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AzureFunctionsApp", "samples\AzureFunctionsApp\AzureFunctionsApp.csproj", "{848FC5BD-4A99-4A0D-9099-9597700AA7BC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleApp", "samples\ConsoleApp\ConsoleApp.csproj", "{93ED401F-5AD2-47B6-B4CA-BA791D8B82B2}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ConsoleApp", "samples\ConsoleApp\ConsoleApp.csproj", "{93ED401F-5AD2-47B6-B4CA-BA791D8B82B2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetFxConsoleApp", "samples\NetFxConsoleApp\NetFxConsoleApp.csproj", "{8A0156E6-F033-49AB-AB0C-6698CE1DB24F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NetFxConsoleApp", "samples\NetFxConsoleApp\NetFxConsoleApp.csproj", "{8A0156E6-F033-49AB-AB0C-6698CE1DB24F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebAPI", "samples\WebAPI\WebAPI.csproj", "{21AF0D71-6D32-483F-B6E8-3B28EE432560}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebAPI", "samples\WebAPI\WebAPI.csproj", "{21AF0D71-6D32-483F-B6E8-3B28EE432560}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shared", "src\Shared\Shared.csproj", "{57A4C812-B0D9-49E9-9EBE-7E94D3D78ED7}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shared", "src\Shared\Shared.csproj", "{57A4C812-B0D9-49E9-9EBE-7E94D3D78ED7}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SolutionItems", "src\SolutionItems\SolutionItems.csproj", "{1838E5F4-C6B0-4468-A3B8-CC5DBD7834F1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
-	EndGlobalSection
-	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{B12489CB-B7E5-497B-8F0C-F87F678947C3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -140,6 +139,13 @@ Global
 		{57A4C812-B0D9-49E9-9EBE-7E94D3D78ED7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{57A4C812-B0D9-49E9-9EBE-7E94D3D78ED7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{57A4C812-B0D9-49E9-9EBE-7E94D3D78ED7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1838E5F4-C6B0-4468-A3B8-CC5DBD7834F1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1838E5F4-C6B0-4468-A3B8-CC5DBD7834F1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1838E5F4-C6B0-4468-A3B8-CC5DBD7834F1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1838E5F4-C6B0-4468-A3B8-CC5DBD7834F1}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{B12489CB-B7E5-497B-8F0C-F87F678947C3} = {8AFC9781-F6F1-4696-BB4A-9ED7CA9D612B}
@@ -165,5 +171,8 @@ Global
 		{8A0156E6-F033-49AB-AB0C-6698CE1DB24F} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
 		{21AF0D71-6D32-483F-B6E8-3B28EE432560} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
 		{57A4C812-B0D9-49E9-9EBE-7E94D3D78ED7} = {8AFC9781-F6F1-4696-BB4A-9ED7CA9D612B}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {AB41CB55-35EA-4986-A522-387AB3402E71}
 	EndGlobalSection
 EndGlobal

@@ -8,22 +8,39 @@ on:
     branches: [ main ]
     paths-ignore: [ '**.md' ]
 
+env:
+  solution: Microsoft.DurableTask.sln
+  config: Release
+
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
+
     - name: Setup .NET
-      uses: actions/setup-dotnet@v1
+      uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: 6.0.x
+        global-json-file: global.json
+
     - name: Enable App Service MyGet feed
       run: dotnet nuget add source https://www.myget.org/F/azure-appservice/api/v3/index.json --name appservice-myget 
+
     - name: Restore dependencies
-      run: dotnet restore
+      run: dotnet restore $solution
+
     - name: Build
-      run: dotnet build --no-restore -p:FileVersionRevision=$GITHUB_RUN_NUMBER
+      run: dotnet build $solution --configuration $config --no-restore -p:FileVersionRevision=$GITHUB_RUN_NUMBER
+
     - name: Test
-      run: dotnet test --no-build --verbosity normal
+      run: dotnet test $solution --configuration $config --no-build --verbosity normal
+
+    - name: Pack
+      run: dotnet pack $solution --configuration $config --no-build
+
+    - name: Upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: pkg
+        path: out/pkg

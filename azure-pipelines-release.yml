@@ -18,7 +18,7 @@ steps:
   displayName: 'Use the .NET 6 SDK'
   inputs:
     packageType: 'sdk'
-    version: '6.0.x'
+    useGlobalJson: true
 
 # Start by restoring all the dependencies. This needs to be its own task.
 - task: DotNetCoreCLI@2

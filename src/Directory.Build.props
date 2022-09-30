@@ -10,15 +10,17 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <RepositoryUrl>https://github.com/microsoft/durabletask-dotnet</RepositoryUrl>
+    <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
   </PropertyGroup>
 
-  <!-- Common NuGet configuration -->
+  <!-- Common NuGet settings -->
   <PropertyGroup>
     <Authors>Microsoft</Authors>
     <Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
     <PackageReleaseNotes>$(RepositoryUrl)/releases/</PackageReleaseNotes>
+    <PackageTags>Microsoft Durable Task Orchestration Workflow Activity Reliable DTFx</PackageTags>
   </PropertyGroup>
 
   <!-- Embed the SBOM manifest, which is generated as part of the "official" build -->

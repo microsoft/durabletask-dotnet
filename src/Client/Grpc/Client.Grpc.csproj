@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageDescription>The gRPC client for the Durable Task Framework.</PackageDescription>
+  </PropertyGroup>
+
+  <!-- Version info -->
+  <PropertyGroup>
+    <VersionPrefix>0.5.0</VersionPrefix>
+    <VersionSuffix>beta</VersionSuffix>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.Core" Version="2.39.1" />
+    <PackageReference Include="Microsoft.DurableTask.Sidecar.Protobuf" Version="0.3.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="6.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Core/Client.csproj" />
+  </ItemGroup>
+
+</Project>

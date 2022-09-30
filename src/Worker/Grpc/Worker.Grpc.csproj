@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageDescription>The gRPC worker for the Durable Task Framework.</PackageDescription>
+  </PropertyGroup>
+
+  <!-- Version info -->
+  <PropertyGroup>
+    <VersionPrefix>0.5.0</VersionPrefix>
+    <VersionSuffix>beta</VersionSuffix>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.Core" Version="2.39.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Server.Kestrel" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Hosting" Version="2.2.7" />
+    <PackageReference Include="Microsoft.DurableTask.Sidecar.Protobuf" Version="0.3.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Abstractions/Abstractions.csproj" />
+    <ProjectReference Include="../Core/Worker.csproj" />
+  </ItemGroup>
+
+</Project>

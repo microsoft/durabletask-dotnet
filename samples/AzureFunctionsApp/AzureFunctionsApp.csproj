@@ -13,12 +13,6 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.7.0" />
   </ItemGroup>
 
-  <!-- These project dependencies are not required in real apps because they're pulled in automatically by Microsoft.Azure.Functions.Worker.Extensions.DurableTask -->
-  <ItemGroup>
-    <ProjectReference Include="$(SrcRoot)DurableTask.Generators\Microsoft.DurableTask.Generators.csproj" OutputItemType="Analyzer"/>
-    <ProjectReference Include="$(SrcRoot)DurableTask\Microsoft.DurableTask.csproj" />
-  </ItemGroup>
-
   <ItemGroup>
     <None Update="host.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -28,4 +22,5 @@
       <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </None>
   </ItemGroup>
+
 </Project>

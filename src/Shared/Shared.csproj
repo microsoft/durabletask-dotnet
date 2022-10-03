@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.Build.NoTargets/3.5.6">
+<Project Sdk="Microsoft.Build.NoTargets">
 
   <!--
     This project is to never be referenced directly. Instead, the files are directly

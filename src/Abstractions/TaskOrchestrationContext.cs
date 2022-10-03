@@ -25,7 +25,7 @@ public abstract class TaskOrchestrationContext
     /// <summary>
     /// Gets the parent instance or <c>null</c> if there is no parent orchestration.
     /// </summary>
-    public abstract ParentInstance? Parent { get; }
+    public abstract ParentOrchestrationInstance? Parent { get; }
 
     /// <summary>
     /// Gets the current orchestration time in UTC.

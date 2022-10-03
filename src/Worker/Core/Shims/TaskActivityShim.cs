@@ -3,7 +3,7 @@
 
 using DurableTask.Core;
 
-namespace Microsoft.DurableTask;
+namespace Microsoft.DurableTask.Worker.Shims;
 
 class TaskActivityShim<TInput, TOutput> : TaskActivityShim
 {

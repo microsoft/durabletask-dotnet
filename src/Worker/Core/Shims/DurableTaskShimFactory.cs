@@ -19,8 +19,6 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// </remarks>
 public class DurableTaskShimFactory
 {
-    public static readonly DurableTaskShimFactory Default = new();
-
     readonly DataConverter dataConverter;
     readonly ILoggerFactory loggerFactory;
     readonly TimerOptions timerOptions;
@@ -41,17 +39,45 @@ public class DurableTaskShimFactory
         this.timerOptions = timerOptions ?? new();
     }
 
-    public TaskActivity CreateActivity(TaskName name, ITaskActivity activity)
-    {
-        return new TaskActivityShim(this.dataConverter, name, activity);
-    }
+    /// <summary>
+    /// Gets the default <see cref="DurableTaskShimFactory" /> with default values:
+    /// <see cref="JsonDataConverter" />, <see cref="NullLoggerFactory" />, and
+    /// <see cref="TimerOptions" />.
+    /// </summary>
+    public static DurableTaskShimFactory Default { get; } = new();
 
+    /// <summary>
+    /// Creates a <see cref="TaskActivity" /> from a <see cref="ITaskActivity" />.
+    /// </summary>
+    /// <param name="name">
+    /// The name of the activity. This should be the name the activity was invoked with.
+    /// </param>
+    /// <param name="activity">The activity to wrap.</param>
+    /// <returns>A new <see cref="TaskActivity" />.</returns>
+    public TaskActivity CreateActivity(TaskName name, ITaskActivity activity)
+        => new TaskActivityShim(this.dataConverter, name, activity);
+
+    /// <summary>
+    /// Creates a <see cref="TaskActivity" /> from a delegate.
+    /// </summary>
+    /// <param name="name">
+    /// The name of the activity. This should be the name the activity was invoked with.
+    /// </param>
+    /// <param name="implementation">The activity delegate to wrap.</param>
+    /// <returns>A new <see cref="TaskActivity" />.</returns>
     public TaskActivity CreateActivity<TInput, TOutput>(
         TaskName name, Func<TaskActivityContext, TInput?, Task<TOutput?>> implementation)
-    {
-        return new TaskActivityShim<TInput, TOutput>(this.dataConverter, name, implementation);
-    }
+        => this.CreateActivity(name, FuncTaskActivity.Create(implementation));
 
+    /// <summary>
+    /// Creates a <see cref="TaskOrchestration" /> from a <see cref="ITaskOrchestrator" />.
+    /// </summary>
+    /// <param name="name">
+    /// The name of the orchestration. This should be the name the orchestration was invoked with.
+    /// </param>
+    /// <param name="orchestrator">The orchestration to wrap.</param>
+    /// <param name="parent">The orchestration parent details or <c>null</c> if no parent.</param>
+    /// <returns>A new <see cref="TaskOrchestration" />.</returns>
     public TaskOrchestration CreateOrchestration(
         TaskName name, ITaskOrchestrator orchestrator, ParentOrchestrationInstance? parent = null)
     {
@@ -60,11 +86,18 @@ public class DurableTaskShimFactory
         return new TaskOrchestrationShim(context, orchestrator);
     }
 
+    /// <summary>
+    /// Creates a <see cref="TaskOrchestration" /> from a <see cref="ITaskOrchestrator" />.
+    /// </summary>
+    /// <param name="name">
+    /// The name of the orchestration. This should be the name the orchestration was invoked with.
+    /// </param>
+    /// <param name="implementation">The orchestration delegate to wrap.</param>
+    /// <param name="parent">The orchestration parent details or <c>null</c> if no parent.</param>
+    /// <returns>A new <see cref="TaskOrchestration" />.</returns>
     public TaskOrchestration CreateOrchestration<TInput, TOutput>(
         TaskName name,
         Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> implementation,
         ParentOrchestrationInstance? parent = null)
-    {
-        return this.CreateOrchestration(name, FuncTaskOrchestrator.Create(implementation), parent);
-    }
+        => this.CreateOrchestration(name, FuncTaskOrchestrator.Create(implementation), parent);
 }

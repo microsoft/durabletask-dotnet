@@ -5,10 +5,9 @@ using DurableTask.Core;
 using DurableTask.Core.History;
 using Google.Protobuf;
 using Microsoft.DurableTask.Grpc;
-using Microsoft.DurableTask.Options;
+using Microsoft.DurableTask.Shims;
+using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask;
@@ -48,8 +47,7 @@ public static class GrpcOrchestrationRunner
             throw new ArgumentNullException(nameof(orchestratorFunc));
         }
 
-        FuncTaskOrchestrator<TInput, TOutput> orchestrator = new(orchestratorFunc);
-        return LoadAndRun(encodedOrchestratorRequest, orchestrator, services);
+        return LoadAndRun(encodedOrchestratorRequest, FuncTaskOrchestrator.Create(orchestratorFunc), services);
     }
 
     /// <summary>
@@ -84,16 +82,6 @@ public static class GrpcOrchestrationRunner
         List<HistoryEvent> pastEvents = request.PastEvents.Select(ProtoUtils.ConvertHistoryEvent).ToList();
         IEnumerable<HistoryEvent> newEvents = request.NewEvents.Select(ProtoUtils.ConvertHistoryEvent);
 
-        DataConverter dataConverter = services?.GetService<DataConverter>() ?? Converters.JsonDataConverter.Default;
-        ILoggerFactory loggerFactory = services?.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance;
-        ILogger logger = SdkUtils.GetLogger(loggerFactory);
-        TimerOptions timerOptions = new(); // TODO: Support loading timer options from configuration
-
-        WorkerContext workerContext = new(
-            dataConverter,
-            logger,
-            services ?? SdkUtils.EmptyServiceProvider.Instance,
-            timerOptions);
 
         // Re-construct the orchestration state from the history.
         // New events must be added using the AddEvent method.
@@ -104,9 +92,15 @@ public static class GrpcOrchestrationRunner
         }
 
         TaskName orchestratorName = new(runtimeState.Name, runtimeState.Version);
+        ParentOrchestrationInstance? parent = runtimeState.ParentInstance is ParentInstance p
+            ? new(new(p.Name, p.Version), p.OrchestrationInstance.InstanceId)
+            : null;
 
-        TaskOrchestrationShim orchestrator = new(new(workerContext, runtimeState), orchestratorName, implementation);
-        TaskOrchestrationExecutor executor = new(runtimeState, orchestrator, BehaviorOnContinueAsNew.Carryover);
+        DurableTaskShimFactory factory = services is null
+            ? DurableTaskShimFactory.Default
+            : ActivatorUtilities.GetServiceOrCreateInstance<DurableTaskShimFactory>(services);
+        TaskOrchestration shim = factory.CreateOrchestration(orchestratorName, implementation, parent);
+        TaskOrchestrationExecutor executor = new(runtimeState, shim, BehaviorOnContinueAsNew.Carryover);
         OrchestratorExecutionResult result = executor.Execute();
 
         P.OrchestratorResponse response = ProtoUtils.ConstructOrchestratorResponse(

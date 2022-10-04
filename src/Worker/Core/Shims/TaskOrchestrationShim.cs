@@ -2,8 +2,9 @@
 // Licensed under the MIT License.
 
 using DurableTask.Core;
+using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask;
+namespace Microsoft.DurableTask.Worker.Shims;
 
 /// <summary>
 /// Shim orchestration implementation that wraps the Durable Task Framework execution engine.
@@ -14,44 +15,38 @@ namespace Microsoft.DurableTask;
 /// </remarks>
 partial class TaskOrchestrationShim : TaskOrchestration
 {
-    readonly TaskName name;
     readonly ITaskOrchestrator implementation;
-    readonly WorkerContext workerContext;
-    readonly OrchestrationRuntimeState runtimeState;
-
+    readonly OrchestrationInvocationContext invocationContext;
     TaskOrchestrationContextWrapper? wrapperContext;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskOrchestrationShim"/> class.
     /// </summary>
-    /// <param name="context">Context from the worker to make available to the orchestration runtime.</param>
-    /// <param name="name">The name of the orchestration.</param>
+    /// <param name="invocationContext">The invocation context for this orchestration.</param>
     /// <param name="implementation">The orchestration's implementation.</param>
     public TaskOrchestrationShim(
-        OrchestrationInvocationContext context,
-        TaskName name,
+        OrchestrationInvocationContext invocationContext,
         ITaskOrchestrator implementation)
     {
-        this.workerContext = context.WorkerContext;
-        this.runtimeState = context.RuntimeState;
-        this.name = name;
+        this.invocationContext = invocationContext;
         this.implementation = implementation;
     }
 
     /// <inheritdoc/>
     public override async Task<string?> Execute(OrchestrationContext innerContext, string rawInput)
     {
-        JsonDataConverterShim converterShim = new(this.workerContext.DataConverter);
+        JsonDataConverterShim converterShim = new(this.invocationContext.DataConverter);
         innerContext.MessageDataConverter = converterShim;
         innerContext.ErrorDataConverter = converterShim;
 
-        object? input = this.workerContext.DataConverter.Deserialize(rawInput, this.implementation.InputType);
+        object? input = this.invocationContext.DataConverter.Deserialize(rawInput, this.implementation.InputType);
 
-        this.wrapperContext = new(innerContext, this.name, this.workerContext, this.runtimeState, input);
+        ILogger contextLogger = this.invocationContext.LoggerFactory.CreateLogger("Microsoft.DurableTask");
+        this.wrapperContext = new(innerContext, this.invocationContext, contextLogger, input);
         object? output = await this.implementation.RunAsync(this.wrapperContext, input);
 
         // Return the output (if any) as a serialized string.
-        return this.workerContext.DataConverter.Serialize(output);
+        return this.invocationContext.DataConverter.Serialize(output);
     }
 
     /// <inheritdoc/>
@@ -64,16 +59,5 @@ partial class TaskOrchestrationShim : TaskOrchestration
     public override void RaiseEvent(OrchestrationContext context, string name, string input)
     {
         this.wrapperContext?.CompleteExternalEvent(name, input);
-    }
-}
-
-class TaskOrchestrationShim<TInput, TOutput> : TaskOrchestrationShim
-{
-    public TaskOrchestrationShim(
-        OrchestrationInvocationContext context,
-        TaskName name,
-        Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> implementation)
-        : base(context, name, new FuncTaskOrchestrator<TInput, TOutput>(implementation))
-    {
     }
 }

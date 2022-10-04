@@ -3,33 +3,7 @@
 
 using DurableTask.Core;
 
-namespace Microsoft.DurableTask;
-
-class TaskActivityShim<TInput, TOutput> : TaskActivityShim
-{
-    public TaskActivityShim(
-        DataConverter dataConverter,
-        TaskName name,
-        Func<TaskActivityContext, TInput?, Task<TOutput?>> implementation)
-        : base(dataConverter, name, new LambdaActivity(implementation))
-    {
-    }
-
-    sealed class LambdaActivity : TaskActivityBase<TInput, TOutput>
-    {
-        readonly Func<TaskActivityContext, TInput?, Task<TOutput?>> implementation;
-
-        public LambdaActivity(Func<TaskActivityContext, TInput?, Task<TOutput?>> implementation)
-        {
-            this.implementation = implementation;
-        }
-
-        protected override Task<TOutput?> OnRunAsync(TaskActivityContext context, TInput? input)
-        {
-            return this.implementation(context, input);
-        }
-    }
-}
+namespace Microsoft.DurableTask.Worker.Shims;
 
 class TaskActivityShim : TaskActivity
 {

@@ -7,7 +7,7 @@ namespace Microsoft.DurableTask;
 /// <summary>
 /// The name of a durable task.
 /// </summary>
-public struct TaskName : IEquatable<TaskName>
+public readonly struct TaskName : IEquatable<TaskName>
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskName"/> struct.
@@ -85,16 +85,16 @@ public struct TaskName : IEquatable<TaskName>
     /// Gets a value indicating whether to <see cref="TaskName"/> objects
     /// are equal using value semantics.
     /// </summary>
-    /// <param name="other">The other object to compare to.</param>
+    /// <param name="obj">The other object to compare to.</param>
     /// <returns><c>true</c> if the two objects are equal using value semantics; otherwise <c>false</c>.</returns>
-    public override bool Equals(object? other)
+    public override bool Equals(object? obj)
     {
-        if (other is not TaskName)
+        if (obj is not TaskName)
         {
             return false;
         }
 
-        return this.Equals((TaskName)other);
+        return this.Equals((TaskName)obj);
     }
 
     /// <summary>

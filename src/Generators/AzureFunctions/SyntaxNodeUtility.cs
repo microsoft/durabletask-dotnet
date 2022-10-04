@@ -48,13 +48,13 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
 
                 foreach (var attribute in parameterAttributes)
                 {
-                    if (attribute.ToString().Equals("OrchestrationTrigger"))
+                    if (attribute.ToString().Equals("OrchestrationTrigger", StringComparison.Ordinal))
                     {
                         kind = DurableFunctionKind.Orchestration;
                         return true;
                     }
 
-                    if (attribute.ToString().Equals("ActivityTrigger"))
+                    if (attribute.ToString().Equals("ActivityTrigger", StringComparison.Ordinal))
                     {
                         kind = DurableFunctionKind.Activity;
                         return true;
@@ -159,13 +159,15 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                 return supportsNullable ? "object?" : "object";
             }
 
-            if (supportsNullable && symbol.IsReferenceType && symbol.NullableAnnotation != NullableAnnotation.Annotated)
+            if (supportsNullable && symbol.IsReferenceType
+                && symbol.NullableAnnotation != NullableAnnotation.Annotated)
             {
                 symbol = symbol.WithNullableAnnotation(NullableAnnotation.Annotated);
             }
 
             string expression = symbol.ToString();
-            if (expression.StartsWith("System.") && symbol.ContainingNamespace.Name == "System")
+            if (expression.StartsWith("System.", StringComparison.Ordinal)
+                && symbol.ContainingNamespace.Name == "System")
             {
                 expression = expression.Substring("System.".Length);
             }
@@ -175,7 +177,8 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
 
         static bool TryGetAttributeByName(MethodDeclarationSyntax method, string attributeName, out AttributeSyntax? attribute)
         {
-            attribute = method.AttributeLists.SelectMany(a => a.Attributes).FirstOrDefault(a => a.Name.NormalizeWhitespace().ToFullString().Equals(attributeName));
+            attribute = method.AttributeLists.SelectMany(a => a.Attributes).FirstOrDefault(
+                a => a.Name.NormalizeWhitespace().ToFullString().Equals(attributeName, StringComparison.Ordinal));
             return attribute != null;
         }
     }

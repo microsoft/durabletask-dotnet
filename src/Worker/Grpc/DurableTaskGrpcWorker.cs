@@ -87,14 +87,14 @@ public partial class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
     /// a warning log message will be written and a new connection attempt will be made. This process
     /// continues until either a connection succeeds or the caller cancels the start operation.
     /// </remarks>
-    /// <param name="startupCancelToken">
+    /// <param name="cancellationToken">
     /// A cancellation token that can be used to cancel the sidecar connection attempt if it takes too long.
     /// </param>
     /// <returns>
     /// Returns a task that completes when the sidecar connection has been established and the background processing started.
     /// </returns>
     /// <exception cref="InvalidOperationException">Thrown if this worker is already started.</exception>
-    public async Task StartAsync(CancellationToken startupCancelToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         if (this.listenLoop?.IsCompleted == false)
         {
@@ -108,7 +108,7 @@ public partial class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
         {
             try
             {
-                AsyncServerStreamingCall<P.WorkItem>? workItemStream = await this.ConnectAsync(startupCancelToken);
+                AsyncServerStreamingCall<P.WorkItem>? workItemStream = await this.ConnectAsync(cancellationToken);
 
                 this.shutdownTcs?.Dispose();
                 this.shutdownTcs = new CancellationTokenSource();
@@ -122,7 +122,7 @@ public partial class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
             {
                 this.logger.SidecarUnavailable(this.sidecarGrpcChannel.Target);
 
-                await Task.Delay(TimeSpan.FromSeconds(5), startupCancelToken);
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
             }
         }
     }
@@ -370,18 +370,6 @@ public partial class DurableTaskGrpcWorker : IHostedService, IAsyncDisposable
                 .GroupBy(a => a.OrchestratorActionTypeCase)
                 .Select(group => $"{group.Key} x{group.Count()}"));
         }
-    }
-
-    OrchestratorExecutionResult CreateOrchestrationFailedActionResult(Exception e)
-    {
-        return this.CreateOrchestrationFailedActionResult(
-            message: "The orchestrator failed with an unhandled exception.",
-            fullText: e.ToString());
-    }
-
-    OrchestratorExecutionResult CreateOrchestrationFailedActionResult(string message, string? fullText = null)
-    {
-        return OrchestratorExecutionResult.ForFailure(message, fullText);
     }
 
     async Task OnRunActivityAsync(P.ActivityRequest request)

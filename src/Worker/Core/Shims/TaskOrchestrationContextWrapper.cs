@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using DurableTask.Core;
@@ -312,7 +313,7 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             "_",
             this.CurrentUtcDateTime.ToString("o"),
             "_",
-            this.newGuidCounter.ToString());
+            this.newGuidCounter.ToString(CultureInfo.InvariantCulture));
 
         this.newGuidCounter++;
 
@@ -321,12 +322,14 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         SwapByteArrayValues(namespaceValueByteArray);
 
         byte[] hashByteArray;
+#pragma warning disable CA5350 // Do Not Use Weak Cryptographic Algorithms -- not for cryptography
         using (HashAlgorithm hashAlgorithm = SHA1.Create())
         {
             hashAlgorithm.TransformBlock(namespaceValueByteArray, 0, namespaceValueByteArray.Length, null, 0);
             hashAlgorithm.TransformFinalBlock(nameByteArray, 0, nameByteArray.Length);
             hashByteArray = hashAlgorithm.Hash;
         }
+#pragma warning restore CA5350 // Do Not Use Weak Cryptographic Algorithms -- not for cryptography
 
         byte[] newGuidByteArray = new byte[16];
         Array.Copy(hashByteArray, 0, newGuidByteArray, 0, 16);

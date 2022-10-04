@@ -15,10 +15,7 @@ public static class DurableTaskExtensions
     /// Adds a singleton <see cref="DurableTaskClient"/> to the provided <see cref="IServiceCollection"/>.
     /// </summary>
     /// <remarks>
-    /// Use this method when the the orchestration logic lives in a separate application.
-    /// If your orchestration logic lives in the same application, then you should instead use the
-    /// <see cref="AddDurableTask"/> method, which configures a <see cref="DurableTaskClient"/> in
-    /// addition to the orchestration logic.
+    /// This must be called independently of worker registration.
     /// </remarks>
     /// <param name="serviceCollection">The <see cref="IServiceCollection"/> to configure.</param>
     /// <param name="sidecarAddress">The address of the Durable Task sidecar endpoint.</param>

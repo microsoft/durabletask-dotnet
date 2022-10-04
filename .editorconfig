@@ -211,3 +211,8 @@ dotnet_style_operator_placement_when_wrapping = beginning_of_line
 tab_width = 4
 indent_size = 4
 end_of_line = crlf
+
+# StyleCop rules
+dotnet_diagnostic.SA1400.severity = none  # Access modifier must be declared
+dotnet_diagnostic.SA1402.severity = none  # File may only contain a single type
+dotnet_diagnostic.SA1649.severity = none  # File name must match type name

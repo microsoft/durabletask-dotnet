@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using System.Collections.Immutable;
-using DurableTask.Core;
 using Grpc.Core;
 using Microsoft.DurableTask.Converters;
 using Microsoft.DurableTask.Options;
@@ -38,7 +37,6 @@ public partial class DurableTaskGrpcWorker
         /// Initializes a new <see cref="DurableTaskGrpcWorker"/> object with the settings specified in the current
         /// builder object.
         /// </summary>
-        /// <param name="serviceProvider">The service provider.</param>
         /// <returns>A new <see cref="DurableTaskGrpcWorker"/> object.</returns>
         public DurableTaskGrpcWorker Build() => new(this);
 

@@ -8,6 +8,10 @@ namespace Microsoft.DurableTask;
 /// </summary>
 public class TaskOptions
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TaskOptions"/> class.
+    /// </summary>
+    /// <param name="builder">The builder.</param>
     internal TaskOptions(Builder builder)
     {
         this.RetryPolicy = builder.RetryPolicy;
@@ -72,10 +76,19 @@ public class TaskOptions
     /// </summary>
     public sealed class Builder
     {
+        /// <summary>
+        /// Gets the retry policy.
+        /// </summary>
         internal RetryPolicy? RetryPolicy { get; private set; }
 
+        /// <summary>
+        /// Gets the retry handler.
+        /// </summary>
         internal AsyncRetryHandler? RetryHandler { get; private set; }
 
+        /// <summary>
+        /// Gets the cancellation token.
+        /// </summary>
         internal CancellationToken CancellationToken { get; private set; }
 
         /// <summary>

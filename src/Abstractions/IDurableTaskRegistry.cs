@@ -41,7 +41,8 @@ public interface IDurableTaskRegistry
     /// </summary>
     /// <typeparam name="T">The concrete type of the orchestrator.</typeparam>
     /// <returns>Returns this <see cref="IDurableTaskRegistry"/> instance.</returns>
-    public IDurableTaskRegistry AddOrchestrator<T>() where T : ITaskOrchestrator;
+    public IDurableTaskRegistry AddOrchestrator<T>()
+        where T : ITaskOrchestrator;
 
     /// <summary>
     /// Registers an activity as a synchronous (blocking) lambda function that doesn't take any input nor returns any output.
@@ -84,5 +85,6 @@ public interface IDurableTaskRegistry
     /// </summary>
     /// <typeparam name="T">The type that implements <see cref="ITaskActivity"/>.</typeparam>
     /// <returns>Returns this <see cref="IDurableTaskRegistry"/> instance.</returns>
-    public IDurableTaskRegistry AddActivity<T>() where T : ITaskActivity;
+    public IDurableTaskRegistry AddActivity<T>()
+        where T : ITaskActivity;
 }

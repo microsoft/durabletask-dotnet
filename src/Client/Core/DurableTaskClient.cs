@@ -12,10 +12,10 @@ namespace Microsoft.DurableTask;
 /// orchestration instances. In most cases, methods on this class accept an instance ID as a parameter, which identifies
 /// the orchestration instance.
 /// </para><para>
-/// At the time of writing, the most common implementation of this class is <see cref="Grpc.DurableTaskGrpcClient"/>,
-/// which works by making gRPC calls to a remote service (e.g. a sidecar) that implements the operation behavior. To
-/// ensure any owned network resources are properly released, instances of <see cref="DurableTaskClient"/> should be
-/// disposed when they are no longer needed.
+/// At the time of writing, the most common implementation of this class is the gRPC client, which works by making gRPC
+/// calls to a remote service (e.g. a sidecar) that implements the operation behavior. To ensure any owned network
+/// resources are properly released, instances of <see cref="DurableTaskClient"/> should be disposed when they are no
+/// longer needed.
 /// </para><para>
 /// Instances of this class are expected to be safe for multithreaded apps. You can therefore safely cache instances
 /// of this class and reuse them across multiple contexts. Caching these objects is useful to improve overall 

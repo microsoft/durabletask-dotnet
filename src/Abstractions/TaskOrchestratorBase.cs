@@ -43,16 +43,16 @@ public interface ITaskOrchestrator
 ///  <em>activities</em>, which perform the actual work.
 /// </para>
 /// <para>
-///   Orchestrators can be scheduled using the <see cref="DurableTaskClient.ScheduleNewOrchestrationInstanceAsync"/>
-///   method of the <see cref="DurableTaskClient"/> class. Orchestrators can also invoke child orchestrators using the
-///   <see cref="TaskOrchestrationContext.CallSubOrchestratorAsync"/> method. Orchestrators that derive from
-///   <see cref="TaskOrchestratorBase{TInput, TOutput}"/> can also be invoked using generated extension methods. To
-///   participate in code generation, an orchestrator class must be decorated with the <see cref="DurableTaskAttribute"/>
-///   attribute. The source generator will then generate a <c>ScheduleNewMyOrchestratorOrchestratorInstanceAsync()</c>
-///   extension method on <c>DurableTaskClient</c> for an orchestrator named "MyOrchestrator". Similarly, a
-///   <c>CallMyOrchestratorAsync()</c> extension method will be generated on the <c>TaskOrchestrationContext</c> class for
-///   calling "MyOrchestrator" as a sub-orchestration. In all cases, the generated input parameters and return values will
-///   be derived from <typeparamref name="TInput"/> and <typeparamref name="TOutput"/> respectively.
+///   Orchestrators can be scheduled using an external client (see Microsoft.DurableTask.Client). Orchestrators can
+///   also invoke child orchestrators using the <see cref="TaskOrchestrationContext.CallSubOrchestratorAsync"/> method.
+///   Orchestrators that derive from <see cref="TaskOrchestratorBase{TInput, TOutput}"/> can also be invoked using
+///   generated extension methods. To participate in code generation, an orchestrator class must be decorated with the
+///   <see cref="DurableTaskAttribute"/> attribute. The source generator will then generate a
+///   <c>ScheduleNewMyOrchestratorOrchestratorInstanceAsync()</c> extension method on <c>DurableTaskClient</c> for an
+///   orchestrator named "MyOrchestrator". Similarly, a  <c>CallMyOrchestratorAsync()</c> extension method will be
+///   generated on the <c>TaskOrchestrationContext</c> class for calling "MyOrchestrator" as a sub-orchestration. In
+///   all cases, the generated input parameters and return values will be derived from <typeparamref name="TInput"/>
+///   and <typeparamref name="TOutput"/> respectively.
 /// </para>
 /// <para>
 ///   Orchestrators may be replayed multiple times to rebuild their local state after being reloaded into memory.
@@ -112,8 +112,19 @@ public interface ITaskOrchestrator
 /// <typeparam name="TOutput">The type of the return value that this orchestrator produces.</typeparam>
 public abstract class TaskOrchestratorBase<TInput, TOutput> : ITaskOrchestrator
 {
+    /// <inheritdoc/>
     Type ITaskOrchestrator.InputType => typeof(TInput);
+
+    /// <inheritdoc/>
     Type ITaskOrchestrator.OutputType => typeof(TOutput);
+
+    /// <inheritdoc/>
+    async Task<object?> ITaskOrchestrator.RunAsync(TaskOrchestrationContext context, object? input)
+    {
+        TInput? typedInput = (TInput?)(input ?? default(TInput));
+        TOutput? output = await this.OnRunAsync(context, typedInput);
+        return output;
+    }
 
     /// <summary>
     /// Override to implement task orchestrator logic.
@@ -122,11 +133,4 @@ public abstract class TaskOrchestratorBase<TInput, TOutput> : ITaskOrchestrator
     /// <param name="input">The deserialized orchestration input.</param>
     /// <returns>The output of the orchestration as a task.</returns>
     protected abstract Task<TOutput?> OnRunAsync(TaskOrchestrationContext context, TInput? input);
-
-    async Task<object?> ITaskOrchestrator.RunAsync(TaskOrchestrationContext context, object? input)
-    {
-        TInput? typedInput = (TInput?)(input ?? default(TInput));
-        TOutput? output = await this.OnRunAsync(context, typedInput);
-        return output;
-    }
 }

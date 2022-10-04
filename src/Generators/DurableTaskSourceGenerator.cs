@@ -11,6 +11,9 @@ using Microsoft.DurableTask.Generators.AzureFunctions;
 
 namespace Microsoft.DurableTask.Generators
 {
+    /// <summary>
+    /// Generator for DurableTask.
+    /// </summary>
     [Generator]
     public class DurableTaskSourceGenerator : ISourceGenerator
     {
@@ -35,11 +38,13 @@ namespace Microsoft.DurableTask.Generators
          * }
          */
 
+        /// <inheritdoc/>
         public void Initialize(GeneratorInitializationContext context)
         {
             context.RegisterForSyntaxNotifications(() => new DurableTaskSyntaxReceiver());
         }
 
+        /// <inheritdoc/>
         public void Execute(GeneratorExecutionContext context)
         {
             // This generator also supports Durable Functions for .NET isolated, but we only generate Functions-specific
@@ -236,7 +241,10 @@ namespace Microsoft.DurableTask
             sourceBuilder.AppendLine(GetGeneratedActivityContextCode());
         }
 
-        // This is public so that it can be called by unit test code.
+        /// <summary>
+        /// Gets the generated activity context code.
+        /// </summary>
+        /// <returns>The generated activity context code.</returns>
         public static string GetGeneratedActivityContextCode() => $@"
         sealed class GeneratedActivityContext : TaskActivityContext
         {{

@@ -1,9 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask;
+using CoreOrchestrationException = DurableTask.Core.Exceptions.OrchestrationException;
 
-using CoreOrchestrationException = global::DurableTask.Core.Exceptions.OrchestrationException;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Record that represents the details of a task failure.
@@ -19,6 +19,7 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
     /// <summary>
     /// Gets a debug-friendly description of the failure information.
     /// </summary>
+    /// <returns>A debugger friendly display string.</returns>
     public override string ToString()
     {
         return $"{this.ErrorType}: {this.ErrorMessage}";
@@ -34,7 +35,8 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
     /// </remarks>
     /// <typeparam name="T">The type of exception to test against.</typeparam>
     /// <returns>Returns <c>true</c> if the <see cref="ErrorType"/> value matches <typeparamref name="T"/>; <c>false</c> otherwise.</returns>
-    public bool IsCausedBy<T>() where T : Exception
+    public bool IsCausedBy<T>()
+        where T : Exception
     {
         this.exceptionType ??= Type.GetType(this.ErrorType, throwOnError: false);
         return this.exceptionType != null && typeof(T).IsAssignableFrom(this.exceptionType);

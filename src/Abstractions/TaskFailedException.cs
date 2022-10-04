@@ -8,11 +8,17 @@ namespace Microsoft.DurableTask;
 /// unhandled exception.
 /// </summary>
 /// <remarks>
-/// Detailed information associated with a particular task failure, including exception details, can be found in the 
+/// Detailed information associated with a particular task failure, including exception details, can be found in the
 /// <see cref="FailureDetails"/> property.
 /// </remarks>
 public sealed class TaskFailedException : Exception
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TaskFailedException"/> class.
+    /// </summary>
+    /// <param name="taskName">The task name.</param>
+    /// <param name="taskId">The task ID.</param>
+    /// <param name="innerException">The inner exception.</param>
     public TaskFailedException(string taskName, int taskId, Exception innerException)
         : base(GetExceptionMessage(taskName, taskId, null, innerException), innerException)
     {
@@ -21,6 +27,12 @@ public sealed class TaskFailedException : Exception
         this.FailureDetails = TaskFailureDetails.FromException(innerException);
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TaskFailedException"/> class.
+    /// </summary>
+    /// <param name="taskName">The task name.</param>
+    /// <param name="taskId">The task ID.</param>
+    /// <param name="failureDetails">The failure details.</param>
     public TaskFailedException(string taskName, int taskId, TaskFailureDetails failureDetails)
         : base(GetExceptionMessage(taskName, taskId, failureDetails, null))
     {
@@ -64,7 +76,9 @@ public sealed class TaskFailedException : Exception
     /// matches <typeparamref name="T"/>; <c>false</c> otherwise.
     /// </returns>
     [Obsolete("Use the FailureDetails property and its IsCausedBy<T>() method")]
-    public bool IsCausedByException<T>() where T : Exception => this.FailureDetails.ErrorType == typeof(T).FullName;
+    public bool IsCausedByException<T>()
+        where T : Exception
+        => this.FailureDetails.ErrorType == typeof(T).FullName;
 
     static string GetExceptionMessage(string taskName, int taskId, TaskFailureDetails? details, Exception? cause)
     {
@@ -85,7 +99,7 @@ public sealed class TaskFailedException : Exception
         }
 
         return subMessage is null
-            ?  $"Task '{taskName}' (#{taskId}) failed with an unhandled exception."
+            ? $"Task '{taskName}' (#{taskId}) failed with an unhandled exception."
             : $"Task '{taskName}' (#{taskId}) failed with an unhandled exception: {subMessage}";
     }
 }

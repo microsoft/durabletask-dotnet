@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Microsoft.DurableTask.Worker.Shims;
 
 /// <summary>
-/// A shim factory for bridging between 
+/// A shim factory for bridging between types from DurableTask.Core and those from Microsoft.DurableTask.Abstractions.
 /// </summary>
 /// <remarks>
 /// This class is intended for use with alternate .NET-based durable task runtimes. It's not intended for use

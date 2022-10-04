@@ -177,7 +177,9 @@ namespace System
         /// <summary>Converts the value of the current Index object to its equivalent string representation.</summary>
         public override string ToString()
         {
+#pragma warning disable CA1305 // Specify IFormatProvider -- code from dotnet repo
             return this.IsFromEnd ? "^" + ((uint)this.Value).ToString() : ((uint)this.Value).ToString();
+#pragma warning restore CA1305 // Specify IFormatProvider -- code from dotnet repo
         }
     }
 

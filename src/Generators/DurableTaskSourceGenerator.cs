@@ -424,13 +424,15 @@ namespace Microsoft.DurableTask
                     return supportsNullable ? "object?" : "object";
                 }
 
-                if (supportsNullable && symbol.IsReferenceType && symbol.NullableAnnotation != NullableAnnotation.Annotated)
+                if (supportsNullable && symbol.IsReferenceType
+                    && symbol.NullableAnnotation != NullableAnnotation.Annotated)
                 {
                     symbol = symbol.WithNullableAnnotation(NullableAnnotation.Annotated);
                 }
 
                 string expression = symbol.ToString();
-                if (expression.StartsWith("System.") && symbol.ContainingNamespace.Name == "System")
+                if (expression.StartsWith("System.", StringComparison.Ordinal)
+                    && symbol.ContainingNamespace.Name == "System")
                 {
                     expression = expression.Substring("System.".Length);
                 }

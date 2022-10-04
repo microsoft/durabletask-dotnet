@@ -12,6 +12,9 @@
     <RepositoryUrl>https://github.com/microsoft/durabletask-dotnet</RepositoryUrl>
     <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <AnalysisMode>recommended</AnalysisMode>
   </PropertyGroup>
 
   <!-- Common NuGet settings -->

@@ -32,10 +32,10 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddDurableTaskWorker(
         this IServiceCollection services, string name, Action<IDurableTaskBuilder> configure)
     {
-        IDurableTaskBuilder builder = GetBuilder(services, name, out bool isNew);
+        IDurableTaskBuilder builder = GetBuilder(services, name, out bool added);
         configure.Invoke(builder);
 
-        if (isNew)
+        if (added)
         {
             ConfigureDurableOptions(services, name);
             services.AddHostedService(sp => builder.Build(sp));
@@ -60,7 +60,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    static IDurableTaskBuilder GetBuilder(IServiceCollection services, string name, out bool isNew)
+    static IDurableTaskBuilder GetBuilder(IServiceCollection services, string name, out bool added)
     {
         // To ensure the builders are tracked with this service collection, we use a singleton
         // service descriptor as a holder for all builders.
@@ -74,7 +74,7 @@ public static class ServiceCollectionExtensions
         }
 
         var container = (BuilderContainer)descriptor.ImplementationInstance!;
-        return container.Get(name, out isNew);
+        return container.Get(name, out added);
     }
 
     /// <summary>
@@ -90,14 +90,14 @@ public static class ServiceCollectionExtensions
             this.services = services;
         }
 
-        public IDurableTaskBuilder Get(string name, out bool isNew)
+        public IDurableTaskBuilder Get(string name, out bool added)
         {
-            isNew = false;
+            added = false;
             if (!this.builders.TryGetValue(name, out IDurableTaskBuilder builder))
             {
                 builder = new DefaultDurableTaskBuilder(name, this.services);
                 this.builders[name] = builder;
-                isNew = true;
+                added = true;
             }
 
             return builder;

@@ -4,13 +4,12 @@
 using DurableTask.Core;
 using DurableTask.Core.History;
 using Google.Protobuf;
-using Microsoft.DurableTask.Grpc;
 using Microsoft.DurableTask.Shims;
 using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.DependencyInjection;
 using P = Microsoft.DurableTask.Protobuf;
 
-namespace Microsoft.DurableTask;
+namespace Microsoft.DurableTask.Worker.Grpc;
 
 /// <summary>
 /// Helper class for invoking orchestrations directly, without building a <see cref="DurableTaskGrpcWorker"/> instance.

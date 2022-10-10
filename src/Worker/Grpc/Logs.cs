@@ -1,10 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask
+namespace Microsoft.DurableTask.Worker.Grpc
 {
     // NOTE: Trying to make logs consistent with https://github.com/Azure/durabletask/blob/main/src/DurableTask.Core/Logging/LogEvents.cs.
     static partial class Logs
@@ -36,8 +35,8 @@ namespace Microsoft.DurableTask
         [LoggerMessage(EventId = 14, Level = LogLevel.Debug, Message = "{instanceId}: Sending {successOrFailure} response for '{name}#{taskId}' activity with {sizeInBytes} bytes of output data.")]
         public static partial void SendingActivityResponse(this ILogger logger, string successOrFailure, string name, int taskId, string instanceId, int sizeInBytes);
 
-        [LoggerMessage(EventId = 20, Level = LogLevel.Error, Message = "Unexpected error in handling of instance ID '{instanceId}'. Details: {details}")]
-        public static partial void UnexpectedError(this ILogger logger, string instanceId, string details);
+        [LoggerMessage(EventId = 20, Level = LogLevel.Error, Message = "Unexpected error in handling of instance ID '{instanceId}'.")]
+        public static partial void UnexpectedError(this ILogger logger, Exception ex, string instanceId);
 
         [LoggerMessage(EventId = 21, Level = LogLevel.Warning, Message = "Received and dropped an unknown '{type}' work-item from the sidecar.")]
         public static partial void UnexpectedWorkItemType(this ILogger logger, string type);

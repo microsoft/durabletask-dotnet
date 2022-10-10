@@ -12,7 +12,7 @@ using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using P = Microsoft.DurableTask.Protobuf;
 
-namespace Microsoft.DurableTask.Grpc;
+namespace Microsoft.DurableTask.Worker.Grpc;
 
 static class ProtoUtils
 {

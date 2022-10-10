@@ -32,21 +32,26 @@ partial class TaskOrchestrationShim : TaskOrchestration
         this.implementation = implementation;
     }
 
+    DataConverter DataConverter => this.invocationContext.Options.DataConverter;
+
+    ILoggerFactory LoggerFactory => this.invocationContext.LoggerFactory;
+
     /// <inheritdoc/>
     public override async Task<string?> Execute(OrchestrationContext innerContext, string rawInput)
     {
-        JsonDataConverterShim converterShim = new(this.invocationContext.DataConverter);
+        JsonDataConverterShim converterShim = new(this.invocationContext.Options.DataConverter);
         innerContext.MessageDataConverter = converterShim;
         innerContext.ErrorDataConverter = converterShim;
 
-        object? input = this.invocationContext.DataConverter.Deserialize(rawInput, this.implementation.InputType);
+        object? input = this.DataConverter.Deserialize(
+            rawInput, this.implementation.InputType);
 
-        ILogger contextLogger = this.invocationContext.LoggerFactory.CreateLogger("Microsoft.DurableTask");
+        ILogger contextLogger = this.LoggerFactory.CreateLogger("Microsoft.DurableTask");
         this.wrapperContext = new(innerContext, this.invocationContext, contextLogger, input);
         object? output = await this.implementation.RunAsync(this.wrapperContext, input);
 
         // Return the output (if any) as a serialized string.
-        return this.invocationContext.DataConverter.Serialize(output);
+        return this.DataConverter.Serialize(output);
     }
 
     /// <inheritdoc/>

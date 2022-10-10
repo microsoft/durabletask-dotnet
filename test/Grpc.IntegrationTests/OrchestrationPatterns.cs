@@ -98,8 +98,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
             .AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
             {
-                var list = new List<bool>();
-                list.Add(ctx.IsReplaying);
+                var list = new List<bool> { ctx.IsReplaying };
                 await ctx.CreateTimer(TimeSpan.Zero, CancellationToken.None);
                 list.Add(ctx.IsReplaying);
                 await ctx.CreateTimer(TimeSpan.Zero, CancellationToken.None);
@@ -474,7 +473,7 @@ public class OrchestrationPatterns : IntegrationTestBase
             .AddTasks(tasks => tasks
                 .AddOrchestrator<int, bool>(orchestratorName, async (ctx, input) =>
                 {
-                    // Test 1: Ensure two consequitively created GUIDs are unique
+                    // Test 1: Ensure two consecutively created GUIDs are unique
                     Guid currentGuid0 = ctx.NewGuid();
                     Guid currentGuid1 = ctx.NewGuid();
                     if (currentGuid0 == currentGuid1)

@@ -74,7 +74,7 @@ public static class DurableTaskBuilderExtensions
     {
         if (builder.Name != Options.DefaultName)
         {
-            throw new InvalidOperationException("gRPC does not support named builders yet.");
+            throw new InvalidOperationException("gRPC does not support named builders.");
         }
 
         builder.Services.Configure(builder.Name, configure);

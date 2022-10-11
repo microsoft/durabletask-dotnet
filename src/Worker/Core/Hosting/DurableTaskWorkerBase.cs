@@ -23,6 +23,7 @@ public abstract class DurableTaskWorkerBase : BackgroundService
         this.Factory = factory;
         this.Options = options;
     }
+
     /// <summary>
     /// Gets the name of this worker.
     /// </summary>

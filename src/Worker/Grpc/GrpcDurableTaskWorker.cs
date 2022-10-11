@@ -17,6 +17,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorkerBase
     readonly IServiceProvider services;
     readonly ILoggerFactory loggerFactory;
     readonly ILogger logger;
+
     /// <summary>
     /// Initializes a new instance of <see cref="GrpcDurableTaskWorker" />.
     /// </summary>

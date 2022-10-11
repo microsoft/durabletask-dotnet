@@ -3,7 +3,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-namespace Microsoft.DurableTask.Worker.Options;
+namespace Microsoft.DurableTask.Worker;
 
 /// <summary>
 /// A factory for creating orchestrators and activities.

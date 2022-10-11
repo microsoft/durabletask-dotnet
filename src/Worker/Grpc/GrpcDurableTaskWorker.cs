@@ -3,7 +3,6 @@
 
 using Grpc.Core;
 using Microsoft.DurableTask.Worker.Hosting;
-using Microsoft.DurableTask.Worker.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -55,7 +54,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorkerBase
         if (this.grpcOptions.Channel is Channel c)
         {
             channel = c;
-            return AsyncDisposable.Empty;
+            return default;
         }
 
         if (this.grpcOptions.Address is Uri address)

@@ -1,12 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask;
-using Microsoft.DurableTask.Worker;
-using Microsoft.DurableTask.Worker.Options;
-using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
-namespace Microsoft.Extensions.DependencyInjection;
+namespace Microsoft.DurableTask.Worker;
 
 /// <summary>
 /// Extensions for <see cref="IServiceCollection" />.
@@ -21,7 +19,9 @@ public static class ServiceCollectionExtensions
     /// <returns>The service collection for call chaining.</returns>
     public static IServiceCollection AddDurableTaskWorker(
         this IServiceCollection services, Action<IDurableTaskBuilder> configure)
-        => services.AddDurableTaskWorker(Options.Options.DefaultName, configure);
+    {
+        return services.AddDurableTaskWorker(Options.DefaultName, configure);
+    }
 
     /// <summary>
     /// Adds and configures Durable Task worker services to the service collection.

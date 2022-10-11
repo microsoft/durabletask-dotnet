@@ -1,7 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Worker.Options;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.Worker.Shims;

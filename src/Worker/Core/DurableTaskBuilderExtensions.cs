@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Worker.Hosting;
-using Microsoft.DurableTask.Worker.Options;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Microsoft.DurableTask.Worker;

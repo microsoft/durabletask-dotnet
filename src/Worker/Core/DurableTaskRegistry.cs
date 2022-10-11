@@ -5,7 +5,7 @@ using System.Collections.Immutable;
 using Microsoft.DurableTask.Shims;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Microsoft.DurableTask.Worker.Options;
+namespace Microsoft.DurableTask.Worker;
 
 /// <summary>
 /// Options for the Durable Task worker.

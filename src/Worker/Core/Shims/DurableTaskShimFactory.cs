@@ -2,9 +2,7 @@
 // Licensed under the MIT License.
 
 using DurableTask.Core;
-using Microsoft.DurableTask.Converters;
 using Microsoft.DurableTask.Shims;
-using Microsoft.DurableTask.Worker.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 

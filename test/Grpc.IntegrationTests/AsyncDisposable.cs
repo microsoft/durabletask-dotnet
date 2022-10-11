@@ -19,19 +19,6 @@ public struct AsyncDisposable : IAsyncDisposable
         this.callback = callback;
     }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AsyncDisposable"/> struct.
-    /// </summary>
-    public AsyncDisposable()
-    {
-        this.callback = null;
-    }
-
-    /// <summary>
-    /// Gets the empty async disposable.
-    /// </summary>
-    public static AsyncDisposable Empty { get; } = default;
-
     /// <inheritdoc/>
     public ValueTask DisposeAsync()
     {

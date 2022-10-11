@@ -1,14 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Grpc.Core;
-using Microsoft.Extensions.Logging;
-using P = Microsoft.DurableTask.Protobuf;
-using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
+using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.History;
+using Grpc.Core;
+using Microsoft.Extensions.Logging;
 using Microsoft.DurableTask.Worker.Shims;
-using System.Text;
+using P = Microsoft.DurableTask.Protobuf;
+using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
 
 namespace Microsoft.DurableTask.Worker.Grpc;
 

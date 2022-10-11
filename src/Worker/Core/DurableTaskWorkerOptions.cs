@@ -3,7 +3,7 @@
 
 using Microsoft.DurableTask.Converters;
 
-namespace Microsoft.DurableTask.Worker.Options;
+namespace Microsoft.DurableTask.Worker;
 
 /// <summary>
 /// Options for the Durable Task worker.

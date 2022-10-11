@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -20,8 +23,8 @@ public interface IDurableTaskBuilder
     IServiceCollection Services { get; }
 
     /// <summary>
-    /// Gets or sets the build target for this builder. The provided type <b>must derive from</b> <see cref="DurableTaskWorkerBase" />.
-    /// This is the hosted service which will ultimately be ran on host startup.
+    /// Gets or sets the build target for this builder. The provided type <b>must derive from</b>
+    /// <see cref="DurableTaskWorkerBase" />. This is the hosted service which will ultimately be ran on host startup.
     /// </summary>
     Type? BuildTarget { get; set; }
 

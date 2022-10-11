@@ -20,12 +20,10 @@ public interface IDurableTaskBuilder
     IServiceCollection Services { get; }
 
     /// <summary>
-    /// Sets the target of the builder. The provided type <b>must derive from</b> <see cref="DurableTaskWorkerBase" />.
+    /// Gets or sets the build target for this builder. The provided type <b>must derive from</b> <see cref="DurableTaskWorkerBase" />.
     /// This is the hosted service which will ultimately be ran on host startup.
     /// </summary>
-    /// <param name="type">The target type to builder.</param>
-    /// <returns>This same builder for call chaining.</returns>
-    IDurableTaskBuilder SetBuildTarget(Type type);
+    Type? BuildTarget { get; set; }
 
     /// <summary>
     /// Build the hosted service which runs the worker.

@@ -1,11 +1,10 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Grpc;
-using Xunit;
+using Microsoft.DurableTask.Worker;
 using Xunit.Abstractions;
 
-namespace Microsoft.DurableTask.Tests;
+namespace Microsoft.DurableTask.Grpc.Tests;
 
 /// <summary>
 /// Integration tests that are designed to exercise the error handling and retry functionality
@@ -32,12 +31,13 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         async Task MyOrchestrationImpl(TaskOrchestrationContext ctx) => await ctx.CallActivityAsync(activityName);
         void MyActivityImpl(TaskActivityContext ctx) => throw new Exception(errorMessage);
 
-        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
-            .AddTasks(tasks => tasks
-                .AddOrchestrator(orchestratorName, MyOrchestrationImpl)
-                .AddActivity(activityName, MyActivityImpl))
-            .Build();
-        await server.StartAsync(this.TimeoutToken);
+        await using AsyncDisposable server = await this.StartWorkerAsync(
+            b =>
+            {
+                b.AddTasks(tasks => tasks
+                    .AddOrchestrator(orchestratorName, MyOrchestrationImpl)
+                    .AddActivity(activityName, MyActivityImpl));
+            });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -78,20 +78,20 @@ public class OrchestrationErrorHandling : IntegrationTestBase
     public async Task UnhandledOrchestratorException()
     {
         string errorMessage = "Kah-BOOOOOM!!!"; // Use an obviously fake error message to avoid confusion when debugging
-        string? expectedCallstack = null;
+        string? expectedCallStack = null;
 
         TaskName orchestratorName = "FaultyOrchestration";
-        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
-            .AddTasks(tasks =>
-                tasks.AddOrchestrator(orchestratorName, ctx =>
+        await using AsyncDisposable server = await this.StartWorkerAsync(
+            b =>
+            {
+                b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, ctx =>
                 {
                     // The Environment.StackTrace and throw statements need to be on the same line
                     // to keep line numbers consistent between the expected stack trace and the actual stack trace.
                     // Also need to remove the top frame from Environment.StackTrace.
-                    expectedCallstack = Environment.StackTrace.Replace("at System.Environment.get_StackTrace()", string.Empty).TrimStart(); throw new Exception(errorMessage);
-                }))
-            .Build();
-        await server.StartAsync(this.TimeoutToken);
+                    expectedCallStack = Environment.StackTrace.Replace("at System.Environment.get_StackTrace()", string.Empty).TrimStart(); throw new Exception(errorMessage);
+                }));
+            });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -109,8 +109,8 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         Assert.Equal(typeof(Exception).FullName, failureDetails.ErrorType);
         Assert.Equal(errorMessage, failureDetails.ErrorMessage);
         Assert.NotNull(failureDetails.StackTrace);
-        Assert.NotNull(expectedCallstack);
-        Assert.Contains(expectedCallstack![..300], failureDetails.StackTrace);
+        Assert.NotNull(expectedCallStack);
+        Assert.Contains(expectedCallStack![..300], failureDetails.StackTrace);
     }
 
     /// <summary>
@@ -131,19 +131,20 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         int actualNumberOfAttempts = 0;
 
         TaskName orchestratorName = "BustedOrchestration";
-        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
-            .AddTasks(tasks =>
-                tasks.AddOrchestrator(orchestratorName, async ctx =>
-                {
-                    await ctx.CallActivityAsync("Foo", options: retryOptions);
-                })
-                .AddActivity("Foo", context =>
-                {
-                    actualNumberOfAttempts++;
-                    throw new Exception(errorMessage);
-                }))
-            .Build();
-        await server.StartAsync(this.TimeoutToken);
+        await using AsyncDisposable server = await this.StartWorkerAsync(
+            b =>
+            {
+                b.AddTasks(tasks =>
+                    tasks.AddOrchestrator(orchestratorName, async ctx =>
+                    {
+                        await ctx.CallActivityAsync("Foo", options: retryOptions);
+                    })
+                    .AddActivity("Foo", context =>
+                    {
+                        actualNumberOfAttempts++;
+                        throw new Exception(errorMessage);
+                    }));
+            });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -194,19 +195,20 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         int actualNumberOfAttempts = 0;
 
         TaskName orchestratorName = "BustedOrchestration";
-        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
-            .AddTasks(tasks =>
-                tasks.AddOrchestrator(orchestratorName, async ctx =>
-                {
-                    await ctx.CallActivityAsync("Foo", options: retryOptions);
-                })
-                .AddActivity("Foo", context =>
-                {
-                    actualNumberOfAttempts++;
-                    throw new ApplicationException(errorMessage);
-                }))
-            .Build();
-        await server.StartAsync(this.TimeoutToken);
+        await using AsyncDisposable server = await this.StartWorkerAsync(
+            b =>
+            {
+                b.AddTasks(tasks =>
+                    tasks.AddOrchestrator(orchestratorName, async ctx =>
+                    {
+                        await ctx.CallActivityAsync("Foo", options: retryOptions);
+                    })
+                    .AddActivity("Foo", context =>
+                    {
+                        actualNumberOfAttempts++;
+                        throw new ApplicationException(errorMessage);
+                    }));
+            });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -240,19 +242,20 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         int actualNumberOfAttempts = 0;
 
         TaskName orchestratorName = "OrchestrationWithBustedSubOrchestrator";
-        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
-            .AddTasks(tasks =>
-                tasks.AddOrchestrator(orchestratorName, async ctx =>
-                {
-                    await ctx.CallSubOrchestratorAsync("BustedSubOrchestrator", options: retryOptions);
-                })
-                .AddOrchestrator("BustedSubOrchestrator", context =>
-                {
-                    actualNumberOfAttempts++;
-                    throw new ApplicationException(errorMessage);
-                }))
-            .Build();
-        await server.StartAsync(this.TimeoutToken);
+        await using AsyncDisposable server = await this.StartWorkerAsync(
+            b =>
+            {
+                b.AddTasks(tasks =>
+                    tasks.AddOrchestrator(orchestratorName, async ctx =>
+                    {
+                        await ctx.CallSubOrchestratorAsync("BustedSubOrchestrator", options: retryOptions);
+                    })
+                    .AddOrchestrator("BustedSubOrchestrator", context =>
+                    {
+                        actualNumberOfAttempts++;
+                        throw new ApplicationException(errorMessage);
+                    }));
+            });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -303,19 +306,20 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         int actualNumberOfAttempts = 0;
 
         TaskName orchestratorName = "OrchestrationWithBustedSubOrchestrator";
-        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
-            .AddTasks(tasks =>
-                tasks.AddOrchestrator(orchestratorName, async ctx =>
-                {
-                    await ctx.CallSubOrchestratorAsync("BustedSubOrchestrator", options: retryOptions);
-                })
-                .AddOrchestrator("BustedSubOrchestrator", context =>
-                {
-                    actualNumberOfAttempts++;
-                    throw new ApplicationException(errorMessage);
-                }))
-            .Build();
-        await server.StartAsync(this.TimeoutToken);
+        await using AsyncDisposable server = await this.StartWorkerAsync(
+            b =>
+            {
+                b.AddTasks(tasks =>
+                    tasks.AddOrchestrator(orchestratorName, async ctx =>
+                    {
+                        await ctx.CallSubOrchestratorAsync("BustedSubOrchestrator", options: retryOptions);
+                    })
+                    .AddOrchestrator("BustedSubOrchestrator", context =>
+                    {
+                        actualNumberOfAttempts++;
+                        throw new ApplicationException(errorMessage);
+                    }));
+            });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -344,9 +348,10 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         });
 
         TaskName orchestratorName = "OrchestrationWithMissingTask";
-        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
-            .AddTasks(tasks =>
-                tasks.AddOrchestrator(orchestratorName, async ctx =>
+        await using AsyncDisposable server = await this.StartWorkerAsync(
+            b =>
+            {
+                b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
                 {
                     if (activity)
                     {
@@ -356,9 +361,8 @@ public class OrchestrationErrorHandling : IntegrationTestBase
                     {
                         await ctx.CallSubOrchestratorAsync("Bogus", options: retryOptions);
                     }
-                }))
-            .Build();
-        await server.StartAsync(this.TimeoutToken);
+                }));
+            });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);

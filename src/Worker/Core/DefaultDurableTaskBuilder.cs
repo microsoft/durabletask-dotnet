@@ -33,15 +33,18 @@ public class DefaultDurableTaskBuilder : IDurableTaskBuilder
     public IServiceCollection Services { get; }
 
     /// <inheritdoc/>
-    public IDurableTaskBuilder SetBuildTarget(Type type)
+    public Type? BuildTarget
     {
-        if (!type.IsSubclassOf(typeof(DurableTaskWorkerBase)))
+        get => this.buildTarget;
+        set
         {
-            throw new ArgumentException($"Type must be subclass of {typeof(DurableTaskWorkerBase)}");
-        }
+            if (!value?.IsSubclassOf(typeof(DurableTaskWorkerBase)) ?? false)
+            {
+                throw new ArgumentException($"Type must be subclass of {typeof(DurableTaskWorkerBase)}", nameof(value));
+            }
 
-        this.buildTarget = type;
-        return this;
+            this.buildTarget = value;
+        }
     }
 
     /// <inheritdoc/>
@@ -51,7 +54,7 @@ public class DefaultDurableTaskBuilder : IDurableTaskBuilder
         {
             throw new InvalidOperationException(
                 "No valid DurableTask worker target was registered. Ensure a valid worker has been configured via"
-                + " 'SetBuildTarget()'. An example of a valid worker is '.UseGrpc()'.");
+                + " 'UseBuildTarget(Type target)'. An example of a valid worker is '.UseGrpc()'.");
         }
 
         DurableTaskRegistry registry = serviceProvider.GetOptions<DurableTaskRegistry>(this.Name);

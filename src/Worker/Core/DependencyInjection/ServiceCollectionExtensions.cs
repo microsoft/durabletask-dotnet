@@ -4,6 +4,7 @@
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Options;
+using Microsoft.Extensions.Hosting;
 
 namespace Microsoft.Extensions.DependencyInjection;
 
@@ -37,8 +38,10 @@ public static class ServiceCollectionExtensions
 
         if (added)
         {
+            // The added toggle logic is because we cannot use TryAddEnumerable logic as
+            // we would have to dynamically compile a lambda to have it work correctly.
             ConfigureDurableOptions(services, name);
-            services.AddHostedService(sp => builder.Build(sp));
+            services.AddSingleton(sp => builder.Build(sp));
         }
 
         return services;

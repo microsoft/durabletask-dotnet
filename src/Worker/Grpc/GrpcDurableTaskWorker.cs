@@ -6,7 +6,6 @@ using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.DurableTask.Worker.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
 
 namespace Microsoft.DurableTask.Worker.Grpc;
 
@@ -40,7 +39,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorkerBase
         this.grpcOptions = grpcOptions.Get(name);
         this.services = services;
         this.loggerFactory = loggerFactory;
-        this.logger = loggerFactory.CreateLogger<GrpcDurableTaskWorker>();
+        this.logger = loggerFactory.CreateLogger("Microsoft.DurableTask"); // TODO: use better category name.
     }
 
     /// <inheritdoc />

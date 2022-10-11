@@ -57,6 +57,6 @@ public static class DurableTaskBuilderExtensions
         this IDurableTaskBuilder builder, Action<GrpcDurableTaskWorkerOptions> configure)
     {
         builder.Services.Configure(builder.Name, configure);
-        return builder.SetBuildTarget<GrpcDurableTaskWorker>();
+        return builder.UseBuildTarget<GrpcDurableTaskWorker>();
     }
 }

@@ -2,11 +2,10 @@
 // Licensed under the MIT License.
 
 using FluentAssertions;
-using Microsoft.DurableTask.Grpc;
-using Xunit;
+using Microsoft.DurableTask.Worker;
 using Xunit.Abstractions;
 
-namespace Microsoft.DurableTask.Tests;
+namespace Microsoft.DurableTask.Grpc.Tests;
 
 public class PageableIntegrationTests : IntegrationTestBase
 {
@@ -20,12 +19,15 @@ public class PageableIntegrationTests : IntegrationTestBase
     {
         TaskName orchestratorName = nameof(PageableActivity_Enumerates);
 
-        await using DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
-            .AddTasks(tasks => tasks
-                .AddOrchestrator<string, int>(orchestratorName, (ctx, input) => PageableOrchestrationAsync(ctx, input))
-                .AddActivity<PageRequest, Page<string>>(nameof(PageableActivityAsync), (_, input) => PageableActivityAsync(input)))
-            .Build();
-        await server.StartAsync(this.TimeoutToken);
+        await using AsyncDisposable server = await this.StartWorkerAsync(
+            b =>
+            {
+                b.AddTasks(tasks => tasks
+                    .AddOrchestrator<string, int>(
+                        orchestratorName, (ctx, input) => PageableOrchestrationAsync(ctx, input))
+                    .AddActivity<PageRequest, Page<string>>(
+                        nameof(PageableActivityAsync), (_, input) => PageableActivityAsync(input)));
+            });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: string.Empty);

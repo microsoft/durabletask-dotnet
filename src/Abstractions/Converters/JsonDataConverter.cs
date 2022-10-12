@@ -16,11 +16,6 @@ public class JsonDataConverter : DataConverter
         IncludeFields = true,
     };
 
-    /// <summary>
-    /// An instance of the <see cref="JsonDataConverter"/> with default configuration.
-    /// </summary>
-    public static JsonDataConverter Default { get; } = new JsonDataConverter();
-
     readonly JsonSerializerOptions? options;
 
     JsonDataConverter(JsonSerializerOptions? options = null)
@@ -34,6 +29,11 @@ public class JsonDataConverter : DataConverter
             this.options = DefaultOptions;
         }
     }
+
+    /// <summary>
+    /// Gets an instance of the <see cref="JsonDataConverter"/> with default configuration.
+    /// </summary>
+    public static JsonDataConverter Default { get; } = new JsonDataConverter();
 
     /// <inheritdoc/>
     public override string? Serialize(object? value)

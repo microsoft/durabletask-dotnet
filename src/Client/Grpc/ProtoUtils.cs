@@ -33,6 +33,11 @@ static class ProtoUtils
         => dateTime.HasValue ? dateTime.Value.ToTimestamp() : null;
 
 #pragma warning disable 0618 // Referencing Obsolete member. This is intention as we are only converting it.
+    /// <summary>
+    /// Converts <see cref="OrchestrationRuntimeStatus" /> to <see cref="P.OrchestrationStatus" />.
+    /// </summary>
+    /// <param name="status">The orchestration status.</param>
+    /// <returns>A <see cref="P.OrchestrationStatus" />.</returns>
     internal static P.OrchestrationStatus ToGrpcStatus(this OrchestrationRuntimeStatus status)
         => status switch
         {

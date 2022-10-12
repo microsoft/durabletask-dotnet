@@ -10,6 +10,10 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <AdditionalFiles Include="$(RepoRoot)stylecop.json" Visible="false" />
+  </ItemGroup>
+
   <Import Project="$(EngRoot)targets/InternalsVisibleTo.targets" />
 
 </Project>

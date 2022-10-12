@@ -6,6 +6,7 @@ namespace Microsoft.DurableTask;
 /// <summary>
 /// Represents a single page of results.
 /// </summary>
+/// <typeparam name="T">The type of values held by the page.</typeparam>
 public sealed class Page<T>
     where T : notnull
 {

@@ -1,9 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask;
+using CoreOrchestrationException = DurableTask.Core.Exceptions.OrchestrationException;
 
-using CoreOrchestrationException = global::DurableTask.Core.Exceptions.OrchestrationException;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Record that represents the details of a task failure.
@@ -19,6 +19,7 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
     /// <summary>
     /// Gets a debug-friendly description of the failure information.
     /// </summary>
+    /// <returns>A debugger friendly display string.</returns>
     public override string ToString()
     {
         return $"{this.ErrorType}: {this.ErrorMessage}";

@@ -61,8 +61,19 @@ public interface ITaskActivity
 /// <typeparam name="TOutput">The type of the return value that this activity produces.</typeparam>
 public abstract class TaskActivityBase<TInput, TOutput> : ITaskActivity
 {
+    /// <inheritdoc/>
     Type ITaskActivity.InputType => typeof(TInput);
+
+    /// <inheritdoc/>
     Type ITaskActivity.OutputType => typeof(TOutput);
+
+    /// <inheritdoc/>
+    async Task<object?> ITaskActivity.RunAsync(TaskActivityContext context, object? input)
+    {
+        TInput? typedInput = (TInput?)(input ?? default(TInput));
+        TOutput? output = await this.OnRunAsync(context, typedInput);
+        return output;
+    }
 
     /// <summary>
     /// Override to implement async (non-blocking) task activity logic.
@@ -70,22 +81,15 @@ public abstract class TaskActivityBase<TInput, TOutput> : ITaskActivity
     /// <param name="context">Provides access to additional context for the current activity execution.</param>
     /// <param name="input">The deserialized activity input.</param>
     /// <returns>The output of the activity as a task.</returns>
-    protected virtual Task<TOutput?> OnRunAsync(TaskActivityContext context, TInput? input) => 
+    protected virtual Task<TOutput?> OnRunAsync(TaskActivityContext context, TInput? input) =>
         Task.FromResult(this.OnRun(context, input));
 
     /// <summary>
     /// Override to implement synchronous (blocking) task activity logic.
     /// </summary>
     /// <inheritdoc cref="OnRunAsync"/>
-    protected virtual TOutput? OnRun(TaskActivityContext context, TInput? input) => 
+    protected virtual TOutput? OnRun(TaskActivityContext context, TInput? input) =>
         throw this.DefaultNotImplementedException();
-
-    async Task<object?> ITaskActivity.RunAsync(TaskActivityContext context, object? input)
-    {
-        TInput? typedInput = (TInput?)(input ?? default(TInput));
-        TOutput? output = await this.OnRunAsync(context, typedInput);
-        return output;
-    }
 
     Exception DefaultNotImplementedException()
     {

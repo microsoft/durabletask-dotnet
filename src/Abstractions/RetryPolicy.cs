@@ -118,7 +118,7 @@ public class RetryPolicy
     public TimeSpan RetryTimeout { get; }
 
     /// <summary>
-    /// Gets or sets a Func to call on exception to determine if retries should proceed
+    /// Gets or sets a Func to call on exception to determine if retries should proceed.
     /// </summary>
     public Func<Exception, Task<bool>>? HandleAsync { get; set; }
 }

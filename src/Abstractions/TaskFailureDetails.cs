@@ -35,8 +35,7 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
     /// </remarks>
     /// <typeparam name="T">The type of exception to test against.</typeparam>
     /// <returns>Returns <c>true</c> if the <see cref="ErrorType"/> value matches <typeparamref name="T"/>; <c>false</c> otherwise.</returns>
-    public bool IsCausedBy<T>()
-        where T : Exception
+    public bool IsCausedBy<T>() where T : Exception
     {
         this.exceptionType ??= Type.GetType(this.ErrorType, throwOnError: false);
         return this.exceptionType != null && typeof(T).IsAssignableFrom(this.exceptionType);

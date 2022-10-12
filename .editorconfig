@@ -212,7 +212,11 @@ tab_width = 4
 indent_size = 4
 end_of_line = crlf
 
+# IDE rules
+dotnet_diagnostic.IDE0073.severity = suggestion # Require file header.
+
 # StyleCop rules
+dotnet_diagnostic.SA1127.severity = none  # Generic type constraints must be on own line.
 dotnet_diagnostic.SA1400.severity = none  # Access modifier must be declared
 dotnet_diagnostic.SA1402.severity = none  # File may only contain a single type
 dotnet_diagnostic.SA1649.severity = none  # File name must match type name

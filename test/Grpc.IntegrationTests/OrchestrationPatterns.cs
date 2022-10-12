@@ -20,11 +20,10 @@ public class OrchestrationPatterns : IntegrationTestBase
     public async Task EmptyOrchestration()
     {
         TaskName orchestratorName = nameof(EmptyOrchestration);
-        await using AsyncDisposable server = await this.StartWorkerAsync(
-            b =>
-            {
-                b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, ctx => Task.FromResult<object?>(null)));
-            });
+        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, ctx => Task.FromResult<object?>(null)));
+        });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -41,12 +40,11 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(SingleTimer);
         TimeSpan delay = TimeSpan.FromSeconds(3);
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(
-            b =>
-            {
-                b.AddTasks(tasks => tasks.AddOrchestrator(
-                    orchestratorName, ctx => ctx.CreateTimer(delay, CancellationToken.None)));
-            });
+        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestrator(
+                orchestratorName, ctx => ctx.CreateTimer(delay, CancellationToken.None)));
+        });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -68,13 +66,12 @@ public class OrchestrationPatterns : IntegrationTestBase
         TimeSpan timerInterval = TimeSpan.FromSeconds(3);
         const int ExpectedTimers = 3; // two for 3 seconds and one for 1 second
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(
-            b =>
-            {
-                b.Configure(opt => opt.MaximumTimerInterval = timerInterval);
-                b.AddTasks(tasks => tasks.AddOrchestrator(
-                    orchestratorName, ctx => ctx.CreateTimer(delay, CancellationToken.None)));
-            });
+        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        {
+            b.Configure(opt => opt.MaximumTimerInterval = timerInterval);
+            b.AddTasks(tasks => tasks.AddOrchestrator(
+                orchestratorName, ctx => ctx.CreateTimer(delay, CancellationToken.None)));
+        });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -98,19 +95,18 @@ public class OrchestrationPatterns : IntegrationTestBase
     {
         TaskName orchestratorName = nameof(IsReplaying);
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(
-            b =>
+        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
             {
-                b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
-                {
-                    var list = new List<bool> { ctx.IsReplaying };
-                    await ctx.CreateTimer(TimeSpan.Zero, CancellationToken.None);
-                    list.Add(ctx.IsReplaying);
-                    await ctx.CreateTimer(TimeSpan.Zero, CancellationToken.None);
-                    list.Add(ctx.IsReplaying);
-                    return list;
-                }));
-            });
+                var list = new List<bool> { ctx.IsReplaying };
+                await ctx.CreateTimer(TimeSpan.Zero, CancellationToken.None);
+                list.Add(ctx.IsReplaying);
+                await ctx.CreateTimer(TimeSpan.Zero, CancellationToken.None);
+                list.Add(ctx.IsReplaying);
+                return list;
+            }));
+        });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -133,30 +129,29 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(CurrentDateTimeUtc);
         TaskName echoActivityName = "Echo";
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(
-            b =>
-            {
-                b.AddTasks(tasks => tasks
-                    .AddOrchestrator(orchestratorName, async ctx =>
+        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestrator(orchestratorName, async ctx =>
+                {
+                    DateTime currentDate1 = ctx.CurrentUtcDateTime;
+                    DateTime originalDate1 = await ctx.CallActivityAsync<DateTime>(echoActivityName, currentDate1);
+                    if (currentDate1 != originalDate1)
                     {
-                        DateTime currentDate1 = ctx.CurrentUtcDateTime;
-                        DateTime originalDate1 = await ctx.CallActivityAsync<DateTime>(echoActivityName, currentDate1);
-                        if (currentDate1 != originalDate1)
-                        {
-                            return false;
-                        }
+                        return false;
+                    }
 
-                        DateTime currentDate2 = ctx.CurrentUtcDateTime;
-                        DateTime originalDate2 = await ctx.CallActivityAsync<DateTime>(echoActivityName, currentDate2);
-                        if (currentDate2 != originalDate2)
-                        {
-                            return false;
-                        }
+                    DateTime currentDate2 = ctx.CurrentUtcDateTime;
+                    DateTime originalDate2 = await ctx.CallActivityAsync<DateTime>(echoActivityName, currentDate2);
+                    if (currentDate2 != originalDate2)
+                    {
+                        return false;
+                    }
 
-                        return currentDate1 != currentDate2;
-                    })
-                    .AddActivity<object, object>(echoActivityName, (ctx, input) => input));
-            });
+                    return currentDate1 != currentDate2;
+                })
+                .AddActivity<object, object>(echoActivityName, (ctx, input) => input));
+        });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -175,14 +170,13 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(SingleActivity);
         TaskName sayHelloActivityName = "SayHello";
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(
-            b =>
-            {
-                b.AddTasks(tasks => tasks
-                    .AddOrchestrator<string, string>(
-                        orchestratorName, (ctx, input) => ctx.CallActivityAsync<string?>(sayHelloActivityName, input))
-                    .AddActivity<string, string>(sayHelloActivityName, (ctx, name) => $"Hello, {name}!"));
-            });
+        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestrator<string, string>(
+                    orchestratorName, (ctx, input) => ctx.CallActivityAsync<string?>(sayHelloActivityName, input))
+                .AddActivity<string, string>(sayHelloActivityName, (ctx, name) => $"Hello, {name}!"));
+        });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
@@ -201,15 +195,14 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(SingleActivity);
         TaskName sayHelloActivityName = "SayHello";
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(
-            b =>
-            {
-                b.AddTasks(tasks => tasks
-                    .AddOrchestrator<string, string>(
-                        orchestratorName, (ctx, input) => ctx.CallActivityAsync<string?>(sayHelloActivityName, input))
-                    .AddActivity<string, string>(
-                        sayHelloActivityName, async (ctx, name) => await Task.FromResult($"Hello, {name}!")));
-            });
+        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestrator<string, string>(
+                    orchestratorName, (ctx, input) => ctx.CallActivityAsync<string?>(sayHelloActivityName, input))
+                .AddActivity<string, string>(
+                    sayHelloActivityName, async (ctx, name) => await Task.FromResult($"Hello, {name}!")));
+        });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
@@ -228,22 +221,21 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(ActivityChain);
         TaskName plusOneActivityName = "PlusOne";
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(
-            b =>
-            {
-                b.AddTasks(tasks => tasks
-                    .AddOrchestrator(orchestratorName, async ctx =>
+        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestrator(orchestratorName, async ctx =>
+                {
+                    int value = 0;
+                    for (int i = 0; i < 10; i++)
                     {
-                        int value = 0;
-                        for (int i = 0; i < 10; i++)
-                        {
-                            value = await ctx.CallActivityAsync<int>(plusOneActivityName, value);
-                        }
+                        value = await ctx.CallActivityAsync<int>(plusOneActivityName, value);
+                    }
 
-                        return value;
-                    })
-                    .AddActivity<int, int>(plusOneActivityName, (ctx, input) => input + 1));
-            });
+                    return value;
+                })
+                .AddActivity<int, int>(plusOneActivityName, (ctx, input) => input + 1));
+        });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
@@ -262,25 +254,24 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(ActivityFanOut);
         TaskName toStringActivity = "ToString";
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(
-            b =>
-            {
-                b.AddTasks(tasks => tasks
-                    .AddOrchestrator(orchestratorName, async ctx =>
+        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestrator(orchestratorName, async ctx =>
+                {
+                    var tasks = new List<Task<string>>();
+                    for (int i = 0; i < 10; i++)
                     {
-                        var tasks = new List<Task<string>>();
-                        for (int i = 0; i < 10; i++)
-                        {
-                            tasks.Add(ctx.CallActivityAsync<string>(toStringActivity, i));
-                        }
+                        tasks.Add(ctx.CallActivityAsync<string>(toStringActivity, i));
+                    }
 
-                        string[] results = await Task.WhenAll(tasks);
-                        Array.Sort(results);
-                        Array.Reverse(results);
-                        return results;
-                    })
-                    .AddActivity<object, string>(toStringActivity, (ctx, input) => input!.ToString()));
-            });
+                    string[] results = await Task.WhenAll(tasks);
+                    Array.Sort(results);
+                    Array.Reverse(results);
+                    return results;
+                })
+                .AddActivity<object, string>(toStringActivity, (ctx, input) => input!.ToString()));
+        });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -301,20 +292,19 @@ public class OrchestrationPatterns : IntegrationTestBase
     public async Task ExternalEvents(int eventCount)
     {
         TaskName orchestratorName = nameof(ExternalEvents);
-        await using AsyncDisposable server = await this.StartWorkerAsync(
-            b =>
+        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
             {
-                b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
+                List<int> events = new();
+                for (int i = 0; i < eventCount; i++)
                 {
-                    List<int> events = new();
-                    for (int i = 0; i < eventCount; i++)
-                    {
-                        events.Add(await ctx.WaitForExternalEvent<int>($"Event{i}"));
-                    }
+                    events.Add(await ctx.WaitForExternalEvent<int>($"Event{i}"));
+                }
 
-                    return events;
-                }));
-            });
+                return events;
+            }));
+        });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -346,12 +336,11 @@ public class OrchestrationPatterns : IntegrationTestBase
     public async Task Termination()
     {
         TaskName orchestrationName = nameof(Termination);
-        await using AsyncDisposable server = await this.StartWorkerAsync(
-            b =>
-            {
-                b.AddTasks(tasks => tasks.AddOrchestrator(
-                    orchestrationName, ctx => ctx.CreateTimer(TimeSpan.FromSeconds(3), CancellationToken.None)));
-            });
+        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestrator(
+                orchestrationName, ctx => ctx.CreateTimer(TimeSpan.FromSeconds(3), CancellationToken.None)));
+        });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestrationName);
@@ -379,20 +368,19 @@ public class OrchestrationPatterns : IntegrationTestBase
     {
         TaskName orchestratorName = nameof(ContinueAsNew);
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(
-            b =>
+        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestrator<int, int>(orchestratorName, async (ctx, input) =>
             {
-                b.AddTasks(tasks => tasks.AddOrchestrator<int, int>(orchestratorName, async (ctx, input) =>
+                if (input < 10)
                 {
-                    if (input < 10)
-                    {
-                        await ctx.CreateTimer(TimeSpan.Zero, CancellationToken.None);
-                        ctx.ContinueAsNew(input + 1);
-                    }
+                    await ctx.CreateTimer(TimeSpan.Zero, CancellationToken.None);
+                    ctx.ContinueAsNew(input + 1);
+                }
 
-                    return input;
-                }));
-            });
+                return input;
+            }));
+        });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -410,21 +398,20 @@ public class OrchestrationPatterns : IntegrationTestBase
     {
         TaskName orchestratorName = nameof(SubOrchestration);
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(
-            b =>
+        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestrator<int, int>(orchestratorName, async (ctx, input) =>
             {
-                b.AddTasks(tasks => tasks.AddOrchestrator<int, int>(orchestratorName, async (ctx, input) =>
+                int result = 5;
+                if (input < 3)
                 {
-                    int result = 5;
-                    if (input < 3)
-                    {
-                        // recursively call this same orchestrator
-                        result += await ctx.CallSubOrchestratorAsync<int>(orchestratorName, input: input + 1);
-                    }
+                    // recursively call this same orchestrator
+                    result += await ctx.CallSubOrchestratorAsync<int>(orchestratorName, input: input + 1);
+                }
 
-                    return result;
-                }));
-            });
+                return result;
+            }));
+        });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 1);
@@ -441,17 +428,16 @@ public class OrchestrationPatterns : IntegrationTestBase
     public async Task SetCustomStatus()
     {
         TaskName orchestratorName = nameof(SetCustomStatus);
-        await using AsyncDisposable server = await this.StartWorkerAsync(
-            b =>
+        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
             {
-                b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
-                {
-                    ctx.SetCustomStatus("Started!");
+                ctx.SetCustomStatus("Started!");
 
-                    object customStatus = await ctx.WaitForExternalEvent<object>("StatusEvent");
-                    ctx.SetCustomStatus(customStatus);
-                }));
-            });
+                object customStatus = await ctx.WaitForExternalEvent<object>("StatusEvent");
+                ctx.SetCustomStatus(customStatus);
+            }));
+        });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -487,40 +473,39 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(ContinueAsNew);
         TaskName echoActivityName = "Echo";
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(
-            b =>
-            {
-                b.AddTasks(tasks => tasks
-                    .AddOrchestrator<int, bool>(orchestratorName, async (ctx, input) =>
+        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestrator<int, bool>(orchestratorName, async (ctx, input) =>
+                {
+                    // Test 1: Ensure two consecutively created GUIDs are unique
+                    Guid currentGuid0 = ctx.NewGuid();
+                    Guid currentGuid1 = ctx.NewGuid();
+                    if (currentGuid0 == currentGuid1)
                     {
-                        // Test 1: Ensure two consecutively created GUIDs are unique
-                        Guid currentGuid0 = ctx.NewGuid();
-                        Guid currentGuid1 = ctx.NewGuid();
-                        if (currentGuid0 == currentGuid1)
-                        {
-                            return false;
-                        }
+                        return false;
+                    }
 
-                        // Test 2: Ensure that the same GUID values are created on each replay
-                        Guid originalGuid1 = await ctx.CallActivityAsync<Guid>(echoActivityName, currentGuid1);
-                        if (currentGuid1 != originalGuid1)
-                        {
-                            return false;
-                        }
+                    // Test 2: Ensure that the same GUID values are created on each replay
+                    Guid originalGuid1 = await ctx.CallActivityAsync<Guid>(echoActivityName, currentGuid1);
+                    if (currentGuid1 != originalGuid1)
+                    {
+                        return false;
+                    }
 
-                        // Test 3: Ensure that the same GUID values are created on each replay even after an await
-                        Guid currentGuid2 = ctx.NewGuid();
-                        Guid originalGuid2 = await ctx.CallActivityAsync<Guid>(echoActivityName, currentGuid2);
-                        if (currentGuid2 != originalGuid2)
-                        {
-                            return false;
-                        }
+                    // Test 3: Ensure that the same GUID values are created on each replay even after an await
+                    Guid currentGuid2 = ctx.NewGuid();
+                    Guid originalGuid2 = await ctx.CallActivityAsync<Guid>(echoActivityName, currentGuid2);
+                    if (currentGuid2 != originalGuid2)
+                    {
+                        return false;
+                    }
 
-                        // Test 4: Finish confirming that every generated GUID is unique
-                        return currentGuid1 != currentGuid2;
-                    })
-                    .AddActivity<Guid, Guid>(echoActivityName, (ctx, input) => input));
-            });
+                    // Test 4: Finish confirming that every generated GUID is unique
+                    return currentGuid1 != currentGuid2;
+                })
+                .AddActivity<Guid, Guid>(echoActivityName, (ctx, input) => input));
+        });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -536,29 +521,28 @@ public class OrchestrationPatterns : IntegrationTestBase
     [Fact]
     public async Task SpecialSerialization()
     {
-        await using AsyncDisposable server = await this.StartWorkerAsync(
-            b =>
-            {
-                b.AddTasks(tasks => tasks
-                    .AddOrchestrator<JsonNode, JsonNode>("SpecialSerialization_Orchestration", (ctx, input) =>
+        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestrator<JsonNode, JsonNode>("SpecialSerialization_Orchestration", (ctx, input) =>
+                {
+                    if (input is null)
                     {
-                        if (input is null)
-                        {
-                            throw new ArgumentNullException(nameof(input));
-                        }
+                        throw new ArgumentNullException(nameof(input));
+                    }
 
-                        return ctx.CallActivityAsync<JsonNode?>("SpecialSerialization_Activity", input);
-                    })
-                    .AddActivity<JsonNode, JsonNode>("SpecialSerialization_Activity", (ctx, input) =>
+                    return ctx.CallActivityAsync<JsonNode?>("SpecialSerialization_Activity", input);
+                })
+                .AddActivity<JsonNode, JsonNode>("SpecialSerialization_Activity", (ctx, input) =>
+                {
+                    if (input is not null)
                     {
-                        if (input is not null)
-                        {
-                            input["newProperty"] = "new value";
-                        }
+                        input["newProperty"] = "new value";
+                    }
 
-                        return Task.FromResult(input);
-                    }));
-            });
+                    return Task.FromResult(input);
+                }));
+        });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         JsonNode input = new JsonObject() { ["originalProperty"] = "original value" };

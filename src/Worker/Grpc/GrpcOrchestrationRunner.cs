@@ -12,7 +12,7 @@ using P = Microsoft.DurableTask.Protobuf;
 namespace Microsoft.DurableTask.Worker.Grpc;
 
 /// <summary>
-/// Helper class for invoking orchestrations directly, without building a <see cref="DurableTaskGrpcWorker"/> instance.
+/// Helper class for invoking orchestrations directly, without building a worker instance.
 /// </summary>
 /// <remarks>
 /// <para>

@@ -19,15 +19,14 @@ public class PageableIntegrationTests : IntegrationTestBase
     {
         TaskName orchestratorName = nameof(PageableActivity_Enumerates);
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(
-            b =>
-            {
-                b.AddTasks(tasks => tasks
-                    .AddOrchestrator<string, int>(
-                        orchestratorName, (ctx, input) => PageableOrchestrationAsync(ctx, input))
-                    .AddActivity<PageRequest, Page<string>>(
-                        nameof(PageableActivityAsync), (_, input) => PageableActivityAsync(input)));
-            });
+        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestrator<string, int>(
+                    orchestratorName, (ctx, input) => PageableOrchestrationAsync(ctx, input))
+                .AddActivity<PageRequest, Page<string>>(
+                    nameof(PageableActivityAsync), (_, input) => PageableActivityAsync(input)));
+        });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: string.Empty);

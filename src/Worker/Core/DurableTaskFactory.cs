@@ -18,7 +18,7 @@ public sealed class DurableTaskFactory
     /// </summary>
     /// <param name="activities">The activity factories.</param>
     /// <param name="orchestrators">The orchestrator factories.</param>
-    public DurableTaskFactory(
+    internal DurableTaskFactory(
         IReadOnlyDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities,
         IReadOnlyDictionary<TaskName, Func<ITaskOrchestrator>> orchestrators)
     {

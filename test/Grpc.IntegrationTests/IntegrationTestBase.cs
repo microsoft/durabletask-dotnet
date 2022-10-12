@@ -71,7 +71,7 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
     /// <summary>
     /// Creates a <see cref="IHostBuilder"/> configured to output logs to xunit logging infrastructure.
     /// </summary>
-    /// <param name="configure">Configures the durable task builder.</param
+    /// <param name="configure">Configures the durable task builder.</param>
     protected IHostBuilder CreateWorkerBuilder(Action<IDurableTaskBuilder> configure)
     {
         return Host.CreateDefaultBuilder()

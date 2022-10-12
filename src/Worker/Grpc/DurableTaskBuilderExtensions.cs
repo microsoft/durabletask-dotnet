@@ -46,18 +46,6 @@ public static class DurableTaskBuilderExtensions
     /// <b>Note:</b> only 1 instance of gRPC worker is supported per sidecar.
     /// </remarks>
     public static IDurableTaskBuilder UseGrpc(this IDurableTaskBuilder builder, string address)
-        => builder.UseGrpc(new Uri(address));
-
-    /// <summary>
-    /// Configures the <see cref="IDurableTaskBuilder" /> to use the gRPC worker.
-    /// </summary>
-    /// <param name="builder">The builder to configure.</param>
-    /// <param name="address">The gRPC address to use.</param>
-    /// <returns>The original builder, for call chaining.</returns>
-    /// <remarks>
-    /// <b>Note:</b> only 1 instance of gRPC worker is supported per sidecar.
-    /// </remarks>
-    public static IDurableTaskBuilder UseGrpc(this IDurableTaskBuilder builder, Uri address)
         => builder.UseGrpc(opt => opt.Address = address);
 
     /// <summary>

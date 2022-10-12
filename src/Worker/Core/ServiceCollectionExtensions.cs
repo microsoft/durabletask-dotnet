@@ -53,8 +53,7 @@ public static class ServiceCollectionExtensions
             .Configure<IServiceProvider>((opt, services) =>
             {
                 // If DataConverter was not explicitly set, check to see if is available as a service.
-                if (!opt.DataConverterExplicitlySet
-                    && services.GetService<DataConverter>() is DataConverter converter)
+                if (!opt.DataConverterExplicitlySet && services.GetService<DataConverter>() is DataConverter converter)
                 {
                     opt.DataConverter = converter;
                 }
@@ -65,10 +64,9 @@ public static class ServiceCollectionExtensions
 
     static IDurableTaskBuilder GetBuilder(IServiceCollection services, string name, out bool added)
     {
-        // To ensure the builders are tracked with this service collection, we use a singleton
-        // service descriptor as a holder for all builders.
-        ServiceDescriptor descriptor = services.FirstOrDefault(
-            sd => sd.ImplementationType == typeof(BuilderContainer));
+        // To ensure the builders are tracked with this service collection, we use a singleton service descriptor as a
+        // holder for all builders.
+        ServiceDescriptor descriptor = services.FirstOrDefault(sd => sd.ServiceType == typeof(BuilderContainer));
 
         if (descriptor is null)
         {

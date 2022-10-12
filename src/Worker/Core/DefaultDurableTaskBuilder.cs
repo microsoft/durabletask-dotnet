@@ -19,7 +19,7 @@ public class DefaultDurableTaskBuilder : IDurableTaskBuilder
     /// </summary>
     /// <param name="services">The service collection for this builder.</param>
     /// <param name="name">The name for this builder.</param>
-    public DefaultDurableTaskBuilder(string name, IServiceCollection services)
+    public DefaultDurableTaskBuilder(string? name, IServiceCollection services)
     {
         this.Name = name ?? Extensions.Options.Options.DefaultName;
         this.Services = services;
@@ -37,9 +37,9 @@ public class DefaultDurableTaskBuilder : IDurableTaskBuilder
         get => this.buildTarget;
         set
         {
-            if (!value?.IsSubclassOf(typeof(DurableTaskWorkerBase)) ?? false)
+            if (!value?.IsSubclassOf(typeof(DurableTaskWorker)) ?? false)
             {
-                throw new ArgumentException($"Type must be subclass of {typeof(DurableTaskWorkerBase)}", nameof(value));
+                throw new ArgumentException($"Type must be subclass of {typeof(DurableTaskWorker)}", nameof(value));
             }
 
             this.buildTarget = value;

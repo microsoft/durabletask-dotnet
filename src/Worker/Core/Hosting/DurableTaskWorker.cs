@@ -8,15 +8,15 @@ namespace Microsoft.DurableTask.Worker.Hosting;
 /// <summary>
 /// Base class for durable workers.
 /// </summary>
-public abstract class DurableTaskWorkerBase : BackgroundService
+public abstract class DurableTaskWorker : BackgroundService
 {
     /// <summary>
-    /// Initializes a new instance of <see cref="DurableTaskWorkerBase" />
+    /// Initializes a new instance of <see cref="DurableTaskWorker" />
     /// </summary>
     /// <param name="name">The name of the worker.</param>
     /// <param name="factory">The durable factory.</param>
     /// <param name="options">The worker options.</param>
-    protected DurableTaskWorkerBase(
+    protected DurableTaskWorker(
         string name, DurableTaskFactory factory, DurableTaskWorkerOptions options)
     {
         this.Name = name;

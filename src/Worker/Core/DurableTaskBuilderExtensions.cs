@@ -58,6 +58,6 @@ public static class DurableTaskBuilderExtensions
     /// <param name="builder">The builder to set the builder target for.</param>
     /// <returns>The original builder, for call chaining.</returns>
     public static IDurableTaskBuilder UseBuildTarget<TTarget>(this IDurableTaskBuilder builder)
-        where TTarget : DurableTaskWorkerBase
+        where TTarget : DurableTaskWorker
         => builder.UseBuildTarget(typeof(TTarget));
 }

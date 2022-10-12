@@ -11,7 +11,7 @@ namespace Microsoft.DurableTask.Worker.Grpc;
 /// <summary>
 /// The gRPC Durable Task worker.
 /// </summary>
-sealed partial class GrpcDurableTaskWorker : DurableTaskWorkerBase
+sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 {
     readonly GrpcDurableTaskWorkerOptions grpcOptions;
     readonly IServiceProvider services;
@@ -58,16 +58,10 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorkerBase
             return default;
         }
 
-        if (this.grpcOptions.Address is Uri address)
-        {
-            // TODO: use SSL channel by default?
-            c = new Channel(address.ToString(), ChannelCredentials.Insecure);
-        }
-        else
-        {
-            c = new Channel("127.0.0.1:4001", ChannelCredentials.Insecure);
-        }
+        string address = string.IsNullOrEmpty(this.grpcOptions.Address) ? "127.0.0.1:4001" : this.grpcOptions.Address!;
 
+        // TODO: use SSL channel by default?
+        c = new(address, ChannelCredentials.Insecure);
         channel = c;
         return new AsyncDisposable(async () => await c.ShutdownAsync());
     }

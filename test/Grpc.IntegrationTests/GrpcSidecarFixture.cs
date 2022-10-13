@@ -6,13 +6,13 @@ using Grpc.Core;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
-using Microsoft.DurableTask.Grpc;
 using Microsoft.DurableTask.Sidecar;
 using Microsoft.DurableTask.Sidecar.Grpc;
+using Microsoft.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.Tests;
+namespace Microsoft.DurableTask.Grpc.Tests;
 
 public sealed class GrpcSidecarFixture : IDisposable
 {
@@ -21,7 +21,6 @@ public sealed class GrpcSidecarFixture : IDisposable
     readonly int ListenPort = Random.Shared.Next(30000, 40000);
 
     readonly IWebHost host;
-    readonly Channel sidecarChannel;
 
     public GrpcSidecarFixture()
     {
@@ -54,25 +53,20 @@ public sealed class GrpcSidecarFixture : IDisposable
 
         this.host.Start();
 
-        this.sidecarChannel = new Channel(ListenHost, this.ListenPort, ChannelCredentials.Insecure);
+        this.Channel = new Channel(ListenHost, this.ListenPort, ChannelCredentials.Insecure);
     }
 
-    public DurableTaskGrpcWorker.Builder GetWorkerBuilder()
-    {
-        // The gRPC channel is reused across tests to avoid the overhead of creating new connections (which is very slow)
-        return DurableTaskGrpcWorker.CreateBuilder().UseGrpcChannel(this.sidecarChannel);
-    }
+    public Channel Channel { get; }
 
     public DurableTaskGrpcClient.Builder GetClientBuilder()
     {
         // The gRPC channel is reused across tests to avoid the overhead of creating new connections (which is very slow)
-        return DurableTaskGrpcClient.CreateBuilder().UseGrpcChannel(this.sidecarChannel);
+        return DurableTaskGrpcClient.CreateBuilder().UseGrpcChannel(this.Channel);
     }
 
     public void Dispose()
     {
-        this.sidecarChannel.ShutdownAsync().GetAwaiter().GetResult();
-
+        this.Channel.ShutdownAsync().GetAwaiter().GetResult();
         this.host.StopAsync().GetAwaiter().GetResult();
         this.host.Dispose();
     }

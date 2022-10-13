@@ -36,11 +36,11 @@ public static class CSharpSourceGeneratorVerifier<TSourceGenerator> where TSourc
         static ImmutableDictionary<string, ReportDiagnostic> GetNullableWarningsFromCompiler()
         {
             string[] args = { "/warnaserror:nullable" };
-            var commandLineArguments = CSharpCommandLineParser.Default.Parse(
+            CSharpCommandLineArguments commandLineArguments = CSharpCommandLineParser.Default.Parse(
                 args,
                 baseDirectory: Environment.CurrentDirectory,
                 sdkDirectory: Environment.CurrentDirectory);
-            var nullableWarnings = commandLineArguments.CompilationOptions.SpecificDiagnosticOptions;
+            ImmutableDictionary<string, ReportDiagnostic> nullableWarnings = commandLineArguments.CompilationOptions.SpecificDiagnosticOptions;
 
             return nullableWarnings;
         }

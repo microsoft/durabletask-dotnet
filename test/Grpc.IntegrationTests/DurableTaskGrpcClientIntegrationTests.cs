@@ -3,7 +3,7 @@
 
 using FluentAssertions;
 using FluentAssertions.Execution;
-using Microsoft.DurableTask.Tests;
+using Microsoft.DurableTask.Worker;
 using Xunit.Abstractions;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
@@ -36,7 +36,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             }
         }
 
-        await using DurableTaskGrpcWorker server = await this.StartAsync();
+        await using AsyncDisposable server = await this.StartAsync();
         DurableTaskClient client = this.CreateDurableTaskClient();
 
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(OrchestrationName, input: shouldThrow);
@@ -87,7 +87,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             await func("GetInstances_EndToEnd-2");
         }
 
-        await using DurableTaskGrpcWorker server = await this.StartAsync();
+        await using AsyncDisposable server = await this.StartAsync();
         DurableTaskClient client = this.CreateDurableTaskClient();
 
         // Enqueue an extra orchestration which we will verify is NOT present.
@@ -114,7 +114,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
     public async Task GetInstances_AsPages_EndToEnd()
     {
         OrchestrationQuery query = new() { InstanceIdPrefix = "GetInstances_AsPages_EndToEnd" };
-        await using DurableTaskGrpcWorker server = await this.StartAsync();
+        await using AsyncDisposable server = await this.StartAsync();
         DurableTaskClient client = this.CreateDurableTaskClient();
 
         for (int i = 0; i < 21; i++)
@@ -139,7 +139,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         page.ContinuationToken.Should().NotBeNull();
     }
 
-    async Task<DurableTaskGrpcWorker> StartAsync()
+    Task<AsyncDisposable> StartAsync()
     {
         static async Task<string?> Orchestration(TaskOrchestrationContext context, bool shouldThrow)
         {
@@ -153,10 +153,9 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             return $"{shouldThrow} -> output";
         }
 
-        DurableTaskGrpcWorker server = this.CreateWorkerBuilder()
-            .AddTasks(tasks => tasks.AddOrchestrator<bool, string>(OrchestrationName, Orchestration))
-            .Build();
-        await server.StartAsync(this.TimeoutToken);
-        return server;
+        return this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestrator<bool, string>(OrchestrationName, Orchestration));
+        });
     }
 }

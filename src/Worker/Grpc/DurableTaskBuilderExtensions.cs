@@ -60,11 +60,6 @@ public static class DurableTaskBuilderExtensions
     public static IDurableTaskBuilder UseGrpc(
         this IDurableTaskBuilder builder, Action<GrpcDurableTaskWorkerOptions> configure)
     {
-        if (builder.Name != Options.DefaultName)
-        {
-            throw new InvalidOperationException("gRPC does not support named builders.");
-        }
-
         builder.Services.Configure(builder.Name, configure);
         return builder.UseBuildTarget<GrpcDurableTaskWorker>();
     }

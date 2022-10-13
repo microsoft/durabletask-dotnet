@@ -9,14 +9,6 @@ namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 public class DurableTaskBuilderExtensionsTests
 {
     [Fact]
-    public void UseGrpc_Named_Throws()
-    {
-        DefaultDurableTaskBuilder builder = new("test", new ServiceCollection());
-        Action act = () => builder.UseGrpc();
-        act.Should().ThrowExactly<InvalidOperationException>();
-    }
-
-    [Fact]
     public void UseGrpc_Sets()
     {
         ServiceCollection services = new();

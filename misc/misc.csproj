@@ -9,6 +9,7 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <IncludeShared>false</IncludeShared>
+    <ImplicitUsings>disable</ImplicitUsings>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
   </PropertyGroup>
 

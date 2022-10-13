@@ -1,3 +1,4 @@
+#pragma warning disable // types taken from dotnet/runtime repo, style may differ from ours.
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
@@ -142,3 +143,4 @@ namespace System.Diagnostics.CodeAnalysis
 }
 
 #endif
+#pragma warning restore

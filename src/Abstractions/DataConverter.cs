@@ -40,6 +40,7 @@ public abstract class DataConverter
     /// <summary>
     /// Deserializes <paramref name="data"/> into an object of type <typeparamref name="T"/>.
     /// </summary>
+    /// <typeparam name="T">The type to deserialize to.</typeparam>
     /// <param name="data">The text data to be deserialized.</param>
     /// <returns>
     /// Returns a deserialized object or <c>null</c> if the input is null.

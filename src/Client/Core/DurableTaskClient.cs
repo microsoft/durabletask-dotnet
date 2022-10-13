@@ -12,13 +12,13 @@ namespace Microsoft.DurableTask;
 /// orchestration instances. In most cases, methods on this class accept an instance ID as a parameter, which identifies
 /// the orchestration instance.
 /// </para><para>
-/// At the time of writing, the most common implementation of this class is <see cref="Grpc.DurableTaskGrpcClient"/>,
-/// which works by making gRPC calls to a remote service (e.g. a sidecar) that implements the operation behavior. To
-/// ensure any owned network resources are properly released, instances of <see cref="DurableTaskClient"/> should be
-/// disposed when they are no longer needed.
+/// At the time of writing, the most common implementation of this class is the gRPC client, which works by making gRPC
+/// calls to a remote service (e.g. a sidecar) that implements the operation behavior. To ensure any owned network
+/// resources are properly released, instances of <see cref="DurableTaskClient"/> should be disposed when they are no
+/// longer needed.
 /// </para><para>
 /// Instances of this class are expected to be safe for multithreaded apps. You can therefore safely cache instances
-/// of this class and reuse them across multiple contexts. Caching these objects is useful to improve overall 
+/// of this class and reuse them across multiple contexts. Caching these objects is useful to improve overall
 /// performance.
 /// </para>
 /// </remarks>
@@ -30,7 +30,7 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// <remarks>
     /// <para>All orchestrations must have a unique instance ID. You can provide an instance ID using the
     /// <paramref name="instanceId"/> parameter or you can omit this parameter and a random instance ID will be
-    /// generated for you automatically. If an orchestration with the specified instance ID already exists and is in a 
+    /// generated for you automatically. If an orchestration with the specified instance ID already exists and is in a
     /// non-terminal state (Pending, Running, etc.), then this operation may fail silently. However, if an orchestration
     /// instance with this ID already exists in a terminal state (Completed, Terminated, Failed, etc.) then the instance
     /// may be recreated automatically, depending on the configuration of the backend instance store.
@@ -43,16 +43,20 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// </para><para>
     /// The task associated with this method completes after the orchestration instance was successfully scheduled. You
     /// can use the <see cref="GetInstanceMetadataAsync"/> to query the status of the scheduled instance, the
-    /// <see cref="WaitForInstanceStartAsync"/> method to wait for the instance to transition out of the 
+    /// <see cref="WaitForInstanceStartAsync"/> method to wait for the instance to transition out of the
     /// <see cref="OrchestrationRuntimeStatus.Pending"/> status, or the <see cref="WaitForInstanceCompletionAsync"/>
     /// method to wait for the instance to reach a terminal state (Completed, Terminated, Failed, etc.).
     /// </para>
     /// </remarks>
     /// <param name="orchestratorName">The name of the orchestrator to schedule.</param>
-    /// <param name="instanceId">The unique ID of the orchestration instance to schedule. If not specified, a random GUID value is used.</param>
-    /// <param name="input">The optional input to pass to the scheduled orchestration instance. This must be a serializable value.</param>
+    /// <param name="instanceId">
+    /// The unique ID of the orchestration instance to schedule. If not specified, a randomGUID value is used.
+    /// </param>
+    /// <param name="input">
+    /// The optional input to pass to the scheduled orchestration instance. This must be a serializable value.
+    /// </param>
     /// <param name="startTime">
-    /// The time when the orchestration instance should start executing. If not specified or if a date-time in the past 
+    /// The time when the orchestration instance should start executing. If not specified or if a date-time in the past
     /// is specified, the orchestration instance will be scheduled immediately.
     /// </param>
     /// <returns>
@@ -91,17 +95,21 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// <param name="eventName">The name of the event. Event names are case-insensitive.</param>
     /// <param name="eventPayload">The serializable data payload to include with the event.</param>
     /// <returns>A task that completes when the event notification message has been enqueued.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if <paramref name="instanceId"/> or <paramref name="eventName"/> is null or empty.</exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown if <paramref name="instanceId"/> or <paramref name="eventName"/> is null or empty.
+    /// </exception>
     public abstract Task RaiseEventAsync(string instanceId, string eventName, object? eventPayload);
 
     /// <summary>
-    /// Terminates a running orchestration instance and updates its runtime status to <see cref="OrchestrationRuntimeStatus.Terminated"/>.
+    /// Terminates a running orchestration instance and updates its runtime status to
+    /// <see cref="OrchestrationRuntimeStatus.Terminated"/>.
     /// </summary>
     /// <remarks>
     /// <para>
     /// This method internally enqueues a "terminate" message in the task hub. When the task hub worker processes
-    /// this message, it will update the runtime status of the target instance to <see cref="OrchestrationRuntimeStatus.Terminated"/>.
-    /// You can use the <see cref="WaitForInstanceCompletionAsync"/> to wait for the instance to reach the terminated state.
+    /// this message, it will update the runtime status of the target instance to
+    /// <see cref="OrchestrationRuntimeStatus.Terminated"/>. You can use the
+    /// <see cref="WaitForInstanceCompletionAsync"/> to wait for the instance to reach the terminated state.
     /// </para>
     /// <para>
     /// Terminating an orchestration instance has no effect on any in-flight activity function executions
@@ -125,13 +133,16 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A "started" orchestration instance is any instance not in the <see cref="OrchestrationRuntimeStatus.Pending"/> state.
+    /// A "started" orchestration instance is any instance not in the <see cref="OrchestrationRuntimeStatus.Pending"/>
+    /// state.
     /// </para><para>
     /// If an orchestration instance is already running when this method is called, the method will return immediately.
     /// </para>
     /// </remarks>
     /// <param name="instanceId">The unique ID of the orchestration instance to wait for.</param>
-    /// <param name="cancellationToken">A <see cref="CancellationToken"/> that can be used to cancel the wait operation.</param>
+    /// <param name="cancellationToken">
+    /// A <see cref="CancellationToken"/> that can be used to cancel the wait operation.
+    /// </param>
     /// <param name="getInputsAndOutputs">
     /// Specify <c>true</c> to fetch the orchestration instance's inputs, outputs, and custom status, or <c>false</c> to
     /// omit them. The default value is <c>false</c> to minimize the network bandwidth, serialization, and memory costs
@@ -188,7 +199,7 @@ public abstract class DurableTaskClient : IAsyncDisposable
     public abstract Task<OrchestrationMetadata?> GetInstanceMetadataAsync(string instanceId, bool getInputsAndOutputs);
 
     /// <summary>
-    /// Queries orchestration instances 
+    /// Queries orchestration instances.
     /// </summary>
     /// <param name="query">Filters down the instances included in the query.</param>
     /// <returns>An async pageable of the query results.</returns>
@@ -201,35 +212,41 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// <para>
     /// This method can be used to permanently delete orchestration metadata from the underlying storage provider,
     /// including any stored inputs, outputs, and orchestration history records. This is often useful for implementing
-    /// data retention policies and for keeping storage costs minimal. Only orchestration instances in the 
+    /// data retention policies and for keeping storage costs minimal. Only orchestration instances in the
     /// <see cref="OrchestrationRuntimeStatus.Completed"/>, <see cref="OrchestrationRuntimeStatus.Failed"/>, or
     /// <see cref="OrchestrationRuntimeStatus.Terminated"/> state can be purged.
     /// </para><para>
-    /// If <paramref name="instanceId"/> is not found in the data store, or if the instance is found but not in a terminal
-    /// state, then the returned <see cref="PurgeResult"/> object will have a <see cref="PurgeResult.PurgedInstanceCount"/>
-    /// value of <c>0</c>. Otherwise, the existing data will be purged and <see cref="PurgeResult.PurgedInstanceCount"/>
-    /// will be <c>1</c>.
+    /// If <paramref name="instanceId"/> is not found in the data store, or if the instance is found but not in a
+    /// terminal state, then the returned <see cref="PurgeResult"/> object will have a
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>0</c>. Otherwise, the existing data will be purged and
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> will be <c>1</c>.
     /// </para>
     /// </remarks>
     /// <param name="instanceId">The unique ID of the orchestration instance to purge.</param>
-    /// <param name="cancellation">A <see cref="CancellationToken"/> that can be used to cancel the purge operation.</param>
+    /// <param name="cancellation">
+    /// A <see cref="CancellationToken"/> that can be used to cancel the purge operation.
+    /// </param>
     /// <returns>
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
-    /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target instance
-    /// was successfully purged.
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target
+    /// instance was successfully purged.
     /// </returns>
-    public abstract Task<PurgeResult> PurgeInstanceMetadataAsync(string instanceId, CancellationToken cancellation = default);
+    public abstract Task<PurgeResult> PurgeInstanceMetadataAsync(
+        string instanceId, CancellationToken cancellation = default);
 
     /// <summary>
     /// Purges orchestration instances metadata from the durable store.
     /// </summary>
     /// <param name="filter">The filter for which orchestrations to purge.</param>
-    /// <param name="cancellation">A <see cref="CancellationToken"/> that can be used to cancel the purge operation.</param>
+    /// <param name="cancellation">
+    /// A <see cref="CancellationToken"/> that can be used to cancel the purge operation.
+    /// </param>
     /// <returns>
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
     /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged.
     /// </returns>
-    public abstract Task<PurgeResult> PurgeInstancesAsync(PurgeInstancesFilter filter, CancellationToken cancellation = default);
+    public abstract Task<PurgeResult> PurgeInstancesAsync(
+        PurgeInstancesFilter filter, CancellationToken cancellation = default);
 
     // TODO: Create task hub
 

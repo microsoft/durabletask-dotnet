@@ -3,12 +3,13 @@
 
 namespace Microsoft.DurableTask;
 
-// TODO: Add detailed remarks that describe the role of TaskName
 /// <summary>
 /// The name of a durable task.
 /// </summary>
 public readonly struct TaskName : IEquatable<TaskName>
 {
+    // TODO: Add detailed remarks that describe the role of TaskName
+
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskName"/> struct.
     /// </summary>
@@ -17,7 +18,7 @@ public readonly struct TaskName : IEquatable<TaskName>
     public TaskName(string name, string? version = null)
     {
         this.Name = name ?? throw new ArgumentNullException(nameof(name));
-        this.Version = version ?? "";
+        this.Version = version ?? string.Empty;
     }
 
     /// <summary>
@@ -35,6 +36,18 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// Task versions are currently experimental and their role may change over time.
     /// </remarks>
     public string Version { get; }
+
+    /// <summary>
+    /// Implicitly converts a <see cref="TaskName"/> into a <see cref="string"/> of the <see cref="Name"/> property value.
+    /// </summary>
+    /// <param name="value">The <see cref="TaskName"/> to be converted into a string.</param>
+    public static implicit operator string(TaskName value) => value.Name;
+
+    /// <summary>
+    /// Implicitly converts a <see cref="string"/> into a <see cref="TaskName"/> value.
+    /// </summary>
+    /// <param name="value">The string to convert into a <see cref="TaskName"/>.</param>
+    public static implicit operator TaskName(string value) => new(value);
 
     /// <summary>
     /// Compares two <see cref="TaskName"/> objects for equality.
@@ -57,18 +70,6 @@ public readonly struct TaskName : IEquatable<TaskName>
     {
         return !a.Equals(b);
     }
-
-    /// <summary>
-    /// Implicitly converts a <see cref="TaskName"/> into a <see cref="string"/> of the <see cref="Name"/> property value.
-    /// </summary>
-    /// <param name="value">The <see cref="TaskName"/> to be converted into a string.</param>
-    public static implicit operator string(TaskName value) => value.Name;
-
-    /// <summary>
-    /// Implicitly converts a <see cref="string"/> into a <see cref="TaskName"/> value.
-    /// </summary>
-    /// <param name="value">The string to convert into a <see cref="TaskName"/>.</param>
-    public static implicit operator TaskName(string value) => new(value);
 
     /// <summary>
     /// Gets a value indicating whether to <see cref="TaskName"/> objects

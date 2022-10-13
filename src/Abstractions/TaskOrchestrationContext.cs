@@ -57,8 +57,7 @@ public abstract class TaskOrchestrationContext
     /// <c>true</c> if the orchestrator is currently replaying a previous execution; otherwise <c>false</c>.
     /// </value>
     public abstract bool IsReplaying { get; }
-    
-    // NOTE: This API is redundant and may be removed in a future version.
+
     /// <summary>
     /// Gets the deserialized input of the orchestrator.
     /// </summary>
@@ -67,7 +66,7 @@ public abstract class TaskOrchestrationContext
     /// Returns the deserialized input as an object of type <typeparamref name="T"/> or <c>null</c> if no input was
     /// provided.
     /// </returns>
-    public abstract T? GetInput<T>();
+    public abstract T? GetInput<T>(); // NOTE: This API is redundant and may be removed in a future version.
 
     /// <summary>
     /// Asynchronously invokes an activity by name and with the specified input value.
@@ -165,9 +164,8 @@ public abstract class TaskOrchestrationContext
     /// </summary>
     /// <remarks>
     /// <para>
-    /// External clients can raise events to a waiting orchestration instance using the 
-    /// <see cref="DurableTaskClient.RaiseEventAsync"/> method. Similarly, orchestrations can raise events to other
-    /// orchestrations using the <see cref="SendEvent"/> method.
+    /// External clients can raise events to a waiting orchestration instance. Similarly, orchestrations can raise
+    /// events to other orchestrations using the <see cref="SendEvent"/> method.
     /// </para><para>
     /// If the current orchestrator instance is not yet waiting for an event named <paramref name="eventName"/>,
     /// then the event will be saved in the orchestration instance state and dispatched immediately when this method is
@@ -242,8 +240,7 @@ public abstract class TaskOrchestrationContext
     /// </summary>
     /// <remarks>
     /// The <paramref name="customStatus"/> value is serialized and stored in orchestration state and will
-    /// be made available to the orchestration status query APIs, such as
-    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync(string, bool)"/>. The serialized value must not exceed
+    /// be made available to the orchestration status query APIs. The serialized value must not exceed
     /// 16 KB of UTF-16 encoded text.
     /// </remarks>
     /// <param name="customStatus">

@@ -8,6 +8,7 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <IncludeShared>false</IncludeShared>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
   
     <!-- Package info -->

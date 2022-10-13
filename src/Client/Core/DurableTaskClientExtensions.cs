@@ -18,8 +18,8 @@ public static class DurableTaskClientExtensions
     /// <param name="cancellation">The cancellation token.</param>
     /// <returns>
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
-    /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target instance
-    /// was successfully purged.
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target
+    /// instance was successfully purged.
     /// </returns>
     public static Task<PurgeResult> PurgeInstancesAsync(
         this DurableTaskClient client,
@@ -46,8 +46,8 @@ public static class DurableTaskClientExtensions
     /// <param name="cancellation">The cancellation token.</param>
     /// <returns>
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
-    /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target instance
-    /// was successfully purged.
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target
+    /// instance was successfully purged.
     /// </returns>
     public static Task<PurgeResult> PurgeInstancesAsync(
         this DurableTaskClient client,

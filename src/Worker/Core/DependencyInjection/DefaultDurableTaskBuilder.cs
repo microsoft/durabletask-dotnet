@@ -37,7 +37,7 @@ public class DefaultDurableTaskBuilder : IDurableTaskBuilder
         get => this.buildTarget;
         set
         {
-            if (!value?.IsSubclassOf(typeof(DurableTaskWorker)) ?? false)
+            if (!IsValidBuildTarget(value))
             {
                 throw new ArgumentException($"Type must be subclass of {typeof(DurableTaskWorker)}", nameof(value));
             }
@@ -60,5 +60,15 @@ public class DefaultDurableTaskBuilder : IDurableTaskBuilder
         DurableTaskWorkerOptions options = serviceProvider.GetOptions<DurableTaskWorkerOptions>(this.Name);
         return (IHostedService)ActivatorUtilities.CreateInstance(
             serviceProvider, this.buildTarget, this.Name, registry.Build(), options);
+    }
+
+    static bool IsValidBuildTarget(Type? type)
+    {
+        if (type is null)
+        {
+            return true; // we will let you set this back to null.
+        }
+
+        return type.IsSubclassOf(typeof(DurableTaskWorker)) && !type.IsAbstract;
     }
 }

@@ -36,9 +36,10 @@ public class DefaultDurableTaskClientBuilder : IDurableTaskClientBuilder
         get => this.buildTarget;
         set
         {
-            if (!value?.IsSubclassOf(typeof(DurableTaskClient)) ?? false)
+            if (!IsValidBuildTarget(value))
             {
-                throw new ArgumentException($"Type must be subclass of {typeof(DurableTaskClient)}", nameof(value));
+                throw new ArgumentException(
+                    $"Type must be non-abstract and a subclass of {typeof(DurableTaskClient)}", nameof(value));
             }
 
             this.buildTarget = value;
@@ -58,5 +59,15 @@ public class DefaultDurableTaskClientBuilder : IDurableTaskClientBuilder
         DurableTaskClientOptions options = serviceProvider.GetOptions<DurableTaskClientOptions>(this.Name);
         return (DurableTaskClient)ActivatorUtilities.CreateInstance(
             serviceProvider, this.buildTarget, this.Name, options);
+    }
+
+    static bool IsValidBuildTarget(Type? type)
+    {
+        if (type is null)
+        {
+            return true; // we will let you set this back to null.
+        }
+
+        return type.IsSubclassOf(typeof(DurableTaskClient)) && !type.IsAbstract;
     }
 }

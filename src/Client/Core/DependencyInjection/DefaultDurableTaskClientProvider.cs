@@ -32,7 +32,7 @@ class DefaultDurableTaskClientProvider : IDurableTaskClientProvider
         {
             string names = string.Join(", ", this.clients.Select(x => $"\"{x.Name}\""));
             throw new ArgumentOutOfRangeException(
-                nameof(name), $"'{name}' is not in the set of available clients [{names}].");
+                nameof(name), name, $"The value of this argument must be in the set of available clients: [{names}].");
         }
 
         return client;

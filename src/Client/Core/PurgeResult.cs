@@ -9,7 +9,7 @@ namespace Microsoft.DurableTask;
 public class PurgeResult
 {
     /// <summary>
-    /// Initializes a new instance of <see cref="PurgeResult" />.
+    /// Initializes a new instance of the <see cref="PurgeResult" /> class.
     /// </summary>
     /// <param name="count">The count of instances purged.</param>
     public PurgeResult(int count)

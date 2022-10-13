@@ -18,7 +18,7 @@ namespace Microsoft.DurableTask;
 public sealed class OrchestrationMetadata
 {
     /// <summary>
-    /// Initializes a new instance of <see cref="OrchestrationMetadata" />,
+    /// Initializes a new instance of the <see cref="OrchestrationMetadata" /> class.
     /// </summary>
     /// <param name="name">The name of the orchestration.</param>
     /// <param name="instanceId">The instance ID of the orchestration.</param>
@@ -46,7 +46,7 @@ public sealed class OrchestrationMetadata
     /// <summary>
     /// Gets the current runtime status of the orchestration instance at the time this object was fetched.
     /// </summary>
-    /// <value>The runtime status of the orchestration instance at the time this object was fetched</value>
+    /// <value>The runtime status of the orchestration instance at the time this object was fetched.</value>
     public OrchestrationRuntimeStatus RuntimeStatus { get; init; }
 
     /// <summary>
@@ -116,8 +116,8 @@ public sealed class OrchestrationMetadata
     /// Deserializes the orchestration's input into an object of the specified type.
     /// </summary>
     /// <remarks>
-    /// This method can only be used when inputs and outputs are explicitly requested from the 
-    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync"/> or 
+    /// This method can only be used when inputs and outputs are explicitly requested from the
+    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync"/> or
     /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync"/> method that produced this
     /// <see cref="OrchestrationMetadata"/> object.
     /// </remarks>
@@ -142,8 +142,8 @@ public sealed class OrchestrationMetadata
     /// Deserializes the orchestration's output into an object of the specified type.
     /// </summary>
     /// <remarks>
-    /// This method can only be used when inputs and outputs are explicitly requested from the 
-    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync"/> or 
+    /// This method can only be used when inputs and outputs are explicitly requested from the
+    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync"/> or
     /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync"/> method that produced this
     /// <see cref="OrchestrationMetadata"/> object.
     /// </remarks>
@@ -168,8 +168,8 @@ public sealed class OrchestrationMetadata
     /// Deserializes the orchestration's custom status value into an object of the specified type.
     /// </summary>
     /// <remarks>
-    /// This method can only be used when inputs and outputs are explicitly requested from the 
-    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync"/> or 
+    /// This method can only be used when inputs and outputs are explicitly requested from the
+    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync"/> or
     /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync"/> method that produced this
     /// <see cref="OrchestrationMetadata"/> object.
     /// </remarks>
@@ -183,8 +183,8 @@ public sealed class OrchestrationMetadata
         if (!this.RequestedInputsAndOutputs)
         {
             throw new InvalidOperationException(
-                $"The {nameof(this.ReadCustomStatusAs)} method can only be used on {nameof(OrchestrationMetadata)} objects " +
-                "that are fetched with the option to include input and output data.");
+                $"The {nameof(this.ReadCustomStatusAs)} method can only be used on {nameof(OrchestrationMetadata)}"
+                + " objects that are fetched with the option to include input and output data.");
         }
 
         return this.DataConverter.Deserialize<T>(this.SerializedCustomStatus);
@@ -196,7 +196,8 @@ public sealed class OrchestrationMetadata
     /// <returns>A user-friendly string representation of the current metadata object.</returns>
     public override string ToString()
     {
-        StringBuilder sb = new($"[Name: '{this.Name}', ID: '{this.InstanceId}', RuntimeStatus: {this.RuntimeStatus}, CreatedAt: {this.CreatedAt:s}, LastUpdatedAt: {this.LastUpdatedAt:s}");
+        StringBuilder sb = new($"[Name: '{this.Name}', ID: '{this.InstanceId}', RuntimeStatus: {this.RuntimeStatus},"
+            + $" CreatedAt: {this.CreatedAt:s}, LastUpdatedAt: {this.LastUpdatedAt:s}");
         if (this.SerializedInput != null)
         {
             sb.Append(", Input: '").Append(GetTrimmedPayload(this.SerializedInput)).Append('\'');

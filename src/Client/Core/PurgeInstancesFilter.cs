@@ -10,4 +10,6 @@ namespace Microsoft.DurableTask;
 /// <param name="CreatedTo">Date created to.</param>
 /// <param name="Statuses">The statuses.</param>
 public record PurgeInstancesFilter(
-    DateTimeOffset? CreatedFrom, DateTimeOffset? CreatedTo, IEnumerable<OrchestrationRuntimeStatus>? Statuses);
+    DateTimeOffset? CreatedFrom, DateTimeOffset? CreatedTo, IEnumerable<OrchestrationRuntimeStatus>? Statuses)
+{
+}

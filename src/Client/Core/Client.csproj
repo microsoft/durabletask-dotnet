@@ -5,6 +5,7 @@
     <PackageDescription>The core client for the Durable Task Framework.
 
 The client is responsible for interacting with orchestrations from outside the worker.</PackageDescription>
+    <EnableStyleCop>true</EnableStyleCop>
   </PropertyGroup>
 
   <!-- Version info -->

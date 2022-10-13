@@ -217,6 +217,7 @@ dotnet_diagnostic.IDE0073.severity = suggestion # Require file header.
 
 # StyleCop rules
 dotnet_diagnostic.SA1127.severity = none  # Generic type constraints must be on own line.
+dotnet_diagnostic.SA1205.severity = none  # Partial elements should declare an access modifier.
 dotnet_diagnostic.SA1400.severity = none  # Access modifier must be declared
 dotnet_diagnostic.SA1402.severity = none  # File may only contain a single type
 dotnet_diagnostic.SA1633.severity = warning  # File must have header -- TODO: replace with IDE0073 eventually

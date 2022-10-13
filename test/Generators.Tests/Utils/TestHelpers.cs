@@ -109,7 +109,7 @@ namespace Microsoft.DurableTask
         foreach (string line in code.Split(Environment.NewLine))
         {
             int charsToSkip = Math.Min(spacesToRemove, line.Length);
-            sb.AppendLine(line.Substring(charsToSkip));
+            sb.AppendLine(line[charsToSkip..]);
         }
 
         return sb.ToString();

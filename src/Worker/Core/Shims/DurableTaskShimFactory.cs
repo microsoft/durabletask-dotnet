@@ -2,8 +2,6 @@
 // Licensed under the MIT License.
 
 using DurableTask.Core;
-using Microsoft.DurableTask.Converters;
-using Microsoft.DurableTask.Options;
 using Microsoft.DurableTask.Shims;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -19,30 +17,23 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// </remarks>
 public class DurableTaskShimFactory
 {
-    readonly DataConverter dataConverter;
+    readonly DurableTaskWorkerOptions options;
     readonly ILoggerFactory loggerFactory;
-    readonly TimerOptions timerOptions;
 
     /// <summary>
     /// Initializes a new instance of <see cref="DurableTaskShimFactory" />.
     /// </summary>
-    /// <param name="dataConverter">The data converter.</param>
+    /// <param name="options">The data converter.</param>
     /// <param name="loggerFactory">The logger factory.</param>
-    /// <param name="timerOptions">The timer options.</param>
     public DurableTaskShimFactory(
-        DataConverter? dataConverter = null,
-        ILoggerFactory? loggerFactory = null,
-        TimerOptions? timerOptions = null)
+        DurableTaskWorkerOptions? options = null, ILoggerFactory? loggerFactory = null)
     {
-        this.dataConverter = dataConverter ?? JsonDataConverter.Default;
+        this.options = options ?? new();
         this.loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
-        this.timerOptions = timerOptions ?? new();
     }
 
     /// <summary>
-    /// Gets the default <see cref="DurableTaskShimFactory" /> with default values:
-    /// <see cref="JsonDataConverter" />, <see cref="NullLoggerFactory" />, and
-    /// <see cref="TimerOptions" />.
+    /// Gets the default <see cref="DurableTaskShimFactory" /> with default values.
     /// </summary>
     public static DurableTaskShimFactory Default { get; } = new();
 
@@ -55,7 +46,7 @@ public class DurableTaskShimFactory
     /// <param name="activity">The activity to wrap.</param>
     /// <returns>A new <see cref="TaskActivity" />.</returns>
     public TaskActivity CreateActivity(TaskName name, ITaskActivity activity)
-        => new TaskActivityShim(this.dataConverter, name, activity);
+        => new TaskActivityShim(this.options.DataConverter, name, activity);
 
     /// <summary>
     /// Creates a <see cref="TaskActivity" /> from a delegate.
@@ -82,7 +73,7 @@ public class DurableTaskShimFactory
         TaskName name, ITaskOrchestrator orchestrator, ParentOrchestrationInstance? parent = null)
     {
         OrchestrationInvocationContext context = new(
-            name, this.dataConverter, this.loggerFactory, this.timerOptions, parent);
+            name, this.options, this.loggerFactory, parent);
         return new TaskOrchestrationShim(context, orchestrator);
     }
 

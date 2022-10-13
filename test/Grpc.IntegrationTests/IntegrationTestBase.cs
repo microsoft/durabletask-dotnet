@@ -4,18 +4,22 @@
 using System.Diagnostics;
 using Microsoft.DurableTask.Grpc;
 using Microsoft.DurableTask.Tests.Logging;
+using Microsoft.DurableTask.Worker;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Xunit;
 using Xunit.Abstractions;
 
-namespace Microsoft.DurableTask.Tests;
+namespace Microsoft.DurableTask.Grpc.Tests;
 
 /// <summary>
 /// Base class for integration tests that use a in-process sidecar for executing orchestrations.
 /// </summary>
 public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposable
 {
-    readonly CancellationTokenSource testTimeoutSource = new(Debugger.IsAttached ? TimeSpan.FromMinutes(5) : TimeSpan.FromSeconds(10));
+    readonly CancellationTokenSource testTimeoutSource
+        = new(Debugger.IsAttached ? TimeSpan.FromMinutes(5) : TimeSpan.FromSeconds(10));
+
     readonly TestLogProvider logProvider;
     readonly ILoggerFactory loggerFactory;
 
@@ -30,6 +34,7 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
             builder.AddProvider(this.logProvider);
             builder.SetMinimumLevel(LogLevel.Debug);
         });
+
         this.sidecarFixture = sidecarFixture;
     }
 
@@ -45,12 +50,45 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
         GC.SuppressFinalize(this);
     }
 
-    /// <summary>
-    /// Creates a <see cref="DurableTaskGrpcWorker"/> configured to output logs to xunit logging infrastructure.
-    /// </summary>
-    protected DurableTaskGrpcWorker.Builder CreateWorkerBuilder()
+    protected async Task<AsyncDisposable> StartWorkerAsync(Action<IDurableTaskBuilder> configure)
     {
-        return this.sidecarFixture.GetWorkerBuilder().UseLoggerFactory(this.loggerFactory);
+        IHost host = this.CreateWorkerBuilder(configure).Build();
+        await host.StartAsync(this.TimeoutToken);
+        return new AsyncDisposable(async () =>
+        {
+            try
+            {
+                await host.StopAsync(this.TimeoutToken);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+
+            host.Dispose();
+        });
+    }
+
+    /// <summary>
+    /// Creates a <see cref="IHostBuilder"/> configured to output logs to xunit logging infrastructure.
+    /// </summary>
+    /// <param name="configure">Configures the durable task builder.</param>
+    protected IHostBuilder CreateWorkerBuilder(Action<IDurableTaskBuilder> configure)
+    {
+        return Host.CreateDefaultBuilder()
+            .ConfigureLogging(b =>
+            {
+                b.ClearProviders();
+                b.AddProvider(this.logProvider);
+                b.SetMinimumLevel(LogLevel.Debug);
+            })
+            .ConfigureServices(services =>
+            {
+                services.AddDurableTaskWorker(b =>
+                {
+                    b.UseGrpc(this.sidecarFixture.Channel);
+                    configure(b);
+                });
+            });
     }
 
     /// <summary>

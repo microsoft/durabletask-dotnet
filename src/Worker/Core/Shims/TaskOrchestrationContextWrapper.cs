@@ -50,18 +50,24 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
     public override T GetInput<T>() => (T)this.deserializedInput!;
 
+    DataConverter DataConverter => this.invocationContext.Options.DataConverter;
+
+    ILoggerFactory LoggerFactory => this.invocationContext.LoggerFactory;
+
     public override async Task<T> CallActivityAsync<T>(
         TaskName name,
         object? input = null,
         TaskOptions? options = null)
     {
-        // Since the input parameter takes any object, it's possible that callers may accidentally provide a TaskOptions parameter here
-        // when the actually meant to provide TaskOptions for the optional options parameter.
+        // Since the input parameter takes any object, it's possible that callers may accidentally provide a
+        // TaskOptions parameter here when the actually meant to provide TaskOptions for the optional options
+        // parameter.
         if (input is TaskOptions && options == null)
         {
             throw new ArgumentException(
-                $"A {nameof(TaskOptions)} value was provided for the activity input but no value was provided for {nameof(options)}. " + 
-                $"Did you actually mean to provide a {nameof(TaskOptions)} value for the {nameof(options)} parameter?",
+                $"A {nameof(TaskOptions)} value was provided for the activity input but no value was provided for"
+                + $" {nameof(options)}. Did you actually mean to provide a {nameof(TaskOptions)} value for the"
+                + $" {nameof(options)} parameter?",
                 nameof(input));
         }
 
@@ -100,7 +106,8 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     }
 
     [Obsolete("This method is not yet fully implemented")]
-    public override Task<T> CallActivityAsync<T>(Func<object?, T> activityLambda, object? input = null, TaskOptions? options = null)
+    public override Task<T> CallActivityAsync<T>(
+        Func<object?, T> activityLambda, object? input = null, TaskOptions? options = null)
     {
         if (options != null)
         {
@@ -193,7 +200,7 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         // Longer timers are broken down into smaller timers. For example, if fireAt is 7 days from now
         // and the max interval is 3 days, there will be two 3-day timers and a single one-day timer.
         // This is primarily to support backends that don't support infinite timers, like Azure Storage.
-        TimeSpan maximumTimerInterval = this.invocationContext.TimerOptions.MaximumTimerInterval;
+        TimeSpan maximumTimerInterval = this.invocationContext.Options.MaximumTimerInterval;
         TimeSpan remainingTime = finalFireAtUtc.Subtract(this.CurrentUtcDateTime);
         while (remainingTime > maximumTimerInterval && !cancellationToken.IsCancellationRequested)
         {
@@ -210,7 +217,7 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         // Return immediately if this external event has already arrived.
         if (this.externalEventBuffer.TryTake(eventName, out string? bufferedEventPayload))
         {
-            return Task.FromResult(this.invocationContext.DataConverter.Deserialize<T>(bufferedEventPayload));
+            return Task.FromResult(this.DataConverter.Deserialize<T>(bufferedEventPayload));
         }
 
         // Create a task completion source that will be set when the external event arrives.
@@ -219,7 +226,8 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         {
             if (existing.EventType != typeof(T))
             {
-                throw new ArgumentException($"Events with the same name must have the same type argument. Expected {existing.EventType.FullName}.");
+                throw new ArgumentException("Events with the same name must have the same type argument. Expected"
+                    + $" {existing.EventType.FullName}.");
             }
 
             existing.Next = eventSource;
@@ -237,7 +245,7 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     {
         if (this.externalEventSources.TryGetValue(eventName, out IEventSource? waiter))
         {
-            object? value = this.invocationContext.DataConverter.Deserialize(rawEventPayload, waiter.EventType);
+            object? value = this.DataConverter.Deserialize(rawEventPayload, waiter.EventType);
 
             // Events are completed in FIFO order. Remove the key if the last event was delivered.
             if (waiter.Next == null)
@@ -297,9 +305,7 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
         static void SwapByteArrayElements(byte[] byteArray, int left, int right)
         {
-            byte temp = byteArray[left];
-            byteArray[left] = byteArray[right];
-            byteArray[right] = temp;
+            (byteArray[right], byteArray[left]) = (byteArray[left], byteArray[right]);
         }
 
         const string DnsNamespaceValue = "9e952958-5e33-4daf-827f-2fa12937b875";
@@ -345,7 +351,7 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
     internal string? GetDeserializedCustomStatus()
     {
-        return this.invocationContext.DataConverter.Serialize(this.customStatus);
+        return this.DataConverter.Serialize(this.customStatus);
     }
 
     async Task<T> InvokeWithCustomRetryHandler<T>(
@@ -365,7 +371,7 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             }
             catch (global::DurableTask.Core.Exceptions.OrchestrationException e)
             {
-                // Some failures are not retriable, like failures for missing activities or sub-orchestrations
+                // Some failures are not retryable, like failures for missing activities or sub-orchestrations
                 if (e.FailureDetails?.IsNonRetriable == true)
                 {
                     throw;

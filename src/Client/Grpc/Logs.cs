@@ -5,7 +5,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask
 {
-    // NOTE: Trying to make logs consistent with https://github.com/Azure/durabletask/blob/main/src/DurableTask.Core/Logging/LogEvents.cs.
+    /// <summary>
+    /// Log messages.
+    /// </summary>
+    /// <remarks>
+    /// NOTE: Trying to make logs consistent with https://github.com/Azure/durabletask/blob/main/src/DurableTask.Core/Logging/LogEvents.cs.
+    /// </remarks>
     static partial class Logs
     {
         [LoggerMessage(EventId = 40, Level = LogLevel.Information, Message = "Scheduling new {name} orchestration with instance ID '{instanceId}' and {sizeInBytes} bytes of input data.")]
@@ -34,6 +39,11 @@ namespace Microsoft.DurableTask
         [LoggerMessage(EventId = 46, Level = LogLevel.Information, Message = "Purging instances with filter: {{ CreatedFrom = {createdFrom}, CreatedTo = {createdTo}, Statuses = {statuses} }}")]
         public static partial void PurgingInstances(this ILogger logger, DateTimeOffset? createdFrom, DateTimeOffset? createdTo, string? statuses);
 
+        /// <summary>
+        /// <see cref="PurgingInstances(ILogger, DateTimeOffset?, DateTimeOffset?, string?)" />.
+        /// </summary>
+        /// <param name="logger">The logger to log to.</param>
+        /// <param name="filter">The filter to log.</param>
         public static void PurgingInstances(this ILogger logger, PurgeInstancesFilter filter)
         {
             string? statuses = filter?.Statuses is null ? null : string.Join("|", filter.Statuses);

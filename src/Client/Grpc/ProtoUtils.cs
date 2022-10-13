@@ -7,8 +7,16 @@ using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Grpc;
 
+/// <summary>
+/// Protobuf helpers and utilities.
+/// </summary>
 static class ProtoUtils
 {
+    /// <summary>
+    /// Converts a <see cref="DateTime" /> to a gRPC <see cref="Timestamp" />.
+    /// </summary>
+    /// <param name="dateTime">The date-time to convert.</param>
+    /// <returns>The gRPC timestamp.</returns>
     internal static Timestamp ToTimestamp(this DateTime dateTime)
     {
         // The protobuf libraries require timestamps to be in UTC
@@ -24,11 +32,26 @@ static class ProtoUtils
         return Timestamp.FromDateTime(dateTime);
     }
 
+    /// <summary>
+    /// Converts a <see cref="DateTime" /> to a gRPC <see cref="Timestamp" />.
+    /// </summary>
+    /// <param name="dateTime">The date-time to convert.</param>
+    /// <returns>The gRPC timestamp.</returns>
     internal static Timestamp? ToTimestamp(this DateTime? dateTime)
         => dateTime.HasValue ? dateTime.Value.ToTimestamp() : null;
 
+    /// <summary>
+    /// Converts a <see cref="DateTimeOffset" /> to a gRPC <see cref="Timestamp" />.
+    /// </summary>
+    /// <param name="dateTime">The date-time to convert.</param>
+    /// <returns>The gRPC timestamp.</returns>
     internal static Timestamp ToTimestamp(this DateTimeOffset dateTime) => Timestamp.FromDateTimeOffset(dateTime);
 
+    /// <summary>
+    /// Converts a <see cref="DateTime" /> to a gRPC <see cref="Timestamp" />.
+    /// </summary>
+    /// <param name="dateTime">The date-time to convert.</param>
+    /// <returns>The gRPC timestamp.</returns>
     internal static Timestamp? ToTimestamp(this DateTimeOffset? dateTime)
         => dateTime.HasValue ? dateTime.Value.ToTimestamp() : null;
 
@@ -52,6 +75,46 @@ static class ProtoUtils
         };
 #pragma warning restore 0618 // Referencing Obsolete member.
 
+    /// <summary>
+    /// Converts a <see cref="P.TaskFailureDetails" /> to a <see cref="TaskFailureDetails" />.
+    /// </summary>
+    /// <param name="failureDetails">The failure details to convert.</param>
+    /// <returns>The converted failure details.</returns>
+    internal static TaskFailureDetails? ConvertTaskFailureDetails(P.TaskFailureDetails? failureDetails)
+    {
+        if (failureDetails == null)
+        {
+            return null;
+        }
+
+        return new TaskFailureDetails(
+            failureDetails.ErrorType,
+            failureDetails.ErrorMessage,
+            failureDetails.StackTrace,
+            ConvertTaskFailureDetails(failureDetails.InnerFailure));
+    }
+
+    /// <summary>
+    /// Converts <see cref="Exception" /> to a <see cref="P.TaskFailureDetails" />.
+    /// </summary>
+    /// <param name="e">The exception to convert.</param>
+    /// <returns>The converted failure details.</returns>
+    internal static P.TaskFailureDetails? ToTaskFailureDetails(Exception? e)
+    {
+        if (e == null)
+        {
+            return null;
+        }
+
+        return new P.TaskFailureDetails
+        {
+            ErrorType = e.GetType().FullName,
+            ErrorMessage = e.Message,
+            StackTrace = e.StackTrace,
+            InnerFailure = ToTaskFailureDetails(e.InnerException),
+        };
+    }
+
     static FailureDetails? ConvertFailureDetails(P.TaskFailureDetails? failureDetails)
     {
         if (failureDetails == null)
@@ -65,20 +128,6 @@ static class ProtoUtils
             failureDetails.StackTrace,
             ConvertFailureDetails(failureDetails.InnerFailure),
             failureDetails.IsNonRetriable);
-    }
-
-    internal static TaskFailureDetails? ConvertTaskFailureDetails(P.TaskFailureDetails? failureDetails)
-    {
-        if (failureDetails == null)
-        {
-            return null;
-        }
-
-        return new TaskFailureDetails(
-            failureDetails.ErrorType,
-            failureDetails.ErrorMessage,
-            failureDetails.StackTrace,
-            ConvertTaskFailureDetails(failureDetails.InnerFailure));
     }
 
     static P.TaskFailureDetails? ConvertFailureDetails(FailureDetails? failureDetails)
@@ -95,22 +144,6 @@ static class ProtoUtils
             StackTrace = failureDetails.StackTrace,
             IsNonRetriable = failureDetails.IsNonRetriable,
             InnerFailure = ConvertFailureDetails(failureDetails.InnerFailure),
-        };
-    }
-
-    internal static P.TaskFailureDetails? ToTaskFailureDetails(Exception? e)
-    {
-        if (e == null)
-        {
-            return null;
-        }
-
-        return new P.TaskFailureDetails
-        {
-            ErrorType = e.GetType().FullName,
-            ErrorMessage = e.Message,
-            StackTrace = e.StackTrace,
-            InnerFailure = ToTaskFailureDetails(e.InnerException),
         };
     }
 }

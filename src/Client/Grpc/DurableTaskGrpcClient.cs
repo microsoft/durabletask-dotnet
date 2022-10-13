@@ -31,27 +31,30 @@ public class DurableTaskGrpcClient : DurableTaskClient
 
     DurableTaskGrpcClient(Builder builder)
     {
-        this.services = builder.services ?? SdkUtils.EmptyServiceProvider.Instance;
-        this.dataConverter = builder.dataConverter ?? this.services.GetService<DataConverter>() ?? Converters.JsonDataConverter.Default;
-        this.logger = SdkUtils.GetLogger(builder.loggerFactory ?? this.services.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance);
-        this.configuration = builder.configuration ?? this.services.GetService<IConfiguration>();
+        this.services = builder.Services ?? SdkUtils.EmptyServiceProvider.Instance;
+        this.dataConverter = builder.DataConverter ?? this.services.GetService<DataConverter>()
+            ?? Converters.JsonDataConverter.Default;
+        this.logger = SdkUtils.GetLogger(builder.LoggerFactory ?? this.services.GetService<ILoggerFactory>()
+            ?? NullLoggerFactory.Instance);
+        this.configuration = builder.Configuration ?? this.services.GetService<IConfiguration>();
 
-        if (builder.channel != null)
+        if (builder.Channel != null)
         {
-            // Use the channel from the builder, which was given to us by the app (thus we don't own it and can't dispose it)
-            this.sidecarGrpcChannel = builder.channel;
+            // Use the channel from the builder, which was given to us by the app (thus we don't own it and can't
+            // dispose it)
+            this.sidecarGrpcChannel = builder.Channel;
             this.ownsChannel = false;
         }
         else
         {
             // We have to create our own channel and are responsible for disposing it
             this.sidecarGrpcChannel = new Channel(
-                builder.hostname ?? SdkUtils.GetSidecarHost(this.configuration),
-                builder.port ?? SdkUtils.GetSidecarPort(this.configuration),
+                builder.Hostname ?? SdkUtils.GetSidecarHost(this.configuration),
+                builder.Port ?? SdkUtils.GetSidecarPort(this.configuration),
                 ChannelCredentials.Insecure);
             this.ownsChannel = true;
         }
-        
+
         this.sidecarClient = new TaskHubSidecarServiceClient(this.sidecarGrpcChannel);
     }
 
@@ -214,7 +217,6 @@ public class DurableTaskGrpcClient : DurableTaskClient
 
             try
             {
-
                 P.QueryInstancesResponse response = await this.sidecarClient.QueryInstancesAsync(
                     request, cancellationToken: cancellation);
 
@@ -227,7 +229,8 @@ public class DurableTaskGrpcClient : DurableTaskClient
             }
             catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
             {
-                throw new OperationCanceledException($"The {nameof(GetInstances)} operation was canceled.", e, cancellation);
+                throw new OperationCanceledException(
+                    $"The {nameof(this.GetInstances)} operation was canceled.", e, cancellation);
             }
         });
     }
@@ -255,7 +258,8 @@ public class DurableTaskGrpcClient : DurableTaskClient
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
-            throw new OperationCanceledException($"The {nameof(WaitForInstanceStartAsync)} operation was canceled.", e, cancellationToken);
+            throw new OperationCanceledException(
+                $"The {nameof(this.WaitForInstanceStartAsync)} operation was canceled.", e, cancellationToken);
         }
 
         return this.CreateMetadata(response.OrchestrationState, getInputsAndOutputs);
@@ -268,7 +272,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
         bool getInputsAndOutputs = false)
     {
         this.logger.WaitingForInstanceCompletion(instanceId, getInputsAndOutputs);
-        
+
         P.GetInstanceRequest request = new()
         {
             InstanceId = instanceId,
@@ -284,23 +288,26 @@ public class DurableTaskGrpcClient : DurableTaskClient
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
-            throw new OperationCanceledException($"The {nameof(WaitForInstanceCompletionAsync)} operation was canceled.", e, cancellationToken);
+            throw new OperationCanceledException(
+                $"The {nameof(this.WaitForInstanceCompletionAsync)} operation was canceled.", e, cancellationToken);
         }
 
         return this.CreateMetadata(response.OrchestrationState, getInputsAndOutputs);
     }
 
     /// <inheritdoc/>
-    public override Task<PurgeResult> PurgeInstanceMetadataAsync(string instanceId, CancellationToken cancellation = default)
+    public override Task<PurgeResult> PurgeInstanceMetadataAsync(
+        string instanceId, CancellationToken cancellation = default)
     {
         this.logger.PurgingInstanceMetadata(instanceId);
-        
+
         P.PurgeInstancesRequest request = new() { InstanceId = instanceId };
         return this.PurgeInstancesCoreAsync(request, cancellation);
     }
 
     /// <inheritdoc/>
-    public override Task<PurgeResult> PurgeInstancesAsync(PurgeInstancesFilter filter, CancellationToken cancellation = default)
+    public override Task<PurgeResult> PurgeInstancesAsync(
+        PurgeInstancesFilter filter, CancellationToken cancellation = default)
     {
         this.logger.PurgingInstances(filter);
         P.PurgeInstancesRequest request = new()
@@ -320,16 +327,19 @@ public class DurableTaskGrpcClient : DurableTaskClient
         return this.PurgeInstancesCoreAsync(request, cancellation);
     }
 
-    async Task<PurgeResult> PurgeInstancesCoreAsync(P.PurgeInstancesRequest request, CancellationToken cancellation = default)
+    async Task<PurgeResult> PurgeInstancesCoreAsync(
+        P.PurgeInstancesRequest request, CancellationToken cancellation = default)
     {
         try
         {
-            P.PurgeInstancesResponse response = await this.sidecarClient.PurgeInstancesAsync(request, cancellationToken: cancellation);
+            P.PurgeInstancesResponse response = await this.sidecarClient.PurgeInstancesAsync(
+                request, cancellationToken: cancellation);
             return new PurgeResult(response.DeletedInstanceCount);
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
-            throw new OperationCanceledException($"The {nameof(PurgeInstancesAsync)} operation was canceled.", e, cancellation);
+            throw new OperationCanceledException(
+                $"The {nameof(this.PurgeInstancesAsync)} operation was canceled.", e, cancellation);
         }
     }
 
@@ -353,20 +363,47 @@ public class DurableTaskGrpcClient : DurableTaskClient
     /// </summary>
     public sealed class Builder
     {
-        internal IServiceProvider? services;
-        internal ILoggerFactory? loggerFactory;
-        internal DataConverter? dataConverter;
-        internal IConfiguration? configuration;
-        internal Channel? channel;
-        internal string? hostname;
-        internal int? port;
+        /// <summary>
+        /// Gets the service provider.
+        /// </summary>
+        internal IServiceProvider? Services { get; private set; }
+
+        /// <summary>
+        /// Gets the logger factory.
+        /// </summary>
+        internal ILoggerFactory? LoggerFactory { get; private set; }
+
+        /// <summary>
+        /// Gets the data converter.
+        /// </summary>
+        internal DataConverter? DataConverter { get; private set; }
+
+        /// <summary>
+        /// Gets the configuration.
+        /// </summary>
+        internal IConfiguration? Configuration { get; private set; }
+
+        /// <summary>
+        /// Gets the gRPC channel.
+        /// </summary>
+        internal Channel? Channel { get; private set; }
+
+        /// <summary>
+        /// Gets the gRPC hostname.
+        /// </summary>
+        internal string? Hostname { get; private set; }
+
+        /// <summary>
+        /// Gets the gRPC port.
+        /// </summary>
+        internal int? Port { get; private set; }
 
         /// <summary>
         /// Configures a logger factory to be used by the client.
         /// </summary>
         /// <remarks>
         /// Use this method to configure a logger factory explicitly. Otherwise, the client creation process will try
-        /// to discover a logger factory from dependency-injected services (see the 
+        /// to discover a logger factory from dependency-injected services (see the
         /// <see cref="UseServices(IServiceProvider)"/> method).
         /// </remarks>
         /// <param name="loggerFactory">
@@ -375,7 +412,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
         /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
         public Builder UseLoggerFactory(ILoggerFactory loggerFactory)
         {
-            this.loggerFactory = loggerFactory;
+            this.LoggerFactory = loggerFactory;
             return this;
         }
 
@@ -387,7 +424,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
         /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
         public Builder UseServices(IServiceProvider services)
         {
-            this.services = services;
+            this.Services = services;
             return this;
         }
 
@@ -404,13 +441,13 @@ public class DurableTaskGrpcClient : DurableTaskClient
         /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
         public Builder UseAddress(string hostname, int? port = null)
         {
-            this.hostname = hostname;
-            this.port = port;
+            this.Hostname = hostname;
+            this.Port = port;
             return this;
         }
 
         /// <summary>
-        /// Configures a gRPC <see cref="Channel"/> to use for communicating with the sidecar process.
+        /// Configures a gRPC <see cref="global::Grpc.Core.Channel"/> to use for communicating with the sidecar process.
         /// </summary>
         /// <remarks>
         /// <para>
@@ -426,7 +463,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
         /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
         public Builder UseGrpcChannel(Channel channel)
         {
-            this.channel = channel;
+            this.Channel = channel;
             return this;
         }
 
@@ -440,7 +477,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
         /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
         public Builder UseDataConverter(DataConverter dataConverter)
         {
-            this.dataConverter = dataConverter;
+            this.DataConverter = dataConverter;
             return this;
         }
 
@@ -451,7 +488,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
         /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
         public Builder UseConfiguration(IConfiguration configuration)
         {
-            this.configuration = configuration;
+            this.Configuration = configuration;
             return this;
         }
 

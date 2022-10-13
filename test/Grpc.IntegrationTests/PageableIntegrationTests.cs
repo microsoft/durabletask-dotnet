@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using FluentAssertions;
+using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
 using Xunit.Abstractions;
 
@@ -19,7 +20,7 @@ public class PageableIntegrationTests : IntegrationTestBase
     {
         TaskName orchestratorName = nameof(PageableActivity_Enumerates);
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        await using HostLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator<string, int>(
@@ -28,9 +29,9 @@ public class PageableIntegrationTests : IntegrationTestBase
                     nameof(PageableActivityAsync), (_, input) => PageableActivityAsync(input)));
         });
 
-        DurableTaskClient client = this.CreateDurableTaskClient();
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: string.Empty);
-        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            orchestratorName, input: string.Empty);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId,
             this.TimeoutToken,
             getInputsAndOutputs: true);
@@ -58,7 +59,8 @@ public class PageableIntegrationTests : IntegrationTestBase
     {
         AsyncPageable<string> pageable = Pageable.Create((continuation, _, _) =>
         {
-            return context.CallActivityAsync<Page<string>?>(nameof(PageableActivityAsync), new PageRequest(continuation))!;
+            return context.CallActivityAsync<Page<string>?>(
+                nameof(PageableActivityAsync), new PageRequest(continuation))!;
         });
 
         return await pageable.CountAsync();

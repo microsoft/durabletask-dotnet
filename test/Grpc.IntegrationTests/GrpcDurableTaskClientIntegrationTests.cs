@@ -3,6 +3,7 @@
 
 using FluentAssertions;
 using FluentAssertions.Execution;
+using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
 using Xunit.Abstractions;
 
@@ -36,19 +37,22 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             }
         }
 
-        await using AsyncDisposable server = await this.StartAsync();
-        DurableTaskClient client = this.CreateDurableTaskClient();
+        await using HostLifetime server = await this.StartAsync();
 
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(OrchestrationName, input: shouldThrow);
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: shouldThrow);
 
-        await client.WaitForInstanceStartAsync(instanceId, default);
-        OrchestrationMetadata? metadata = await client.GetInstanceMetadataAsync(instanceId, false);
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceMetadataAsync(instanceId, false);
         AssertMetadata(metadata!, instanceId, OrchestrationRuntimeStatus.Running);
 
-        await client.RaiseEventAsync(instanceId, "event", default);
-        await client.WaitForInstanceCompletionAsync(instanceId, default);
-        metadata = await client.GetInstanceMetadataAsync(instanceId, false);
-        AssertMetadata(metadata!, instanceId, shouldThrow ? OrchestrationRuntimeStatus.Failed : OrchestrationRuntimeStatus.Completed);
+        await server.Client.RaiseEventAsync(instanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(instanceId, default);
+        metadata = await server.Client.GetInstanceMetadataAsync(instanceId, false);
+        AssertMetadata(
+            metadata!,
+            instanceId,
+            shouldThrow ? OrchestrationRuntimeStatus.Failed : OrchestrationRuntimeStatus.Completed);
     }
 
     [Fact]
@@ -87,23 +91,24 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             await func("GetInstances_EndToEnd-2");
         }
 
-        await using AsyncDisposable server = await this.StartAsync();
-        DurableTaskClient client = this.CreateDurableTaskClient();
+        await using HostLifetime server = await this.StartAsync();
 
         // Enqueue an extra orchestration which we will verify is NOT present.
-        string notIncluded = await client.ScheduleNewOrchestrationInstanceAsync(OrchestrationName, input: false);
+        string notIncluded = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false);
 
-        await ForEachOrchestrationAsync(x => client.ScheduleNewOrchestrationInstanceAsync(OrchestrationName, x, input: false));
-        AsyncPageable<OrchestrationMetadata> pageable = client.GetInstances(query);
+        await ForEachOrchestrationAsync(
+            x => server.Client.ScheduleNewOrchestrationInstanceAsync(OrchestrationName, x, input: false));
+        AsyncPageable<OrchestrationMetadata> pageable = server.Client.GetInstances(query);
 
-        await ForEachOrchestrationAsync(x => client.WaitForInstanceStartAsync(x, default));
+        await ForEachOrchestrationAsync(x => server.Client.WaitForInstanceStartAsync(x, default));
         List<OrchestrationMetadata> metadata = await pageable.ToListAsync();
         metadata.Should().HaveCount(2)
             .And.AllSatisfy(m => AssertMetadata(m, OrchestrationRuntimeStatus.Running))
             .And.NotContain(x => string.Equals(x.InstanceId, notIncluded, StringComparison.OrdinalIgnoreCase));
 
-        await ForEachOrchestrationAsync(x => client.RaiseEventAsync(x, "event", default));
-        await ForEachOrchestrationAsync(x => client.WaitForInstanceCompletionAsync(x, default));
+        await ForEachOrchestrationAsync(x => server.Client.RaiseEventAsync(x, "event", default));
+        await ForEachOrchestrationAsync(x => server.Client.WaitForInstanceCompletionAsync(x, default));
         metadata = await pageable.ToListAsync();
         metadata.Should().HaveCount(2)
             .And.AllSatisfy(m => AssertMetadata(m, OrchestrationRuntimeStatus.Completed))
@@ -114,20 +119,21 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
     public async Task GetInstances_AsPages_EndToEnd()
     {
         OrchestrationQuery query = new() { InstanceIdPrefix = "GetInstances_AsPages_EndToEnd" };
-        await using AsyncDisposable server = await this.StartAsync();
-        DurableTaskClient client = this.CreateDurableTaskClient();
+        await using HostLifetime server = await this.StartAsync();
 
         for (int i = 0; i < 21; i++)
         {
-            await client.ScheduleNewOrchestrationInstanceAsync(OrchestrationName, $"GetInstances_AsPages_EndToEnd-{i}", input: false);
+            await server.Client.ScheduleNewOrchestrationInstanceAsync(
+                OrchestrationName, $"GetInstances_AsPages_EndToEnd-{i}", input: false);
         }
 
-        AsyncPageable<OrchestrationMetadata> pageable = client.GetInstances(query);
+        AsyncPageable<OrchestrationMetadata> pageable = server.Client.GetInstances(query);
         List<Page<OrchestrationMetadata>> pages = await pageable.AsPages(pageSizeHint: 5).ToListAsync();
         pages.Should().HaveCount(5);
         pages.ForEach(p => p.Values.Should().HaveCount(p.ContinuationToken is null ? 1 : 5));
 
-        List<Page<OrchestrationMetadata>> resumedPages = await pageable.AsPages(pages[1].ContinuationToken, pageSizeHint: 4).ToListAsync();
+        List<Page<OrchestrationMetadata>> resumedPages = await pageable.AsPages(
+            pages[1].ContinuationToken, pageSizeHint: 4).ToListAsync();
         resumedPages.Should().HaveCount(3);
 
         List<OrchestrationMetadata> left = resumedPages.SelectMany(p => p.Values).ToList();
@@ -139,7 +145,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         page.ContinuationToken.Should().NotBeNull();
     }
 
-    Task<AsyncDisposable> StartAsync()
+    Task<HostLifetime> StartAsync()
     {
         static async Task<string?> Orchestration(TaskOrchestrationContext context, bool shouldThrow)
         {

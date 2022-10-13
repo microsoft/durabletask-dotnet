@@ -58,12 +58,6 @@ public sealed class GrpcSidecarFixture : IDisposable
 
     public Channel Channel { get; }
 
-    public DurableTaskGrpcClient.Builder GetClientBuilder()
-    {
-        // The gRPC channel is reused across tests to avoid the overhead of creating new connections (which is very slow)
-        return DurableTaskGrpcClient.CreateBuilder().UseGrpcChannel(this.Channel);
-    }
-
     public void Dispose()
     {
         this.Channel.ShutdownAsync().GetAwaiter().GetResult();

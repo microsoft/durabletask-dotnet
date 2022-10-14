@@ -4,7 +4,6 @@
 using Grpc.Core;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 
 namespace Microsoft.DurableTask.Worker;
 

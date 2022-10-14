@@ -26,16 +26,28 @@ namespace Microsoft.DurableTask.Worker.Grpc;
 public static class GrpcOrchestrationRunner
 {
     /// <summary>
-    /// Loads orchestration history from <paramref name="encodedOrchestratorRequest"/> and uses it to execute the orchestrator function
-    /// code pointed to by <paramref name="orchestratorFunc"/>.
+    /// Loads orchestration history from <paramref name="encodedOrchestratorRequest"/> and uses it to execute the
+    /// orchestrator function code pointed to by <paramref name="orchestratorFunc"/>.
     /// </summary>
-    /// <typeparam name="TInput">The type of the orchestrator function input. This type must be deserializable from JSON.</typeparam>
-    /// <typeparam name="TOutput">The type of the orchestrator function output. This type must be serializable to JSON.</typeparam>
-    /// <param name="encodedOrchestratorRequest">The base64-encoded protobuf payload representing an orchestration execution request.</param>
+    /// <typeparam name="TInput">
+    /// The type of the orchestrator function input. This type must be deserializable from JSON.
+    /// </typeparam>
+    /// <typeparam name="TOutput">
+    /// The type of the orchestrator function output. This type must be serializable to JSON.
+    /// </typeparam>
+    /// <param name="encodedOrchestratorRequest">
+    /// The base64-encoded protobuf payload representing an orchestration execution request.
+    /// </param>
     /// <param name="orchestratorFunc">A function that implements the orchestrator logic.</param>
-    /// <param name="services">Optional <see cref="IServiceProvider"/> from which injected dependencies can be retrieved.</param>
-    /// <returns>Returns a base64-encoded set of orchestrator actions to be interpreted by the external orchestration engine.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if <paramref name="encodedOrchestratorRequest"/> or <paramref name="orchestratorFunc"/> is <c>null</c>.</exception>
+    /// <param name="services">
+    /// Optional <see cref="IServiceProvider"/> from which injected dependencies can be retrieved.
+    /// </param>
+    /// <returns>
+    /// Returns a base64-encoded set of orchestrator actions to be interpreted by the external orchestration engine.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown if <paramref name="encodedOrchestratorRequest"/> or <paramref name="orchestratorFunc"/> is <c>null</c>.
+    /// </exception>
     public static string LoadAndRun<TInput, TOutput>(
         string encodedOrchestratorRequest,
         Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> orchestratorFunc,
@@ -50,15 +62,27 @@ public static class GrpcOrchestrationRunner
     }
 
     /// <summary>
-    /// Deserializes orchestration history from <paramref name="encodedOrchestratorRequest"/> and uses it to resume the orchestrator
-    /// implemented by <paramref name="implementation"/>.
+    /// Deserializes orchestration history from <paramref name="encodedOrchestratorRequest"/> and uses it to resume the
+    /// orchestrator implemented by <paramref name="implementation"/>.
     /// </summary>
-    /// <param name="encodedOrchestratorRequest">The encoded protobuf payload representing an orchestration execution request. This is a base64-encoded string.</param>
-    /// <param name="implementation">An <see cref="ITaskOrchestrator"/> implementation that defines the orchestrator logic.</param>
-    /// <param name="services">Optional <see cref="IServiceProvider"/> from which injected dependencies can be retrieved.</param>
-    /// <returns>Returns a serialized set of orchestrator actions that should be used as the return value of the orchestrator function trigger.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if <paramref name="encodedOrchestratorRequest"/> or <paramref name="implementation"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">Thrown if <paramref name="encodedOrchestratorRequest"/> contains invalid data.</exception>
+    /// <param name="encodedOrchestratorRequest">
+    /// The encoded protobuf payload representing an orchestration execution request. This is a base64-encoded string.
+    /// </param>
+    /// <param name="implementation">
+    /// An <see cref="ITaskOrchestrator"/> implementation that defines the orchestrator logic.
+    /// </param>
+    /// <param name="services">
+    /// Optional <see cref="IServiceProvider"/> from which injected dependencies can be retrieved.
+    /// </param>
+    /// <returns>
+    /// Returns a serialized set of orchestrator actions that should be used as the return value of the orchestrator function trigger.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown if <paramref name="encodedOrchestratorRequest"/> or <paramref name="implementation"/> is <c>null</c>.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown if <paramref name="encodedOrchestratorRequest"/> contains invalid data.
+    /// </exception>
     public static string LoadAndRun(
         string encodedOrchestratorRequest,
         ITaskOrchestrator implementation,

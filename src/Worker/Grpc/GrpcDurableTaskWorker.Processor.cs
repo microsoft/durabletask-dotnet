@@ -140,7 +140,8 @@ sealed partial class GrpcDurableTaskWorker
                 {
                     if (workItem.RequestCase == P.WorkItem.RequestOneofCase.OrchestratorRequest)
                     {
-                        this.RunBackgroundTask(workItem, () => this.OnRunOrchestratorAsync(workItem.OrchestratorRequest));
+                        this.RunBackgroundTask(workItem, () => this.OnRunOrchestratorAsync(
+                            workItem.OrchestratorRequest));
                     }
                     else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
                     {

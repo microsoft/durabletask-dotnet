@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -13,7 +12,7 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// <summary>
 /// A wrapper to go from <see cref="OrchestrationContext" /> to <see cref="TaskOrchestrationContext "/>.
 /// </summary>
-sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
+sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 {
     readonly Dictionary<string, IEventSource> externalEventSources = new(StringComparer.OrdinalIgnoreCase);
     readonly NamedQueue<string> externalEventBuffer = new();
@@ -27,6 +26,13 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     int newGuidCounter;
     object? customStatus;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TaskOrchestrationContextWrapper"/> class.
+    /// </summary>
+    /// <param name="innerContext">The inner orchestration context.</param>
+    /// <param name="invocationContext">The invocation context.</param>
+    /// <param name="logger">The logger.</param>
+    /// <param name="deserializedInput">The deserialized input.</param>
     public TaskOrchestrationContextWrapper(
         OrchestrationContext innerContext,
         OrchestrationInvocationContext invocationContext,
@@ -39,21 +45,29 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         this.deserializedInput = deserializedInput;
     }
 
+    /// <inheritdoc/>
     public override TaskName Name => this.invocationContext.Name;
 
+    /// <inheritdoc/>
     public override string InstanceId => this.innerContext.OrchestrationInstance.InstanceId;
+
+    /// <inheritdoc/>
     public override ParentOrchestrationInstance? Parent { get; }
 
+    /// <inheritdoc/>
     public override bool IsReplaying => this.innerContext.IsReplaying;
 
+    /// <inheritdoc/>
     public override DateTime CurrentUtcDateTime => this.innerContext.CurrentUtcDateTime;
-
-    public override T GetInput<T>() => (T)this.deserializedInput!;
 
     DataConverter DataConverter => this.invocationContext.Options.DataConverter;
 
     ILoggerFactory LoggerFactory => this.invocationContext.LoggerFactory;
 
+    /// <inheritdoc/>
+    public override T GetInput<T>() => (T)this.deserializedInput!;
+
+    /// <inheritdoc/>
     public override async Task<T> CallActivityAsync<T>(
         TaskName name,
         object? input = null,
@@ -74,8 +88,6 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         try
         {
             // TODO: Cancellation (https://github.com/microsoft/durabletask-dotnet/issues/7)
-            // TODO: DataConverter?
-
             if (options?.RetryPolicy != null)
             {
                 return await this.innerContext.ScheduleWithRetry<T>(
@@ -96,7 +108,6 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             {
                 return await this.innerContext.ScheduleTask<T>(name.Name, name.Version, input);
             }
-
         }
         catch (global::DurableTask.Core.Exceptions.TaskFailedException e)
         {
@@ -105,6 +116,7 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         }
     }
 
+    /// <inheritdoc/>
     [Obsolete("This method is not yet fully implemented")]
     public override Task<T> CallActivityAsync<T>(
         Func<object?, T> activityLambda, object? input = null, TaskOptions? options = null)
@@ -131,17 +143,7 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         return tcs.Task;
     }
 
-    internal void ExecuteLocalActivityCalls()
-    {
-        while (this.localActivityCalls.Count > 0)
-        {
-            Action localActivityLambda = this.localActivityCalls.Dequeue();
-
-            // Exceptions are never expected to escape here
-            localActivityLambda.Invoke();
-        }
-    }
-
+    /// <inheritdoc/>
     public override async Task<TResult> CallSubOrchestratorAsync<TResult>(
         TaskName orchestratorName,
         string? instanceId = null,
@@ -149,9 +151,6 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         TaskOptions? options = null)
     {
         // TODO: Check to see if this orchestrator is defined
-
-        // TODO: IDataConverter
-
         instanceId ??= this.NewGuid().ToString("N");
 
         try
@@ -192,6 +191,7 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         }
     }
 
+    /// <inheritdoc/>
     public override async Task CreateTimer(DateTime fireAt, CancellationToken cancellationToken)
     {
         // Make sure we're always operating in UTC
@@ -212,6 +212,7 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         await this.innerContext.CreateTimer<object>(finalFireAtUtc, state: null!, cancellationToken);
     }
 
+    /// <inheritdoc/>
     public override Task<T> WaitForExternalEvent<T>(string eventName, CancellationToken cancellationToken = default)
     {
         // Return immediately if this external event has already arrived.
@@ -237,41 +238,18 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             this.externalEventSources.Add(eventName, eventSource);
         }
 
+        // TODO: this needs to be tracked and disposed appropriately.
         cancellationToken.Register(() => eventSource.TrySetCanceled(cancellationToken));
         return eventSource.Task;
     }
 
-    internal void CompleteExternalEvent(string eventName, string rawEventPayload)
-    {
-        if (this.externalEventSources.TryGetValue(eventName, out IEventSource? waiter))
-        {
-            object? value = this.DataConverter.Deserialize(rawEventPayload, waiter.EventType);
-
-            // Events are completed in FIFO order. Remove the key if the last event was delivered.
-            if (waiter.Next == null)
-            {
-                this.externalEventSources.Remove(eventName);
-            }
-            else
-            {
-                this.externalEventSources[eventName] = waiter.Next;
-            }
-
-            waiter.TrySetResult(value);
-        }
-        else
-        {
-            // The orchestrator isn't waiting for this event (yet?). Save it in case
-            // the orchestrator wants it later.
-            this.externalEventBuffer.Add(eventName, rawEventPayload);
-        }
-    }
-
+    /// <inheritdoc/>
     public override void SendEvent(string instanceId, string eventName, object eventData)
     {
         this.innerContext.SendEvent(new OrchestrationInstance { InstanceId = instanceId }, eventName, eventData);
     }
 
+    /// <inheritdoc/>
     public override void SetCustomStatus(object? customStatus)
     {
         this.customStatus = customStatus;
@@ -293,6 +271,7 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         }
     }
 
+    /// <inheritdoc/>
     public override Guid NewGuid()
     {
         static void SwapByteArrayValues(byte[] byteArray)
@@ -349,7 +328,56 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         return new Guid(newGuidByteArray);
     }
 
-    internal string? GetDeserializedCustomStatus()
+    /// <summary>
+    /// Invokes all queued local activity calls.
+    /// </summary>
+    internal void ExecuteLocalActivityCalls()
+    {
+        while (this.localActivityCalls.Count > 0)
+        {
+            Action localActivityLambda = this.localActivityCalls.Dequeue();
+
+            // Exceptions are never expected to escape here
+            localActivityLambda.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Completes the external event by name, allowing the orchestration to continue if it is waiting on this event.
+    /// </summary>
+    /// <param name="eventName">The name of the event to complete.</param>
+    /// <param name="rawEventPayload">The serialized event payload.</param>
+    internal void CompleteExternalEvent(string eventName, string rawEventPayload)
+    {
+        if (this.externalEventSources.TryGetValue(eventName, out IEventSource? waiter))
+        {
+            object? value = this.DataConverter.Deserialize(rawEventPayload, waiter.EventType);
+
+            // Events are completed in FIFO order. Remove the key if the last event was delivered.
+            if (waiter.Next == null)
+            {
+                this.externalEventSources.Remove(eventName);
+            }
+            else
+            {
+                this.externalEventSources[eventName] = waiter.Next;
+            }
+
+            waiter.TrySetResult(value);
+        }
+        else
+        {
+            // The orchestrator isn't waiting for this event (yet?). Save it in case
+            // the orchestrator wants it later.
+            this.externalEventBuffer.Add(eventName, rawEventPayload);
+        }
+    }
+
+    /// <summary>
+    /// Gets the serialized custom status.
+    /// </summary>
+    /// <returns>The custom status serialized to a string, or <c>null</c> if there is not custom status.</returns>
+    internal string? GetSerializedCustomStatus()
     {
         return this.DataConverter.Serialize(this.customStatus);
     }
@@ -403,83 +431,6 @@ sealed class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                     throw;
                 }
             }
-        }
-    }
-
-    class EventTaskCompletionSource<T> : TaskCompletionSource<T>, IEventSource
-    {
-        /// <inheritdoc/>
-        public Type EventType => typeof(T);
-
-        /// <inheritdoc/>
-        public IEventSource? Next { get; set; }
-
-        /// <inheritdoc/>
-        void IEventSource.TrySetResult(object result) => this.TrySetResult((T)result);
-    }
-
-    interface IEventSource
-    {
-        /// <summary>
-        /// The type of the event stored in the completion source.
-        /// </summary>
-        Type EventType { get; }
-
-        /// <summary>
-        /// The next task completion source in the stack.
-        /// </summary>
-        IEventSource? Next { get; set; }
-
-        /// <summary>
-        /// Tries to set the result on tcs.
-        /// </summary>
-        /// <param name="result">The result.</param>
-        void TrySetResult(object result);
-    }
-
-    class NamedQueue<TValue>
-    {
-        readonly Dictionary<string, Queue<TValue>> buffers = new(StringComparer.OrdinalIgnoreCase);
-
-        public void Add(string name, TValue value)
-        {
-            if (!this.buffers.TryGetValue(name, out Queue<TValue>? queue))
-            {
-                queue = new Queue<TValue>();
-                this.buffers[name] = queue;
-            }
-
-            queue.Enqueue(value);
-        }
-
-        public bool TryTake(string name, [NotNullWhen(true)] out TValue? value)
-        {
-            if (this.buffers.TryGetValue(name, out Queue<TValue>? queue))
-            {
-                value = queue.Dequeue()!;
-                if (queue.Count == 0)
-                {
-                    this.buffers.Remove(name);
-                }
-
-                return true;
-            }
-
-            value = default;
-            return false;
-        }
-
-        public IEnumerable<(string eventName, TValue eventPayload)> TakeAll()
-        {
-            foreach ((string eventName, Queue<TValue> eventPayloads) in this.buffers)
-            {
-                foreach (TValue payload in eventPayloads)
-                {
-                    yield return (eventName, payload);
-                }
-            }
-
-            this.buffers.Clear();
         }
     }
 }

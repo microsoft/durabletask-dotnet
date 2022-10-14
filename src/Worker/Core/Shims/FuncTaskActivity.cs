@@ -47,5 +47,4 @@ public static class FuncTaskActivity
             return this.implementation(context, input);
         }
     }
-
 }

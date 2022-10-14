@@ -5,10 +5,10 @@ using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.History;
 using Grpc.Core;
-using Microsoft.Extensions.Logging;
 using Microsoft.DurableTask.Worker.Shims;
-using P = Microsoft.DurableTask.Protobuf;
+using Microsoft.Extensions.Logging;
 using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc;
 
@@ -197,7 +197,8 @@ sealed partial class GrpcDurableTaskWorker
 
                 if (this.worker.Factory.TryCreateOrchestrator(name, out ITaskOrchestrator? orchestrator))
                 {
-                    // Both the factory invocation and the ExecuteAsync could involve user code and need to be handled as part of try/catch.
+                    // Both the factory invocation and the ExecuteAsync could involve user code and need to be handled
+                    // as part of try/catch.
                     ParentOrchestrationInstance? parent = runtimeState.ParentInstance switch
                     {
                         ParentInstance p => new(new(p.Name, p.Version), p.OrchestrationInstance.InstanceId),
@@ -268,7 +269,7 @@ sealed partial class GrpcDurableTaskWorker
 
         async Task OnRunActivityAsync(P.ActivityRequest request)
         {
-            OrchestrationInstance instance = ProtoUtils.ConvertOrchestrationInstance(request.OrchestrationInstance);
+            OrchestrationInstance instance = request.OrchestrationInstance.ToCore();
             string rawInput = request.Input;
 
             int inputSize = rawInput != null ? Encoding.UTF8.GetByteCount(rawInput) : 0;
@@ -285,7 +286,8 @@ sealed partial class GrpcDurableTaskWorker
                 // TODO: start new service scope for activity.
                 if (this.worker.Factory.TryCreateActivity(name, this.worker.services, out ITaskActivity? activity))
                 {
-                    // Both the factory invocation and the RunAsync could involve user code and need to be handled as part of try/catch.
+                    // Both the factory invocation and the RunAsync could involve user code and need to be handled as
+                    // part of try/catch.
                     TaskActivity shim = this.shimFactory.CreateActivity(name, activity);
                     output = await shim.RunAsync(innerContext, request.Input);
                 }
@@ -312,7 +314,7 @@ sealed partial class GrpcDurableTaskWorker
             int outputSizeInBytes = 0;
             if (failureDetails != null)
             {
-                outputSizeInBytes = ProtoUtils.GetApproximateByteCount(failureDetails);
+                outputSizeInBytes = failureDetails.GetApproximateByteCount();
             }
             else if (output != null)
             {
@@ -320,7 +322,8 @@ sealed partial class GrpcDurableTaskWorker
             }
 
             string successOrFailure = failureDetails != null ? "failure" : "success";
-            this.Logger.SendingActivityResponse(successOrFailure, name, request.TaskId, instance.InstanceId, outputSizeInBytes);
+            this.Logger.SendingActivityResponse(
+                successOrFailure, name, request.TaskId, instance.InstanceId, outputSizeInBytes);
 
             P.ActivityResponse response = new()
             {

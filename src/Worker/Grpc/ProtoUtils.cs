@@ -14,8 +14,17 @@ using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc;
 
+/// <summary>
+/// Protobuf utilities and helpers.
+/// </summary>
 static class ProtoUtils
 {
+    /// <summary>
+    /// Converts a history event from <see cref="P.HistoryEvent" /> to <see cref="HistoryEvent" />.
+    /// </summary>
+    /// <param name="proto">The proto history event to converter.</param>
+    /// <returns>The converted history event.</returns>
+    /// <exception cref="NotSupportedException">When the provided history event type is not supported.</exception>
     internal static HistoryEvent ConvertHistoryEvent(P.HistoryEvent proto)
     {
         HistoryEvent historyEvent;
@@ -29,12 +38,12 @@ static class ProtoUtils
                 {
                     Name = proto.ExecutionStarted.Name,
                     Version = proto.ExecutionStarted.Version,
-                    OrchestrationInstance = ConvertOrchestrationInstance(proto.ExecutionStarted.OrchestrationInstance),
+                    OrchestrationInstance = proto.ExecutionStarted.OrchestrationInstance.ToCore(),
                     ParentInstance = proto.ExecutionStarted.ParentInstance == null ? null : new ParentInstance
                     {
                         Name = proto.ExecutionStarted.ParentInstance.Name,
                         Version = proto.ExecutionStarted.ParentInstance.Version,
-                        OrchestrationInstance = ConvertOrchestrationInstance(proto.ExecutionStarted.ParentInstance.OrchestrationInstance),
+                        OrchestrationInstance = proto.ExecutionStarted.ParentInstance.OrchestrationInstance.ToCore(),
                         TaskScheduleId = proto.ExecutionStarted.ParentInstance.TaskScheduledId,
                     },
                     Correlation = proto.ExecutionStarted.CorrelationData,
@@ -45,7 +54,7 @@ static class ProtoUtils
                 historyEvent = new ExecutionCompletedEvent(
                     proto.EventId,
                     proto.ExecutionCompleted.Result,
-                    ConvertOrchestrationRuntimeStatus(proto.ExecutionCompleted.OrchestrationStatus));
+                    proto.ExecutionCompleted.OrchestrationStatus.ToCore());
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated:
                 historyEvent = new ExecutionTerminatedEvent(proto.EventId, proto.ExecutionTerminated.Input);
@@ -69,7 +78,7 @@ static class ProtoUtils
                     proto.TaskFailed.TaskScheduledId,
                     reason: null,  /* not supported */
                     details: null, /* not supported */
-                    ConvertFailureDetails(proto.TaskFailed.FailureDetails));
+                    proto.TaskFailed.FailureDetails.ToCore());
                 break;
             case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated:
                 historyEvent = new SubOrchestrationInstanceCreatedEvent(proto.EventId)
@@ -90,9 +99,9 @@ static class ProtoUtils
                 historyEvent = new SubOrchestrationInstanceFailedEvent(
                     proto.EventId,
                     proto.SubOrchestrationInstanceFailed.TaskScheduledId,
-                    reason: null  /* not supported */,
+                    reason: null /* not supported */,
                     details: null /* not supported */,
-                    ConvertFailureDetails(proto.SubOrchestrationInstanceFailed.FailureDetails));
+                    proto.SubOrchestrationInstanceFailed.FailureDetails.ToCore());
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TimerCreated:
                 historyEvent = new TimerCreatedEvent(
@@ -150,13 +159,18 @@ static class ProtoUtils
                     });
                 break;
             default:
-                throw new NotImplementedException($"Deserialization of {proto.EventTypeCase} is not implemented.");
+                throw new NotSupportedException($"Deserialization of {proto.EventTypeCase} is not supported.");
         }
 
         historyEvent.Timestamp = proto.Timestamp.ToDateTime();
         return historyEvent;
     }
 
+    /// <summary>
+    /// Converts a <see cref="DateTime" /> to a gRPC <see cref="Timestamp" />.
+    /// </summary>
+    /// <param name="dateTime">The date-time to convert.</param>
+    /// <returns>The gRPC timestamp.</returns>
     internal static Timestamp ToTimestamp(this DateTime dateTime)
     {
         // The protobuf libraries require timestamps to be in UTC
@@ -172,14 +186,37 @@ static class ProtoUtils
         return Timestamp.FromDateTime(dateTime);
     }
 
+    /// <summary>
+    /// Converts a <see cref="DateTime" /> to a gRPC <see cref="Timestamp" />.
+    /// </summary>
+    /// <param name="dateTime">The date-time to convert.</param>
+    /// <returns>The gRPC timestamp.</returns>
     internal static Timestamp? ToTimestamp(this DateTime? dateTime)
         => dateTime.HasValue ? dateTime.Value.ToTimestamp() : null;
 
+    /// <summary>
+    /// Converts a <see cref="DateTimeOffset" /> to a gRPC <see cref="Timestamp" />.
+    /// </summary>
+    /// <param name="dateTime">The date-time to convert.</param>
+    /// <returns>The gRPC timestamp.</returns>
     internal static Timestamp ToTimestamp(this DateTimeOffset dateTime) => Timestamp.FromDateTimeOffset(dateTime);
 
+    /// <summary>
+    /// Converts a <see cref="DateTimeOffset" /> to a gRPC <see cref="Timestamp" />.
+    /// </summary>
+    /// <param name="dateTime">The date-time to convert.</param>
+    /// <returns>The gRPC timestamp.</returns>
     internal static Timestamp? ToTimestamp(this DateTimeOffset? dateTime)
         => dateTime.HasValue ? dateTime.Value.ToTimestamp() : null;
 
+    /// <summary>
+    /// Constructs a <see cref="P.OrchestratorResponse" />.
+    /// </summary>
+    /// <param name="instanceId">The orchestrator instance ID.</param>
+    /// <param name="customStatus">The orchestrator customer status or <c>null</c> if no custom status.</param>
+    /// <param name="actions">The orchestrator actions.</param>
+    /// <returns>The orchestrator response.</returns>
+    /// <exception cref="NotSupportedException">When an orchestrator action is unknown.</exception>
     internal static P.OrchestratorResponse ConstructOrchestratorResponse(
         string instanceId,
         string? customStatus,
@@ -227,12 +264,13 @@ static class ProtoUtils
                     var sendEventAction = (SendEventOrchestratorAction)action;
                     if (sendEventAction.Instance == null)
                     {
-                        throw new ArgumentException($"{nameof(SendEventOrchestratorAction)} cannot have a null Instance property!");
+                        throw new ArgumentException(
+                            $"{nameof(SendEventOrchestratorAction)} cannot have a null Instance property!");
                     }
 
                     protoAction.SendEvent = new P.SendEventAction
                     {
-                        Instance = ConvertOrchestrationInstance(sendEventAction.Instance),
+                        Instance = sendEventAction.Instance.ToProtobuf(),
                         Name = sendEventAction.EventName,
                         Data = sendEventAction.EventData,
                     };
@@ -247,17 +285,18 @@ static class ProtoUtils
                         },
                         Details = completeAction.Details,
                         NewVersion = completeAction.NewVersion,
-                        OrchestrationStatus = ConvertOrchestrationRuntimeStatus(completeAction.OrchestrationStatus),
+                        OrchestrationStatus = completeAction.OrchestrationStatus.ToProtobuf(),
                         Result = completeAction.Result,
                     };
 
                     if (completeAction.OrchestrationStatus == OrchestrationStatus.Failed)
                     {
-                        protoAction.CompleteOrchestration.FailureDetails = ConvertFailureDetails(completeAction.FailureDetails);
+                        protoAction.CompleteOrchestration.FailureDetails = completeAction.FailureDetails.ToProtobuf();
                     }
+
                     break;
                 default:
-                    throw new NotImplementedException($"Unknown orchestrator action: {action.OrchestratorActionType}");
+                    throw new NotSupportedException($"Unknown orchestrator action: {action.OrchestratorActionType}");
             }
 
             response.Actions.Add(protoAction);
@@ -266,100 +305,42 @@ static class ProtoUtils
         return response;
     }
 
-    internal static P.ActivityResponse ConstructActivityResponse(
-        string instanceId,
-        int taskId,
-        string? serializedOutput)
-    {
-        return new P.ActivityResponse
-        {
-            InstanceId = instanceId,
-            TaskId = taskId,
-            Result = serializedOutput,
-        };
-    }
-
-    static P.OrchestrationStatus ConvertOrchestrationRuntimeStatus(OrchestrationStatus status)
-    {
-        return(P.OrchestrationStatus)status;
-    }
-
-    internal static OrchestrationStatus ConvertOrchestrationRuntimeStatus(P.OrchestrationStatus status)
+    /// <summary>
+    /// Converts a <see cref="P.OrchestrationStatus" /> to a <see cref="OrchestrationStatus" />.
+    /// </summary>
+    /// <param name="status">The status to convert.</param>
+    /// <returns>The converted status.</returns>
+    internal static OrchestrationStatus ToCore(this P.OrchestrationStatus status)
     {
         return (OrchestrationStatus)status;
     }
 
-    [return: NotNullIfNotNull("instanceProto")]
-    internal static OrchestrationInstance? ConvertOrchestrationInstance(P.OrchestrationInstance? instanceProto)
+    /// <summary>
+    /// Converts a <see cref="P.OrchestrationStatus" /> to a <see cref="OrchestrationStatus" />.
+    /// </summary>
+    /// <param name="status">The status to convert.</param>
+    /// <returns>The converted status.</returns>
+    [return: NotNullIfNotNull("status")]
+    internal static OrchestrationInstance? ToCore(this P.OrchestrationInstance? status)
     {
-        if (instanceProto == null)
+        if (status == null)
         {
             return null;
         }
 
         return new OrchestrationInstance
         {
-            InstanceId = instanceProto.InstanceId,
-            ExecutionId = instanceProto.ExecutionId,
+            InstanceId = status.InstanceId,
+            ExecutionId = status.ExecutionId,
         };
     }
 
-    static P.OrchestrationInstance ConvertOrchestrationInstance(OrchestrationInstance instance)
-    {
-        return new P.OrchestrationInstance
-        {
-            InstanceId = instance.InstanceId,
-            ExecutionId = instance.ExecutionId,
-        };
-    }
-
-    static FailureDetails? ConvertFailureDetails(P.TaskFailureDetails? failureDetails)
-    {
-        if (failureDetails == null)
-        {
-            return null;
-        }
-
-        return new FailureDetails(
-            failureDetails.ErrorType,
-            failureDetails.ErrorMessage,
-            failureDetails.StackTrace,
-            ConvertFailureDetails(failureDetails.InnerFailure),
-            failureDetails.IsNonRetriable);
-    }
-
-    internal static TaskFailureDetails? ConvertTaskFailureDetails(P.TaskFailureDetails? failureDetails)
-    {
-        if (failureDetails == null)
-        {
-            return null;
-        }
-
-        return new TaskFailureDetails(
-            failureDetails.ErrorType,
-            failureDetails.ErrorMessage,
-            failureDetails.StackTrace,
-            ConvertTaskFailureDetails(failureDetails.InnerFailure));
-    }
-
-    static P.TaskFailureDetails? ConvertFailureDetails(FailureDetails? failureDetails)
-    {
-        if (failureDetails == null)
-        {
-            return null;
-        }
-
-        return new P.TaskFailureDetails
-        {
-            ErrorType = failureDetails.ErrorType ?? "(unkown)",
-            ErrorMessage = failureDetails.ErrorMessage ?? "(unkown)",
-            StackTrace = failureDetails.StackTrace,
-            IsNonRetriable = failureDetails.IsNonRetriable,
-            InnerFailure = ConvertFailureDetails(failureDetails.InnerFailure),
-        };
-    }
-
-    internal static P.TaskFailureDetails? ToTaskFailureDetails(Exception? e)
+    /// <summary>
+    /// Converts a <see cref="Exception" /> to <see cref="P.TaskFailureDetails" />.
+    /// </summary>
+    /// <param name="e">The exception to convert.</param>
+    /// <returns>The task failure details.</returns>
+    internal static P.TaskFailureDetails? ToTaskFailureDetails(this Exception? e)
     {
         if (e == null)
         {
@@ -371,11 +352,16 @@ static class ProtoUtils
             ErrorType = e.GetType().FullName,
             ErrorMessage = e.Message,
             StackTrace = e.StackTrace,
-            InnerFailure = ToTaskFailureDetails(e.InnerException),
+            InnerFailure = e.InnerException.ToTaskFailureDetails(),
         };
     }
 
-    internal static int GetApproximateByteCount(P.TaskFailureDetails failureDetails)
+    /// <summary>
+    /// Gets the approximate byte count for a <see cref="P.TaskFailureDetails" />.
+    /// </summary>
+    /// <param name="failureDetails">The failure details.</param>
+    /// <returns>The approximate byte count.</returns>
+    internal static int GetApproximateByteCount(this P.TaskFailureDetails failureDetails)
     {
         // Protobuf strings are always UTF-8: https://developers.google.com/protocol-buffers/docs/proto3#scalar
         Encoding encoding = Encoding.UTF8;
@@ -398,13 +384,21 @@ static class ProtoUtils
 
         if (failureDetails.InnerFailure != null)
         {
-            byteCount += GetApproximateByteCount(failureDetails.InnerFailure);
+            byteCount += failureDetails.InnerFailure.GetApproximateByteCount();
         }
 
         return byteCount;
     }
 
-    internal static T Base64Decode<T>(string encodedMessage, MessageParser parser) where T : IMessage
+    /// <summary>
+    /// Decode a protobuf message from a base64 string.
+    /// </summary>
+    /// <typeparam name="T">The type to decode to.</typeparam>
+    /// <param name="parser">The message parser.</param>
+    /// <param name="encodedMessage">The base64 encoded message.</param>
+    /// <returns>The decoded message.</returns>
+    /// <exception cref="ArgumentException">If decoding fails.</exception>
+    internal static T Base64Decode<T>(this MessageParser parser, string encodedMessage) where T : IMessage
     {
         // Decode the base64 in a way that doesn't allocate a byte[] on each request
         int encodedByteCount = Encoding.UTF8.GetByteCount(encodedMessage);
@@ -420,7 +414,8 @@ static class ProtoUtils
                 out int bytesWritten);
             if (status != OperationStatus.Done)
             {
-                throw new ArgumentException($"Failed to base64-decode the '{typeof(T).Name}' payload: {status}", nameof(encodedMessage));
+                throw new ArgumentException(
+                    $"Failed to base64-decode the '{typeof(T).Name}' payload: {status}", nameof(encodedMessage));
             }
 
             return (T)parser.ParseFrom(buffer, 0, bytesWritten);
@@ -429,5 +424,51 @@ static class ProtoUtils
         {
             ArrayPool<byte>.Shared.Return(buffer);
         }
+    }
+
+    static P.OrchestrationStatus ToProtobuf(this OrchestrationStatus status)
+    {
+        return (P.OrchestrationStatus)status;
+    }
+
+    static P.OrchestrationInstance ToProtobuf(this OrchestrationInstance instance)
+    {
+        return new P.OrchestrationInstance
+        {
+            InstanceId = instance.InstanceId,
+            ExecutionId = instance.ExecutionId,
+        };
+    }
+
+    static FailureDetails? ToCore(this P.TaskFailureDetails? failureDetails)
+    {
+        if (failureDetails == null)
+        {
+            return null;
+        }
+
+        return new FailureDetails(
+            failureDetails.ErrorType,
+            failureDetails.ErrorMessage,
+            failureDetails.StackTrace,
+            failureDetails.InnerFailure.ToCore(),
+            failureDetails.IsNonRetriable);
+    }
+
+    static P.TaskFailureDetails? ToProtobuf(this FailureDetails? failureDetails)
+    {
+        if (failureDetails == null)
+        {
+            return null;
+        }
+
+        return new P.TaskFailureDetails
+        {
+            ErrorType = failureDetails.ErrorType ?? "(unknown)",
+            ErrorMessage = failureDetails.ErrorMessage ?? "(unknown)",
+            StackTrace = failureDetails.StackTrace,
+            IsNonRetriable = failureDetails.IsNonRetriable,
+            InnerFailure = failureDetails.InnerFailure.ToProtobuf(),
+        };
     }
 }

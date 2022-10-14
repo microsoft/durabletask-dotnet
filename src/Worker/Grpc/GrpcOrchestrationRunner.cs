@@ -74,13 +74,11 @@ public static class GrpcOrchestrationRunner
             throw new ArgumentNullException(nameof(implementation));
         }
 
-        P.OrchestratorRequest request = ProtoUtils.Base64Decode<P.OrchestratorRequest>(
-            encodedOrchestratorRequest,
-            P.OrchestratorRequest.Parser);
+        P.OrchestratorRequest request = P.OrchestratorRequest.Parser.Base64Decode<P.OrchestratorRequest>(
+            encodedOrchestratorRequest);
 
         List<HistoryEvent> pastEvents = request.PastEvents.Select(ProtoUtils.ConvertHistoryEvent).ToList();
         IEnumerable<HistoryEvent> newEvents = request.NewEvents.Select(ProtoUtils.ConvertHistoryEvent);
-
 
         // Re-construct the orchestration state from the history.
         // New events must be added using the AddEvent method.

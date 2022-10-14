@@ -5,6 +5,7 @@
     <PackageDescription>The core worker for the Durable Task Framework.
 
 The worker is responsible for processing durable task work items.</PackageDescription>
+    <EnableStyleCop>true</EnableStyleCop>
   </PropertyGroup>
 
   <!-- Version info -->

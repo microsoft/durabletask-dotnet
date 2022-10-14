@@ -18,7 +18,12 @@ public sealed class DurableTaskRegistry
     readonly ImmutableDictionary<TaskName, Func<ITaskOrchestrator>>.Builder orchestratorsBuilder
         = ImmutableDictionary.CreateBuilder<TaskName, Func<ITaskOrchestrator>>();
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Registers an activity as a synchronous (blocking) lambda function that doesn't take any input nor returns any output.
+    /// </summary>
+    /// <param name="name">The name of the activity.</param>
+    /// <param name="implementation">The lambda function to invoke when the activity is called.</param>
+    /// <returns>Returns this <see cref="IDurableTaskRegistry"/> instance.</returns>
     public DurableTaskRegistry AddActivity(TaskName name, Action<TaskActivityContext> implementation)
     {
         return this.AddActivity<object?, object?>(name, (context, _) =>

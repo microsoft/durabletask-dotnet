@@ -5,22 +5,29 @@ using DurableTask.Core;
 
 namespace Microsoft.DurableTask.Worker.Shims;
 
+/// <summary>
+/// Shims a <see cref="ITaskActivity" /> to a <see cref="TaskActivity" />.
+/// </summary>
 class TaskActivityShim : TaskActivity
 {
     readonly ITaskActivity implementation;
     readonly DataConverter dataConverter;
     readonly TaskName name;
 
-    public TaskActivityShim(
-        DataConverter dataConverter,
-        TaskName name,
-        ITaskActivity implementation)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TaskActivityShim"/> class.
+    /// </summary>
+    /// <param name="dataConverter">The data converter.</param>
+    /// <param name="name">The name of the activity.</param>
+    /// <param name="implementation">The activity implementation to wrap.</param>
+    public TaskActivityShim(DataConverter dataConverter, TaskName name, ITaskActivity implementation)
     {
         this.dataConverter = dataConverter;
         this.name = name;
         this.implementation = implementation;
     }
 
+    /// <inheritdoc/>
     public override async Task<string?> RunAsync(TaskContext coreContext, string? rawInput)
     {
         string? strippedRawInput = StripArrayCharacters(rawInput);
@@ -33,7 +40,8 @@ class TaskActivityShim : TaskActivity
         return serializedOutput;
     }
 
-    // Not used/called
+    /// <inheritdoc/>
+    /// <remarks>Not used/called.</remarks>
     public override string Run(TaskContext context, string input) => throw new NotImplementedException();
 
     static string? StripArrayCharacters(string? input)

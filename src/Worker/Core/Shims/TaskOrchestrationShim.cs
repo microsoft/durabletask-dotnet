@@ -57,7 +57,7 @@ partial class TaskOrchestrationShim : TaskOrchestration
     /// <inheritdoc/>
     public override string? GetStatus()
     {
-        return this.wrapperContext?.GetDeserializedCustomStatus();
+        return this.wrapperContext?.GetSerializedCustomStatus();
     }
 
     /// <inheritdoc/>

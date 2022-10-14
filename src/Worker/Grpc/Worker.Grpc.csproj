@@ -3,6 +3,7 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <PackageDescription>The gRPC worker for the Durable Task Framework.</PackageDescription>
+    <EnableStyleCop>true</EnableStyleCop>
   </PropertyGroup>
 
   <!-- Version info -->

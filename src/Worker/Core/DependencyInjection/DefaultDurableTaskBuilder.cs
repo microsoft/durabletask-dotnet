@@ -15,7 +15,7 @@ public class DefaultDurableTaskBuilder : IDurableTaskBuilder
     Type? buildTarget;
 
     /// <summary>
-    /// Initializes a new instance of <see cref="DefaultDurableTaskBuilder" />.
+    /// Initializes a new instance of the <see cref="DefaultDurableTaskBuilder" /> class.
     /// </summary>
     /// <param name="services">The service collection for this builder.</param>
     /// <param name="name">The name for this builder.</param>

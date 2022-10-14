@@ -47,5 +47,4 @@ public static class FuncTaskOrchestrator
             return this.implementation(context, input);
         }
     }
-
 }

@@ -14,7 +14,7 @@ public sealed class DurableTaskFactory
     readonly IReadOnlyDictionary<TaskName, Func<ITaskOrchestrator>> orchestrators;
 
     /// <summary>
-    /// Initializes a new instance of <see cref="DurableTaskFactory" />.
+    /// Initializes a new instance of the <see cref="DurableTaskFactory" /> class.
     /// </summary>
     /// <param name="activities">The activity factories.</param>
     /// <param name="orchestrators">The orchestrator factories.</param>

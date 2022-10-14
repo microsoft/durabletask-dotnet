@@ -11,7 +11,7 @@ namespace Microsoft.DurableTask.Worker.Hosting;
 public abstract class DurableTaskWorker : BackgroundService
 {
     /// <summary>
-    /// Initializes a new instance of <see cref="DurableTaskWorker" />
+    /// Initializes a new instance of the <see cref="DurableTaskWorker" /> class.
     /// </summary>
     /// <param name="name">The name of the worker.</param>
     /// <param name="factory">The durable factory.</param>

@@ -45,7 +45,8 @@ public abstract class TaskOrchestrationContext
     /// Orchestrator functions are "replayed" after being unloaded from memory to reconstruct local variable state.
     /// During a replay, previously executed tasks will be completed automatically with previously seen values
     /// that are stored in the orchestration history. One the orchestrator reaches the point in the orchestrator
-    /// where it's no longer replaying existing history, the <see cref="IsReplaying"/> property will return <c>false</c>.
+    /// where it's no longer replaying existing history, the <see cref="IsReplaying"/> property will return
+    /// <c>false</c>.
     /// </para><para>
     /// You can use this property if you have logic that needs to run only when <em>not</em> replaying. For example,
     /// certain types of application logging may become too noisy when duplicated as part of replay. The
@@ -107,7 +108,10 @@ public abstract class TaskOrchestrationContext
         return this.CallActivityAsync<object>(name, input, options);
     }
 
-    /// <returns>A task that completes when the activity completes or fails. The result of the task is the activity's return value.</returns>
+    /// <returns>
+    /// A task that completes when the activity completes or fails. The result of the task is the activity's return
+    /// value.
+    /// </returns>
     /// <inheritdoc cref="CallActivityAsync"/>
     public abstract Task<T> CallActivityAsync<T>(TaskName name, object? input = null, TaskOptions? options = null);
 
@@ -123,7 +127,8 @@ public abstract class TaskOrchestrationContext
     /// </remarks>
     /// <inheritdoc cref="CallActivityAsync{T}(TaskName, object?, TaskOptions?)"/>
     [Obsolete("This method is not yet fully implemented")]
-    public abstract Task<T> CallActivityAsync<T>(Func<object?, T> activityLambda, object? input = null, TaskOptions? options = null);
+    public abstract Task<T> CallActivityAsync<T>(
+        Func<object?, T> activityLambda, object? input = null, TaskOptions? options = null);
 
     /// <summary>
     /// Creates a durable timer that expires after the specified delay.
@@ -183,7 +188,8 @@ public abstract class TaskOrchestrationContext
     /// <param name="cancellationToken">A <c>CancellationToken</c> to use to abort waiting for the event.</param>
     /// <typeparam name="T">Any serializable type that represents the event payload.</typeparam>
     /// <returns>
-    /// A task that completes when the external event is received. The value of the task is the deserialized event payload.
+    /// A task that completes when the external event is received. The value of the task is the deserialized event
+    /// payload.
     /// </returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown if the calling thread is anything other than the main orchestrator thread.
@@ -270,19 +276,26 @@ public abstract class TaskOrchestrationContext
     /// <remarks>
     /// <para>
     /// In addition to activities, orchestrators can schedule other orchestrators, creating <i>sub-orchestrations</i>.
-    /// A sub-orchestration has its own instance ID, history, and status that is independent of the parent orchestrator that started it.
+    /// A sub-orchestration has its own instance ID, history, and status that is independent of the parent orchestrator
+    /// that started it.
     /// </para><para>
     /// Sub-orchestrations have many benefits:
     /// <list type="bullet">
-    ///  <item>You can split large orchestrations into a series of smaller sub-orchestrations, making your code more maintainable.</item>
-    ///  <item>You can distribute orchestration logic across multiple compute nodes concurrently, which is useful if your orchestration logic otherwise needs to coordinate a lot of tasks.</item>
-    ///  <item>You can reduce memory usage and CPU overhead by keeping the history of parent orchestrations smaller.</item>
+    ///  <item>You can split large orchestrations into a series of smaller sub-orchestrations, making your code more
+    ///  maintainable.</item>
+    ///  <item>You can distribute orchestration logic across multiple compute nodes concurrently, which is useful if
+    ///  your orchestration logic otherwise needs to coordinate a lot of tasks.</item>
+    ///  <item>You can reduce memory usage and CPU overhead by keeping the history of parent orchestrations smaller.
+    ///  </item>
     /// </list>
     /// </para><para>
-    /// The return value of a sub-orchestration is its output. If a sub-orchestration fails with an exception, then that exception will be surfaced to the parent orchestration, just like it is when an activity task fails with an exception. Sub-orchestrations also support automatic retry policies.
+    /// The return value of a sub-orchestration is its output. If a sub-orchestration fails with an exception, then that
+    /// exception will be surfaced to the parent orchestration, just like it is when an activity task fails with an
+    /// exception. Sub-orchestrations also support automatic retry policies.
     /// </para><para>
-    /// Because sub-orchestrations are independent of their parents, terminating a parent orchestration does not affect any sub-orchestrations.
-    /// You must terminate each sub-orchestration independently using its instance ID, which is specified using the <paramref name="instanceId"/>
+    /// Because sub-orchestrations are independent of their parents, terminating a parent orchestration does not affect
+    /// any sub-orchestrations. You must terminate each sub-orchestration independently using its instance ID, which is
+    /// specified using the <paramref name="instanceId"/>
     /// parameter.
     /// </para>
     /// </remarks>
@@ -291,7 +304,9 @@ public abstract class TaskOrchestrationContext
     /// A unique ID to use for the sub-orchestration instance. If not specified, a random instance ID will be generated.
     /// </param>
     /// <param name="input">The serializable input to pass to the sub-orchestrator.</param>
-    /// <param name="options">Additional options that control the execution and processing of the sub-orchestrator.</param>
+    /// <param name="options">
+    /// Additional options that control the execution and processing of the sub-orchestrator.
+    /// </param>
     /// <returns>A task that completes when the sub-orchestrator completes or fails.</returns>
     /// <exception cref="ArgumentException">The specified orchestrator does not exist.</exception>
     /// <exception cref="InvalidOperationException">
@@ -386,7 +401,12 @@ public abstract class TaskOrchestrationContext
 
         public bool IsEnabled(LogLevel logLevel) => this.logger.IsEnabled(logLevel);
 
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
         {
             if (!this.context.IsReplaying)
             {

@@ -12,7 +12,8 @@ namespace Microsoft.DurableTask;
 /// <param name="ErrorMessage">A summary description of the failure.</param>
 /// <param name="StackTrace">The stack trace of the failure.</param>
 /// <param name="InnerFailure">The inner cause of the task failure.</param>
-public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? StackTrace, TaskFailureDetails? InnerFailure)
+public record TaskFailureDetails(
+    string ErrorType, string ErrorMessage, string? StackTrace, TaskFailureDetails? InnerFailure)
 {
     Type? exceptionType;
 
@@ -34,7 +35,10 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
     /// for any reason, this method will return <c>false</c>. Base types are supported.
     /// </remarks>
     /// <typeparam name="T">The type of exception to test against.</typeparam>
-    /// <returns>Returns <c>true</c> if the <see cref="ErrorType"/> value matches <typeparamref name="T"/>; <c>false</c> otherwise.</returns>
+    /// <returns>
+    /// Returns <c>true</c> if the <see cref="ErrorType"/> value matches <typeparamref name="T"/>; <c>false</c>
+    /// otherwise.
+    /// </returns>
     public bool IsCausedBy<T>() where T : Exception
     {
         this.exceptionType ??= Type.GetType(this.ErrorType, throwOnError: false);
@@ -44,11 +48,12 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
     /// <summary>
     /// Creates a task failure details from an <see cref="Exception" />.
     /// </summary>
-    /// <param name="e">The exception to use.</param>
+    /// <param name="exception">The exception to use.</param>
     /// <returns>A new task failure details.</returns>
-    public static TaskFailureDetails FromException(Exception e)
+    public static TaskFailureDetails FromException(Exception exception)
     {
-        if (e is CoreOrchestrationException coreEx)
+        Check.NotNull(exception);
+        if (exception is CoreOrchestrationException coreEx)
         {
             return new TaskFailureDetails(
                 coreEx.FailureDetails?.ErrorType ?? "(unknown)",
@@ -58,6 +63,6 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
         }
 
         // TODO: consider populating inner details.
-        return new TaskFailureDetails(e.GetType().ToString(), e.Message, null, null);
+        return new TaskFailureDetails(exception.GetType().ToString(), exception.Message, null, null);
     }
 }

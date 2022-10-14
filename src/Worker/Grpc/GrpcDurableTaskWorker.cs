@@ -36,9 +36,9 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         ILoggerFactory loggerFactory)
         : base(name, factory, options)
     {
-        this.grpcOptions = grpcOptions.Get(name);
-        this.services = services;
-        this.loggerFactory = loggerFactory;
+        this.grpcOptions = Check.NotNull(grpcOptions).Get(name);
+        this.services = Check.NotNull(services);
+        this.loggerFactory = Check.NotNull(loggerFactory);
         this.logger = loggerFactory.CreateLogger("Microsoft.DurableTask"); // TODO: use better category name.
     }
 

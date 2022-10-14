@@ -17,11 +17,11 @@ public abstract class DurableTaskWorker : BackgroundService
     /// <param name="factory">The durable factory.</param>
     /// <param name="options">The worker options.</param>
     protected DurableTaskWorker(
-        string name, DurableTaskFactory factory, DurableTaskWorkerOptions options)
+        string? name, DurableTaskFactory factory, DurableTaskWorkerOptions options)
     {
-        this.Name = name;
-        this.Factory = factory;
-        this.Options = options;
+        this.Name = name ?? Microsoft.Extensions.Options.Options.DefaultName;
+        this.Factory = Check.NotNull(factory);
+        this.Options = Check.NotNull(options);
     }
 
     /// <summary>

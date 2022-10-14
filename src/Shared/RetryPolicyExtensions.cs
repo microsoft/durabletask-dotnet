@@ -17,11 +17,12 @@ static class RetryPolicyExtensions
     /// <returns>A <see cref="CoreRetryOptions" />.</returns>
     public static CoreRetryOptions ToDurableTaskCoreRetryOptions(this RetryPolicy retry)
     {
+        Check.NotNull(retry);
+
         // The legacy framework doesn't support Timeout.InfiniteTimeSpan so we have to convert that
         // to TimeSpan.MaxValue when encountered.
         static TimeSpan ConvertInfiniteTimeSpans(TimeSpan timeout) =>
             timeout == Timeout.InfiniteTimeSpan ? TimeSpan.MaxValue : timeout;
-
         return new CoreRetryOptions(retry.FirstRetryInterval, retry.MaxNumberOfAttempts)
         {
             BackoffCoefficient = retry.BackoffCoefficient,

@@ -14,6 +14,7 @@ public class TaskOptions
     /// <param name="builder">The builder.</param>
     internal TaskOptions(Builder builder)
     {
+        Check.NotNull(builder);
         this.RetryPolicy = builder.RetryPolicy;
         this.CancellationToken = builder.CancellationToken;
         this.RetryHandler = builder.RetryHandler;
@@ -60,7 +61,8 @@ public class TaskOptions
     /// Convenience method from creating a <see cref="TaskOptions"/> object from a <see cref="AsyncRetryHandler"/>.
     /// </summary>
     /// <inheritdoc cref="FromRetryHandler(RetryHandler, CancellationToken)"/>
-    public static TaskOptions FromRetryHandler(AsyncRetryHandler retryHandler, CancellationToken cancellationToken = default)
+    public static TaskOptions FromRetryHandler(
+        AsyncRetryHandler retryHandler, CancellationToken cancellationToken = default)
     {
         return CreateBuilder().WithRetryStrategy(retryHandler).WithCancellationToken(cancellationToken).Build();
     }
@@ -68,7 +70,9 @@ public class TaskOptions
     /// <summary>
     /// Creates a new <see cref="Builder"/> object that can be used to construct a new <see cref="TaskOptions"/> object.
     /// </summary>
-    /// <returns>Returns a new <see cref="Builder"/> object that can be used to construct a new <see cref="TaskOptions"/> object.</returns>
+    /// <returns>
+    /// Returns a new <see cref="Builder"/> object that can be used to construct a new <see cref="TaskOptions"/> object.
+    /// </returns>
     public static Builder CreateBuilder() => new();
 
     /// <summary>
@@ -137,7 +141,9 @@ public class TaskOptions
         {
             if (cancellationToken != default)
             {
-                throw new NotSupportedException("Durable task cancellation is not yet supported. See https://github.com/microsoft/durabletask-dotnet/issues/7 for more information.");
+                throw new NotSupportedException(
+                    "Durable task cancellation is not yet supported. See"
+                    + " https://github.com/microsoft/durabletask-dotnet/issues/7 for more information.");
             }
 
             this.CancellationToken = cancellationToken;

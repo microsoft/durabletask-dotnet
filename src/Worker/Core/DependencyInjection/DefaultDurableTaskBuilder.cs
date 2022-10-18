@@ -37,9 +37,8 @@ public class DefaultDurableTaskBuilder : IDurableTaskBuilder
         get => this.buildTarget;
         set
         {
-            if (value is not null && !value.IsSubclassOf(typeof(DurableTaskWorker)))
+            if (!value?.IsSubclassOf(typeof(DurableTaskWorker)) ?? false)
             {
-                // only validate when not null.
                 throw new ArgumentException($"Type must be subclass of {typeof(DurableTaskWorker)}", nameof(value));
             }
 

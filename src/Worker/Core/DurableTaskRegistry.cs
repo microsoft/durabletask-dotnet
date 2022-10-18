@@ -19,8 +19,7 @@ public sealed class DurableTaskRegistry
         = ImmutableDictionary.CreateBuilder<TaskName, Func<ITaskOrchestrator>>();
 
     /// <summary>
-    /// Registers an activity as a synchronous (blocking) lambda function that doesn't take any input nor returns any
-    /// output.
+    /// Registers an activity as a synchronous (blocking) lambda function that doesn't take any input nor returns any output.
     /// </summary>
     /// <param name="name">The name of the activity.</param>
     /// <param name="implementation">The lambda function to invoke when the activity is called.</param>
@@ -37,8 +36,7 @@ public sealed class DurableTaskRegistry
     }
 
     /// <summary>
-    /// Registers an activity as a synchronous (blocking) lambda function that doesn't take any input nor returns any
-    /// output.
+    /// Registers an activity as a synchronous (blocking) lambda function that doesn't take any input nor returns any output.
     /// </summary>
     /// <param name="name">The name of the activity.</param>
     /// <param name="implementation">The lambda function to invoke when the activity is called.</param>

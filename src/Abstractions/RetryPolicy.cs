@@ -14,8 +14,7 @@ public class RetryPolicy
     /// <param name="maxNumberOfAttempts">The maximum number of task invocation attempts. Must be 1 or greater.</param>
     /// <param name="firstRetryInterval">The amount of time to delay between the first and second attempt.</param>
     /// <param name="backoffCoefficient">
-    /// The exponential back-off coefficient used to determine the delay between subsequent retries. Must be 1.0 or
-    /// greater.
+    /// The exponential back-off coefficient used to determine the delay between subsequent retries. Must be 1.0 or greater.
     /// </param>
     /// <param name="maxRetryInterval">
     /// The maximum time to delay between attempts, regardless of<paramref name="backoffCoefficient"/>.

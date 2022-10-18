@@ -12,8 +12,7 @@ namespace Microsoft.DurableTask;
 /// <param name="ErrorMessage">A summary description of the failure.</param>
 /// <param name="StackTrace">The stack trace of the failure.</param>
 /// <param name="InnerFailure">The inner cause of the task failure.</param>
-public record TaskFailureDetails(
-    string ErrorType, string ErrorMessage, string? StackTrace, TaskFailureDetails? InnerFailure)
+public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? StackTrace, TaskFailureDetails? InnerFailure)
 {
     Type? exceptionType;
 
@@ -36,8 +35,7 @@ public record TaskFailureDetails(
     /// </remarks>
     /// <typeparam name="T">The type of exception to test against.</typeparam>
     /// <returns>
-    /// Returns <c>true</c> if the <see cref="ErrorType"/> value matches <typeparamref name="T"/>; <c>false</c>
-    /// otherwise.
+    /// Returns <c>true</c> if the <see cref="ErrorType"/> value matches <typeparamref name="T"/>; <c>false</c> otherwise.
     /// </returns>
     public bool IsCausedBy<T>() where T : Exception
     {

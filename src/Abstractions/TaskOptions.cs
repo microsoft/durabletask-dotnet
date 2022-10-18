@@ -61,8 +61,7 @@ public class TaskOptions
     /// Convenience method from creating a <see cref="TaskOptions"/> object from a <see cref="AsyncRetryHandler"/>.
     /// </summary>
     /// <inheritdoc cref="FromRetryHandler(RetryHandler, CancellationToken)"/>
-    public static TaskOptions FromRetryHandler(
-        AsyncRetryHandler retryHandler, CancellationToken cancellationToken = default)
+    public static TaskOptions FromRetryHandler(AsyncRetryHandler retryHandler, CancellationToken cancellationToken = default)
     {
         return CreateBuilder().WithRetryStrategy(retryHandler).WithCancellationToken(cancellationToken).Build();
     }

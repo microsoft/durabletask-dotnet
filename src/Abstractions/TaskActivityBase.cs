@@ -94,7 +94,6 @@ public abstract class TaskActivityBase<TInput, TOutput> : ITaskActivity
     Exception DefaultNotImplementedException()
     {
         return new NotImplementedException(
-            $"{this.GetType().Name} needs to override {nameof(this.OnRun)} or {nameof(this.OnRunAsync)} with an"
-            + " implementation.");
+            $"{this.GetType().Name} needs to override {nameof(this.OnRun)} or {nameof(this.OnRunAsync)} with an implementation.");
     }
 }

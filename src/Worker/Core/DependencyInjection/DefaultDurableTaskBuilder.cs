@@ -37,7 +37,11 @@ public class DefaultDurableTaskBuilder : IDurableTaskBuilder
         get => this.buildTarget;
         set
         {
-            Check.ConcreteType<DurableTaskWorker>(value);
+            if (value is not null)
+            {
+                Check.ConcreteType<DurableTaskWorker>(value);
+            }
+
             this.buildTarget = value;
         }
     }

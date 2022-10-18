@@ -22,11 +22,7 @@ static class GrpcExtensions
         this IAsyncStreamReader<T> reader,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        if (reader == null)
-        {
-            throw new ArgumentNullException(nameof(reader));
-        }
-
+        Check.NotNull(reader);
         while (await reader.MoveNext(cancellationToken).ConfigureAwait(false))
         {
             yield return reader.Current;

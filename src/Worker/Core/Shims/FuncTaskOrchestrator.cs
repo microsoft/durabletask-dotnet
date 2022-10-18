@@ -19,6 +19,7 @@ public static class FuncTaskOrchestrator
     public static TaskOrchestratorBase<TInput, TOutput> Create<TInput, TOutput>(
         Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> implementation)
     {
+        Check.NotNull(implementation);
         return new Implementation<TInput, TOutput>(implementation);
     }
 

@@ -39,9 +39,9 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         ILogger logger,
         object? deserializedInput)
     {
-        this.innerContext = innerContext;
-        this.invocationContext = invocationContext;
-        this.logger = this.CreateReplaySafeLogger(logger);
+        this.innerContext = Check.NotNull(innerContext);
+        this.invocationContext = Check.NotNull(invocationContext);
+        this.logger = this.CreateReplaySafeLogger(Check.NotNull(logger));
         this.deserializedInput = deserializedInput;
     }
 

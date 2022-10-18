@@ -28,11 +28,7 @@ public static class DurableTaskClientExtensions
         IEnumerable<OrchestrationRuntimeStatus>? statuses,
         CancellationToken cancellation = default)
     {
-        if (client is null)
-        {
-            throw new ArgumentNullException(nameof(client));
-        }
-
+        Check.NotNull(client);
         PurgeInstancesFilter filter = new(createdFrom, createdTo, statuses);
         return client.PurgeInstancesAsync(filter, cancellation);
     }

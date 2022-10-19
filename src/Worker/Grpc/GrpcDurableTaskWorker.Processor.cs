@@ -196,7 +196,8 @@ sealed partial class GrpcDurableTaskWorker
                     runtimeState.PastEvents.Count,
                     runtimeState.NewEvents.Count);
 
-                if (this.worker.Factory.TryCreateOrchestrator(name, out ITaskOrchestrator? orchestrator))
+                if (this.worker.Factory.TryCreateOrchestrator(
+                    name, this.worker.services, out ITaskOrchestrator? orchestrator))
                 {
                     // Both the factory invocation and the ExecuteAsync could involve user code and need to be handled
                     // as part of try/catch.

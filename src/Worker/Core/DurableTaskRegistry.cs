@@ -15,8 +15,8 @@ public sealed class DurableTaskRegistry
     readonly ImmutableDictionary<TaskName, Func<IServiceProvider, ITaskActivity>>.Builder activitiesBuilder
         = ImmutableDictionary.CreateBuilder<TaskName, Func<IServiceProvider, ITaskActivity>>();
 
-    readonly ImmutableDictionary<TaskName, Func<ITaskOrchestrator>>.Builder orchestratorsBuilder
-        = ImmutableDictionary.CreateBuilder<TaskName, Func<ITaskOrchestrator>>();
+    readonly ImmutableDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>>.Builder orchestratorsBuilder
+        = ImmutableDictionary.CreateBuilder<TaskName, Func<IServiceProvider, ITaskOrchestrator>>();
 
     /// <summary>
     /// Registers an activity as a synchronous (blocking) lambda function that doesn't take any input nor returns any output.
@@ -149,7 +149,7 @@ public sealed class DurableTaskRegistry
             throw new ArgumentException($"A task orchestrator named '{name}' is already added.", nameof(name));
         }
 
-        this.orchestratorsBuilder.Add(name, () => FuncTaskOrchestrator.Create(implementation));
+        this.orchestratorsBuilder.Add(name, _ => FuncTaskOrchestrator.Create(implementation));
         return this;
     }
 
@@ -164,7 +164,7 @@ public sealed class DurableTaskRegistry
         string name = GetTaskName(typeof(TOrchestrator));
         this.orchestratorsBuilder.Add(
             name,
-            () =>
+            _ =>
             {
                 // Unlike activities, we don't give orchestrators access to the IServiceProvider collection since
                 // injected services are inherently non-deterministic. If an orchestrator needs access to a service,
@@ -176,10 +176,10 @@ public sealed class DurableTaskRegistry
     }
 
     /// <summary>
-    /// Builds this registry into a <see cref="DurableTaskFactory" />.
+    /// Builds this registry into a <see cref="IDurableTaskFactory" />.
     /// </summary>
-    /// <returns>The built <see cref="DurableTaskFactory" />.</returns>
-    internal DurableTaskFactory Build()
+    /// <returns>The built <see cref="IDurableTaskFactory" />.</returns>
+    internal IDurableTaskFactory Build()
     {
         return new DurableTaskFactory(this.activitiesBuilder.ToImmutable(), this.orchestratorsBuilder.ToImmutable());
     }

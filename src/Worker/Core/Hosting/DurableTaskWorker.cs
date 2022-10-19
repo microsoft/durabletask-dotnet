@@ -17,7 +17,7 @@ public abstract class DurableTaskWorker : BackgroundService
     /// <param name="factory">The durable factory.</param>
     /// <param name="options">The worker options.</param>
     protected DurableTaskWorker(
-        string? name, DurableTaskFactory factory, DurableTaskWorkerOptions options)
+        string? name, IDurableTaskFactory factory, DurableTaskWorkerOptions options)
     {
         this.Name = name ?? Microsoft.Extensions.Options.Options.DefaultName;
         this.Factory = Check.NotNull(factory);
@@ -30,10 +30,10 @@ public abstract class DurableTaskWorker : BackgroundService
     protected virtual string Name { get; }
 
     /// <summary>
-    /// Gets the <see cref="DurableTaskFactory" /> which has been initialized from
+    /// Gets the <see cref="IDurableTaskFactory" /> which has been initialized from
     /// the configured tasks during host construction.
     /// </summary>
-    protected virtual DurableTaskFactory Factory { get; }
+    protected virtual IDurableTaskFactory Factory { get; }
 
     /// <summary>
     /// Gets the worker options.

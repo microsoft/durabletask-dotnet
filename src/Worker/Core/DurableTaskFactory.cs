@@ -8,10 +8,10 @@ namespace Microsoft.DurableTask.Worker;
 /// <summary>
 /// A factory for creating orchestrators and activities.
 /// </summary>
-public sealed class DurableTaskFactory
+sealed class DurableTaskFactory : IDurableTaskFactory
 {
     readonly IReadOnlyDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities;
-    readonly IReadOnlyDictionary<TaskName, Func<ITaskOrchestrator>> orchestrators;
+    readonly IReadOnlyDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>> orchestrators;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DurableTaskFactory" /> class.
@@ -20,23 +20,15 @@ public sealed class DurableTaskFactory
     /// <param name="orchestrators">The orchestrator factories.</param>
     internal DurableTaskFactory(
         IReadOnlyDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities,
-        IReadOnlyDictionary<TaskName, Func<ITaskOrchestrator>> orchestrators)
+        IReadOnlyDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>> orchestrators)
     {
         this.activities = Check.NotNull(activities);
         this.orchestrators = Check.NotNull(orchestrators);
     }
 
-    /// <summary>
-    /// Tries to creates an activity given a name.
-    /// </summary>
-    /// <param name="name">The name of the activity.</param>
-    /// <param name="serviceProvider">The service provider.</param>
-    /// <param name="activity">The activity or <c>null</c> if it does not exist.</param>
-    /// <returns>True if activity was created, false otherwise.</returns>
+    /// <inheritdoc/>
     public bool TryCreateActivity(
-        TaskName name,
-        IServiceProvider serviceProvider,
-        [NotNullWhen(true)] out ITaskActivity? activity)
+        TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskActivity? activity)
     {
         Check.NotNull(serviceProvider);
         if (this.activities.TryGetValue(name, out Func<IServiceProvider, ITaskActivity>? factory))
@@ -49,17 +41,13 @@ public sealed class DurableTaskFactory
         return false;
     }
 
-    /// <summary>
-    /// Creates an orchestrator given a name.
-    /// </summary>
-    /// <param name="name">The name of the orchestrator.</param>
-    /// <param name="orchestrator">The orchestrator or <c>null</c> if it does not exist.</param>
-    /// <returns>The task orchestrator.</returns>
-    public bool TryCreateOrchestrator(TaskName name, [NotNullWhen(true)] out ITaskOrchestrator? orchestrator)
+    /// <inheritdoc/>
+    public bool TryCreateOrchestrator(
+        TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskOrchestrator? orchestrator)
     {
-        if (this.orchestrators.TryGetValue(name, out Func<ITaskOrchestrator>? factory))
+        if (this.orchestrators.TryGetValue(name, out Func<IServiceProvider, ITaskOrchestrator>? factory))
         {
-            orchestrator = factory.Invoke();
+            orchestrator = factory.Invoke(serviceProvider);
             return true;
         }
 

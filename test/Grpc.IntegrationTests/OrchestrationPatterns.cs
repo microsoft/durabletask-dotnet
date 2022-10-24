@@ -174,7 +174,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator<string, string>(
-                    orchestratorName, (ctx, input) => ctx.CallActivityAsync<string?>(sayHelloActivityName, input))
+                    orchestratorName, (ctx, input) => ctx.CallActivityAsync<string>(sayHelloActivityName, input))
                 .AddActivity<string, string>(sayHelloActivityName, (ctx, name) => $"Hello, {name}!"));
         });
 
@@ -199,7 +199,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator<string, string>(
-                    orchestratorName, (ctx, input) => ctx.CallActivityAsync<string?>(sayHelloActivityName, input))
+                    orchestratorName, (ctx, input) => ctx.CallActivityAsync<string>(sayHelloActivityName, input))
                 .AddActivity<string, string>(
                     sayHelloActivityName, async (ctx, name) => await Task.FromResult($"Hello, {name}!")));
         });
@@ -270,7 +270,7 @@ public class OrchestrationPatterns : IntegrationTestBase
                     Array.Reverse(results);
                     return results;
                 })
-                .AddActivity<object, string>(toStringActivity, (ctx, input) => input!.ToString()));
+                .AddActivity<object, string>(toStringActivity, (ctx, input) => input.ToString()!));
         });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
@@ -531,9 +531,9 @@ public class OrchestrationPatterns : IntegrationTestBase
                         throw new ArgumentNullException(nameof(input));
                     }
 
-                    return ctx.CallActivityAsync<JsonNode?>("SpecialSerialization_Activity", input);
+                    return ctx.CallActivityAsync<JsonNode>("SpecialSerialization_Activity", input);
                 })
-                .AddActivity<JsonNode, JsonNode>("SpecialSerialization_Activity", (ctx, input) =>
+                .AddActivity<JsonNode, JsonNode?>("SpecialSerialization_Activity", (ctx, input) =>
                 {
                     if (input is not null)
                     {

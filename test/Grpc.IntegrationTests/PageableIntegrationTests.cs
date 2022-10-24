@@ -24,7 +24,7 @@ public class PageableIntegrationTests : IntegrationTestBase
             b.AddTasks(tasks => tasks
                 .AddOrchestrator<string, int>(
                     orchestratorName, (ctx, input) => PageableOrchestrationAsync(ctx, input))
-                .AddActivity<PageRequest, Page<string>>(
+                .AddActivity<PageRequest, Page<string>?>(
                     nameof(PageableActivityAsync), (_, input) => PageableActivityAsync(input)));
         });
 

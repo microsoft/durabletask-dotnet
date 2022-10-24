@@ -1,6 +1,8 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace Microsoft.DurableTask;
 
 /// <summary>
@@ -8,7 +10,7 @@ namespace Microsoft.DurableTask;
 /// </summary>
 /// <remarks>
 /// Users should not implement activities using this interface, directly.
-/// Instead, <see cref="TaskActivityBase{TInput, TOutput}"/> should be used to implement orchestration activities.
+/// Instead, <see cref="TaskActivity{TInput, TOutput}"/> should be used to implement orchestration activities.
 /// </remarks>
 public interface ITaskActivity
 {
@@ -50,7 +52,7 @@ public interface ITaskActivity
 /// idempotent whenever possible.
 /// </para><para>
 /// Activities are invoked by orchestrators using one of the <see cref="TaskOrchestrationContext.CallActivityAsync"/>
-/// method overloads. Activities that derive from <see cref="TaskActivityBase{TInput, TOutput}"/> can also be invoked
+/// method overloads. Activities that derive from <see cref="TaskActivity{TInput, TOutput}"/> can also be invoked
 /// using generated extension methods. To participate in code generation, an activity class must be decorated with the
 /// <see cref="DurableTaskAttribute"/> attribute. The source generator will then generate a <c>CallMyActivityAsync()</c>
 /// extension method for an activity named "MyActivity". The generated input parameter and return value will be derived
@@ -59,7 +61,7 @@ public interface ITaskActivity
 /// </remarks>
 /// <typeparam name="TInput">The type of the input parameter that this activity accepts.</typeparam>
 /// <typeparam name="TOutput">The type of the return value that this activity produces.</typeparam>
-public abstract class TaskActivityBase<TInput, TOutput> : ITaskActivity
+public abstract class TaskActivity<TInput, TOutput> : ITaskActivity
 {
     /// <inheritdoc/>
     Type ITaskActivity.InputType => typeof(TInput);
@@ -70,9 +72,15 @@ public abstract class TaskActivityBase<TInput, TOutput> : ITaskActivity
     /// <inheritdoc/>
     async Task<object?> ITaskActivity.RunAsync(TaskActivityContext context, object? input)
     {
-        TInput? typedInput = (TInput?)(input ?? default(TInput));
-        TOutput? output = await this.OnRunAsync(context, typedInput);
-        return output;
+        Check.NotNull(context, nameof(context));
+        if (!IsValidInput(input, out TInput? typedInput))
+        {
+            throw new ArgumentException($"Input type '{input?.GetType()}' does not match expected type '{typeof(TInput)}'.");
+        }
+
+        // Input very well may be null here. However, as explained above, we need to let later code decide what to do
+        // with a null value. So we use '!' just to suppress the warning.
+        return await this.RunAsync(context, typedInput);
     }
 
     /// <summary>
@@ -81,19 +89,30 @@ public abstract class TaskActivityBase<TInput, TOutput> : ITaskActivity
     /// <param name="context">Provides access to additional context for the current activity execution.</param>
     /// <param name="input">The deserialized activity input.</param>
     /// <returns>The output of the activity as a task.</returns>
-    protected virtual Task<TOutput?> OnRunAsync(TaskActivityContext context, TInput? input) =>
-        Task.FromResult(this.OnRun(context, input));
+    public abstract Task<TOutput> RunAsync(TaskActivityContext context, TInput input);
 
     /// <summary>
-    /// Override to implement synchronous (blocking) task activity logic.
+    /// Due to nullable reference types being static analysis only, we need to do our best efforts for validating the
+    /// input type, but also give control of nullability to the implementation. It is not ideal, but we do not want to
+    /// force 'TInput?' on the RunAsync implementation.
     /// </summary>
-    /// <inheritdoc cref="OnRunAsync"/>
-    protected virtual TOutput? OnRun(TaskActivityContext context, TInput? input) =>
-        throw this.DefaultNotImplementedException();
-
-    Exception DefaultNotImplementedException()
+    static bool IsValidInput(object? input, [NotNullWhen(true)] out TInput? typedInput)
     {
-        return new NotImplementedException(
-            $"{this.GetType().Name} needs to override {nameof(this.OnRun)} or {nameof(this.OnRunAsync)} with an implementation.");
+        if (input is TInput typed)
+        {
+            // Quick pattern check.
+            typedInput = typed;
+            return true;
+        }
+        else if (input is not null && typeof(TInput) != input.GetType())
+        {
+            typedInput = default;
+            return false;
+        }
+
+        // Input is null and did not match a nullable value type. We do not have enough information to tell if it is
+        // valid or not. We will have to defer this decision to the implementation.
+        typedInput = default!;
+        return true;
     }
 }

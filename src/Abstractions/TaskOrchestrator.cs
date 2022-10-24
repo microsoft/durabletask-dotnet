@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask;
@@ -10,7 +11,7 @@ namespace Microsoft.DurableTask;
 /// </summary>
 /// <remarks>
 /// Users should not implement task orchestrators using this interface, directly.
-/// Instead, <see cref="TaskOrchestratorBase{TInput, TOutput}"/> should be used to implement orchestration activities.
+/// Instead, <see cref="TaskOrchestrator{TInput, TOutput}"/> should be used to implement orchestrators.
 /// </remarks>
 public interface ITaskOrchestrator
 {
@@ -45,7 +46,7 @@ public interface ITaskOrchestrator
 /// <para>
 ///   Orchestrators can be scheduled using an external client (see Microsoft.DurableTask.Client). Orchestrators can
 ///   also invoke child orchestrators using the <see cref="TaskOrchestrationContext.CallSubOrchestratorAsync"/> method.
-///   Orchestrators that derive from <see cref="TaskOrchestratorBase{TInput, TOutput}"/> can also be invoked using
+///   Orchestrators that derive from <see cref="TaskOrchestrator{TInput, TOutput}"/> can also be invoked using
 ///   generated extension methods. To participate in code generation, an orchestrator class must be decorated with the
 ///   <see cref="DurableTaskAttribute"/> attribute. The source generator will then generate a
 ///   <c>ScheduleNewMyOrchestratorOrchestratorInstanceAsync()</c> extension method on <c>DurableTaskClient</c> for an
@@ -111,7 +112,7 @@ public interface ITaskOrchestrator
 /// </remarks>
 /// <typeparam name="TInput">The type of the input parameter that this orchestrator accepts.</typeparam>
 /// <typeparam name="TOutput">The type of the return value that this orchestrator produces.</typeparam>
-public abstract class TaskOrchestratorBase<TInput, TOutput> : ITaskOrchestrator
+public abstract class TaskOrchestrator<TInput, TOutput> : ITaskOrchestrator
 {
     /// <inheritdoc/>
     Type ITaskOrchestrator.InputType => typeof(TInput);
@@ -122,16 +123,47 @@ public abstract class TaskOrchestratorBase<TInput, TOutput> : ITaskOrchestrator
     /// <inheritdoc/>
     async Task<object?> ITaskOrchestrator.RunAsync(TaskOrchestrationContext context, object? input)
     {
-        TInput? typedInput = (TInput?)(input ?? default(TInput));
-        TOutput? output = await this.OnRunAsync(context, typedInput);
-        return output;
+        Check.NotNull(context, nameof(context));
+        if (!IsValidInput(input, out TInput? typedInput))
+        {
+            throw new ArgumentException($"Input type '{input?.GetType()}' does not match expected type '{typeof(TInput)}'.");
+        }
+
+        // Input very well may be null here. However, as explained above, we need to let later code decide what to do
+        // with a null value. So we use '!' just to suppress the warning.
+        return await this.RunAsync(context, typedInput);
     }
 
     /// <summary>
     /// Override to implement task orchestrator logic.
     /// </summary>
-    /// <param name="context">Provides access to additional context for the current orchestration execution.</param>
+    /// <param name="context">The task orchestrator's context.</param>
     /// <param name="input">The deserialized orchestration input.</param>
     /// <returns>The output of the orchestration as a task.</returns>
-    protected abstract Task<TOutput?> OnRunAsync(TaskOrchestrationContext context, TInput? input);
+    public abstract Task<TOutput> RunAsync(TaskOrchestrationContext context, TInput input);
+
+    /// <summary>
+    /// Due to nullable reference types being static analysis only, we need to do our best efforts for validating the
+    /// input type, but also give control of nullability to the implementation. It is not ideal, but we do not want to
+    /// force 'TInput?' on the RunAsync implementation.
+    /// </summary>
+    static bool IsValidInput(object? input, [NotNullWhen(true)] out TInput? typedInput)
+    {
+        if (input is TInput typed)
+        {
+            // Quick pattern check.
+            typedInput = typed;
+            return true;
+        }
+        else if (input is not null && typeof(TInput) != input.GetType())
+        {
+            typedInput = default;
+            return false;
+        }
+
+        // Input is null and did not match a nullable value type. We do not have enough information to tell if it is
+        // valid or not. We will have to defer this decision to the implementation.
+        typedInput = default!;
+        return true;
+    }
 }

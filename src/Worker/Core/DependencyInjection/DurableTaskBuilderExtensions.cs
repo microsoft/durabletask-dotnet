@@ -20,6 +20,7 @@ public static class DurableTaskBuilderExtensions
     public static IDurableTaskBuilder AddTasks(
         this IDurableTaskBuilder builder, Action<DurableTaskRegistry> configure)
     {
+        Check.NotNull(builder);
         builder.Services.Configure(builder.Name, configure);
         return builder;
     }
@@ -33,6 +34,7 @@ public static class DurableTaskBuilderExtensions
     public static IDurableTaskBuilder Configure(
         this IDurableTaskBuilder builder, Action<DurableTaskWorkerOptions> configure)
     {
+        Check.NotNull(builder);
         builder.Services.Configure(builder.Name, configure);
         return builder;
     }
@@ -46,6 +48,7 @@ public static class DurableTaskBuilderExtensions
     /// <returns>The original builder, for call chaining.</returns>
     public static IDurableTaskBuilder UseBuildTarget(this IDurableTaskBuilder builder, Type target)
     {
+        Check.NotNull(builder);
         builder.BuildTarget = target;
         return builder;
     }

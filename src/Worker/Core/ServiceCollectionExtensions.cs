@@ -20,6 +20,8 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddDurableTaskWorker(
         this IServiceCollection services, Action<IDurableTaskBuilder> configure)
     {
+        Check.NotNull(services);
+        Check.NotNull(configure);
         return services.AddDurableTaskWorker(Options.DefaultName, configure);
     }
 
@@ -33,6 +35,10 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddDurableTaskWorker(
         this IServiceCollection services, string name, Action<IDurableTaskBuilder> configure)
     {
+        Check.NotNull(services);
+        Check.NotNull(name);
+        Check.NotNull(configure);
+
         IDurableTaskBuilder builder = GetBuilder(services, name, out bool added);
         configure.Invoke(builder);
 

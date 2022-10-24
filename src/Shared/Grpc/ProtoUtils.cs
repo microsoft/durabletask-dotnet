@@ -27,6 +27,7 @@ static class ProtoUtils
     /// <exception cref="NotSupportedException">When the provided history event type is not supported.</exception>
     internal static HistoryEvent ConvertHistoryEvent(P.HistoryEvent proto)
     {
+        Check.NotNull(proto);
         HistoryEvent historyEvent;
         switch (proto.EventTypeCase)
         {
@@ -222,6 +223,7 @@ static class ProtoUtils
         string? customStatus,
         IEnumerable<OrchestratorAction> actions)
     {
+        Check.NotNull(actions);
         var response = new P.OrchestratorResponse
         {
             InstanceId = instanceId,

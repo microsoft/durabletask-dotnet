@@ -22,14 +22,15 @@ class TaskActivityShim : TaskActivity
     /// <param name="implementation">The activity implementation to wrap.</param>
     public TaskActivityShim(DataConverter dataConverter, TaskName name, ITaskActivity implementation)
     {
-        this.dataConverter = dataConverter;
-        this.name = name;
-        this.implementation = implementation;
+        this.dataConverter = Check.NotNull(dataConverter);
+        this.name = Check.NotDefault(name);
+        this.implementation = Check.NotNull(implementation);
     }
 
     /// <inheritdoc/>
     public override async Task<string?> RunAsync(TaskContext coreContext, string? rawInput)
     {
+        Check.NotNull(coreContext);
         string? strippedRawInput = StripArrayCharacters(rawInput);
         object? deserializedInput = this.dataConverter.Deserialize(strippedRawInput, this.implementation.InputType);
         TaskActivityContextWrapper contextWrapper = new(coreContext, this.name);
@@ -60,9 +61,7 @@ class TaskActivityShim : TaskActivity
         readonly TaskContext innerContext;
         readonly TaskName name;
 
-        public TaskActivityContextWrapper(
-            TaskContext taskContext,
-            TaskName name)
+        public TaskActivityContextWrapper(TaskContext taskContext, TaskName name)
         {
             this.innerContext = taskContext;
             this.name = name;

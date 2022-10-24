@@ -13,11 +13,16 @@ public class RetryPolicy
     /// </summary>
     /// <param name="maxNumberOfAttempts">The maximum number of task invocation attempts. Must be 1 or greater.</param>
     /// <param name="firstRetryInterval">The amount of time to delay between the first and second attempt.</param>
-    /// <param name="backoffCoefficient">The exponential back-off coefficient used to determine the delay between subsequent retries. Must be 1.0 or greater.</param>
-    /// <param name="maxRetryInterval">The maximum time to delay between attempts, regardless of <paramref name="backoffCoefficient"/>.</param>
+    /// <param name="backoffCoefficient">
+    /// The exponential back-off coefficient used to determine the delay between subsequent retries. Must be 1.0 or greater.
+    /// </param>
+    /// <param name="maxRetryInterval">
+    /// The maximum time to delay between attempts, regardless of<paramref name="backoffCoefficient"/>.
+    /// </param>
     /// <param name="retryTimeout">The overall timeout for retries.</param>
     /// <remarks>
-    /// The value <see cref="Timeout.InfiniteTimeSpan"/> can be used to specify an unlimited timeout for <paramref name="maxRetryInterval"/> or <paramref name="retryTimeout"/>.
+    /// The value <see cref="Timeout.InfiniteTimeSpan"/> can be used to specify an unlimited timeout for
+    /// <paramref name="maxRetryInterval"/> or <paramref name="retryTimeout"/>.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown if any of the following are true:
@@ -110,7 +115,8 @@ public class RetryPolicy
     public TimeSpan MaxRetryInterval { get; }
 
     /// <summary>
-    /// Gets the overall timeout for retries. No further attempts will be made at executing a task after this retry timeout expires.
+    /// Gets the overall timeout for retries. No further attempts will be made at executing a task after this retry
+    /// timeout expires.
     /// </summary>
     /// <value>
     /// Defaults to <see cref="Timeout.InfiniteTimeSpan"/>.

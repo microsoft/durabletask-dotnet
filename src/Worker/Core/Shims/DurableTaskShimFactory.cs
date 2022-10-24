@@ -46,7 +46,11 @@ public class DurableTaskShimFactory
     /// <param name="activity">The activity to wrap.</param>
     /// <returns>A new <see cref="TaskActivity" />.</returns>
     public TaskActivity CreateActivity(TaskName name, ITaskActivity activity)
-        => new TaskActivityShim(this.options.DataConverter, name, activity);
+    {
+        Check.NotDefault(name);
+        Check.NotNull(activity);
+        return new TaskActivityShim(this.options.DataConverter, name, activity);
+    }
 
     /// <summary>
     /// Creates a <see cref="TaskActivity" /> from a delegate.
@@ -60,7 +64,11 @@ public class DurableTaskShimFactory
     /// <returns>A new <see cref="TaskActivity" />.</returns>
     public TaskActivity CreateActivity<TInput, TOutput>(
         TaskName name, Func<TaskActivityContext, TInput?, Task<TOutput?>> implementation)
-        => this.CreateActivity(name, FuncTaskActivity.Create(implementation));
+    {
+        Check.NotDefault(name);
+        Check.NotNull(implementation);
+        return this.CreateActivity(name, FuncTaskActivity.Create(implementation));
+    }
 
     /// <summary>
     /// Creates a <see cref="TaskOrchestration" /> from a <see cref="ITaskOrchestrator" />.
@@ -74,8 +82,9 @@ public class DurableTaskShimFactory
     public TaskOrchestration CreateOrchestration(
         TaskName name, ITaskOrchestrator orchestrator, ParentOrchestrationInstance? parent = null)
     {
-        OrchestrationInvocationContext context = new(
-            name, this.options, this.loggerFactory, parent);
+        Check.NotDefault(name);
+        Check.NotNull(orchestrator);
+        OrchestrationInvocationContext context = new(name, this.options, this.loggerFactory, parent);
         return new TaskOrchestrationShim(context, orchestrator);
     }
 
@@ -94,5 +103,9 @@ public class DurableTaskShimFactory
         TaskName name,
         Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> implementation,
         ParentOrchestrationInstance? parent = null)
-        => this.CreateOrchestration(name, FuncTaskOrchestrator.Create(implementation), parent);
+    {
+        Check.NotDefault(name);
+        Check.NotNull(implementation);
+        return this.CreateOrchestration(name, FuncTaskOrchestrator.Create(implementation), parent);
+    }
 }

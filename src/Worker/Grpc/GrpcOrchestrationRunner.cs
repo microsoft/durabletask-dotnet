@@ -88,15 +88,8 @@ public static class GrpcOrchestrationRunner
         ITaskOrchestrator implementation,
         IServiceProvider? services = null)
     {
-        if (string.IsNullOrEmpty(encodedOrchestratorRequest))
-        {
-            throw new ArgumentNullException(nameof(encodedOrchestratorRequest));
-        }
-
-        if (implementation == null)
-        {
-            throw new ArgumentNullException(nameof(implementation));
-        }
+        Check.NotNullOrEmpty(encodedOrchestratorRequest);
+        Check.NotNull(implementation);
 
         P.OrchestratorRequest request = P.OrchestratorRequest.Parser.Base64Decode<P.OrchestratorRequest>(
             encodedOrchestratorRequest);

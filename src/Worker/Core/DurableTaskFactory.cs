@@ -22,8 +22,8 @@ public sealed class DurableTaskFactory
         IReadOnlyDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities,
         IReadOnlyDictionary<TaskName, Func<ITaskOrchestrator>> orchestrators)
     {
-        this.activities = activities;
-        this.orchestrators = orchestrators;
+        this.activities = Check.NotNull(activities);
+        this.orchestrators = Check.NotNull(orchestrators);
     }
 
     /// <summary>
@@ -38,6 +38,7 @@ public sealed class DurableTaskFactory
         IServiceProvider serviceProvider,
         [NotNullWhen(true)] out ITaskActivity? activity)
     {
+        Check.NotNull(serviceProvider);
         if (this.activities.TryGetValue(name, out Func<IServiceProvider, ITaskActivity>? factory))
         {
             activity = factory.Invoke(serviceProvider);

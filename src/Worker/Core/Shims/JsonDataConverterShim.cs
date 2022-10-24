@@ -18,7 +18,7 @@ sealed class JsonDataConverterShim : CoreJsonDataConverter
     /// <param name="innerConverter">The converter to wrap.</param>
     public JsonDataConverterShim(DataConverter innerConverter)
     {
-        this.innerConverter = innerConverter;
+        this.innerConverter = Check.NotNull(innerConverter);
     }
 
     /// <inheritdoc/>

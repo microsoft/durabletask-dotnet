@@ -18,9 +18,16 @@ public sealed class DurableTaskRegistry
     readonly ImmutableDictionary<TaskName, Func<ITaskOrchestrator>>.Builder orchestratorsBuilder
         = ImmutableDictionary.CreateBuilder<TaskName, Func<ITaskOrchestrator>>();
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Registers an activity as a synchronous (blocking) lambda function that doesn't take any input nor returns any output.
+    /// </summary>
+    /// <param name="name">The name of the activity.</param>
+    /// <param name="implementation">The lambda function to invoke when the activity is called.</param>
+    /// <returns>Returns this <see cref="DurableTaskRegistry"/> instance.</returns>
     public DurableTaskRegistry AddActivity(TaskName name, Action<TaskActivityContext> implementation)
     {
+        Check.NotDefault(name);
+        Check.NotNull(implementation);
         return this.AddActivity<object?, object?>(name, (context, _) =>
         {
             implementation(context);
@@ -33,9 +40,11 @@ public sealed class DurableTaskRegistry
     /// </summary>
     /// <param name="name">The name of the activity.</param>
     /// <param name="implementation">The lambda function to invoke when the activity is called.</param>
-    /// <returns>Returns this <see cref="IDurableTaskRegistry"/> instance.</returns>
+    /// <returns>Returns this <see cref="DurableTaskRegistry"/> instance.</returns>
     public DurableTaskRegistry AddActivity(TaskName name, Func<TaskActivityContext, Task> implementation)
     {
+        Check.NotDefault(name);
+        Check.NotNull(implementation);
         return this.AddActivity<object, object?>(name, (context, input) => implementation(context));
     }
 
@@ -47,7 +56,10 @@ public sealed class DurableTaskRegistry
         TaskName name,
         Func<TaskActivityContext, TInput?, TOutput?> implementation)
     {
-        return this.AddActivity<TInput, TOutput?>(name, (context, input) => Task.FromResult(implementation(context, input)));
+        Check.NotDefault(name);
+        Check.NotNull(implementation);
+        return this.AddActivity<TInput, TOutput?>(
+            name, (context, input) => Task.FromResult(implementation(context, input)));
     }
 
     /// <summary>
@@ -60,24 +72,14 @@ public sealed class DurableTaskRegistry
         TaskName name,
         Func<TaskActivityContext, TInput?, Task<TOutput?>> implementation)
     {
-        if (name == default)
-        {
-            throw new ArgumentNullException(nameof(name));
-        }
-
-        if (implementation == null)
-        {
-            throw new ArgumentNullException(nameof(implementation));
-        }
-
+        Check.NotDefault(name);
+        Check.NotNull(implementation);
         if (this.activitiesBuilder.ContainsKey(name))
         {
             throw new ArgumentException($"A task activity named '{name}' is already added.", nameof(name));
         }
 
-        this.activitiesBuilder.Add(
-            name,
-            _ => FuncTaskActivity.Create(implementation));
+        this.activitiesBuilder.Add(name, _ => FuncTaskActivity.Create(implementation));
         return this;
     }
 
@@ -106,6 +108,8 @@ public sealed class DurableTaskRegistry
         TaskName name,
         Func<TaskOrchestrationContext, Task> implementation)
     {
+        Check.NotDefault(name);
+        Check.NotNull(implementation);
         return this.AddOrchestrator<object?, object?>(name, async (ctx, _) =>
         {
             await implementation(ctx);
@@ -121,6 +125,8 @@ public sealed class DurableTaskRegistry
         TaskName name,
         Func<TaskOrchestrationContext, Task<TOutput?>> implementation)
     {
+        Check.NotDefault(name);
+        Check.NotNull(implementation);
         return this.AddOrchestrator<object?, TOutput>(name, (ctx, _) => implementation(ctx));
     }
 
@@ -131,30 +137,19 @@ public sealed class DurableTaskRegistry
     /// <typeparam name="TOutput">The orchestrator function's return type.</typeparam>
     /// <param name="name">The name of the orchestrator.</param>
     /// <param name="implementation">The orchestration implementation as a function.</param>
-    /// <returns>Returns this <see cref="IDurableTaskRegistry"/> instance.</returns>
+    /// <returns>Returns this <see cref="DurableTaskRegistry"/> instance.</returns>
     public DurableTaskRegistry AddOrchestrator<TInput, TOutput>(
         TaskName name,
         Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> implementation)
     {
-        if (name == default)
-        {
-            throw new ArgumentNullException(nameof(name));
-        }
-
-        if (implementation == null)
-        {
-            throw new ArgumentNullException(nameof(implementation));
-        }
-
+        Check.NotDefault(name);
+        Check.NotNull(implementation);
         if (this.orchestratorsBuilder.ContainsKey(name))
         {
             throw new ArgumentException($"A task orchestrator named '{name}' is already added.", nameof(name));
         }
 
-        this.orchestratorsBuilder.Add(
-            name,
-            () => FuncTaskOrchestrator.Create(implementation));
-
+        this.orchestratorsBuilder.Add(name, () => FuncTaskOrchestrator.Create(implementation));
         return this;
     }
 
@@ -162,7 +157,7 @@ public sealed class DurableTaskRegistry
     /// Registers an orchestrator that implements the <see cref="ITaskOrchestrator"/> interface.
     /// </summary>
     /// <typeparam name="TOrchestrator">The concrete type of the orchestrator.</typeparam>
-    /// <returns>Returns this <see cref="IDurableTaskRegistry"/> instance.</returns>
+    /// <returns>Returns this <see cref="DurableTaskRegistry"/> instance.</returns>
     public DurableTaskRegistry AddOrchestrator<TOrchestrator>()
         where TOrchestrator : ITaskOrchestrator
     {

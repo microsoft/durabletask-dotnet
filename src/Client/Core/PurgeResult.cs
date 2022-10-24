@@ -14,6 +14,7 @@ public class PurgeResult
     /// <param name="count">The count of instances purged.</param>
     public PurgeResult(int count)
     {
+        Check.Argument(count > 0, nameof(count), "Count must be non-negative");
         this.PurgedInstanceCount = count;
     }
 

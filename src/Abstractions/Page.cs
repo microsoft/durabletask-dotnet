@@ -20,7 +20,7 @@ public sealed class Page<T>
     /// <param name="continuationToken">The continuation token.</param>
     public Page(IReadOnlyList<T> values, string? continuationToken = null)
     {
-        this.Values = values ?? throw new ArgumentNullException(nameof(values));
+        this.Values = Check.NotNull(values);
         this.ContinuationToken = continuationToken;
     }
 

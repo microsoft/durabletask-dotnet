@@ -11,17 +11,17 @@ namespace Microsoft.DurableTask.Worker.Hosting;
 public abstract class DurableTaskWorker : BackgroundService
 {
     /// <summary>
-    /// Initializes a new instance of <see cref="DurableTaskWorker" />
+    /// Initializes a new instance of the <see cref="DurableTaskWorker" /> class.
     /// </summary>
     /// <param name="name">The name of the worker.</param>
     /// <param name="factory">The durable factory.</param>
     /// <param name="options">The worker options.</param>
     protected DurableTaskWorker(
-        string name, DurableTaskFactory factory, DurableTaskWorkerOptions options)
+        string? name, DurableTaskFactory factory, DurableTaskWorkerOptions options)
     {
-        this.Name = name;
-        this.Factory = factory;
-        this.Options = options;
+        this.Name = name ?? Microsoft.Extensions.Options.Options.DefaultName;
+        this.Factory = Check.NotNull(factory);
+        this.Options = Check.NotNull(options);
     }
 
     /// <summary>

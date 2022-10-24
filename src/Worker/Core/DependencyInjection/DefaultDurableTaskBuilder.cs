@@ -15,14 +15,14 @@ public class DefaultDurableTaskBuilder : IDurableTaskBuilder
     Type? buildTarget;
 
     /// <summary>
-    /// Initializes a new instance of <see cref="DefaultDurableTaskBuilder" />.
+    /// Initializes a new instance of the <see cref="DefaultDurableTaskBuilder" /> class.
     /// </summary>
     /// <param name="services">The service collection for this builder.</param>
     /// <param name="name">The name for this builder.</param>
     public DefaultDurableTaskBuilder(string? name, IServiceCollection services)
     {
         this.Name = name ?? Extensions.Options.Options.DefaultName;
-        this.Services = services;
+        this.Services = Check.NotNull(services);
     }
 
     /// <inheritdoc/>
@@ -37,9 +37,9 @@ public class DefaultDurableTaskBuilder : IDurableTaskBuilder
         get => this.buildTarget;
         set
         {
-            if (!IsValidBuildTarget(value))
+            if (value is not null)
             {
-                throw new ArgumentException($"Type must be subclass of {typeof(DurableTaskWorker)}", nameof(value));
+                Check.ConcreteType<DurableTaskWorker>(value);
             }
 
             this.buildTarget = value;
@@ -49,26 +49,13 @@ public class DefaultDurableTaskBuilder : IDurableTaskBuilder
     /// <inheritdoc/>
     public IHostedService Build(IServiceProvider serviceProvider)
     {
-        if (this.buildTarget is null)
-        {
-            throw new InvalidOperationException(
-                "No valid DurableTask worker target was registered. Ensure a valid worker has been configured via"
-                + " 'UseBuildTarget(Type target)'. An example of a valid worker is '.UseGrpc()'.");
-        }
+        const string error = "No valid DurableTask worker target was registered. Ensure a valid worker has been"
+            + " configured via 'UseBuildTarget(Type target)'. An example of a valid worker is '.UseGrpc()'.";
+        Verify.NotNull(this.buildTarget, error);
 
         DurableTaskRegistry registry = serviceProvider.GetOptions<DurableTaskRegistry>(this.Name);
         DurableTaskWorkerOptions options = serviceProvider.GetOptions<DurableTaskWorkerOptions>(this.Name);
         return (IHostedService)ActivatorUtilities.CreateInstance(
             serviceProvider, this.buildTarget, this.Name, registry.Build(), options);
-    }
-
-    static bool IsValidBuildTarget(Type? type)
-    {
-        if (type is null)
-        {
-            return true; // we will let you set this back to null.
-        }
-
-        return type.IsSubclassOf(typeof(DurableTaskWorker)) && !type.IsAbstract;
     }
 }

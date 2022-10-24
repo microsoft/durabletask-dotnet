@@ -5,7 +5,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.Worker.Grpc
 {
-    // NOTE: Trying to make logs consistent with https://github.com/Azure/durabletask/blob/main/src/DurableTask.Core/Logging/LogEvents.cs.
+    /// <summary>
+    /// Log messages.
+    /// </summary>
+    /// <remarks>
+    /// NOTE: Trying to make logs consistent with https://github.com/Azure/durabletask/blob/main/src/DurableTask.Core/Logging/LogEvents.cs.
+    /// </remarks>
     static partial class Logs
     {
         [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Durable Task worker is connecting to sidecar at {address}.")]

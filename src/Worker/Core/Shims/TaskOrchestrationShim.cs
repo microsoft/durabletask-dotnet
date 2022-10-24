@@ -28,8 +28,8 @@ partial class TaskOrchestrationShim : TaskOrchestration
         OrchestrationInvocationContext invocationContext,
         ITaskOrchestrator implementation)
     {
-        this.invocationContext = invocationContext;
-        this.implementation = implementation;
+        this.invocationContext = Check.NotNull(invocationContext);
+        this.implementation = Check.NotNull(implementation);
     }
 
     DataConverter DataConverter => this.invocationContext.Options.DataConverter;
@@ -39,6 +39,7 @@ partial class TaskOrchestrationShim : TaskOrchestration
     /// <inheritdoc/>
     public override async Task<string?> Execute(OrchestrationContext innerContext, string rawInput)
     {
+        Check.NotNull(innerContext);
         JsonDataConverterShim converterShim = new(this.invocationContext.Options.DataConverter);
         innerContext.MessageDataConverter = converterShim;
         innerContext.ErrorDataConverter = converterShim;
@@ -57,7 +58,7 @@ partial class TaskOrchestrationShim : TaskOrchestration
     /// <inheritdoc/>
     public override string? GetStatus()
     {
-        return this.wrapperContext?.GetDeserializedCustomStatus();
+        return this.wrapperContext?.GetSerializedCustomStatus();
     }
 
     /// <inheritdoc/>

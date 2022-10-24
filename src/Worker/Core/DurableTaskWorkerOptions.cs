@@ -45,13 +45,13 @@ public sealed class DurableTaskWorkerOptions
     }
 
     /// <summary>
-    /// Sets the maximum timer interval for the
+    /// Gets or sets the maximum timer interval for the
     /// <see cref="TaskOrchestrationContext.CreateTimer(TimeSpan, CancellationToken)"/> method.
     /// </summary>
     /// <remarks>
     /// <para>
     /// The default maximum timer interval is 3 days. If a
-    /// <see cref="TaskOrchestrationContext.CreateTimer(TimeSpan, CancellationToken)"/> call 
+    /// <see cref="TaskOrchestrationContext.CreateTimer(TimeSpan, CancellationToken)"/> call
     /// specifies a 7-day timer, it will be implemented using three separate timers: two for 3 days and one for 1 day.
     /// </para><para>
     /// Long timers are broken up into smaller timers to support certain types of backend storage providers which have
@@ -62,8 +62,8 @@ public sealed class DurableTaskWorkerOptions
     /// history.
     /// </para><para>
     /// Be aware that changing this setting may be breaking for in-flight orchestrations. For example, if an existing
-    /// orchestration has created a timer that exceeds the maximum interval (e.g., a 7 day timer), and this value is 
-    /// subsequently changed to a higher value (e.g., from 3 days to 10 days) then the next reply of the existing 
+    /// orchestration has created a timer that exceeds the maximum interval (e.g., a 7 day timer), and this value is
+    /// subsequently changed to a higher value (e.g., from 3 days to 10 days) then the next reply of the existing
     /// orchestration will fail with a non-determinism error because the number of intermediate timers scheduled during
     /// the replay (e.g., one timer) will no longer match the number of timers that exist in the orchestration history
     /// (e.g., two timers).
@@ -72,7 +72,7 @@ public sealed class DurableTaskWorkerOptions
     /// with no state or when an application is known to have no in-flight orchestration instances.
     /// </para><para>
     /// WARNING: Changing this value from a previously configured value is a breaking change for in-flight
-    /// orchestrations!
+    /// orchestrations.
     /// </para>
     /// </remarks>
     public TimeSpan MaximumTimerInterval { get; set; } = TimeSpan.FromDays(3);

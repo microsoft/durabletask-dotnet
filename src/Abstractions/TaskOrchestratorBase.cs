@@ -76,11 +76,12 @@ public interface ITaskOrchestrator
 ///     </item>
 ///     <item>
 ///       Avoid infinite loops as they could cause the application to run out of memory. Instead, ensure that loops are
-///       bounded or use <see cref="TaskOrchestrationContext.ContinueAsNew"/> to restart an orchestrator with a new input.
+///       bounded or use <see cref="TaskOrchestrationContext.ContinueAsNew"/> to restart an orchestrator with a new
+///       input.
 ///     </item>
 ///     <item>
-///       Avoid logging directly in the orchestrator code because log messages will be duplicated on each replay. Instead,
-///       use the <see cref="TaskOrchestrationContext.CreateReplaySafeLogger"/> method to wrap an existing
+///       Avoid logging directly in the orchestrator code because log messages will be duplicated on each replay.
+///       Instead, use the <see cref="TaskOrchestrationContext.CreateReplaySafeLogger"/> method to wrap an existing
 ///       <see cref="ILogger"/> into a new <c>ILogger</c> that automatically filters out replay logs.
 ///     </item>
 ///   </list>

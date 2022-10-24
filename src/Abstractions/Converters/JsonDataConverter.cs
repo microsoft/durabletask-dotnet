@@ -20,14 +20,7 @@ public class JsonDataConverter : DataConverter
 
     JsonDataConverter(JsonSerializerOptions? options = null)
     {
-        if (options != null)
-        {
-            this.options = options;
-        }
-        else
-        {
-            this.options = DefaultOptions;
-        }
+        this.options = options ?? DefaultOptions;
     }
 
     /// <summary>

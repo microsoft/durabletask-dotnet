@@ -19,6 +19,7 @@ public static class FuncTaskActivity
     public static TaskActivityBase<TInput, TOutput> Create<TInput, TOutput>(
         Func<TaskActivityContext, TInput?, Task<TOutput?>> implementation)
     {
+        Check.NotNull(implementation);
         return new Implementation<TInput, TOutput>(implementation);
     }
 
@@ -47,5 +48,4 @@ public static class FuncTaskActivity
             return this.implementation(context, input);
         }
     }
-
 }

@@ -21,7 +21,7 @@ public class DurableTaskShimFactory
     readonly ILoggerFactory loggerFactory;
 
     /// <summary>
-    /// Initializes a new instance of <see cref="DurableTaskShimFactory" />.
+    /// Initializes a new instance of the <see cref="DurableTaskShimFactory" /> class.
     /// </summary>
     /// <param name="options">The data converter.</param>
     /// <param name="loggerFactory">The logger factory.</param>
@@ -46,7 +46,11 @@ public class DurableTaskShimFactory
     /// <param name="activity">The activity to wrap.</param>
     /// <returns>A new <see cref="TaskActivity" />.</returns>
     public TaskActivity CreateActivity(TaskName name, ITaskActivity activity)
-        => new TaskActivityShim(this.options.DataConverter, name, activity);
+    {
+        Check.NotDefault(name);
+        Check.NotNull(activity);
+        return new TaskActivityShim(this.options.DataConverter, name, activity);
+    }
 
     /// <summary>
     /// Creates a <see cref="TaskActivity" /> from a delegate.
@@ -54,11 +58,17 @@ public class DurableTaskShimFactory
     /// <param name="name">
     /// The name of the activity. This should be the name the activity was invoked with.
     /// </param>
+    /// <typeparam name="TInput">The input type of the activity.</typeparam>
+    /// <typeparam name="TOutput">The output type of the activity.</typeparam>
     /// <param name="implementation">The activity delegate to wrap.</param>
     /// <returns>A new <see cref="TaskActivity" />.</returns>
     public TaskActivity CreateActivity<TInput, TOutput>(
         TaskName name, Func<TaskActivityContext, TInput?, Task<TOutput?>> implementation)
-        => this.CreateActivity(name, FuncTaskActivity.Create(implementation));
+    {
+        Check.NotDefault(name);
+        Check.NotNull(implementation);
+        return this.CreateActivity(name, FuncTaskActivity.Create(implementation));
+    }
 
     /// <summary>
     /// Creates a <see cref="TaskOrchestration" /> from a <see cref="ITaskOrchestrator" />.
@@ -72,8 +82,9 @@ public class DurableTaskShimFactory
     public TaskOrchestration CreateOrchestration(
         TaskName name, ITaskOrchestrator orchestrator, ParentOrchestrationInstance? parent = null)
     {
-        OrchestrationInvocationContext context = new(
-            name, this.options, this.loggerFactory, parent);
+        Check.NotDefault(name);
+        Check.NotNull(orchestrator);
+        OrchestrationInvocationContext context = new(name, this.options, this.loggerFactory, parent);
         return new TaskOrchestrationShim(context, orchestrator);
     }
 
@@ -83,6 +94,8 @@ public class DurableTaskShimFactory
     /// <param name="name">
     /// The name of the orchestration. This should be the name the orchestration was invoked with.
     /// </param>
+    /// <typeparam name="TInput">The input type of the orchestration.</typeparam>
+    /// <typeparam name="TOutput">The output type of the orchestration.</typeparam>
     /// <param name="implementation">The orchestration delegate to wrap.</param>
     /// <param name="parent">The orchestration parent details or <c>null</c> if no parent.</param>
     /// <returns>A new <see cref="TaskOrchestration" />.</returns>
@@ -90,5 +103,9 @@ public class DurableTaskShimFactory
         TaskName name,
         Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> implementation,
         ParentOrchestrationInstance? parent = null)
-        => this.CreateOrchestration(name, FuncTaskOrchestrator.Create(implementation), parent);
+    {
+        Check.NotDefault(name);
+        Check.NotNull(implementation);
+        return this.CreateOrchestration(name, FuncTaskOrchestrator.Create(implementation), parent);
+    }
 }

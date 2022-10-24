@@ -24,11 +24,7 @@ public static class Pageable
     public static AsyncPageable<T> Create<T>(Func<string?, CancellationToken, Task<Page<T>>> pageFunc)
         where T : notnull
     {
-        if (pageFunc is null)
-        {
-            throw new ArgumentNullException(nameof(pageFunc));
-        }
-
+        Check.NotNull(pageFunc);
         return Create((continuation, size, cancellation) => pageFunc(continuation, cancellation));
     }
 
@@ -41,11 +37,7 @@ public static class Pageable
     public static AsyncPageable<T> Create<T>(Func<string?, int?, CancellationToken, Task<Page<T>>> pageFunc)
         where T : notnull
     {
-        if (pageFunc is null)
-        {
-            throw new ArgumentNullException(nameof(pageFunc));
-        }
-
+        Check.NotNull(pageFunc);
         return new FuncAsyncPageable<T>(pageFunc);
     }
 

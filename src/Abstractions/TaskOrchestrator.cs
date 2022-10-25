@@ -129,8 +129,6 @@ public abstract class TaskOrchestrator<TInput, TOutput> : ITaskOrchestrator
             throw new ArgumentException($"Input type '{input?.GetType()}' does not match expected type '{typeof(TInput)}'.");
         }
 
-        // Input very well may be null here. However, as explained above, we need to let later code decide what to do
-        // with a null value. So we use '!' just to suppress the warning.
         return await this.RunAsync(context, typedInput);
     }
 
@@ -162,7 +160,9 @@ public abstract class TaskOrchestrator<TInput, TOutput> : ITaskOrchestrator
         }
 
         // Input is null and did not match a nullable value type. We do not have enough information to tell if it is
-        // valid or not. We will have to defer this decision to the implementation.
+        // valid or not. We will have to defer this decision to the implementation. Additionally, we will coerce a null
+        // input to a default value type here. This is to keep the two RunAsync(context, default) overloads to have
+        // identical behavior.
         typedInput = default!;
         return true;
     }

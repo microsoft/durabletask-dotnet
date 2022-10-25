@@ -10,6 +10,25 @@ namespace Microsoft.DurableTask.Worker;
 /// </summary>
 public static partial class DurableTaskRegistryExtensions
 {
+    /*
+      Covers the following ways to add orchestrators.
+      by type:
+        Type argument
+        TaskName and Type argument
+        {TOrchestrator} generic parameter
+        TaskName and {TOrchestrator} generic parameter
+
+      by func/action:
+        Func{Context, Input, Task{Output}}
+        Func{Context, Input, Task}
+        Func{Context, Input, Output}
+        Func{Context, Task{Output}}
+        Func{Context, Task}
+        Func{Context, Output}
+        Action{Context, TInput}
+        Action{Context}
+    */
+
     /// <summary>
     /// Registers an orchestrator factory.
     /// </summary>

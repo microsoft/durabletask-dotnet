@@ -11,6 +11,25 @@ namespace Microsoft.DurableTask.Worker;
 /// </summary>
 public static partial class DurableTaskRegistryExtensions
 {
+    /*
+      Covers the following ways to add activities.
+      by type:
+        Type argument
+        TaskName and Type argument
+        {TActivity} generic parameter
+        TaskName and {TActivity} generic parameter
+
+      by func/action:
+        Func{Context, Input, Task{Output}}
+        Func{Context, Input, Task}
+        Func{Context, Input, Output}
+        Func{Context, Task{Output}}
+        Func{Context, Task}
+        Func{Context, Output}
+        Action{Context, TInput}
+        Action{Context}
+    */
+
     static readonly Task<object?> CompletedNullTask = Task.FromResult<object?>(null);
 
     /// <summary>

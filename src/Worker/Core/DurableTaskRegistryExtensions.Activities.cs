@@ -22,6 +22,7 @@ public static partial class DurableTaskRegistryExtensions
     /// <returns>The same registry, for call chaining.</returns>
     public static DurableTaskRegistry AddActivity(this DurableTaskRegistry registry, TaskName name, Type type)
     {
+        // TODO: Compile a constructor expression for performance -- ActivatorUtilities.CreateFactory
         Check.NotNull(registry);
         Check.ConcreteType<ITaskActivity>(type);
         return registry.AddActivity(name, sp => (ITaskActivity)ActivatorUtilities.GetServiceOrCreateInstance(sp, type));
@@ -101,7 +102,7 @@ public static partial class DurableTaskRegistryExtensions
     {
         Check.NotNull(registry);
         Check.NotNull(activity);
-        ITaskActivity wrapper = FuncTaskActivity.Create(activity!); // TODO: remove '!'
+        ITaskActivity wrapper = FuncTaskActivity.Create(activity);
         return registry.AddActivity(name, wrapper);
     }
 

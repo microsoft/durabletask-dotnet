@@ -97,10 +97,9 @@ public static partial class DurableTaskRegistryExtensions
         TaskName name,
         Func<TaskOrchestrationContext, TInput, Task<TOutput>> orchestrator)
     {
-        // TODO: cache and re-use the func wrapper.
         Check.NotNull(registry);
         Check.NotNull(orchestrator);
-        ITaskOrchestrator wrapper = FuncTaskOrchestrator.Create(orchestrator!); // TODO: remove '!'
+        ITaskOrchestrator wrapper = FuncTaskOrchestrator.Create(orchestrator);
         return registry.AddOrchestrator(name, wrapper);
     }
 

@@ -6,6 +6,7 @@ using DurableTask.Core;
 using DurableTask.Core.History;
 using Grpc.Core;
 using Microsoft.DurableTask.Worker.Shims;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
 using P = Microsoft.DurableTask.Protobuf;
@@ -196,7 +197,9 @@ sealed partial class GrpcDurableTaskWorker
                     runtimeState.PastEvents.Count,
                     runtimeState.NewEvents.Count);
 
-                if (this.worker.Factory.TryCreateOrchestrator(name, out ITaskOrchestrator? orchestrator))
+                await using AsyncServiceScope scope = this.worker.services.CreateAsyncScope();
+                if (this.worker.Factory.TryCreateOrchestrator(
+                    name, scope.ServiceProvider, out ITaskOrchestrator? orchestrator))
                 {
                     // Both the factory invocation and the ExecuteAsync could involve user code and need to be handled
                     // as part of try/catch.
@@ -284,8 +287,8 @@ sealed partial class GrpcDurableTaskWorker
             P.TaskFailureDetails? failureDetails = null;
             try
             {
-                // TODO: start new service scope for activity.
-                if (this.worker.Factory.TryCreateActivity(name, this.worker.services, out ITaskActivity? activity))
+                await using AsyncServiceScope scope = this.worker.services.CreateAsyncScope();
+                if (this.worker.Factory.TryCreateActivity(name, scope.ServiceProvider, out ITaskActivity? activity))
                 {
                     // Both the factory invocation and the RunAsync could involve user code and need to be handled as
                     // part of try/catch.

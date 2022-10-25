@@ -29,7 +29,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     /// <param name="loggerFactory">The logger.</param>
     public GrpcDurableTaskWorker(
         string name,
-        DurableTaskFactory factory,
+        IDurableTaskFactory factory,
         DurableTaskWorkerOptions options,
         IOptionsMonitor<GrpcDurableTaskWorkerOptions> grpcOptions,
         IServiceProvider services,

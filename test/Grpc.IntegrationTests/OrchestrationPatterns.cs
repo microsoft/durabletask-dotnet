@@ -270,7 +270,7 @@ public class OrchestrationPatterns : IntegrationTestBase
                     Array.Reverse(results);
                     return results;
                 })
-                .AddActivity<object, string>(toStringActivity, (ctx, input) => input.ToString()!));
+                .AddActivity<object, string?>(toStringActivity, (ctx, input) => input.ToString()));
         });
 
         DurableTaskClient client = this.CreateDurableTaskClient();

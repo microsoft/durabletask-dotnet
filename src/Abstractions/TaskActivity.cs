@@ -78,8 +78,6 @@ public abstract class TaskActivity<TInput, TOutput> : ITaskActivity
             throw new ArgumentException($"Input type '{input?.GetType()}' does not match expected type '{typeof(TInput)}'.");
         }
 
-        // Input very well may be null here. However, as explained above, we need to let later code decide what to do
-        // with a null value. So we use '!' just to suppress the warning.
         return await this.RunAsync(context, typedInput);
     }
 
@@ -98,20 +96,27 @@ public abstract class TaskActivity<TInput, TOutput> : ITaskActivity
     /// </summary>
     static bool IsValidInput(object? input, [NotNullWhen(true)] out TInput? typedInput)
     {
+        Type inputType = typeof(TInput);
         if (input is TInput typed)
         {
             // Quick pattern check.
             typedInput = typed;
             return true;
         }
-        else if (input is not null && typeof(TInput) != input.GetType())
+        else if (input is not null && inputType != input.GetType())
         {
             typedInput = default;
             return false;
         }
+        else if (input is null && inputType.IsValueType && Nullable.GetUnderlyingType(inputType) is null)
+        {
+            // We have a non-nullable value type, but null was supplied. This is invalid input.
+            typedInput = default;
+            return false;
+        }
 
-        // Input is null and did not match a nullable value type. We do not have enough information to tell if it is
-        // valid or not. We will have to defer this decision to the implementation.
+        // Input is null. We do not have enough information to tell if it is valid or not. We cannot tell at runtime if
+        // the customer used nullable reference types or not. We will have to defer this decision to the implementation.
         typedInput = default!;
         return true;
     }

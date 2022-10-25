@@ -7,24 +7,27 @@ public class TaskOrchestratorTests
 {
     [Theory]
     [InlineData(typeof(ReferenceOrchestrator), null)]
+    [InlineData(typeof(ReferenceOrchestrator), "")]
     [InlineData(typeof(ReferenceOrchestrator), "input")]
     [InlineData(typeof(NullableReferenceOrchestrator), null)]
+    [InlineData(typeof(NullableReferenceOrchestrator), "")]
     [InlineData(typeof(NullableReferenceOrchestrator), "input")]
-    [InlineData(typeof(ValueOrchestrator), null)]
+    [InlineData(typeof(ValueOrchestrator), 0)]
     [InlineData(typeof(ValueOrchestrator), 1)]
     [InlineData(typeof(NullableValueOrchestrator), null)]
+    [InlineData(typeof(NullableValueOrchestrator), 0)]
     [InlineData(typeof(NullableValueOrchestrator), 1)]
     public async Task Run_CorrectType_DoesNotThrow(Type t, object? input)
     {
         ITaskOrchestrator orchestrator = (ITaskOrchestrator)Activator.CreateInstance(t)!;
         object? obj = await orchestrator.RunAsync(Mock.Of<TaskOrchestrationContext>(), input);
-        object? expected = t == typeof(ValueOrchestrator) && input is null ? 0 : input; // need to special case the value type.
-        obj.Should().Be(expected);
+        obj.Should().Be(input);
     }
 
     [Theory]
     [InlineData(typeof(ReferenceOrchestrator), 1)]
     [InlineData(typeof(NullableReferenceOrchestrator), 1)]
+    [InlineData(typeof(ValueOrchestrator), null)]
     [InlineData(typeof(ValueOrchestrator), "input")]
     [InlineData(typeof(NullableValueOrchestrator), "input")]
     public async Task Run_WrongType_Throws(Type t, object? input)

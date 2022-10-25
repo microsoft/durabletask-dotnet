@@ -54,11 +54,11 @@ public sealed class DurableTaskRegistry
     /// <inheritdoc cref="AddActivity(TaskName, Action{TaskActivityContext})"/>
     public DurableTaskRegistry AddActivity<TInput, TOutput>(
         TaskName name,
-        Func<TaskActivityContext, TInput?, TOutput?> implementation)
+        Func<TaskActivityContext, TInput, TOutput> implementation)
     {
         Check.NotDefault(name);
         Check.NotNull(implementation);
-        return this.AddActivity<TInput, TOutput?>(
+        return this.AddActivity<TInput, TOutput>(
             name, (context, input) => Task.FromResult(implementation(context, input)));
     }
 
@@ -70,7 +70,7 @@ public sealed class DurableTaskRegistry
     /// <inheritdoc cref="AddActivity(TaskName, Action{TaskActivityContext})"/>
     public DurableTaskRegistry AddActivity<TInput, TOutput>(
         TaskName name,
-        Func<TaskActivityContext, TInput?, Task<TOutput?>> implementation)
+        Func<TaskActivityContext, TInput, Task<TOutput>> implementation)
     {
         Check.NotDefault(name);
         Check.NotNull(implementation);
@@ -123,7 +123,7 @@ public sealed class DurableTaskRegistry
     /// <inheritdoc cref="AddOrchestrator{TInput, TOutput}"/>
     public DurableTaskRegistry AddOrchestrator<TOutput>(
         TaskName name,
-        Func<TaskOrchestrationContext, Task<TOutput?>> implementation)
+        Func<TaskOrchestrationContext, Task<TOutput>> implementation)
     {
         Check.NotDefault(name);
         Check.NotNull(implementation);
@@ -140,7 +140,7 @@ public sealed class DurableTaskRegistry
     /// <returns>Returns this <see cref="DurableTaskRegistry"/> instance.</returns>
     public DurableTaskRegistry AddOrchestrator<TInput, TOutput>(
         TaskName name,
-        Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> implementation)
+        Func<TaskOrchestrationContext, TInput, Task<TOutput>> implementation)
     {
         Check.NotDefault(name);
         Check.NotNull(implementation);

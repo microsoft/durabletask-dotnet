@@ -126,6 +126,25 @@ public static partial class DurableTaskRegistryExtensions
     /// <summary>
     /// Registers an orchestrator factory, where the implementation is <paramref name="orchestrator" />.
     /// </summary>
+    /// <param name="registry">The registry to add to.</param>
+    /// <param name="name">The name of the orchestrator to register.</param>
+    /// <param name="orchestrator">The orchestrator implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    public static DurableTaskRegistry AddOrchestrator(
+        this DurableTaskRegistry registry, TaskName name, Func<TaskOrchestrationContext, Task> orchestrator)
+    {
+        Check.NotNull(registry);
+        Check.NotNull(orchestrator);
+        return registry.AddOrchestrator<object?, object?>(name, async (context, _) =>
+        {
+            await orchestrator(context);
+            return null;
+        });
+    }
+
+    /// <summary>
+    /// Registers an orchestrator factory, where the implementation is <paramref name="orchestrator" />.
+    /// </summary>
     /// <typeparam name="TInput">The orchestrator input type.</typeparam>
     /// <typeparam name="TOutput">The orchestrator output type.</typeparam>
     /// <param name="registry">The registry to add to.</param>

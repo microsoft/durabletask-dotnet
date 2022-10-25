@@ -129,6 +129,25 @@ public static partial class DurableTaskRegistryExtensions
     /// <summary>
     /// Registers an activity factory, where the implementation is <paramref name="activity" />.
     /// </summary>
+    /// <param name="registry">The registry to add to.</param>
+    /// <param name="name">The name of the activity to register.</param>
+    /// <param name="activity">The activity implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    public static DurableTaskRegistry AddActivity(
+        this DurableTaskRegistry registry, TaskName name, Func<TaskActivityContext, Task> activity)
+    {
+        Check.NotNull(registry);
+        Check.NotNull(activity);
+        return registry.AddActivity<object?, object?>(name, async (context, _) =>
+        {
+            await activity(context);
+            return null;
+        });
+    }
+
+    /// <summary>
+    /// Registers an activity factory, where the implementation is <paramref name="activity" />.
+    /// </summary>
     /// <typeparam name="TInput">The activity input type.</typeparam>
     /// <typeparam name="TOutput">The activity output type.</typeparam>
     /// <param name="registry">The registry to add to.</param>

@@ -78,7 +78,7 @@ public class DurableTaskBuilderExtensionsTests
 
         public new string Name => base.Name;
 
-        public new DurableTaskFactory Factory => base.Factory;
+        public new IDurableTaskFactory Factory => base.Factory;
 
         public new DurableTaskWorkerOptions Options => base.Options;
 

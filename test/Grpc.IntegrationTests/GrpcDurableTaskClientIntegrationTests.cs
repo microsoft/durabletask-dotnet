@@ -147,7 +147,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
 
     Task<HostLifetime> StartAsync()
     {
-        static async Task<string?> Orchestration(TaskOrchestrationContext context, bool shouldThrow)
+        static async Task<string> Orchestration(TaskOrchestrationContext context, bool shouldThrow)
         {
             context.SetCustomStatus("waiting");
             await context.WaitForExternalEvent<string>("event");

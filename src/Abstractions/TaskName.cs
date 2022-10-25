@@ -14,11 +14,10 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// Initializes a new instance of the <see cref="TaskName"/> struct.
     /// </summary>
     /// <param name="name">The name of the task.</param>
-    /// <param name="version">The version of the task, if applicable.</param>
-    public TaskName(string name, string? version = null)
+    public TaskName(string name)
     {
-        this.Name = name ?? throw new ArgumentNullException(nameof(name));
-        this.Version = version ?? string.Empty;
+        this.Name = Check.NotNullOrEmpty(name);
+        this.Version = string.Empty; // expose setting Version only when we actually consume it.
     }
 
     /// <summary>
@@ -33,7 +32,8 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// Gets the version of the task.
     /// </summary>
     /// <remarks>
-    /// Task versions are currently experimental and their role may change over time.
+    /// Task versions is currently locked to <see cref="string.Empty" /> as it is not yet integrated into task
+    /// identification. This is being left here as we intend to support it soon.
     /// </remarks>
     public string Version { get; }
 
@@ -90,12 +90,12 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// <returns><c>true</c> if the two objects are equal using value semantics; otherwise <c>false</c>.</returns>
     public override bool Equals(object? obj)
     {
-        if (obj is not TaskName)
+        if (obj is not TaskName other)
         {
             return false;
         }
 
-        return this.Equals((TaskName)obj);
+        return this.Equals(other);
     }
 
     /// <summary>

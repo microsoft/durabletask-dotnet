@@ -38,7 +38,7 @@ public sealed partial class DurableTaskRegistry
         Check.NotNull(factory);
         if (this.activitiesBuilder.ContainsKey(name))
         {
-            throw new ArgumentException($"A TaskActivity named '{name}' is already added.", nameof(name));
+            throw new ArgumentException($"An {nameof(ITaskActivity)} named '{name}' is already added.", nameof(name));
         }
 
         this.activitiesBuilder.Add(name, factory);
@@ -65,7 +65,8 @@ public sealed partial class DurableTaskRegistry
         Check.NotNull(factory);
         if (this.activitiesBuilder.ContainsKey(name))
         {
-            throw new ArgumentException($"A TaskOrchestrator named '{name}' is already added.", nameof(name));
+            throw new ArgumentException(
+                $"An {nameof(ITaskOrchestrator)} named '{name}' is already added.", nameof(name));
         }
 
         this.orchestratorsBuilder.Add(name, _ => factory());

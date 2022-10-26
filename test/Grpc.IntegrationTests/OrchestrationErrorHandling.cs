@@ -136,7 +136,7 @@ public class OrchestrationErrorHandling : IntegrationTestBase
                 {
                     await ctx.CallActivityAsync("Foo", options: retryOptions);
                 })
-                .AddActivity("Foo", context =>
+                .AddActivity("Foo", (TaskActivityContext context) =>
                 {
                     actualNumberOfAttempts++;
                     throw new Exception(errorMessage);
@@ -199,7 +199,7 @@ public class OrchestrationErrorHandling : IntegrationTestBase
                 {
                     await ctx.CallActivityAsync("Foo", options: retryOptions);
                 })
-                .AddActivity("Foo", context =>
+                .AddActivity("Foo", (TaskActivityContext context) =>
                 {
                     actualNumberOfAttempts++;
                     throw new ApplicationException(errorMessage);

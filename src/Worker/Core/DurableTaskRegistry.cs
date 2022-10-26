@@ -8,8 +8,10 @@ namespace Microsoft.DurableTask.Worker;
 /// <summary>
 /// Options for the Durable Task worker.
 /// </summary>
-public sealed class DurableTaskRegistry
+public sealed partial class DurableTaskRegistry
 {
+    static readonly Task<object?> CompletedNullTask = Task.FromResult<object?>(null);
+
     readonly ImmutableDictionary<TaskName, Func<IServiceProvider, ITaskActivity>>.Builder activitiesBuilder
         = ImmutableDictionary.CreateBuilder<TaskName, Func<IServiceProvider, ITaskActivity>>();
 

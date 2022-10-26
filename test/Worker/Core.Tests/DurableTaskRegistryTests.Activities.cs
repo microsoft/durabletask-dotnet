@@ -9,13 +9,13 @@ public partial class DurableTaskRegistryTests
     public void AddActivity_DefaultName_Throws()
     {
         DurableTaskRegistry registry = new();
-        Action act = () => registry.AddActivity(default, _ => new TestActivity());
+        Action act = () => registry.AddActivity(default, (IServiceProvider _) => new TestActivity());
         act.Should().ThrowExactly<ArgumentException>().WithParameterName("name");
 
-        act = () => registry.AddActivity(string.Empty, _ => new TestActivity());
+        act = () => registry.AddActivity(string.Empty, (IServiceProvider _) => new TestActivity());
         act.Should().ThrowExactly<ArgumentException>().WithParameterName("name");
 
-        act = () => registry.AddActivity(null!, _ => new TestActivity());
+        act = () => registry.AddActivity(null!, (IServiceProvider _) => new TestActivity());
         act.Should().ThrowExactly<ArgumentException>().WithParameterName("name");
     }
 

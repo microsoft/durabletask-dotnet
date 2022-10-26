@@ -24,4 +24,9 @@
     <ProjectReference Include="../Core/Worker.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <SharedSection Include="DependencyInjection" />
+    <SharedSection Include="Grpc" />
+  </ItemGroup>
+
 </Project>

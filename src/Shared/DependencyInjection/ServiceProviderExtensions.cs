@@ -4,7 +4,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace Microsoft.DurableTask.Worker;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Extensions for <see cref="IServiceProvider" />.

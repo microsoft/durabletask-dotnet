@@ -1,6 +1,5 @@
 {
   "[csharp]": {
     "editor.rulers": [120]
-  },
-  "sarif-viewer.connectToGithubCodeScanning": "off"
+  }
 }

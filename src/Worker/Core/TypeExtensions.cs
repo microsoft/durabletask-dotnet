@@ -17,14 +17,10 @@ static class TypeExtensions
     {
         // IMPORTANT: This logic needs to be kept consistent with the source generator logic
         Check.NotNull(type);
-        if (Attribute.GetCustomAttribute(type, typeof(DurableTaskAttribute))
-            is DurableTaskAttribute attribute)
+        return Attribute.GetCustomAttribute(type, typeof(DurableTaskAttribute)) switch
         {
-            return attribute.Name;
-        }
-        else
-        {
-            return type.Name;
-        }
+            DurableTaskAttribute { Name.Name: not null and not "" } attr => attr.Name,
+            _ => new TaskName(type.Name),
+        };
     }
 }

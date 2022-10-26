@@ -63,7 +63,7 @@ public sealed partial class DurableTaskRegistry
     {
         Check.NotDefault(name);
         Check.NotNull(factory);
-        if (this.activitiesBuilder.ContainsKey(name))
+        if (this.orchestratorsBuilder.ContainsKey(name))
         {
             throw new ArgumentException(
                 $"An {nameof(ITaskOrchestrator)} named '{name}' is already added.", nameof(name));

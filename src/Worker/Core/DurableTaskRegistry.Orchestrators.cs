@@ -15,8 +15,10 @@ public partial class DurableTaskRegistry
       by type:
         Type argument
         TaskName and Type argument
-        {TOrchestrator} generic parameter
-        TaskName and {TOrchestrator} generic parameter
+        TOrchestrator generic parameter
+        TaskName and TOrchestrator generic parameter
+        ITaskOrchestrator singleton
+        TaskName and ITaskOrchestrator singleton
 
       by func/action:
         Func{Context, Input, Task{Output}}
@@ -112,6 +114,22 @@ public partial class DurableTaskRegistry
     /// Registers an orchestrator factory, where the implementation is <paramref name="orchestrator" />.
     /// </summary>
     /// <typeparam name="TInput">The orchestrator input type.</typeparam>
+    /// <typeparam name="TOutput">The orchestrator output type.</typeparam>
+    /// <param name="name">The name of the orchestrator to register.</param>
+    /// <param name="orchestrator">The orchestrator implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    public DurableTaskRegistry AddOrchestrator<TInput, TOutput>(
+        TaskName name, Func<TaskOrchestrationContext, TInput, TOutput> orchestrator)
+    {
+        Check.NotNull(orchestrator);
+        return this.AddOrchestrator<TInput, TOutput>(
+            name, (context, input) => Task.FromResult(orchestrator.Invoke(context, input)));
+    }
+
+    /// <summary>
+    /// Registers an orchestrator factory, where the implementation is <paramref name="orchestrator" />.
+    /// </summary>
+    /// <typeparam name="TInput">The orchestrator input type.</typeparam>
     /// <param name="name">The name of the orchestrator to register.</param>
     /// <param name="orchestrator">The orchestrator implementation.</param>
     /// <returns>The same registry, for call chaining.</returns>
@@ -124,6 +142,20 @@ public partial class DurableTaskRegistry
             await orchestrator(context, input);
             return null;
         });
+    }
+
+    /// <summary>
+    /// Registers an orchestrator factory, where the implementation is <paramref name="orchestrator" />.
+    /// </summary>
+    /// <typeparam name="TOutput">The orchestrator output type.</typeparam>
+    /// <param name="name">The name of the orchestrator to register.</param>
+    /// <param name="orchestrator">The orchestrator implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    public DurableTaskRegistry AddOrchestrator<TOutput>(
+        TaskName name, Func<TaskOrchestrationContext, Task<TOutput>> orchestrator)
+    {
+        Check.NotNull(orchestrator);
+        return this.AddOrchestrator<object?, TOutput>(name, (context, _) => orchestrator(context));
     }
 
     /// <summary>
@@ -145,28 +177,12 @@ public partial class DurableTaskRegistry
     /// <summary>
     /// Registers an orchestrator factory, where the implementation is <paramref name="orchestrator" />.
     /// </summary>
-    /// <typeparam name="TInput">The orchestrator input type.</typeparam>
-    /// <typeparam name="TOutput">The orchestrator output type.</typeparam>
-    /// <param name="name">The name of the orchestrator to register.</param>
-    /// <param name="orchestrator">The orchestrator implementation.</param>
-    /// <returns>The same registry, for call chaining.</returns>
-    public DurableTaskRegistry AddOrchestrator<TInput, TOutput>(
-        TaskName name, Func<TaskOrchestrationContext, TInput, TOutput> orchestrator)
-    {
-        Check.NotNull(orchestrator);
-        return this.AddOrchestrator<TInput, TOutput>(
-            name, (context, input) => Task.FromResult(orchestrator.Invoke(context, input)));
-    }
-
-    /// <summary>
-    /// Registers an orchestrator factory, where the implementation is <paramref name="orchestrator" />.
-    /// </summary>
     /// <typeparam name="TOutput">The orchestrator output type.</typeparam>
     /// <param name="name">The name of the orchestrator to register.</param>
     /// <param name="orchestrator">The orchestrator implementation.</param>
     /// <returns>The same registry, for call chaining.</returns>
     public DurableTaskRegistry AddOrchestrator<TOutput>(
-        TaskName name, Func<TaskOrchestrationContext, Task<TOutput>> orchestrator)
+        TaskName name, Func<TaskOrchestrationContext, TOutput> orchestrator)
     {
         Check.NotNull(orchestrator);
         return this.AddOrchestrator<object?, TOutput>(name, (context, _) => orchestrator(context));

@@ -14,11 +14,10 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// Initializes a new instance of the <see cref="TaskName"/> struct.
     /// </summary>
     /// <param name="name">The name of the task.</param>
-    /// <param name="version">The version of the task, if applicable.</param>
-    public TaskName(string name, string? version = null)
+    public TaskName(string name)
     {
-        this.Name = name ?? throw new ArgumentNullException(nameof(name));
-        this.Version = version ?? string.Empty;
+        this.Name = Check.NotNullOrEmpty(name);
+        this.Version = string.Empty;
     }
 
     /// <summary>
@@ -47,7 +46,7 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// Implicitly converts a <see cref="string"/> into a <see cref="TaskName"/> value.
     /// </summary>
     /// <param name="value">The string to convert into a <see cref="TaskName"/>.</param>
-    public static implicit operator TaskName(string value) => new(value);
+    public static implicit operator TaskName(string value) => string.IsNullOrEmpty(value) ? default : new(value);
 
     /// <summary>
     /// Compares two <see cref="TaskName"/> objects for equality.

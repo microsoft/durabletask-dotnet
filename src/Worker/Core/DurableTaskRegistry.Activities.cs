@@ -16,8 +16,10 @@ public sealed partial class DurableTaskRegistry
       by type:
         Type argument
         TaskName and Type argument
-        {TActivity} generic parameter
-        TaskName and {TActivity} generic parameter
+        TActivity generic parameter
+        TaskName and TActivity generic parameter
+        ITaskActivity singleton
+        TaskName ITaskActivity singleton
 
       by func/action:
         Func{Context, Input, Task{Output}}
@@ -81,7 +83,7 @@ public sealed partial class DurableTaskRegistry
     public DurableTaskRegistry AddActivity(TaskName name, ITaskActivity activity)
     {
         Check.NotNull(activity);
-        return this.AddActivity(name, _ => activity);
+        return this.AddActivity(name, (IServiceProvider _) => activity);
     }
 
     /// <summary>
@@ -115,6 +117,22 @@ public sealed partial class DurableTaskRegistry
     /// Registers an activity factory, where the implementation is <paramref name="activity" />.
     /// </summary>
     /// <typeparam name="TInput">The activity input type.</typeparam>
+    /// <typeparam name="TOutput">The activity output type.</typeparam>
+    /// <param name="name">The name of the activity to register.</param>
+    /// <param name="activity">The activity implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    public DurableTaskRegistry AddActivity<TInput, TOutput>(
+        TaskName name, Func<TaskActivityContext, TInput, TOutput> activity)
+    {
+        Check.NotNull(activity);
+        return this.AddActivity<TInput, TOutput>(
+            name, (context, input) => Task.FromResult(activity.Invoke(context, input)));
+    }
+
+    /// <summary>
+    /// Registers an activity factory, where the implementation is <paramref name="activity" />.
+    /// </summary>
+    /// <typeparam name="TInput">The activity input type.</typeparam>
     /// <param name="name">The name of the activity to register.</param>
     /// <param name="activity">The activity implementation.</param>
     /// <returns>The same registry, for call chaining.</returns>
@@ -126,6 +144,19 @@ public sealed partial class DurableTaskRegistry
             await activity(context, input);
             return null;
         });
+    }
+
+    /// <summary>
+    /// Registers an activity factory, where the implementation is <paramref name="activity" />.
+    /// </summary>
+    /// <typeparam name="TOutput">The activity output type.</typeparam>
+    /// <param name="name">The name of the activity to register.</param>
+    /// <param name="activity">The activity implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    public DurableTaskRegistry AddActivity<TOutput>(TaskName name, Func<TaskActivityContext, Task<TOutput>> activity)
+    {
+        Check.NotNull(activity);
+        return this.AddActivity<object?, TOutput>(name, (context, _) => activity(context));
     }
 
     /// <summary>
@@ -147,27 +178,11 @@ public sealed partial class DurableTaskRegistry
     /// <summary>
     /// Registers an activity factory, where the implementation is <paramref name="activity" />.
     /// </summary>
-    /// <typeparam name="TInput">The activity input type.</typeparam>
     /// <typeparam name="TOutput">The activity output type.</typeparam>
     /// <param name="name">The name of the activity to register.</param>
     /// <param name="activity">The activity implementation.</param>
     /// <returns>The same registry, for call chaining.</returns>
-    public DurableTaskRegistry AddActivity<TInput, TOutput>(
-        TaskName name, Func<TaskActivityContext, TInput, TOutput> activity)
-    {
-        Check.NotNull(activity);
-        return this.AddActivity<TInput, TOutput>(
-            name, (context, input) => Task.FromResult(activity.Invoke(context, input)));
-    }
-
-    /// <summary>
-    /// Registers an activity factory, where the implementation is <paramref name="activity" />.
-    /// </summary>
-    /// <typeparam name="TOutput">The activity output type.</typeparam>
-    /// <param name="name">The name of the activity to register.</param>
-    /// <param name="activity">The activity implementation.</param>
-    /// <returns>The same registry, for call chaining.</returns>
-    public DurableTaskRegistry AddActivity<TOutput>(TaskName name, Func<TaskActivityContext, Task<TOutput>> activity)
+    public DurableTaskRegistry AddActivity<TOutput>(TaskName name, Func<TaskActivityContext, TOutput> activity)
     {
         Check.NotNull(activity);
         return this.AddActivity<object?, TOutput>(name, (context, _) => activity(context));

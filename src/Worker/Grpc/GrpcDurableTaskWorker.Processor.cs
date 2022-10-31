@@ -189,7 +189,7 @@ sealed partial class GrpcDurableTaskWorker
             try
             {
                 OrchestrationRuntimeState runtimeState = BuildRuntimeState(request);
-                name = new(runtimeState.Name, runtimeState.Version);
+                name = new(runtimeState.Name);
 
                 this.Logger.ReceivedOrchestratorRequest(
                     name,
@@ -205,7 +205,7 @@ sealed partial class GrpcDurableTaskWorker
                     // as part of try/catch.
                     ParentOrchestrationInstance? parent = runtimeState.ParentInstance switch
                     {
-                        ParentInstance p => new(new(p.Name, p.Version), p.OrchestrationInstance.InstanceId),
+                        ParentInstance p => new(new(p.Name), p.OrchestrationInstance.InstanceId),
                         _ => null,
                     };
 
@@ -280,9 +280,7 @@ sealed partial class GrpcDurableTaskWorker
             this.Logger.ReceivedActivityRequest(request.Name, request.TaskId, instance.InstanceId, inputSize);
 
             TaskContext innerContext = new(instance);
-
-            TaskName name = new(request.Name, request.Version);
-
+            TaskName name = new(request.Name);
             string? output = null;
             P.TaskFailureDetails? failureDetails = null;
             try

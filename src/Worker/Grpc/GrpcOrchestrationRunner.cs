@@ -105,9 +105,9 @@ public static class GrpcOrchestrationRunner
             runtimeState.AddEvent(newEvent);
         }
 
-        TaskName orchestratorName = new(runtimeState.Name, runtimeState.Version);
+        TaskName orchestratorName = new(runtimeState.Name);
         ParentOrchestrationInstance? parent = runtimeState.ParentInstance is ParentInstance p
-            ? new(new(p.Name, p.Version), p.OrchestrationInstance.InstanceId)
+            ? new(new(p.Name), p.OrchestrationInstance.InstanceId)
             : null;
 
         DurableTaskShimFactory factory = services is null

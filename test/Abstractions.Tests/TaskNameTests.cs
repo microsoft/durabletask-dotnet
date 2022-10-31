@@ -6,17 +6,18 @@ namespace Microsoft.DurableTask;
 public class TaskNameTests
 {
     [Fact]
-    public void Ctor_NullName_Throws()
+    public void Ctor_NullName_Default()
     {
-        Func<TaskName> act = () => new TaskName(null!);
-        act.Should().ThrowExactly<ArgumentNullException>().WithParameterName("name");
+        TaskName name = new(null!);
+        name.Should().Be(default(TaskName));
     }
 
     [Fact]
-    public void Ctor_EmptyName_Throws()
+    public void Ctor_EmptyName_Okay()
     {
-        Func<TaskName> act = () => new TaskName(string.Empty);
-        act.Should().ThrowExactly<ArgumentException>().WithParameterName("name");
+        TaskName name = new(string.Empty);
+        name.Name.Should().Be(string.Empty);
+        name.Version.Should().Be(string.Empty);
     }
 
     [Theory]

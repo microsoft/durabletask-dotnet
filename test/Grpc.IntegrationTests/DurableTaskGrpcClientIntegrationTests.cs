@@ -155,7 +155,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
 
         return this.StartWorkerAsync(b =>
         {
-            b.AddTasks(tasks => tasks.AddOrchestrator<bool, string>(OrchestrationName, Orchestration));
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc<bool, string>(OrchestrationName, Orchestration));
         });
     }
 }

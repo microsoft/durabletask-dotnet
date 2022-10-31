@@ -128,45 +128,45 @@ public partial class DurableTaskRegistryTests
     [Fact]
     public void AddOrchestrator_Func1_Success()
         => RunAddOrchestratorTest(
-            r => r.AddOrchestrator(
+            r => r.AddOrchestratorFunc(
                 nameof(TestOrchestrator), (TaskOrchestrationContext ctx, string input) => Task.FromResult(input)));
 
     [Fact]
     public void AddOrchestrator_Func2_Success()
         => RunAddOrchestratorTest(
-            r => r.AddOrchestrator(nameof(TestOrchestrator), (TaskOrchestrationContext ctx, string input) => input));
+            r => r.AddOrchestratorFunc(nameof(TestOrchestrator), (TaskOrchestrationContext ctx, string input) => input));
 
     [Fact]
     public void AddOrchestrator_Func3_Success()
         => RunAddOrchestratorTest(
-            r => r.AddOrchestrator(
+            r => r.AddOrchestratorFunc(
                 nameof(TestOrchestrator), (TaskOrchestrationContext ctx, string input) => Task.CompletedTask));
 
     [Fact]
     public void AddOrchestrator_Func4_Success()
         => RunAddOrchestratorTest(
-            r => r.AddOrchestrator(
+            r => r.AddOrchestratorFunc(
                 nameof(TestOrchestrator), (TaskOrchestrationContext ctx) => Task.FromResult(string.Empty)));
 
     [Fact]
     public void AddOrchestrator_Func5_Success()
         => RunAddOrchestratorTest(
-            r => r.AddOrchestrator(nameof(TestOrchestrator), (TaskOrchestrationContext ctx) => Task.CompletedTask));
+            r => r.AddOrchestratorFunc(nameof(TestOrchestrator), (TaskOrchestrationContext ctx) => Task.CompletedTask));
 
     [Fact]
     public void AddOrchestrator_Func6_Success()
         => RunAddOrchestratorTest(
-            r => r.AddOrchestrator(nameof(TestOrchestrator), (TaskOrchestrationContext ctx) => string.Empty));
+            r => r.AddOrchestratorFunc(nameof(TestOrchestrator), (TaskOrchestrationContext ctx) => string.Empty));
 
     [Fact]
     public void AddOrchestrator_Action1_Success()
         => RunAddOrchestratorTest(
-            r => r.AddOrchestrator(nameof(TestOrchestrator), (TaskOrchestrationContext ctx, string input) => { }));
+            r => r.AddOrchestratorFunc(nameof(TestOrchestrator), (TaskOrchestrationContext ctx, string input) => { }));
 
     [Fact]
     public void AddOrchestrator_Action2_Success()
         => RunAddOrchestratorTest(
-            r => r.AddOrchestrator(nameof(TestOrchestrator), (TaskOrchestrationContext ctx) => { }));
+            r => r.AddOrchestratorFunc(nameof(TestOrchestrator), (TaskOrchestrationContext ctx) => { }));
 
     static ITaskOrchestrator RunAddOrchestratorTest(Action<DurableTaskRegistry> callback)
     {

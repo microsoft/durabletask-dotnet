@@ -22,9 +22,9 @@ public class PageableIntegrationTests : IntegrationTestBase
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
-                .AddOrchestrator<string, int>(
+                .AddOrchestratorFunc<string, int>(
                     orchestratorName, (ctx, input) => PageableOrchestrationAsync(ctx, input))
-                .AddActivity<PageRequest, Page<string>?>(
+                .AddActivityFunc<PageRequest, Page<string>?>(
                     nameof(PageableActivityAsync), (_, input) => PageableActivityAsync(input)));
         });
 

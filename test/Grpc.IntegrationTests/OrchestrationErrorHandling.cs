@@ -34,8 +34,8 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
-                .AddOrchestrator(orchestratorName, MyOrchestrationImpl)
-                .AddActivity(activityName, MyActivityImpl));
+                .AddOrchestratorFunc(orchestratorName, MyOrchestrationImpl)
+                .AddActivityFunc(activityName, MyActivityImpl));
         });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
@@ -82,7 +82,7 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         TaskName orchestratorName = "FaultyOrchestration";
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
-            b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, ctx =>
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, ctx =>
             {
                 // The Environment.StackTrace and throw statements need to be on the same line
                 // to keep line numbers consistent between the expected stack trace and the actual stack trace.
@@ -132,11 +132,11 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks =>
-                tasks.AddOrchestrator(orchestratorName, async ctx =>
+                tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
                 {
                     await ctx.CallActivityAsync("Foo", options: retryOptions);
                 })
-                .AddActivity("Foo", (TaskActivityContext context) =>
+                .AddActivityFunc("Foo", (TaskActivityContext context) =>
                 {
                     actualNumberOfAttempts++;
                     throw new Exception(errorMessage);
@@ -195,11 +195,11 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks =>
-                tasks.AddOrchestrator(orchestratorName, async ctx =>
+                tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
                 {
                     await ctx.CallActivityAsync("Foo", options: retryOptions);
                 })
-                .AddActivity("Foo", (TaskActivityContext context) =>
+                .AddActivityFunc("Foo", (TaskActivityContext context) =>
                 {
                     actualNumberOfAttempts++;
                     throw new ApplicationException(errorMessage);
@@ -241,11 +241,11 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks =>
-                tasks.AddOrchestrator(orchestratorName, async ctx =>
+                tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
                 {
                     await ctx.CallSubOrchestratorAsync("BustedSubOrchestrator", options: retryOptions);
                 })
-                .AddOrchestrator("BustedSubOrchestrator", context =>
+                .AddOrchestratorFunc("BustedSubOrchestrator", context =>
                 {
                     actualNumberOfAttempts++;
                     throw new ApplicationException(errorMessage);
@@ -304,11 +304,11 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks =>
-                tasks.AddOrchestrator(orchestratorName, async ctx =>
+                tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
                 {
                     await ctx.CallSubOrchestratorAsync("BustedSubOrchestrator", options: retryOptions);
                 })
-                .AddOrchestrator("BustedSubOrchestrator", context =>
+                .AddOrchestratorFunc("BustedSubOrchestrator", context =>
                 {
                     actualNumberOfAttempts++;
                     throw new ApplicationException(errorMessage);
@@ -344,7 +344,7 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         TaskName orchestratorName = "OrchestrationWithMissingTask";
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
-            b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
             {
                 if (activity)
                 {

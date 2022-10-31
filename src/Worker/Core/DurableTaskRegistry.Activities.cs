@@ -105,7 +105,7 @@ public sealed partial class DurableTaskRegistry
     /// <param name="name">The name of the activity to register.</param>
     /// <param name="activity">The activity implementation.</param>
     /// <returns>The same registry, for call chaining.</returns>
-    public DurableTaskRegistry AddActivity<TInput, TOutput>(
+    public DurableTaskRegistry AddActivityFunc<TInput, TOutput>(
         TaskName name, Func<TaskActivityContext, TInput, Task<TOutput>> activity)
     {
         Check.NotNull(activity);
@@ -121,11 +121,11 @@ public sealed partial class DurableTaskRegistry
     /// <param name="name">The name of the activity to register.</param>
     /// <param name="activity">The activity implementation.</param>
     /// <returns>The same registry, for call chaining.</returns>
-    public DurableTaskRegistry AddActivity<TInput, TOutput>(
+    public DurableTaskRegistry AddActivityFunc<TInput, TOutput>(
         TaskName name, Func<TaskActivityContext, TInput, TOutput> activity)
     {
         Check.NotNull(activity);
-        return this.AddActivity<TInput, TOutput>(
+        return this.AddActivityFunc<TInput, TOutput>(
             name, (context, input) => Task.FromResult(activity.Invoke(context, input)));
     }
 
@@ -136,10 +136,10 @@ public sealed partial class DurableTaskRegistry
     /// <param name="name">The name of the activity to register.</param>
     /// <param name="activity">The activity implementation.</param>
     /// <returns>The same registry, for call chaining.</returns>
-    public DurableTaskRegistry AddActivity<TInput>(TaskName name, Func<TaskActivityContext, TInput, Task> activity)
+    public DurableTaskRegistry AddActivityFunc<TInput>(TaskName name, Func<TaskActivityContext, TInput, Task> activity)
     {
         Check.NotNull(activity);
-        return this.AddActivity<TInput, object?>(name, async (context, input) =>
+        return this.AddActivityFunc<TInput, object?>(name, async (context, input) =>
         {
             await activity(context, input);
             return null;
@@ -153,10 +153,10 @@ public sealed partial class DurableTaskRegistry
     /// <param name="name">The name of the activity to register.</param>
     /// <param name="activity">The activity implementation.</param>
     /// <returns>The same registry, for call chaining.</returns>
-    public DurableTaskRegistry AddActivity<TOutput>(TaskName name, Func<TaskActivityContext, Task<TOutput>> activity)
+    public DurableTaskRegistry AddActivityFunc<TOutput>(TaskName name, Func<TaskActivityContext, Task<TOutput>> activity)
     {
         Check.NotNull(activity);
-        return this.AddActivity<object?, TOutput>(name, (context, _) => activity(context));
+        return this.AddActivityFunc<object?, TOutput>(name, (context, _) => activity(context));
     }
 
     /// <summary>
@@ -165,10 +165,10 @@ public sealed partial class DurableTaskRegistry
     /// <param name="name">The name of the activity to register.</param>
     /// <param name="activity">The activity implementation.</param>
     /// <returns>The same registry, for call chaining.</returns>
-    public DurableTaskRegistry AddActivity(TaskName name, Func<TaskActivityContext, Task> activity)
+    public DurableTaskRegistry AddActivityFunc(TaskName name, Func<TaskActivityContext, Task> activity)
     {
         Check.NotNull(activity);
-        return this.AddActivity<object?, object?>(name, async (context, _) =>
+        return this.AddActivityFunc<object?, object?>(name, async (context, _) =>
         {
             await activity(context);
             return null;
@@ -182,10 +182,10 @@ public sealed partial class DurableTaskRegistry
     /// <param name="name">The name of the activity to register.</param>
     /// <param name="activity">The activity implementation.</param>
     /// <returns>The same registry, for call chaining.</returns>
-    public DurableTaskRegistry AddActivity<TOutput>(TaskName name, Func<TaskActivityContext, TOutput> activity)
+    public DurableTaskRegistry AddActivityFunc<TOutput>(TaskName name, Func<TaskActivityContext, TOutput> activity)
     {
         Check.NotNull(activity);
-        return this.AddActivity<object?, TOutput>(name, (context, _) => activity(context));
+        return this.AddActivityFunc<object?, TOutput>(name, (context, _) => activity(context));
     }
 
     /// <summary>
@@ -195,10 +195,10 @@ public sealed partial class DurableTaskRegistry
     /// <param name="name">The name of the activity to register.</param>
     /// <param name="activity">The activity implementation.</param>
     /// <returns>The same registry, for call chaining.</returns>
-    public DurableTaskRegistry AddActivity<TInput>(TaskName name, Action<TaskActivityContext, TInput> activity)
+    public DurableTaskRegistry AddActivityFunc<TInput>(TaskName name, Action<TaskActivityContext, TInput> activity)
     {
         Check.NotNull(activity);
-        return this.AddActivity<TInput, object?>(name, (context, input) =>
+        return this.AddActivityFunc<TInput, object?>(name, (context, input) =>
         {
             activity(context, input);
             return CompletedNullTask;
@@ -211,10 +211,10 @@ public sealed partial class DurableTaskRegistry
     /// <param name="name">The name of the activity to register.</param>
     /// <param name="activity">The activity implementation.</param>
     /// <returns>The same registry, for call chaining.</returns>
-    public DurableTaskRegistry AddActivity(TaskName name, Action<TaskActivityContext> activity)
+    public DurableTaskRegistry AddActivityFunc(TaskName name, Action<TaskActivityContext> activity)
     {
         Check.NotNull(activity);
-        return this.AddActivity<object?, object?>(name, (context, input) =>
+        return this.AddActivityFunc<object?, object?>(name, (context, input) =>
         {
             activity(context);
             return CompletedNullTask;

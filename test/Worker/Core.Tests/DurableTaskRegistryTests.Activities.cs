@@ -125,43 +125,43 @@ public partial class DurableTaskRegistryTests
     [Fact]
     public void AddActivity_Func1_Success()
         => RunAddActivityTest(
-            r => r.AddActivity(
+            r => r.AddActivityFunc(
                 nameof(TestActivity), (TaskActivityContext ctx, string input) => Task.FromResult(input)));
 
     [Fact]
     public void AddActivity_Func2_Success()
         => RunAddActivityTest(
-            r => r.AddActivity(nameof(TestActivity), (TaskActivityContext ctx, string input) => input));
+            r => r.AddActivityFunc(nameof(TestActivity), (TaskActivityContext ctx, string input) => input));
 
     [Fact]
     public void AddActivity_Func3_Success()
         => RunAddActivityTest(
-            r => r.AddActivity(nameof(TestActivity), (TaskActivityContext ctx, string input) => Task.CompletedTask));
+            r => r.AddActivityFunc(nameof(TestActivity), (TaskActivityContext ctx, string input) => Task.CompletedTask));
 
     [Fact]
     public void AddActivity_Func4_Success()
         => RunAddActivityTest(
-            r => r.AddActivity(nameof(TestActivity), (TaskActivityContext ctx) => Task.FromResult(string.Empty)));
+            r => r.AddActivityFunc(nameof(TestActivity), (TaskActivityContext ctx) => Task.FromResult(string.Empty)));
 
     [Fact]
     public void AddActivity_Func5_Success()
         => RunAddActivityTest(
-            r => r.AddActivity(nameof(TestActivity), (TaskActivityContext ctx) => Task.CompletedTask));
+            r => r.AddActivityFunc(nameof(TestActivity), (TaskActivityContext ctx) => Task.CompletedTask));
 
     [Fact]
     public void AddActivity_Func6_Success()
         => RunAddActivityTest(
-            r => r.AddActivity(nameof(TestActivity), (TaskActivityContext ctx) => string.Empty));
+            r => r.AddActivityFunc(nameof(TestActivity), (TaskActivityContext ctx) => string.Empty));
 
     [Fact]
     public void AddActivity_Action1_Success()
         => RunAddActivityTest(
-            r => r.AddActivity(nameof(TestActivity), (TaskActivityContext ctx, string input) => { }));
+            r => r.AddActivityFunc(nameof(TestActivity), (TaskActivityContext ctx, string input) => { }));
 
     [Fact]
     public void AddActivity_Action2_Success()
         => RunAddActivityTest(
-            r => r.AddActivity(nameof(TestActivity), (TaskActivityContext ctx) => { }));
+            r => r.AddActivityFunc(nameof(TestActivity), (TaskActivityContext ctx) => { }));
 
     static ITaskActivity RunAddActivityTest(Action<DurableTaskRegistry> callback)
     {

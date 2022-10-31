@@ -13,11 +13,20 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskName"/> struct.
     /// </summary>
-    /// <param name="name">The name of the task.</param>
+    /// <param name="name">The name of the task. Providing <c>null</c> will yield the default struct.</param>
     public TaskName(string name)
     {
-        this.Name = Check.NotNullOrEmpty(name);
-        this.Version = string.Empty; // expose setting Version only when we actually consume it.
+        if (name is null)
+        {
+            // Force the default struct when null is passed in.
+            this.Name = null!;
+            this.Version = null!;
+        }
+        else
+        {
+            this.Name = name;
+            this.Version = string.Empty; // expose setting Version only when we actually consume it.
+        }
     }
 
     /// <summary>

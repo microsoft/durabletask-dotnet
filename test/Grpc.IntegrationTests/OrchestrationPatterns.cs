@@ -22,7 +22,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(EmptyOrchestration);
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
-            b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, ctx => Task.FromResult<object?>(null)));
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, ctx => Task.FromResult<object?>(null)));
         });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
@@ -42,7 +42,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
-            b.AddTasks(tasks => tasks.AddOrchestrator(
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(
                 orchestratorName, ctx => ctx.CreateTimer(delay, CancellationToken.None)));
         });
 
@@ -69,7 +69,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
             b.Configure(opt => opt.MaximumTimerInterval = timerInterval);
-            b.AddTasks(tasks => tasks.AddOrchestrator(
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(
                 orchestratorName, ctx => ctx.CreateTimer(delay, CancellationToken.None)));
         });
 
@@ -97,7 +97,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
-            b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
             {
                 var list = new List<bool> { ctx.IsReplaying };
                 await ctx.CreateTimer(TimeSpan.Zero, CancellationToken.None);
@@ -132,7 +132,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
-                .AddOrchestrator(orchestratorName, async ctx =>
+                .AddOrchestratorFunc(orchestratorName, async ctx =>
                 {
                     DateTime currentDate1 = ctx.CurrentUtcDateTime;
                     DateTime originalDate1 = await ctx.CallActivityAsync<DateTime>(echoActivityName, currentDate1);
@@ -150,7 +150,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
                     return currentDate1 != currentDate2;
                 })
-                .AddActivity<object, object>(echoActivityName, (ctx, input) => input));
+                .AddActivityFunc<object, object>(echoActivityName, (ctx, input) => input));
         });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
@@ -173,9 +173,9 @@ public class OrchestrationPatterns : IntegrationTestBase
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
-                .AddOrchestrator<string, string>(
+                .AddOrchestratorFunc<string, string>(
                     orchestratorName, (ctx, input) => ctx.CallActivityAsync<string>(sayHelloActivityName, input))
-                .AddActivity<string, string>(sayHelloActivityName, (ctx, name) => $"Hello, {name}!"));
+                .AddActivityFunc<string, string>(sayHelloActivityName, (ctx, name) => $"Hello, {name}!"));
         });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
@@ -198,9 +198,9 @@ public class OrchestrationPatterns : IntegrationTestBase
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
-                .AddOrchestrator<string, string>(
+                .AddOrchestratorFunc<string, string>(
                     orchestratorName, (ctx, input) => ctx.CallActivityAsync<string>(sayHelloActivityName, input))
-                .AddActivity<string, string>(
+                .AddActivityFunc<string, string>(
                     sayHelloActivityName, async (ctx, name) => await Task.FromResult($"Hello, {name}!")));
         });
 
@@ -224,7 +224,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
-                .AddOrchestrator(orchestratorName, async ctx =>
+                .AddOrchestratorFunc(orchestratorName, async ctx =>
                 {
                     int value = 0;
                     for (int i = 0; i < 10; i++)
@@ -234,7 +234,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
                     return value;
                 })
-                .AddActivity<int, int>(plusOneActivityName, (ctx, input) => input + 1));
+                .AddActivityFunc<int, int>(plusOneActivityName, (ctx, input) => input + 1));
         });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
@@ -257,7 +257,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
-                .AddOrchestrator(orchestratorName, async ctx =>
+                .AddOrchestratorFunc(orchestratorName, async ctx =>
                 {
                     var tasks = new List<Task<string>>();
                     for (int i = 0; i < 10; i++)
@@ -270,7 +270,7 @@ public class OrchestrationPatterns : IntegrationTestBase
                     Array.Reverse(results);
                     return results;
                 })
-                .AddActivity<object, string?>(toStringActivity, (ctx, input) => input.ToString()));
+                .AddActivityFunc<object, string?>(toStringActivity, (ctx, input) => input.ToString()));
         });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
@@ -294,7 +294,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(ExternalEvents);
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
-            b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
             {
                 List<int> events = new();
                 for (int i = 0; i < eventCount; i++)
@@ -338,7 +338,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestrationName = nameof(Termination);
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
-            b.AddTasks(tasks => tasks.AddOrchestrator(
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(
                 orchestrationName, ctx => ctx.CreateTimer(TimeSpan.FromSeconds(3), CancellationToken.None)));
         });
 
@@ -370,7 +370,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
-            b.AddTasks(tasks => tasks.AddOrchestrator<int, int>(orchestratorName, async (ctx, input) =>
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc<int, int>(orchestratorName, async (ctx, input) =>
             {
                 if (input < 10)
                 {
@@ -400,7 +400,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
-            b.AddTasks(tasks => tasks.AddOrchestrator<int, int>(orchestratorName, async (ctx, input) =>
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc<int, int>(orchestratorName, async (ctx, input) =>
             {
                 int result = 5;
                 if (input < 3)
@@ -430,7 +430,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(SetCustomStatus);
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
-            b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
             {
                 ctx.SetCustomStatus("Started!");
 
@@ -476,7 +476,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
-                .AddOrchestrator<int, bool>(orchestratorName, async (ctx, input) =>
+                .AddOrchestratorFunc<int, bool>(orchestratorName, async (ctx, input) =>
                 {
                     // Test 1: Ensure two consecutively created GUIDs are unique
                     Guid currentGuid0 = ctx.NewGuid();
@@ -504,7 +504,7 @@ public class OrchestrationPatterns : IntegrationTestBase
                     // Test 4: Finish confirming that every generated GUID is unique
                     return currentGuid1 != currentGuid2;
                 })
-                .AddActivity<Guid, Guid>(echoActivityName, (ctx, input) => input));
+                .AddActivityFunc<Guid, Guid>(echoActivityName, (ctx, input) => input));
         });
 
         DurableTaskClient client = this.CreateDurableTaskClient();
@@ -524,7 +524,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         await using AsyncDisposable server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
-                .AddOrchestrator<JsonNode, JsonNode>("SpecialSerialization_Orchestration", (ctx, input) =>
+                .AddOrchestratorFunc<JsonNode, JsonNode>("SpecialSerialization_Orchestration", (ctx, input) =>
                 {
                     if (input is null)
                     {
@@ -533,7 +533,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
                     return ctx.CallActivityAsync<JsonNode>("SpecialSerialization_Activity", input);
                 })
-                .AddActivity<JsonNode, JsonNode?>("SpecialSerialization_Activity", (ctx, input) =>
+                .AddActivityFunc<JsonNode, JsonNode?>("SpecialSerialization_Activity", (ctx, input) =>
                 {
                     if (input is not null)
                     {

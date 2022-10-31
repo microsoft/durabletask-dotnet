@@ -2,91 +2,51 @@
 // Licensed under the MIT License.
 
 using System.Text;
-using DurableTask.Core.Serializing;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
 using P = Microsoft.DurableTask.Protobuf;
 
-namespace Microsoft.DurableTask.Grpc;
+namespace Microsoft.DurableTask.Client.Grpc;
 
 /// <summary>
 /// Durable Task client implementation that uses gRPC to connect to a remote "sidecar" process.
 /// </summary>
-public class DurableTaskGrpcClient : DurableTaskClient
+sealed class GrpcDurableTaskClient : DurableTaskClient
 {
-    readonly IServiceProvider services;
-    readonly DataConverter dataConverter;
     readonly ILogger logger;
-    readonly IConfiguration? configuration;
-    readonly Channel sidecarGrpcChannel;
     readonly TaskHubSidecarServiceClient sidecarClient;
-    readonly bool ownsChannel;
+    readonly GrpcDurableTaskClientOptions grpcOptions;
+    readonly AsyncDisposable asyncDisposable;
 
-    bool isDisposed;
-
-    DurableTaskGrpcClient(Builder builder)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GrpcDurableTaskClient"/> class.
+    /// </summary>
+    /// <param name="name">The name of the client.</param>
+    /// <param name="options">The common client options.</param>
+    /// <param name="grpcOptions">The gRPC client options.</param>
+    /// <param name="logger">The logger.</param>
+    public GrpcDurableTaskClient(
+        string name,
+        DurableTaskClientOptions options,
+        IOptionsMonitor<GrpcDurableTaskClientOptions> grpcOptions,
+        ILogger<GrpcDurableTaskClient> logger)
+        : base(name, options)
     {
-        this.services = builder.Services ?? SdkUtils.EmptyServiceProvider.Instance;
-        this.dataConverter = builder.DataConverter ?? this.services.GetService<DataConverter>()
-            ?? Converters.JsonDataConverter.Default;
-        this.logger = SdkUtils.GetLogger(builder.LoggerFactory ?? this.services.GetService<ILoggerFactory>()
-            ?? NullLoggerFactory.Instance);
-        this.configuration = builder.Configuration ?? this.services.GetService<IConfiguration>();
-
-        if (builder.Channel != null)
-        {
-            // Use the channel from the builder, which was given to us by the app (thus we don't own it and can't
-            // dispose it)
-            this.sidecarGrpcChannel = builder.Channel;
-            this.ownsChannel = false;
-        }
-        else
-        {
-            // We have to create our own channel and are responsible for disposing it
-            this.sidecarGrpcChannel = new Channel(
-                builder.Hostname ?? SdkUtils.GetSidecarHost(this.configuration),
-                builder.Port ?? SdkUtils.GetSidecarPort(this.configuration),
-                ChannelCredentials.Insecure);
-            this.ownsChannel = true;
-        }
-
-        this.sidecarClient = new TaskHubSidecarServiceClient(this.sidecarGrpcChannel);
+        this.logger = logger;
+        this.grpcOptions = grpcOptions.Get(name);
+        this.asyncDisposable = this.BuildChannel(out Channel channel);
+        this.sidecarClient = new TaskHubSidecarServiceClient(channel);
     }
 
-    /// <summary>
-    /// Creates a new instance of the <see cref="DurableTaskGrpcClient"/> class with default configuration.
-    /// </summary>
-    /// <remarks>
-    /// You can use the <see cref="CreateBuilder"/> method to create client with non-default configuration.
-    /// </remarks>
-    /// <returns>Returns a new instance of the <see cref="DurableTaskGrpcClient"/> class.</returns>
-    public static DurableTaskClient Create() => CreateBuilder().Build();
-
-    /// <summary>
-    /// Creates a new instance of the <see cref="Builder"/> class, which can be used to construct customized
-    /// <see cref="DurableTaskClient"/> instances.
-    /// </summary>
-    /// <returns>Returns a new <see cref="Builder"/> object.</returns>
-    public static Builder CreateBuilder() => new();
+    DataConverter DataConverter => this.Options.DataConverter;
 
     /// <inheritdoc/>
-    public override async ValueTask DisposeAsync()
+    public override ValueTask DisposeAsync()
     {
-        if (!this.isDisposed)
-        {
-            if (this.ownsChannel)
-            {
-                await this.sidecarGrpcChannel.ShutdownAsync();
-            }
-
-            GC.SuppressFinalize(this);
-            this.isDisposed = true;
-        }
+        return this.asyncDisposable.DisposeAsync();
     }
 
     /// <inheritdoc/>
@@ -101,7 +61,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
             Name = orchestratorName.Name,
             Version = orchestratorName.Version,
             InstanceId = instanceId ?? Guid.NewGuid().ToString("N"),
-            Input = this.dataConverter.Serialize(input),
+            Input = this.DataConverter.Serialize(input),
         };
 
         this.logger.SchedulingOrchestration(
@@ -137,7 +97,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
         {
             InstanceId = instanceId,
             Name = eventName,
-            Input = this.dataConverter.Serialize(eventPayload),
+            Input = this.DataConverter.Serialize(eventPayload),
         };
 
         await this.sidecarClient.RaiseEventAsync(request);
@@ -153,7 +113,7 @@ public class DurableTaskGrpcClient : DurableTaskClient
 
         this.logger.TerminatingInstance(instanceId);
 
-        string? serializedOutput = this.dataConverter.Serialize(output);
+        string? serializedOutput = this.DataConverter.Serialize(output);
         await this.sidecarClient.TerminateInstanceAsync(new P.TerminateRequest
         {
             InstanceId = instanceId,
@@ -354,149 +314,23 @@ public class DurableTaskGrpcClient : DurableTaskClient
             SerializedOutput = state.Output,
             SerializedCustomStatus = state.CustomStatus,
             FailureDetails = ProtoUtils.ConvertTaskFailureDetails(state.FailureDetails),
-            DataConverter = includeInputsAndOutputs ? this.dataConverter : null,
+            DataConverter = includeInputsAndOutputs ? this.DataConverter : null,
         };
     }
 
-    /// <summary>
-    /// Builder object for constructing customized <see cref="DurableTaskClient"/> instances.
-    /// </summary>
-    public sealed class Builder
+    AsyncDisposable BuildChannel(out Channel channel)
     {
-        /// <summary>
-        /// Gets the service provider.
-        /// </summary>
-        internal IServiceProvider? Services { get; private set; }
-
-        /// <summary>
-        /// Gets the logger factory.
-        /// </summary>
-        internal ILoggerFactory? LoggerFactory { get; private set; }
-
-        /// <summary>
-        /// Gets the data converter.
-        /// </summary>
-        internal DataConverter? DataConverter { get; private set; }
-
-        /// <summary>
-        /// Gets the configuration.
-        /// </summary>
-        internal IConfiguration? Configuration { get; private set; }
-
-        /// <summary>
-        /// Gets the gRPC channel.
-        /// </summary>
-        internal Channel? Channel { get; private set; }
-
-        /// <summary>
-        /// Gets the gRPC hostname.
-        /// </summary>
-        internal string? Hostname { get; private set; }
-
-        /// <summary>
-        /// Gets the gRPC port.
-        /// </summary>
-        internal int? Port { get; private set; }
-
-        /// <summary>
-        /// Configures a logger factory to be used by the client.
-        /// </summary>
-        /// <remarks>
-        /// Use this method to configure a logger factory explicitly. Otherwise, the client creation process will try
-        /// to discover a logger factory from dependency-injected services (see the
-        /// <see cref="UseServices(IServiceProvider)"/> method).
-        /// </remarks>
-        /// <param name="loggerFactory">
-        /// The logger factory to use or <c>null</c> to rely on default logging configuration.
-        /// </param>
-        /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
-        public Builder UseLoggerFactory(ILoggerFactory loggerFactory)
+        if (this.grpcOptions.Channel is Channel c)
         {
-            this.LoggerFactory = loggerFactory;
-            return this;
+            channel = c;
+            return default;
         }
 
-        /// <summary>
-        /// Configures a dependency-injection service provider to use when constructing the client.
-        /// </summary>
-        /// <param name="services">
-        /// The dependency-injection service provider to configure or <c>null</c> to disable service discovery.</param>
-        /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
-        public Builder UseServices(IServiceProvider services)
-        {
-            this.Services = services;
-            return this;
-        }
+        string address = string.IsNullOrEmpty(this.grpcOptions.Address) ? "127.0.0.1:4001" : this.grpcOptions.Address!;
 
-        /// <summary>
-        /// Explicitly configures the gRPC endpoint to connect to, including the hostname and port.
-        /// </summary>
-        /// <remarks>
-        /// If not specified, the client creation process will try to resolve the endpoint from configuration (see
-        /// the <see cref="UseConfiguration(IConfiguration)"/> method). Otherwise, 127.0.0.0:4001 will be used as the
-        /// default gRPC endpoint address.
-        /// </remarks>
-        /// <param name="hostname">The hostname of the target gRPC endpoint. The default value is "127.0.0.1".</param>
-        /// <param name="port">The port number of the target gRPC endpoint. The default value is 4001.</param>
-        /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
-        public Builder UseAddress(string hostname, int? port = null)
-        {
-            this.Hostname = hostname;
-            this.Port = port;
-            return this;
-        }
-
-        /// <summary>
-        /// Configures a gRPC <see cref="global::Grpc.Core.Channel"/> to use for communicating with the sidecar process.
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// This builder method allows you to provide your own gRPC channel for communicating with the Durable Task
-        /// sidecar service. Channels provided using this method won't be disposed when the client is disposed.
-        /// Rather, the caller remains responsible for shutting down the channel after disposing the client.
-        /// </para><para>
-        /// If not specified, a gRPC channel will be created automatically for each constructed
-        /// <see cref="DurableTaskGrpcClient"/> instance.
-        /// </para>
-        /// </remarks>
-        /// <param name="channel">The gRPC channel to use.</param>
-        /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
-        public Builder UseGrpcChannel(Channel channel)
-        {
-            this.Channel = channel;
-            return this;
-        }
-
-        /// <summary>
-        /// Configures a data converter to use when reading and writing orchestration data payloads.
-        /// </summary>
-        /// <remarks>
-        /// The default behavior is to use the <see cref="JsonDataConverter"/>.
-        /// </remarks>
-        /// <param name="dataConverter">The data converter to use.</param>
-        /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
-        public Builder UseDataConverter(DataConverter dataConverter)
-        {
-            this.DataConverter = dataConverter;
-            return this;
-        }
-
-        /// <summary>
-        /// Configures a configuration source to use when initializing the <see cref="DurableTaskClient"/> instance.
-        /// </summary>
-        /// <param name="configuration">The configuration source to use.</param>
-        /// <returns>Returns the current builder object to enable fluent-like code syntax.</returns>
-        public Builder UseConfiguration(IConfiguration configuration)
-        {
-            this.Configuration = configuration;
-            return this;
-        }
-
-        /// <summary>
-        /// Initializes a new <see cref="DurableTaskClient"/> object with the settings specified in the current
-        /// builder object.
-        /// </summary>
-        /// <returns>A new <see cref="DurableTaskClient"/> object.</returns>
-        public DurableTaskClient Build() => new DurableTaskGrpcClient(this);
+        // TODO: use SSL channel by default?
+        c = new(address, ChannelCredentials.Insecure);
+        channel = c;
+        return new AsyncDisposable(async () => await c.ShutdownAsync());
     }
 }

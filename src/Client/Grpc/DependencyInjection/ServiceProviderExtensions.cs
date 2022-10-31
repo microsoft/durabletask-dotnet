@@ -4,7 +4,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace Microsoft.DurableTask;
+namespace Microsoft.DurableTask.Client;
 
 /// <summary>
 /// Extensions for <see cref="IServiceProvider" />.
@@ -22,7 +22,6 @@ static class ServiceProviderExtensions
         this IServiceProvider serviceProvider, string? name = null)
         where TOptions : class
     {
-        Check.NotNull(serviceProvider);
         IOptionsMonitor<TOptions>? options = serviceProvider.GetRequiredService<IOptionsMonitor<TOptions>>();
         return options.Get(name);
     }

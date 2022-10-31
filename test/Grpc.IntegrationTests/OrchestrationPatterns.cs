@@ -7,6 +7,7 @@ using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit.Abstractions;
+using Microsoft.DurableTask.Client;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
@@ -20,14 +21,14 @@ public class OrchestrationPatterns : IntegrationTestBase
     public async Task EmptyOrchestration()
     {
         TaskName orchestratorName = nameof(EmptyOrchestration);
-        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, ctx => Task.FromResult<object?>(null)));
         });
 
-        DurableTaskClient client = this.CreateDurableTaskClient();
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, this.TimeoutToken);
 
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
@@ -40,15 +41,15 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(SingleTimer);
         TimeSpan delay = TimeSpan.FromSeconds(3);
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator(
                 orchestratorName, ctx => ctx.CreateTimer(delay, CancellationToken.None)));
         });
 
-        DurableTaskClient client = this.CreateDurableTaskClient();
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, this.TimeoutToken);
 
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
@@ -66,16 +67,15 @@ public class OrchestrationPatterns : IntegrationTestBase
         TimeSpan timerInterval = TimeSpan.FromSeconds(3);
         const int ExpectedTimers = 3; // two for 3 seconds and one for 1 second
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.Configure(opt => opt.MaximumTimerInterval = timerInterval);
             b.AddTasks(tasks => tasks.AddOrchestrator(
                 orchestratorName, ctx => ctx.CreateTimer(delay, CancellationToken.None)));
         });
 
-        DurableTaskClient client = this.CreateDurableTaskClient();
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
 
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
@@ -95,7 +95,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     {
         TaskName orchestratorName = nameof(IsReplaying);
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
             {
@@ -108,9 +108,8 @@ public class OrchestrationPatterns : IntegrationTestBase
             }));
         });
 
-        DurableTaskClient client = this.CreateDurableTaskClient();
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId,
             this.TimeoutToken,
             getInputsAndOutputs: true);
@@ -129,7 +128,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(CurrentDateTimeUtc);
         TaskName echoActivityName = "Echo";
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator(orchestratorName, async ctx =>
@@ -153,9 +152,8 @@ public class OrchestrationPatterns : IntegrationTestBase
                 .AddActivity<object, object>(echoActivityName, (ctx, input) => input));
         });
 
-        DurableTaskClient client = this.CreateDurableTaskClient();
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId,
             this.TimeoutToken,
             getInputsAndOutputs: true);
@@ -170,7 +168,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(SingleActivity);
         TaskName sayHelloActivityName = "SayHello";
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator<string, string>(
@@ -178,9 +176,8 @@ public class OrchestrationPatterns : IntegrationTestBase
                 .AddActivity<string, string>(sayHelloActivityName, (ctx, name) => $"Hello, {name}!"));
         });
 
-        DurableTaskClient client = this.CreateDurableTaskClient();
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
-        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId,
             this.TimeoutToken,
             getInputsAndOutputs: true);
@@ -195,7 +192,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(SingleActivity);
         TaskName sayHelloActivityName = "SayHello";
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator<string, string>(
@@ -204,9 +201,8 @@ public class OrchestrationPatterns : IntegrationTestBase
                     sayHelloActivityName, async (ctx, name) => await Task.FromResult($"Hello, {name}!")));
         });
 
-        DurableTaskClient client = this.CreateDurableTaskClient();
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
-        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId,
             this.TimeoutToken,
             getInputsAndOutputs: true);
@@ -221,7 +217,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(ActivityChain);
         TaskName plusOneActivityName = "PlusOne";
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator(orchestratorName, async ctx =>
@@ -237,9 +233,8 @@ public class OrchestrationPatterns : IntegrationTestBase
                 .AddActivity<int, int>(plusOneActivityName, (ctx, input) => input + 1));
         });
 
-        DurableTaskClient client = this.CreateDurableTaskClient();
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
-        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId,
             this.TimeoutToken,
             getInputsAndOutputs: true);
@@ -254,7 +249,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(ActivityFanOut);
         TaskName toStringActivity = "ToString";
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator(orchestratorName, async ctx =>
@@ -273,9 +268,8 @@ public class OrchestrationPatterns : IntegrationTestBase
                 .AddActivity<object, string?>(toStringActivity, (ctx, input) => input.ToString()));
         });
 
-        DurableTaskClient client = this.CreateDurableTaskClient();
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId,
             this.TimeoutToken,
             getInputsAndOutputs: true);
@@ -292,7 +286,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     public async Task ExternalEvents(int eventCount)
     {
         TaskName orchestratorName = nameof(ExternalEvents);
-        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
             {
@@ -306,22 +300,21 @@ public class OrchestrationPatterns : IntegrationTestBase
             }));
         });
 
-        DurableTaskClient client = this.CreateDurableTaskClient();
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
 
         // To ensure consistency, wait for the instance to start before sending the events
-        OrchestrationMetadata metadata = await client.WaitForInstanceStartAsync(
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceStartAsync(
             instanceId,
             this.TimeoutToken);
 
         // Send events one-at-a-time to that we can better ensure ordered processing.
         for (int i = 0; i < eventCount; i++)
         {
-            await client.RaiseEventAsync(metadata.InstanceId, $"Event{i}", eventPayload: i);
+            await server.Client.RaiseEventAsync(metadata.InstanceId, $"Event{i}", eventPayload: i);
         }
 
         // Once the orchestration receives all the events it is expecting, it should complete.
-        metadata = await client.WaitForInstanceCompletionAsync(
+        metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId,
             this.TimeoutToken,
             getInputsAndOutputs: true);
@@ -336,20 +329,19 @@ public class OrchestrationPatterns : IntegrationTestBase
     public async Task Termination()
     {
         TaskName orchestrationName = nameof(Termination);
-        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator(
                 orchestrationName, ctx => ctx.CreateTimer(TimeSpan.FromSeconds(3), CancellationToken.None)));
         });
 
-        DurableTaskClient client = this.CreateDurableTaskClient();
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestrationName);
-        OrchestrationMetadata metadata = await client.WaitForInstanceStartAsync(instanceId, this.TimeoutToken);
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestrationName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceStartAsync(instanceId, this.TimeoutToken);
 
         var expectedOutput = new { quote = "I'll be back." };
-        await client.TerminateAsync(instanceId, expectedOutput);
+        await server.Client.TerminateAsync(instanceId, expectedOutput);
 
-        metadata = await client.WaitForInstanceCompletionAsync(
+        metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId,
             this.TimeoutToken,
             getInputsAndOutputs: true);
@@ -368,7 +360,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     {
         TaskName orchestratorName = nameof(ContinueAsNew);
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator<int, int>(orchestratorName, async (ctx, input) =>
             {
@@ -382,9 +374,8 @@ public class OrchestrationPatterns : IntegrationTestBase
             }));
         });
 
-        DurableTaskClient client = this.CreateDurableTaskClient();
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId,
             this.TimeoutToken,
             getInputsAndOutputs: true);
@@ -398,7 +389,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     {
         TaskName orchestratorName = nameof(SubOrchestration);
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator<int, int>(orchestratorName, async (ctx, input) =>
             {
@@ -413,9 +404,8 @@ public class OrchestrationPatterns : IntegrationTestBase
             }));
         });
 
-        DurableTaskClient client = this.CreateDurableTaskClient();
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 1);
-        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 1);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId,
             this.TimeoutToken,
             getInputsAndOutputs: true);
@@ -428,7 +418,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     public async Task SetCustomStatus()
     {
         TaskName orchestratorName = nameof(SetCustomStatus);
-        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
             {
@@ -439,11 +429,10 @@ public class OrchestrationPatterns : IntegrationTestBase
             }));
         });
 
-        DurableTaskClient client = this.CreateDurableTaskClient();
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
 
         // To ensure consistency, wait for the instance to start before sending the events
-        OrchestrationMetadata metadata = await client.WaitForInstanceStartAsync(
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceStartAsync(
             instanceId,
             this.TimeoutToken,
             getInputsAndOutputs: true);
@@ -452,13 +441,13 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         // Send a tuple payload, which will be used as the custom status
         (string, int) eventPayload = ("Hello", 42);
-        await client.RaiseEventAsync(
+        await server.Client.RaiseEventAsync(
             metadata.InstanceId,
             eventName: "StatusEvent",
             eventPayload);
 
         // Once the orchestration receives all the events it is expecting, it should complete.
-        metadata = await client.WaitForInstanceCompletionAsync(
+        metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId,
             this.TimeoutToken,
             getInputsAndOutputs: true);
@@ -473,7 +462,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(ContinueAsNew);
         TaskName echoActivityName = "Echo";
 
-        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator<int, bool>(orchestratorName, async (ctx, input) =>
@@ -507,9 +496,8 @@ public class OrchestrationPatterns : IntegrationTestBase
                 .AddActivity<Guid, Guid>(echoActivityName, (ctx, input) => input));
         });
 
-        DurableTaskClient client = this.CreateDurableTaskClient();
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId,
             this.TimeoutToken,
             getInputsAndOutputs: true);
@@ -521,7 +509,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     [Fact]
     public async Task SpecialSerialization()
     {
-        await using AsyncDisposable server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator<JsonNode, JsonNode>("SpecialSerialization_Orchestration", (ctx, input) =>
@@ -544,10 +532,11 @@ public class OrchestrationPatterns : IntegrationTestBase
                 }));
         });
 
-        DurableTaskClient client = this.CreateDurableTaskClient();
         JsonNode input = new JsonObject() { ["originalProperty"] = "original value" };
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync("SpecialSerialization_Orchestration", input: input);
-        OrchestrationMetadata result = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken, getInputsAndOutputs: true);
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            "SpecialSerialization_Orchestration", input: input);
+        OrchestrationMetadata result = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, this.TimeoutToken, getInputsAndOutputs: true);
         JsonNode? output = result.ReadOutputAs<JsonNode>();
 
         Assert.NotNull(output);

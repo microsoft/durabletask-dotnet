@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask
+namespace Microsoft.DurableTask.Client.Grpc
 {
     /// <summary>
     /// Log messages.

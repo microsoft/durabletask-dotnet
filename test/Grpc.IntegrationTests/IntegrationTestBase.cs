@@ -2,13 +2,13 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics;
-using Microsoft.DurableTask.Grpc;
 using Microsoft.DurableTask.Tests.Logging;
+using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Xunit.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
@@ -21,7 +21,6 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
         = new(Debugger.IsAttached ? TimeSpan.FromMinutes(5) : TimeSpan.FromSeconds(10));
 
     readonly TestLogProvider logProvider;
-    readonly ILoggerFactory loggerFactory;
 
     // Documentation on xunit test fixtures: https://xunit.net/docs/shared-context
     readonly GrpcSidecarFixture sidecarFixture;
@@ -29,12 +28,6 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
     public IntegrationTestBase(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
     {
         this.logProvider = new(output);
-        this.loggerFactory = LoggerFactory.Create(builder =>
-        {
-            builder.AddProvider(this.logProvider);
-            builder.SetMinimumLevel(LogLevel.Debug);
-        });
-
         this.sidecarFixture = sidecarFixture;
     }
 
@@ -50,29 +43,18 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
         GC.SuppressFinalize(this);
     }
 
-    protected async Task<AsyncDisposable> StartWorkerAsync(Action<IDurableTaskBuilder> configure)
+    protected async Task<HostTestLifetime> StartWorkerAsync(Action<IDurableTaskBuilder> configure)
     {
-        IHost host = this.CreateWorkerBuilder(configure).Build();
+        IHost host = this.CreateHostBuilder(configure).Build();
         await host.StartAsync(this.TimeoutToken);
-        return new AsyncDisposable(async () =>
-        {
-            try
-            {
-                await host.StopAsync(this.TimeoutToken);
-            }
-            catch (OperationCanceledException)
-            {
-            }
-
-            host.Dispose();
-        });
+        return new HostTestLifetime(host, this.TimeoutToken);
     }
 
     /// <summary>
     /// Creates a <see cref="IHostBuilder"/> configured to output logs to xunit logging infrastructure.
     /// </summary>
     /// <param name="configure">Configures the durable task builder.</param>
-    protected IHostBuilder CreateWorkerBuilder(Action<IDurableTaskBuilder> configure)
+    protected IHostBuilder CreateHostBuilder(Action<IDurableTaskBuilder> configure)
     {
         return Host.CreateDefaultBuilder()
             .ConfigureLogging(b =>
@@ -88,15 +70,13 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
                     b.UseGrpc(this.sidecarFixture.Channel);
                     configure(b);
                 });
-            });
-    }
 
-    /// <summary>
-    /// Creates a <see cref="DurableTaskGrpcClient"/> configured to output logs to xunit logging infrastructure.
-    /// </summary>
-    protected DurableTaskClient CreateDurableTaskClient()
-    {
-        return this.sidecarFixture.GetClientBuilder().UseLoggerFactory(this.loggerFactory).Build();
+                services.AddDurableTaskClient(b =>
+                {
+                    b.UseGrpc(this.sidecarFixture.Channel);
+                    b.RegisterDirectly();
+                });
+            });
     }
 
     protected IReadOnlyCollection<LogEntry> GetLogs()
@@ -106,5 +86,32 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
         bool foundCategory = this.logProvider.TryGetLogs(ExpectedCategoryName, out IReadOnlyCollection<LogEntry> logs);
         Assert.True(foundCategory);
         return logs;
+    }
+
+    protected struct HostTestLifetime : IAsyncDisposable
+    {
+        readonly IHost host;
+        readonly CancellationToken cancellation;
+
+        public HostTestLifetime(IHost host, CancellationToken cancellation)
+        {
+            this.host = host;
+            this.cancellation = cancellation;
+            this.Client = host.Services.GetRequiredService<DurableTaskClient>();
+        }
+
+        public DurableTaskClient Client { get; }
+
+        public async ValueTask DisposeAsync()
+        {
+            try
+            {
+                await this.host.StopAsync(this.cancellation);
+            }
+            finally
+            {
+                this.host.Dispose();
+            }
+        }
     }
 }

@@ -5,7 +5,7 @@ using DurableTask.Core;
 using Google.Protobuf.WellKnownTypes;
 using P = Microsoft.DurableTask.Protobuf;
 
-namespace Microsoft.DurableTask.Grpc;
+namespace Microsoft.DurableTask.Client.Grpc;
 
 /// <summary>
 /// Protobuf helpers and utilities.

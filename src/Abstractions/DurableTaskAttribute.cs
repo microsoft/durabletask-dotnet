@@ -23,7 +23,8 @@ public sealed class DurableTaskAttribute : Attribute
     /// </param>
     public DurableTaskAttribute(string? name = null)
     {
-        this.Name = name ?? string.Empty;
+        // This logic cannot become too complex as code-generator relies on examining the constructor arguments.
+        this.Name = string.IsNullOrEmpty(name) ? default : new TaskName(name!);
     }
 
     /// <summary>

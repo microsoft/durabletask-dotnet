@@ -17,7 +17,7 @@ static class ServiceProviderExtensions
     /// <typeparam name="TOptions">The option type to get.</typeparam>
     /// <param name="serviceProvider">The service provider.</param>
     /// <param name="name">The name of the options. <c>null</c> for default name.</param>
-    /// <returns>The options, if available. Null otherwise.</returns>
+    /// <returns>The options, if available. <c>null</c> otherwise.</returns>
     public static TOptions GetOptions<TOptions>(
         this IServiceProvider serviceProvider, string? name = null)
         where TOptions : class

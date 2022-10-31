@@ -20,7 +20,7 @@ public class PageableIntegrationTests : IntegrationTestBase
     {
         TaskName orchestratorName = nameof(PageableActivity_Enumerates);
 
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator<string, int>(

@@ -32,7 +32,7 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         async Task MyOrchestrationImpl(TaskOrchestrationContext ctx) => await ctx.CallActivityAsync(activityName);
         void MyActivityImpl(TaskActivityContext ctx) => throw new Exception(errorMessage);
 
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator(orchestratorName, MyOrchestrationImpl)
@@ -80,7 +80,7 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         string? expectedCallStack = null;
 
         TaskName orchestratorName = "FaultyOrchestration";
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, ctx =>
             {
@@ -128,7 +128,7 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         int actualNumberOfAttempts = 0;
 
         TaskName orchestratorName = "BustedOrchestration";
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks =>
                 tasks.AddOrchestrator(orchestratorName, async ctx =>
@@ -190,7 +190,7 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         int actualNumberOfAttempts = 0;
 
         TaskName orchestratorName = "BustedOrchestration";
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks =>
                 tasks.AddOrchestrator(orchestratorName, async ctx =>
@@ -235,7 +235,7 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         int actualNumberOfAttempts = 0;
 
         TaskName orchestratorName = "OrchestrationWithBustedSubOrchestrator";
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks =>
                 tasks.AddOrchestrator(orchestratorName, async ctx =>
@@ -297,7 +297,7 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         int actualNumberOfAttempts = 0;
 
         TaskName orchestratorName = "OrchestrationWithBustedSubOrchestrator";
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks =>
                 tasks.AddOrchestrator(orchestratorName, async ctx =>
@@ -337,7 +337,7 @@ public class OrchestrationErrorHandling : IntegrationTestBase
         });
 
         TaskName orchestratorName = "OrchestrationWithMissingTask";
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
             {

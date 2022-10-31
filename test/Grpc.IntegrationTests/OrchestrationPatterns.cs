@@ -21,7 +21,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     public async Task EmptyOrchestration()
     {
         TaskName orchestratorName = nameof(EmptyOrchestration);
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, ctx => Task.FromResult<object?>(null)));
         });
@@ -41,7 +41,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(SingleTimer);
         TimeSpan delay = TimeSpan.FromSeconds(3);
 
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator(
                 orchestratorName, ctx => ctx.CreateTimer(delay, CancellationToken.None)));
@@ -67,7 +67,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TimeSpan timerInterval = TimeSpan.FromSeconds(3);
         const int ExpectedTimers = 3; // two for 3 seconds and one for 1 second
 
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.Configure(opt => opt.MaximumTimerInterval = timerInterval);
             b.AddTasks(tasks => tasks.AddOrchestrator(
@@ -95,7 +95,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     {
         TaskName orchestratorName = nameof(IsReplaying);
 
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
             {
@@ -128,7 +128,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(CurrentDateTimeUtc);
         TaskName echoActivityName = "Echo";
 
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator(orchestratorName, async ctx =>
@@ -168,7 +168,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(SingleActivity);
         TaskName sayHelloActivityName = "SayHello";
 
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator<string, string>(
@@ -192,7 +192,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(SingleActivity);
         TaskName sayHelloActivityName = "SayHello";
 
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator<string, string>(
@@ -217,7 +217,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(ActivityChain);
         TaskName plusOneActivityName = "PlusOne";
 
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator(orchestratorName, async ctx =>
@@ -249,7 +249,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(ActivityFanOut);
         TaskName toStringActivity = "ToString";
 
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator(orchestratorName, async ctx =>
@@ -286,7 +286,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     public async Task ExternalEvents(int eventCount)
     {
         TaskName orchestratorName = nameof(ExternalEvents);
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
             {
@@ -329,7 +329,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     public async Task Termination()
     {
         TaskName orchestrationName = nameof(Termination);
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator(
                 orchestrationName, ctx => ctx.CreateTimer(TimeSpan.FromSeconds(3), CancellationToken.None)));
@@ -360,7 +360,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     {
         TaskName orchestratorName = nameof(ContinueAsNew);
 
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator<int, int>(orchestratorName, async (ctx, input) =>
             {
@@ -389,7 +389,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     {
         TaskName orchestratorName = nameof(SubOrchestration);
 
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator<int, int>(orchestratorName, async (ctx, input) =>
             {
@@ -418,7 +418,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     public async Task SetCustomStatus()
     {
         TaskName orchestratorName = nameof(SetCustomStatus);
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestrator(orchestratorName, async ctx =>
             {
@@ -462,7 +462,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         TaskName orchestratorName = nameof(ContinueAsNew);
         TaskName echoActivityName = "Echo";
 
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator<int, bool>(orchestratorName, async (ctx, input) =>
@@ -509,7 +509,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     [Fact]
     public async Task SpecialSerialization()
     {
-        await using HostLifetime server = await this.StartWorkerAsync(b =>
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestrator<JsonNode, JsonNode>("SpecialSerialization_Orchestration", (ctx, input) =>

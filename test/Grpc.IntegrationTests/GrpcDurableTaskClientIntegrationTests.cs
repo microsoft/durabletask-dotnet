@@ -37,7 +37,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             }
         }
 
-        await using HostLifetime server = await this.StartAsync();
+        await using HostTestLifetime server = await this.StartAsync();
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
             OrchestrationName, input: shouldThrow);
@@ -91,7 +91,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             await func("GetInstances_EndToEnd-2");
         }
 
-        await using HostLifetime server = await this.StartAsync();
+        await using HostTestLifetime server = await this.StartAsync();
 
         // Enqueue an extra orchestration which we will verify is NOT present.
         string notIncluded = await server.Client.ScheduleNewOrchestrationInstanceAsync(
@@ -119,7 +119,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
     public async Task GetInstances_AsPages_EndToEnd()
     {
         OrchestrationQuery query = new() { InstanceIdPrefix = "GetInstances_AsPages_EndToEnd" };
-        await using HostLifetime server = await this.StartAsync();
+        await using HostTestLifetime server = await this.StartAsync();
 
         for (int i = 0; i < 21; i++)
         {
@@ -145,7 +145,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         page.ContinuationToken.Should().NotBeNull();
     }
 
-    Task<HostLifetime> StartAsync()
+    Task<HostTestLifetime> StartAsync()
     {
         static async Task<string> Orchestration(TaskOrchestrationContext context, bool shouldThrow)
         {

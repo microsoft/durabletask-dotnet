@@ -77,7 +77,7 @@ public static class ServiceCollectionExtensions
         }
 
         var container = (BuilderContainer)descriptor.ImplementationInstance!;
-        return container.Get(name, out added);
+        return container.GetOrAdd(name, out added);
     }
 
     /// <summary>
@@ -93,7 +93,7 @@ public static class ServiceCollectionExtensions
             this.services = services;
         }
 
-        public IDurableTaskClientBuilder Get(string name, out bool added)
+        public IDurableTaskClientBuilder GetOrAdd(string name, out bool added)
         {
             added = false;
             if (!this.builders.TryGetValue(name, out IDurableTaskClientBuilder builder))

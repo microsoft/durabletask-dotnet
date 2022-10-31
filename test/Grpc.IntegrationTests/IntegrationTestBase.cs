@@ -21,7 +21,6 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
         = new(Debugger.IsAttached ? TimeSpan.FromMinutes(5) : TimeSpan.FromSeconds(10));
 
     readonly TestLogProvider logProvider;
-    readonly ILoggerFactory loggerFactory;
 
     // Documentation on xunit test fixtures: https://xunit.net/docs/shared-context
     readonly GrpcSidecarFixture sidecarFixture;
@@ -29,12 +28,6 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
     public IntegrationTestBase(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
     {
         this.logProvider = new(output);
-        this.loggerFactory = LoggerFactory.Create(builder =>
-        {
-            builder.AddProvider(this.logProvider);
-            builder.SetMinimumLevel(LogLevel.Debug);
-        });
-
         this.sidecarFixture = sidecarFixture;
     }
 
@@ -50,11 +43,11 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
         GC.SuppressFinalize(this);
     }
 
-    protected async Task<HostLifetime> StartWorkerAsync(Action<IDurableTaskBuilder> configure)
+    protected async Task<HostTestLifetime> StartWorkerAsync(Action<IDurableTaskBuilder> configure)
     {
         IHost host = this.CreateHostBuilder(configure).Build();
         await host.StartAsync(this.TimeoutToken);
-        return new HostLifetime(host, this.TimeoutToken);
+        return new HostTestLifetime(host, this.TimeoutToken);
     }
 
     /// <summary>
@@ -95,12 +88,12 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
         return logs;
     }
 
-    protected struct HostLifetime : IAsyncDisposable
+    protected struct HostTestLifetime : IAsyncDisposable
     {
         readonly IHost host;
         readonly CancellationToken cancellation;
 
-        public HostLifetime(IHost host, CancellationToken cancellation)
+        public HostTestLifetime(IHost host, CancellationToken cancellation)
         {
             this.host = host;
             this.cancellation = cancellation;

@@ -15,6 +15,7 @@
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest</AnalysisLevel>
     <AnalysisMode>recommended</AnalysisMode>
+    <SharedRoot>$(SrcRoot)Shared/</SharedRoot>
   </PropertyGroup>
 
   <!-- Common NuGet settings -->
@@ -33,6 +34,11 @@
       <Pack>true</Pack>
       <PackagePath>content/SBOM</PackagePath>
     </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Include 'Core' shared files by default -->
+    <SharedSection Include="Core" />
   </ItemGroup>
 
 </Project>

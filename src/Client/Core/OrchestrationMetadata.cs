@@ -4,7 +4,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
-namespace Microsoft.DurableTask;
+namespace Microsoft.DurableTask.Client;
 
 /// <summary>
 /// Represents a snapshot of an orchestration instance's current state, including metadata.

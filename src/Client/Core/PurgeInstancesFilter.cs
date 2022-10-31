@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask;
+namespace Microsoft.DurableTask.Client;
 
 /// <summary>
 /// Query for purging orchestration instances.

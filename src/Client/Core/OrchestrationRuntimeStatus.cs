@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask;
+namespace Microsoft.DurableTask.Client;
 
 /// <summary>
 /// Enum describing the runtime status of the orchestration.

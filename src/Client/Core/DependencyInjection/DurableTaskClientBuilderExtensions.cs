@@ -1,0 +1,69 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+
+namespace Microsoft.DurableTask.Client;
+
+/// <summary>
+/// Extensions for <see cref="IDurableTaskClientBuilder" />.
+/// </summary>
+public static class DurableTaskBuilderExtensions
+{
+    /// <summary>
+    /// Configures the worker options for this builder.
+    /// </summary>
+    /// <param name="builder">The builder to configure options for.</param>
+    /// <param name="configure">The configure callback.</param>
+    /// <returns>The original builder, for call chaining.</returns>
+    public static IDurableTaskClientBuilder Configure(
+        this IDurableTaskClientBuilder builder, Action<DurableTaskClientOptions> configure)
+    {
+        builder.Services.Configure(builder.Name, configure);
+        return builder;
+    }
+
+    /// <summary>
+    /// Registers this builders <see cref="DurableTaskClient" /> directly to the service container. This will allow for
+    /// directly importing <see cref="DurableTaskClient" />. This can <b>only</b> be used for a single builder. Only
+    /// the first call will register.
+    /// </summary>
+    /// <param name="builder">The builder to register the client directly of.</param>
+    /// <returns>The original builder, for call chaining.</returns>
+    public static IDurableTaskClientBuilder RegisterDirectly(this IDurableTaskClientBuilder builder)
+    {
+        DurableTaskClient GetClient(IServiceProvider services)
+        {
+            IDurableTaskClientProvider provider = services.GetRequiredService<IDurableTaskClientProvider>();
+            return provider.GetClient(builder.Name);
+        }
+
+        builder.Services.TryAddSingleton(GetClient);
+        return builder;
+    }
+
+    /// <summary>
+    /// Sets the build target for this builder.
+    /// startup.
+    /// </summary>
+    /// <param name="builder">The builder to set the builder target for.</param>
+    /// <param name="target">The type of target to set.</param>
+    /// <returns>The original builder, for call chaining.</returns>
+    public static IDurableTaskClientBuilder UseBuildTarget(this IDurableTaskClientBuilder builder, Type target)
+    {
+        builder.BuildTarget = target;
+        return builder;
+    }
+
+    /// <summary>
+    /// Sets the build target for this builder.
+    /// startup.
+    /// </summary>
+    /// <typeparam name="TTarget">The builder target type.</typeparam>
+    /// <param name="builder">The builder to set the builder target for.</param>
+    /// <returns>The original builder, for call chaining.</returns>
+    public static IDurableTaskClientBuilder UseBuildTarget<TTarget>(this IDurableTaskClientBuilder builder)
+        where TTarget : DurableTaskClient
+        => builder.UseBuildTarget(typeof(TTarget));
+}

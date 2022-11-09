@@ -7,9 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="6.0.0" />
-    <PackageReference Include="Microsoft.DurableTask.Client" Version="0.4.1-beta" />
-    <PackageReference Include="Microsoft.DurableTask.Generators" Version="0.4.1-beta" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(SrcRoot)Worker/Grpc/Worker.Grpc.csproj" />
+    <ProjectReference Include="$(SrcRoot)Client/Grpc/Client.Grpc.csproj" />
   </ItemGroup>
 
 

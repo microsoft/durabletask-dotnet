@@ -1,46 +1,47 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using Microsoft.DurableTask;
-using Microsoft.DurableTask.Grpc;
-using Microsoft.Extensions.Logging;
+using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.Worker;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
-ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
-{
-    builder.SetMinimumLevel(LogLevel.Debug);
-    builder.AddSimpleConsole(options =>
+IHost host = Host.CreateDefaultBuilder(args)
+    .ConfigureServices(services =>
     {
-        options.SingleLine = true;
-        options.UseUtcTimestamp = true;
-        options.TimestampFormat = "yyyy-mm-ddThh:mm:ss.ffffffZ ";
-    });
-});
-
-DurableTaskGrpcWorker worker = DurableTaskGrpcWorker.CreateBuilder()
-    .AddTasks(tasks =>
-    {
-        tasks.AddOrchestrator("HelloSequence", async context =>
+        services.AddDurableTaskClient(builder =>
         {
-            var greetings = new List<string>
-            {
-                await context.CallActivityAsync<string>("SayHello", "Tokyo"),
-                await context.CallActivityAsync<string>("SayHello", "London"),
-                await context.CallActivityAsync<string>("SayHello", "Seattle"),
-            };
-
-            return greetings;
+            builder.UseGrpc();
+            builder.RegisterDirectly();
         });
-        tasks.AddActivity<string, string>("SayHello", (context, city) => $"Hello {city}!");
+
+        services.AddDurableTaskWorker(builder =>
+        {
+            builder.AddTasks(tasks =>
+            {
+                tasks.AddOrchestratorFunc("HelloSequence", async context =>
+                {
+                    var greetings = new List<string>
+                    {
+                        await context.CallActivityAsync<string>("SayHello", "Tokyo"),
+                        await context.CallActivityAsync<string>("SayHello", "London"),
+                        await context.CallActivityAsync<string>("SayHello", "Seattle"),
+                    };
+
+                    return greetings;
+                });
+
+                tasks.AddActivityFunc<string, string>("SayHello", (context, city) => $"Hello {city}!");
+            });
+
+            builder.UseGrpc();
+        });
     })
-    .UseLoggerFactory(loggerFactory)
     .Build();
 
-await worker.StartAsync(timeout: TimeSpan.FromSeconds(30));
+await host.StartAsync();
 
-await using DurableTaskClient client = DurableTaskGrpcClient.Create();
+await using DurableTaskClient client = host.Services.GetRequiredService<DurableTaskClient>();
 string instanceId = await client.ScheduleNewOrchestrationInstanceAsync("HelloSequence");
 Console.WriteLine($"Created instance: '{instanceId}'");
 

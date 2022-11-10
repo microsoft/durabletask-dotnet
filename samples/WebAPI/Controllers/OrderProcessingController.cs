@@ -3,6 +3,7 @@
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.DurableTask;
+using Microsoft.DurableTask.Client;
 using WebAPI.Models;
 
 namespace WebAPI.Controllers;

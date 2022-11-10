@@ -7,9 +7,9 @@ using WebAPI.Models;
 namespace WebAPI.Orchestrations;
 
 [DurableTask]
-public class ProcessOrderOrchestrator : TaskOrchestratorBase<OrderInfo, OrderStatus>
+public class ProcessOrderOrchestrator : TaskOrchestrator<OrderInfo, OrderStatus>
 {
-    protected override async Task<OrderStatus?> OnRunAsync(TaskOrchestrationContext context, OrderInfo? orderInfo)
+    public override async Task<OrderStatus> RunAsync(TaskOrchestrationContext context, OrderInfo?orderInfo)
     {
         if (orderInfo == null)
         {

@@ -7,7 +7,7 @@ using WebAPI.Models;
 namespace WebAPI.Orchestrations
 {
     [DurableTask("CheckInventory")]
-    public class CheckInventoryActivity : TaskActivityBase<OrderInfo, bool>
+    public class CheckInventoryActivity : TaskActivity<OrderInfo, bool>
     {
         readonly ILogger logger;
 
@@ -17,7 +17,7 @@ namespace WebAPI.Orchestrations
             this.logger = logger;
         }
 
-        protected override bool OnRun(TaskActivityContext context, OrderInfo? orderInfo)
+        public override Task<bool> RunAsync(TaskActivityContext context, OrderInfo orderInfo)
         {
             if (orderInfo == null)
             {
@@ -28,7 +28,7 @@ namespace WebAPI.Orchestrations
                 "{instanceId}: Checking inventory for '{item}'...found some!",
                 context.InstanceId,
                 orderInfo.Item);
-            return true;
+            return Task.FromResult(true);
         }
     }
 }

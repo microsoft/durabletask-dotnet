@@ -7,7 +7,7 @@ using WebAPI.Models;
 namespace WebAPI.Orchestrations;
 
 [DurableTask("ChargeCustomer")]
-public class ChargeCustomerActivity : TaskActivityBase<OrderInfo, object>
+public class ChargeCustomerActivity : TaskActivity<OrderInfo, object?>
 {
     readonly ILogger logger;
 
@@ -17,7 +17,7 @@ public class ChargeCustomerActivity : TaskActivityBase<OrderInfo, object>
         this.logger = logger;
     }
 
-    protected override async Task<object?> OnRunAsync(TaskActivityContext context, OrderInfo? orderInfo)
+    public override async Task<object?> RunAsync(TaskActivityContext context, OrderInfo orderInfo)
     {
         this.logger.LogInformation(
             "{instanceId}: Charging customer {price:C}'...",

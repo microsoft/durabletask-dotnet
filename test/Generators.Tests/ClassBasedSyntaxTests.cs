@@ -82,7 +82,7 @@ using Microsoft.DurableTask;
 [DurableTask(nameof(MyOrchestrator))]
 sealed class MyOrchestrator : MyOrchestratorBase
 {
-    protected override Task<string> OnRunAsync(TaskOrchestrationContext ctx, int input) => Task.FromResult(this.X);
+    public override Task<string> RunAsync(TaskOrchestrationContext ctx, int input) => Task.FromResult(this.X);
 }
 
 abstract class MyOrchestratorBase : TaskOrchestrator<int, string>
@@ -97,8 +97,8 @@ abstract class MyOrchestratorBase : TaskOrchestrator<int, string>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     this IOrchestrationSubmitter client,
+    int input,
     string? instanceId = null,
-    int input = default,
     DateTimeOffset? startTime = null)
 {
     return client.ScheduleNewOrchestrationInstanceAsync(
@@ -111,8 +111,8 @@ public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync""/>
 public static Task<string> CallMyOrchestratorAsync(
     this TaskOrchestrationContext context,
+    int input,
     string? instanceId = null,
-    int input = default,
     TaskOptions? options = null)
 {
     return context.CallSubOrchestratorAsync<string>(
@@ -122,7 +122,7 @@ public static Task<string> CallMyOrchestratorAsync(
         options);
 }
 
-public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistry builder)
+public static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
 {
     builder.AddOrchestrator<MyOrchestrator>();
     return builder;
@@ -136,31 +136,37 @@ public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistr
 
     }
 
-    [Fact]
-    public Task Activities_PrimitiveTypes()
+    [Theory]
+    [InlineData("int", "int input")]
+    [InlineData("int?", "int? input = default")]
+    [InlineData("string", "string input")]
+    [InlineData("string?", "string? input = default")]
+    public Task Activities_PrimitiveTypes(string type, string input)
     {
-        string code = @"
+        string code = $@"
+#nullable enable
+using System.Threading.Tasks;
 using Microsoft.DurableTask;
 
 [DurableTask(nameof(MyActivity))]
-class MyActivity : TaskActivity<int, string>
-{
-    protected override string OnRun(TaskActivityContext context, int input) => default;
-}";
+class MyActivity : TaskActivity<{type}, string>
+{{
+    public override Task<string> RunAsync(TaskActivityContext context, {type} input) => Task.FromResult(string.Empty);
+}}";
 
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
-            methodList: @"
-public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
-{
+            methodList: $@"
+public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, {input}, TaskOptions? options = null)
+{{
     return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
-}
+}}
 
-public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistry builder)
-{
+public static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
+{{
     builder.AddActivity<MyActivity>();
     return builder;
-}");
+}}");
 
         return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
             GeneratedFileName,
@@ -173,13 +179,14 @@ public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistr
     public Task Activities_CustomTypes()
     {
         string code = @"
+using System.Threading.Tasks;
 using MyNS;
 using Microsoft.DurableTask;
 
 [DurableTask(nameof(MyActivity))]
 class MyActivity : TaskActivity<MyClass, MyClass>
 {
-    protected override MyClass OnRun(TaskActivityContext context, MyClass input) => default;
+    public override Task<MyClass> RunAsync(TaskActivityContext context, MyClass input) => Task.FromResult(input);
 }
 
 namespace MyNS
@@ -195,7 +202,7 @@ public static Task<MyNS.MyClass> CallMyActivityAsync(this TaskOrchestrationConte
     return ctx.CallActivityAsync<MyNS.MyClass>(""MyActivity"", input, options);
 }
 
-public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistry builder)
+public static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
 {
     builder.AddActivity<MyActivity>();
     return builder;
@@ -214,6 +221,7 @@ public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistr
     {
         // The [DurableTask] attribute is expected to override the activity class name
         string code = @"
+using System.Threading.Tasks;
 using MyNS;
 using Microsoft.DurableTask;
 
@@ -222,7 +230,7 @@ namespace MyNS
     [DurableTask(""MyActivity"")]
     class MyActivityImpl : TaskActivity<MyClass, MyClass>
     {
-        protected override MyClass OnRun(TaskActivityContext context, MyClass input) => default;
+        public override Task<MyClass> RunAsync(TaskActivityContext context, MyClass input) => Task.FromResult(input);
     }
 
     public class MyClass { }
@@ -236,7 +244,7 @@ public static Task<MyNS.MyClass> CallMyActivityAsync(this TaskOrchestrationConte
     return ctx.CallActivityAsync<MyNS.MyClass>(""MyActivity"", input, options);
 }
 
-public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistry builder)
+public static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
 {
     builder.AddActivity<MyNS.MyActivityImpl>();
     return builder;
@@ -253,12 +261,13 @@ public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistr
     public Task Activities_Inheritance()
     {
         string code = @"
+using System.Threading.Tasks;
 using Microsoft.DurableTask;
 
 [DurableTask(nameof(MyActivity))]
 class MyActivity : MyActivityBase
 {
-    protected override string OnRun(TaskActivityContext context, int input) => default;
+    public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
 }
 
 abstract class MyActivityBase : TaskActivity<int, string>
@@ -274,7 +283,7 @@ public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx
     return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
 }
 
-public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistry builder)
+public static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
 {
     builder.AddActivity<MyActivity>();
     return builder;

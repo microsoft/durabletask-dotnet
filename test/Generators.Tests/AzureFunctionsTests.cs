@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.Azure.Functions.Worker;
+//using Microsoft.Azure.Functions.Worker;
 using Microsoft.DurableTask.Generators.Tests.Utils;
 
 namespace Microsoft.DurableTask.Generators.Tests;
@@ -11,7 +11,7 @@ public class AzureFunctionsTests
     const string GeneratedClassName = "GeneratedDurableTaskExtensions";
     const string GeneratedFileName = $"{GeneratedClassName}.cs";
 
-    [Fact]
+    [Fact(Skip = "Durable Functions Extension out of date")]
     public async Task Activities_SimpleFunctionTrigger()
     {
         string code = @"
@@ -40,7 +40,7 @@ public static Task<int> CallIdentityAsync(this TaskOrchestrationContext ctx, int
             isDurableFunctions: true);
     }
 
-    [Fact]
+    [Fact(Skip = "Durable Functions Extension out of date")]
     public async Task Activities_SimpleFunctionTrigger_TaskReturning()
     {
         string code = @"
@@ -70,7 +70,7 @@ public static Task<int> CallIdentityAsync(this TaskOrchestrationContext ctx, int
             isDurableFunctions: true);
     }
 
-    [Fact]
+    [Fact(Skip = "Durable Functions Extension out of date")]
     public async Task Activities_SimpleFunctionTrigger_CustomType()
     {
         string code = @"
@@ -111,7 +111,7 @@ public static Task<AzureFunctionsTests.Input> CallIdentityAsync(this TaskOrchest
     /// </summary>
     /// <param name="inputType">The activity input type.</param>
     /// <param name="outputType">The activity output type.</param>
-    [Theory]
+    [Theory(Skip = "Durable Functions Extension out of date")]
     [InlineData("int", "string")]
     [InlineData("string", "int")]
     [InlineData("Guid", "TimeSpan")]
@@ -164,7 +164,7 @@ public static async Task<{outputType}> MyActivity([ActivityTrigger] {defaultInpu
     /// </summary>
     /// <param name="inputType">The activity input type.</param>
     /// <param name="outputType">The activity output type.</param>
-    [Theory]
+    [Theory(Skip = "Durable Functions Extension out of date")]
     [InlineData("int", "string?")]
     [InlineData("string", "int")]
     [InlineData("(int, int)", "(double, double)")]
@@ -243,7 +243,7 @@ public static Task<{outputType}> CallMyOrchestratorAsync(
     /// </summary>
     /// <param name="inputType">The activity input type.</param>
     /// <param name="outputType">The activity output type.</param>
-    [Theory]
+    [Theory(Skip = "Durable Functions Extension out of date")]
     [InlineData("int", "string?")]
     [InlineData("string", "int")]
     [InlineData("(int, int)", "(double, double)")]

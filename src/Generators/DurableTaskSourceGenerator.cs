@@ -73,7 +73,8 @@ namespace Microsoft.DurableTask.Generators
 #nullable enable
 
 using System;
-using System.Threading.Tasks;");
+using System.Threading.Tasks;
+using Microsoft.DurableTask.Internal;");
 
             if (isDurableFunctions)
             {
@@ -166,11 +167,11 @@ namespace Microsoft.DurableTask
         static void AddOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator)
         {
             sourceBuilder.AppendLine($@"
-        /// <inheritdoc cref=""DurableTaskClient.ScheduleNewOrchestrationInstanceAsync""/>
+        /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
         public static Task<string> ScheduleNew{orchestrator.TaskName}InstanceAsync(
-            this DurableTaskClient client,
+            this IOrchestrationSubmitter client,
+            {orchestrator.InputParameter},
             string? instanceId = null,
-            {orchestrator.InputDefaultType} input = default,
             DateTimeOffset? startTime = null)
         {{
             return client.ScheduleNewOrchestrationInstanceAsync(
@@ -187,8 +188,8 @@ namespace Microsoft.DurableTask
         /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync""/>
         public static Task<{orchestrator.OutputType}> Call{orchestrator.TaskName}Async(
             this TaskOrchestrationContext context,
+            {orchestrator.InputParameter},
             string? instanceId = null,
-            {orchestrator.InputDefaultType} input = default,
             TaskOptions? options = null)
         {{
             return context.CallSubOrchestratorAsync<{orchestrator.OutputType}>(
@@ -202,7 +203,7 @@ namespace Microsoft.DurableTask
         static void AddActivityCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo activity)
         {
             sourceBuilder.AppendLine($@"
-        public static Task<{activity.OutputType}> Call{activity.TaskName}Async(this TaskOrchestrationContext ctx, {activity.InputType} input, TaskOptions? options = null)
+        public static Task<{activity.OutputType}> Call{activity.TaskName}Async(this TaskOrchestrationContext ctx, {activity.InputParameter}, TaskOptions? options = null)
         {{
             return ctx.CallActivityAsync<{activity.OutputType}>(""{activity.TaskName}"", input, options);
         }}");
@@ -223,7 +224,7 @@ namespace Microsoft.DurableTask
             // Note that the second "instanceId" parameter is populated via the Azure Functions binding context.
             sourceBuilder.AppendLine($@"
         [Function(nameof({activity.TaskName}))]
-        public static async Task<{activity.OutputType}> {activity.TaskName}([ActivityTrigger] {activity.InputDefaultType} input, string instanceId, FunctionContext executionContext)
+        public static async Task<{activity.OutputType}> {activity.TaskName}([ActivityTrigger] {activity.InputParameter}, string instanceId, FunctionContext executionContext)
         {{
             ITaskActivity activity = ActivatorUtilities.CreateInstance<{activity.TypeName}>(executionContext.InstanceServices);
             TaskActivityContext context = new GeneratedActivityContext(""{activity.TaskName}"", instanceId);
@@ -265,7 +266,7 @@ namespace Microsoft.DurableTask
             IEnumerable<DurableTaskTypeInfo> activities)
         {
             sourceBuilder.Append($@"
-        public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistry builder)
+        public static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
         {{");
 
             foreach (DurableTaskTypeInfo taskInfo in orchestrators)
@@ -346,15 +347,15 @@ namespace Microsoft.DurableTask
                 INamedTypeSymbol? baseType = classType.BaseType;
                 while (baseType != null)
                 {
-                    if (baseType.ContainingAssembly.Name == "Microsoft.DurableTask.Client")
+                    if (baseType.ContainingAssembly.Name == "Microsoft.DurableTask.Abstractions")
                     {
-                        if (baseType.Name == "TaskActivityBase")
+                        if (baseType.Name == "TaskActivity")
                         {
                             taskList = this.activities;
                             taskType = baseType;
                             break;
                         }
-                        else if (baseType.Name == "TaskOrchestratorBase")
+                        else if (baseType.Name == "TaskOrchestrator")
                         {
                             taskList = this.orchestrators;
                             taskType = baseType;
@@ -406,28 +407,27 @@ namespace Microsoft.DurableTask
             {
                 this.TypeName = taskType;
                 this.TaskName = taskName;
-                this.InputType = GetRenderedTypeExpression(inputType, supportsNullable: false);
-                this.InputDefaultType = GetRenderedTypeExpression(inputType, supportsNullable: true);
-                this.OutputType = GetRenderedTypeExpression(outputType, supportsNullable: false);
+                this.InputType = GetRenderedTypeExpression(inputType);
+                this.InputParameter = this.InputType + " input";
+                if (this.InputType[this.InputType.Length - 1] == '?')
+                {
+                    this.InputParameter += " = default";
+                }
+
+                this.OutputType = GetRenderedTypeExpression(outputType);
             }
 
             public string TypeName { get; }
             public string TaskName { get; }
             public string InputType { get; }
-            public string InputDefaultType { get; }
+            public string InputParameter { get; }
             public string OutputType { get; }
 
-            static string GetRenderedTypeExpression(ITypeSymbol? symbol, bool supportsNullable)
+            static string GetRenderedTypeExpression(ITypeSymbol? symbol)
             {
                 if (symbol == null)
                 {
-                    return supportsNullable ? "object?" : "object";
-                }
-
-                if (supportsNullable && symbol.IsReferenceType
-                    && symbol.NullableAnnotation != NullableAnnotation.Annotated)
-                {
-                    symbol = symbol.WithNullableAnnotation(NullableAnnotation.Annotated);
+                    return "object";
                 }
 
                 string expression = symbol.ToString();

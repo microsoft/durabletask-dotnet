@@ -10,55 +10,60 @@ public class ClassBasedSyntaxTests
     const string GeneratedClassName = "GeneratedDurableTaskExtensions";
     const string GeneratedFileName = $"{GeneratedClassName}.cs";
 
-    [Fact]
-    public Task Orchestrators_PrimitiveTypes()
+    [Theory]
+    [InlineData("int", "int input")]
+    [InlineData("int?", "int? input = default")]
+    [InlineData("string", "string input")]
+    [InlineData("string?", "string? input = default")]
+    public Task Orchestrators_PrimitiveTypes(string type, string input)
     {
-        string code = @"
+        string code = $@"
+#nullable enable
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
 
 [DurableTask(nameof(MyOrchestrator))]
-class MyOrchestrator : TaskOrchestratorBase<int, string>
-{
-    protected override Task<string> OnRunAsync(TaskOrchestrationContext ctx, int input) => Task.FromResult(string.Empty);
-}";
+class MyOrchestrator : TaskOrchestrator<{type}, string>
+{{
+    public override Task<string> RunAsync(TaskOrchestrationContext ctx, {type} input) => Task.FromResult(string.Empty);
+}}";
 
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
-            methodList: @"
-/// <inheritdoc cref=""DurableTaskClient.ScheduleNewOrchestrationInstanceAsync""/>
+            methodList: $@"
+/// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
-    this DurableTaskClient client,
+    this IOrchestrationSubmitter client,
+    {input},
     string? instanceId = null,
-    int input = default,
     DateTimeOffset? startTime = null)
-{
+{{
     return client.ScheduleNewOrchestrationInstanceAsync(
         ""MyOrchestrator"",
         instanceId,
         input,
         startTime);
-}
+}}
 
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync""/>
 public static Task<string> CallMyOrchestratorAsync(
     this TaskOrchestrationContext context,
+    {input},
     string? instanceId = null,
-    int input = default,
     TaskOptions? options = null)
-{
+{{
     return context.CallSubOrchestratorAsync<string>(
         ""MyOrchestrator"",
         instanceId,
         input,
         options);
-}
+}}
 
-public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistry builder)
-{
+public static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
+{{
     builder.AddOrchestrator<MyOrchestrator>();
     return builder;
-}");
+}}");
 
         return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
             GeneratedFileName,
@@ -80,7 +85,7 @@ sealed class MyOrchestrator : MyOrchestratorBase
     protected override Task<string> OnRunAsync(TaskOrchestrationContext ctx, int input) => Task.FromResult(this.X);
 }
 
-abstract class MyOrchestratorBase : TaskOrchestratorBase<int, string>
+abstract class MyOrchestratorBase : TaskOrchestrator<int, string>
 {
     public virtual string X => ""Foo"";
 }";
@@ -89,9 +94,9 @@ abstract class MyOrchestratorBase : TaskOrchestratorBase<int, string>
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
-/// <inheritdoc cref=""DurableTaskClient.ScheduleNewOrchestrationInstanceAsync""/>
+/// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
-    this DurableTaskClient client,
+    this IOrchestrationSubmitter client,
     string? instanceId = null,
     int input = default,
     DateTimeOffset? startTime = null)
@@ -138,7 +143,7 @@ public static IDurableTaskRegistry AddAllGeneratedTasks(this IDurableTaskRegistr
 using Microsoft.DurableTask;
 
 [DurableTask(nameof(MyActivity))]
-class MyActivity : TaskActivityBase<int, string>
+class MyActivity : TaskActivity<int, string>
 {
     protected override string OnRun(TaskActivityContext context, int input) => default;
 }";
@@ -172,7 +177,7 @@ using MyNS;
 using Microsoft.DurableTask;
 
 [DurableTask(nameof(MyActivity))]
-class MyActivity : TaskActivityBase<MyClass, MyClass>
+class MyActivity : TaskActivity<MyClass, MyClass>
 {
     protected override MyClass OnRun(TaskActivityContext context, MyClass input) => default;
 }
@@ -215,7 +220,7 @@ using Microsoft.DurableTask;
 namespace MyNS
 {
     [DurableTask(""MyActivity"")]
-    class MyActivityImpl : TaskActivityBase<MyClass, MyClass>
+    class MyActivityImpl : TaskActivity<MyClass, MyClass>
     {
         protected override MyClass OnRun(TaskActivityContext context, MyClass input) => default;
     }
@@ -256,7 +261,7 @@ class MyActivity : MyActivityBase
     protected override string OnRun(TaskActivityContext context, int input) => default;
 }
 
-abstract class MyActivityBase : TaskActivityBase<int, string>
+abstract class MyActivityBase : TaskActivity<int, string>
 {
 }";
 

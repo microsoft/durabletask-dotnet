@@ -1,6 +1,8 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.Internal;
+
 namespace Microsoft.DurableTask.Client;
 
 /// <summary>
@@ -22,7 +24,7 @@ namespace Microsoft.DurableTask.Client;
 /// performance.
 /// </para>
 /// </remarks>
-public abstract class DurableTaskClient : IAsyncDisposable
+public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposable
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="DurableTaskClient"/> class.
@@ -87,10 +89,7 @@ public abstract class DurableTaskClient : IAsyncDisposable
     /// </returns>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="orchestratorName"/> is empty.</exception>
     public abstract Task<string> ScheduleNewOrchestrationInstanceAsync(
-        TaskName orchestratorName,
-        string? instanceId = null,
-        object? input = null,
-        DateTimeOffset? startTime = null);
+        TaskName orchestratorName, string? instanceId = null, object? input = null, DateTimeOffset? startTime = null);
 
     /// <summary>
     /// Sends an event notification message to a waiting orchestration instance.

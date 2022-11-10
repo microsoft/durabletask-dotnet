@@ -36,9 +36,4 @@
     </Content>
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- Include 'Core' shared files by default -->
-    <SharedSection Include="Core" />
-  </ItemGroup>
-
 </Project>

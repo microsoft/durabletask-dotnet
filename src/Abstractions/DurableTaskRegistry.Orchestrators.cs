@@ -1,12 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Shims;
-
-namespace Microsoft.DurableTask.Worker;
+namespace Microsoft.DurableTask;
 
 /// <summary>
-/// Options for the Durable Task worker.
+/// Class for registering <see cref="ITaskOrchestrator" /> and <see cref="ITaskActivity" />.
 /// </summary>
 public partial class DurableTaskRegistry
 {

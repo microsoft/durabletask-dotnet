@@ -1,10 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Shims;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Microsoft.DurableTask.Worker;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Options for the Durable Task worker.

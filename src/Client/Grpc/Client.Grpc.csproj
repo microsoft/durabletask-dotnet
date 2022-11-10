@@ -23,4 +23,8 @@
     <ProjectReference Include="../Core/Client.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <SharedSection Include="Core" />
+  </ItemGroup>
+
 </Project>

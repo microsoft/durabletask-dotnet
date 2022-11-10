@@ -1,9 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Collections.Immutable;
-
-namespace Microsoft.DurableTask.Worker;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Options for the Durable Task worker.
@@ -12,11 +10,17 @@ public sealed partial class DurableTaskRegistry
 {
     static readonly Task<object?> CompletedNullTask = Task.FromResult<object?>(null);
 
-    readonly ImmutableDictionary<TaskName, Func<IServiceProvider, ITaskActivity>>.Builder activitiesBuilder
-        = ImmutableDictionary.CreateBuilder<TaskName, Func<IServiceProvider, ITaskActivity>>();
+    /// <summary>
+    /// Gets the currently registered activities.
+    /// </summary>
+    internal IDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> Activities { get; }
+        = new Dictionary<TaskName, Func<IServiceProvider, ITaskActivity>>();
 
-    readonly ImmutableDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>>.Builder orchestratorsBuilder
-        = ImmutableDictionary.CreateBuilder<TaskName, Func<IServiceProvider, ITaskOrchestrator>>();
+    /// <summary>
+    /// Gets the currently registered orchestrators.
+    /// </summary>
+    internal IDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>> Orchestrators { get; }
+        = new Dictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>>();
 
     /// <summary>
     /// Registers an activity factory.
@@ -36,12 +40,12 @@ public sealed partial class DurableTaskRegistry
     {
         Check.NotDefault(name);
         Check.NotNull(factory);
-        if (this.activitiesBuilder.ContainsKey(name))
+        if (this.Activities.ContainsKey(name))
         {
             throw new ArgumentException($"An {nameof(ITaskActivity)} named '{name}' is already added.", nameof(name));
         }
 
-        this.activitiesBuilder.Add(name, factory);
+        this.Activities.Add(name, factory);
         return this;
     }
 
@@ -63,22 +67,13 @@ public sealed partial class DurableTaskRegistry
     {
         Check.NotDefault(name);
         Check.NotNull(factory);
-        if (this.orchestratorsBuilder.ContainsKey(name))
+        if (this.Orchestrators.ContainsKey(name))
         {
             throw new ArgumentException(
                 $"An {nameof(ITaskOrchestrator)} named '{name}' is already added.", nameof(name));
         }
 
-        this.orchestratorsBuilder.Add(name, _ => factory());
+        this.Orchestrators.Add(name, _ => factory());
         return this;
-    }
-
-    /// <summary>
-    /// Builds this registry into a <see cref="IDurableTaskFactory" />.
-    /// </summary>
-    /// <returns>The built <see cref="IDurableTaskFactory" />.</returns>
-    internal IDurableTaskFactory Build()
-    {
-        return new DurableTaskFactory(this.activitiesBuilder.ToImmutable(), this.orchestratorsBuilder.ToImmutable());
     }
 }

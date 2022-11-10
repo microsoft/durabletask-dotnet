@@ -1,6 +1,8 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.Internal;
+
 namespace Microsoft.DurableTask.Client;
 
 /// <summary>

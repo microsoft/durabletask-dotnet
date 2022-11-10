@@ -1,10 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Client;
+namespace Microsoft.DurableTask.Internal;
 
 /// <summary>
-/// Contract for submitting orchestrations to be ran.
+/// This is an internal API that supports the DurableTask infrastructure and not subject to
+/// the same compatibility standards as public APIs. It may be changed or removed without notice in
+/// any release. You should only use it directly in your code with extreme caution and knowing that
+/// doing so can result in application failures when updating to a new DurableTask release.
 /// </summary>
 /// <remarks>
 /// <b>Do not</b> implement directly, instead use "DurableTaskClient" from the client package instead. This interface's
@@ -14,6 +17,10 @@ public interface IOrchestrationSubmitter
 {
     /// <summary>
     /// Schedules a new orchestration instance for execution.
+    /// This is an internal API that supports the DurableTask infrastructure and not subject to
+    /// the same compatibility standards as public APIs. It may be changed or removed without notice in
+    /// any release. You should only use it directly in your code with extreme caution and knowing that
+    /// doing so can result in application failures when updating to a new DurableTask release.
     /// </summary>
     /// <param name="orchestratorName">The name of the orchestrator to schedule.</param>
     /// <param name="instanceId">

@@ -56,6 +56,6 @@ public class DefaultDurableTaskBuilder : IDurableTaskBuilder
         DurableTaskRegistry registry = serviceProvider.GetOptions<DurableTaskRegistry>(this.Name);
         DurableTaskWorkerOptions options = serviceProvider.GetOptions<DurableTaskWorkerOptions>(this.Name);
         return (IHostedService)ActivatorUtilities.CreateInstance(
-            serviceProvider, this.buildTarget, this.Name, registry.Build(), options);
+            serviceProvider, this.buildTarget, this.Name, registry.BuildFactory(), options);
     }
 }

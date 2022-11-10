@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Shims;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Helpers for creating <see cref="ITaskOrchestrator" />.

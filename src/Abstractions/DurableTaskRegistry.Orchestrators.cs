@@ -4,7 +4,7 @@
 namespace Microsoft.DurableTask;
 
 /// <summary>
-/// Class for registering <see cref="ITaskOrchestrator" /> and <see cref="ITaskActivity" />.
+/// Container for registered <see cref="ITaskOrchestrator" /> and <see cref="ITaskActivity" /> implementations.
 /// </summary>
 public partial class DurableTaskRegistry
 {

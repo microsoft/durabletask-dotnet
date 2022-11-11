@@ -6,9 +6,22 @@ namespace Microsoft.DurableTask;
 /// <summary>
 /// Options that can be used to control the behavior of orchestrator task execution.
 /// </summary>
-/// <param name="Retry">The retry options. <c>null</c> for no retries.</param>
-public record TaskOptions(TaskRetryOptions? Retry = null)
+public record TaskOptions
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TaskOptions"/> class.
+    /// </summary>
+    /// <param name="retry">The task retry options.</param>
+    public TaskOptions(TaskRetryOptions? retry = null)
+    {
+        this.Retry = retry;
+    }
+
+    /// <summary>
+    /// Gets the task retry options.
+    /// </summary>
+    public TaskRetryOptions? Retry { get; init; }
+
     /// <summary>
     /// Returns a new <see cref="TaskOptions" /> from the provided <see cref="RetryPolicy" />.
     /// </summary>
@@ -35,23 +48,57 @@ public record TaskOptions(TaskRetryOptions? Retry = null)
     }
 
     /// <summary>
+    /// Returns a new <see cref="OrchestrationOptions" /> with the provided instance ID. This can be used when starting
+    /// a new sub-orchestration to specify the instance ID.
+    /// </summary>
+    /// <param name="instanceId">The instance ID to use.</param>
+    /// <returns>A new <see cref="OrchestrationOptions" />.</returns>
+    public OrchestrationOptions WithInstanceId(string instanceId) => new(this, instanceId);
+
+    /// <summary>
     /// Gets the instance ID, if available, for this options instance.
     /// </summary>
     /// <returns>The orchestration instance ID if available, <c>null</c> otherwise.</returns>
-    internal string? GetInstanceId()
-    {
-        return this is OrchestrationOptions options ? options.InstanceId : null;
-    }
+    internal string? GetInstanceId() => this is OrchestrationOptions options ? options.InstanceId : null;
 }
 
 /// <summary>
 /// Options that can be used to control the behavior of orchestrator task execution. This derived type can be used to
 /// supply extra options for orchestrations.
 /// </summary>
-/// <param name="InstanceId">The orchestration instance ID to use. <c>null</c> to have one generated.</param>
-/// <param name="Retry">The retry options. <c>null</c> for no retries.</param>
-public record OrchestrationOptions(string? InstanceId = null, TaskRetryOptions? Retry = null)
-    : TaskOptions(Retry);
+public record OrchestrationOptions : TaskOptions
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OrchestrationOptions"/> class.
+    /// </summary>
+    /// <param name="retry">The task retry options.</param>
+    /// <param name="instanceId">The orchestration instance ID.</param>
+    public OrchestrationOptions(TaskRetryOptions? retry = null, string? instanceId = null)
+        : base(retry)
+    {
+        this.InstanceId = instanceId;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OrchestrationOptions"/> class.
+    /// </summary>
+    /// <param name="options">The task options to wrap.</param>
+    /// <param name="instanceId">The orchestration instance ID.</param>
+    public OrchestrationOptions(TaskOptions options, string? instanceId = null)
+        : base(options)
+    {
+        this.InstanceId = instanceId;
+        if (instanceId is null && options is OrchestrationOptions derived)
+        {
+            this.InstanceId = derived.InstanceId;
+        }
+    }
+
+    /// <summary>
+    /// Gets the orchestration instance ID.
+    /// </summary>
+    public string? InstanceId { get; init; }
+}
 
 /// <summary>
 /// Options for submitting new orchestrations via the client.

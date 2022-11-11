@@ -15,12 +15,7 @@ namespace NetFxConsoleApp
             IHost host = Host.CreateDefaultBuilder(args)
                 .ConfigureServices(services =>
                 {
-                    services.AddDurableTaskClient(builder =>
-                    {
-                        builder.UseGrpc();
-                        builder.RegisterDirectly();
-                    });
-
+                    services.AddDurableTaskClient(builder => builder.UseGrpc());
                     services.AddDurableTaskWorker(builder =>
                     {
                         builder.AddTasks(tasks =>

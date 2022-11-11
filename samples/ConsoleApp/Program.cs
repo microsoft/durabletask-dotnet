@@ -16,6 +16,12 @@ IHost host = Host.CreateDefaultBuilder(args)
             // Configure options for this builder. Can be omitted if no options customization is needed.
             builder.Configure(opt => { });
             builder.UseGrpc(); // multiple overloads available for providing gRPC information
+
+            // AddDurableTaskClient allows for multiple named clients by passing in a name as the first argument.
+            // When using a non-default named client, you will need to make this call below to have the
+            // DurableTaskClient added directly to the DI container. Otherwise IDurableTaskClientProvider must be used
+            // to retrieve DurableTaskClients by name from the DI container. In this case, we are using the default
+            // name, so the line below is NOT required as it was already called for us.
             builder.RegisterDirectly();
         });
 
@@ -50,7 +56,11 @@ IHost host = Host.CreateDefaultBuilder(args)
         services.Configure<DurableTaskWorkerOptions>(opt => { });
         services.Configure<DurableTaskClientOptions>(opt => { });
 
-        // Registry is also done via options pattern. This is equivalent to the 'builder.AddTasks' call above.
+        // Registry can also be done via options pattern. This is equivalent to the 'builder.AddTasks' call above.
+        // You can use all the tools options pattern has available. For example, if you have multiple workers you could
+        // use ConfigureAll<DurableTaskRegistry> to add tasks to ALL workers in one go. Otherwise, you need to use
+        // named option configuration to register to specific workers (where the name matches the name passed to 
+        // 'AddDurableTaskWorker(name?, builder)').
         services.Configure<DurableTaskRegistry>(registry => { });
 
         // You can configure custom data converter multiple ways. One is through worker/client options configuration.

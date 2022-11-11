@@ -150,7 +150,9 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         TaskOptions? options = null)
     {
         // TODO: Check to see if this orchestrator is defined
-        string instanceId = options?.GetInstanceId() ?? this.NewGuid().ToString("N");
+        static string? GetInstanceId(TaskOptions? options)
+            => options is SubOrchestrationOptions derived ? derived.InstanceId : null;
+        string instanceId = GetInstanceId(options) ?? this.NewGuid().ToString("N");
 
         try
         {

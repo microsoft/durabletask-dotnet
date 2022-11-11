@@ -41,54 +41,44 @@ public record TaskOptions
     /// </summary>
     /// <param name="handler">The handler to convert from.</param>
     /// <returns>A <see cref="TaskOptions" /> built from the handler.</returns>
-    public static TaskOptions FromRetryHandler(RetryHandler handler)
-    {
-        Check.NotNull(handler);
-        return FromRetryHandler(context => Task.FromResult(handler.Invoke(context)));
-    }
+    public static TaskOptions FromRetryHandler(RetryHandler handler) => new(handler);
 
     /// <summary>
-    /// Returns a new <see cref="OrchestrationOptions" /> with the provided instance ID. This can be used when starting
-    /// a new sub-orchestration to specify the instance ID.
+    /// Returns a new <see cref="SubOrchestrationOptions" /> with the provided instance ID. This can be used when
+    /// starting a new sub-orchestration to specify the instance ID.
     /// </summary>
     /// <param name="instanceId">The instance ID to use.</param>
-    /// <returns>A new <see cref="OrchestrationOptions" />.</returns>
-    public OrchestrationOptions WithInstanceId(string instanceId) => new(this, instanceId);
-
-    /// <summary>
-    /// Gets the instance ID, if available, for this options instance.
-    /// </summary>
-    /// <returns>The orchestration instance ID if available, <c>null</c> otherwise.</returns>
-    internal string? GetInstanceId() => this is OrchestrationOptions options ? options.InstanceId : null;
+    /// <returns>A new <see cref="SubOrchestrationOptions" />.</returns>
+    public SubOrchestrationOptions WithInstanceId(string instanceId) => new(this, instanceId);
 }
 
 /// <summary>
 /// Options that can be used to control the behavior of orchestrator task execution. This derived type can be used to
 /// supply extra options for orchestrations.
 /// </summary>
-public record OrchestrationOptions : TaskOptions
+public record SubOrchestrationOptions : TaskOptions
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="OrchestrationOptions"/> class.
+    /// Initializes a new instance of the <see cref="SubOrchestrationOptions"/> class.
     /// </summary>
     /// <param name="retry">The task retry options.</param>
     /// <param name="instanceId">The orchestration instance ID.</param>
-    public OrchestrationOptions(TaskRetryOptions? retry = null, string? instanceId = null)
+    public SubOrchestrationOptions(TaskRetryOptions? retry = null, string? instanceId = null)
         : base(retry)
     {
         this.InstanceId = instanceId;
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="OrchestrationOptions"/> class.
+    /// Initializes a new instance of the <see cref="SubOrchestrationOptions"/> class.
     /// </summary>
     /// <param name="options">The task options to wrap.</param>
     /// <param name="instanceId">The orchestration instance ID.</param>
-    public OrchestrationOptions(TaskOptions options, string? instanceId = null)
+    public SubOrchestrationOptions(TaskOptions options, string? instanceId = null)
         : base(options)
     {
         this.InstanceId = instanceId;
-        if (instanceId is null && options is OrchestrationOptions derived)
+        if (instanceId is null && options is SubOrchestrationOptions derived)
         {
             this.InstanceId = derived.InstanceId;
         }

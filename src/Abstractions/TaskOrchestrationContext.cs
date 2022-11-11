@@ -290,13 +290,14 @@ public abstract class TaskOrchestrationContext
     /// </para><para>
     /// Because sub-orchestrations are independent of their parents, terminating a parent orchestration does not affect
     /// any sub-orchestrations. You must terminate each sub-orchestration independently using its instance ID, which is
-    /// specified by supplying <see cref="OrchestrationOptions" /> in place of <see cref="TaskOptions" />.
+    /// specified by supplying <see cref="SubOrchestrationOptions" /> in place of <see cref="TaskOptions" />.
     /// </para>
     /// </remarks>
     /// <param name="orchestratorName">The name of the orchestrator to call.</param>
     /// <param name="input">The serializable input to pass to the sub-orchestrator.</param>
     /// <param name="options">
-    /// Additional options that control the execution and processing of the sub-orchestrator.
+    /// Additional options that control the execution and processing of the sub-orchestrator. Callers can choose to
+    /// supply the derived type <see cref="SubOrchestrationOptions" />.
     /// </param>
     /// <returns>A task that completes when the sub-orchestrator completes or fails.</returns>
     /// <exception cref="ArgumentException">The specified orchestrator does not exist.</exception>

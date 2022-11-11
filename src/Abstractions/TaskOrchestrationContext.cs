@@ -260,10 +260,9 @@ public abstract class TaskOrchestrationContext
     /// <typeparam name="TResult">
     /// The type into which to deserialize the sub-orchestrator's output.
     /// </typeparam>
-    /// <inheritdoc cref="CallSubOrchestratorAsync(TaskName, string?, object?, TaskOptions?)"/>
+    /// <inheritdoc cref="CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)"/>
     public abstract Task<TResult> CallSubOrchestratorAsync<TResult>(
         TaskName orchestratorName,
-        string? instanceId = null,
         object? input = null,
         TaskOptions? options = null);
 
@@ -291,14 +290,10 @@ public abstract class TaskOrchestrationContext
     /// </para><para>
     /// Because sub-orchestrations are independent of their parents, terminating a parent orchestration does not affect
     /// any sub-orchestrations. You must terminate each sub-orchestration independently using its instance ID, which is
-    /// specified using the <paramref name="instanceId"/>
-    /// parameter.
+    /// specified by supplying <see cref="OrchestrationOptions" /> in place of <see cref="TaskOptions" />.
     /// </para>
     /// </remarks>
     /// <param name="orchestratorName">The name of the orchestrator to call.</param>
-    /// <param name="instanceId">
-    /// A unique ID to use for the sub-orchestration instance. If not specified, a random instance ID will be generated.
-    /// </param>
     /// <param name="input">The serializable input to pass to the sub-orchestrator.</param>
     /// <param name="options">
     /// Additional options that control the execution and processing of the sub-orchestrator.
@@ -314,11 +309,10 @@ public abstract class TaskOrchestrationContext
     /// </exception>
     public Task CallSubOrchestratorAsync(
         TaskName orchestratorName,
-        string? instanceId = null,
         object? input = null,
         TaskOptions? options = null)
     {
-        return this.CallSubOrchestratorAsync<object>(orchestratorName, instanceId, input, options);
+        return this.CallSubOrchestratorAsync<object>(orchestratorName, input, options);
     }
 
     /// <summary>

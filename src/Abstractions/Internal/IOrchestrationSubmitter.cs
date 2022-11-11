@@ -23,21 +23,15 @@ public interface IOrchestrationSubmitter
     /// doing so can result in application failures when updating to a new DurableTask release.
     /// </summary>
     /// <param name="orchestratorName">The name of the orchestrator to schedule.</param>
-    /// <param name="instanceId">
-    /// The unique ID of the orchestration instance to schedule. If not specified, a randomGUID value is used.
-    /// </param>
     /// <param name="input">
     /// The optional input to pass to the scheduled orchestration instance. This must be a serializable value.
     /// </param>
-    /// <param name="startTime">
-    /// The time when the orchestration instance should start executing. If not specified or if a date-time in the past
-    /// is specified, the orchestration instance will be scheduled immediately.
-    /// </param>
+    /// <param name="options">The options to start the new orchestration with.</param>
     /// <returns>
     /// A task that completes when the orchestration instance is successfully scheduled. The value of this task is
-    /// the instance ID of the scheduled orchestration instance. If a non-null <paramref name="instanceId"/> parameter
-    /// value was provided, the same value will be returned by the completed task.
+    /// the instance ID of the scheduled orchestration instance. If a non-null instance ID was provided via
+    /// <paramref name="options" />, the same value will be returned by the completed task.
     /// </returns>
     Task<string> ScheduleNewOrchestrationInstanceAsync(
-        TaskName orchestratorName, string? instanceId = null, object? input = null, DateTimeOffset? startTime = null);
+        TaskName orchestratorName, object? input = null, StartOrchestrationOptions? options = null);
 }

@@ -120,9 +120,8 @@ public class DurableTaskClientBuilderExtensionsTests
 
         public override Task<string> ScheduleNewOrchestrationInstanceAsync(
             TaskName orchestratorName,
-            string? instanceId = null,
             object? input = null,
-            DateTimeOffset? startTime = null)
+            StartOrchestrationOptions? options = null)
         {
             throw new NotImplementedException();
         }

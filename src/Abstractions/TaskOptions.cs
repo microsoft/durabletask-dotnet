@@ -6,153 +6,61 @@ namespace Microsoft.DurableTask;
 /// <summary>
 /// Options that can be used to control the behavior of orchestrator task execution.
 /// </summary>
-public class TaskOptions
+/// <param name="Retry">The retry options. <c>null</c> for no retries.</param>
+public record TaskOptions(TaskRetryOptions? Retry = null)
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="TaskOptions"/> class.
+    /// Returns a new <see cref="TaskOptions" /> from the provided <see cref="RetryPolicy" />.
     /// </summary>
-    /// <param name="builder">The builder.</param>
-    internal TaskOptions(Builder builder)
+    /// <param name="policy">The policy to convert from.</param>
+    /// <returns>A <see cref="TaskOptions" /> built from the policy.</returns>
+    public static TaskOptions FromRetryPolicy(RetryPolicy policy) => new(policy);
+
+    /// <summary>
+    /// Returns a new <see cref="TaskOptions" /> from the provided <see cref="AsyncRetryHandler" />.
+    /// </summary>
+    /// <param name="handler">The handler to convert from.</param>
+    /// <returns>A <see cref="TaskOptions" /> built from the handler.</returns>
+    public static TaskOptions FromRetryHandler(AsyncRetryHandler handler) => new(handler);
+
+    /// <summary>
+    /// Returns a new <see cref="TaskOptions" /> from the provided <see cref="RetryHandler" />.
+    /// </summary>
+    /// <param name="handler">The handler to convert from.</param>
+    /// <returns>A <see cref="TaskOptions" /> built from the handler.</returns>
+    public static TaskOptions FromRetryHandler(RetryHandler handler)
     {
-        Check.NotNull(builder);
-        this.RetryPolicy = builder.RetryPolicy;
-        this.CancellationToken = builder.CancellationToken;
-        this.RetryHandler = builder.RetryHandler;
+        Check.NotNull(handler);
+        return FromRetryHandler(context => Task.FromResult(handler.Invoke(context)));
     }
 
     /// <summary>
-    /// Gets the retry policy that was configured for this <see cref="TaskOptions"/> instance.
+    /// Gets the instance ID, if available, for this options instance.
     /// </summary>
-    public RetryPolicy? RetryPolicy { get; }
-
-    /// <summary>
-    /// Gets the cancellation token that was configured for this <see cref="TaskOptions"/> instance.
-    /// </summary>
-    public CancellationToken CancellationToken { get; }
-
-    /// <summary>
-    /// Gets the retry handler that was configured for this <see cref="TaskOptions"/> instance.
-    /// </summary>
-    public AsyncRetryHandler? RetryHandler { get; }
-
-    /// <summary>
-    /// Convenience method from creating a <see cref="TaskOptions"/> object from a <see cref="RetryPolicy"/>.
-    /// </summary>
-    /// <param name="policy">The task retry policy to configure.</param>
-    /// <param name="cancellationToken">Optional cancellation token for canceling the task.</param>
-    /// <returns>Returns a newly created <see cref="TaskOptions"/> object.</returns>
-    public static TaskOptions FromRetryPolicy(RetryPolicy policy, CancellationToken cancellationToken = default)
+    /// <returns>The orchestration instance ID if available, <c>null</c> otherwise.</returns>
+    internal string? GetInstanceId()
     {
-        return CreateBuilder().WithRetryStrategy(policy).WithCancellationToken(cancellationToken).Build();
-    }
-
-    /// <summary>
-    /// Convenience method from creating a <see cref="TaskOptions"/> object from a <see cref="RetryHandler"/>.
-    /// </summary>
-    /// <param name="retryHandler">The task retry handler to configure.</param>
-    /// <param name="cancellationToken">Optional cancellation token for canceling the task.</param>
-    /// <returns>Returns a newly created <see cref="TaskOptions"/> object.</returns>
-    public static TaskOptions FromRetryHandler(RetryHandler retryHandler, CancellationToken cancellationToken = default)
-    {
-        return CreateBuilder().WithRetryStrategy(retryHandler).WithCancellationToken(cancellationToken).Build();
-    }
-
-    /// <summary>
-    /// Convenience method from creating a <see cref="TaskOptions"/> object from a <see cref="AsyncRetryHandler"/>.
-    /// </summary>
-    /// <inheritdoc cref="FromRetryHandler(RetryHandler, CancellationToken)"/>
-    public static TaskOptions FromRetryHandler(AsyncRetryHandler retryHandler, CancellationToken cancellationToken = default)
-    {
-        return CreateBuilder().WithRetryStrategy(retryHandler).WithCancellationToken(cancellationToken).Build();
-    }
-
-    /// <summary>
-    /// Creates a new <see cref="Builder"/> object that can be used to construct a new <see cref="TaskOptions"/> object.
-    /// </summary>
-    /// <returns>
-    /// Returns a new <see cref="Builder"/> object that can be used to construct a new <see cref="TaskOptions"/> object.
-    /// </returns>
-    public static Builder CreateBuilder() => new();
-
-    /// <summary>
-    /// Builder for creating <see cref="TaskOptions"/> instances.
-    /// </summary>
-    public sealed class Builder
-    {
-        /// <summary>
-        /// Gets the retry policy.
-        /// </summary>
-        internal RetryPolicy? RetryPolicy { get; private set; }
-
-        /// <summary>
-        /// Gets the retry handler.
-        /// </summary>
-        internal AsyncRetryHandler? RetryHandler { get; private set; }
-
-        /// <summary>
-        /// Gets the cancellation token.
-        /// </summary>
-        internal CancellationToken CancellationToken { get; private set; }
-
-        /// <summary>
-        /// Configures a task retry policy.
-        /// </summary>
-        /// <param name="policy">The task retry policy to configure.</param>
-        /// <returns>Returns the current <see cref="Builder"/> object.</returns>
-        public Builder WithRetryStrategy(RetryPolicy policy)
-        {
-            this.RetryPolicy = policy;
-            this.RetryHandler = null;
-            return this;
-        }
-
-        /// <inheritdoc cref="WithRetryStrategy(AsyncRetryHandler)"/>
-        public Builder WithRetryStrategy(RetryHandler handler)
-        {
-            // Synchronous handlers are wrapped in an async handler so that we only have
-            // to keep track of a single handler assignment.
-            return this.WithRetryStrategy(retryContext => Task.FromResult(handler(retryContext)));
-        }
-
-        /// <summary>
-        /// Configures a retry handler.
-        /// </summary>
-        /// <param name="handler">The handler to invoke when deciding whether to retry a failed orchestrator task.</param>
-        /// <returns>Returns the current <see cref="Builder"/> object.</returns>
-        public Builder WithRetryStrategy(AsyncRetryHandler handler)
-        {
-            this.RetryHandler = handler;
-            this.RetryPolicy = null;
-            return this;
-        }
-
-        /// <summary>
-        /// Configures a <see cref="CancellationToken"/> that can be used to cancel the task execution.
-        /// </summary>
-        /// <remarks>
-        /// Cancellation tokens can be used to stop the current orchestrator from awaiting a pending activity or
-        /// sub-orchestration completion. However, this cancellation won't necessarily stop the activity or
-        /// sub-orchestration from running in the background.
-        /// </remarks>
-        /// <param name="cancellationToken">The cancellation token to use for cancelling task execution.</param>
-        /// <returns>Returns the current <see cref="Builder"/> object.</returns>
-        public Builder WithCancellationToken(CancellationToken cancellationToken)
-        {
-            if (cancellationToken != default)
-            {
-                throw new NotSupportedException(
-                    "Durable task cancellation is not yet supported. See"
-                    + " https://github.com/microsoft/durabletask-dotnet/issues/7 for more information.");
-            }
-
-            this.CancellationToken = cancellationToken;
-            return this;
-        }
-
-        /// <summary>
-        /// Creates a new <see cref="TaskOptions"/> object from this builder.
-        /// </summary>
-        /// <returns>The created <see cref="TaskOptions"/> object.</returns>
-        public TaskOptions Build() => new(this);
+        return this is OrchestrationOptions options ? options.InstanceId : null;
     }
 }
+
+/// <summary>
+/// Options that can be used to control the behavior of orchestrator task execution. This derived type can be used to
+/// supply extra options for orchestrations.
+/// </summary>
+/// <param name="InstanceId">The orchestration instance ID to use. <c>null</c> to have one generated.</param>
+/// <param name="Retry">The retry options. <c>null</c> for no retries.</param>
+public record OrchestrationOptions(string? InstanceId = null, TaskRetryOptions? Retry = null)
+    : TaskOptions(Retry);
+
+/// <summary>
+/// Options for submitting new orchestrations via the client.
+/// </summary>
+/// <param name="InstanceId">
+/// The unique ID of the orchestration instance to schedule. If not specified, a new GUID value is used.
+/// </param>
+/// <param name="StartAt">
+/// The time when the orchestration instance should start executing. If not specified or if a date-time in the past
+/// is specified, the orchestration instance will be scheduled immediately.
+/// </param>
+public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null);

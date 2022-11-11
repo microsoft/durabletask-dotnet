@@ -88,21 +88,21 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         try
         {
             // TODO: Cancellation (https://github.com/microsoft/durabletask-dotnet/issues/7)
-            if (options?.RetryPolicy != null)
+            if (options?.Retry?.Policy is RetryPolicy policy)
             {
                 return await this.innerContext.ScheduleWithRetry<T>(
                     name.Name,
                     name.Version,
-                    options.RetryPolicy.ToDurableTaskCoreRetryOptions(),
+                    policy.ToDurableTaskCoreRetryOptions(),
                     input);
             }
-            else if (options?.RetryHandler != null)
+            else if (options?.Retry?.Handler is AsyncRetryHandler handler)
             {
                 return await this.InvokeWithCustomRetryHandler(
                     () => this.innerContext.ScheduleTask<T>(name.Name, name.Version, input),
                     name.Name,
-                    options.RetryHandler,
-                    options.CancellationToken);
+                    handler,
+                    default);
             }
             else
             {
@@ -146,24 +146,23 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override async Task<TResult> CallSubOrchestratorAsync<TResult>(
         TaskName orchestratorName,
-        string? instanceId = null,
         object? input = null,
         TaskOptions? options = null)
     {
         // TODO: Check to see if this orchestrator is defined
-        instanceId ??= this.NewGuid().ToString("N");
+        string instanceId = options?.GetInstanceId() ?? this.NewGuid().ToString("N");
 
         try
         {
-            if (options?.RetryPolicy != null)
+            if (options?.Retry?.Policy is RetryPolicy policy)
             {
                 return await this.innerContext.CreateSubOrchestrationInstanceWithRetry<TResult>(
                     orchestratorName.Name,
                     orchestratorName.Version,
-                    options.RetryPolicy.ToDurableTaskCoreRetryOptions(),
+                    policy.ToDurableTaskCoreRetryOptions(),
                     input);
             }
-            else if (options?.RetryHandler != null)
+            else if (options?.Retry?.Handler is AsyncRetryHandler handler)
             {
                 return await this.InvokeWithCustomRetryHandler(
                     () => this.innerContext.CreateSubOrchestrationInstance<TResult>(
@@ -172,8 +171,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                         instanceId,
                         input),
                     orchestratorName.Name,
-                    options.RetryHandler,
-                    options.CancellationToken);
+                    handler,
+                    default);
             }
             else
             {

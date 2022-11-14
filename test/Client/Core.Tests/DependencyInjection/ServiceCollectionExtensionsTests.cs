@@ -28,6 +28,19 @@ public class ServiceCollectionExtensionsTests
         services.AddDurableTaskClient(builder => { });
         services.Should().ContainSingle(
             x => x.ServiceType == typeof(IDurableTaskClientProvider) && x.Lifetime == ServiceLifetime.Singleton);
+        services.Should().ContainSingle(
+            x => x.ServiceType == typeof(DurableTaskClient) && x.Lifetime == ServiceLifetime.Singleton);
+    }
+
+    [Fact]
+    public void AddDurableTaskClient_Named_HostedServiceAdded()
+    {
+        ServiceCollection services = new();
+        services.AddDurableTaskClient("named", builder => { });
+        services.Should().ContainSingle(
+            x => x.ServiceType == typeof(IDurableTaskClientProvider) && x.Lifetime == ServiceLifetime.Singleton);
+        services.Should().NotContain(
+            x => x.ServiceType == typeof(DurableTaskClient) && x.Lifetime == ServiceLifetime.Singleton);
     }
 
     [Fact]

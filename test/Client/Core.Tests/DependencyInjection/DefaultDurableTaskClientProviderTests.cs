@@ -40,12 +40,12 @@ public class DefaultDurableTaskClientProviderTests
         client.Name.Should().Be("client1");
     }
 
-    static List<DurableTaskClient> CreateClients(params string[] names)
+    static List<DefaultDurableTaskClientProvider.ClientContainer> CreateClients(params string[] names)
     {
         return names.Select(n =>
         {
             Mock<DurableTaskClient> client = new(n, new DurableTaskClientOptions());
-            return client.Object;
+            return new DefaultDurableTaskClientProvider.ClientContainer(client.Object);
         }).ToList();
     }
 }

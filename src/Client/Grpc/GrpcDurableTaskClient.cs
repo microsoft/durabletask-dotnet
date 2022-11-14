@@ -4,6 +4,7 @@
 using System.Text;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
@@ -14,34 +15,42 @@ namespace Microsoft.DurableTask.Client.Grpc;
 /// <summary>
 /// Durable Task client implementation that uses gRPC to connect to a remote "sidecar" process.
 /// </summary>
-sealed class GrpcDurableTaskClient : DurableTaskClient
+public sealed class GrpcDurableTaskClient : DurableTaskClient
 {
     readonly ILogger logger;
     readonly TaskHubSidecarServiceClient sidecarClient;
-    readonly GrpcDurableTaskClientOptions grpcOptions;
+    readonly GrpcDurableTaskClientOptions options;
     readonly AsyncDisposable asyncDisposable;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GrpcDurableTaskClient"/> class.
     /// </summary>
     /// <param name="name">The name of the client.</param>
-    /// <param name="options">The common client options.</param>
-    /// <param name="grpcOptions">The gRPC client options.</param>
+    /// <param name="options">The gRPC client options.</param>
     /// <param name="logger">The logger.</param>
+    [ActivatorUtilitiesConstructor]
     public GrpcDurableTaskClient(
-        string name,
-        DurableTaskClientOptions options,
-        IOptionsMonitor<GrpcDurableTaskClientOptions> grpcOptions,
-        ILogger<GrpcDurableTaskClient> logger)
-        : base(name, options)
+        string name, IOptionsMonitor<GrpcDurableTaskClientOptions> options, ILogger<GrpcDurableTaskClient> logger)
+        : this(name, Check.NotNull(options).Get(name), logger)
     {
-        this.logger = logger;
-        this.grpcOptions = grpcOptions.Get(name);
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GrpcDurableTaskClient"/> class.
+    /// </summary>
+    /// <param name="name">The name of the client.</param>
+    /// <param name="options">The gRPC client options.</param>
+    /// <param name="logger">The logger.</param>
+    public GrpcDurableTaskClient(string name, GrpcDurableTaskClientOptions options, ILogger logger)
+        : base(name)
+    {
+        this.logger = Check.NotNull(logger);
+        this.options = Check.NotNull(options);
         this.asyncDisposable = this.BuildChannel(out Channel channel);
         this.sidecarClient = new TaskHubSidecarServiceClient(channel);
     }
 
-    DataConverter DataConverter => this.Options.DataConverter;
+    DataConverter DataConverter => this.options.DataConverter;
 
     /// <inheritdoc/>
     public override ValueTask DisposeAsync()
@@ -320,13 +329,13 @@ sealed class GrpcDurableTaskClient : DurableTaskClient
 
     AsyncDisposable BuildChannel(out Channel channel)
     {
-        if (this.grpcOptions.Channel is Channel c)
+        if (this.options.Channel is Channel c)
         {
             channel = c;
             return default;
         }
 
-        string address = string.IsNullOrEmpty(this.grpcOptions.Address) ? "127.0.0.1:4001" : this.grpcOptions.Address!;
+        string address = string.IsNullOrEmpty(this.options.Address) ? "127.0.0.1:4001" : this.options.Address!;
 
         // TODO: use SSL channel by default?
         c = new(address, ChannelCredentials.Insecure);

@@ -18,7 +18,11 @@ public class JsonDataConverter : DataConverter
 
     readonly JsonSerializerOptions? options;
 
-    JsonDataConverter(JsonSerializerOptions? options = null)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="JsonDataConverter"/> class.
+    /// </summary>
+    /// <param name="options">The serializer options.</param>
+    public JsonDataConverter(JsonSerializerOptions? options = null)
     {
         this.options = options ?? DefaultOptions;
     }

@@ -3,6 +3,7 @@
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace Microsoft.DurableTask.Client;
 
@@ -66,4 +67,26 @@ public static class DurableTaskBuilderExtensions
     public static IDurableTaskClientBuilder UseBuildTarget<TTarget>(this IDurableTaskClientBuilder builder)
         where TTarget : DurableTaskClient
         => builder.UseBuildTarget(typeof(TTarget));
+
+    /// <summary>
+    /// Sets the build target for this builder. Additionally populates default options values for the provided
+    /// <typeparamref name="TOptions" />.
+    /// </summary>
+    /// <typeparam name="TTarget">The builder target type.</typeparam>
+    /// <typeparam name="TOptions">The options for this builder.</typeparam>
+    /// <param name="builder">The builder to set the builder target for.</param>
+    /// <returns>The original builder, for call chaining.</returns>
+    public static IDurableTaskClientBuilder UseBuildTarget<TTarget, TOptions>(this IDurableTaskClientBuilder builder)
+        where TTarget : DurableTaskClient
+        where TOptions : DurableTaskClientOptions
+    {
+        builder.UseBuildTarget(typeof(TTarget));
+        builder.Services.AddOptions<TOptions>(builder.Name)
+            .Configure<IOptionsMonitor<DurableTaskClientOptions>>((options, baseOptions) =>
+            {
+                DurableTaskClientOptions input = baseOptions.Get(builder.Name);
+                input.ApplyTo(options);
+            });
+        return builder;
+    }
 }

@@ -30,22 +30,15 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// Initializes a new instance of the <see cref="DurableTaskClient"/> class.
     /// </summary>
     /// <param name="name">The name of the client.</param>
-    /// <param name="options">The client options.</param>
-    protected DurableTaskClient(string name, DurableTaskClientOptions options)
+    protected DurableTaskClient(string name)
     {
         this.Name = name;
-        this.Options = options;
     }
 
     /// <summary>
     /// Gets the name of the client.
     /// </summary>
     public string Name { get; }
-
-    /// <summary>
-    /// Gets the common client options.
-    /// </summary>
-    protected DurableTaskClientOptions Options { get; }
 
     /// <summary>
     /// Schedules a new orchestration instance for execution.

@@ -3,13 +3,14 @@
 
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Microsoft.DurableTask.Worker;
 
 /// <summary>
-/// Extensions for <see cref="IDurableTaskBuilder" />.
+/// Extensions for <see cref="IDurableTaskWorkerBuilder" />.
 /// </summary>
-public static class DurableTaskBuilderExtensions
+public static class DurableTaskWorkerBuilderExtensions
 {
     /// <summary>
     /// Adds tasks to the current builder.
@@ -17,8 +18,8 @@ public static class DurableTaskBuilderExtensions
     /// <param name="builder">The builder to add tasks to.</param>
     /// <param name="configure">The callback to add tasks.</param>
     /// <returns>The original builder, for call chaining.</returns>
-    public static IDurableTaskBuilder AddTasks(
-        this IDurableTaskBuilder builder, Action<DurableTaskRegistry> configure)
+    public static IDurableTaskWorkerBuilder AddTasks(
+        this IDurableTaskWorkerBuilder builder, Action<DurableTaskRegistry> configure)
     {
         Check.NotNull(builder);
         builder.Services.Configure(builder.Name, configure);
@@ -31,8 +32,8 @@ public static class DurableTaskBuilderExtensions
     /// <param name="builder">The builder to configure options for.</param>
     /// <param name="configure">The configure callback.</param>
     /// <returns>The original builder, for call chaining.</returns>
-    public static IDurableTaskBuilder Configure(
-        this IDurableTaskBuilder builder, Action<DurableTaskWorkerOptions> configure)
+    public static IDurableTaskWorkerBuilder Configure(
+        this IDurableTaskWorkerBuilder builder, Action<DurableTaskWorkerOptions> configure)
     {
         Check.NotNull(builder);
         builder.Services.Configure(builder.Name, configure);
@@ -46,7 +47,7 @@ public static class DurableTaskBuilderExtensions
     /// <param name="builder">The builder to set the builder target for.</param>
     /// <param name="target">The type of target to set.</param>
     /// <returns>The original builder, for call chaining.</returns>
-    public static IDurableTaskBuilder UseBuildTarget(this IDurableTaskBuilder builder, Type target)
+    public static IDurableTaskWorkerBuilder UseBuildTarget(this IDurableTaskWorkerBuilder builder, Type target)
     {
         Check.NotNull(builder);
         builder.BuildTarget = target;
@@ -60,7 +61,29 @@ public static class DurableTaskBuilderExtensions
     /// <typeparam name="TTarget">The builder target type.</typeparam>
     /// <param name="builder">The builder to set the builder target for.</param>
     /// <returns>The original builder, for call chaining.</returns>
-    public static IDurableTaskBuilder UseBuildTarget<TTarget>(this IDurableTaskBuilder builder)
+    public static IDurableTaskWorkerBuilder UseBuildTarget<TTarget>(this IDurableTaskWorkerBuilder builder)
         where TTarget : DurableTaskWorker
         => builder.UseBuildTarget(typeof(TTarget));
+
+    /// <summary>
+    /// Sets the build target for this builder. This is the hosted service which will ultimately be ran on host
+    /// startup.
+    /// </summary>
+    /// <typeparam name="TTarget">The builder target type.</typeparam>
+    /// <typeparam name="TOptions">The options for this builder.</typeparam>
+    /// <param name="builder">The builder to set the builder target for.</param>
+    /// <returns>The original builder, for call chaining.</returns>
+    public static IDurableTaskWorkerBuilder UseBuildTarget<TTarget, TOptions>(this IDurableTaskWorkerBuilder builder)
+        where TTarget : DurableTaskWorker
+        where TOptions : DurableTaskWorkerOptions
+    {
+        builder.UseBuildTarget(typeof(TTarget));
+        builder.Services.AddOptions<TOptions>(builder.Name)
+            .Configure<IOptionsMonitor<DurableTaskWorkerOptions>>((options, baseOptions) =>
+            {
+                DurableTaskWorkerOptions input = baseOptions.Get(builder.Name);
+                input.ApplyTo(options);
+            });
+        return builder;
+    }
 }

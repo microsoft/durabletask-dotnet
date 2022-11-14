@@ -10,16 +10,16 @@ namespace Microsoft.DurableTask.Worker;
 /// <summary>
 /// The default builder for durable task.
 /// </summary>
-public class DefaultDurableTaskBuilder : IDurableTaskBuilder
+public class DefaultDurableTaskWorkerBuilder : IDurableTaskWorkerBuilder
 {
     Type? buildTarget;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="DefaultDurableTaskBuilder" /> class.
+    /// Initializes a new instance of the <see cref="DefaultDurableTaskWorkerBuilder" /> class.
     /// </summary>
     /// <param name="services">The service collection for this builder.</param>
     /// <param name="name">The name for this builder.</param>
-    public DefaultDurableTaskBuilder(string? name, IServiceCollection services)
+    public DefaultDurableTaskWorkerBuilder(string? name, IServiceCollection services)
     {
         this.Name = name ?? Extensions.Options.Options.DefaultName;
         this.Services = Check.NotNull(services);
@@ -54,8 +54,7 @@ public class DefaultDurableTaskBuilder : IDurableTaskBuilder
         Verify.NotNull(this.buildTarget, error);
 
         DurableTaskRegistry registry = serviceProvider.GetOptions<DurableTaskRegistry>(this.Name);
-        DurableTaskWorkerOptions options = serviceProvider.GetOptions<DurableTaskWorkerOptions>(this.Name);
         return (IHostedService)ActivatorUtilities.CreateInstance(
-            serviceProvider, this.buildTarget, this.Name, registry.BuildFactory(), options);
+            serviceProvider, this.buildTarget, this.Name, registry.BuildFactory());
     }
 }

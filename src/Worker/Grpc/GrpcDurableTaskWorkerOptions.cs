@@ -8,7 +8,7 @@ namespace Microsoft.DurableTask.Worker.Grpc;
 /// <summary>
 /// The gRPC worker options.
 /// </summary>
-public sealed class GrpcDurableTaskWorkerOptions
+public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
 {
     /// <summary>
     /// Gets or sets the address of the gRPC endpoint to connect to. Default is 127.0.0.1:4001.

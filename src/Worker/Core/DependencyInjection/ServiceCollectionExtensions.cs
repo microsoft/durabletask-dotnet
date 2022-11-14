@@ -18,7 +18,7 @@ public static class ServiceCollectionExtensions
     /// <param name="configure">The callback to configure the builder.</param>
     /// <returns>The service collection for call chaining.</returns>
     public static IServiceCollection AddDurableTaskWorker(
-        this IServiceCollection services, Action<IDurableTaskBuilder> configure)
+        this IServiceCollection services, Action<IDurableTaskWorkerBuilder> configure)
     {
         Check.NotNull(services);
         Check.NotNull(configure);
@@ -33,13 +33,13 @@ public static class ServiceCollectionExtensions
     /// <param name="configure">The callback to configure the builder.</param>
     /// <returns>The service collection for call chaining.</returns>
     public static IServiceCollection AddDurableTaskWorker(
-        this IServiceCollection services, string name, Action<IDurableTaskBuilder> configure)
+        this IServiceCollection services, string name, Action<IDurableTaskWorkerBuilder> configure)
     {
         Check.NotNull(services);
         Check.NotNull(name);
         Check.NotNull(configure);
 
-        IDurableTaskBuilder builder = GetBuilder(services, name, out bool added);
+        IDurableTaskWorkerBuilder builder = GetBuilder(services, name, out bool added);
         configure.Invoke(builder);
 
         if (added)
@@ -68,7 +68,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    static IDurableTaskBuilder GetBuilder(IServiceCollection services, string name, out bool added)
+    static IDurableTaskWorkerBuilder GetBuilder(IServiceCollection services, string name, out bool added)
     {
         // To ensure the builders are tracked with this service collection, we use a singleton service descriptor as a
         // holder for all builders.
@@ -89,7 +89,7 @@ public static class ServiceCollectionExtensions
     /// </summary>
     class BuilderContainer
     {
-        readonly Dictionary<string, IDurableTaskBuilder> builders = new();
+        readonly Dictionary<string, IDurableTaskWorkerBuilder> builders = new();
         readonly IServiceCollection services;
 
         public BuilderContainer(IServiceCollection services)
@@ -97,12 +97,12 @@ public static class ServiceCollectionExtensions
             this.services = services;
         }
 
-        public IDurableTaskBuilder GetOrAdd(string name, out bool added)
+        public IDurableTaskWorkerBuilder GetOrAdd(string name, out bool added)
         {
             added = false;
-            if (!this.builders.TryGetValue(name, out IDurableTaskBuilder builder))
+            if (!this.builders.TryGetValue(name, out IDurableTaskWorkerBuilder builder))
             {
-                builder = new DefaultDurableTaskBuilder(name, this.services);
+                builder = new DefaultDurableTaskWorkerBuilder(name, this.services);
                 this.builders[name] = builder;
                 added = true;
             }

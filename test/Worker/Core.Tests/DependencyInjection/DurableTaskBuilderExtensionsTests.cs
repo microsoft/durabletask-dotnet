@@ -12,7 +12,7 @@ public class DurableTaskBuilderExtensionsTests
     [Fact]
     public void UseBuildTarget_InvalidType_Throws()
     {
-        DefaultDurableTaskBuilder builder = new("test", new ServiceCollection());
+        DefaultDurableTaskWorkerBuilder builder = new("test", new ServiceCollection());
         Action act = () => builder.UseBuildTarget(typeof(BadBuildTarget));
         act.Should().ThrowExactly<ArgumentException>().WithParameterName("value");
     }
@@ -20,7 +20,7 @@ public class DurableTaskBuilderExtensionsTests
     [Fact]
     public void UseBuildTarget_ValidType_Sets()
     {
-        DefaultDurableTaskBuilder builder = new("test", new ServiceCollection());
+        DefaultDurableTaskWorkerBuilder builder = new("test", new ServiceCollection());
         Action act = () => builder.UseBuildTarget(typeof(GoodBuildTarget));
         act.Should().NotThrow();
         builder.BuildTarget.Should().Be(typeof(GoodBuildTarget));
@@ -29,7 +29,7 @@ public class DurableTaskBuilderExtensionsTests
     [Fact]
     public void UseBuildTargetT_ValidType_Sets()
     {
-        DefaultDurableTaskBuilder builder = new("test", new ServiceCollection());
+        DefaultDurableTaskWorkerBuilder builder = new("test", new ServiceCollection());
         Action act = () => builder.UseBuildTarget<GoodBuildTarget>();
         act.Should().NotThrow();
         builder.BuildTarget.Should().Be(typeof(GoodBuildTarget));
@@ -39,7 +39,7 @@ public class DurableTaskBuilderExtensionsTests
     public void AddTasks_ConfiguresRegistry()
     {
         ServiceCollection services = new();
-        DefaultDurableTaskBuilder builder = new("test", services);
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
 
         DurableTaskRegistry? actual = null;
         builder.AddTasks(registry => actual = registry);
@@ -52,7 +52,7 @@ public class DurableTaskBuilderExtensionsTests
     public void Configure_ConfiguresOptions()
     {
         ServiceCollection services = new();
-        DefaultDurableTaskBuilder builder = new("test", services);
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
 
         DurableTaskWorkerOptions? actual = null;
         builder.Configure(options => actual = options);

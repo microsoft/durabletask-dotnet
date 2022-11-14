@@ -41,7 +41,7 @@ class DefaultDurableTaskClientProvider : IDurableTaskClientProvider
     /// <summary>
     /// Container for holding a client in memory.
     /// </summary>
-    internal class ClientContainer
+    internal class ClientContainer : IAsyncDisposable
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="ClientContainer"/> class.
@@ -61,5 +61,8 @@ class DefaultDurableTaskClientProvider : IDurableTaskClientProvider
         /// Gets the client.
         /// </summary>
         public DurableTaskClient Client { get; }
+
+        /// <inheritdoc/>
+        public ValueTask DisposeAsync() => this.Client.DisposeAsync();
     }
 }

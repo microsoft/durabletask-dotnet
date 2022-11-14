@@ -82,7 +82,7 @@ public static class DurableTaskBuilderExtensions
     {
         builder.UseBuildTarget(typeof(TTarget));
         builder.Services.AddOptions<TOptions>(builder.Name)
-            .Configure<IOptionsMonitor<DurableTaskClientOptions>>((options, baseOptions) =>
+            .PostConfigure<IOptionsMonitor<DurableTaskClientOptions>>((options, baseOptions) =>
             {
                 DurableTaskClientOptions input = baseOptions.Get(builder.Name);
                 input.ApplyTo(options);

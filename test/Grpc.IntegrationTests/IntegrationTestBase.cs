@@ -43,7 +43,7 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
         GC.SuppressFinalize(this);
     }
 
-    protected async Task<HostTestLifetime> StartWorkerAsync(Action<IDurableTaskBuilder> configure)
+    protected async Task<HostTestLifetime> StartWorkerAsync(Action<IDurableTaskWorkerBuilder> configure)
     {
         IHost host = this.CreateHostBuilder(configure).Build();
         await host.StartAsync(this.TimeoutToken);
@@ -54,7 +54,7 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
     /// Creates a <see cref="IHostBuilder"/> configured to output logs to xunit logging infrastructure.
     /// </summary>
     /// <param name="configure">Configures the durable task builder.</param>
-    protected IHostBuilder CreateHostBuilder(Action<IDurableTaskBuilder> configure)
+    protected IHostBuilder CreateHostBuilder(Action<IDurableTaskWorkerBuilder> configure)
     {
         return Host.CreateDefaultBuilder()
             .ConfigureLogging(b =>

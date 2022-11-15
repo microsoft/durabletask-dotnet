@@ -56,9 +56,7 @@ public class DefaultDurableTaskClientBuilder : IDurableTaskClientBuilder
                 + " 'UseBuildTarget(Type target)'. An example of a valid client is '.UseGrpc()'.");
         }
 
-        DurableTaskClientOptions options = serviceProvider.GetOptions<DurableTaskClientOptions>(this.Name);
-        return (DurableTaskClient)ActivatorUtilities.CreateInstance(
-            serviceProvider, this.buildTarget, this.Name, options);
+        return (DurableTaskClient)ActivatorUtilities.CreateInstance(serviceProvider, this.buildTarget, this.Name);
     }
 
     static bool IsValidBuildTarget(Type? type)

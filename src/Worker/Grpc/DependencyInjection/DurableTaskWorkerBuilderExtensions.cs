@@ -8,23 +8,23 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Microsoft.DurableTask.Worker;
 
 /// <summary>
-/// Extension methods for registering gRPC to <see cref="IDurableTaskBuilder" />.
+/// Extension methods for registering gRPC to <see cref="IDurableTaskWorkerBuilder" />.
 /// </summary>
-public static class DurableTaskBuilderExtensions
+public static class DurableTaskWorkerBuilderExtensions
 {
     /// <summary>
-    /// Configures the <see cref="IDurableTaskBuilder" /> to use the gRPC worker.
+    /// Configures the <see cref="IDurableTaskWorkerBuilder" /> to use the gRPC worker.
     /// </summary>
     /// <param name="builder">The builder to configure.</param>
     /// <returns>The original builder, for call chaining.</returns>
     /// <remarks>
     /// <b>Note:</b> only 1 instance of gRPC worker is supported per sidecar.
     /// </remarks>
-    public static IDurableTaskBuilder UseGrpc(this IDurableTaskBuilder builder)
+    public static IDurableTaskWorkerBuilder UseGrpc(this IDurableTaskWorkerBuilder builder)
         => builder.UseGrpc(opt => { });
 
     /// <summary>
-    /// Configures the <see cref="IDurableTaskBuilder" /> to use the gRPC worker.
+    /// Configures the <see cref="IDurableTaskWorkerBuilder" /> to use the gRPC worker.
     /// </summary>
     /// <param name="builder">The builder to configure.</param>
     /// <param name="channel">The gRPC channel to use.</param>
@@ -32,11 +32,11 @@ public static class DurableTaskBuilderExtensions
     /// <remarks>
     /// <b>Note:</b> only 1 instance of gRPC worker is supported per sidecar.
     /// </remarks>
-    public static IDurableTaskBuilder UseGrpc(this IDurableTaskBuilder builder, Channel channel)
+    public static IDurableTaskWorkerBuilder UseGrpc(this IDurableTaskWorkerBuilder builder, Channel channel)
         => builder.UseGrpc(opt => opt.Channel = channel);
 
     /// <summary>
-    /// Configures the <see cref="IDurableTaskBuilder" /> to use the gRPC worker.
+    /// Configures the <see cref="IDurableTaskWorkerBuilder" /> to use the gRPC worker.
     /// </summary>
     /// <param name="builder">The builder to configure.</param>
     /// <param name="address">The gRPC address to use.</param>
@@ -44,11 +44,11 @@ public static class DurableTaskBuilderExtensions
     /// <remarks>
     /// <b>Note:</b> only 1 instance of gRPC worker is supported per sidecar.
     /// </remarks>
-    public static IDurableTaskBuilder UseGrpc(this IDurableTaskBuilder builder, string address)
+    public static IDurableTaskWorkerBuilder UseGrpc(this IDurableTaskWorkerBuilder builder, string address)
         => builder.UseGrpc(opt => opt.Address = address);
 
     /// <summary>
-    /// Configures the <see cref="IDurableTaskBuilder" /> to use the gRPC worker.
+    /// Configures the <see cref="IDurableTaskWorkerBuilder" /> to use the gRPC worker.
     /// </summary>
     /// <param name="builder">The builder to configure.</param>
     /// <param name="configure">The callback for configuring gRPC options.</param>
@@ -56,12 +56,12 @@ public static class DurableTaskBuilderExtensions
     /// <remarks>
     /// <b>Note:</b> only 1 instance of gRPC worker is supported per sidecar.
     /// </remarks>
-    public static IDurableTaskBuilder UseGrpc(
-        this IDurableTaskBuilder builder, Action<GrpcDurableTaskWorkerOptions> configure)
+    public static IDurableTaskWorkerBuilder UseGrpc(
+        this IDurableTaskWorkerBuilder builder, Action<GrpcDurableTaskWorkerOptions> configure)
     {
         Check.NotNull(builder);
         Check.NotNull(configure);
         builder.Services.Configure(builder.Name, configure);
-        return builder.UseBuildTarget<GrpcDurableTaskWorker>();
+        return builder.UseBuildTarget<GrpcDurableTaskWorker, GrpcDurableTaskWorkerOptions>();
     }
 }

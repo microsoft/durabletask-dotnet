@@ -1,7 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.Converters;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Microsoft.DurableTask.Client.Tests;
 
@@ -31,6 +33,22 @@ public class DurableTaskClientBuilderExtensionsTests
         Action act = () => builder.UseBuildTarget<GoodBuildTarget>();
         act.Should().NotThrow();
         builder.BuildTarget.Should().Be(typeof(GoodBuildTarget));
+    }
+
+    [Fact]
+    public void UseBuildTargetT_ValidTypeWithOptions_Sets()
+    {
+        JsonDataConverter converter = new();
+        ServiceCollection services = new();
+        DefaultDurableTaskClientBuilder builder = new("test", services);
+        builder.Configure(opt => opt.DataConverter = converter);
+        builder.UseBuildTarget<GoodBuildTarget, GoodBuildTargetOptions>();
+        DurableTaskClient client = builder.Build(services.BuildServiceProvider());
+
+        GoodBuildTarget target = client.Should().BeOfType<GoodBuildTarget>().Subject;
+        target.Name.Should().Be("test");
+        target.Options.Should().NotBeNull();
+        target.Options.DataConverter.Should().BeSameAs(converter);
     }
 
     [Fact]
@@ -74,14 +92,15 @@ public class DurableTaskClientBuilderExtensionsTests
 
     class GoodBuildTarget : DurableTaskClient
     {
-        public GoodBuildTarget(string name, DurableTaskClientOptions options)
-            : base(name, options)
+        public GoodBuildTarget(string name, IOptionsMonitor<GoodBuildTargetOptions> options)
+            : base(name)
         {
+            this.Options = options.Get(name);
         }
 
         public new string Name => base.Name;
 
-        public new DurableTaskClientOptions Options => base.Options;
+        public GoodBuildTargetOptions Options { get; }
 
         public override ValueTask DisposeAsync()
         {
@@ -143,5 +162,9 @@ public class DurableTaskClientBuilderExtensionsTests
         {
             throw new NotImplementedException();
         }
+    }
+
+    class GoodBuildTargetOptions : DurableTaskClientOptions
+    {
     }
 }

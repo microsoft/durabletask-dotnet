@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Microsoft.DurableTask.Client.Tests;
 
@@ -61,14 +62,15 @@ public class DefaultDurableTaskClientBuilderTests
 
     class GoodBuildTarget : DurableTaskClient
     {
-        public GoodBuildTarget(string name, DurableTaskClientOptions options)
-            : base(name, options)
+        public GoodBuildTarget(string name, IOptionsMonitor<DurableTaskClientOptions> options)
+            : base(name)
         {
+            this.Options = options.Get(name);
         }
 
         public new string Name => base.Name;
 
-        public new DurableTaskClientOptions Options => base.Options;
+        public DurableTaskClientOptions Options { get; }
 
         public override ValueTask DisposeAsync()
         {

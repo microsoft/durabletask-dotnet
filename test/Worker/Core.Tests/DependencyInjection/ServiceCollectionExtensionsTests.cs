@@ -13,8 +13,8 @@ public class ServiceCollectionExtensionsTests
     public void AddDurableTaskWorker_SameInstance()
     {
         ServiceCollection services = new();
-        IDurableTaskBuilder? actual1 = null;
-        IDurableTaskBuilder? actual2 = null;
+        IDurableTaskWorkerBuilder? actual1 = null;
+        IDurableTaskWorkerBuilder? actual2 = null;
         services.AddDurableTaskWorker(builder => actual1 = builder);
         services.AddDurableTaskWorker(builder => actual2 = builder);
 

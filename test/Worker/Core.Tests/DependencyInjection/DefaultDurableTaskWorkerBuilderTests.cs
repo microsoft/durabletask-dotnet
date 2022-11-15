@@ -1,18 +1,20 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.Converters;
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace Microsoft.DurableTask.Worker.Tests;
 
-public class DefaultDurableTaskBuilderTests
+public class DefaultDurableTaskWorkerBuilderTests
 {
     [Fact]
     public void BuildTarget_InvalidType_Throws()
     {
-        DefaultDurableTaskBuilder builder = new("test", new ServiceCollection());
+        DefaultDurableTaskWorkerBuilder builder = new("test", new ServiceCollection());
         Action act = () => builder.BuildTarget = typeof(BadBuildTarget);
         act.Should().ThrowExactly<ArgumentException>().WithParameterName("value");
     }
@@ -20,7 +22,7 @@ public class DefaultDurableTaskBuilderTests
     [Fact]
     public void BuildTarget_ValidType_Sets()
     {
-        DefaultDurableTaskBuilder builder = new("test", new ServiceCollection());
+        DefaultDurableTaskWorkerBuilder builder = new("test", new ServiceCollection());
         Action act = () => builder.BuildTarget = typeof(GoodBuildTarget);
         act.Should().NotThrow();
         builder.BuildTarget.Should().Be(typeof(GoodBuildTarget));
@@ -30,10 +32,35 @@ public class DefaultDurableTaskBuilderTests
     }
 
     [Fact]
+    public void UseBuildTargetT_ValidType_Sets()
+    {
+        DefaultDurableTaskWorkerBuilder builder = new("test", new ServiceCollection());
+        Action act = () => builder.UseBuildTarget<GoodBuildTarget>();
+        act.Should().NotThrow();
+        builder.BuildTarget.Should().Be(typeof(GoodBuildTarget));
+    }
+
+    [Fact]
+    public void UseBuildTargetT_ValidTypeWithOptions_Sets()
+    {
+        JsonDataConverter converter = new();
+        ServiceCollection services = new();
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
+        builder.Configure(opt => opt.DataConverter = converter);
+        builder.UseBuildTarget<GoodBuildTarget, GoodBuildTargetOptions>();
+        IHostedService client = builder.Build(services.BuildServiceProvider());
+
+        GoodBuildTarget target = client.Should().BeOfType<GoodBuildTarget>().Subject;
+        target.Name.Should().Be("test");
+        target.Options.Should().NotBeNull();
+        target.Options.DataConverter.Should().BeSameAs(converter);
+    }
+
+    [Fact]
     public void Build_NoTarget_Throws()
     {
         ServiceCollection services = new();
-        DefaultDurableTaskBuilder builder = new("test", services);
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
         Action act = () => builder.Build(services.BuildServiceProvider());
         act.Should().ThrowExactly<InvalidOperationException>();
     }
@@ -45,7 +72,7 @@ public class DefaultDurableTaskBuilderTests
         ServiceCollection services = new();
         services.AddOptions();
         services.Configure<DurableTaskWorkerOptions>("test", x => x.DataConverter = converter);
-        DefaultDurableTaskBuilder builder = new("test", services)
+        DefaultDurableTaskWorkerBuilder builder = new("test", services)
         {
             BuildTarget = typeof(GoodBuildTarget),
         };
@@ -68,16 +95,18 @@ public class DefaultDurableTaskBuilderTests
 
     class GoodBuildTarget : DurableTaskWorker
     {
-        public GoodBuildTarget(string name, DurableTaskFactory factory, DurableTaskWorkerOptions options)
-            : base(name, factory, options)
+        public GoodBuildTarget(
+            string name, DurableTaskFactory factory, IOptionsMonitor<DurableTaskWorkerOptions> options)
+            : base(name, factory)
         {
+            this.Options = options.Get(name);
         }
 
         public new string Name => base.Name;
 
         public new IDurableTaskFactory Factory => base.Factory;
 
-        public new DurableTaskWorkerOptions Options => base.Options;
+        public DurableTaskWorkerOptions Options { get; }
 
         protected override Task ExecuteAsync(CancellationToken stoppingToken)
         {
@@ -96,5 +125,9 @@ public class DefaultDurableTaskBuilderTests
         {
             throw new NotImplementedException();
         }
+    }
+
+    class GoodBuildTargetOptions : DurableTaskWorkerOptions
+    {
     }
 }

@@ -44,7 +44,7 @@ public class DefaultDurableTaskClientProviderTests
     {
         return names.Select(n =>
         {
-            Mock<DurableTaskClient> client = new(n, new DurableTaskClientOptions());
+            Mock<DurableTaskClient> client = new(n);
             return new DefaultDurableTaskClientProvider.ClientContainer(client.Object);
         }).ToList();
     }

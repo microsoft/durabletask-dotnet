@@ -56,7 +56,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
             return default;
         }
 
-        string address = string.IsNullOrEmpty(this.options.Address) ? "127.0.0.1:4001" : this.options.Address!;
+        string address = string.IsNullOrEmpty(this.options.Address) ? "localhost:4001" : this.options.Address!;
 
         // TODO: use SSL channel by default?
         c = new(address, ChannelCredentials.Insecure);

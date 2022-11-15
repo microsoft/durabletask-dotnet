@@ -29,19 +29,19 @@ public class DurableTaskBuilderExtensionsTests
     {
         ServiceCollection services = new();
         DefaultDurableTaskWorkerBuilder builder = new(null, services);
-        builder.UseGrpc("127.0.0.1:9001");
+        builder.UseGrpc("localhost:9001");
 
         IServiceProvider provider = services.BuildServiceProvider();
         GrpcDurableTaskWorkerOptions options = provider.GetOptions<GrpcDurableTaskWorkerOptions>();
 
-        options.Address.Should().Be("127.0.0.1:9001");
+        options.Address.Should().Be("localhost:9001");
         options.Channel.Should().BeNull();
     }
 
     [Fact]
     public void UseGrpc_Channel_Sets()
     {
-        Channel c = new("127.0.0.1:9001", ChannelCredentials.Insecure);
+        Channel c = new("localhost:9001", ChannelCredentials.Insecure);
         ServiceCollection services = new();
         DefaultDurableTaskWorkerBuilder builder = new(null, services);
         builder.UseGrpc(c);
@@ -56,7 +56,7 @@ public class DurableTaskBuilderExtensionsTests
     [Fact]
     public void UseGrpc_Callback_Sets()
     {
-        Channel c = new("127.0.0.1:9001", ChannelCredentials.Insecure);
+        Channel c = new("localhost:9001", ChannelCredentials.Insecure);
         ServiceCollection services = new();
         DefaultDurableTaskWorkerBuilder builder = new(null, services);
         builder.UseGrpc(opt => opt.Channel = c);

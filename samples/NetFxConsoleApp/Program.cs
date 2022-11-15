@@ -24,7 +24,7 @@ namespace NetFxConsoleApp
                 });
             });
 
-            Channel channel = new("127.0.0.1:4001", ChannelCredentials.Insecure);
+            Channel channel = new("localhost:4001", ChannelCredentials.Insecure);
 
             DurableTaskGrpcWorker worker = DurableTaskGrpcWorker.CreateBuilder()
                 .AddTasks(tasks =>

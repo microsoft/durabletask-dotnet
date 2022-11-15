@@ -60,29 +60,27 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
     /// <inheritdoc/>
     public override async Task<string> ScheduleNewOrchestrationInstanceAsync(
-        TaskName orchestratorName,
-        string? instanceId = null,
-        object? input = null,
-        DateTimeOffset? startTime = null)
+        TaskName orchestratorName, object? input = null, StartOrchestrationOptions? options = null)
     {
         var request = new P.CreateInstanceRequest
         {
             Name = orchestratorName.Name,
             Version = orchestratorName.Version,
-            InstanceId = instanceId ?? Guid.NewGuid().ToString("N"),
+            InstanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N"),
             Input = this.DataConverter.Serialize(input),
         };
 
+        DateTimeOffset? startAt = options?.StartAt;
         this.logger.SchedulingOrchestration(
             request.InstanceId,
             orchestratorName,
             sizeInBytes: request.Input != null ? Encoding.UTF8.GetByteCount(request.Input) : 0,
-            startTime.GetValueOrDefault(DateTimeOffset.UtcNow));
+            startAt.GetValueOrDefault(DateTimeOffset.UtcNow));
 
-        if (startTime.HasValue)
+        if (startAt.HasValue)
         {
             // Convert timestamps to UTC if not already UTC
-            request.ScheduledStartTimestamp = Timestamp.FromDateTimeOffset(startTime.Value.ToUniversalTime());
+            request.ScheduledStartTimestamp = Timestamp.FromDateTimeOffset(startAt.Value.ToUniversalTime());
         }
 
         P.CreateInstanceResponse? result = await this.sidecarClient.StartInstanceAsync(request);

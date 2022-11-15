@@ -32,8 +32,7 @@ public class OrderProcessingController : ControllerBase
         // Generate an order ID and start the order processing workflow orchestration
         string orderId = $"{orderInfo.Item}-{Guid.NewGuid().ToString()[..4]}";
         await this.durableTaskClient.ScheduleNewProcessOrderOrchestratorInstanceAsync(
-            instanceId: orderId,
-            input: orderInfo);
+            orderInfo, new() { InstanceId = orderId });
 
         // Return 202 with a link to the GetOrderStatus API
         return this.AcceptedAtAction(

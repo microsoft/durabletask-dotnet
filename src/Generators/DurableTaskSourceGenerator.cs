@@ -169,16 +169,9 @@ namespace Microsoft.DurableTask
             sourceBuilder.AppendLine($@"
         /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
         public static Task<string> ScheduleNew{orchestrator.TaskName}InstanceAsync(
-            this IOrchestrationSubmitter client,
-            {orchestrator.InputParameter},
-            string? instanceId = null,
-            DateTimeOffset? startTime = null)
+            this IOrchestrationSubmitter client, {orchestrator.InputParameter}, StartOrchestrationOptions? options = null)
         {{
-            return client.ScheduleNewOrchestrationInstanceAsync(
-                ""{orchestrator.TaskName}"",
-                instanceId,
-                input,
-                startTime);
+            return client.ScheduleNewOrchestrationInstanceAsync(""{orchestrator.TaskName}"", input, options);
         }}");
         }
 
@@ -187,16 +180,9 @@ namespace Microsoft.DurableTask
             sourceBuilder.AppendLine($@"
         /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync""/>
         public static Task<{orchestrator.OutputType}> Call{orchestrator.TaskName}Async(
-            this TaskOrchestrationContext context,
-            {orchestrator.InputParameter},
-            string? instanceId = null,
-            TaskOptions? options = null)
+            this TaskOrchestrationContext context, {orchestrator.InputParameter}, TaskOptions? options = null)
         {{
-            return context.CallSubOrchestratorAsync<{orchestrator.OutputType}>(
-                ""{orchestrator.TaskName}"",
-                instanceId,
-                input,
-                options);
+            return context.CallSubOrchestratorAsync<{orchestrator.OutputType}>(""{orchestrator.TaskName}"", input, options);
         }}");
         }
 

@@ -8,7 +8,7 @@ namespace Microsoft.DurableTask.Worker;
 /// <summary>
 /// Options for the Durable Task worker.
 /// </summary>
-public sealed class DurableTaskWorkerOptions
+public class DurableTaskWorkerOptions
 {
     DataConverter dataConverter = JsonDataConverter.Default;
 
@@ -87,4 +87,18 @@ public sealed class DurableTaskWorkerOptions
     /// behavior is consistently irrespective of option configuration ordering.
     /// </remarks>
     internal bool DataConverterExplicitlySet { get; private set; }
+
+    /// <summary>
+    /// Applies these option values to another.
+    /// </summary>
+    /// <param name="other">The other options object to apply to.</param>
+    internal void ApplyTo(DurableTaskWorkerOptions other)
+    {
+        if (other is not null)
+        {
+            // Make sure to keep this up to date as values are added.
+            other.DataConverter = this.DataConverter;
+            other.MaximumTimerInterval = this.MaximumTimerInterval;
+        }
+    }
 }

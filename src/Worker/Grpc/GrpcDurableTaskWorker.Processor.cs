@@ -30,7 +30,7 @@ sealed partial class GrpcDurableTaskWorker
         {
             this.worker = worker;
             this.sidecar = sidecar;
-            this.shimFactory = new DurableTaskShimFactory(this.worker.Options, this.worker.loggerFactory);
+            this.shimFactory = new DurableTaskShimFactory(this.worker.options, this.worker.loggerFactory);
         }
 
         ILogger Logger => this.worker.logger;

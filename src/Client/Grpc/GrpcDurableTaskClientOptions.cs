@@ -8,10 +8,10 @@ namespace Microsoft.DurableTask.Client.Grpc;
 /// <summary>
 /// The gRPC client options.
 /// </summary>
-public sealed class GrpcDurableTaskClientOptions
+public sealed class GrpcDurableTaskClientOptions : DurableTaskClientOptions
 {
     /// <summary>
-    /// Gets or sets the address of the gRPC endpoint to connect to. Default is 127.0.0.1:4001.
+    /// Gets or sets the address of the gRPC endpoint to connect to. Default is localhost:4001.
     /// </summary>
     public string? Address { get; set; }
 

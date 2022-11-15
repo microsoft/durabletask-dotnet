@@ -10,7 +10,7 @@ namespace Microsoft.DurableTask.Worker;
 /// <summary>
 /// Contract for building DurableTask worker.
 /// </summary>
-public interface IDurableTaskBuilder
+public interface IDurableTaskWorkerBuilder
 {
     /// <summary>
     /// Gets the name of this builder.

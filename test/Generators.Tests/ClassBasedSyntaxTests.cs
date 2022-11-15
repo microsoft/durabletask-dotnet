@@ -33,30 +33,16 @@ class MyOrchestrator : TaskOrchestrator<{type}, string>
             methodList: $@"
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
-    this IOrchestrationSubmitter client,
-    {input},
-    string? instanceId = null,
-    DateTimeOffset? startTime = null)
+    this IOrchestrationSubmitter client, {input}, StartOrchestrationOptions? options = null)
 {{
-    return client.ScheduleNewOrchestrationInstanceAsync(
-        ""MyOrchestrator"",
-        instanceId,
-        input,
-        startTime);
+    return client.ScheduleNewOrchestrationInstanceAsync(""MyOrchestrator"", input, options);
 }}
 
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync""/>
 public static Task<string> CallMyOrchestratorAsync(
-    this TaskOrchestrationContext context,
-    {input},
-    string? instanceId = null,
-    TaskOptions? options = null)
+    this TaskOrchestrationContext context, {input}, TaskOptions? options = null)
 {{
-    return context.CallSubOrchestratorAsync<string>(
-        ""MyOrchestrator"",
-        instanceId,
-        input,
-        options);
+    return context.CallSubOrchestratorAsync<string>(""MyOrchestrator"", input, options);
 }}
 
 public static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
@@ -96,30 +82,16 @@ abstract class MyOrchestratorBase : TaskOrchestrator<int, string>
             methodList: @"
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
-    this IOrchestrationSubmitter client,
-    int input,
-    string? instanceId = null,
-    DateTimeOffset? startTime = null)
+    this IOrchestrationSubmitter client, int input, StartOrchestrationOptions? options = null)
 {
-    return client.ScheduleNewOrchestrationInstanceAsync(
-        ""MyOrchestrator"",
-        instanceId,
-        input,
-        startTime);
+    return client.ScheduleNewOrchestrationInstanceAsync(""MyOrchestrator"", input, options);
 }
 
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync""/>
 public static Task<string> CallMyOrchestratorAsync(
-    this TaskOrchestrationContext context,
-    int input,
-    string? instanceId = null,
-    TaskOptions? options = null)
+    this TaskOrchestrationContext context, int input, TaskOptions? options = null)
 {
-    return context.CallSubOrchestratorAsync<string>(
-        ""MyOrchestrator"",
-        instanceId,
-        input,
-        options);
+    return context.CallSubOrchestratorAsync<string>(""MyOrchestrator"", input, options);
 }
 
 public static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)

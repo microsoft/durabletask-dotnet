@@ -8,7 +8,7 @@ namespace Microsoft.DurableTask.Client;
 /// <summary>
 /// Common options for <see cref="DurableTaskClient" />.
 /// </summary>
-public sealed class DurableTaskClientOptions
+public class DurableTaskClientOptions
 {
     DataConverter dataConverter = JsonDataConverter.Default;
 
@@ -56,4 +56,17 @@ public sealed class DurableTaskClientOptions
     /// behavior is consistently irrespective of option configuration ordering.
     /// </remarks>
     internal bool DataConverterExplicitlySet { get; private set; }
+
+    /// <summary>
+    /// Applies these option values to another.
+    /// </summary>
+    /// <param name="other">The other options object to apply to.</param>
+    internal void ApplyTo(DurableTaskClientOptions other)
+    {
+        if (other is not null)
+        {
+            // Make sure to keep this up to date as values are added.
+            other.DataConverter = this.DataConverter;
+        }
+    }
 }

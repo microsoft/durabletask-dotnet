@@ -12,7 +12,7 @@ public class DurableTaskBuilderExtensionsTests
     public void UseGrpc_Sets()
     {
         ServiceCollection services = new();
-        DefaultDurableTaskBuilder builder = new(null, services);
+        DefaultDurableTaskWorkerBuilder builder = new(null, services);
         Action act = () => builder.UseGrpc();
         act.Should().NotThrow();
         builder.BuildTarget.Should().Be(typeof(GrpcDurableTaskWorker));
@@ -28,22 +28,22 @@ public class DurableTaskBuilderExtensionsTests
     public void UseGrpc_Address_Sets()
     {
         ServiceCollection services = new();
-        DefaultDurableTaskBuilder builder = new(null, services);
-        builder.UseGrpc("127.0.0.1:9001");
+        DefaultDurableTaskWorkerBuilder builder = new(null, services);
+        builder.UseGrpc("localhost:9001");
 
         IServiceProvider provider = services.BuildServiceProvider();
         GrpcDurableTaskWorkerOptions options = provider.GetOptions<GrpcDurableTaskWorkerOptions>();
 
-        options.Address.Should().Be("127.0.0.1:9001");
+        options.Address.Should().Be("localhost:9001");
         options.Channel.Should().BeNull();
     }
 
     [Fact]
     public void UseGrpc_Channel_Sets()
     {
-        Channel c = new("127.0.0.1:9001", ChannelCredentials.Insecure);
+        Channel c = new("localhost:9001", ChannelCredentials.Insecure);
         ServiceCollection services = new();
-        DefaultDurableTaskBuilder builder = new(null, services);
+        DefaultDurableTaskWorkerBuilder builder = new(null, services);
         builder.UseGrpc(c);
 
         IServiceProvider provider = services.BuildServiceProvider();
@@ -56,9 +56,9 @@ public class DurableTaskBuilderExtensionsTests
     [Fact]
     public void UseGrpc_Callback_Sets()
     {
-        Channel c = new("127.0.0.1:9001", ChannelCredentials.Insecure);
+        Channel c = new("localhost:9001", ChannelCredentials.Insecure);
         ServiceCollection services = new();
-        DefaultDurableTaskBuilder builder = new(null, services);
+        DefaultDurableTaskWorkerBuilder builder = new(null, services);
         builder.UseGrpc(opt => opt.Channel = c);
 
         IServiceProvider provider = services.BuildServiceProvider();

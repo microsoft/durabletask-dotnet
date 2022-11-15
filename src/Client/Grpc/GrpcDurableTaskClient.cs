@@ -4,6 +4,7 @@
 using System.Text;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
@@ -14,34 +15,42 @@ namespace Microsoft.DurableTask.Client.Grpc;
 /// <summary>
 /// Durable Task client implementation that uses gRPC to connect to a remote "sidecar" process.
 /// </summary>
-sealed class GrpcDurableTaskClient : DurableTaskClient
+public sealed class GrpcDurableTaskClient : DurableTaskClient
 {
     readonly ILogger logger;
     readonly TaskHubSidecarServiceClient sidecarClient;
-    readonly GrpcDurableTaskClientOptions grpcOptions;
+    readonly GrpcDurableTaskClientOptions options;
     readonly AsyncDisposable asyncDisposable;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GrpcDurableTaskClient"/> class.
     /// </summary>
     /// <param name="name">The name of the client.</param>
-    /// <param name="options">The common client options.</param>
-    /// <param name="grpcOptions">The gRPC client options.</param>
+    /// <param name="options">The gRPC client options.</param>
     /// <param name="logger">The logger.</param>
+    [ActivatorUtilitiesConstructor]
     public GrpcDurableTaskClient(
-        string name,
-        DurableTaskClientOptions options,
-        IOptionsMonitor<GrpcDurableTaskClientOptions> grpcOptions,
-        ILogger<GrpcDurableTaskClient> logger)
-        : base(name, options)
+        string name, IOptionsMonitor<GrpcDurableTaskClientOptions> options, ILogger<GrpcDurableTaskClient> logger)
+        : this(name, Check.NotNull(options).Get(name), logger)
     {
-        this.logger = logger;
-        this.grpcOptions = grpcOptions.Get(name);
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GrpcDurableTaskClient"/> class.
+    /// </summary>
+    /// <param name="name">The name of the client.</param>
+    /// <param name="options">The gRPC client options.</param>
+    /// <param name="logger">The logger.</param>
+    public GrpcDurableTaskClient(string name, GrpcDurableTaskClientOptions options, ILogger logger)
+        : base(name)
+    {
+        this.logger = Check.NotNull(logger);
+        this.options = Check.NotNull(options);
         this.asyncDisposable = this.BuildChannel(out Channel channel);
         this.sidecarClient = new TaskHubSidecarServiceClient(channel);
     }
 
-    DataConverter DataConverter => this.Options.DataConverter;
+    DataConverter DataConverter => this.options.DataConverter;
 
     /// <inheritdoc/>
     public override ValueTask DisposeAsync()
@@ -51,29 +60,27 @@ sealed class GrpcDurableTaskClient : DurableTaskClient
 
     /// <inheritdoc/>
     public override async Task<string> ScheduleNewOrchestrationInstanceAsync(
-        TaskName orchestratorName,
-        string? instanceId = null,
-        object? input = null,
-        DateTimeOffset? startTime = null)
+        TaskName orchestratorName, object? input = null, StartOrchestrationOptions? options = null)
     {
         var request = new P.CreateInstanceRequest
         {
             Name = orchestratorName.Name,
             Version = orchestratorName.Version,
-            InstanceId = instanceId ?? Guid.NewGuid().ToString("N"),
+            InstanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N"),
             Input = this.DataConverter.Serialize(input),
         };
 
+        DateTimeOffset? startAt = options?.StartAt;
         this.logger.SchedulingOrchestration(
             request.InstanceId,
             orchestratorName,
             sizeInBytes: request.Input != null ? Encoding.UTF8.GetByteCount(request.Input) : 0,
-            startTime.GetValueOrDefault(DateTimeOffset.UtcNow));
+            startAt.GetValueOrDefault(DateTimeOffset.UtcNow));
 
-        if (startTime.HasValue)
+        if (startAt.HasValue)
         {
             // Convert timestamps to UTC if not already UTC
-            request.ScheduledStartTimestamp = Timestamp.FromDateTimeOffset(startTime.Value.ToUniversalTime());
+            request.ScheduledStartTimestamp = Timestamp.FromDateTimeOffset(startAt.Value.ToUniversalTime());
         }
 
         P.CreateInstanceResponse? result = await this.sidecarClient.StartInstanceAsync(request);
@@ -320,13 +327,13 @@ sealed class GrpcDurableTaskClient : DurableTaskClient
 
     AsyncDisposable BuildChannel(out Channel channel)
     {
-        if (this.grpcOptions.Channel is Channel c)
+        if (this.options.Channel is Channel c)
         {
             channel = c;
             return default;
         }
 
-        string address = string.IsNullOrEmpty(this.grpcOptions.Address) ? "127.0.0.1:4001" : this.grpcOptions.Address!;
+        string address = string.IsNullOrEmpty(this.options.Address) ? "localhost:4001" : this.options.Address!;
 
         // TODO: use SSL channel by default?
         c = new(address, ChannelCredentials.Insecure);

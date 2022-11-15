@@ -17,7 +17,7 @@ namespace Microsoft.DurableTask.Grpc.Tests;
 public sealed class GrpcSidecarFixture : IDisposable
 {
     // Use a random port number to allow multiple instances to run in parallel
-    const string ListenHost = "127.0.0.1";
+    const string ListenHost = "localhost";
     readonly int ListenPort = Random.Shared.Next(30000, 40000);
 
     readonly IWebHost host;

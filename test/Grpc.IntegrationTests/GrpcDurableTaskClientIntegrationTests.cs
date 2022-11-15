@@ -98,7 +98,8 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             OrchestrationName, input: false);
 
         await ForEachOrchestrationAsync(
-            x => server.Client.ScheduleNewOrchestrationInstanceAsync(OrchestrationName, x, input: false));
+            x => server.Client.ScheduleNewOrchestrationInstanceAsync(
+                OrchestrationName, input: false, new() { InstanceId = x }));
         AsyncPageable<OrchestrationMetadata> pageable = server.Client.GetInstances(query);
 
         await ForEachOrchestrationAsync(x => server.Client.WaitForInstanceStartAsync(x, default));
@@ -124,7 +125,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         for (int i = 0; i < 21; i++)
         {
             await server.Client.ScheduleNewOrchestrationInstanceAsync(
-                OrchestrationName, $"GetInstances_AsPages_EndToEnd-{i}", input: false);
+                OrchestrationName, input: false, new() { InstanceId = $"GetInstances_AsPages_EndToEnd-{i}" });
         }
 
         AsyncPageable<OrchestrationMetadata> pageable = server.Client.GetInstances(query);

@@ -172,7 +172,7 @@ public partial class DurableTaskRegistryTests
     {
         DurableTaskRegistry registry = new();
         callback(registry);
-        IDurableTaskFactory factory = registry.Build();
+        IDurableTaskFactory factory = registry.BuildFactory();
 
         bool found = factory.TryCreateOrchestrator(
             nameof(TestOrchestrator), Mock.Of<IServiceProvider>(), out ITaskOrchestrator? actual);

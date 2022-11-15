@@ -10,8 +10,8 @@ namespace Microsoft.DurableTask.Worker;
 /// </summary>
 sealed class DurableTaskFactory : IDurableTaskFactory
 {
-    readonly IReadOnlyDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities;
-    readonly IReadOnlyDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>> orchestrators;
+    readonly IDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities;
+    readonly IDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>> orchestrators;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DurableTaskFactory" /> class.
@@ -19,8 +19,8 @@ sealed class DurableTaskFactory : IDurableTaskFactory
     /// <param name="activities">The activity factories.</param>
     /// <param name="orchestrators">The orchestrator factories.</param>
     internal DurableTaskFactory(
-        IReadOnlyDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities,
-        IReadOnlyDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>> orchestrators)
+        IDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities,
+        IDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>> orchestrators)
     {
         this.activities = Check.NotNull(activities);
         this.orchestrators = Check.NotNull(orchestrators);

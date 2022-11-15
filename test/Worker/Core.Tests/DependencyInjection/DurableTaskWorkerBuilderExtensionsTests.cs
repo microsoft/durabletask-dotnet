@@ -4,10 +4,11 @@
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace Microsoft.DurableTask.Worker.Tests;
 
-public class DurableTaskBuilderExtensionsTests
+public class DurableTaskBuilderWorkerExtensionsTests
 {
     [Fact]
     public void UseBuildTarget_InvalidType_Throws()
@@ -71,16 +72,18 @@ public class DurableTaskBuilderExtensionsTests
 
     class GoodBuildTarget : DurableTaskWorker
     {
-        public GoodBuildTarget(string name, DurableTaskFactory factory, DurableTaskWorkerOptions options)
-            : base(name, factory, options)
+        public GoodBuildTarget(
+            string name, DurableTaskFactory factory, IOptions<DurableTaskWorkerOptions> options)
+            : base(name, factory)
         {
+            this.Options = options.Value;
         }
 
         public new string Name => base.Name;
 
         public new IDurableTaskFactory Factory => base.Factory;
 
-        public new DurableTaskWorkerOptions Options => base.Options;
+        public DurableTaskWorkerOptions Options { get; }
 
         protected override Task ExecuteAsync(CancellationToken stoppingToken)
         {

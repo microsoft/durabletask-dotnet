@@ -74,6 +74,7 @@ namespace Microsoft.DurableTask.Generators
 
 using System;
 using System.Threading.Tasks;
+using Microsoft.DurableTask;
 using Microsoft.DurableTask.Internal;");
 
             if (isDurableFunctions)
@@ -83,12 +84,21 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.DependencyInjection;");
             }
 
-            sourceBuilder.Append(@"
+            // Try to get the root namespace of the project through a few methods.
+            if (!context.AnalyzerConfigOptions.GlobalOptions.TryGetValue(
+                "build_property.DurableTaskSourceGenerators_Namespace", out string? durableNamespace)
+                && !context.AnalyzerConfigOptions.GlobalOptions.TryGetValue(
+                    "build_property.RootNamespace", out durableNamespace))
+            {
+                IMethodSymbol? mainMethod = context.Compilation.GetEntryPoint(context.CancellationToken);
+                durableNamespace = mainMethod?.ContainingNamespace?.ToDisplayString();
+            }
 
-namespace Microsoft.DurableTask
-{
+            sourceBuilder.Append($@"
+namespace {durableNamespace} // Microsoft.DurableTask
+{{
     public static class GeneratedDurableTaskExtensions
-    {");
+    {{");
             if (isDurableFunctions)
             {
                 // Generate a singleton orchestrator object instance that can be reused for all invocations.
@@ -251,8 +261,9 @@ namespace Microsoft.DurableTask
             IEnumerable<DurableTaskTypeInfo> orchestrators,
             IEnumerable<DurableTaskTypeInfo> activities)
         {
+            // internal so it does not conflict with other projects with this generated file.
             sourceBuilder.Append($@"
-        public static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
+        internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
         {{");
 
             foreach (DurableTaskTypeInfo taskInfo in orchestrators)

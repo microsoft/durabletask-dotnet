@@ -1,0 +1,8 @@
+<Project>
+
+  <ItemGroup>
+    <CompilerVisibleProperty Include="DurableTaskSourceGenerators_Namespace" />
+    <CompilerVisibleProperty Include="RootNamespace" />
+  <ItemGroup>
+
+</Project>

@@ -45,7 +45,7 @@ public static Task<string> CallMyOrchestratorAsync(
     return context.CallSubOrchestratorAsync<string>(""MyOrchestrator"", input, options);
 }}
 
-public static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
+internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
 {{
     builder.AddOrchestrator<MyOrchestrator>();
     return builder;
@@ -94,7 +94,7 @@ public static Task<string> CallMyOrchestratorAsync(
     return context.CallSubOrchestratorAsync<string>(""MyOrchestrator"", input, options);
 }
 
-public static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
+internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
 {
     builder.AddOrchestrator<MyOrchestrator>();
     return builder;
@@ -134,7 +134,7 @@ public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx
     return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
 }}
 
-public static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
+internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
 {{
     builder.AddActivity<MyActivity>();
     return builder;
@@ -174,7 +174,7 @@ public static Task<MyNS.MyClass> CallMyActivityAsync(this TaskOrchestrationConte
     return ctx.CallActivityAsync<MyNS.MyClass>(""MyActivity"", input, options);
 }
 
-public static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
+internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
 {
     builder.AddActivity<MyActivity>();
     return builder;
@@ -216,7 +216,7 @@ public static Task<MyNS.MyClass> CallMyActivityAsync(this TaskOrchestrationConte
     return ctx.CallActivityAsync<MyNS.MyClass>(""MyActivity"", input, options);
 }
 
-public static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
+internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
 {
     builder.AddActivity<MyNS.MyActivityImpl>();
     return builder;
@@ -255,7 +255,7 @@ public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx
     return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
 }
 
-public static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
+internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
 {
     builder.AddActivity<MyActivity>();
     return builder;

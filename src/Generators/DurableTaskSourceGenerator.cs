@@ -74,7 +74,6 @@ namespace Microsoft.DurableTask.Generators
 
 using System;
 using System.Threading.Tasks;
-using Microsoft.DurableTask;
 using Microsoft.DurableTask.Internal;");
 
             if (isDurableFunctions)
@@ -84,21 +83,11 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.DependencyInjection;");
             }
 
-            // Try to get the root namespace of the project through a few methods.
-            if (!context.AnalyzerConfigOptions.GlobalOptions.TryGetValue(
-                "build_property.DurableTaskSourceGenerators_Namespace", out string? durableNamespace)
-                && !context.AnalyzerConfigOptions.GlobalOptions.TryGetValue(
-                    "build_property.RootNamespace", out durableNamespace))
-            {
-                IMethodSymbol? mainMethod = context.Compilation.GetEntryPoint(context.CancellationToken);
-                durableNamespace = mainMethod?.ContainingNamespace?.ToDisplayString();
-            }
-
-            sourceBuilder.Append($@"
-namespace {durableNamespace} // Microsoft.DurableTask
-{{
+            sourceBuilder.Append(@"
+namespace Microsoft.DurableTask
+{
     public static class GeneratedDurableTaskExtensions
-    {{");
+    {");
             if (isDurableFunctions)
             {
                 // Generate a singleton orchestrator object instance that can be reused for all invocations.

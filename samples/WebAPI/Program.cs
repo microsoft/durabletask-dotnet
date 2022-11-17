@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 using System.Text.Json.Serialization;
+using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
-using WebAPI;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 

@@ -50,6 +50,10 @@
 - Ability to set `TaskName.Version` removed for now. Will be added when we address versioning.
 - `IDurableTaskRegistry` removed, only `DurableTaskRegistry` concrete type.
   - All lambda-methods renamed to `AddActivityFunc` and `AddOrchestratorFunc`. This was to avoid ambiguous or incorrect overload resolution with the factory methods.
+- `GeneratedDurableTaskExtensions` namespace changed to be the target projects root namespace.
+  - This is to avoid type conflicts when multiple projects have this file generated.
+- `GeneratedDurableTaskExtensions.AddAllGeneratedTasks` made `internal` (from `public`)
+  - This is also to avoid conflicts when multiple files have this method generated. When wanting to expose to external consumes, a new extension method can be manually authored in the desired namespace and with an appropriate name which calls this method.
 
 ## v0.4.1-beta
 

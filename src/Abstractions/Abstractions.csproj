@@ -21,10 +21,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Generators\Generators.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <SharedSection Include="Core" />
   </ItemGroup>
 

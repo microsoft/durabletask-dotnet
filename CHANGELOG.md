@@ -2,6 +2,16 @@
 
 ## v1.0.0-rc.1
 
+### Included Packages
+
+Microsoft.DurableTask.Abstractions \
+Microsoft.DurableTask.Client \
+Microsoft.DurableTask.Client.Grpc \
+Microsoft.DurableTask.Worker \
+Microsoft.DurableTask.Worker.Grpc \
+
+_see v1.0.0-preview.1 for `Microsoft.DurableTask.Generators`_
+
 ### Updates
 
 - Refactors and splits assemblies.
@@ -22,8 +32,9 @@
   - Integrates into options pattern, giving a variety of ways for user configuration.
   - Builder is now re-enterable. Multiple calls to `.AddDurableTask{Worker|Client}` with the same name will yield the exact same builder instance.
 
-### Breaking changes
+### Breaking Changes
 
+- `Microsoft.DurableTask.Generators` reference removed.
 - Added new abstract property `TaskOrchestrationContext.ParentInstance`.
 - Added new abstract method `DurableTaskClient.PurgeInstancesAsync`.
 - Renamed `TaskOrchestratorBase` to `TaskOrchestrator`
@@ -50,6 +61,20 @@
 - Ability to set `TaskName.Version` removed for now. Will be added when we address versioning.
 - `IDurableTaskRegistry` removed, only `DurableTaskRegistry` concrete type.
   - All lambda-methods renamed to `AddActivityFunc` and `AddOrchestratorFunc`. This was to avoid ambiguous or incorrect overload resolution with the factory methods.
+
+## v1.0.0-preview.1
+
+### Included Packages
+
+Microsoft.DurableTask.Generators
+
+### Breaking Changes
+
+- `Microsoft.DurableTask.Generators` is now an optional package.
+  - no longer automatically brought in when referencing other packages.
+  - To get code generation, add `<PackageReference Include="Microsoft.DurableTask.Generators" Version="1.0.0-preview.1" PrivateAssets="All" />` to your csproj.
+- `GeneratedDurableTaskExtensions.AddAllGeneratedTasks` made `internal` (from `public`)
+  - This is also to avoid conflicts when multiple files have this method generated. When wanting to expose to external consumes, a new extension method can be manually authored in the desired namespace and with an appropriate name which calls this method.
 
 ## v0.4.1-beta
 

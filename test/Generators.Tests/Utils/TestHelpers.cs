@@ -3,8 +3,6 @@
 
 using System.Reflection;
 using System.Text;
-using Microsoft.Azure.Functions.Worker;
-using Microsoft.Azure.Functions.Worker.Extensions.Abstractions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.DependencyInjection;
@@ -40,14 +38,14 @@ static class TestHelpers
         {
             // Durable Functions code generation is triggered by the presence of the
             // Durable Functions worker extension for .NET Isolated.
-            Assembly functionsWorkerAbstractions = typeof(TriggerBindingAttribute).Assembly;
-            test.TestState.AdditionalReferences.Add(functionsWorkerAbstractions);
+            // Assembly functionsWorkerAbstractions = typeof(TriggerBindingAttribute).Assembly;
+            // test.TestState.AdditionalReferences.Add(functionsWorkerAbstractions);
 
-            Assembly functionsWorkerCore = typeof(FunctionContext).Assembly;
-            test.TestState.AdditionalReferences.Add(functionsWorkerCore);
+            // Assembly functionsWorkerCore = typeof(FunctionContext).Assembly;
+            // test.TestState.AdditionalReferences.Add(functionsWorkerCore);
             
-            Assembly durableExtension = typeof(OrchestrationTriggerAttribute).Assembly;
-            test.TestState.AdditionalReferences.Add(durableExtension);
+            // Assembly durableExtension = typeof(OrchestrationTriggerAttribute).Assembly;
+            // test.TestState.AdditionalReferences.Add(durableExtension);
 
             Assembly dependencyInjection = typeof(ActivatorUtilities).Assembly;
             test.TestState.AdditionalReferences.Add(dependencyInjection);
@@ -61,7 +59,8 @@ static class TestHelpers
         string formattedMethodList = IndentLines(spaces: 8, methodList);
         string usings = @"
 using System;
-using System.Threading.Tasks;";
+using System.Threading.Tasks;
+using Microsoft.DurableTask.Internal;";
 
         if (isDurableFunctions)
         {

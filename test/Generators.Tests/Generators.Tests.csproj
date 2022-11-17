@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="0.4.1-beta" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="6.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -13,9 +13,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- TODO: Due to the Durable Functions ref above, we cannot include this yet. -->
-    <!-- <ProjectReference Include="$(SrcRoot)Abstractions/Abstractions.csproj" /> -->
-    <ProjectReference Include="$(SrcRoot)Generators/Generators.csproj" />
+    <ProjectReference Include="$(SrcRoot)Abstractions/Abstractions.csproj" />
+    <ProjectReference Include="$(SrcRoot)Generators/Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
   </ItemGroup>
 
 </Project>

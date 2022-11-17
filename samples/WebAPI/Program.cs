@@ -15,7 +15,7 @@ builder.Services.AddDurableTaskWorker(builder =>
     builder.UseGrpc();
 });
 
-builder.Services.AddDurableTaskClient(b => b.UseGrpc().RegisterDirectly());
+builder.Services.AddDurableTaskClient(b => b.UseGrpc());
 
 // Configure the HTTP request pipeline.
 builder.Services.AddControllers().AddJsonOptions(options =>

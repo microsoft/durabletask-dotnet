@@ -84,6 +84,7 @@ using Microsoft.Extensions.DependencyInjection;");
             }
 
             sourceBuilder.Append(@"
+
 namespace Microsoft.DurableTask
 {
     public static class GeneratedDurableTaskExtensions

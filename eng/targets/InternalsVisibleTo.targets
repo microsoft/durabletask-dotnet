@@ -32,7 +32,7 @@
     Outputs="$(GeneratedInternalsVisibleToFile)"
     DependsOnTargets="PrepareGenerateInternalsVisibleToFile;PrepareForBuild"
     Condition="'@(InternalsVisibleTo)' != ''"
-    BeforeTargets="CoreCompile">
+    BeforeTargets="BeforeCompile">
 
     <WriteCodeFragment AssemblyAttributes="@(_InternalsVisibleToAttribute)" Language="$(Language)" OutputFile="$(GeneratedInternalsVisibleToFile)">
       <Output TaskParameter="OutputFile" ItemName="CompileBefore" Condition="'$(Language)' == 'F#'" />

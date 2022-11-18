@@ -5,7 +5,6 @@
 
   <!-- Common build settings -->
   <PropertyGroup>
-    <DebugType>embedded</DebugType>
     <Company>Microsoft Corporation</Company>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
@@ -26,6 +25,8 @@
     <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
     <PackageReleaseNotes>$(RepositoryUrl)/releases/</PackageReleaseNotes>
     <PackageTags>Microsoft Durable Task Orchestration Workflow Activity Reliable DTFx</PackageTags>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <IncludeSymbols>true</IncludeSymbols>
   </PropertyGroup>
 
   <!-- Embed the SBOM manifest, which is generated as part of the "official" build -->

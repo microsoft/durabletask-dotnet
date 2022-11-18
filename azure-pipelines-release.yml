@@ -42,7 +42,7 @@ steps:
   displayName: 'ESRP CodeSigning: Authenticode'
   inputs:
     ConnectedServiceName: 'ESRP Service'
-    FolderPath: 'src'
+    FolderPath: 'out/bin'
     Pattern: 'Microsoft.DurableTask.*.dll'
     signConfigType: inlineSignParams
     inlineOperation: |

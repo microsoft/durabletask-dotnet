@@ -114,9 +114,9 @@ public static class HelloCitiesTypedStarter
 }
 
 [DurableTask(nameof(HelloCitiesTyped))]
-public class HelloCitiesTyped : TaskOrchestratorBase<string, string>
+public class HelloCitiesTyped : TaskOrchestrator<string?, string>
 {
-    protected async override Task<string?> OnRunAsync(TaskOrchestrationContext context, string? input)
+    public async override Task<string> RunAsync(TaskOrchestrationContext context, string? input)
     {
         string result = "";
         result += await context.CallSayHelloTypedAsync("Tokyo") + " ";
@@ -127,7 +127,7 @@ public class HelloCitiesTyped : TaskOrchestratorBase<string, string>
 }
 
 [DurableTask(nameof(SayHelloTyped))]
-public class SayHelloTyped : TaskActivityBase<string, string>
+public class SayHelloTyped : TaskActivity<string, string>
 {
     readonly ILogger? logger;
 
@@ -136,10 +136,10 @@ public class SayHelloTyped : TaskActivityBase<string, string>
         this.logger = loggerFactory?.CreateLogger<SayHelloTyped>();
     }
 
-    protected override string OnRun(TaskActivityContext context, string? cityName)
+    public override Task<string> RunAsync(TaskActivityContext context, string cityName)
     {
         this.logger?.LogInformation("Saying hello to {name}", cityName);
-        return $"Hello, {cityName}!";
+        return Task.FromResult($"Hello, {cityName}!");
     }
 }
 ```
@@ -155,9 +155,6 @@ There are also several features that aren't yet available:
 * Durable Entities is not yet supported.
 * APIs for calling HTTP endpoints are not yet available.
 * Several instance management APIs are not yet implemented.
-* Some orchestration context properties, like the parent instance ID, are not yet available.
-
-Feature parity with Durable Functions can be expected in the 1.0 release.
 
 ## Contributing
 

@@ -3,11 +3,19 @@
 
 using System.Text.Json.Serialization;
 using Microsoft.DurableTask;
+using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.Worker;
 
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // Add all the generated tasks
-builder.Services.AddDurableTask(taskRegistry => taskRegistry.AddAllGeneratedTasks());
+builder.Services.AddDurableTaskWorker(builder =>
+{
+    builder.AddTasks(r => r.AddAllGeneratedTasks());
+    builder.UseGrpc();
+});
+
+builder.Services.AddDurableTaskClient(b => b.UseGrpc());
 
 // Configure the HTTP request pipeline.
 builder.Services.AddControllers().AddJsonOptions(options =>

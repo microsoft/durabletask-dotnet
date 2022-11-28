@@ -7,15 +7,11 @@ using WebAPI.Models;
 namespace WebAPI.Orchestrations;
 
 [DurableTask]
-public class ProcessOrderOrchestrator : TaskOrchestratorBase<OrderInfo, OrderStatus>
+public class ProcessOrderOrchestrator : TaskOrchestrator<OrderInfo, OrderStatus>
 {
-    protected override async Task<OrderStatus?> OnRunAsync(TaskOrchestrationContext context, OrderInfo? orderInfo)
+    public override async Task<OrderStatus> RunAsync(TaskOrchestrationContext context, OrderInfo orderInfo)
     {
-        if (orderInfo == null)
-        {
-            // Unhandled exceptions transition the orchestration into a failed state. 
-            throw new InvalidOperationException("Failed to read the order info!");
-        }
+        ArgumentNullException.ThrowIfNull(orderInfo);
 
         // Call the following activity operations in sequence.
         OrderStatus orderStatus = new();

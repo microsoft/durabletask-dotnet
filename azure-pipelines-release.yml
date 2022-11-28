@@ -33,7 +33,7 @@ steps:
   displayName: 'Build'
   inputs:
     command: build
-    arguments: --no-restore -p:FileVersionRevision=$(Build.BuildId) -p:ContinuousIntegrationBuild=true
+    arguments: --no-restore -c release -p:FileVersionRevision=$(Build.BuildId) -p:ContinuousIntegrationBuild=true
     projects: 'src/dirs.proj'
 
 # Authenticode sign all the DLLs with the Microsoft certificate.
@@ -42,7 +42,7 @@ steps:
   displayName: 'ESRP CodeSigning: Authenticode'
   inputs:
     ConnectedServiceName: 'ESRP Service'
-    FolderPath: 'src'
+    FolderPath: 'out/bin'
     Pattern: 'Microsoft.DurableTask.*.dll'
     signConfigType: inlineSignParams
     inlineOperation: |
@@ -82,7 +82,7 @@ steps:
   inputs:
     command: pack
     verbosityPack: Minimal
-    configuration: Release
+    configuration: release
     nobuild: true
     packDirectory: $(build.artifactStagingDirectory)
     packagesToPack: 'src/dirs.proj'

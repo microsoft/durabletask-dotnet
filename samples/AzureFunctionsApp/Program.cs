@@ -1,19 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace AzureFunctionsApp
+using Microsoft.Extensions.Hosting;
+namespace AzureFunctionsApp;
+
+public class Program
 {
-    using Microsoft.Extensions.Hosting;
-
-    public class Program
+    public static void Main()
     {
-        public static void Main()
-        {
-            IHost host = new HostBuilder()
-                .ConfigureFunctionsWorkerDefaults()
-                .Build();
+        IHost host = new HostBuilder()
+            .ConfigureFunctionsWorkerDefaults()
+            .Build();
 
-            host.Run();
-        }
+        host.Run();
     }
 }

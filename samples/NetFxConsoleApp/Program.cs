@@ -1,11 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using Grpc.Core;
-using Microsoft.DurableTask;
-using Microsoft.DurableTask.Grpc;
-using Microsoft.Extensions.Logging;
+﻿// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.Worker;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace NetFxConsoleApp
 {
@@ -13,45 +12,37 @@ namespace NetFxConsoleApp
     {
         static async Task Main(string[] args)
         {
-            ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
-            {
-                builder.SetMinimumLevel(LogLevel.Debug);
-                builder.AddSimpleConsole(options =>
+            IHost host = Host.CreateDefaultBuilder(args)
+                .ConfigureServices(services =>
                 {
-                    options.SingleLine = true;
-                    options.UseUtcTimestamp = true;
-                    options.TimestampFormat = "yyyy-mm-ddThh:mm:ss.ffffffZ ";
-                });
-            });
-
-            Channel channel = new("localhost:4001", ChannelCredentials.Insecure);
-
-            DurableTaskGrpcWorker worker = DurableTaskGrpcWorker.CreateBuilder()
-                .AddTasks(tasks =>
-                {
-                    tasks.AddOrchestrator("HelloSequence", async context =>
+                    services.AddDurableTaskClient(builder => builder.UseGrpc());
+                    services.AddDurableTaskWorker(builder =>
                     {
-                        var greetings = new List<string>
+                        builder.AddTasks(tasks =>
                         {
-                            await context.CallActivityAsync<string>("SayHello", "Tokyo"),
-                            await context.CallActivityAsync<string>("SayHello", "London"),
-                            await context.CallActivityAsync<string>("SayHello", "Seattle"),
-                        };
+                            tasks.AddOrchestratorFunc("HelloSequence", async context =>
+                            {
+                                var greetings = new List<string>
+                                {
+                                    await context.CallActivityAsync<string>("SayHello", "Tokyo"),
+                                    await context.CallActivityAsync<string>("SayHello", "London"),
+                                    await context.CallActivityAsync<string>("SayHello", "Seattle"),
+                                };
 
-                        return greetings;
+                                return greetings;
+                            });
+
+                            tasks.AddActivityFunc<string, string>("SayHello", (context, city) => $"Hello {city}!");
+                        });
+
+                        builder.UseGrpc();
                     });
-                    tasks.AddActivity<string, string>("SayHello", (context, city) => $"Hello {city}!");
                 })
-                .UseLoggerFactory(loggerFactory)
-                .UseGrpcChannel(channel)
                 .Build();
 
-            await worker.StartAsync(timeout: TimeSpan.FromSeconds(30));
+            await host.StartAsync();
 
-            await using DurableTaskClient client = DurableTaskGrpcClient.CreateBuilder()
-                .UseGrpcChannel(channel)
-                .Build();
-
+            await using DurableTaskClient client = host.Services.GetRequiredService<DurableTaskClient>();
             string instanceId = await client.ScheduleNewOrchestrationInstanceAsync("HelloSequence");
             Console.WriteLine($"Created instance: '{instanceId}'");
 
@@ -62,7 +53,6 @@ namespace NetFxConsoleApp
                 getInputsAndOutputs: true);
 
             Console.WriteLine($"Instance completed: {instance}");
-            await channel.ShutdownAsync();
         }
     }
 }

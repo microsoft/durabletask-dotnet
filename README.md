@@ -31,8 +31,8 @@ To get started, add the [Microsoft.Azure.Functions.Worker.Extensions.DurableTask
 
 ```xml
   <ItemGroup>
-    <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="1.8.0" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="0.4.1-beta" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="1.10.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.0.0-rc.1" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.0.13" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.7.0" />
   </ItemGroup>
@@ -87,6 +87,8 @@ static class HelloSequenceUntyped
 You can find the full sample file, including detailed comments, at [samples/AzureFunctionsApp/HelloCitiesUntyped.cs](samples/AzureFunctionsApp/HelloCitiesUntyped.cs).
 
 ### Class-based syntax
+
+**IMPORTANT**: class based syntax in Durable Functions relies on a package reference to `Microsoft.DurableTask.Generators`. This is still in "preview" and may be subject to significant change before 1.0 or even post-1.0. It is recommended to stick with function-syntax for now.
 
 A new feature in this version of Durable Functions for .NET Isolated is the ability to define orchestrators and activities as classes instead of as functions. When using the class-based syntax, source generators are used to generate function definitions behind the scenes to instantiate and invoke your classes.
 

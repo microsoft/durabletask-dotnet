@@ -5,7 +5,6 @@ using Microsoft.DurableTask;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
-using System.Threading.Tasks;
 
 namespace AzureFunctionsApp.Typed;
 
@@ -30,9 +29,9 @@ public static class HelloCitiesTypedStarter
         // orchestrators that are defined in the current project. The name of the generated extension methods
         // are based on the names of the orchestrator classes. Note that the source generator will *not*
         // generate type-safe extension methods for non-class-based orchestrator functions.
+        // NOTE: This feature is in PREVIEW and requires a package reference to Microsoft.DurableTask.Generators.
         string instanceId = await durableContext.Client.ScheduleNewHelloCitiesTypedInstanceAsync();
         logger.LogInformation("Created new orchestration with instance ID = {instanceId}", instanceId);
-
         return durableContext.CreateCheckStatusResponse(req, instanceId);
     }
 }
@@ -43,9 +42,9 @@ public static class HelloCitiesTypedStarter
 /// that invokes the <see cref="OnRunAsync"/> method.
 /// </summary>
 [DurableTask(nameof(HelloCitiesTyped))]
-public class HelloCitiesTyped : TaskOrchestratorBase<string, string>
+public class HelloCitiesTyped : TaskOrchestrator<string?, string>
 {
-    protected async override Task<string?> OnRunAsync(TaskOrchestrationContext context, string? input)
+    public async override Task<string> RunAsync(TaskOrchestrationContext context, string? input)
     {
         // Source generators are used to generate the type-safe activity function
         // call extension methods on the context object. The names of these generated
@@ -64,9 +63,9 @@ public class HelloCitiesTyped : TaskOrchestratorBase<string, string>
 /// definition that creates an instance of this class and invokes its <see cref="OnRun"/> method.
 /// </summary>
 [DurableTask(nameof(SayHelloTyped))]
-public class SayHelloTyped : TaskActivityBase<string, string>
+public class SayHelloTyped : TaskActivity<string, string>
 {
-    readonly ILogger? logger;
+    readonly ILogger logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SayHelloTyped"/> class.
@@ -76,15 +75,15 @@ public class SayHelloTyped : TaskActivityBase<string, string>
     /// Activity class constructors support constructor-based dependency injection.
     /// The injected services are provided by the function's <see cref="FunctionContext.InstanceServices"/> property.
     /// </remarks>
-    /// <param name="loggerFactory">The <see cref="ILoggerFactory"/> injected by the Azure Functions runtime.</param>
-    public SayHelloTyped(ILoggerFactory? loggerFactory)
+    /// <param name="logger">The logger injected by the Azure Functions runtime.</param>
+    public SayHelloTyped(ILogger<SayHelloTyped> logger)
     {
-        this.logger = loggerFactory?.CreateLogger<SayHelloTyped>();
+        this.logger = logger;
     }
 
-    protected override string OnRun(TaskActivityContext context, string? cityName)
+    public override Task<string> RunAsync(TaskActivityContext context, string cityName)
     {
-        this.logger?.LogInformation("Saying hello to {name}", cityName);
-        return $"Hello, {cityName}!";
+        this.logger.LogInformation("Saying hello to {name}", cityName);
+        return Task.FromResult($"Hello, {cityName}!");
     }
 }

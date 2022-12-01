@@ -9,15 +9,21 @@ The Durable Task .NET Client SDK is a .NET Standard 2.0 library for implementing
 
 If you're looking to run fully self-hosted Durable Task Framework apps, see https://github.com/azure/durabletask.
 
+*Current Release*: [v1.0.0-rc.1](https://github.com/microsoft/durabletask-dotnet/releases/tag/v1.0.0-rc.1)
+
 ## NuGet packages
 
 The following nuget packages are available for download.
 
-| Name | Latest version |
-| - | - |
- | Azure Functions Extension |  [![NuGet version (Microsoft.Azure.Functions.Worker.Extensions.DurableTask)](https://img.shields.io/nuget/vpre/Microsoft.Azure.Functions.Worker.Extensions.DurableTask)](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.DurableTask/) |
- | Client SDK | [![NuGet version (Microsoft.DurableTask.Client)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Client)](https://www.nuget.org/packages/Microsoft.DurableTask.Client/) |
- | Source Generators | [![NuGet version (Microsoft.DurableTask.Generators)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Generators)](https://www.nuget.org/packages/Microsoft.DurableTask.Generators/) |
+| Name | Latest version | Description |
+| - | - | - |
+ | Azure Functions Extension |  [![NuGet version (Microsoft.Azure.Functions.Worker.Extensions.DurableTask)](https://img.shields.io/nuget/vpre/Microsoft.Azure.Functions.Worker.Extensions.DurableTask)](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.DurableTask/) | For Durable Functions in .NET isolated. |
+ | Abstractions SDK | [![NuGet version (Microsoft.DurableTask.Abstractions)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Abstractions)](https://www.nuget.org/packages/Microsoft.DurableTask.Abstractions/) | Contains base abstractions for Durable. Useful for writing re-usable libraries independent of the chosen worker or client. |
+ | Client SDK | [![NuGet version (Microsoft.DurableTask.Client)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Client)](https://www.nuget.org/packages/Microsoft.DurableTask.Client/) | Contains the core client logic for interacting with a Durable backend. |
+ | Client.Grpc SDK | [![NuGet version (Microsoft.DurableTask.Client.Grpc)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Client.Grpc)](https://www.nuget.org/packages/Microsoft.DurableTask.Client.Grpc/) | The gRPC client implementation. |
+ | Worker SDK | [![NuGet version (Microsoft.DurableTask.Worker)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Worker)](https://www.nuget.org/packages/Microsoft.DurableTask.Worker/) | Contains the core worker logic for having a `IHostedService` to process durable tasks. |
+ | Worker.Grpc SDK | [![NuGet version (Microsoft.DurableTask.Worker.Grpc)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Worker.Grpc)](https://www.nuget.org/packages/Microsoft.DurableTask.Worker.Grpc/) | The gRPC worker implementation.
+ | Source Generators | [![NuGet version (Microsoft.DurableTask.Generators)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Generators)](https://www.nuget.org/packages/Microsoft.DurableTask.Generators/) | DurableTask source generators. |
 
 ## Usage with Azure Functions
 
@@ -27,10 +33,11 @@ To get started, add the [Microsoft.Azure.Functions.Worker.Extensions.DurableTask
 
 ```xml
   <ItemGroup>
-    <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="1.8.0" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="0.4.1-beta" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="1.10.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.0.0-rc.1" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.0.13" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.7.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.7.0" OutputItemType="Analyzer" />
+    <PackageReference Include="Microsoft.DurableTask.Generators" Version="1.0.0-preview.1" OutputItemType="Analyzer" />
   </ItemGroup>
 ```
 
@@ -83,6 +90,8 @@ static class HelloSequenceUntyped
 You can find the full sample file, including detailed comments, at [samples/AzureFunctionsApp/HelloCitiesUntyped.cs](samples/AzureFunctionsApp/HelloCitiesUntyped.cs).
 
 ### Class-based syntax
+
+**IMPORTANT**: class based syntax in Durable Functions relies on a package reference to `Microsoft.DurableTask.Generators`. This is still in "preview" and may be subject to significant change before 1.0 or even post-1.0. It is recommended to stick with function-syntax for now.
 
 A new feature in this version of Durable Functions for .NET Isolated is the ability to define orchestrators and activities as classes instead of as functions. When using the class-based syntax, source generators are used to generate function definitions behind the scenes to instantiate and invoke your classes.
 

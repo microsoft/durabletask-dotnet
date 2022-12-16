@@ -129,6 +129,50 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
+    public override async Task SuspendInstanceAsync(
+        string instanceId, string? reason = null, CancellationToken cancellation = default)
+    {
+        P.SuspendRequest request = new()
+        {
+            InstanceId = instanceId,
+            Reason = reason,
+        };
+
+        try
+        {
+            await this.sidecarClient.SuspendInstanceAsync(
+                request, cancellationToken: cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.SuspendInstanceAsync)} operation was canceled.", e, cancellation);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override async Task ResumeInstanceAsync(
+        string instanceId, string? reason = null, CancellationToken cancellation = default)
+    {
+        P.ResumeRequest request = new()
+        {
+            InstanceId = instanceId,
+            Reason = reason,
+        };
+
+        try
+        {
+            await this.sidecarClient.ResumeInstanceAsync(
+                request, cancellationToken: cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.ResumeInstanceAsync)} operation was canceled.", e, cancellation);
+        }
+    }
+
+    /// <inheritdoc/>
     public override async Task<OrchestrationMetadata?> GetInstanceMetadataAsync(
         string instanceId,
         bool getInputsAndOutputs = false)

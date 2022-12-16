@@ -135,6 +135,33 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     public abstract Task TerminateAsync(string instanceId, object? output);
 
     /// <summary>
+    /// Suspends an orchestration instance, halting processing of it until <see cref="ResumeInstanceAsync" /> is used
+    /// to resume the orchestration.
+    /// </summary>
+    /// <param name="instanceId">The instance ID of the orchestration to suspend.</param>
+    /// <param name="reason">The optional suspension reason.</param>
+    /// <param name="cancellation">
+    /// A <see cref="CancellationToken"/> that can be used to cancel the suspend operation. Note, cancelling this token
+    /// does <b>not</b> resume the orchestration if suspend was successful.
+    /// </param>
+    /// <returns>A task that completes when the suspend has been committed to the backend.</returns>
+    public abstract Task SuspendInstanceAsync(
+        string instanceId, string? reason = null, CancellationToken cancellation = default);
+
+    /// <summary>
+    /// Resumes an orchestration instance that was suspended via <see cref="SuspendInstanceAsync" />.
+    /// </summary>
+    /// <param name="instanceId">The instance ID of the orchestration to resume.</param>
+    /// <param name="reason">The optional resume reason.</param>
+    /// <param name="cancellation">
+    /// A <see cref="CancellationToken"/> that can be used to cancel the resume operation. Note, cancelling this token
+    /// does <b>not</b> re-suspend the orchestration if resume was successful.
+    /// </param>
+    /// <returns>A task that completes when the resume has been committed to the backend.</returns>
+    public abstract Task ResumeInstanceAsync(
+        string instanceId, string? reason = null, CancellationToken cancellation = default);
+
+    /// <summary>
     /// Waits for an orchestration to start running and returns a <see cref="OrchestrationMetadata"/>
     /// object that contains metadata about the started instance.
     /// </summary>

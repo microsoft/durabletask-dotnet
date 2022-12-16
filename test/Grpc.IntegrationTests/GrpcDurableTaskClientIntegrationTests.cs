@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.DurableTask.Client;
@@ -139,7 +140,10 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
 
         List<OrchestrationMetadata> left = resumedPages.SelectMany(p => p.Values).ToList();
         List<OrchestrationMetadata> right = pages.Skip(2).SelectMany(p => p.Values).ToList();
-        left.Should().BeEquivalentTo(right, cfg => cfg.Including(x => x.InstanceId).Including(x => x.CreatedAt));
+        left.Should().BeEquivalentTo(
+            right,
+            cfg => cfg.Including(x => x.InstanceId).Including(x => x.CreatedAt)
+                .Using<DateTimeOffset, DateTimeToleranceComparer>());
 
         Page<OrchestrationMetadata> page = await pageable.AsPages(pageSizeHint: 10).FirstAsync();
         page.Values.Should().HaveCount(10);
@@ -164,5 +168,12 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         {
             b.AddTasks(tasks => tasks.AddOrchestratorFunc<bool, string>(OrchestrationName, Orchestration));
         });
+    }
+
+    class DateTimeToleranceComparer : IEqualityComparer<DateTimeOffset>
+    {
+        public bool Equals(DateTimeOffset x, DateTimeOffset y) => (x - y).Duration() < TimeSpan.FromMilliseconds(100);
+
+        public int GetHashCode([DisallowNull] DateTimeOffset obj) => obj.GetHashCode();
     }
 }

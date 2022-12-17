@@ -8,6 +8,9 @@ pool:
     - ImageOverride -equals MMS2022TLS
 
 steps:
+- checkout: self
+  submodules: true
+
 - task: UseDotNet@2
   displayName: 'Use the .NET Core 2.1 SDK (required for build signing)'
   inputs:

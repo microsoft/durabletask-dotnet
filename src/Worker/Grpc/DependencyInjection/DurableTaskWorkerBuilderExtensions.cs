@@ -1,9 +1,16 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Grpc.Core;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
+
+#if NET6_0_OR_GREATER
+using Grpc.Net.Client;
+#endif
+
+#if NETSTANDARD2_0
+using GrpcChannel = Grpc.Core.Channel;
+#endif
 
 namespace Microsoft.DurableTask.Worker;
 
@@ -24,15 +31,12 @@ public static class DurableTaskWorkerBuilderExtensions
         => builder.UseGrpc(opt => { });
 
     /// <summary>
-    /// Configures the <see cref="IDurableTaskWorkerBuilder" /> to use the gRPC worker.
+    /// Configures the <see cref="IDurableTaskWorkerBuilder" /> to be a gRPC client.
     /// </summary>
     /// <param name="builder">The builder to configure.</param>
-    /// <param name="channel">The gRPC channel to use.</param>
+    /// <param name="channel">The channel for the Durable Task sidecar endpoint.</param>
     /// <returns>The original builder, for call chaining.</returns>
-    /// <remarks>
-    /// <b>Note:</b> only 1 instance of gRPC worker is supported per sidecar.
-    /// </remarks>
-    public static IDurableTaskWorkerBuilder UseGrpc(this IDurableTaskWorkerBuilder builder, Channel channel)
+    public static IDurableTaskWorkerBuilder UseGrpc(this IDurableTaskWorkerBuilder builder, GrpcChannel channel)
         => builder.UseGrpc(opt => opt.Channel = channel);
 
     /// <summary>

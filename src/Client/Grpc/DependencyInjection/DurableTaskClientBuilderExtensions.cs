@@ -1,9 +1,16 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Grpc.Core;
 using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.Extensions.DependencyInjection;
+
+#if NET6_0_OR_GREATER
+using Grpc.Net.Client;
+#endif
+
+#if NETSTANDARD2_0
+using GrpcChannel = Grpc.Core.Channel;
+#endif
 
 namespace Microsoft.DurableTask.Client;
 
@@ -44,7 +51,7 @@ public static class DurableTaskClientBuilderExtensions
     /// <param name="builder">The builder to configure.</param>
     /// <param name="channel">The channel for the Durable Task sidecar endpoint.</param>
     /// <returns>The original builder, for call chaining.</returns>
-    public static IDurableTaskClientBuilder UseGrpc(this IDurableTaskClientBuilder builder, Channel channel)
+    public static IDurableTaskClientBuilder UseGrpc(this IDurableTaskClientBuilder builder, GrpcChannel channel)
         => builder.UseGrpc(opt => opt.Channel = channel);
 
     /// <summary>

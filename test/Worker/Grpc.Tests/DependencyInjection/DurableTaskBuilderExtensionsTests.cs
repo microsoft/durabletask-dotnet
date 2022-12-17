@@ -1,8 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Grpc.Core;
 using Microsoft.Extensions.DependencyInjection;
+
+#if NET6_0_OR_GREATER
+using Grpc.Net.Client;
+#endif
+
+#if NETFRAMEWORK
+using Grpc.Core;
+using GrpcChannel = Grpc.Core.Channel;
+#endif
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 
@@ -41,7 +49,7 @@ public class DurableTaskBuilderExtensionsTests
     [Fact]
     public void UseGrpc_Channel_Sets()
     {
-        Channel c = new("localhost:9001", ChannelCredentials.Insecure);
+        GrpcChannel c = GetChannel();
         ServiceCollection services = new();
         DefaultDurableTaskWorkerBuilder builder = new(null, services);
         builder.UseGrpc(c);
@@ -56,7 +64,7 @@ public class DurableTaskBuilderExtensionsTests
     [Fact]
     public void UseGrpc_Callback_Sets()
     {
-        Channel c = new("localhost:9001", ChannelCredentials.Insecure);
+        GrpcChannel c = GetChannel();
         ServiceCollection services = new();
         DefaultDurableTaskWorkerBuilder builder = new(null, services);
         builder.UseGrpc(opt => opt.Channel = c);
@@ -67,4 +75,12 @@ public class DurableTaskBuilderExtensionsTests
         options.Channel.Should().Be(c);
         options.Address.Should().BeNull();
     }
+
+#if NET6_0_OR_GREATER
+    static GrpcChannel GetChannel() => GrpcChannel.ForAddress("http://localhost:9001");
+#endif
+
+#if NETFRAMEWORK
+    static GrpcChannel GetChannel() => new("http://localhost:9001", ChannelCredentials.Insecure);
+#endif
 }

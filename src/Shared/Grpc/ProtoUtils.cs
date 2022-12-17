@@ -338,10 +338,31 @@ static class ProtoUtils
     }
 
     /// <summary>
+    /// Converts a <see cref="P.TaskFailureDetails" /> to a <see cref="TaskFailureDetails" />.
+    /// </summary>
+    /// <param name="failureDetails">The failure details to convert.</param>
+    /// <returns>The converted failure details.</returns>
+    [return: NotNullIfNotNull("failureDetails")]
+    internal static TaskFailureDetails? ToTaskFailureDetails(this P.TaskFailureDetails? failureDetails)
+    {
+        if (failureDetails == null)
+        {
+            return null;
+        }
+
+        return new TaskFailureDetails(
+            failureDetails.ErrorType,
+            failureDetails.ErrorMessage,
+            failureDetails.StackTrace,
+            failureDetails.InnerFailure.ToTaskFailureDetails());
+    }
+
+    /// <summary>
     /// Converts a <see cref="Exception" /> to <see cref="P.TaskFailureDetails" />.
     /// </summary>
     /// <param name="e">The exception to convert.</param>
     /// <returns>The task failure details.</returns>
+    [return: NotNullIfNotNull("e")]
     internal static P.TaskFailureDetails? ToTaskFailureDetails(this Exception? e)
     {
         if (e == null)

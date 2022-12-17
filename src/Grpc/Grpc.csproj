@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net6.0</TargetFrameworks>
+    <PackageDescription>The gRPC Protobuf .NET services for Durable Task Framework.</PackageDescription>
+  </PropertyGroup>
+
+  <!-- Version info -->
+  <PropertyGroup>
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <VersionSuffix>rc.1</VersionSuffix>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.Tools" Version="2.51.0" PrivateAssets="All" />
+    <PackageReference Include="Google.Protobuf" Version="3.21.12" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="Grpc.Core" Version="2.46.5" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net6.0'">
+    <PackageReference Include="Grpc.Net.Client" Version="2.50.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="$(EngRoot)proto/protos/orchestrator_service.proto" GrpcServices="both" Link="proto/orchestrator_service.proto" />
+  </ItemGroup>
+
+</Project>

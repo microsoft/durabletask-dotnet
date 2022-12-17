@@ -10,6 +10,14 @@ using Microsoft.Extensions.Options;
 using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
 using P = Microsoft.DurableTask.Protobuf;
 
+#if NET6_0_OR_GREATER
+using Grpc.Net.Client;
+#endif
+
+#if NETSTANDARD2_0
+using GrpcChannel = Grpc.Core.Channel;
+#endif
+
 namespace Microsoft.DurableTask.Client.Grpc;
 
 /// <summary>
@@ -20,7 +28,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     readonly ILogger logger;
     readonly TaskHubSidecarServiceClient sidecarClient;
     readonly GrpcDurableTaskClientOptions options;
-    readonly AsyncDisposable asyncDisposable;
+    AsyncDisposable asyncDisposable;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GrpcDurableTaskClient"/> class.
@@ -46,7 +54,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     {
         this.logger = Check.NotNull(logger);
         this.options = Check.NotNull(options);
-        this.asyncDisposable = this.BuildChannel(out Channel channel);
+        this.asyncDisposable = BuildChannel(options, out GrpcChannel channel);
         this.sidecarClient = new TaskHubSidecarServiceClient(channel);
     }
 
@@ -294,6 +302,43 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         return this.PurgeInstancesCoreAsync(request, cancellation);
     }
 
+    static AsyncDisposable BuildChannel(GrpcDurableTaskClientOptions options, out GrpcChannel channel)
+    {
+        if (options.Channel is GrpcChannel c)
+        {
+            channel = c;
+            return default;
+        }
+
+        c = GetChannel(options.Address);
+        channel = c;
+        return new AsyncDisposable(async () => await c.ShutdownAsync());
+    }
+
+#if NET6_0_OR_GREATER
+    static GrpcChannel GetChannel(string? address)
+    {
+        if (string.IsNullOrEmpty(address))
+        {
+            address = "http://localhost:4001";
+        }
+
+        return GrpcChannel.ForAddress(address);
+    }
+#endif
+
+#if NETSTANDARD2_0
+    static GrpcChannel GetChannel(string? address)
+    {
+        if (string.IsNullOrEmpty(address))
+        {
+            address = "localhost:4001";
+        }
+
+        return new(address, ChannelCredentials.Insecure);
+    }
+#endif
+
     async Task<PurgeResult> PurgeInstancesCoreAsync(
         P.PurgeInstancesRequest request, CancellationToken cancellation = default)
     {
@@ -320,24 +365,8 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             SerializedInput = state.Input,
             SerializedOutput = state.Output,
             SerializedCustomStatus = state.CustomStatus,
-            FailureDetails = ProtoUtils.ConvertTaskFailureDetails(state.FailureDetails),
+            FailureDetails = state.FailureDetails.ToTaskFailureDetails(),
             DataConverter = includeInputsAndOutputs ? this.DataConverter : null,
         };
-    }
-
-    AsyncDisposable BuildChannel(out Channel channel)
-    {
-        if (this.options.Channel is Channel c)
-        {
-            channel = c;
-            return default;
-        }
-
-        string address = string.IsNullOrEmpty(this.options.Address) ? "localhost:4001" : this.options.Address!;
-
-        // TODO: use SSL channel by default?
-        c = new(address, ChannelCredentials.Insecure);
-        channel = c;
-        return new AsyncDisposable(async () => await c.ShutdownAsync());
     }
 }

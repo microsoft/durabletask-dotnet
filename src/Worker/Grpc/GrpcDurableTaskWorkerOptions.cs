@@ -1,7 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Grpc.Core;
+#if NET6_0_OR_GREATER
+using Grpc.Net.Client;
+#endif
+
+#if NETSTANDARD2_0
+using GrpcChannel = Grpc.Core.Channel;
+#endif
 
 namespace Microsoft.DurableTask.Worker.Grpc;
 
@@ -18,5 +24,5 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
     /// <summary>
     /// Gets or sets the gRPC channel to use. Will supersede <see cref="Address" /> when provided.
     /// </summary>
-    public Channel? Channel { get; set; }
+    public GrpcChannel? Channel { get; set; }
 }

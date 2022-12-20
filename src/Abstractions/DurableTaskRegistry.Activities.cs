@@ -218,18 +218,4 @@ public sealed partial class DurableTaskRegistry
             return CompletedNullTask;
         });
     }
-
-    static Func<IServiceProvider, ITaskActivity> GetActivityCreator(
-        IServiceProvider services, Type type, out ITaskActivity activity)
-    {
-        if (services.GetService(type) is ITaskActivity created)
-        {
-            activity = created;
-            return sp => (ITaskActivity)sp.GetRequiredService(type);
-        }
-
-        ObjectFactory factory = ActivatorUtilities.CreateFactory(type, Array.Empty<Type>());
-        activity = (ITaskActivity)factory.Invoke(services, null);
-        return sp => (ITaskActivity)factory.Invoke(sp, null);
-    }
 }

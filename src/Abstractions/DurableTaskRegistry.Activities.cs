@@ -39,7 +39,6 @@ public sealed partial class DurableTaskRegistry
     /// <returns>The same registry, for call chaining.</returns>
     public DurableTaskRegistry AddActivity(TaskName name, Type type)
     {
-        // TODO: Compile a constructor expression for performance -- ActivatorUtilities.CreateFactory
         Check.ConcreteType<ITaskActivity>(type);
         return this.AddActivity(name, sp => (ITaskActivity)ActivatorUtilities.GetServiceOrCreateInstance(sp, type));
     }
@@ -218,5 +217,19 @@ public sealed partial class DurableTaskRegistry
             activity(context);
             return CompletedNullTask;
         });
+    }
+
+    static Func<IServiceProvider, ITaskActivity> GetActivityCreator(
+        IServiceProvider services, Type type, out ITaskActivity activity)
+    {
+        if (services.GetService(type) is ITaskActivity created)
+        {
+            activity = created;
+            return sp => (ITaskActivity)sp.GetRequiredService(type);
+        }
+
+        ObjectFactory factory = ActivatorUtilities.CreateFactory(type, Array.Empty<Type>());
+        activity = (ITaskActivity)factory.Invoke(services, null);
+        return sp => (ITaskActivity)factory.Invoke(sp, null);
     }
 }

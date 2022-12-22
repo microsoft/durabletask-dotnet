@@ -59,6 +59,8 @@ public static class DurableTaskClientBuilderExtensions
     public static IDurableTaskClientBuilder UseGrpc(
         this IDurableTaskClientBuilder builder, Action<GrpcDurableTaskClientOptions> configure)
     {
+        Check.NotNull(builder);
+        Check.NotNull(configure);
         builder.Services.Configure(builder.Name, configure);
         return builder.UseBuildTarget<GrpcDurableTaskClient, GrpcDurableTaskClientOptions>();
     }

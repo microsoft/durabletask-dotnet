@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <SharedSection Include="Core" />
+    <SharedSection Include="DependencyInjection" />
   </ItemGroup>
 
 </Project>

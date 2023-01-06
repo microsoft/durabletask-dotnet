@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.Extensions.DependencyInjection;
+
 namespace Microsoft.DurableTask;
 
 /// <summary>
@@ -37,9 +39,8 @@ public partial class DurableTaskRegistry
     /// <returns>The same registry, for call chaining.</returns>
     public DurableTaskRegistry AddOrchestrator(TaskName name, Type type)
     {
-        // TODO: Compile a constructor expression for performance.
         Check.ConcreteType<ITaskOrchestrator>(type);
-        return this.AddOrchestrator(name, () => (ITaskOrchestrator)Activator.CreateInstance(type));
+        return this.AddOrchestratorCore(name, sp => (ITaskOrchestrator)ActivatorUtilities.CreateInstance(sp, type));
     }
 
     /// <summary>

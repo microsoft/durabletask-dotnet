@@ -47,6 +47,7 @@ partial class TaskOrchestrationShim : TaskOrchestration
         object? input = this.DataConverter.Deserialize(rawInput, this.implementation.InputType);
         ILogger contextLogger = this.LoggerFactory.CreateLogger("Microsoft.DurableTask");
         this.wrapperContext = new(innerContext, this.invocationContext, contextLogger, input);
+        TaskOrchestrationContextAccessor.Current = this.wrapperContext;
         object? output = await this.implementation.RunAsync(this.wrapperContext, input);
 
         // Return the output (if any) as a serialized string.

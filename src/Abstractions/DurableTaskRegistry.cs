@@ -67,13 +67,20 @@ public sealed partial class DurableTaskRegistry
     {
         Check.NotDefault(name);
         Check.NotNull(factory);
+        return this.AddOrchestratorCore(name, _ => factory());
+    }
+
+    DurableTaskRegistry AddOrchestratorCore(TaskName name, Func<IServiceProvider, ITaskOrchestrator> factory)
+    {
+        Check.NotDefault(name);
+        Check.NotNull(factory);
         if (this.Orchestrators.ContainsKey(name))
         {
             throw new ArgumentException(
                 $"An {nameof(ITaskOrchestrator)} named '{name}' is already added.", nameof(name));
         }
 
-        this.Orchestrators.Add(name, _ => factory());
+        this.Orchestrators.Add(name, sp => factory(sp));
         return this;
     }
 }

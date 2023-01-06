@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.DurableTask.Worker.DependencyInjection;
 
 namespace Microsoft.DurableTask.Worker;
 
@@ -47,7 +48,7 @@ sealed class DurableTaskFactory : IDurableTaskFactory
     {
         if (this.orchestrators.TryGetValue(name, out Func<IServiceProvider, ITaskOrchestrator>? factory))
         {
-            orchestrator = factory.Invoke(serviceProvider);
+            orchestrator = factory.Invoke(new OrchestrationServiceProvider(serviceProvider));
             return true;
         }
 

@@ -390,7 +390,7 @@ public abstract class TaskOrchestrationContext
 
         public IDisposable BeginScope<TState>(TState state) => this.logger.BeginScope(state);
 
-        public bool IsEnabled(LogLevel logLevel) => this.logger.IsEnabled(logLevel);
+        public bool IsEnabled(LogLevel logLevel) => !this.context.IsReplaying && this.logger.IsEnabled(logLevel);
 
         public void Log<TState>(
             LogLevel logLevel,
@@ -399,7 +399,7 @@ public abstract class TaskOrchestrationContext
             Exception? exception,
             Func<TState, Exception?, string> formatter)
         {
-            if (!this.context.IsReplaying)
+            if (this.IsEnabled(logLevel))
             {
                 this.logger.Log(logLevel, eventId, state, exception, formatter);
             }

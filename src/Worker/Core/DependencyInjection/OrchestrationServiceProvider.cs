@@ -30,6 +30,7 @@ public sealed class OrchestrationServiceProvider : IServiceProvider
     /// <param name="innerProvider">The inner service provider.</param>
     internal OrchestrationServiceProvider(IServiceProvider innerProvider)
     {
+        Check.NotNull(innerProvider);
         this.loggerFactory = new(() =>
         {
             ILoggerFactory inner = innerProvider.GetRequiredService<ILoggerFactory>();
@@ -48,10 +49,11 @@ public sealed class OrchestrationServiceProvider : IServiceProvider
 
         if (serviceType.IsGenericType && serviceType.GetGenericTypeDefinition() == typeof(ILogger<>))
         {
-            Type closed = typeof(Logger<>).MakeGenericType(serviceType);
+            Type closed = typeof(Logger<>).MakeGenericType(serviceType.GenericTypeArguments.First());
             return Activator.CreateInstance(closed, this.loggerFactory.Value);
         }
 
+        // TODO: Create and include a support link for more information.
         throw new NotSupportedException($"Type {serviceType} is not supported in orchestrations.");
     }
 }

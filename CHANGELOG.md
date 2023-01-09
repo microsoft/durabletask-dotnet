@@ -1,5 +1,9 @@
 ﻿# Changelog
 
+## v1.0.0
+
+- Durable Functions class-based syntax now resolves `ITaskActivity` instances from `IServiceProvider`, if available there.
+
 ## v1.0.0-rc.1
 
 ### Included Packages

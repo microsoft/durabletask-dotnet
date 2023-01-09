@@ -1,5 +1,9 @@
 ﻿# Changelog
 
+## v1.0.0
+
+- `DurableTaskClient` methods have been touched up to ensure `CancellationToken` is included, as well as is the last parameter.
+
 ## v1.0.0-rc.1
 
 ### Included Packages

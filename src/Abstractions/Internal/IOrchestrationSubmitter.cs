@@ -27,11 +27,18 @@ public interface IOrchestrationSubmitter
     /// The optional input to pass to the scheduled orchestration instance. This must be a serializable value.
     /// </param>
     /// <param name="options">The options to start the new orchestration with.</param>
+    /// <param name="cancellation">
+    /// The cancellation token. This only cancels enqueueing the new orchestration to the backend. Does not cancel the
+    /// orchestration once enqueued.
+    /// </param>
     /// <returns>
     /// A task that completes when the orchestration instance is successfully scheduled. The value of this task is
     /// the instance ID of the scheduled orchestration instance. If a non-null instance ID was provided via
     /// <paramref name="options" />, the same value will be returned by the completed task.
     /// </returns>
     Task<string> ScheduleNewOrchestrationInstanceAsync(
-        TaskName orchestratorName, object? input = null, StartOrchestrationOptions? options = null);
+        TaskName orchestratorName,
+        object? input = null,
+        StartOrchestrationOptions? options = null,
+        CancellationToken cancellation = default);
 }

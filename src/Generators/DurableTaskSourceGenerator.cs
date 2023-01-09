@@ -212,7 +212,7 @@ namespace Microsoft.DurableTask
         [Function(nameof({activity.TaskName}))]
         public static async Task<{activity.OutputType}> {activity.TaskName}([ActivityTrigger] {activity.InputParameter}, string instanceId, FunctionContext executionContext)
         {{
-            ITaskActivity activity = ActivatorUtilities.CreateInstance<{activity.TypeName}>(executionContext.InstanceServices);
+            ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<{activity.TypeName}>(executionContext.InstanceServices);
             TaskActivityContext context = new GeneratedActivityContext(""{activity.TaskName}"", instanceId);
             object? result = await activity.RunAsync(context, input);
             return ({activity.OutputType})result!;

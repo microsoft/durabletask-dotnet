@@ -110,9 +110,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         List<bool>? results = metadata.ReadOutputAs<List<bool>>();
         Assert.NotNull(results);
@@ -154,9 +152,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         Assert.NotNull(metadata);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.True(metadata.ReadOutputAs<bool>());
@@ -178,9 +174,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         Assert.NotNull(metadata);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.Equal("Hello, World!", metadata.ReadOutputAs<string>());
@@ -203,9 +197,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         Assert.NotNull(metadata);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.Equal("Hello, World!", metadata.ReadOutputAs<string>());
@@ -235,9 +227,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         Assert.NotNull(metadata);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.Equal(10, metadata.ReadOutputAs<int>());
@@ -270,9 +260,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         Assert.NotNull(metadata);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
 
@@ -315,9 +303,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         // Once the orchestration receives all the events it is expecting, it should complete.
         metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         Assert.NotNull(metadata);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
 
@@ -342,9 +328,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         await server.Client.TerminateAsync(instanceId, expectedOutput);
 
         metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Terminated, metadata.RuntimeStatus);
@@ -376,9 +360,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         Assert.NotNull(metadata);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.Equal(10, metadata.ReadOutputAs<int>());
@@ -406,9 +388,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 1);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         Assert.NotNull(metadata);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.Equal(15, metadata.ReadOutputAs<int>());
@@ -433,9 +413,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         // To ensure consistency, wait for the instance to start before sending the events
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceStartAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         Assert.NotNull(metadata);
         Assert.Equal("Started!", metadata.ReadCustomStatusAs<string>());
 
@@ -448,9 +426,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         // Once the orchestration receives all the events it is expecting, it should complete.
         metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         Assert.NotNull(metadata);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.Equal(eventPayload, metadata.ReadCustomStatusAs<(string, int)>());
@@ -498,9 +474,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         Assert.NotNull(metadata);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.True(metadata.ReadOutputAs<bool>());
@@ -536,7 +510,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
             "SpecialSerialization_Orchestration", input: input);
         OrchestrationMetadata result = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId, this.TimeoutToken, getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         JsonNode? output = result.ReadOutputAs<JsonNode>();
 
         Assert.NotNull(output);

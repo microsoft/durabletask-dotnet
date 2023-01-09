@@ -11,9 +11,9 @@ namespace Microsoft.DurableTask.Client;
 /// </summary>
 /// <remarks>
 /// Instances of this class are produced by methods in the <see cref="DurableTaskClient"/> class, such as
-/// <see cref="DurableTaskClient.GetInstanceMetadataAsync"/>,
-/// <see cref="DurableTaskClient.WaitForInstanceStartAsync"/> and
-/// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync"/>.
+/// <see cref="DurableTaskClient.GetInstanceMetadataAsync(string, CancellationToken)"/>,
+/// <see cref="DurableTaskClient.WaitForInstanceStartAsync(string, CancellationToken)"/> and
+/// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync(string, CancellationToken)"/>.
 /// </remarks>
 public sealed class OrchestrationMetadata
 {
@@ -117,9 +117,9 @@ public sealed class OrchestrationMetadata
     /// </summary>
     /// <remarks>
     /// This method can only be used when inputs and outputs are explicitly requested from the
-    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync"/> or
-    /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync"/> method that produced this
-    /// <see cref="OrchestrationMetadata"/> object.
+    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync(string, CancellationToken)"/> or
+    /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync(string, CancellationToken)"/> method that produced
+    /// this <see cref="OrchestrationMetadata"/> object.
     /// </remarks>
     /// <typeparam name="T">The type to deserialize the orchestration input into.</typeparam>
     /// <returns>Returns the deserialized input value.</returns>
@@ -143,9 +143,9 @@ public sealed class OrchestrationMetadata
     /// </summary>
     /// <remarks>
     /// This method can only be used when inputs and outputs are explicitly requested from the
-    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync"/> or
-    /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync"/> method that produced this
-    /// <see cref="OrchestrationMetadata"/> object.
+    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync(string, CancellationToken)"/> or
+    /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync(string, CancellationToken)"/> method that produced
+    /// this <see cref="OrchestrationMetadata"/> object.
     /// </remarks>
     /// <typeparam name="T">The type to deserialize the orchestration output into.</typeparam>
     /// <returns>Returns the deserialized output value.</returns>
@@ -169,9 +169,9 @@ public sealed class OrchestrationMetadata
     /// </summary>
     /// <remarks>
     /// This method can only be used when inputs and outputs are explicitly requested from the
-    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync"/> or
-    /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync"/> method that produced this
-    /// <see cref="OrchestrationMetadata"/> object.
+    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync(string, CancellationToken)"/> or
+    /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync(string, CancellationToken)"/> method that produced
+    /// this <see cref="OrchestrationMetadata"/> object.
     /// </remarks>
     /// <typeparam name="T">The type to deserialize the orchestration' custom status into.</typeparam>
     /// <returns>Returns the deserialized custom status value.</returns>

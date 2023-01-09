@@ -374,21 +374,13 @@ public abstract class TaskOrchestrationContext
     public ILogger CreateReplaySafeLogger(string categoryName)
         => new ReplaySafeLogger(this, this.LoggerFactory.CreateLogger(categoryName));
 
-    /// <summary>
-    /// Returns an instance of <see cref="ILogger"/> that is replay-safe, meaning that the logger only
-    /// writes logs when the orchestrator is not replaying previous history.
-    /// </summary>
+    /// <inheritdoc cref="CreateReplaySafeLogger(string)" />
     /// <param name="type">The type to derive the category name from.</param>
-    /// <returns>An instance of <see cref="ILogger"/> that is replay-safe.</returns>
     public virtual ILogger CreateReplaySafeLogger(Type type)
         => new ReplaySafeLogger(this, this.LoggerFactory.CreateLogger(type));
 
-    /// <summary>
-    /// Returns an instance of <see cref="ILogger"/> that is replay-safe, meaning that the logger only
-    /// writes logs when the orchestrator is not replaying previous history.
-    /// </summary>
+    /// <inheritdoc cref="CreateReplaySafeLogger(string)" />
     /// <typeparam name="T">The type to derive category name from.</typeparam>
-    /// <returns>An instance of <see cref="ILogger"/> that is replay-safe.</returns>
     public virtual ILogger CreateReplaySafeLogger<T>()
         => new ReplaySafeLogger(this, this.LoggerFactory.CreateLogger<T>());
 

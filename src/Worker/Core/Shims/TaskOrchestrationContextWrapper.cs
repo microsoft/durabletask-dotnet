@@ -29,17 +29,15 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// </summary>
     /// <param name="innerContext">The inner orchestration context.</param>
     /// <param name="invocationContext">The invocation context.</param>
-    /// <param name="logger">The logger.</param>
     /// <param name="deserializedInput">The deserialized input.</param>
     public TaskOrchestrationContextWrapper(
         OrchestrationContext innerContext,
         OrchestrationInvocationContext invocationContext,
-        ILogger logger,
         object? deserializedInput)
     {
         this.innerContext = Check.NotNull(innerContext);
         this.invocationContext = Check.NotNull(invocationContext);
-        this.logger = this.CreateReplaySafeLogger(Check.NotNull(logger));
+        this.logger = this.CreateReplaySafeLogger("Microsoft.DurableTask");
         this.deserializedInput = deserializedInput;
     }
 
@@ -58,9 +56,10 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override DateTime CurrentUtcDateTime => this.innerContext.CurrentUtcDateTime;
 
-    DataConverter DataConverter => this.invocationContext.Options.DataConverter;
+    /// <inheritdoc/>
+    protected override ILoggerFactory LoggerFactory => this.invocationContext.LoggerFactory;
 
-    ILoggerFactory LoggerFactory => this.invocationContext.LoggerFactory;
+    DataConverter DataConverter => this.invocationContext.Options.DataConverter;
 
     /// <inheritdoc/>
     public override T GetInput<T>() => (T)this.deserializedInput!;

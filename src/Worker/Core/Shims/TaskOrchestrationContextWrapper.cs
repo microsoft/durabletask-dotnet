@@ -16,8 +16,6 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 {
     readonly Dictionary<string, IEventSource> externalEventSources = new(StringComparer.OrdinalIgnoreCase);
     readonly NamedQueue<string> externalEventBuffer = new();
-    readonly Queue<Action> localActivityCalls = new();
-
     readonly OrchestrationContext innerContext;
     readonly OrchestrationInvocationContext invocationContext;
     readonly ILogger logger;
@@ -31,17 +29,15 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// </summary>
     /// <param name="innerContext">The inner orchestration context.</param>
     /// <param name="invocationContext">The invocation context.</param>
-    /// <param name="logger">The logger.</param>
     /// <param name="deserializedInput">The deserialized input.</param>
     public TaskOrchestrationContextWrapper(
         OrchestrationContext innerContext,
         OrchestrationInvocationContext invocationContext,
-        ILogger logger,
         object? deserializedInput)
     {
         this.innerContext = Check.NotNull(innerContext);
         this.invocationContext = Check.NotNull(invocationContext);
-        this.logger = this.CreateReplaySafeLogger(Check.NotNull(logger));
+        this.logger = this.CreateReplaySafeLogger("Microsoft.DurableTask");
         this.deserializedInput = deserializedInput;
     }
 
@@ -60,9 +56,10 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override DateTime CurrentUtcDateTime => this.innerContext.CurrentUtcDateTime;
 
-    DataConverter DataConverter => this.invocationContext.Options.DataConverter;
+    /// <inheritdoc/>
+    protected override ILoggerFactory LoggerFactory => this.invocationContext.LoggerFactory;
 
-    ILoggerFactory LoggerFactory => this.invocationContext.LoggerFactory;
+    DataConverter DataConverter => this.invocationContext.Options.DataConverter;
 
     /// <inheritdoc/>
     public override T GetInput<T>() => (T)this.deserializedInput!;
@@ -114,33 +111,6 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             // Hide the core DTFx types and instead use our own
             throw new TaskFailedException(name, e.ScheduleId, e);
         }
-    }
-
-    /// <inheritdoc/>
-    [Obsolete("This method is not yet fully implemented")]
-    public override Task<T> CallActivityAsync<T>(
-        Func<object?, T> activityLambda, object? input = null, TaskOptions? options = null)
-    {
-        if (options != null)
-        {
-            throw new NotImplementedException($"{nameof(TaskOptions)} are not yet supported.");
-        }
-
-        TaskCompletionSource<T> tcs = new();
-        this.localActivityCalls.Enqueue(() =>
-        {
-            try
-            {
-                T output = activityLambda(input);
-                tcs.SetResult(output);
-            }
-            catch (Exception ex)
-            {
-                tcs.SetException(ex);
-            }
-        });
-
-        return tcs.Task;
     }
 
     /// <inheritdoc/>
@@ -257,7 +227,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     }
 
     /// <inheritdoc/>
-    public override void ContinueAsNew(object newInput, bool preserveUnprocessedEvents = true)
+    public override void ContinueAsNew(object? newInput = null, bool preserveUnprocessedEvents = true)
     {
         this.innerContext.ContinueAsNew(newInput);
 
@@ -327,20 +297,6 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         SwapByteArrayValues(newGuidByteArray);
 
         return new Guid(newGuidByteArray);
-    }
-
-    /// <summary>
-    /// Invokes all queued local activity calls.
-    /// </summary>
-    internal void ExecuteLocalActivityCalls()
-    {
-        while (this.localActivityCalls.Count > 0)
-        {
-            Action localActivityLambda = this.localActivityCalls.Dequeue();
-
-            // Exceptions are never expected to escape here
-            localActivityLambda.Invoke();
-        }
     }
 
     /// <summary>

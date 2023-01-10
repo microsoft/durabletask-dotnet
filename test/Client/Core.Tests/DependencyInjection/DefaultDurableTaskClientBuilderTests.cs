@@ -78,7 +78,7 @@ public class DefaultDurableTaskClientBuilderTests
         }
 
         public override Task<OrchestrationMetadata?> GetInstanceMetadataAsync(
-            string instanceId, bool getInputsAndOutputs)
+            string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
         {
             throw new NotImplementedException();
         }
@@ -101,12 +101,13 @@ public class DefaultDurableTaskClientBuilderTests
         }
 
         public override Task RaiseEventAsync(
-            string instanceId, string eventName, object? eventPayload)
+            string instanceId, string eventName, object? eventPayload = null, CancellationToken cancellation = default)
         {
             throw new NotImplementedException();
         }
 
-        public override Task ResumeInstanceAsync(string instanceId, string? reason = null, CancellationToken cancellation = default)
+        public override Task ResumeInstanceAsync(
+            string instanceId, string? reason = null, CancellationToken cancellation = default)
         {
             throw new NotImplementedException();
         }
@@ -114,29 +115,32 @@ public class DefaultDurableTaskClientBuilderTests
         public override Task<string> ScheduleNewOrchestrationInstanceAsync(
             TaskName orchestratorName,
             object? input = null,
-            StartOrchestrationOptions? options = null)
+            StartOrchestrationOptions? options = null,
+            CancellationToken cancellation = default)
         {
             throw new NotImplementedException();
         }
 
-        public override Task SuspendInstanceAsync(string instanceId, string? reason = null, CancellationToken cancellation = default)
+        public override Task SuspendInstanceAsync(
+            string instanceId, string? reason = null, CancellationToken cancellation = default)
         {
             throw new NotImplementedException();
         }
 
-        public override Task TerminateAsync(string instanceId, object? output)
+        public override Task TerminateAsync(
+            string instanceId, object? output = null, CancellationToken cancellation = default)
         {
             throw new NotImplementedException();
         }
 
         public override Task<OrchestrationMetadata> WaitForInstanceCompletionAsync(
-            string instanceId, CancellationToken cancellationToken, bool getInputsAndOutputs = false)
+            string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
         {
             throw new NotImplementedException();
         }
 
         public override Task<OrchestrationMetadata> WaitForInstanceStartAsync(
-            string instanceId, CancellationToken cancellationToken, bool getInputsAndOutputs = false)
+            string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
         {
             throw new NotImplementedException();
         }

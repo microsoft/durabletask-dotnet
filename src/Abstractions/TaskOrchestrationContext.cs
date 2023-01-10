@@ -59,6 +59,11 @@ public abstract class TaskOrchestrationContext
     public abstract bool IsReplaying { get; }
 
     /// <summary>
+    /// Gets the logger factory for this context.
+    /// </summary>
+    protected abstract ILoggerFactory LoggerFactory { get; }
+
+    /// <summary>
     /// Gets the deserialized input of the orchestrator.
     /// </summary>
     /// <typeparam name="T">The expected type of the orchestrator input.</typeparam>
@@ -112,21 +117,6 @@ public abstract class TaskOrchestrationContext
     /// </returns>
     /// <inheritdoc cref="CallActivityAsync"/>
     public abstract Task<T> CallActivityAsync<T>(TaskName name, object? input = null, TaskOptions? options = null);
-
-    /// <summary>
-    /// Asynchronously invokes an activity function on the current machine.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Unlike named activities, anonymous activities are triggered in local memory and always run in the same process
-    /// space as the calling orchestrators. If a machine failure occurs before the anonymous activity completes, then
-    /// the previous orchestration execution will be re-run to re-schedule the anonymous activity.
-    /// </para>
-    /// </remarks>
-    /// <inheritdoc cref="CallActivityAsync{T}(TaskName, object?, TaskOptions?)"/>
-    [Obsolete("This method is not yet fully implemented")]
-    public abstract Task<T> CallActivityAsync<T>(
-        Func<object?, T> activityLambda, object? input = null, TaskOptions? options = null);
 
     /// <summary>
     /// Creates a durable timer that expires after the specified delay.
@@ -262,9 +252,7 @@ public abstract class TaskOrchestrationContext
     /// </typeparam>
     /// <inheritdoc cref="CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)"/>
     public abstract Task<TResult> CallSubOrchestratorAsync<TResult>(
-        TaskName orchestratorName,
-        object? input = null,
-        TaskOptions? options = null);
+        TaskName orchestratorName, object? input = null, TaskOptions? options = null);
 
     /// <summary>
     /// Executes a named sub-orchestrator.
@@ -309,9 +297,7 @@ public abstract class TaskOrchestrationContext
     /// <see cref="TaskFailedException.FailureDetails"/> property.
     /// </exception>
     public Task CallSubOrchestratorAsync(
-        TaskName orchestratorName,
-        object? input = null,
-        TaskOptions? options = null)
+        TaskName orchestratorName, object? input = null, TaskOptions? options = null)
     {
         return this.CallSubOrchestratorAsync<object>(orchestratorName, input, options);
     }
@@ -347,7 +333,7 @@ public abstract class TaskOrchestrationContext
     /// history when the orchestration instance restarts. If <c>false</c>, any unprocessed
     /// external events will be discarded when the orchestration instance restarts.
     /// </param>
-    public abstract void ContinueAsNew(object newInput, bool preserveUnprocessedEvents = true);
+    public abstract void ContinueAsNew(object? newInput = null, bool preserveUnprocessedEvents = true);
 
     /// <summary>
     /// Creates a new GUID that is safe for replay within an orchestration or operation.
@@ -364,18 +350,20 @@ public abstract class TaskOrchestrationContext
     /// Returns an instance of <see cref="ILogger"/> that is replay-safe, meaning that the logger only
     /// writes logs when the orchestrator is not replaying previous history.
     /// </summary>
-    /// <remarks>
-    /// This method wraps the provider <paramref name="logger"/> instance with a new <see cref="ILogger"/>
-    /// implementation that only writes log messages when <see cref="IsReplaying"/> is <c>false</c>.
-    /// The resulting logger can be used normally in orchestrator code without needing to worry about duplicate
-    /// log messages caused by orchestrator replays.
-    /// </remarks>
-    /// <param name="logger">The <see cref="ILogger"/> to be wrapped for use by the orchestration.</param>
-    /// <returns>An instance of <see cref="ILogger"/> that wraps the specified <paramref name="logger"/>.</returns>
-    public ILogger CreateReplaySafeLogger(ILogger logger)
-    {
-        return new ReplaySafeLogger(this, logger);
-    }
+    /// <param name="categoryName">The logger's category name.</param>
+    /// <returns>An instance of <see cref="ILogger"/> that is replay-safe.</returns>
+    public ILogger CreateReplaySafeLogger(string categoryName)
+        => new ReplaySafeLogger(this, this.LoggerFactory.CreateLogger(categoryName));
+
+    /// <inheritdoc cref="CreateReplaySafeLogger(string)" />
+    /// <param name="type">The type to derive the category name from.</param>
+    public virtual ILogger CreateReplaySafeLogger(Type type)
+        => new ReplaySafeLogger(this, this.LoggerFactory.CreateLogger(type));
+
+    /// <inheritdoc cref="CreateReplaySafeLogger(string)" />
+    /// <typeparam name="T">The type to derive category name from.</typeparam>
+    public virtual ILogger CreateReplaySafeLogger<T>()
+        => new ReplaySafeLogger(this, this.LoggerFactory.CreateLogger<T>());
 
     class ReplaySafeLogger : ILogger
     {

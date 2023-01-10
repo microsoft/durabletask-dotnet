@@ -39,7 +39,6 @@ public sealed partial class DurableTaskRegistry
     /// <returns>The same registry, for call chaining.</returns>
     public DurableTaskRegistry AddActivity(TaskName name, Type type)
     {
-        // TODO: Compile a constructor expression for performance -- ActivatorUtilities.CreateFactory
         Check.ConcreteType<ITaskActivity>(type);
         return this.AddActivity(name, sp => (ITaskActivity)ActivatorUtilities.GetServiceOrCreateInstance(sp, type));
     }

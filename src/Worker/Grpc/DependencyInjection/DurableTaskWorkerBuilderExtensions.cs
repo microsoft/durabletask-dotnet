@@ -4,14 +4,6 @@
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 
-#if NET6_0_OR_GREATER
-using Grpc.Net.Client;
-#endif
-
-#if NETSTANDARD2_0
-using GrpcChannel = Grpc.Core.Channel;
-#endif
-
 namespace Microsoft.DurableTask.Worker;
 
 /// <summary>

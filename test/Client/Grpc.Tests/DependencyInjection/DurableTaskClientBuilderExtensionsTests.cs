@@ -3,15 +3,6 @@
 
 using Microsoft.Extensions.DependencyInjection;
 
-#if NET6_0_OR_GREATER
-using Grpc.Net.Client;
-#endif
-
-#if NETFRAMEWORK
-using Grpc.Core;
-using GrpcChannel = Grpc.Core.Channel;
-#endif
-
 namespace Microsoft.DurableTask.Client.Grpc.Tests;
 
 public class DurableTaskClientBuilderExtensionsTests

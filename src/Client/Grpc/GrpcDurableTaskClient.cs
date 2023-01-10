@@ -10,14 +10,6 @@ using Microsoft.Extensions.Options;
 using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
 using P = Microsoft.DurableTask.Protobuf;
 
-#if NET6_0_OR_GREATER
-using Grpc.Net.Client;
-#endif
-
-#if NETSTANDARD2_0
-using GrpcChannel = Grpc.Core.Channel;
-#endif
-
 namespace Microsoft.DurableTask.Client.Grpc;
 
 /// <summary>

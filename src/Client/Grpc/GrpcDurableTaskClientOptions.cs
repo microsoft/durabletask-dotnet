@@ -1,14 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-#if NET6_0_OR_GREATER
-using Grpc.Net.Client;
-#endif
-
-#if NETSTANDARD2_0
-using GrpcChannel = Grpc.Core.Channel;
-#endif
-
 namespace Microsoft.DurableTask.Client.Grpc;
 
 /// <summary>

@@ -5,15 +5,6 @@ using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-#if NET6_0_OR_GREATER
-using Grpc.Net.Client;
-#endif
-
-#if NETSTANDARD2_0
-using Grpc.Core;
-using GrpcChannel = Grpc.Core.Channel;
-#endif
-
 namespace Microsoft.DurableTask.Worker.Grpc;
 
 /// <summary>

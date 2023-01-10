@@ -81,9 +81,9 @@ public interface ITaskOrchestrator
 ///       input.
 ///     </item>
 ///     <item>
-///       Avoid logging directly in the orchestrator code because log messages will be duplicated on each replay.
-///       Instead, use the <see cref="TaskOrchestrationContext.CreateReplaySafeLogger"/> method to wrap an existing
-///       <see cref="ILogger"/> into a new <c>ILogger</c> that automatically filters out replay logs.
+///       When logging, ensure you use only loggers created from
+///       <see cref="TaskOrchestrationContext.CreateReplaySafeLogger(string)"/> or other overloads, as this will ensure
+///       logging is not duplicated on each replay.
 ///     </item>
 ///   </list>
 /// </para>

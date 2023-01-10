@@ -68,7 +68,10 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
     /// <inheritdoc/>
     public override async Task<string> ScheduleNewOrchestrationInstanceAsync(
-        TaskName orchestratorName, object? input = null, StartOrchestrationOptions? options = null)
+        TaskName orchestratorName,
+        object? input = null,
+        StartOrchestrationOptions? options = null,
+        CancellationToken cancellation = default)
     {
         var request = new P.CreateInstanceRequest
         {
@@ -91,12 +94,14 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             request.ScheduledStartTimestamp = Timestamp.FromDateTimeOffset(startAt.Value.ToUniversalTime());
         }
 
-        P.CreateInstanceResponse? result = await this.sidecarClient.StartInstanceAsync(request);
+        P.CreateInstanceResponse? result = await this.sidecarClient.StartInstanceAsync(
+            request, cancellationToken: cancellation);
         return result.InstanceId;
     }
 
     /// <inheritdoc/>
-    public override async Task RaiseEventAsync(string instanceId, string eventName, object? eventPayload)
+    public override async Task RaiseEventAsync(
+        string instanceId, string eventName, object? eventPayload = null, CancellationToken cancellation = default)
     {
         if (string.IsNullOrEmpty(instanceId))
         {
@@ -115,11 +120,12 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             Input = this.DataConverter.Serialize(eventPayload),
         };
 
-        await this.sidecarClient.RaiseEventAsync(request);
+        await this.sidecarClient.RaiseEventAsync(request, cancellationToken: cancellation);
     }
 
     /// <inheritdoc/>
-    public override async Task TerminateAsync(string instanceId, object? output)
+    public override async Task TerminateAsync(
+        string instanceId, object? output = null, CancellationToken cancellation = default)
     {
         if (string.IsNullOrEmpty(instanceId))
         {
@@ -129,17 +135,62 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         this.logger.TerminatingInstance(instanceId);
 
         string? serializedOutput = this.DataConverter.Serialize(output);
-        await this.sidecarClient.TerminateInstanceAsync(new P.TerminateRequest
+        await this.sidecarClient.TerminateInstanceAsync(
+            new P.TerminateRequest
+            {
+                InstanceId = instanceId,
+                Output = serializedOutput,
+            },
+            cancellationToken: cancellation);
+    }
+
+    /// <inheritdoc/>
+    public override async Task SuspendInstanceAsync(
+        string instanceId, string? reason = null, CancellationToken cancellation = default)
+    {
+        P.SuspendRequest request = new()
         {
             InstanceId = instanceId,
-            Output = serializedOutput,
-        });
+            Reason = reason,
+        };
+
+        try
+        {
+            await this.sidecarClient.SuspendInstanceAsync(
+                request, cancellationToken: cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.SuspendInstanceAsync)} operation was canceled.", e, cancellation);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override async Task ResumeInstanceAsync(
+        string instanceId, string? reason = null, CancellationToken cancellation = default)
+    {
+        P.ResumeRequest request = new()
+        {
+            InstanceId = instanceId,
+            Reason = reason,
+        };
+
+        try
+        {
+            await this.sidecarClient.ResumeInstanceAsync(
+                request, cancellationToken: cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.ResumeInstanceAsync)} operation was canceled.", e, cancellation);
+        }
     }
 
     /// <inheritdoc/>
     public override async Task<OrchestrationMetadata?> GetInstanceMetadataAsync(
-        string instanceId,
-        bool getInputsAndOutputs = false)
+        string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {
         if (string.IsNullOrEmpty(instanceId))
         {
@@ -151,7 +202,8 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             {
                 InstanceId = instanceId,
                 GetInputsAndOutputs = getInputsAndOutputs,
-            });
+            },
+            cancellationToken: cancellation);
 
         // REVIEW: Should we return a non-null value instead of !exists?
         if (!response.Exists)
@@ -212,9 +264,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
     /// <inheritdoc/>
     public override async Task<OrchestrationMetadata> WaitForInstanceStartAsync(
-        string instanceId,
-        CancellationToken cancellationToken,
-        bool getInputsAndOutputs = false)
+        string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {
         this.logger.WaitingForInstanceStart(instanceId, getInputsAndOutputs);
 
@@ -224,27 +274,22 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             GetInputsAndOutputs = getInputsAndOutputs,
         };
 
-        P.GetInstanceResponse response;
         try
         {
-            response = await this.sidecarClient.WaitForInstanceStartAsync(
-                request,
-                cancellationToken: cancellationToken);
+            P.GetInstanceResponse response = await this.sidecarClient.WaitForInstanceStartAsync(
+                request, cancellationToken: cancellation);
+            return this.CreateMetadata(response.OrchestrationState, getInputsAndOutputs);
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
             throw new OperationCanceledException(
-                $"The {nameof(this.WaitForInstanceStartAsync)} operation was canceled.", e, cancellationToken);
+                $"The {nameof(this.WaitForInstanceStartAsync)} operation was canceled.", e, cancellation);
         }
-
-        return this.CreateMetadata(response.OrchestrationState, getInputsAndOutputs);
     }
 
     /// <inheritdoc/>
     public override async Task<OrchestrationMetadata> WaitForInstanceCompletionAsync(
-        string instanceId,
-        CancellationToken cancellationToken,
-        bool getInputsAndOutputs = false)
+        string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {
         this.logger.WaitingForInstanceCompletion(instanceId, getInputsAndOutputs);
 
@@ -254,20 +299,17 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             GetInputsAndOutputs = getInputsAndOutputs,
         };
 
-        P.GetInstanceResponse response;
         try
         {
-            response = await this.sidecarClient.WaitForInstanceCompletionAsync(
-                request,
-                cancellationToken: cancellationToken);
+            P.GetInstanceResponse response = await this.sidecarClient.WaitForInstanceCompletionAsync(
+                request, cancellationToken: cancellation);
+            return this.CreateMetadata(response.OrchestrationState, getInputsAndOutputs);
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
             throw new OperationCanceledException(
-                $"The {nameof(this.WaitForInstanceCompletionAsync)} operation was canceled.", e, cancellationToken);
+                $"The {nameof(this.WaitForInstanceCompletionAsync)} operation was canceled.", e, cancellation);
         }
-
-        return this.CreateMetadata(response.OrchestrationState, getInputsAndOutputs);
     }
 
     /// <inheritdoc/>

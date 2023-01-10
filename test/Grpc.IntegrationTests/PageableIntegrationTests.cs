@@ -32,9 +32,7 @@ public class PageableIntegrationTests : IntegrationTestBase
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
             orchestratorName, input: string.Empty);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
 
         metadata.ReadOutputAs<int>().Should().Be(9);
     }

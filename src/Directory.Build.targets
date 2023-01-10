@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="$(AssemblyName).Tests" Key="$(StrongNamePublicKey)" />
+    <InternalsVisibleTo Include="Benchmarks" Key="$(StrongNamePublicKey)" />
   </ItemGroup>
 
   <Import Project="$(EngRoot)targets/SharedFiles.targets" />

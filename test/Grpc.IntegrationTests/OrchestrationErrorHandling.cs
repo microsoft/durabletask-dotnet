@@ -41,9 +41,7 @@ public class OrchestrationErrorHandling : IntegrationTestBase
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
 
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
@@ -93,9 +91,7 @@ public class OrchestrationErrorHandling : IntegrationTestBase
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
 
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
@@ -144,9 +140,7 @@ public class OrchestrationErrorHandling : IntegrationTestBase
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
 
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
@@ -206,9 +200,7 @@ public class OrchestrationErrorHandling : IntegrationTestBase
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
 
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
@@ -251,9 +243,7 @@ public class OrchestrationErrorHandling : IntegrationTestBase
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
 
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
@@ -313,9 +303,7 @@ public class OrchestrationErrorHandling : IntegrationTestBase
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId,
-            this.TimeoutToken,
-            getInputsAndOutputs: true);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
 
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);

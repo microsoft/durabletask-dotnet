@@ -16,8 +16,6 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 {
     readonly Dictionary<string, IEventSource> externalEventSources = new(StringComparer.OrdinalIgnoreCase);
     readonly NamedQueue<string> externalEventBuffer = new();
-    readonly Queue<Action> localActivityCalls = new();
-
     readonly OrchestrationContext innerContext;
     readonly OrchestrationInvocationContext invocationContext;
     readonly ILogger logger;
@@ -113,33 +111,6 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             // Hide the core DTFx types and instead use our own
             throw new TaskFailedException(name, e.ScheduleId, e);
         }
-    }
-
-    /// <inheritdoc/>
-    [Obsolete("This method is not yet fully implemented")]
-    public override Task<T> CallActivityAsync<T>(
-        Func<object?, T> activityLambda, object? input = null, TaskOptions? options = null)
-    {
-        if (options != null)
-        {
-            throw new NotImplementedException($"{nameof(TaskOptions)} are not yet supported.");
-        }
-
-        TaskCompletionSource<T> tcs = new();
-        this.localActivityCalls.Enqueue(() =>
-        {
-            try
-            {
-                T output = activityLambda(input);
-                tcs.SetResult(output);
-            }
-            catch (Exception ex)
-            {
-                tcs.SetException(ex);
-            }
-        });
-
-        return tcs.Task;
     }
 
     /// <inheritdoc/>
@@ -326,20 +297,6 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         SwapByteArrayValues(newGuidByteArray);
 
         return new Guid(newGuidByteArray);
-    }
-
-    /// <summary>
-    /// Invokes all queued local activity calls.
-    /// </summary>
-    internal void ExecuteLocalActivityCalls()
-    {
-        while (this.localActivityCalls.Count > 0)
-        {
-            Action localActivityLambda = this.localActivityCalls.Dequeue();
-
-            // Exceptions are never expected to escape here
-            localActivityLambda.Invoke();
-        }
     }
 
     /// <summary>

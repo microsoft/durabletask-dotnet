@@ -119,21 +119,6 @@ public abstract class TaskOrchestrationContext
     public abstract Task<T> CallActivityAsync<T>(TaskName name, object? input = null, TaskOptions? options = null);
 
     /// <summary>
-    /// Asynchronously invokes an activity function on the current machine.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Unlike named activities, anonymous activities are triggered in local memory and always run in the same process
-    /// space as the calling orchestrators. If a machine failure occurs before the anonymous activity completes, then
-    /// the previous orchestration execution will be re-run to re-schedule the anonymous activity.
-    /// </para>
-    /// </remarks>
-    /// <inheritdoc cref="CallActivityAsync{T}(TaskName, object?, TaskOptions?)"/>
-    [Obsolete("This method is not yet fully implemented")]
-    public abstract Task<T> CallActivityAsync<T>(
-        Func<object?, T> activityLambda, object? input = null, TaskOptions? options = null);
-
-    /// <summary>
     /// Creates a durable timer that expires after the specified delay.
     /// </summary>
     /// <remarks>
@@ -267,9 +252,7 @@ public abstract class TaskOrchestrationContext
     /// </typeparam>
     /// <inheritdoc cref="CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)"/>
     public abstract Task<TResult> CallSubOrchestratorAsync<TResult>(
-        TaskName orchestratorName,
-        object? input = null,
-        TaskOptions? options = null);
+        TaskName orchestratorName, object? input = null, TaskOptions? options = null);
 
     /// <summary>
     /// Executes a named sub-orchestrator.
@@ -314,9 +297,7 @@ public abstract class TaskOrchestrationContext
     /// <see cref="TaskFailedException.FailureDetails"/> property.
     /// </exception>
     public Task CallSubOrchestratorAsync(
-        TaskName orchestratorName,
-        object? input = null,
-        TaskOptions? options = null)
+        TaskName orchestratorName, object? input = null, TaskOptions? options = null)
     {
         return this.CallSubOrchestratorAsync<object>(orchestratorName, input, options);
     }

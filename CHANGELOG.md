@@ -6,6 +6,7 @@
 - Durable Functions class-based syntax now resolves `ITaskActivity` instances from `IServiceProvider`, if available there.
 - `DurableTaskClient` methods have been touched up to ensure `CancellationToken` is included, as well as is the last parameter.
 - Removed obsolete/unimplemented local lambda activity calls from `TaskOrchestrationContext`
+- Input is now an optional parameter on `TaskOrchestrationContext.ContinueAsNew`
 
 ## v1.0.0-rc.1
 

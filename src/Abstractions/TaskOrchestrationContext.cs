@@ -333,7 +333,7 @@ public abstract class TaskOrchestrationContext
     /// history when the orchestration instance restarts. If <c>false</c>, any unprocessed
     /// external events will be discarded when the orchestration instance restarts.
     /// </param>
-    public abstract void ContinueAsNew(object newInput, bool preserveUnprocessedEvents = true);
+    public abstract void ContinueAsNew(object? newInput = null, bool preserveUnprocessedEvents = true);
 
     /// <summary>
     /// Creates a new GUID that is safe for replay within an orchestration or operation.

@@ -227,7 +227,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     }
 
     /// <inheritdoc/>
-    public override void ContinueAsNew(object newInput, bool preserveUnprocessedEvents = true)
+    public override void ContinueAsNew(object? newInput = null, bool preserveUnprocessedEvents = true)
     {
         this.innerContext.ContinueAsNew(newInput);
 

@@ -136,11 +136,23 @@ public class DurableTaskClientBuilderExtensionsTests
             throw new NotImplementedException();
         }
 
+        public override Task ResumeInstanceAsync(
+            string instanceId, string? reason = null, CancellationToken cancellation = default)
+        {
+            throw new NotImplementedException();
+        }
+
         public override Task<string> ScheduleNewOrchestrationInstanceAsync(
             TaskName orchestratorName,
             object? input = null,
             StartOrchestrationOptions? options = null,
             CancellationToken cancellation = default)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override Task SuspendInstanceAsync(
+            string instanceId, string? reason = null, CancellationToken cancellation = default)
         {
             throw new NotImplementedException();
         }

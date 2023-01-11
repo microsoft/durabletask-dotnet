@@ -231,7 +231,7 @@ sealed partial class GrpcDurableTaskWorker
             {
                 // This is not expected: Normally TaskOrchestrationExecutor handles exceptions in user code.
                 this.Logger.OrchestratorFailed(name, request.InstanceId, unexpected.ToString());
-                failureDetails = ProtoUtils.ToTaskFailureDetails(unexpected);
+                failureDetails = unexpected.ToTaskFailureDetails();
             }
 
             P.OrchestratorResponse response;

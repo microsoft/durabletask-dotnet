@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using DurableTask.Core;
-using Grpc.Core;
+using Grpc.Net.Client;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -16,9 +16,7 @@ namespace Microsoft.DurableTask.Grpc.Tests;
 
 public sealed class GrpcSidecarFixture : IDisposable
 {
-    // Use a random port number to allow multiple instances to run in parallel
     const string ListenHost = "localhost";
-    readonly int ListenPort = Random.Shared.Next(30000, 40000);
 
     readonly IWebHost host;
 
@@ -26,6 +24,8 @@ public sealed class GrpcSidecarFixture : IDisposable
     {
         InMemoryOrchestrationService service = new();
 
+        // Use a random port number to allow multiple instances to run in parallel
+        string address = $"http://{ListenHost}:{Random.Shared.Next(30000, 40000)}";
         this.host = new WebHostBuilder()
             .UseKestrel(options =>
             {
@@ -33,7 +33,7 @@ public sealed class GrpcSidecarFixture : IDisposable
                 // https://docs.microsoft.com/en-us/aspnet/core/grpc/troubleshoot?view=aspnetcore-3.0
                 options.ConfigureEndpointDefaults(listenOptions => listenOptions.Protocols = HttpProtocols.Http2);
             })
-            .UseUrls($"http://{ListenHost}:{this.ListenPort}")
+            .UseUrls(address)
             .ConfigureServices(services =>
             {
                 services.AddGrpc();
@@ -53,10 +53,10 @@ public sealed class GrpcSidecarFixture : IDisposable
 
         this.host.Start();
 
-        this.Channel = new Channel(ListenHost, this.ListenPort, ChannelCredentials.Insecure);
+        this.Channel = GrpcChannel.ForAddress(address);
     }
 
-    public Channel Channel { get; }
+    public GrpcChannel Channel { get; }
 
     public void Dispose()
     {

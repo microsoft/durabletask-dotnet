@@ -53,8 +53,9 @@ class ShimDurableTaskClient : DurableTaskClient
 
     /// <inheritdoc/>
     public override async Task<OrchestrationMetadata?> GetInstanceMetadataAsync(
-        string instanceId, bool getInputsAndOutputs)
+        string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {
+        cancellation.ThrowIfCancellationRequested();
         IList<Core.OrchestrationState> states = await this.Client.GetOrchestrationStateAsync(instanceId, false);
         if (states is null or { Count: 0 })
         {
@@ -113,24 +114,25 @@ class ShimDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override Task RaiseEventAsync(string instanceId, string eventName, object? eventPayload)
+    public override Task RaiseEventAsync(
+        string instanceId, string eventName, object? eventPayload = null, CancellationToken cancellation = default)
     {
         Check.NotNullOrEmpty(instanceId);
+        Check.NotNullOrEmpty(eventName);
 
         string? serializedInput = this.DataConverter.Serialize(eventPayload);
-        TaskMessage message = new()
-        {
-            OrchestrationInstance = new() { InstanceId = instanceId },
-            Event = new EventRaisedEvent(-1, serializedInput) { Name = eventName },
-        };
-
-        return this.Client.SendTaskOrchestrationMessageAsync(message);
+        return this.SendInstanceMessageAsync(
+            instanceId, new EventRaisedEvent(-1, serializedInput) { Name = eventName }, cancellation);
     }
 
     /// <inheritdoc/>
     public override async Task<string> ScheduleNewOrchestrationInstanceAsync(
-        TaskName orchestratorName, object? input = null, StartOrchestrationOptions? options = null)
+        TaskName orchestratorName,
+        object? input = null,
+        StartOrchestrationOptions? options = null,
+        CancellationToken cancellation = default)
     {
+        cancellation.ThrowIfCancellationRequested();
         string instanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N");
         OrchestrationInstance instance = new()
         {
@@ -156,32 +158,45 @@ class ShimDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override Task TerminateAsync(string instanceId, object? output)
+    public override Task SuspendInstanceAsync(
+        string instanceId, string? reason = null, CancellationToken cancellation = default)
+        => this.SendInstanceMessageAsync(instanceId, new ExecutionSuspendedEvent(-1, reason), cancellation);
+
+    /// <inheritdoc/>
+    public override Task ResumeInstanceAsync(
+        string instanceId, string? reason = null, CancellationToken cancellation = default)
+        => this.SendInstanceMessageAsync(instanceId, new ExecutionResumedEvent(-1, reason), cancellation);
+
+    /// <inheritdoc/>
+    public override Task TerminateAsync(
+        string instanceId, object? output = null, CancellationToken cancellation = default)
     {
+        Check.NotNullOrEmpty(instanceId);
+        cancellation.ThrowIfCancellationRequested();
         string? reason = this.DataConverter.Serialize(output);
         return this.Client.ForceTerminateTaskOrchestrationAsync(instanceId, reason);
     }
 
     /// <inheritdoc/>
     public override async Task<OrchestrationMetadata> WaitForInstanceCompletionAsync(
-        string instanceId, CancellationToken cancellationToken, bool getInputsAndOutputs = false)
+        string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {
         Check.NotNullOrEmpty(instanceId);
         OrchestrationState state = await this.Client.WaitForOrchestrationAsync(
-            instanceId, null, TimeSpan.MaxValue, cancellationToken);
+            instanceId, null, TimeSpan.MaxValue, cancellation);
         return this.ToMetadata(state, getInputsAndOutputs);
     }
 
     /// <inheritdoc/>
     public override async Task<OrchestrationMetadata> WaitForInstanceStartAsync(
-        string instanceId, CancellationToken cancellationToken, bool getInputsAndOutputs = false)
+        string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {
         Check.NotNullOrEmpty(instanceId);
 
         while (true)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            OrchestrationMetadata? metadata = await this.GetInstanceMetadataAsync(instanceId, getInputsAndOutputs);
+            OrchestrationMetadata? metadata = await this.GetInstanceMetadataAsync(
+                instanceId, getInputsAndOutputs, cancellation);
             if (metadata is null)
             {
                 throw new InvalidOperationException($"Orchestration with instanceId '{instanceId}' does not exist");
@@ -193,7 +208,7 @@ class ShimDurableTaskClient : DurableTaskClient
                 return metadata;
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(5));
+            await Task.Delay(TimeSpan.FromSeconds(5), cancellation);
         }
     }
 
@@ -226,5 +241,21 @@ class ShimDurableTaskClient : DurableTaskClient
         }
 
         throw new NotSupportedException($"Provided IOrchestrationClient does not implement {typeof(T)}.");
+    }
+
+    Task SendInstanceMessageAsync(string instanceId, HistoryEvent @event, CancellationToken cancellation)
+    {
+        Check.NotNullOrEmpty(instanceId);
+        Check.NotNull(@event);
+
+        cancellation.ThrowIfCancellationRequested();
+
+        TaskMessage message = new()
+        {
+            OrchestrationInstance = new() { InstanceId = instanceId },
+            Event = @event,
+        };
+
+        return this.Client.SendTaskOrchestrationMessageAsync(message);
     }
 }

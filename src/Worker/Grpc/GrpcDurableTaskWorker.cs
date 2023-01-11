@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Grpc.Core;
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -43,23 +42,44 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await using AsyncDisposable disposable = this.BuildChannel(out Channel channel);
+        await using AsyncDisposable disposable = this.BuildChannel(out GrpcChannel channel);
         this.logger.StartingTaskHubWorker(channel.Target);
         await new Processor(this, new(channel)).ExecuteAsync(channel.Target, stoppingToken);
     }
 
-    AsyncDisposable BuildChannel(out Channel channel)
+#if NET6_0_OR_GREATER
+    static GrpcChannel GetChannel(string? address)
     {
-        if (this.options.Channel is Channel c)
+        if (string.IsNullOrEmpty(address))
+        {
+            address = "http://localhost:4001";
+        }
+
+        return GrpcChannel.ForAddress(address);
+    }
+#endif
+
+#if NETSTANDARD2_0
+    static GrpcChannel GetChannel(string? address)
+    {
+        if (string.IsNullOrEmpty(address))
+        {
+            address = "localhost:4001";
+        }
+
+        return new(address, ChannelCredentials.Insecure);
+    }
+#endif
+
+    AsyncDisposable BuildChannel(out GrpcChannel channel)
+    {
+        if (this.options.Channel is GrpcChannel c)
         {
             channel = c;
             return default;
         }
 
-        string address = string.IsNullOrEmpty(this.options.Address) ? "localhost:4001" : this.options.Address!;
-
-        // TODO: use SSL channel by default?
-        c = new(address, ChannelCredentials.Insecure);
+        c = GetChannel(this.options.Address);
         channel = c;
         return new AsyncDisposable(async () => await c.ShutdownAsync());
     }

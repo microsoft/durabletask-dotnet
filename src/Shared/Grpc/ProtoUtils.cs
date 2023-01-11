@@ -60,6 +60,12 @@ static class ProtoUtils
             case P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated:
                 historyEvent = new ExecutionTerminatedEvent(proto.EventId, proto.ExecutionTerminated.Input);
                 break;
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionSuspended:
+                historyEvent = new ExecutionSuspendedEvent(proto.EventId, proto.ExecutionSuspended.Input);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionResumed:
+                historyEvent = new ExecutionResumedEvent(proto.EventId, proto.ExecutionResumed.Input);
+                break;
             case P.HistoryEvent.EventTypeOneofCase.TaskScheduled:
                 historyEvent = new TaskScheduledEvent(
                     proto.EventId,

@@ -61,6 +61,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.CompatShim", "src\Cl
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.CompatShim.Tests", "test\Client\CompatShim.Tests\Client.CompatShim.Tests.csproj", "{93E3B973-0FC4-4241-B7BB-064FB538FB50}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Benchmarks", "test\Benchmarks\Benchmarks.csproj", "{82C0CD7D-2764-421A-8256-7E2304D5A6E7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -155,6 +157,10 @@ Global
 		{93E3B973-0FC4-4241-B7BB-064FB538FB50}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{93E3B973-0FC4-4241-B7BB-064FB538FB50}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{93E3B973-0FC4-4241-B7BB-064FB538FB50}.Release|Any CPU.Build.0 = Release|Any CPU
+		{82C0CD7D-2764-421A-8256-7E2304D5A6E7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{82C0CD7D-2764-421A-8256-7E2304D5A6E7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{82C0CD7D-2764-421A-8256-7E2304D5A6E7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{82C0CD7D-2764-421A-8256-7E2304D5A6E7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -185,6 +191,7 @@ Global
 		{57A4C812-B0D9-49E9-9EBE-7E94D3D78ED7} = {8AFC9781-F6F1-4696-BB4A-9ED7CA9D612B}
 		{505F6151-6E36-4E0A-A740-14751B8A9397} = {1C217BB2-CE16-41CC-9D47-0FC0DB60BDB3}
 		{93E3B973-0FC4-4241-B7BB-064FB538FB50} = {5AD837BC-78F3-4543-8AA3-DF74D0DF94C0}
+		{82C0CD7D-2764-421A-8256-7E2304D5A6E7} = {E5637F81-2FB9-4CD7-900D-455363B142A7}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AB41CB55-35EA-4986-A522-387AB3402E71}

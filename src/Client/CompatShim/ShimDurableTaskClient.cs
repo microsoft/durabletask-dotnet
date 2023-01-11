@@ -5,6 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 using DurableTask.Core;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Core = DurableTask.Core;
 using CoreOrchestrationQuery = DurableTask.Core.Query.OrchestrationQuery;
@@ -23,11 +24,22 @@ class ShimDurableTaskClient : DurableTaskClient
     /// </summary>
     /// <param name="name">The name of this client.</param>
     /// <param name="options">The client options.</param>
+    [ActivatorUtilitiesConstructor]
     public ShimDurableTaskClient(
         string name, IOptionsMonitor<ShimDurableTaskClientOptions> options)
+        : this(name, Check.NotNull(options).Get(name))
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ShimDurableTaskClient"/> class.
+    /// </summary>
+    /// <param name="name">The name of the client.</param>
+    /// <param name="options">The client options.</param>
+    public ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options)
         : base(name)
     {
-        this.options = Check.NotNull(options?.Get(name), nameof(options));
+        this.options = Check.NotNull(options);
     }
 
     DataConverter DataConverter => this.options.DataConverter;
@@ -44,7 +56,7 @@ class ShimDurableTaskClient : DurableTaskClient
         string instanceId, bool getInputsAndOutputs)
     {
         IList<Core.OrchestrationState> states = await this.Client.GetOrchestrationStateAsync(instanceId, false);
-        if (states is null || states.Count == 0)
+        if (states is null or { Count: 0 })
         {
             return null;
         }

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using DurableTask.Core;
+using DurableTask.Core.History;
 using DurableTask.Core.Query;
 using Microsoft.DurableTask.Converters;
 using Microsoft.Extensions.Options;
@@ -66,7 +67,7 @@ public class ShimDurableTaskClientTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task GetInstanceMetadata_Results_Success(bool getInputs)
+    public async Task GetInstanceMetadata_Results(bool getInputs)
     {
         // arrange
         List<Core.OrchestrationState> states = new() { CreateState("input") };
@@ -83,7 +84,7 @@ public class ShimDurableTaskClientTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task GetInstances_Results_Success(bool getInputs)
+    public async Task GetInstances_Results(bool getInputs)
     {
         // arrange
         DateTimeOffset utcNow = DateTimeOffset.UtcNow;
@@ -109,6 +110,7 @@ public class ShimDurableTaskClientTests
         List<OrchestrationMetadata> result = await this.client.GetInstances(query).ToListAsync();
 
         // assert
+        this.orchestrationClient.VerifyAll();
         foreach ((OrchestrationMetadata left, Core.OrchestrationState right) in result.Zip(states))
         {
             Validate(left, right, getInputs);
@@ -116,7 +118,7 @@ public class ShimDurableTaskClientTests
     }
 
     [Fact]
-    public async Task PurgeInstanceMetadata_Success()
+    public async Task PurgeInstanceMetadata()
     {
         // arrange
         string instanceId = Guid.NewGuid().ToString();
@@ -126,11 +128,12 @@ public class ShimDurableTaskClientTests
         PurgeResult result = await this.client.PurgeInstanceMetadataAsync(instanceId);
 
         // assert
+        this.orchestrationClient.VerifyAll();
         result.PurgedInstanceCount.Should().Be(1);
     }
 
     [Fact]
-    public async Task PurgeInstances_Success()
+    public async Task PurgeInstances()
     {
         // arrange
         PurgeInstanceFilter filter = new(CreatedTo: DateTimeOffset.UtcNow);
@@ -141,8 +144,127 @@ public class ShimDurableTaskClientTests
         PurgeResult result = await this.client.PurgeInstancesAsync(filter);
 
         // assert
+        this.orchestrationClient.VerifyAll();
         result.PurgedInstanceCount.Should().Be(10);
     }
+
+    [Fact]
+    public async Task RaiseEvent()
+    {
+        // arrange
+        string instanceId = Guid.NewGuid().ToString();
+        this.SetupClientTaskMessage<EventRaisedEvent>(instanceId);
+
+        // act
+        await this.client.RaiseEventAsync(instanceId, "test-event", null, default);
+
+        // assert
+        this.orchestrationClient.VerifyAll();
+    }
+
+    [Fact]
+    public async Task SuspendInstance()
+    {
+        // arrange
+        string instanceId = Guid.NewGuid().ToString();
+        this.SetupClientTaskMessage<ExecutionSuspendedEvent>(instanceId);
+
+        // act
+        await this.client.SuspendInstanceAsync(instanceId, null, default);
+
+        // assert
+        this.orchestrationClient.VerifyAll();
+    }
+
+    [Fact]
+    public async Task ResumeInstance()
+    {
+        // arrange
+        string instanceId = Guid.NewGuid().ToString();
+        this.SetupClientTaskMessage<ExecutionResumedEvent>(instanceId);
+
+        // act
+        await this.client.ResumeInstanceAsync(instanceId, null, default);
+
+        // assert
+        this.orchestrationClient.VerifyAll();
+    }
+
+    [Fact]
+    public async Task TerminateInstance()
+    {
+        // arrange
+        string instanceId = Guid.NewGuid().ToString();
+        this.orchestrationClient.Setup(m => m.ForceTerminateTaskOrchestrationAsync(instanceId, null))
+            .Returns(Task.CompletedTask);
+
+        // act
+        await this.client.TerminateAsync(instanceId, null, default);
+
+        // assert
+        this.orchestrationClient.VerifyAll();
+    }
+
+    [Fact]
+    public async Task WaitForInstanceCompletion()
+    {
+        // arrange
+        Core.OrchestrationState state = CreateState("input", "output");
+        this.orchestrationClient.Setup(
+            m => m.WaitForOrchestrationAsync(state.OrchestrationInstance.InstanceId, null, TimeSpan.MaxValue, default))
+            .ReturnsAsync(state);
+
+        // act
+        OrchestrationMetadata metadata = await this.client.WaitForInstanceCompletionAsync(
+            state.OrchestrationInstance.InstanceId, false, default);
+
+        // assert
+        this.orchestrationClient.VerifyAll();
+        Validate(metadata, state, false);
+    }
+
+    [Fact]
+    public async Task WaitForInstanceStart()
+    {
+        // arrange
+        DateTimeOffset start = DateTimeOffset.UtcNow;
+        OrchestrationInstance instance = new()
+        {
+            InstanceId = Guid.NewGuid().ToString(),
+            ExecutionId = Guid.NewGuid().ToString(),
+        };
+
+        Core.OrchestrationState state1 = CreateState("input", start: start);
+        state1.OrchestrationInstance = instance;
+        state1.OrchestrationStatus = Core.OrchestrationStatus.Pending;
+        Core.OrchestrationState state2 = CreateState("input", start: start);
+        state1.OrchestrationInstance = instance;
+        this.orchestrationClient.SetupSequence(m => m.GetOrchestrationStateAsync(instance.InstanceId, false))
+            .ReturnsAsync(new[] { state1 })
+            .ReturnsAsync(new[] { state2 });
+
+        // act
+        OrchestrationMetadata metadata = await this.client.WaitForInstanceStartAsync(
+            instance.InstanceId, false, default);
+
+        // assert
+        this.orchestrationClient.Verify(
+            m => m.GetOrchestrationStateAsync(instance.InstanceId, false), Times.Exactly(2));
+        Validate(metadata, state2, false);
+    }
+
+    [Fact]
+    public Task ScheduleNewOrchestrationInstance_IdGenerated_NoInput()
+        => this.RunScheduleNewOrchestrationInstanceAsync("test", null, null);
+
+    [Fact]
+    public Task ScheduleNewOrchestrationInstance_IdProvided_InputProvided()
+        => this.RunScheduleNewOrchestrationInstanceAsync("test", "input", new() { InstanceId = "test-id" });
+
+    [Fact]
+    public Task ScheduleNewOrchestrationInstance_StartAt()
+        => this.RunScheduleNewOrchestrationInstanceAsync(
+            "test", null, new() { StartAt = DateTimeOffset.UtcNow.AddHours(1) });
 
     static Core.OrchestrationState CreateState(
         object input, object? output = null, DateTimeOffset start = default)
@@ -150,6 +272,11 @@ public class ShimDurableTaskClientTests
         string? serializedOutput = null;
         FailureDetails? failure = null;
         OrchestrationStatus status = OrchestrationStatus.Running;
+
+        if (start == default)
+        {
+            start = DateTimeOffset.UtcNow.AddMinutes(-10);
+        }
 
         switch (output)
         {
@@ -181,6 +308,42 @@ public class ShimDurableTaskClientTests
             Status = JsonDataConverter.Default.Serialize("custom-status"),
             Version = string.Empty,
         };
+    }
+
+    static TaskMessage MatchStartExecutionMessage(TaskName name, object? input, StartOrchestrationOptions? options)
+    {
+        return Match.Create<TaskMessage>(m =>
+        {
+            if (m.Event is not ExecutionStartedEvent @event)
+            {
+                return false;
+            }
+
+            
+            if (options?.InstanceId is string str && m.OrchestrationInstance.InstanceId != str)
+            {
+                return false;
+            }
+            else if (options?.InstanceId  is null && !Guid.TryParse(m.OrchestrationInstance.InstanceId, out _))
+            {
+                return false;
+            }
+
+            if (options?.StartAt is DateTimeOffset start && @event.ScheduledStartTime != start.UtcDateTime)
+            {
+                return false;
+            }
+            else if (options?.StartAt is null && @event.ScheduledStartTime is not null)
+            {
+                return false;
+            }
+
+            return Guid.TryParse(m.OrchestrationInstance.ExecutionId, out _)
+                && @event.Name == name.Name && @event.Version == name.Version
+                && @event.OrchestrationInstance == m.OrchestrationInstance
+                && @event.EventId == -1
+                && @event.Input == JsonDataConverter.Default.Serialize(input);
+        });
     }
 
     static void Validate(OrchestrationMetadata? metadata, Core.OrchestrationState? state, bool getInputs)
@@ -220,5 +383,41 @@ public class ShimDurableTaskClientTests
         left.ErrorMessage.Should().Be(right.ErrorMessage);
         left.StackTrace.Should().Be(right.StackTrace);
         Validate(left.InnerFailure, right.InnerFailure);
+    }
+
+    void SetupClientTaskMessage<TEvent>(string instanceId)
+        where TEvent : HistoryEvent
+    {
+        this.orchestrationClient
+            .Setup(m => m.SendTaskOrchestrationMessageAsync(It.Is<TaskMessage>(m =>
+                m.OrchestrationInstance.InstanceId == instanceId && m.Event.GetType() == typeof(TEvent))
+            ))
+            .Returns(Task.CompletedTask);
+    }
+
+    async Task RunScheduleNewOrchestrationInstanceAsync(
+        TaskName name, object? input, StartOrchestrationOptions? options)
+    {
+        // arrange
+        this.orchestrationClient.Setup(
+            m => m.CreateTaskOrchestrationAsync(MatchStartExecutionMessage(name, input, options)))
+            .Returns(Task.CompletedTask);
+
+        // act
+        string instanceId = await this.client.ScheduleNewOrchestrationInstanceAsync(name, input, options, default);
+
+        // assert
+        this.orchestrationClient.Verify(
+            m => m.CreateTaskOrchestrationAsync(MatchStartExecutionMessage(name, input, options)),
+            Times.Once());
+
+        if (options?.InstanceId is string str)
+        {
+            instanceId.Should().Be(str);
+        }
+        else
+        {
+            Guid.TryParse(instanceId, out _).Should().BeTrue();
+        }
     }
 }

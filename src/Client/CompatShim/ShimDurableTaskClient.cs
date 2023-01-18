@@ -208,7 +208,7 @@ class ShimDurableTaskClient : DurableTaskClient
                 return metadata;
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(5), cancellation);
+            await Task.Delay(TimeSpan.FromSeconds(1), cancellation);
         }
     }
 

@@ -91,7 +91,7 @@ public abstract class TaskOrchestrationContext
     /// to not include any sensitive data in activity inputs or outputs. It's also recommended to not use large payloads
     /// for activity inputs and outputs, which can result in expensive serialization and network utilization. For data
     /// that cannot be cheaply or safely persisted to storage, it's recommended to instead pass <em>references</em>
-    /// (for example, a URL to a storage blog) to the data and have activities fetch the data directly as part of their
+    /// (for example, a URL to a storage blob) to the data and have activities fetch the data directly as part of their
     /// implementation.
     /// </para>
     /// </remarks>
@@ -99,7 +99,7 @@ public abstract class TaskOrchestrationContext
     /// <param name="input">The serializable input to pass to the activity.</param>
     /// <param name="options">Additional options that control the execution and processing of the activity.</param>
     /// <returns>A task that completes when the activity completes or fails.</returns>
-    /// <exception cref="ArgumentException">The specified orchestrator does not exist.</exception>
+    /// <exception cref="ArgumentException">The specified activity does not exist.</exception>
     /// <exception cref="InvalidOperationException">
     /// Thrown if the calling thread is anything other than the main orchestrator thread.
     /// </exception>
@@ -293,7 +293,7 @@ public abstract class TaskOrchestrationContext
     /// Thrown if the calling thread is anything other than the main orchestrator thread.
     /// </exception>
     /// <exception cref="TaskFailedException">
-    /// The activity failed with an unhandled exception. The details of the failure can be found in the
+    /// The sub-orchestration failed with an unhandled exception. The details of the failure can be found in the
     /// <see cref="TaskFailedException.FailureDetails"/> property.
     /// </exception>
     public Task CallSubOrchestratorAsync(

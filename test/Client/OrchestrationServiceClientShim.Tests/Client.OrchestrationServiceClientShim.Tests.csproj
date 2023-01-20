@@ -5,7 +5,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="$(SrcRoot)Client/CompatShim/Client.CompatShim.csproj" />
+    <ProjectReference Include="$(SrcRoot)Client/OrchestrationServiceClientShim/Client.OrchestrationServiceClientShim.csproj" />
   </ItemGroup>
 
 </Project>

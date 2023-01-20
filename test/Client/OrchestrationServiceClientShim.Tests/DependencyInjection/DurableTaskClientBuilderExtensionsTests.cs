@@ -5,7 +5,7 @@ using DurableTask.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace Microsoft.DurableTask.Client.CompatShim.Tests;
+namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim.Tests;
 
 public class DurableTaskClientBuilderExtensionsTests
 {

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using DurableTask.Core;
-using Microsoft.DurableTask.Client.CompatShim;
+using Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Microsoft.DurableTask.Client;

@@ -3,7 +3,7 @@
 
 using DurableTask.Core;
 
-namespace Microsoft.DurableTask.Client.CompatShim;
+namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
 
 /// <summary>
 /// The shim client options.

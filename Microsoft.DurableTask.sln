@@ -57,9 +57,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shared", "src\Shared\Shared
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "misc", "misc\misc.csproj", "{1E135970-60CF-470A-9270-4560BFA0A7DF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.CompatShim", "src\Client\CompatShim\Client.CompatShim.csproj", "{505F6151-6E36-4E0A-A740-14751B8A9397}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.OrchestrationServiceClientShim", "src\Client\OrchestrationServiceClientShim\Client.OrchestrationServiceClientShim.csproj", "{505F6151-6E36-4E0A-A740-14751B8A9397}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.CompatShim.Tests", "test\Client\CompatShim.Tests\Client.CompatShim.Tests.csproj", "{93E3B973-0FC4-4241-B7BB-064FB538FB50}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.OrchestrationServiceClientShim.Tests", "test\Client\OrchestrationServiceClientShim.Tests\Client.OrchestrationServiceClientShim.Tests.csproj", "{93E3B973-0FC4-4241-B7BB-064FB538FB50}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Grpc", "src\Grpc\Grpc.csproj", "{44AD321D-96D4-481E-BD41-D0B12A619833}"
 EndProject

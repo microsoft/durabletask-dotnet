@@ -10,7 +10,7 @@ using Core = DurableTask.Core;
 using CoreOrchestrationQuery = DurableTask.Core.Query.OrchestrationQuery;
 using PurgeInstanceFilter = Microsoft.DurableTask.Client.PurgeInstancesFilter;
 
-namespace Microsoft.DurableTask.Client.CompatShim.Tests;
+namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim.Tests;
 
 public class ShimDurableTaskClientTests
 {

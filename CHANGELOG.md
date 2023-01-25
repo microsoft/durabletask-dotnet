@@ -3,6 +3,12 @@
 ## v1.0.0
 
 - Added `SuspendInstanceAsync` and `ResumeInstanceAsync` to `DurableTaskClient`.
+- Rename `DurableTaskClient` methods
+    - `TerminateAsync` -> `TerminateInstanceAsync`
+    - `PurgeInstances` -> `PurgeAllInstancesAsync`
+    - `PurgeInstanceMetadataAsync` -> `PurgeInstanceAsync`
+    - `GetInstanceMetadataAsync` -> `GetInstanceAsync`
+    - `GetInstances` -> `GetAllInstancesAsync`
 - `TaskOrchestrationContext.CreateReplaySafeLogger` now creates `ILogger` directly (as opposed to wrapping an existing `ILogger`).
 - Durable Functions class-based syntax now resolves `ITaskActivity` instances from `IServiceProvider`, if available there.
 - `DurableTaskClient` methods have been touched up to ensure `CancellationToken` is included, as well as is the last parameter.

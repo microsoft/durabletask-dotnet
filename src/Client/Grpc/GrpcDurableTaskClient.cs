@@ -207,7 +207,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override AsyncPageable<OrchestrationMetadata> GetInstancesAsync(OrchestrationQuery? query = null)
+    public override AsyncPageable<OrchestrationMetadata> GetAllInstancesAsync(OrchestrationQuery? filter = null)
     {
         return Pageable.Create(async (continuation, pageSize, cancellation) =>
         {
@@ -215,23 +215,23 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             {
                 Query = new P.InstanceQuery
                 {
-                    CreatedTimeFrom = query?.CreatedFrom?.ToTimestamp(),
-                    CreatedTimeTo = query?.CreatedTo?.ToTimestamp(),
-                    FetchInputsAndOutputs = query?.FetchInputsAndOutputs ?? false,
-                    InstanceIdPrefix = query?.InstanceIdPrefix,
-                    MaxInstanceCount = pageSize ?? query?.PageSize ?? OrchestrationQuery.DefaultPageSize,
-                    ContinuationToken = continuation ?? query?.ContinuationToken,
+                    CreatedTimeFrom = filter?.CreatedFrom?.ToTimestamp(),
+                    CreatedTimeTo = filter?.CreatedTo?.ToTimestamp(),
+                    FetchInputsAndOutputs = filter?.FetchInputsAndOutputs ?? false,
+                    InstanceIdPrefix = filter?.InstanceIdPrefix,
+                    MaxInstanceCount = pageSize ?? filter?.PageSize ?? OrchestrationQuery.DefaultPageSize,
+                    ContinuationToken = continuation ?? filter?.ContinuationToken,
                 },
             };
 
-            if (query?.Statuses is not null)
+            if (filter?.Statuses is not null)
             {
-                request.Query.RuntimeStatus.AddRange(query.Statuses.Select(x => x.ToGrpcStatus()));
+                request.Query.RuntimeStatus.AddRange(filter.Statuses.Select(x => x.ToGrpcStatus()));
             }
 
-            if (query?.TaskHubNames is not null)
+            if (filter?.TaskHubNames is not null)
             {
-                request.Query.TaskHubNames.AddRange(query.TaskHubNames);
+                request.Query.TaskHubNames.AddRange(filter.TaskHubNames);
             }
 
             try
@@ -239,7 +239,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
                 P.QueryInstancesResponse response = await this.sidecarClient.QueryInstancesAsync(
                     request, cancellationToken: cancellation);
 
-                bool getInputsAndOutputs = query?.FetchInputsAndOutputs ?? false;
+                bool getInputsAndOutputs = filter?.FetchInputsAndOutputs ?? false;
                 IReadOnlyList<OrchestrationMetadata> values = response.OrchestrationState
                     .Select(x => this.CreateMetadata(x, getInputsAndOutputs))
                     .ToList();
@@ -305,7 +305,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override Task<PurgeResult> PurgeInstancesAsync(
+    public override Task<PurgeResult> PurgeInstanceAsync(
         string instanceId, CancellationToken cancellation = default)
     {
         this.logger.PurgingInstanceMetadata(instanceId);
@@ -315,7 +315,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override Task<PurgeResult> PurgeInstancesAsync(
+    public override Task<PurgeResult> PurgeAllInstancesAsync(
         PurgeInstancesFilter filter, CancellationToken cancellation = default)
     {
         this.logger.PurgingInstances(filter);
@@ -385,7 +385,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
             throw new OperationCanceledException(
-                $"The {nameof(this.PurgeInstancesAsync)} operation was canceled.", e, cancellation);
+                $"The {nameof(this.PurgeAllInstancesAsync)} operation was canceled.", e, cancellation);
         }
     }
 

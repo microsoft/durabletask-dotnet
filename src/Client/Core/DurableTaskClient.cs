@@ -144,6 +144,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     public virtual Task<OrchestrationMetadata> WaitForInstanceStartAsync(
         string instanceId, CancellationToken cancellation)
         => this.WaitForInstanceStartAsync(instanceId, false, cancellation);
+
     /// <summary>
     /// Waits for an orchestration to start running and returns a <see cref="OrchestrationMetadata"/>
     /// object that contains metadata about the started instance.
@@ -239,8 +240,8 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         => this.SuspendInstanceAsync(instanceId, null, cancellation);
 
     /// <summary>
-    /// Suspends an orchestration instance, halting processing of it until <see cref="ResumeInstanceAsync" /> is used
-    /// to resume the orchestration.
+    /// Suspends an orchestration instance, halting processing of it until
+    /// <see cref="ResumeInstanceAsync(string, string, CancellationToken)" /> is used to resume the orchestration.
     /// </summary>
     /// <param name="instanceId">The instance ID of the orchestration to suspend.</param>
     /// <param name="reason">The optional suspension reason.</param>

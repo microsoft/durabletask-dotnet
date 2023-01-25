@@ -181,7 +181,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override async Task<OrchestrationMetadata?> GetInstanceMetadataAsync(
+    public override async Task<OrchestrationMetadata?> GetInstancesAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {
         if (string.IsNullOrEmpty(instanceId))
@@ -207,7 +207,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override AsyncPageable<OrchestrationMetadata> GetInstanceMetadataAsync(OrchestrationQuery? query = null)
+    public override AsyncPageable<OrchestrationMetadata> GetInstancesAsync(OrchestrationQuery? query = null)
     {
         return Pageable.Create(async (continuation, pageSize, cancellation) =>
         {
@@ -249,7 +249,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
             {
                 throw new OperationCanceledException(
-                    $"The {nameof(this.GetInstanceMetadataAsync)} operation was canceled.", e, cancellation);
+                    $"The {nameof(this.GetInstancesAsync)} operation was canceled.", e, cancellation);
             }
         });
     }
@@ -305,7 +305,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override Task<PurgeResult> PurgeInstanceMetadataAsync(
+    public override Task<PurgeResult> PurgeInstancesAsync(
         string instanceId, CancellationToken cancellation = default)
     {
         this.logger.PurgingInstanceMetadata(instanceId);
@@ -315,7 +315,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override Task<PurgeResult> PurgeInstanceMetadataAsync(
+    public override Task<PurgeResult> PurgeInstancesAsync(
         PurgeInstancesFilter filter, CancellationToken cancellation = default)
     {
         this.logger.PurgingInstances(filter);
@@ -385,7 +385,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
             throw new OperationCanceledException(
-                $"The {nameof(this.PurgeInstanceMetadataAsync)} operation was canceled.", e, cancellation);
+                $"The {nameof(this.PurgeInstancesAsync)} operation was canceled.", e, cancellation);
         }
     }
 

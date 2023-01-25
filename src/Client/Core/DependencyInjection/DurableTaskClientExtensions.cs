@@ -30,7 +30,7 @@ public static class DurableTaskClientExtensions
     {
         Check.NotNull(client);
         PurgeInstancesFilter filter = new(createdFrom, createdTo, statuses);
-        return client.PurgeInstanceMetadataAsync(filter, cancellation);
+        return client.PurgeInstancesAsync(filter, cancellation);
     }
 
     /// <summary>

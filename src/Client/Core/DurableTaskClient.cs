@@ -73,7 +73,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// and health of the backend task hub, and whether a start time was provided via <paramref name="options" />.
     /// </para><para>
     /// The task associated with this method completes after the orchestration instance was successfully scheduled. You
-    /// can use the <see cref="GetInstanceMetadataAsync(string, bool, CancellationToken)"/> to query the status of the
+    /// can use the <see cref="GetInstancesAsync(string, bool, CancellationToken)"/> to query the status of the
     /// scheduled instance, the <see cref="WaitForInstanceStartAsync(string, bool, CancellationToken)"/> method to wait
     /// for the instance to transition out of the <see cref="OrchestrationRuntimeStatus.Pending"/> status, or the
     /// <see cref="WaitForInstanceCompletionAsync(string, bool, CancellationToken)"/> method to wait for the instance to
@@ -263,10 +263,10 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     public abstract Task ResumeInstanceAsync(
         string instanceId, string? reason = null, CancellationToken cancellation = default);
 
-    /// <inheritdoc cref="GetInstanceMetadataAsync(string, bool, CancellationToken)"/>
-    public virtual Task<OrchestrationMetadata?> GetInstanceMetadataAsync(
+    /// <inheritdoc cref="GetInstancesAsync(string, bool, CancellationToken)"/>
+    public virtual Task<OrchestrationMetadata?> GetInstancesAsync(
         string instanceId, CancellationToken cancellation)
-        => this.GetInstanceMetadataAsync(instanceId, false, cancellation);
+        => this.GetInstancesAsync(instanceId, false, cancellation);
 
     /// <summary>
     /// Fetches orchestration instance metadata from the configured durable store.
@@ -278,7 +278,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// memory costs associated with fetching the instance metadata.
     /// </remarks>
     /// <inheritdoc cref="WaitForInstanceStartAsync(string, bool, CancellationToken)"/>
-    public abstract Task<OrchestrationMetadata?> GetInstanceMetadataAsync(
+    public abstract Task<OrchestrationMetadata?> GetInstancesAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default);
 
     /// <summary>
@@ -286,7 +286,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// </summary>
     /// <param name="query">Filters down the instances included in the query.</param>
     /// <returns>An async pageable of the query results.</returns>
-    public abstract AsyncPageable<OrchestrationMetadata> GetInstanceMetadataAsync(OrchestrationQuery? query = null);
+    public abstract AsyncPageable<OrchestrationMetadata> GetInstancesAsync(OrchestrationQuery? query = null);
 
     /// <summary>
     /// Purges orchestration instance metadata from the durable store.
@@ -314,7 +314,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target
     /// instance was successfully purged.
     /// </returns>
-    public abstract Task<PurgeResult> PurgeInstanceMetadataAsync(
+    public abstract Task<PurgeResult> PurgeInstancesAsync(
         string instanceId, CancellationToken cancellation = default);
 
     /// <summary>
@@ -328,7 +328,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
     /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged.
     /// </returns>
-    public abstract Task<PurgeResult> PurgeInstanceMetadataAsync(
+    public abstract Task<PurgeResult> PurgeInstancesAsync(
         PurgeInstancesFilter filter, CancellationToken cancellation = default);
 
     // TODO: Create task hub

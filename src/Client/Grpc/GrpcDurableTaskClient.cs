@@ -116,7 +116,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override async Task TerminateAsync(
+    public override async Task TerminateInstanceAsync(
         string instanceId, object? output = null, CancellationToken cancellation = default)
     {
         if (string.IsNullOrEmpty(instanceId))
@@ -207,7 +207,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override AsyncPageable<OrchestrationMetadata> GetInstances(OrchestrationQuery? query = null)
+    public override AsyncPageable<OrchestrationMetadata> GetInstanceMetadataAsync(OrchestrationQuery? query = null)
     {
         return Pageable.Create(async (continuation, pageSize, cancellation) =>
         {
@@ -249,7 +249,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
             {
                 throw new OperationCanceledException(
-                    $"The {nameof(this.GetInstances)} operation was canceled.", e, cancellation);
+                    $"The {nameof(this.GetInstanceMetadataAsync)} operation was canceled.", e, cancellation);
             }
         });
     }
@@ -315,7 +315,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override Task<PurgeResult> PurgeInstancesAsync(
+    public override Task<PurgeResult> PurgeInstanceMetadataAsync(
         PurgeInstancesFilter filter, CancellationToken cancellation = default)
     {
         this.logger.PurgingInstances(filter);
@@ -385,7 +385,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
             throw new OperationCanceledException(
-                $"The {nameof(this.PurgeInstancesAsync)} operation was canceled.", e, cancellation);
+                $"The {nameof(this.PurgeInstanceMetadataAsync)} operation was canceled.", e, cancellation);
         }
     }
 

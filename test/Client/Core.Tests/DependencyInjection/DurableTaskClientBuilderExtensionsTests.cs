@@ -113,7 +113,7 @@ public class DurableTaskClientBuilderExtensionsTests
             throw new NotImplementedException();
         }
 
-        public override AsyncPageable<OrchestrationMetadata> GetInstances(OrchestrationQuery? query = null)
+        public override AsyncPageable<OrchestrationMetadata> GetInstanceMetadataAsync(OrchestrationQuery? query = null)
         {
             throw new NotImplementedException();
         }
@@ -124,7 +124,7 @@ public class DurableTaskClientBuilderExtensionsTests
             throw new NotImplementedException();
         }
 
-        public override Task<PurgeResult> PurgeInstancesAsync(
+        public override Task<PurgeResult> PurgeInstanceMetadataAsync(
             PurgeInstancesFilter filter, CancellationToken cancellation = default)
         {
             throw new NotImplementedException();
@@ -157,7 +157,7 @@ public class DurableTaskClientBuilderExtensionsTests
             throw new NotImplementedException();
         }
 
-        public override Task TerminateAsync(
+        public override Task TerminateInstanceAsync(
             string instanceId, object? output = null, CancellationToken cancellation = default)
         {
             throw new NotImplementedException();

@@ -325,7 +325,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceStartAsync(instanceId, this.TimeoutToken);
 
         var expectedOutput = new { quote = "I'll be back." };
-        await server.Client.TerminateAsync(instanceId, expectedOutput);
+        await server.Client.TerminateInstanceAsync(instanceId, expectedOutput);
 
         metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);

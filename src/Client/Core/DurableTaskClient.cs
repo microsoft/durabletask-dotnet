@@ -50,6 +50,11 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         TaskName orchestratorName, object? input, CancellationToken cancellation)
         => this.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input, null, cancellation);
 
+    /// <inheritdoc cref="ScheduleNewOrchestrationInstanceAsync(TaskName, object, StartOrchestrationOptions, CancellationToken)"/>
+    public virtual Task<string> ScheduleNewOrchestrationInstanceAsync(
+        TaskName orchestratorName, StartOrchestrationOptions options, CancellationToken cancellation = default)
+        => this.ScheduleNewOrchestrationInstanceAsync(orchestratorName, null, options, cancellation);
+
     /// <summary>
     /// Schedules a new orchestration instance for execution.
     /// </summary>

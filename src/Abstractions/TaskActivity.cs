@@ -51,7 +51,8 @@ public interface ITaskActivity
 /// Because activities only guarantee at least once execution, it's recommended that activity logic be implemented as
 /// idempotent whenever possible.
 /// </para><para>
-/// Activities are invoked by orchestrators using one of the <see cref="TaskOrchestrationContext.CallActivityAsync"/>
+/// Activities are invoked by orchestrators using one of the
+/// <see cref="TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)"/>
 /// method overloads. Activities that derive from <see cref="TaskActivity{TInput, TOutput}"/> can also be invoked
 /// using generated extension methods. To participate in code generation, an activity class must be decorated with the
 /// <see cref="DurableTaskAttribute"/> attribute. The source generator will then generate a <c>CallMyActivityAsync()</c>

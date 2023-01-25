@@ -108,15 +108,30 @@ public abstract class TaskOrchestrationContext
     /// <see cref="TaskFailedException.FailureDetails"/> property.
     /// </exception>
     public virtual Task CallActivityAsync(TaskName name, object? input = null, TaskOptions? options = null)
-    {
-        return this.CallActivityAsync<object>(name, input, options);
-    }
+        => this.CallActivityAsync<object>(name, input, options);
 
     /// <returns>
     /// A task that completes when the activity completes or fails. The result of the task is the activity's return value.
     /// </returns>
-    /// <inheritdoc cref="CallActivityAsync"/>
-    public abstract Task<T> CallActivityAsync<T>(TaskName name, object? input = null, TaskOptions? options = null);
+    /// <inheritdoc cref="CallActivityAsync(TaskName, object?, TaskOptions?)"/>
+    public virtual Task CallActivityAsync(TaskName name, TaskOptions options)
+        => this.CallActivityAsync(name, null, options);
+
+    /// <returns>
+    /// A task that completes when the activity completes or fails. The result of the task is the activity's return value.
+    /// </returns>
+    /// <typeparam name="TResult">The type into which to deserialize the activity's output.</typeparam>
+    /// <inheritdoc cref="CallActivityAsync(TaskName, object?, TaskOptions?)"/>
+    public virtual Task<TResult> CallActivityAsync<TResult>(TaskName name, TaskOptions options)
+        => this.CallActivityAsync<TResult>(name, null, options);
+
+    /// <returns>
+    /// A task that completes when the activity completes or fails. The result of the task is the activity's return value.
+    /// </returns>
+    /// <typeparam name="TResult">The type into which to deserialize the activity's output.</typeparam>
+    /// <inheritdoc cref="CallActivityAsync(TaskName, object?, TaskOptions?)"/>
+    public abstract Task<TResult> CallActivityAsync<TResult>(
+        TaskName name, object? input = null, TaskOptions? options = null);
 
     /// <summary>
     /// Creates a durable timer that expires after the specified delay.
@@ -247,12 +262,25 @@ public abstract class TaskOrchestrationContext
     /// <summary>
     /// Executes a named sub-orchestrator and returns the result.
     /// </summary>
-    /// <typeparam name="TResult">
-    /// The type into which to deserialize the sub-orchestrator's output.
-    /// </typeparam>
+    /// <typeparam name="TResult">The type into which to deserialize the sub-orchestrator's output.</typeparam>
     /// <inheritdoc cref="CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)"/>
     public abstract Task<TResult> CallSubOrchestratorAsync<TResult>(
         TaskName orchestratorName, object? input = null, TaskOptions? options = null);
+
+    /// <summary>
+    /// Executes a named sub-orchestrator and returns the result.
+    /// </summary>
+    /// <typeparam name="TResult">The type into which to deserialize the sub-orchestrator's output.</typeparam>
+    /// <inheritdoc cref="CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)"/>
+    public virtual Task<TResult> CallSubOrchestratorAsync<TResult>(TaskName orchestratorName, TaskOptions options)
+        => this.CallSubOrchestratorAsync<TResult>(orchestratorName, null, options);
+
+    /// <summary>
+    /// Executes a named sub-orchestrator and returns the result.
+    /// </summary>
+    /// <inheritdoc cref="CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)"/>
+    public virtual Task CallSubOrchestratorAsync(TaskName orchestratorName, TaskOptions options)
+        => this.CallSubOrchestratorAsync(orchestratorName, null, options);
 
     /// <summary>
     /// Executes a named sub-orchestrator.
@@ -296,11 +324,9 @@ public abstract class TaskOrchestrationContext
     /// The sub-orchestration failed with an unhandled exception. The details of the failure can be found in the
     /// <see cref="TaskFailedException.FailureDetails"/> property.
     /// </exception>
-    public Task CallSubOrchestratorAsync(
+    public virtual Task CallSubOrchestratorAsync(
         TaskName orchestratorName, object? input = null, TaskOptions? options = null)
-    {
-        return this.CallSubOrchestratorAsync<object>(orchestratorName, input, options);
-    }
+        => this.CallSubOrchestratorAsync<object>(orchestratorName, input, options);
 
     /// <summary>
     /// Restarts the orchestration with a new input and clears its history.

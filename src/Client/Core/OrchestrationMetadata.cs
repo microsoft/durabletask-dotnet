@@ -11,7 +11,7 @@ namespace Microsoft.DurableTask.Client;
 /// </summary>
 /// <remarks>
 /// Instances of this class are produced by methods in the <see cref="DurableTaskClient"/> class, such as
-/// <see cref="DurableTaskClient.GetInstanceMetadataAsync(string, CancellationToken)"/>,
+/// <see cref="DurableTaskClient.GetInstancesAsync(string, CancellationToken)"/>,
 /// <see cref="DurableTaskClient.WaitForInstanceStartAsync(string, CancellationToken)"/> and
 /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync(string, CancellationToken)"/>.
 /// </remarks>
@@ -117,7 +117,7 @@ public sealed class OrchestrationMetadata
     /// </summary>
     /// <remarks>
     /// This method can only be used when inputs and outputs are explicitly requested from the
-    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync(string, CancellationToken)"/> or
+    /// <see cref="DurableTaskClient.GetInstancesAsync(string, CancellationToken)"/> or
     /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync(string, CancellationToken)"/> method that produced
     /// this <see cref="OrchestrationMetadata"/> object.
     /// </remarks>
@@ -143,7 +143,7 @@ public sealed class OrchestrationMetadata
     /// </summary>
     /// <remarks>
     /// This method can only be used when inputs and outputs are explicitly requested from the
-    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync(string, CancellationToken)"/> or
+    /// <see cref="DurableTaskClient.GetInstancesAsync(string, CancellationToken)"/> or
     /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync(string, CancellationToken)"/> method that produced
     /// this <see cref="OrchestrationMetadata"/> object.
     /// </remarks>
@@ -169,7 +169,7 @@ public sealed class OrchestrationMetadata
     /// </summary>
     /// <remarks>
     /// This method can only be used when inputs and outputs are explicitly requested from the
-    /// <see cref="DurableTaskClient.GetInstanceMetadataAsync(string, CancellationToken)"/> or
+    /// <see cref="DurableTaskClient.GetInstancesAsync(string, CancellationToken)"/> or
     /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync(string, CancellationToken)"/> method that produced
     /// this <see cref="OrchestrationMetadata"/> object.
     /// </remarks>

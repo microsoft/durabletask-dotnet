@@ -47,6 +47,7 @@ You can then use the following code to define a simple "Hello, cities" durable o
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask;
+using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 
 namespace IsolatedFunctionApp1.Untyped;
@@ -56,15 +57,15 @@ static class HelloSequenceUntyped
     [Function(nameof(StartHelloCitiesUntyped))]
     public static async Task<HttpResponseData> StartHelloCitiesUntyped(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post")] HttpRequestData req,
-        [DurableClient] DurableClientContext durableContext,
+        [DurableClient] DurableTaskClient client,
         FunctionContext executionContext)
     {
         ILogger logger = executionContext.GetLogger(nameof(StartHelloCitiesUntyped));
 
-        string instanceId = await durableContext.Client.ScheduleNewOrchestrationInstanceAsync(nameof(HelloCitiesUntyped));
+        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(nameof(HelloCitiesUntyped));
         logger.LogInformation("Created new orchestration with instance ID = {instanceId}", instanceId);
 
-        return durableContext.CreateCheckStatusResponse(req, instanceId);
+        return client.CreateCheckStatusResponse(req, instanceId);
     }
 
     [Function(nameof(HelloCitiesUntyped))]
@@ -101,6 +102,7 @@ The source generators also generate type-safe extension methods on the `client` 
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask;
+using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 
 namespace IsolatedFunctionApp1.Typed;
@@ -110,15 +112,15 @@ public static class HelloCitiesTypedStarter
     [Function(nameof(StartHelloCitiesTyped))]
     public static async Task<HttpResponseData> StartHelloCitiesTyped(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post")] HttpRequestData req,
-        [DurableClient] DurableClientContext durableContext,
+        [DurableClient] DurableTaskClient client,
         FunctionContext executionContext)
     {
         ILogger logger = executionContext.GetLogger(nameof(StartHelloCitiesTyped));
 
-        string instanceId = await durableContext.Client.ScheduleNewHelloCitiesTypedInstanceAsync();
+        string instanceId = await client.ScheduleNewHelloCitiesTypedInstanceAsync();
         logger.LogInformation("Created new orchestration with instance ID = {instanceId}", instanceId);
 
-        return durableContext.CreateCheckStatusResponse(req, instanceId);
+        return client.CreateCheckStatusResponse(req, instanceId);
     }
 }
 

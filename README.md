@@ -3,8 +3,6 @@
 [![Build status](https://github.com/microsoft/durabletask-dotnet/workflows/Validate%20Build/badge.svg)](https://github.com/microsoft/durabletask-dotnet/actions?workflow=Validate+Build)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-⚠ This project is not yet ready for production use ⚠
-
 The Durable Task .NET Client SDK is a .NET Standard 2.0 library for implementing Durable Task orchestrations and activities. It's specifically designed to connect to a "sidecar" process, such as the [Azure Functions .NET Isolated host](https://docs.microsoft.com/azure/azure-functions/dotnet-isolated-process-guide), a special purpose sidecar container, or potentially even [Dapr](https://github.com/dapr/dapr/issues/4576).
 
 If you're looking to run fully self-hosted Durable Task Framework apps, see https://github.com/azure/durabletask.

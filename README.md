@@ -34,7 +34,7 @@ To get started, add the [Microsoft.Azure.Functions.Worker.Extensions.DurableTask
 ```xml
   <ItemGroup>
     <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="1.10.0" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.0.0-rc.1" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.0.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.0.13" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.7.0" OutputItemType="Analyzer" />
     <PackageReference Include="Microsoft.DurableTask.Generators" Version="1.0.0-preview.1" OutputItemType="Analyzer" />

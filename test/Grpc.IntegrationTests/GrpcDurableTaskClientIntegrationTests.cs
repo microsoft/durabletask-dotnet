@@ -44,12 +44,12 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             OrchestrationName, input: shouldThrow);
 
         await server.Client.WaitForInstanceStartAsync(instanceId, default);
-        OrchestrationMetadata? metadata = await server.Client.GetInstanceMetadataAsync(instanceId, false);
+        OrchestrationMetadata? metadata = await server.Client.GetInstancesAsync(instanceId, false);
         AssertMetadata(metadata!, instanceId, OrchestrationRuntimeStatus.Running);
 
         await server.Client.RaiseEventAsync(instanceId, "event", default);
         await server.Client.WaitForInstanceCompletionAsync(instanceId, default);
-        metadata = await server.Client.GetInstanceMetadataAsync(instanceId, false);
+        metadata = await server.Client.GetInstancesAsync(instanceId, false);
         AssertMetadata(
             metadata!,
             instanceId,
@@ -101,7 +101,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         await ForEachOrchestrationAsync(
             x => server.Client.ScheduleNewOrchestrationInstanceAsync(
                 OrchestrationName, input: false, new StartOrchestrationOptions(x)));
-        AsyncPageable<OrchestrationMetadata> pageable = server.Client.GetInstances(query);
+        AsyncPageable<OrchestrationMetadata> pageable = server.Client.GetAllInstancesAsync(query);
 
         await ForEachOrchestrationAsync(x => server.Client.WaitForInstanceStartAsync(x, default));
         List<OrchestrationMetadata> metadata = await pageable.ToListAsync();
@@ -129,7 +129,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
                 OrchestrationName, input: false, new StartOrchestrationOptions($"GetInstances_AsPages_EndToEnd-{i}"));
         }
 
-        AsyncPageable<OrchestrationMetadata> pageable = server.Client.GetInstances(query);
+        AsyncPageable<OrchestrationMetadata> pageable = server.Client.GetAllInstancesAsync(query);
         List<Page<OrchestrationMetadata>> pages = await pageable.AsPages(pageSizeHint: 5).ToListAsync();
         pages.Should().HaveCount(5);
         pages.ForEach(p => p.Values.Should().HaveCount(p.ContinuationToken is null ? 1 : 5));

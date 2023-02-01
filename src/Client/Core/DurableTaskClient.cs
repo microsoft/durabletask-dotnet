@@ -50,6 +50,11 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         TaskName orchestratorName, object? input, CancellationToken cancellation)
         => this.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input, null, cancellation);
 
+    /// <inheritdoc cref="ScheduleNewOrchestrationInstanceAsync(TaskName, object, StartOrchestrationOptions, CancellationToken)"/>
+    public virtual Task<string> ScheduleNewOrchestrationInstanceAsync(
+        TaskName orchestratorName, StartOrchestrationOptions options, CancellationToken cancellation = default)
+        => this.ScheduleNewOrchestrationInstanceAsync(orchestratorName, null, options, cancellation);
+
     /// <summary>
     /// Schedules a new orchestration instance for execution.
     /// </summary>
@@ -68,7 +73,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// and health of the backend task hub, and whether a start time was provided via <paramref name="options" />.
     /// </para><para>
     /// The task associated with this method completes after the orchestration instance was successfully scheduled. You
-    /// can use the <see cref="GetInstanceMetadataAsync(string, bool, CancellationToken)"/> to query the status of the
+    /// can use the <see cref="GetInstancesAsync(string, bool, CancellationToken)"/> to query the status of the
     /// scheduled instance, the <see cref="WaitForInstanceStartAsync(string, bool, CancellationToken)"/> method to wait
     /// for the instance to transition out of the <see cref="OrchestrationRuntimeStatus.Pending"/> status, or the
     /// <see cref="WaitForInstanceCompletionAsync(string, bool, CancellationToken)"/> method to wait for the instance to
@@ -135,75 +140,10 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     public abstract Task RaiseEventAsync(
         string instanceId, string eventName, object? eventPayload = null, CancellationToken cancellation = default);
 
-    /// <inheritdoc cref="TerminateAsync(string, object, CancellationToken)"/>
-    public virtual Task TerminateAsync(
-        string instanceId, CancellationToken cancellation)
-        => this.TerminateAsync(instanceId, null, cancellation);
-
-    /// <summary>
-    /// Terminates a running orchestration instance and updates its runtime status to
-    /// <see cref="OrchestrationRuntimeStatus.Terminated"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method internally enqueues a "terminate" message in the task hub. When the task hub worker processes
-    /// this message, it will update the runtime status of the target instance to
-    /// <see cref="OrchestrationRuntimeStatus.Terminated"/>. You can use the
-    /// <see cref="WaitForInstanceCompletionAsync(string, bool, CancellationToken)"/> to wait for the instance to reach
-    /// the terminated state.
-    /// </para>
-    /// <para>
-    /// Terminating an orchestration instance has no effect on any in-flight activity function executions
-    /// or sub-orchestrations that were started by the terminated instance. Those actions will continue to run
-    /// without interruption. However, their results will be discarded. If you want to terminate sub-orchestrations,
-    /// you must issue separate terminate commands for each sub-orchestration instance.
-    /// </para><para>
-    /// At the time of writing, there is no way to terminate an in-flight activity execution.
-    /// </para><para>
-    /// Attempting to terminate a completed or non-existent orchestration instance will fail silently.
-    /// </para>
-    /// </remarks>
-    /// <param name="instanceId">The ID of the orchestration instance to terminate.</param>
-    /// <param name="output">The optional output to set for the terminated orchestration instance.</param>
-    /// <param name="cancellation">
-    /// The cancellation token. This only cancels enqueueing the termination request to the backend. Does not abort
-    /// termination of the orchestration once enqueued.
-    /// </param>
-    /// <returns>A task that completes when the terminate message is enqueued.</returns>
-    public abstract Task TerminateAsync(
-        string instanceId, object? output = null, CancellationToken cancellation = default);
-
     /// <inheritdoc cref="WaitForInstanceStartAsync(string, bool, CancellationToken)"/>
     public virtual Task<OrchestrationMetadata> WaitForInstanceStartAsync(
         string instanceId, CancellationToken cancellation)
         => this.WaitForInstanceStartAsync(instanceId, false, cancellation);
-
-    /// <summary>
-    /// Suspends an orchestration instance, halting processing of it until <see cref="ResumeInstanceAsync" /> is used
-    /// to resume the orchestration.
-    /// </summary>
-    /// <param name="instanceId">The instance ID of the orchestration to suspend.</param>
-    /// <param name="reason">The optional suspension reason.</param>
-    /// <param name="cancellation">
-    /// A <see cref="CancellationToken"/> that can be used to cancel the suspend operation. Note, cancelling this token
-    /// does <b>not</b> resume the orchestration if suspend was successful.
-    /// </param>
-    /// <returns>A task that completes when the suspend has been committed to the backend.</returns>
-    public abstract Task SuspendInstanceAsync(
-        string instanceId, string? reason = null, CancellationToken cancellation = default);
-
-    /// <summary>
-    /// Resumes an orchestration instance that was suspended via <see cref="SuspendInstanceAsync" />.
-    /// </summary>
-    /// <param name="instanceId">The instance ID of the orchestration to resume.</param>
-    /// <param name="reason">The optional resume reason.</param>
-    /// <param name="cancellation">
-    /// A <see cref="CancellationToken"/> that can be used to cancel the resume operation. Note, cancelling this token
-    /// does <b>not</b> re-suspend the orchestration if resume was successful.
-    /// </param>
-    /// <returns>A task that completes when the resume has been committed to the backend.</returns>
-    public abstract Task ResumeInstanceAsync(
-        string instanceId, string? reason = null, CancellationToken cancellation = default);
 
     /// <summary>
     /// Waits for an orchestration to start running and returns a <see cref="OrchestrationMetadata"/>
@@ -258,10 +198,82 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     public abstract Task<OrchestrationMetadata> WaitForInstanceCompletionAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default);
 
-    /// <inheritdoc cref="GetInstanceMetadataAsync(string, bool, CancellationToken)"/>
-    public virtual Task<OrchestrationMetadata?> GetInstanceMetadataAsync(
+    /// <inheritdoc cref="TerminateInstanceAsync(string, object, CancellationToken)"/>
+    public virtual Task TerminateInstanceAsync(string instanceId, CancellationToken cancellation)
+        => this.TerminateInstanceAsync(instanceId, null, cancellation);
+
+    /// <summary>
+    /// Terminates a running orchestration instance and updates its runtime status to
+    /// <see cref="OrchestrationRuntimeStatus.Terminated"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method internally enqueues a "terminate" message in the task hub. When the task hub worker processes
+    /// this message, it will update the runtime status of the target instance to
+    /// <see cref="OrchestrationRuntimeStatus.Terminated"/>. You can use the
+    /// <see cref="WaitForInstanceCompletionAsync(string, bool, CancellationToken)"/> to wait for the instance to reach
+    /// the terminated state.
+    /// </para>
+    /// <para>
+    /// Terminating an orchestration instance has no effect on any in-flight activity function executions
+    /// or sub-orchestrations that were started by the terminated instance. Those actions will continue to run
+    /// without interruption. However, their results will be discarded. If you want to terminate sub-orchestrations,
+    /// you must issue separate terminate commands for each sub-orchestration instance.
+    /// </para><para>
+    /// At the time of writing, there is no way to terminate an in-flight activity execution.
+    /// </para><para>
+    /// Attempting to terminate a completed or non-existent orchestration instance will fail silently.
+    /// </para>
+    /// </remarks>
+    /// <param name="instanceId">The ID of the orchestration instance to terminate.</param>
+    /// <param name="output">The optional output to set for the terminated orchestration instance.</param>
+    /// <param name="cancellation">
+    /// The cancellation token. This only cancels enqueueing the termination request to the backend. Does not abort
+    /// termination of the orchestration once enqueued.
+    /// </param>
+    /// <returns>A task that completes when the terminate message is enqueued.</returns>
+    public abstract Task TerminateInstanceAsync(
+        string instanceId, object? output = null, CancellationToken cancellation = default);
+
+    /// <inheritdoc cref="SuspendInstanceAsync(string, string, CancellationToken)"/>
+    public virtual Task SuspendInstanceAsync(string instanceId, CancellationToken cancellation)
+        => this.SuspendInstanceAsync(instanceId, null, cancellation);
+
+    /// <summary>
+    /// Suspends an orchestration instance, halting processing of it until
+    /// <see cref="ResumeInstanceAsync(string, string, CancellationToken)" /> is used to resume the orchestration.
+    /// </summary>
+    /// <param name="instanceId">The instance ID of the orchestration to suspend.</param>
+    /// <param name="reason">The optional suspension reason.</param>
+    /// <param name="cancellation">
+    /// A <see cref="CancellationToken"/> that can be used to cancel the suspend operation. Note, cancelling this token
+    /// does <b>not</b> resume the orchestration if suspend was successful.
+    /// </param>
+    /// <returns>A task that completes when the suspend has been committed to the backend.</returns>
+    public abstract Task SuspendInstanceAsync(
+        string instanceId, string? reason = null, CancellationToken cancellation = default);
+
+    /// <inheritdoc cref="ResumeInstanceAsync(string, string, CancellationToken)"/>
+    public virtual Task ResumeInstanceAsync(string instanceId, CancellationToken cancellation)
+        => this.ResumeInstanceAsync(instanceId, null, cancellation);
+
+    /// <summary>
+    /// Resumes an orchestration instance that was suspended via <see cref="SuspendInstanceAsync(string, string, CancellationToken)" />.
+    /// </summary>
+    /// <param name="instanceId">The instance ID of the orchestration to resume.</param>
+    /// <param name="reason">The optional resume reason.</param>
+    /// <param name="cancellation">
+    /// A <see cref="CancellationToken"/> that can be used to cancel the resume operation. Note, cancelling this token
+    /// does <b>not</b> re-suspend the orchestration if resume was successful.
+    /// </param>
+    /// <returns>A task that completes when the resume has been committed to the backend.</returns>
+    public abstract Task ResumeInstanceAsync(
+        string instanceId, string? reason = null, CancellationToken cancellation = default);
+
+    /// <inheritdoc cref="GetInstancesAsync(string, bool, CancellationToken)"/>
+    public virtual Task<OrchestrationMetadata?> GetInstancesAsync(
         string instanceId, CancellationToken cancellation)
-        => this.GetInstanceMetadataAsync(instanceId, false, cancellation);
+        => this.GetInstancesAsync(instanceId, false, cancellation);
 
     /// <summary>
     /// Fetches orchestration instance metadata from the configured durable store.
@@ -273,15 +285,15 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// memory costs associated with fetching the instance metadata.
     /// </remarks>
     /// <inheritdoc cref="WaitForInstanceStartAsync(string, bool, CancellationToken)"/>
-    public abstract Task<OrchestrationMetadata?> GetInstanceMetadataAsync(
+    public abstract Task<OrchestrationMetadata?> GetInstancesAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default);
 
     /// <summary>
     /// Queries orchestration instances.
     /// </summary>
-    /// <param name="query">Filters down the instances included in the query.</param>
+    /// <param name="filter">Filters down the instances included in the query.</param>
     /// <returns>An async pageable of the query results.</returns>
-    public abstract AsyncPageable<OrchestrationMetadata> GetInstances(OrchestrationQuery? query = null);
+    public abstract AsyncPageable<OrchestrationMetadata> GetAllInstancesAsync(OrchestrationQuery? filter = null);
 
     /// <summary>
     /// Purges orchestration instance metadata from the durable store.
@@ -309,7 +321,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target
     /// instance was successfully purged.
     /// </returns>
-    public abstract Task<PurgeResult> PurgeInstanceMetadataAsync(
+    public abstract Task<PurgeResult> PurgeInstanceAsync(
         string instanceId, CancellationToken cancellation = default);
 
     /// <summary>
@@ -323,7 +335,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
     /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged.
     /// </returns>
-    public abstract Task<PurgeResult> PurgeInstancesAsync(
+    public abstract Task<PurgeResult> PurgeAllInstancesAsync(
         PurgeInstancesFilter filter, CancellationToken cancellation = default);
 
     // TODO: Create task hub

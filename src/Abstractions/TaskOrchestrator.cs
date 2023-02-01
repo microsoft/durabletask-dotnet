@@ -45,7 +45,8 @@ public interface ITaskOrchestrator
 /// </para>
 /// <para>
 ///   Orchestrators can be scheduled using an external client (see Microsoft.DurableTask.Client). Orchestrators can
-///   also invoke child orchestrators using the <see cref="TaskOrchestrationContext.CallSubOrchestratorAsync"/> method.
+///   also invoke child orchestrators using the
+///   <see cref="TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)"/> method.
 ///   Orchestrators that derive from <see cref="TaskOrchestrator{TInput, TOutput}"/> can also be invoked using
 ///   generated extension methods. To participate in code generation, an orchestrator class must be decorated with the
 ///   <see cref="DurableTaskAttribute"/> attribute. The source generator will then generate a

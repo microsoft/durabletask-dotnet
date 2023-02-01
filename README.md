@@ -3,13 +3,11 @@
 [![Build status](https://github.com/microsoft/durabletask-dotnet/workflows/Validate%20Build/badge.svg)](https://github.com/microsoft/durabletask-dotnet/actions?workflow=Validate+Build)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-⚠ This project is not yet ready for production use ⚠
-
 The Durable Task .NET Client SDK is a .NET Standard 2.0 library for implementing Durable Task orchestrations and activities. It's specifically designed to connect to a "sidecar" process, such as the [Azure Functions .NET Isolated host](https://docs.microsoft.com/azure/azure-functions/dotnet-isolated-process-guide), a special purpose sidecar container, or potentially even [Dapr](https://github.com/dapr/dapr/issues/4576).
 
 If you're looking to run fully self-hosted Durable Task Framework apps, see https://github.com/azure/durabletask.
 
-*Current Release*: [v1.0.0-rc.1](https://github.com/microsoft/durabletask-dotnet/releases/tag/v1.0.0-rc.1)
+*Current Release*: [v1.0.0](https://github.com/microsoft/durabletask-dotnet/releases/tag/v1.0.0)
 
 ## NuGet packages
 
@@ -34,7 +32,7 @@ To get started, add the [Microsoft.Azure.Functions.Worker.Extensions.DurableTask
 ```xml
   <ItemGroup>
     <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="1.10.0" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.0.0-rc.1" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.0.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.0.13" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.7.0" OutputItemType="Analyzer" />
     <PackageReference Include="Microsoft.DurableTask.Generators" Version="1.0.0-preview.1" OutputItemType="Analyzer" />
@@ -47,6 +45,7 @@ You can then use the following code to define a simple "Hello, cities" durable o
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask;
+using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 
 namespace IsolatedFunctionApp1.Untyped;
@@ -56,15 +55,15 @@ static class HelloSequenceUntyped
     [Function(nameof(StartHelloCitiesUntyped))]
     public static async Task<HttpResponseData> StartHelloCitiesUntyped(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post")] HttpRequestData req,
-        [DurableClient] DurableClientContext durableContext,
+        [DurableClient] DurableTaskClient client,
         FunctionContext executionContext)
     {
         ILogger logger = executionContext.GetLogger(nameof(StartHelloCitiesUntyped));
 
-        string instanceId = await durableContext.Client.ScheduleNewOrchestrationInstanceAsync(nameof(HelloCitiesUntyped));
+        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(nameof(HelloCitiesUntyped));
         logger.LogInformation("Created new orchestration with instance ID = {instanceId}", instanceId);
 
-        return durableContext.CreateCheckStatusResponse(req, instanceId);
+        return client.CreateCheckStatusResponse(req, instanceId);
     }
 
     [Function(nameof(HelloCitiesUntyped))]
@@ -101,6 +100,7 @@ The source generators also generate type-safe extension methods on the `client` 
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask;
+using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 
 namespace IsolatedFunctionApp1.Typed;
@@ -110,15 +110,15 @@ public static class HelloCitiesTypedStarter
     [Function(nameof(StartHelloCitiesTyped))]
     public static async Task<HttpResponseData> StartHelloCitiesTyped(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post")] HttpRequestData req,
-        [DurableClient] DurableClientContext durableContext,
+        [DurableClient] DurableTaskClient client,
         FunctionContext executionContext)
     {
         ILogger logger = executionContext.GetLogger(nameof(StartHelloCitiesTyped));
 
-        string instanceId = await durableContext.Client.ScheduleNewHelloCitiesTypedInstanceAsync();
+        string instanceId = await client.ScheduleNewHelloCitiesTypedInstanceAsync();
         logger.LogInformation("Created new orchestration with instance ID = {instanceId}", instanceId);
 
-        return durableContext.CreateCheckStatusResponse(req, instanceId);
+        return client.CreateCheckStatusResponse(req, instanceId);
     }
 }
 

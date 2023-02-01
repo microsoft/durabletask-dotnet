@@ -4,6 +4,7 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask;
+using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 
 namespace AzureFunctionsApp;
@@ -23,17 +24,17 @@ static class Fib
     [Function(nameof(Fib))]
     public static async Task<HttpResponseData> Start(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
-        [DurableClient] DurableClientContext durableContext,
+        [DurableClient] DurableTaskClient client,
         FunctionContext executionContext)
     {
         ILogger logger = executionContext.GetLogger(nameof(Fib));
 
         int? payload = await req.ReadFromJsonAsync<int>();
-        string instanceId = await durableContext.Client
+        string instanceId = await client
             .ScheduleNewOrchestrationInstanceAsync(nameof(FibOrchestration), payload);
         logger.LogInformation("Created new orchestration with instance ID = {instanceId}", instanceId);
 
-        return durableContext.CreateCheckStatusResponse(req, instanceId);
+        return client.CreateCheckStatusResponse(req, instanceId);
     }
 
     [Function(nameof(FibOrchestration))]

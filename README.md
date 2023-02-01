@@ -7,7 +7,7 @@ The Durable Task .NET Client SDK is a .NET Standard 2.0 library for implementing
 
 If you're looking to run fully self-hosted Durable Task Framework apps, see https://github.com/azure/durabletask.
 
-*Current Release*: [v1.0.0-rc.1](https://github.com/microsoft/durabletask-dotnet/releases/tag/v1.0.0-rc.1)
+*Current Release*: [v1.0.0](https://github.com/microsoft/durabletask-dotnet/releases/tag/v1.0.0)
 
 ## NuGet packages
 

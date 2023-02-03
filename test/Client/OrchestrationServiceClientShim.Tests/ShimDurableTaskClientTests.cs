@@ -58,7 +58,7 @@ public class ShimDurableTaskClientTests
         this.orchestrationClient.Setup(m => m.GetOrchestrationStateAsync(instanceId, false)).ReturnsAsync(states);
 
         // act
-        OrchestrationMetadata? result = await this.client.GetInstanceMetadataAsync(instanceId, false);
+        OrchestrationMetadata? result = await this.client.GetInstanceAsync(instanceId, false);
 
         // assert
         result.Should().BeNull();
@@ -75,7 +75,7 @@ public class ShimDurableTaskClientTests
         this.orchestrationClient.Setup(m => m.GetOrchestrationStateAsync(instanceId, false)).ReturnsAsync(states);
 
         // act
-        OrchestrationMetadata? result = await this.client.GetInstanceMetadataAsync(instanceId, getInputs);
+        OrchestrationMetadata? result = await this.client.GetInstanceAsync(instanceId, getInputs);
 
         // assert
         Validate(result, states.First(), getInputs);
@@ -107,7 +107,7 @@ public class ShimDurableTaskClientTests
         };
 
         // act
-        List<OrchestrationMetadata> result = await this.client.GetInstances(query).ToListAsync();
+        List<OrchestrationMetadata> result = await this.client.GetAllInstancesAsync(query).ToListAsync();
 
         // assert
         this.orchestrationClient.VerifyAll();
@@ -125,7 +125,7 @@ public class ShimDurableTaskClientTests
         this.purgeClient.Setup(m => m.PurgeInstanceStateAsync(instanceId)).ReturnsAsync(new Core.PurgeResult(1));
 
         // act
-        PurgeResult result = await this.client.PurgeInstanceMetadataAsync(instanceId);
+        PurgeResult result = await this.client.PurgeInstanceAsync(instanceId);
 
         // assert
         this.orchestrationClient.VerifyAll();
@@ -141,7 +141,7 @@ public class ShimDurableTaskClientTests
             .ReturnsAsync(new Core.PurgeResult(10));
 
         // act
-        PurgeResult result = await this.client.PurgeInstancesAsync(filter);
+        PurgeResult result = await this.client.PurgeAllInstancesAsync(filter);
 
         // assert
         this.orchestrationClient.VerifyAll();
@@ -199,7 +199,7 @@ public class ShimDurableTaskClientTests
             .Returns(Task.CompletedTask);
 
         // act
-        await this.client.TerminateAsync(instanceId, null, default);
+        await this.client.TerminateInstanceAsync(instanceId, null, default);
 
         // assert
         this.orchestrationClient.VerifyAll();

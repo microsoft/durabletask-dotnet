@@ -52,7 +52,7 @@ class ShimDurableTaskClient : DurableTaskClient
     public override ValueTask DisposeAsync() => default;
 
     /// <inheritdoc/>
-    public override async Task<OrchestrationMetadata?> GetInstanceMetadataAsync(
+    public override async Task<OrchestrationMetadata?> GetInstancesAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {
         cancellation.ThrowIfCancellationRequested();
@@ -66,7 +66,7 @@ class ShimDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override AsyncPageable<OrchestrationMetadata> GetInstances(OrchestrationQuery? query = null)
+    public override AsyncPageable<OrchestrationMetadata> GetAllInstancesAsync(OrchestrationQuery? query = null)
     {
         // Get this early to force an exception if not supported.
         IOrchestrationServiceQueryClient queryClient = this.CastClient<IOrchestrationServiceQueryClient>();
@@ -94,7 +94,7 @@ class ShimDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override async Task<PurgeResult> PurgeInstanceMetadataAsync(
+    public override async Task<PurgeResult> PurgeInstanceAsync(
         string instanceId, CancellationToken cancellation = default)
     {
         Check.NotNullOrEmpty(instanceId);
@@ -104,7 +104,7 @@ class ShimDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override async Task<PurgeResult> PurgeInstancesAsync(
+    public override async Task<PurgeResult> PurgeAllInstancesAsync(
         PurgeInstancesFilter filter, CancellationToken cancellation = default)
     {
         Check.NotNull(filter);
@@ -168,7 +168,7 @@ class ShimDurableTaskClient : DurableTaskClient
         => this.SendInstanceMessageAsync(instanceId, new ExecutionResumedEvent(-1, reason), cancellation);
 
     /// <inheritdoc/>
-    public override Task TerminateAsync(
+    public override Task TerminateInstanceAsync(
         string instanceId, object? output = null, CancellationToken cancellation = default)
     {
         Check.NotNullOrEmpty(instanceId);
@@ -195,7 +195,7 @@ class ShimDurableTaskClient : DurableTaskClient
 
         while (true)
         {
-            OrchestrationMetadata? metadata = await this.GetInstanceMetadataAsync(
+            OrchestrationMetadata? metadata = await this.GetInstancesAsync(
                 instanceId, getInputsAndOutputs, cancellation);
             if (metadata is null)
             {
@@ -240,7 +240,7 @@ class ShimDurableTaskClient : DurableTaskClient
             return t;
         }
 
-        throw new NotSupportedException($"Provided IOrchestrationClient does not implement {typeof(T)}.");
+        throw new NotSupportedException($"Provided IOrchestrationServiceClient does not implement {typeof(T)}.");
     }
 
     Task SendInstanceMessageAsync(string instanceId, HistoryEvent @event, CancellationToken cancellation)

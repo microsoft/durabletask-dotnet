@@ -44,12 +44,12 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             OrchestrationName, input: shouldThrow);
 
         await server.Client.WaitForInstanceStartAsync(instanceId, default);
-        OrchestrationMetadata? metadata = await server.Client.GetInstancesAsync(instanceId, false);
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
         AssertMetadata(metadata!, instanceId, OrchestrationRuntimeStatus.Running);
 
         await server.Client.RaiseEventAsync(instanceId, "event", default);
         await server.Client.WaitForInstanceCompletionAsync(instanceId, default);
-        metadata = await server.Client.GetInstancesAsync(instanceId, false);
+        metadata = await server.Client.GetInstanceAsync(instanceId, false);
         AssertMetadata(
             metadata!,
             instanceId,

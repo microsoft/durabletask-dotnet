@@ -46,7 +46,7 @@ public enum OrchestrationRuntimeStatus
     Pending,
 
     /// <summary>
-    /// The orchestration is in a suspended state.
+    /// The orchestration has been suspended.
     /// </summary>
     Suspended,
 }

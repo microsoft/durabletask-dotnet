@@ -95,15 +95,8 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override async Task RaiseEventAsync(
         string instanceId, string eventName, object? eventPayload = null, CancellationToken cancellation = default)
     {
-        if (string.IsNullOrEmpty(instanceId))
-        {
-            throw new ArgumentNullException(nameof(instanceId));
-        }
-
-        if (string.IsNullOrEmpty(eventName))
-        {
-            throw new ArgumentNullException(nameof(eventName));
-        }
+        Check.NotNullOrEmpty(instanceId);
+        Check.NotNullOrEmpty(eventName);
 
         P.RaiseEventRequest request = new()
         {
@@ -119,11 +112,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override async Task TerminateInstanceAsync(
         string instanceId, object? output = null, CancellationToken cancellation = default)
     {
-        if (string.IsNullOrEmpty(instanceId))
-        {
-            throw new ArgumentNullException(nameof(instanceId));
-        }
-
+        Check.NotNullOrEmpty(instanceId);
         this.logger.TerminatingInstance(instanceId);
 
         string? serializedOutput = this.DataConverter.Serialize(output);

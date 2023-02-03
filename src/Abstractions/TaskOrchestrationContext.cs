@@ -91,7 +91,7 @@ public abstract class TaskOrchestrationContext
     /// to not include any sensitive data in activity inputs or outputs. It's also recommended to not use large payloads
     /// for activity inputs and outputs, which can result in expensive serialization and network utilization. For data
     /// that cannot be cheaply or safely persisted to storage, it's recommended to instead pass <em>references</em>
-    /// (for example, a URL to a storage blog) to the data and have activities fetch the data directly as part of their
+    /// (for example, a URL to a storage blob) to the data and have activities fetch the data directly as part of their
     /// implementation.
     /// </para>
     /// </remarks>
@@ -99,7 +99,7 @@ public abstract class TaskOrchestrationContext
     /// <param name="input">The serializable input to pass to the activity.</param>
     /// <param name="options">Additional options that control the execution and processing of the activity.</param>
     /// <returns>A task that completes when the activity completes or fails.</returns>
-    /// <exception cref="ArgumentException">The specified orchestrator does not exist.</exception>
+    /// <exception cref="ArgumentException">The specified activity does not exist.</exception>
     /// <exception cref="InvalidOperationException">
     /// Thrown if the calling thread is anything other than the main orchestrator thread.
     /// </exception>
@@ -108,15 +108,30 @@ public abstract class TaskOrchestrationContext
     /// <see cref="TaskFailedException.FailureDetails"/> property.
     /// </exception>
     public virtual Task CallActivityAsync(TaskName name, object? input = null, TaskOptions? options = null)
-    {
-        return this.CallActivityAsync<object>(name, input, options);
-    }
+        => this.CallActivityAsync<object>(name, input, options);
 
     /// <returns>
     /// A task that completes when the activity completes or fails. The result of the task is the activity's return value.
     /// </returns>
-    /// <inheritdoc cref="CallActivityAsync"/>
-    public abstract Task<T> CallActivityAsync<T>(TaskName name, object? input = null, TaskOptions? options = null);
+    /// <inheritdoc cref="CallActivityAsync(TaskName, object?, TaskOptions?)"/>
+    public virtual Task CallActivityAsync(TaskName name, TaskOptions options)
+        => this.CallActivityAsync(name, null, options);
+
+    /// <returns>
+    /// A task that completes when the activity completes or fails. The result of the task is the activity's return value.
+    /// </returns>
+    /// <typeparam name="TResult">The type into which to deserialize the activity's output.</typeparam>
+    /// <inheritdoc cref="CallActivityAsync(TaskName, object?, TaskOptions?)"/>
+    public virtual Task<TResult> CallActivityAsync<TResult>(TaskName name, TaskOptions options)
+        => this.CallActivityAsync<TResult>(name, null, options);
+
+    /// <returns>
+    /// A task that completes when the activity completes or fails. The result of the task is the activity's return value.
+    /// </returns>
+    /// <typeparam name="TResult">The type into which to deserialize the activity's output.</typeparam>
+    /// <inheritdoc cref="CallActivityAsync(TaskName, object?, TaskOptions?)"/>
+    public abstract Task<TResult> CallActivityAsync<TResult>(
+        TaskName name, object? input = null, TaskOptions? options = null);
 
     /// <summary>
     /// Creates a durable timer that expires after the specified delay.
@@ -247,12 +262,25 @@ public abstract class TaskOrchestrationContext
     /// <summary>
     /// Executes a named sub-orchestrator and returns the result.
     /// </summary>
-    /// <typeparam name="TResult">
-    /// The type into which to deserialize the sub-orchestrator's output.
-    /// </typeparam>
+    /// <typeparam name="TResult">The type into which to deserialize the sub-orchestrator's output.</typeparam>
     /// <inheritdoc cref="CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)"/>
     public abstract Task<TResult> CallSubOrchestratorAsync<TResult>(
         TaskName orchestratorName, object? input = null, TaskOptions? options = null);
+
+    /// <summary>
+    /// Executes a named sub-orchestrator and returns the result.
+    /// </summary>
+    /// <typeparam name="TResult">The type into which to deserialize the sub-orchestrator's output.</typeparam>
+    /// <inheritdoc cref="CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)"/>
+    public virtual Task<TResult> CallSubOrchestratorAsync<TResult>(TaskName orchestratorName, TaskOptions options)
+        => this.CallSubOrchestratorAsync<TResult>(orchestratorName, null, options);
+
+    /// <summary>
+    /// Executes a named sub-orchestrator and returns the result.
+    /// </summary>
+    /// <inheritdoc cref="CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)"/>
+    public virtual Task CallSubOrchestratorAsync(TaskName orchestratorName, TaskOptions options)
+        => this.CallSubOrchestratorAsync(orchestratorName, null, options);
 
     /// <summary>
     /// Executes a named sub-orchestrator.
@@ -293,14 +321,12 @@ public abstract class TaskOrchestrationContext
     /// Thrown if the calling thread is anything other than the main orchestrator thread.
     /// </exception>
     /// <exception cref="TaskFailedException">
-    /// The activity failed with an unhandled exception. The details of the failure can be found in the
+    /// The sub-orchestration failed with an unhandled exception. The details of the failure can be found in the
     /// <see cref="TaskFailedException.FailureDetails"/> property.
     /// </exception>
-    public Task CallSubOrchestratorAsync(
+    public virtual Task CallSubOrchestratorAsync(
         TaskName orchestratorName, object? input = null, TaskOptions? options = null)
-    {
-        return this.CallSubOrchestratorAsync<object>(orchestratorName, input, options);
-    }
+        => this.CallSubOrchestratorAsync<object>(orchestratorName, input, options);
 
     /// <summary>
     /// Restarts the orchestration with a new input and clears its history.

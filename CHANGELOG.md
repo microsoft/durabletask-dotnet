@@ -3,12 +3,20 @@
 ## v1.0.0
 
 - Added `SuspendInstanceAsync` and `ResumeInstanceAsync` to `DurableTaskClient`.
+- Rename `DurableTaskClient` methods
+    - `TerminateAsync` -> `TerminateInstanceAsync`
+    - `PurgeInstanceMetadataAsync` -> `PurgeInstanceAsync`
+    - `PurgeInstances` -> `PurgeAllInstancesAsync`
+    - `GetInstanceMetadataAsync` -> `GetInstanceAsync`
+    - `GetInstances` -> `GetAllInstancesAsync`
 - `TaskOrchestrationContext.CreateReplaySafeLogger` now creates `ILogger` directly (as opposed to wrapping an existing `ILogger`).
 - Durable Functions class-based syntax now resolves `ITaskActivity` instances from `IServiceProvider`, if available there.
 - `DurableTaskClient` methods have been touched up to ensure `CancellationToken` is included, as well as is the last parameter.
 - Removed obsolete/unimplemented local lambda activity calls from `TaskOrchestrationContext`
 - Input is now an optional parameter on `TaskOrchestrationContext.ContinueAsNew`
 - Multi-target gRPC projects to now use `Grpc.Net.Client` when appropriate (.NET6.0 and up)
+
+*Note: `Microsoft.DurableTask.Generators` is remaining as `preview.1`.*
 
 ## v1.0.0-rc.1
 

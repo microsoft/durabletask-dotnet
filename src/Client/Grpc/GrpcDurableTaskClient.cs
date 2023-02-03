@@ -148,8 +148,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
         try
         {
-            await this.sidecarClient.SuspendInstanceAsync(
-                request, cancellationToken: cancellation);
+            await this.sidecarClient.SuspendInstanceAsync(request, cancellationToken: cancellation);
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
@@ -170,8 +169,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
         try
         {
-            await this.sidecarClient.ResumeInstanceAsync(
-                request, cancellationToken: cancellation);
+            await this.sidecarClient.ResumeInstanceAsync(request, cancellationToken: cancellation);
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {

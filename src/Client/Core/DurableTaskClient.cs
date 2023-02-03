@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.ComponentModel;
 using Microsoft.DurableTask.Internal;
 
 namespace Microsoft.DurableTask.Client;
@@ -73,7 +74,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// and health of the backend task hub, and whether a start time was provided via <paramref name="options" />.
     /// </para><para>
     /// The task associated with this method completes after the orchestration instance was successfully scheduled. You
-    /// can use the <see cref="GetInstancesAsync(string, bool, CancellationToken)"/> to query the status of the
+    /// can use the <see cref="GetInstanceAsync(string, bool, CancellationToken)"/> to query the status of the
     /// scheduled instance, the <see cref="WaitForInstanceStartAsync(string, bool, CancellationToken)"/> method to wait
     /// for the instance to transition out of the <see cref="OrchestrationRuntimeStatus.Pending"/> status, or the
     /// <see cref="WaitForInstanceCompletionAsync(string, bool, CancellationToken)"/> method to wait for the instance to
@@ -270,7 +271,27 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     public abstract Task ResumeInstanceAsync(
         string instanceId, string? reason = null, CancellationToken cancellation = default);
 
+    /// <inheritdoc cref="GetInstanceAsync(string, bool, CancellationToken)"/>
+    public virtual Task<OrchestrationMetadata?> GetInstanceAsync(
+        string instanceId, CancellationToken cancellation)
+        => this.GetInstanceAsync(instanceId, false, cancellation);
+
+    /// <summary>
+    /// Fetches orchestration instance metadata from the configured durable store.
+    /// </summary>
+    /// <remarks>
+    /// You can use the <paramref name="getInputsAndOutputs"/> parameter to determine whether to fetch input and
+    /// output data for the target orchestration instance. If your code doesn't require access to this data, it's
+    /// recommended that you set this parameter to <c>false</c> to minimize the network bandwidth, serialization, and
+    /// memory costs associated with fetching the instance metadata.
+    /// </remarks>
+    /// <inheritdoc cref="WaitForInstanceStartAsync(string, bool, CancellationToken)"/>
+    public virtual Task<OrchestrationMetadata?> GetInstanceAsync(
+        string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
+        => this.GetInstancesAsync(instanceId, getInputsAndOutputs, cancellation);
+
     /// <inheritdoc cref="GetInstancesAsync(string, bool, CancellationToken)"/>
+    [EditorBrowsable(EditorBrowsableState.Never)] // use GetInstanceAsync
     public virtual Task<OrchestrationMetadata?> GetInstancesAsync(
         string instanceId, CancellationToken cancellation)
         => this.GetInstancesAsync(instanceId, false, cancellation);
@@ -285,6 +306,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// memory costs associated with fetching the instance metadata.
     /// </remarks>
     /// <inheritdoc cref="WaitForInstanceStartAsync(string, bool, CancellationToken)"/>
+    [EditorBrowsable(EditorBrowsableState.Never)] // use GetInstanceAsync
     public abstract Task<OrchestrationMetadata?> GetInstancesAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default);
 

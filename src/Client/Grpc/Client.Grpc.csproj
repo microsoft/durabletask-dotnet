@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <SharedSection Include="Core" />
+    <SharedSection Include="DependencyInjection" />
     <SharedSection Include="Grpc" />
   </ItemGroup>
 

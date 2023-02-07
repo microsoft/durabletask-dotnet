@@ -23,7 +23,7 @@ public static class TaskOrchestrationContextRequestExtensions
         Check.NotNull(context);
         Check.NotNull(request);
         TaskName name = request.GetTaskName();
-        return context.CallSubOrchestratorAsync<TResult>(name, GetInput(request), options);
+        return context.CallSubOrchestratorAsync<TResult>(name, request.GetInput(), options);
     }
 
     /// <summary>
@@ -40,7 +40,7 @@ public static class TaskOrchestrationContextRequestExtensions
         Check.NotNull(context);
         Check.NotNull(request);
         TaskName name = request.GetTaskName();
-        return context.CallSubOrchestratorAsync(name, GetInput(request), options);
+        return context.CallSubOrchestratorAsync(name, request.GetInput(), options);
     }
 
     /// <summary>
@@ -58,7 +58,7 @@ public static class TaskOrchestrationContextRequestExtensions
         Check.NotNull(context);
         Check.NotNull(request);
         TaskName name = request.GetTaskName();
-        return context.CallActivityAsync<TResult>(name, GetInput(request), options);
+        return context.CallActivityAsync<TResult>(name, request.GetInput(), options);
     }
 
     /// <summary>
@@ -75,16 +75,6 @@ public static class TaskOrchestrationContextRequestExtensions
         Check.NotNull(context);
         Check.NotNull(request);
         TaskName name = request.GetTaskName();
-        return context.CallActivityAsync(name, GetInput(request), options);
-    }
-
-    static object? GetInput(object request)
-    {
-        if (request is IProvidesInput provider)
-        {
-            return provider.GetInput();
-        }
-
-        return request;
+        return context.CallActivityAsync(name, request.GetInput(), options);
     }
 }

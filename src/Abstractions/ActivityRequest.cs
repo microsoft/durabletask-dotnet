@@ -54,6 +54,21 @@ public static class ActivityRequest
         => new Request<TResult>(name, input);
 
     /// <summary>
+    /// Gets the activity input from a <see cref="IBaseActivityRequest" />.
+    /// </summary>
+    /// <param name="request">The request to get input for.</param>
+    /// <returns>The input.</returns>
+    internal static object? GetInput(this IBaseActivityRequest request)
+    {
+        if (request is IProvidesInput provider)
+        {
+            return provider.GetInput();
+        }
+
+        return request;
+    }
+
+    /// <summary>
     /// Represents an activity request where the input is not the request itself.
     /// </summary>
     /// <typeparam name="TResult">The result type.</typeparam>

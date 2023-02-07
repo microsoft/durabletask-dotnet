@@ -54,6 +54,21 @@ public static class OrchestrationRequest
         => new Request<TResult>(name, input);
 
     /// <summary>
+    /// Gets the orchestration input from a <see cref="IBaseOrchestrationRequest" />.
+    /// </summary>
+    /// <param name="request">The request to get input for.</param>
+    /// <returns>The input.</returns>
+    internal static object? GetInput(this IBaseOrchestrationRequest request)
+    {
+        if (request is IProvidesInput provider)
+        {
+            return provider.GetInput();
+        }
+
+        return request;
+    }
+
+    /// <summary>
     /// Represents an orchestration request where the input is not the request itself.
     /// </summary>
     /// <typeparam name="TResult">The result type.</typeparam>

@@ -6,6 +6,9 @@ namespace Microsoft.DurableTask;
 /// <summary>
 /// Represents a <see cref="Void" /> result.
 /// </summary>
+/// <remarks>
+/// Modeled after https://learn.microsoft.com/en-us/dotnet/fsharp/language-reference/unit-type.
+/// </remarks>
 public readonly struct Unit : IEquatable<Unit>, IComparable<Unit>
 {
 #pragma warning disable CA1801 // unused parameters
@@ -24,50 +27,50 @@ public readonly struct Unit : IEquatable<Unit>, IComparable<Unit>
     public static Task<Unit> Task { get; } = System.Threading.Tasks.Task.FromResult(RefValue);
 
     /// <summary>
-    /// Compares two empties for equality. Always true.
+    /// Compares two units for equality. Always true.
     /// </summary>
-    /// <param name="left">The left empty.</param>
-    /// <param name="right">The right empty.</param>
+    /// <param name="left">The left unit.</param>
+    /// <param name="right">The right unit.</param>
     /// <returns>Always true.</returns>
     public static bool operator ==(Unit left, Unit right) => true;
 
     /// <summary>
-    /// Compares two empties for inequality. Always false.
+    /// Compares two units for inequality. Always false.
     /// </summary>
-    /// <param name="left">The left empty.</param>
-    /// <param name="right">The right empty.</param>
+    /// <param name="left">The left unit.</param>
+    /// <param name="right">The right unit.</param>
     /// <returns>Always false.</returns>
     public static bool operator !=(Unit left, Unit right) => !true;
 
     /// <summary>
-    /// Compares two empties. Always false.
+    /// Compares two units. Always false.
     /// </summary>
-    /// <param name="left">The left empty.</param>
-    /// <param name="right">The right empty.</param>
+    /// <param name="left">The left unit.</param>
+    /// <param name="right">The right unit.</param>
     /// <returns>Always false.</returns>
     public static bool operator <(Unit left, Unit right) => false;
 
     /// <summary>
-    /// Compares two empties. Always true.
+    /// Compares two units. Always true.
     /// </summary>
-    /// <param name="left">The left empty.</param>
-    /// <param name="right">The right empty.</param>
+    /// <param name="left">The left unit.</param>
+    /// <param name="right">The right unit.</param>
     /// <returns>Always true.</returns>
     public static bool operator <=(Unit left, Unit right) => true;
 
     /// <summary>
-    /// Compares two empties. Always false.
+    /// Compares two units. Always false.
     /// </summary>
-    /// <param name="left">The left empty.</param>
-    /// <param name="right">The right empty.</param>
+    /// <param name="left">The left unit.</param>
+    /// <param name="right">The right unit.</param>
     /// <returns>Always false.</returns>
     public static bool operator >(Unit left, Unit right) => false;
 
     /// <summary>
-    /// Compares two empties. Always true.
+    /// Compares two units. Always true.
     /// </summary>
-    /// <param name="left">The left empty.</param>
-    /// <param name="right">The right empty.</param>
+    /// <param name="left">The left unit.</param>
+    /// <param name="right">The right unit.</param>
     /// <returns>Always true.</returns>
     public static bool operator >=(Unit left, Unit right) => true;
 
@@ -84,7 +87,7 @@ public readonly struct Unit : IEquatable<Unit>, IComparable<Unit>
     public override int GetHashCode() => 0;
 
     /// <inheritdoc />
-    public override string ToString() => "{}";
+    public override string ToString() => "()"; // Same as F# Unit string representation.
 
 #pragma warning restore CA1801 // unused parameters
 #pragma warning restore IDE0060 // unused parameters

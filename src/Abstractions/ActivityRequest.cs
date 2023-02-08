@@ -54,6 +54,19 @@ public static class ActivityRequest
         => new Request<TResult>(name, input);
 
     /// <summary>
+    /// Gets an <see cref="IActivityRequest" /> which has an explicitly provided input.
+    /// </summary>
+    /// <remarks>
+    /// This is useful when you want to use an existing type for input (like <see cref="string" />) and not derive an
+    /// entirely new type.
+    /// </remarks>
+    /// <param name="name">The name of the activity to run.</param>
+    /// <param name="input">The input for the activity.</param>
+    /// <returns>A request that can be used to enqueue an activity.</returns>
+    public static IActivityRequest Create(TaskName name, object? input = null)
+        => new Request(name, input);
+
+    /// <summary>
     /// Gets the activity input from a <see cref="IBaseActivityRequest" />.
     /// </summary>
     /// <param name="request">The request to get input for.</param>
@@ -68,30 +81,35 @@ public static class ActivityRequest
         return request;
     }
 
-    /// <summary>
-    /// Represents an activity request where the input is not the request itself.
-    /// </summary>
-    /// <typeparam name="TResult">The result type.</typeparam>
-    class Request<TResult> : IActivityRequest<TResult>, IProvidesInput
+    class Request<TResult> : RequestCore, IActivityRequest<TResult>
+    {
+        public Request(TaskName name, object? input)
+            : base(name, input)
+        {
+        }
+    }
+
+    class Request : RequestCore, IActivityRequest
+    {
+        public Request(TaskName name, object? input)
+            : base(name, input)
+        {
+        }
+    }
+
+    class RequestCore : IBaseActivityRequest, IProvidesInput
     {
         readonly TaskName name;
         readonly object? input;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Request{TResult}"/> class.
-        /// </summary>
-        /// <param name="name">The task name.</param>
-        /// <param name="input">The input.</param>
-        public Request(TaskName name, object? input)
+        public RequestCore(TaskName name, object? input)
         {
             this.name = name;
             this.input = input;
         }
 
-        /// <inheritdoc/>
         public object? GetInput() => this.input;
 
-        /// <inheritdoc/>
         public TaskName GetTaskName() => this.name;
     }
 }

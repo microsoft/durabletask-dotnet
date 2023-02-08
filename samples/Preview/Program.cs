@@ -17,7 +17,7 @@ IHost host = Host.CreateDefaultBuilder(args)
         {
             // Configure options for this builder. Can be omitted if no options customization is needed.
             builder.Configure(opt => { });
-            builder.UseGrpc(address); // multiple overloads available for providing gRPC information
+            builder.UseGrpc(); // multiple overloads available for providing gRPC information
 
             // AddDurableTaskClient allows for multiple named clients by passing in a name as the first argument.
             // When using a non-default named client, you will need to make this call below to have the
@@ -39,7 +39,7 @@ IHost host = Host.CreateDefaultBuilder(args)
                 Mediator2Command.Register(tasks);
             });
 
-            builder.UseGrpc(address); // multiple overloads available for providing gRPC information
+            builder.UseGrpc(); // multiple overloads available for providing gRPC information
         });
 
         // Can also configure worker and client options through all the existing options config methods.

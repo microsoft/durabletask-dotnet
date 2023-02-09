@@ -49,8 +49,8 @@ namespace NetFxConsoleApp
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1000));
             OrchestrationMetadata instance = await client.WaitForInstanceCompletionAsync(
                 instanceId,
-                cts.Token,
-                getInputsAndOutputs: true);
+                getInputsAndOutputs: true,
+                cts.Token);
 
             Console.WriteLine($"Instance completed: {instance}");
         }

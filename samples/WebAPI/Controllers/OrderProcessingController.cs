@@ -45,7 +45,7 @@ public class OrderProcessingController : ControllerBase
     [HttpGet("{orderId}")]
     public async Task<ActionResult> GetOrderStatus(string orderId)
     {
-        OrchestrationMetadata? metadata = await this.durableTaskClient.GetInstanceMetadataAsync(
+        OrchestrationMetadata? metadata = await this.durableTaskClient.GetInstancesAsync(
             instanceId: orderId,
             getInputsAndOutputs: true);
 

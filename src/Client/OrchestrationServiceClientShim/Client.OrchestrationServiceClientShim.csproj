@@ -8,12 +8,6 @@ The client is responsible for interacting with orchestrations from outside the w
     <EnableStyleCop>true</EnableStyleCop>
   </PropertyGroup>
 
-  <!-- Version info -->
-  <PropertyGroup>
-    <VersionPrefix>1.0.0</VersionPrefix>
-    <VersionSuffix>rc.1</VersionSuffix>
-  </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="../Core/Client.csproj" />
   </ItemGroup>

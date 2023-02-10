@@ -1,4 +1,4 @@
-Client abstractions for `Microsoft.DurableTask`. A `DurableTaskClient` is used for interacting with a task hub. Including starting new orchestrations, retrieving orchestration details, sending events to orchestrations, etc. This package does not include a concrete client implementation, instead a separate client package must be used, such as `Microsoft.DurableTask.Client.Grpc`.
+Client abstractions for `Microsoft.DurableTask`. A `DurableTaskClient` is used for interacting with a task hub. Including starting new orchestrations, retrieving orchestration details, sending events to orchestrations, etc. This package does not include a concrete client implementation. Instead a separate client package must be used, such as `Microsoft.DurableTask.Client.Grpc`.
 
 Commonly used types:
 - `DurableTaskClient`

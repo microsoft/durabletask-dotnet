@@ -27,5 +27,6 @@
   </ItemGroup>
 
   <Import Project="$(EngRoot)targets/SharedFiles.targets" />
+  <Import Project="$(EngRoot)targets/Release.targets" />
 
 </Project>

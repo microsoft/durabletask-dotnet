@@ -7,18 +7,15 @@ pool:
   demands:
     - ImageOverride -equals MMS2022TLS
 
+variables:
+  project: 'src/dirs.proj'
+
 steps:
 - checkout: self
   submodules: true
 
 - task: UseDotNet@2
-  displayName: 'Use the .NET Core 2.1 SDK (required for build signing)'
-  inputs:
-    packageType: 'sdk'
-    version: '2.1.x'
-
-- task: UseDotNet@2
-  displayName: 'Use the .NET 6 SDK'
+  displayName: 'Install .NET SDK'
   inputs:
     packageType: 'sdk'
     useGlobalJson: true
@@ -29,7 +26,7 @@ steps:
   inputs:
     command: restore
     verbosityRestore: Minimal
-    projects: 'src/dirs.proj'
+    projects: $(project)
 
 # Build source directory
 - task: DotNetCoreCLI@2
@@ -37,11 +34,11 @@ steps:
   inputs:
     command: build
     arguments: --no-restore -c release -p:FileVersionRevision=$(Build.BuildId) -p:ContinuousIntegrationBuild=true
-    projects: 'src/dirs.proj'
+    projects: $(project)
 
 # Authenticode sign all the DLLs with the Microsoft certificate.
 # This appears to be an in-place signing job, which is convenient.
-- task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
+- task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@2
   displayName: 'ESRP CodeSigning: Authenticode'
   inputs:
     ConnectedServiceName: 'ESRP Service'
@@ -49,7 +46,7 @@ steps:
     Pattern: 'Microsoft.DurableTask.*.dll'
     signConfigType: inlineSignParams
     inlineOperation: |
-     [    
+    [
         {
             "KeyCode": "CP-230012",
             "OperationCode": "SigntoolSign",
@@ -88,11 +85,11 @@ steps:
     configuration: release
     nobuild: true
     packDirectory: $(build.artifactStagingDirectory)
-    packagesToPack: 'src/dirs.proj'
+    packagesToPack: $(project)
 
 # Digitally sign all the nuget packages with the Microsoft certificate.
 # This appears to be an in-place signing job, which is convenient.
-- task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
+- task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@2
   displayName: 'ESRP CodeSigning: Nupkg'
   inputs:
     ConnectedServiceName: 'ESRP Service'
@@ -100,22 +97,22 @@ steps:
     Pattern: '*.nupkg'
     signConfigType: inlineSignParams
     inlineOperation: |
-     [    
+      [
         {
-            "KeyCode": "CP-401405",
-            "OperationCode": "NuGetSign",
-            "Parameters": {},
-            "ToolName": "sign",
-            "ToolVersion": "1.0"
+          "KeyCode": "CP-401405",
+          "OperationCode": "NuGetSign",
+          "Parameters": {},
+          "ToolName": "sign",
+          "ToolVersion": "1.0"
         },
         {
-            "KeyCode": "CP-401405",
-            "OperationCode": "NuGetVerify",
-            "Parameters": {},
-            "ToolName": "sign",
-            "ToolVersion": "1.0"
+          "KeyCode": "CP-401405",
+          "OperationCode": "NuGetVerify",
+          "Parameters": {},
+          "ToolName": "sign",
+          "ToolVersion": "1.0"
         }
-     ]
+      ]
 
 # Make the nuget packages available for download in the ADO portal UI
 - publish: $(build.artifactStagingDirectory)

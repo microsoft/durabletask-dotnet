@@ -4,4 +4,4 @@ Commonly used types:
 - `GrpcDurableTaskClient`
 - `GrpcDurableTaskClientOptions`
 
-For more information, see https://github.com/microsoft/durabletask-dotnet/readme.md
+For more information, see https://github.com/microsoft/durabletask-dotnet/blob/main/README.md

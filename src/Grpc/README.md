@@ -4,4 +4,4 @@ Commonly used types:
 - `TaskHubSidecarService`
 - `TaskHubSidecarServiceClient`
 
-For more information, see https://github.com/microsoft/durabletask-dotnet/blob/main/README.md
+For more information, see https://github.com/microsoft/durabletask-dotnet

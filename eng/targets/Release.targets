@@ -1,0 +1,44 @@
+<Project>
+
+  <!--
+    Release.targets: targets relating to the release integrity of our product.
+    - Nuget packaging targets
+    - Versioning targets
+  -->
+
+  <PropertyGroup>
+    <ReleaseNotesFile Condition="'$(ReleaseNotesFile)' == ''">RELEASENOTES.md</ReleaseNotesFile>
+    <BeforePack>$(BeforePack);GetReleaseNotes;AddCommonReleaseNotes</BeforePack>
+    <PackageReadmeFile Condition="Exists('README.md')">README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <!-- Embed the SBOM manifest, which is generated as part of the "official" build -->
+  <ItemGroup Condition="'$(Configuration)'=='Release'">
+    <Content Include="..\..\_manifest\**" Pack="true" PackagePath="content/SBOM">
+      <Pack>true</Pack>
+      <PackagePath>content/SBOM</PackagePath>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('README.md')">
+    <Content Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+  <!-- This target lets us define a release notes file per package. -->
+  <Target Name="GetReleaseNotes" Condition="'$(PackageReleaseNotes)' == '' and Exists('$(ReleaseNotesFile)')">
+    <PropertyGroup>
+      <PackageReleaseNotes>$([System.IO.File]::ReadAllText('$(ReleaseNotesFile)'))</PackageReleaseNotes>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="AddCommonReleaseNotes">
+    <PropertyGroup>
+      <PackageReleaseNotes>
+See $(RepositoryUrl)/releases/tag/v$(Version)
+
+$(PackageReleaseNotes)
+      </PackageReleaseNotes>
+    </PropertyGroup>
+  </Target>
+
+</Project>

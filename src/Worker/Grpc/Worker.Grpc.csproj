@@ -6,11 +6,6 @@
     <EnableStyleCop>true</EnableStyleCop>
   </PropertyGroup>
 
-  <!-- Version info -->
-  <PropertyGroup>
-    <VersionPrefix>1.0.0</VersionPrefix>
-  </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="../Core/Worker.csproj" />
     <ProjectReference Include="../../Abstractions/Abstractions.csproj" />

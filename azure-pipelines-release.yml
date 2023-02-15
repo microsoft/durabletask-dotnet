@@ -9,6 +9,8 @@ pool:
 
 variables:
   project: 'src/dirs.proj'
+  log_dir: 'out/log'
+  pkg_dir: 'out/pkg'
 
 steps:
 - checkout: self
@@ -33,7 +35,7 @@ steps:
   displayName: 'Build'
   inputs:
     command: build
-    arguments: --no-restore -c release -p:FileVersionRevision=$(Build.BuildId) -p:ContinuousIntegrationBuild=true
+    arguments: --no-restore -c release -p:FileVersionRevision=$(Build.BuildId) -p:ContinuousIntegrationBuild=true -bl:$(log_dir)/build.binlog
     projects: $(project)
 
 # Authenticode sign all the DLLs with the Microsoft certificate.
@@ -80,11 +82,9 @@ steps:
 - task: DotNetCoreCLI@2
   displayName: Generate nuget packages
   inputs:
-    command: pack
-    verbosityPack: Minimal
-    configuration: release
-    nobuild: true
-    packDirectory: $(build.artifactStagingDirectory)
+    command: custom
+    custom: Pack
+    arguments: --no-build -c release -p:FileVersionRevision=$(Build.BuildId) -p:ContinuousIntegrationBuild=true -bl:$(log_dir)/pack.binlog
     packagesToPack: $(project)
 
 # Digitally sign all the nuget packages with the Microsoft certificate.
@@ -115,6 +115,10 @@ steps:
       ]
 
 # Make the nuget packages available for download in the ADO portal UI
-- publish: $(build.artifactStagingDirectory)
-  displayName: 'Publish nuget packages to Artifacts'
-  artifact: PackageOutput
+- publish: $(pkg_dir)
+  displayName: 'Publish packages to Artifacts'
+  artifact: pkg
+
+- publish: $(log_dir)
+  displayName: 'Publish logs to Artifacts'
+  artifact: log

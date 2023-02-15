@@ -7,8 +7,21 @@ pool:
   demands:
     - ImageOverride -equals MMS2022TLS
 
+parameters:
+- name: binlog
+  displayName: MSBuild binary log
+  type: boolean
+  default: false
+
 variables:
   project: 'src/dirs.proj'
+  bin_dir: 'out/bin'
+  log_dir: 'out/log'
+  pkg_dir: 'out/pkg'
+  build_args: -c release -p:FileVersionRevision=$(Build.BuildId) -p:ContinuousIntegrationBuild=true
+  ${{ if parameters.binlog }}:
+    build_binlog: -bl:$(log_dir)/build.binlog
+    pack_binlog: -bl:$(log_dir)/pack.binlog
 
 steps:
 - checkout: self
@@ -22,7 +35,7 @@ steps:
 
 # Start by restoring all the dependencies. This needs to be its own task.
 - task: DotNetCoreCLI@2
-  displayName: 'Restore'
+  displayName: Restore
   inputs:
     command: restore
     verbosityRestore: Minimal
@@ -30,10 +43,10 @@ steps:
 
 # Build source directory
 - task: DotNetCoreCLI@2
-  displayName: 'Build'
+  displayName: Build
   inputs:
     command: build
-    arguments: --no-restore -c release -p:FileVersionRevision=$(Build.BuildId) -p:ContinuousIntegrationBuild=true
+    arguments: --no-restore $(build_args) $(build_binlog)
     projects: $(project)
 
 # Authenticode sign all the DLLs with the Microsoft certificate.
@@ -42,7 +55,7 @@ steps:
   displayName: 'ESRP CodeSigning: Authenticode'
   inputs:
     ConnectedServiceName: 'ESRP Service'
-    FolderPath: 'out/bin'
+    FolderPath: $(bin_dir)
     Pattern: 'Microsoft.DurableTask.*.dll'
     signConfigType: inlineSignParams
     inlineOperation: |
@@ -78,14 +91,12 @@ steps:
 # Packaging needs to be a separate step from build.
 # This will automatically pick up the signed DLLs.
 - task: DotNetCoreCLI@2
-  displayName: Generate nuget packages
+  displayName: Pack
   inputs:
-    command: pack
-    verbosityPack: Minimal
-    configuration: release
-    nobuild: true
-    packDirectory: $(build.artifactStagingDirectory)
-    packagesToPack: $(project)
+    command: custom
+    custom: pack
+    arguments: --no-build $(build_args) $(pack_binlog)
+    projects: $(project)
 
 # Digitally sign all the nuget packages with the Microsoft certificate.
 # This appears to be an in-place signing job, which is convenient.
@@ -93,7 +104,7 @@ steps:
   displayName: 'ESRP CodeSigning: Nupkg'
   inputs:
     ConnectedServiceName: 'ESRP Service'
-    FolderPath: $(build.artifactStagingDirectory)
+    FolderPath: $(pkg_dir)
     Pattern: '*.nupkg'
     signConfigType: inlineSignParams
     inlineOperation: |
@@ -115,6 +126,10 @@ steps:
       ]
 
 # Make the nuget packages available for download in the ADO portal UI
-- publish: $(build.artifactStagingDirectory)
-  displayName: 'Publish nuget packages to Artifacts'
-  artifact: PackageOutput
+- publish: $(pkg_dir)
+  displayName: 'Publish packages to Artifacts'
+  artifact: pkg
+
+- publish: $(log_dir)
+  displayName: 'Publish logs to Artifacts'
+  artifact: log

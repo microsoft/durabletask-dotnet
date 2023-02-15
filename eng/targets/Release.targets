@@ -14,7 +14,7 @@
 
   <!-- Embed the SBOM manifest, which is generated as part of the "official" build -->
   <ItemGroup Condition="'$(Configuration)'=='Release'">
-    <Content Include="..\..\_manifest\**" Pack="true" PackagePath="content/SBOM">
+    <Content Include="$(RepoRoot)_manifest/**" Pack="true" PackagePath="content/SBOM">
       <Pack>true</Pack>
       <PackagePath>content/SBOM</PackagePath>
     </Content>

@@ -15,6 +15,7 @@ parameters:
 
 variables:
   project: 'src/dirs.proj'
+  bin_dir: 'out/bin'
   log_dir: 'out/log'
   pkg_dir: 'out/pkg'
   build_args: -c release -p:FileVersionRevision=$(Build.BuildId) -p:ContinuousIntegrationBuild=true
@@ -34,7 +35,7 @@ steps:
 
 # Start by restoring all the dependencies. This needs to be its own task.
 - task: DotNetCoreCLI@2
-  displayName: 'Restore'
+  displayName: Restore
   inputs:
     command: restore
     verbosityRestore: Minimal
@@ -42,7 +43,7 @@ steps:
 
 # Build source directory
 - task: DotNetCoreCLI@2
-  displayName: 'Build'
+  displayName: Build
   inputs:
     command: build
     arguments: --no-restore $(build_args) $(build_binlog)
@@ -54,7 +55,7 @@ steps:
   displayName: 'ESRP CodeSigning: Authenticode'
   inputs:
     ConnectedServiceName: 'ESRP Service'
-    FolderPath: 'out/bin'
+    FolderPath: $(bin_dir)
     Pattern: 'Microsoft.DurableTask.*.dll'
     signConfigType: inlineSignParams
     inlineOperation: |
@@ -90,7 +91,7 @@ steps:
 # Packaging needs to be a separate step from build.
 # This will automatically pick up the signed DLLs.
 - task: DotNetCoreCLI@2
-  displayName: Generate nuget packages
+  displayName: Pack
   inputs:
     command: custom
     custom: pack
@@ -103,7 +104,7 @@ steps:
   displayName: 'ESRP CodeSigning: Nupkg'
   inputs:
     ConnectedServiceName: 'ESRP Service'
-    FolderPath: $(build.artifactStagingDirectory)
+    FolderPath: $(pkg_dir)
     Pattern: '*.nupkg'
     signConfigType: inlineSignParams
     inlineOperation: |

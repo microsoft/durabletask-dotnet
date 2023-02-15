@@ -46,7 +46,7 @@ steps:
     Pattern: 'Microsoft.DurableTask.*.dll'
     signConfigType: inlineSignParams
     inlineOperation: |
-    [
+      [
         {
             "KeyCode": "CP-230012",
             "OperationCode": "SigntoolSign",

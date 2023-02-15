@@ -73,7 +73,7 @@ steps:
 - task: AzureArtifacts.manifest-generator-task.manifest-generator-task.ManifestGeneratorTask@0
   displayName: 'SBOM Manifest Generator'
   inputs:
-    BuildDropPath: '$(System.DefaultWorkingDirectory)/out/pkg'
+    BuildDropPath: '$(System.DefaultWorkingDirectory)'
 
 # Packaging needs to be a separate step from build.
 # This will automatically pick up the signed DLLs.

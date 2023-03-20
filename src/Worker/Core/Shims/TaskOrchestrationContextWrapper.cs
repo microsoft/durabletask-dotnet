@@ -48,7 +48,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     public override string InstanceId => this.innerContext.OrchestrationInstance.InstanceId;
 
     /// <inheritdoc/>
-    public override ParentOrchestrationInstance? Parent { get; }
+    public override ParentOrchestrationInstance? Parent => this.invocationContext.Parent;
 
     /// <inheritdoc/>
     public override bool IsReplaying => this.innerContext.IsReplaying;

@@ -1,6 +1,6 @@
 ﻿# Changelog
 
-### To be released
+## To be released
 
 ### Microsoft.DurableTask.Worker
 

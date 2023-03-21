@@ -111,28 +111,3 @@ public abstract class TaskActivity<TInput> : ITaskActivity
     /// <returns>The output of the activity as a task.</returns>
     public abstract Task RunAsync(TaskActivityContext context, TInput input);
 }
-
-/// <inheritdoc cref="TaskActivity{Unit, Unit}" />
-public abstract class TaskActivity : ITaskActivity
-{
-    /// <inheritdoc/>
-    Type ITaskActivity.InputType => typeof(Unit);
-
-    /// <inheritdoc/>
-    Type ITaskActivity.OutputType => typeof(Unit);
-
-    /// <inheritdoc/>
-    async Task<object?> ITaskActivity.RunAsync(TaskActivityContext context, object? input)
-    {
-        Check.NotNull(context, nameof(context));
-        await this.RunAsync(context);
-        return Unit.Value;
-    }
-
-    /// <summary>
-    /// Override to implement async (non-blocking) task activity logic.
-    /// </summary>
-    /// <param name="context">Provides access to additional context for the current activity execution.</param>
-    /// <returns>The output of the activity as a task.</returns>
-    public abstract Task RunAsync(TaskActivityContext context);
-}

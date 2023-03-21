@@ -1,6 +1,6 @@
 ﻿# Changelog
 
-### v1.0.2
+### Unreleased
 
 ### Microsoft.DurableTask.Worker
 

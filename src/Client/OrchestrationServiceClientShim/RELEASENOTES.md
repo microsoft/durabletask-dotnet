@@ -1,1 +1,0 @@
-First release. Introduces a `DurableTaskClient` that interfaces directly with a `IOrchestrationServiceClient` from `DurableTask.Core`.

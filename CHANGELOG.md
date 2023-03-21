@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## To be released
+
+### Microsoft.DurableTask.Worker
+
+- Fix issue with `TaskOrchestrationContext.Parent` not being set.
+
 ## v1.0.1
 
 ### Microsoft.DurableTask.Client

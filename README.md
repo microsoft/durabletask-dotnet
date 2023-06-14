@@ -165,6 +165,12 @@ There are also several features that aren't yet available:
 * APIs for calling HTTP endpoints are not yet available.
 * Several instance management APIs are not yet implemented.
 
+## Obtaining the Protobuf definitions
+
+This project utilizes git submodules to obtain Protobuf definitions from [durabletask-protobuf](https://github.com/microsoft/durabletask-protobuf). You will need to obtain these to build the project.
+
+To get the definitions, run `git submodule update --init --recursive`
+
 ## Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a

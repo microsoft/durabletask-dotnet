@@ -1,1 +1,0 @@
-- Add `GrpcDurableTaskClient.CallInvoker` as an alternative to `GrpcDurableTaskClient.Channel`

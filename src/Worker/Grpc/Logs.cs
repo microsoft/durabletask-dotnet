@@ -13,14 +13,14 @@ namespace Microsoft.DurableTask.Worker.Grpc
     /// </remarks>
     static partial class Logs
     {
-        [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Durable Task worker is connecting to sidecar at {address}.")]
-        public static partial void StartingTaskHubWorker(this ILogger logger, string address);
+        [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Durable Task gRPC worker starting.")]
+        public static partial void StartingTaskHubWorker(this ILogger logger);
 
-        [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Durable Task worker has disconnected from {address}.")]
-        public static partial void SidecarDisconnected(this ILogger logger, string address);
+        [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Durable Task gRPC worker has disconnected from gRPC server.")]
+        public static partial void SidecarDisconnected(this ILogger logger);
 
-        [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "The sidecar at address {address} is unavailable. Will continue retrying.")]
-        public static partial void SidecarUnavailable(this ILogger logger, string address);
+        [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "The gRPC server for Durable Task gRPC worker is unavailable. Will continue retrying.")]
+        public static partial void SidecarUnavailable(this ILogger logger);
 
         [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Sidecar work-item streaming connection established.")]
         public static partial void EstablishedWorkItemConnection(this ILogger logger);

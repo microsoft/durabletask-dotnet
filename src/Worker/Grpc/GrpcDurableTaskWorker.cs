@@ -87,6 +87,6 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 
         c = GetChannel(this.options.Address);
         callInvoker = c.CreateCallInvoker();
-        return new AsyncDisposable(async () => await c.ShutdownAsync());
+        return new AsyncDisposable(() => new(c.ShutdownAsync()));
     }
 }

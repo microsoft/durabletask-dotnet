@@ -14,7 +14,12 @@ public sealed class GrpcDurableTaskClientOptions : DurableTaskClientOptions
     public string? Address { get; set; }
 
     /// <summary>
-    /// Gets or sets the gRPC channel to use. Will supersede <see cref="Address" /> when provided.
+    /// Gets or sets the gRPC channel to use. Will supersede <see cref="CallInvoker" /> when provided.
     /// </summary>
     public GrpcChannel? Channel { get; set; }
+
+    /// <summary>
+    /// Gets or sets the gRPC call invoker to use. Will supersede <see cref="Address" /> when provided.
+    /// </summary>
+    public CallInvoker? CallInvoker { get; set; }
 }

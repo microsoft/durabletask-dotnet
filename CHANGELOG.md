@@ -1,5 +1,15 @@
 ﻿# Changelog
 
+## v1.0.3
+
+### Microsoft.DurableTask.Worker.Grpc
+
+- Add `GrpcDurableTaskWorkerOptions.CallInvoker` as an alternative to `GrpcDurableTaskWorkerOptions.Channel`
+
+### Microsoft.DurableTask.Client.Grpc
+
+- Add `GrpcDurableTaskClientOptions.CallInvoker` as an alternative to `GrpcDurableTaskClientOptions.Channel`
+
 ## v1.0.2
 
 ### Microsoft.DurableTask.Worker

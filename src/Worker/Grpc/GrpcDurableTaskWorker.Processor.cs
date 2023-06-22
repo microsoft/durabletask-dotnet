@@ -35,7 +35,7 @@ sealed partial class GrpcDurableTaskWorker
 
         ILogger Logger => this.worker.logger;
 
-        public async Task ExecuteAsync(string target, CancellationToken cancellation)
+        public async Task ExecuteAsync(CancellationToken cancellation)
         {
             while (!cancellation.IsCancellationRequested)
             {
@@ -52,12 +52,12 @@ sealed partial class GrpcDurableTaskWorker
                 catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
                 {
                     // Sidecar is shutting down - retry
-                    this.Logger.SidecarDisconnected(target);
+                    this.Logger.SidecarDisconnected();
                 }
                 catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
                 {
                     // Sidecar is down - keep retrying
-                    this.Logger.SidecarUnavailable(target);
+                    this.Logger.SidecarUnavailable();
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
                 {

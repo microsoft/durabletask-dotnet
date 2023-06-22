@@ -3,7 +3,6 @@
 
 using System.Text;
 using Google.Protobuf.WellKnownTypes;
-using Grpc.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -46,8 +45,8 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     {
         this.logger = Check.NotNull(logger);
         this.options = Check.NotNull(options);
-        this.asyncDisposable = BuildChannel(options, out GrpcChannel channel);
-        this.sidecarClient = new TaskHubSidecarServiceClient(channel);
+        this.asyncDisposable = GetCallInvoker(options, out CallInvoker callInvoker);
+        this.sidecarClient = new TaskHubSidecarServiceClient(callInvoker);
     }
 
     DataConverter DataConverter => this.options.DataConverter;
@@ -323,17 +322,23 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         return this.PurgeInstancesCoreAsync(request, cancellation);
     }
 
-    static AsyncDisposable BuildChannel(GrpcDurableTaskClientOptions options, out GrpcChannel channel)
+    static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, out CallInvoker callInvoker)
     {
         if (options.Channel is GrpcChannel c)
         {
-            channel = c;
+            callInvoker = c.CreateCallInvoker();
+            return default;
+        }
+
+        if (options.CallInvoker is CallInvoker invoker)
+        {
+            callInvoker = invoker;
             return default;
         }
 
         c = GetChannel(options.Address);
-        channel = c;
-        return new AsyncDisposable(async () => await c.ShutdownAsync());
+        callInvoker = c.CreateCallInvoker();
+        return new AsyncDisposable(() => new(c.ShutdownAsync()));
     }
 
 #if NET6_0_OR_GREATER

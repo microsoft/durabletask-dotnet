@@ -18,6 +18,15 @@ public abstract class TaskEntityContext
     /// </summary>
     /// <param name="id">The entity to signal.</param>
     /// <param name="operationName">The operation name.</param>
+    /// <param name="options">The options to signal with.</param>
+    public virtual void SignalEntity(EntityInstanceId id, string operationName, SignalEntityOptions options)
+        => this.SignalEntity(id, operationName, null, options);
+
+    /// <summary>
+    /// Signals an entity operation.
+    /// </summary>
+    /// <param name="id">The entity to signal.</param>
+    /// <param name="operationName">The operation name.</param>
     /// <param name="input">The operation input.</param>
     /// <param name="options">The options to signal with.</param>
     public abstract void SignalEntity(
@@ -25,6 +34,14 @@ public abstract class TaskEntityContext
         string operationName,
         object? input = null,
         SignalEntityOptions? options = null);
+
+    /// <summary>
+    /// Starts an orchestration.
+    /// </summary>
+    /// <param name="name">The name of the orchestration to start.</param>
+    /// <param name="options">The options for starting the orchestration.</param>
+    public virtual void StartOrchestration(TaskName name, StartOrchestrationOptions options)
+        => this.StartOrchestration(name, null, options);
 
     /// <summary>
     /// Starts an orchestration.

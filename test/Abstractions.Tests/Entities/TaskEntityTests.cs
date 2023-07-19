@@ -23,6 +23,21 @@ public class TaskEntityTests
     }
 
     [Theory]
+    [InlineData("TaskOp")]
+    [InlineData("TaskOfStringOp")]
+    [InlineData("ValueTaskOp")]
+    [InlineData("ValueTaskOfStringOp")]
+    public async Task TasknNotSupported_Fails(string name)
+    {
+        Operation operation = new(name, Mock.Of<TaskEntityContext>(), default);
+        TestEntity entity = new();
+
+        Func<Task<object?>> action = () => entity.RunAsync(operation).AsTask();
+
+        await action.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Theory]
     [CombinatorialData]
     public async Task Add_Success([CombinatorialRange(0, 14)] int method, bool lowercase)
     {
@@ -207,6 +222,14 @@ public class TaskEntityTests
             => this.Add0(value);
 
         public string DefaultValue(string toReturn = "default") => toReturn;
+
+        public Task TaskOp() => throw new NotImplementedException();
+
+        public Task<string> TaskOfStringOp() => throw new NotImplementedException();
+
+        public ValueTask ValueTaskOp() => throw new NotImplementedException();
+
+        public ValueTask<string> ValueTaskOfStringOp() => throw new NotImplementedException();
 
         int Add(int? value, Optional<TaskEntityContext> context, Optional<TaskEntityOperation> operation)
         {

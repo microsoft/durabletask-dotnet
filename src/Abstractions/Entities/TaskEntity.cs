@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Data.Common;
 using System.Reflection;
 
 namespace Microsoft.DurableTask.Entities;
@@ -63,6 +64,18 @@ public abstract class TaskEntity : ITaskEntity
 
     bool TryDispatchMethod(TaskEntityOperation operation, out object? result)
     {
+        static void CheckDuplicateBinding(
+            ParameterInfo? existing, ParameterInfo parameter, string bindingConcept, TaskEntityOperation operation)
+        {
+            if (existing is not null)
+            {
+                throw new InvalidOperationException($"Error dispatching {operation} to '{parameter.Member}'.\n" +
+                    $"Unable to bind {bindingConcept} to '{parameter}' because it has " +
+                    $"already been bound to parameter '{existing}'. Please remove the duplicate parameter in method " +
+                    $"'{parameter.Member}'.\nEntity operation: {operation}.");
+            }
+        }
+
         Type t = this.GetType();
         MethodInfo? method = t.GetMethod(operation.Name, InstanceBindingFlags);
         if (method is null)
@@ -73,38 +86,43 @@ public abstract class TaskEntity : ITaskEntity
 
         if (method.ReturnType.IsTaskOrValueTask())
         {
-            throw new InvalidOperationException($"{typeof(Task)} and {typeof(ValueTask)} return values are not supported");
+            throw new InvalidOperationException($"Error dispatching {operation} to '{method}'.\n" +
+                $"{typeof(Task)} and {typeof(ValueTask)} return values are not supported. Return type found: " +
+                $"{method.ReturnType}.");
         }
 
         ParameterInfo[] parameters = method.GetParameters();
         object?[] inputs = new object[parameters.Length];
 
         int i = 0;
-        bool inputResolved = false;
-        bool contextResolved = false;
-        bool operationResolved = false;
+        ParameterInfo? inputResolved = null;
+        ParameterInfo? contextResolved = null;
+        ParameterInfo? operationResolved = null;
         foreach (ParameterInfo parameter in parameters)
         {
-            if (!contextResolved && parameter.ParameterType == typeof(TaskEntityContext))
+            if (parameter.ParameterType == typeof(TaskEntityContext))
             {
+                CheckDuplicateBinding(contextResolved, parameter, "context", operation);
                 inputs[i] = operation.Context;
-                contextResolved = true;
+                contextResolved = parameter;
             }
-            else if (!operationResolved && parameter.ParameterType == typeof(TaskEntityOperation))
+            else if (parameter.ParameterType == typeof(TaskEntityOperation))
             {
+                CheckDuplicateBinding(operationResolved, parameter, "operation", operation);
                 inputs[i] = operation;
-                operationResolved = true;
+                operationResolved = parameter;
             }
-            else if (!inputResolved && TryGetInput(parameter, operation, out object? input))
+            else if (TryGetInput(parameter, operation, out object? input))
             {
+                CheckDuplicateBinding(inputResolved, parameter, "input", operation);
                 inputs[i] = input;
-                inputResolved = true;
+                inputResolved = parameter;
             }
             else
             {
-                throw new InvalidOperationException($"Entity operation input parameter of '{parameter}' cannot be" +
-                    $" resolved. Either this input has already been resolved, is an unsupported type, or no input was " +
-                    $" provided to the operation.");
+                throw new InvalidOperationException($"Error dispatching {operation} to '{method}'.\n" +
+                    $"There was an error binding parameter '{parameter}'. Either the type is not supported or no " +
+                    $"input was provided for this parameter.\nInput provided: {operation.HasInput}.");
             }
 
             i++;

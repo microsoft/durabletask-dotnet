@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask;
@@ -57,6 +58,12 @@ public abstract class TaskOrchestrationContext
     /// <c>true</c> if the orchestrator is currently replaying a previous execution; otherwise <c>false</c>.
     /// </value>
     public abstract bool IsReplaying { get; }
+
+    /// <summary>
+    /// Gets the entity feature, for interacting with entities.
+    /// </summary>
+    public virtual TaskOrchestrationEntityFeature Entities =>
+        throw new NotSupportedException($"Durable entities are not supported by {this.GetType()}.");
 
     /// <summary>
     /// Gets the logger factory for this context.

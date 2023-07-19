@@ -19,9 +19,20 @@ public abstract class TaskEntityOperation
     public abstract TaskEntityContext Context { get; }
 
     /// <summary>
+    /// Gets a value indicating whether this operation has input or not.
+    /// </summary>
+    public abstract bool HasInput { get; }
+
+    /// <summary>
     /// Gets the input for this operation.
     /// </summary>
     /// <param name="inputType">The type to deserialize the input as.</param>
     /// <returns>The deserialized input type.</returns>
     public abstract object? GetInput(Type inputType);
+
+    /// <inheritdoc/>
+    public override string ToString()
+    {
+        return $"{this.Context.Id.Name}/{this.Name}";
+    }
 }

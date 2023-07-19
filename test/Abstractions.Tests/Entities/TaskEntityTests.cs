@@ -10,8 +10,9 @@ public class TaskEntityTests
 {
     [Theory]
     [InlineData("doesNotExist")] // method does not exist.
-    [InlineData("add")] // private method, should not work
-    public async Task Dispatch_OperationNotSupported(string name)
+    [InlineData("add")] // private method, should not work.
+    [InlineData("staticMethod")] // public static methods are not supported.
+    public async Task OperationNotSupported_Fails(string name)
     {
         Operation operation = new(name, Mock.Of<TaskEntityContext>(), 10);
         TestEntity entity = new();
@@ -23,7 +24,7 @@ public class TaskEntityTests
 
     [Theory]
     [CombinatorialData]
-    public async Task Dispatch_Add_Success([CombinatorialRange(0, 14)] int method, bool lowercase)
+    public async Task Add_Success([CombinatorialRange(0, 14)] int method, bool lowercase)
     {
         int start = Random.Shared.Next(0, 10);
         int toAdd = Random.Shared.Next(0, 10);
@@ -40,7 +41,7 @@ public class TaskEntityTests
 
     [Theory]
     [CombinatorialData]
-    public async Task Dispatch_Get_Success([CombinatorialRange(0, 2)] int method, bool lowercase)
+    public async Task Get_Success([CombinatorialRange(0, 2)] int method, bool lowercase)
     {
         int expected = Random.Shared.Next(0, 10);
         string opName = lowercase ? "get" : "Get";
@@ -53,13 +54,23 @@ public class TaskEntityTests
         result.Should().BeOfType<int>().Which.Should().Be(expected);
     }
 
+    [Fact]
+    public async Task Add_NoInput_Fails()
+    {
+        Operation operation = new("add0", Mock.Of<TaskEntityContext>(), default);
+        TestEntity entity = new();
+
+        Func<Task<object?>> action = () => entity.RunAsync(operation).AsTask();
+
+        await action.Should().ThrowAsync<InvalidOperationException>();
+    }
+
     [Theory]
     [CombinatorialData]
-    public async Task Dispatch_AddBadArgs_Fails([CombinatorialRange(0, 3)] int method, bool lowercase)
+    public async Task Dispatch_AmbiguousArgs_Fails([CombinatorialRange(0, 3)] int method)
     {
-        string opName = lowercase ? "addBadArgs" : "AddBadArgs";
-        Operation operation = new($"{opName}{method}", Mock.Of<TaskEntityContext>(), 10);
-        ErrorEntity entity = new();
+        Operation operation = new($"ambiguousArgs{method}", Mock.Of<TaskEntityContext>(), 10);
+        TestEntity entity = new();
 
         Func<Task<object?>> action = () => entity.RunAsync(operation).AsTask();
 
@@ -67,13 +78,35 @@ public class TaskEntityTests
     }
 
     [Fact]
-    public async Task Dispatch_AddAmbiguous_Fails()
+    public async Task Dispatch_AmbiguousMatch_Fails()
     {
-        Operation operation = new("add0", Mock.Of<TaskEntityContext>(), 10);
-        ErrorEntity entity = new();
+        Operation operation = new("ambiguousMatch", Mock.Of<TaskEntityContext>(), 10);
+        TestEntity entity = new();
 
         Func<Task<object?>> action = () => entity.RunAsync(operation).AsTask();
         await action.Should().ThrowAsync<AmbiguousMatchException>();
+    }
+
+    [Fact]
+    public async Task DefaultValue_NoInput_Succeeds()
+    {
+        Operation operation = new("defaultValue", Mock.Of<TaskEntityContext>(), default);
+        TestEntity entity = new();
+
+        object? result = await entity.RunAsync(operation);
+
+        result.Should().BeOfType<string>().Which.Should().Be("default");
+    }
+
+    [Fact]
+    public async Task DefaultValue_Input_Succeeds()
+    {
+        Operation operation = new("defaultValue", Mock.Of<TaskEntityContext>(), "not-default");
+        TestEntity entity = new();
+
+        object? result = await entity.RunAsync(operation);
+
+        result.Should().BeOfType<string>().Which.Should().Be("not-default");
     }
 
     class Operation : TaskEntityOperation
@@ -114,21 +147,11 @@ public class TaskEntityTests
         }
     }
 
-    class ErrorEntity : TestEntity
-    {
-        // Should be an amiguous match.
-        public int Add0(int value, TaskEntityContext context) => this.Add0(value);
-
-        public int AddBadArgs0(int value, object other) => this.Add0(value);
-
-        public int AddBadArgs1(int value, TaskEntityContext context, TaskEntityContext context2) => this.Add0(value);
-
-        public int AddBadArgs2(int value, TaskEntityOperation operation, TaskEntityOperation operation2) => this.Add0(value);
-    }
-
     class TestEntity : TaskEntity
     {
         public int Value { get; set; }
+
+        public static string StaticMethod() => throw new NotImplementedException();
 
         // All possible permutations of the 3 inputs we support: object, context, operation
         public int Add0(int value) => this.Add(value, default, default);
@@ -171,6 +194,19 @@ public class TaskEntityTests
         public int Get0() => this.Get(default);
 
         public int Get1(TaskEntityContext context) => this.Get(context);
+
+        public int AmbiguousMatch(TaskEntityContext context) => this.Value;
+
+        public int AmbiguousMatch(TaskEntityOperation operation) => this.Value;
+
+        public int AmbiguousArgs0(int value, object other) => this.Add0(value);
+
+        public int AmbiguousArgs1(int value, TaskEntityContext context, TaskEntityContext context2) => this.Add0(value);
+
+        public int AmbiguousArgs2(int value, TaskEntityOperation operation, TaskEntityOperation operation2)
+            => this.Add0(value);
+
+        public string DefaultValue(string toReturn = "default") => toReturn;
 
         int Add(int? value, Optional<TaskEntityContext> context, Optional<TaskEntityOperation> operation)
         {

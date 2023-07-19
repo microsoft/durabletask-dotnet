@@ -43,6 +43,24 @@ public abstract class TaskEntity : ITaskEntity
         return new(result);
     }
 
+    static bool TryGetInput(ParameterInfo parameter, TaskEntityOperation operation, out object? input)
+    {
+        if (!operation.HasInput)
+        {
+            if (parameter.HasDefaultValue)
+            {
+                input = parameter.DefaultValue;
+                return true;
+            }
+
+            input = null;
+            return false;
+        }
+
+        input = operation.GetInput(parameter.ParameterType);
+        return true;
+    }
+
     bool TryDispatchMethod(TaskEntityOperation operation, out object? result)
     {
         Type t = this.GetType();
@@ -77,15 +95,16 @@ public abstract class TaskEntity : ITaskEntity
                 inputs[i] = operation;
                 operationResolved = true;
             }
-            else if (!inputResolved)
+            else if (!inputResolved && TryGetInput(parameter, operation, out object? input))
             {
-                inputs[i] = operation.GetInput(parameter.ParameterType);
+                inputs[i] = input;
                 inputResolved = true;
             }
             else
             {
                 throw new InvalidOperationException($"Entity operation input parameter of '{parameter}' cannot be" +
-                    $" resolved. Either this input has already been resolved or is unsupported.");
+                    $" resolved. Either this input has already been resolved, is an unsupported type, or no input was " +
+                    $" provided to the operation.");
             }
 
             i++;

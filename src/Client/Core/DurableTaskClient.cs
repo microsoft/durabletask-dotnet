@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.ComponentModel;
+using Microsoft.DurableTask.Client.Entites;
 using Microsoft.DurableTask.Internal;
 
 namespace Microsoft.DurableTask.Client;
@@ -40,6 +41,15 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// Gets the name of the client.
     /// </summary>
     public string Name { get; }
+
+    /// <summary>
+    /// Gets the <see cref="DurableEntityClient"/> for interacting with durable entities.
+    /// </summary>
+    /// <remarks>
+    /// Not all clients support durable entities. Refer to a specific client implementation for verifying support.
+    /// </remarks>
+    public virtual DurableEntityClient Entities =>
+        throw new NotSupportedException($"{this.GetType()} does not support durable entities.");
 
     /// <inheritdoc cref="ScheduleNewOrchestrationInstanceAsync(TaskName, object, StartOrchestrationOptions, CancellationToken)"/>
     public virtual Task<string> ScheduleNewOrchestrationInstanceAsync(

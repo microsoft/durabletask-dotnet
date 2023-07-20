@@ -31,7 +31,7 @@ public abstract class DurableEntityClient
     /// <param name="operationName">The name of the operation.</param>
     /// <param name="input">The input for the operation.</param>
     /// <param name="options">The options to signal the entity with.</param>
-    /// <param name="cancellation">Token to cancel enqueuing this operation.</param>
+    /// <param name="cancellation">The cancellation token to cancel enqueuing of the operation.</param>
     /// <returns>A task that completes when the message has been reliably enqueued.</returns>
     /// <remarks>This does not wait for the operation to be processed by the receiving entity.</remarks>
     public abstract Task SignalEntityAsync(
@@ -47,7 +47,7 @@ public abstract class DurableEntityClient
     /// <param name="id">The ID of the entity to signal.</param>
     /// <param name="operationName">The name of the operation.</param>
     /// <param name="options">The options to signal the entity with.</param>
-    /// <param name="cancellation">Token to cancel enqueuing this operation.</param>
+    /// <param name="cancellation">The cancellation token to cancel enqueuing of the operation.</param>
     /// <returns>A task that completes when the message has been reliably enqueued.</returns>
     /// <remarks>This does not wait for the operation to be processed by the receiving entity.</remarks>
     public virtual Task SignalEntityAsync(
@@ -62,7 +62,7 @@ public abstract class DurableEntityClient
     /// </summary>
     /// <param name="id">The ID of the entity to signal.</param>
     /// <param name="operationName">The name of the operation.</param>
-    /// <param name="cancellation">Token to cancel enqueuing this operation.</param>
+    /// <param name="cancellation">The cancellation token to cancel enqueuing of the operation.</param>
     /// <returns>A task that completes when the message has been reliably enqueued.</returns>
     /// <remarks>This does not wait for the operation to be processed by the receiving entity.</remarks>
     public virtual Task SignalEntityAsync(
@@ -75,7 +75,7 @@ public abstract class DurableEntityClient
     /// Tries to get the entity with ID of <paramref name="id"/>.
     /// </summary>
     /// <param name="id">The ID of the entity to get.</param>
-    /// <param name="cancellation">The cancellation token.</param>
+    /// <param name="cancellation">The cancellation token to cancel the operation.</param>
     /// <returns>a response containing metadata describing the entity.</returns>
     public abstract Task<EntityMetadata?> GetEntityAsync(
         EntityInstanceId id, CancellationToken cancellation = default);
@@ -86,4 +86,13 @@ public abstract class DurableEntityClient
     /// <param name="filter">The optional query filter.</param>
     /// <returns>An async pageable of the query results.</returns>
     public abstract AsyncPageable<EntityMetadata> GetAllEntitiesAsync(EntityQuery? filter = null);
+
+    /// <summary>
+    /// Cleans entity storage. See <see cref="CleanEntityStorageRequest"/> for the different forms of cleaning available.
+    /// </summary>
+    /// <param name="request">The request which describes what to clean.</param>
+    /// <param name="cancellation">The cancellation token to cancel the operation.</param>
+    /// <returns>A task that completes when the operation is finished.</returns>
+    public abstract Task<CleanEntityStorageResult> CleanEntityStorageAsync(
+        CleanEntityStorageRequest request = default, CancellationToken cancellation = default);
 }

@@ -26,9 +26,6 @@ jobs:
       with:
         global-json-file: global.json
 
-    - name: Enable App Service MyGet feed
-      run: dotnet nuget add source https://www.myget.org/F/azure-appservice/api/v3/index.json --name appservice-myget 
-
     - name: Restore dependencies
       run: dotnet restore $solution
 

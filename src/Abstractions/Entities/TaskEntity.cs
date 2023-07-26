@@ -4,7 +4,7 @@
 namespace Microsoft.DurableTask.Entities;
 
 /// <summary>
-/// Represents an invokable entity.
+/// The task entity contract.
 /// </summary>
 public interface ITaskEntity
 {

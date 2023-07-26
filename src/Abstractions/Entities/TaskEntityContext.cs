@@ -53,7 +53,7 @@ public abstract class TaskEntityContext
         TaskName name, object? input = null, StartOrchestrationOptions? options = null);
 
     /// <summary>
-    /// Deletes this current entities state after the current operation completes.
+    /// Deletes the state of this entity after the current operation completes.
     /// </summary>
     /// <remarks>
     /// The state deletion only takes effect after the current operation completes. Any state changes made during the

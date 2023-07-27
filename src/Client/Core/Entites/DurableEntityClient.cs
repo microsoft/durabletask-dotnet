@@ -75,13 +75,24 @@ public abstract class DurableEntityClient
     /// Tries to get the entity with ID of <paramref name="id"/>.
     /// </summary>
     /// <param name="id">The ID of the entity to get.</param>
+    /// <param name="includeState"><c>true</c> to include entity state in the response, <c>false</c> to not.</param>
     /// <param name="cancellation">The cancellation token to cancel the operation.</param>
     /// <returns>a response containing metadata describing the entity.</returns>
     public abstract Task<EntityMetadata?> GetEntityAsync(
-        EntityInstanceId id, CancellationToken cancellation = default);
+        EntityInstanceId id, bool includeState = false, CancellationToken cancellation = default);
 
     /// <summary>
-    /// Queries entitity instances, optionally filtering results with <paramref name="filter"/>.
+    /// Tries to get the entity with ID of <paramref name="id"/>.
+    /// </summary>
+    /// <param name="id">The ID of the entity to get.</param>
+    /// <param name="cancellation">The cancellation token to cancel the operation.</param>
+    /// <returns>a response containing metadata describing the entity.</returns>
+    public virtual Task<EntityMetadata?> GetEntityAsync(
+        EntityInstanceId id, CancellationToken cancellation)
+            => this.GetEntityAsync(id, includeState: false, cancellation);
+
+    /// <summary>
+    /// Queries entity instances, optionally filtering results with <paramref name="filter"/>.
     /// </summary>
     /// <param name="filter">The optional query filter.</param>
     /// <returns>An async pageable of the query results.</returns>

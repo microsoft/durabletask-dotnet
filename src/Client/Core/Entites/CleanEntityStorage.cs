@@ -31,7 +31,7 @@ public readonly record struct CleanEntityStorageRequest
 /// <summary>
 /// Result struct for <see cref="DurableEntityClient.CleanEntityStorageAsync"/>.
 /// </summary>
-public readonly struct CleanEntityStorageResult
+public readonly record struct CleanEntityStorageResult
 {
     /// <summary>
     /// Gets the number of empty entities removed.

@@ -3,7 +3,7 @@
 
 using Microsoft.DurableTask.Entities;
 
-namespace Microsoft.DurableTask.Client.Entites;
+namespace Microsoft.DurableTask.Client.Entities;
 
 /// <summary>
 /// A client for interacting with entities.

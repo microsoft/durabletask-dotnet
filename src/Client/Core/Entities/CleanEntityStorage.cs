@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Client.Entites;
+namespace Microsoft.DurableTask.Client.Entities;
 
 /// <summary>
 /// Request struct for <see cref="DurableEntityClient.CleanEntityStorageAsync"/>.

@@ -27,7 +27,7 @@ public class TaskEntityTests
     [InlineData("TaskOfStringOp")]
     [InlineData("ValueTaskOp")]
     [InlineData("ValueTaskOfStringOp")]
-    public async Task TasknNotSupported_Fails(string name)
+    public async Task TaskNotSupported_Fails(string name)
     {
         Operation operation = new(name, Mock.Of<TaskEntityContext>(), default);
         TestEntity entity = new();
@@ -169,6 +169,7 @@ public class TaskEntityTests
         public static string StaticMethod() => throw new NotImplementedException();
 
         // All possible permutations of the 3 inputs we support: object, context, operation
+        // 14 via Add, 2 via Get: 16 total.
         public int Add0(int value) => this.Add(value, default, default);
 
         public int Add1(int value, TaskEntityContext context) => this.Add(value, context, default);

@@ -23,18 +23,17 @@ public class TaskEntityTests
     }
 
     [Theory]
-    [InlineData("TaskOp")]
-    [InlineData("TaskOfStringOp")]
-    [InlineData("ValueTaskOp")]
-    [InlineData("ValueTaskOfStringOp")]
-    public async Task TaskNotSupported_Fails(string name)
+    [CombinatorialData]
+    public async Task TaskOperation_Success(
+        [CombinatorialValues("TaskOp", "TaskOfStringOp", "ValueTaskOp", "ValueTaskOfStringOp")] string name, bool sync)
     {
-        Operation operation = new(name, Mock.Of<TaskEntityContext>(), default);
+        object? expected = name.Contains("OfString") ? "success" : null;
+        Operation operation = new(name, Mock.Of<TaskEntityContext>(), sync);
         TestEntity entity = new();
 
-        Func<Task<object?>> action = () => entity.RunAsync(operation).AsTask();
+        object? result = await entity.RunAsync(operation);
 
-        await action.Should().ThrowAsync<InvalidOperationException>();
+        result.Should().Be(expected);
     }
 
     [Theory]
@@ -224,13 +223,47 @@ public class TaskEntityTests
 
         public string DefaultValue(string toReturn = "default") => toReturn;
 
-        public Task TaskOp() => throw new NotImplementedException();
+        public Task TaskOp(bool sync)
+        {
+            static async Task Slow()
+            {
+                await Task.Yield();
+            }
 
-        public Task<string> TaskOfStringOp() => throw new NotImplementedException();
+            return sync ? Task.CompletedTask : Slow();
+        }
 
-        public ValueTask ValueTaskOp() => throw new NotImplementedException();
+        public Task<string> TaskOfStringOp(bool sync)
+        {
+            static async Task<string> Slow()
+            {
+                await Task.Yield();
+                return "success";
+            }
 
-        public ValueTask<string> ValueTaskOfStringOp() => throw new NotImplementedException();
+            return sync ? Task.FromResult("success") : Slow();
+        }
+
+        public ValueTask ValueTaskOp(bool sync)
+        {
+            static async Task Slow()
+            {
+                await Task.Yield();
+            }
+
+            return sync ? default : new(Slow());
+        }
+
+        public ValueTask<string> ValueTaskOfStringOp(bool sync)
+        {
+            static async Task<string> Slow()
+            {
+                await Task.Yield();
+                return "success";
+            }
+
+            return sync ? new("success") : new(Slow());
+        }
 
         int Add(int? value, Optional<TaskEntityContext> context, Optional<TaskEntityOperation> operation)
         {

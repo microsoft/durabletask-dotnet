@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Reflection;
+using System.Threading.Tasks;
 
 namespace Microsoft.DurableTask.Entities;
 
@@ -78,8 +79,7 @@ public abstract class TaskEntity : ITaskEntity
 {
     /**
      * TODO:
-     * 1. Evaluate if Task and ValueTask support is necessary. If so, also support "Async" method name suffix.
-     * 2. Consider caching a compiled delegate for a given operation name.
+     * 1. Consider caching a compiled delegate for a given operation name.
      */
     static readonly BindingFlags InstanceBindingFlags
             = BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase;
@@ -88,53 +88,30 @@ public abstract class TaskEntity : ITaskEntity
     public ValueTask<object?> RunAsync(TaskEntityOperation operation)
     {
         Check.NotNull(operation);
-        if (!this.TryDispatchMethod(operation, out object? result))
+        if (!this.TryDispatchMethod(operation, out object? result, out Type returnType))
         {
             throw new NotSupportedException($"No suitable method found for entity operation '{operation}'.");
         }
 
-        if (result is null)
+        if (typeof(Task).IsAssignableFrom(returnType))
         {
-            return default;
+            // Task or Task<T>
+            return new(AsGeneric((Task)result!, returnType)); // we assume a declared Task return type is never null.
         }
 
-        if (result is Task task)
+        if (returnType == typeof(ValueTask))
         {
-            return new(task.ToGeneric<object?>());
+            // ValueTask
+            return AsGeneric((ValueTask)result!); // we assume a declared ValueTask return type is never null.
         }
 
-        if (result is ValueTask valueTask)
+        if (returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(ValueTask<>))
         {
-            if (valueTask.IsCompletedSuccessfully)
-            {
-                return default;
-            }
-
-            return valueTask.ToGeneric<object?>();
-        }
-
-        Type type = result.GetType();
-        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ValueTask<>))
-        {
-            // unwrap ValueTask via reflection.
-            return Unwrap(type, result);
+            // ValueTask<T>
+            return AsGeneric(result!, returnType); // No inheritance, have to do purely via reflection.
         }
 
         return new(result);
-
-        static ValueTask<object?> Unwrap(Type type, object result)
-        {
-            if ((bool)type.GetProperty("IsCompleted").GetValue(result))
-            {
-                return new(type.GetProperty("Result").GetValue(result));
-            }
-            else
-            {
-                Task t = (Task)type.GetMethod("AsTask", BindingFlags.Instance | BindingFlags.Public)
-                    .Invoke(result, null);
-                return new(t.ToGeneric<object?>());
-            }
-        }
     }
 
     static bool TryGetInput(ParameterInfo parameter, TaskEntityOperation operation, out object? input)
@@ -155,7 +132,49 @@ public abstract class TaskEntity : ITaskEntity
         return true;
     }
 
-    bool TryDispatchMethod(TaskEntityOperation operation, out object? result)
+    static async Task<object?> AsGeneric(Task task, Type declared)
+    {
+        await task;
+        if (declared.IsGenericType && declared.GetGenericTypeDefinition() == typeof(Task<>))
+        {
+            return declared.GetProperty("Result", BindingFlags.Public | BindingFlags.Instance).GetValue(task);
+        }
+
+        return null;
+    }
+
+    static ValueTask<object?> AsGeneric(ValueTask t)
+    {
+        static async Task<object?> Await(ValueTask t)
+        {
+            await t;
+            return null;
+        }
+
+        if (t.IsCompletedSuccessfully)
+        {
+            return default;
+        }
+
+        return new(Await(t));
+    }
+
+    static ValueTask<object?> AsGeneric(object result, Type type)
+    {
+        // result and type here must be some form of ValueTask<T>.
+        if ((bool)type.GetProperty("IsCompletedSuccessfully").GetValue(result))
+        {
+            return new(type.GetProperty("Result").GetValue(result));
+        }
+        else
+        {
+            Task t = (Task)type.GetMethod("AsTask", BindingFlags.Instance | BindingFlags.Public)
+                .Invoke(result, null);
+            return new(t.ToGeneric<object?>());
+        }
+    }
+
+    bool TryDispatchMethod(TaskEntityOperation operation, out object? result, out Type returnType)
     {
         Type t = this.GetType();
 
@@ -164,6 +183,7 @@ public abstract class TaskEntity : ITaskEntity
         if (method is null)
         {
             result = null;
+            returnType = typeof(void);
             return false;
         }
 
@@ -208,6 +228,7 @@ public abstract class TaskEntity : ITaskEntity
         }
 
         result = method.Invoke(this, inputs);
+        returnType = method.ReturnType;
         return true;
 
         static void ThrowIfDuplicateBinding(

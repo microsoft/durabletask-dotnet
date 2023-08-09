@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using System.ComponentModel;
-using Microsoft.DurableTask.Client.Entites;
+using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Internal;
 
 namespace Microsoft.DurableTask.Client;

@@ -11,9 +11,7 @@ namespace Microsoft.DurableTask.Entities;
 /// <remarks>
 /// <para><b>Entity State</b></para>
 /// <para>
-/// All entity implementations are required to be serializable by the configured <see cref="DataConverter"/>. An entity
-/// will have its state deserialized before executing an operation, and then the new state will be the serialized value
-/// of the <see cref="ITaskEntity"/> implementation instance post-operation.
+/// The state of an entity can be retrieved and updated via <see cref="TaskEntityOperation.Context"/>.
 /// </para>
 /// </remarks>
 public interface ITaskEntity
@@ -71,8 +69,9 @@ public interface ITaskEntity
 ///
 /// <para><b>Entity State</b></para>
 /// <para>
-/// Unchanged from <see cref="ITaskEntity"/>. Entity state is the serialized value of the entity after an operation
-/// completes.
+/// Entity state will be hydrated into the <see cref="TaskEntity{TState}.State"/> property. The contents of this
+/// property will be persisted to <see cref="TaskEntityContext.SetState(object?)"/> when the operation has completed.
+/// Deleting entity state can be accomplished by setting to default(<typeparamref name="TState"/>).
 /// </para>
 /// </remarks>
 public abstract class TaskEntity<TState> : ITaskEntity
@@ -86,6 +85,11 @@ public abstract class TaskEntity<TState> : ITaskEntity
     /// <summary>
     /// Gets or sets the state for this entity.
     /// </summary>
+    /// <remarks>
+    /// This will be hydrated as part of <see cref="RunAsync(TaskEntityOperation)"/>. The contents of this property
+    /// will be persisted to <see cref="TaskEntityContext.SetState(object?)"/> when the operation completes. Deleting
+    /// entity state can be accomplished by setting this to default(<typeparamref name="TState"/>).
+    /// </remarks>
     protected TState State { get; set; } = default!; // leave null-checks to end implementation.
 
     /// <summary>

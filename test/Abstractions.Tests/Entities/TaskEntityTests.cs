@@ -14,7 +14,7 @@ public class TaskEntityTests
     [InlineData("staticMethod")] // public static methods are not supported.
     public async Task OperationNotSupported_Fails(string name)
     {
-        Operation operation = new(name, Mock.Of<TaskEntityContext>(), 10);
+        Operation operation = new(name, new Context(null), 10);
         TestEntity entity = new();
 
         Func<Task<object?>> action = () => entity.RunAsync(operation).AsTask();
@@ -28,7 +28,7 @@ public class TaskEntityTests
         [CombinatorialValues("TaskOp", "TaskOfStringOp", "ValueTaskOp", "ValueTaskOfStringOp")] string name, bool sync)
     {
         object? expected = name.Contains("OfString") ? "success" : null;
-        Operation operation = new(name, Mock.Of<TaskEntityContext>(), sync);
+        Operation operation = new(name, new Context(null), sync);
         TestEntity entity = new();
 
         object? result = await entity.RunAsync(operation);
@@ -43,13 +43,14 @@ public class TaskEntityTests
         int start = Random.Shared.Next(0, 10);
         int toAdd = Random.Shared.Next(0, 10);
         string opName = lowercase ? "add" : "Add";
-        Operation operation = new($"{opName}{method}", Mock.Of<TaskEntityContext>(), toAdd);
-        TestEntity entity = new() { Value = start };
+        Context context = new(start);
+        Operation operation = new($"{opName}{method}", context, toAdd);
+        TestEntity entity = new();
 
         object? result = await entity.RunAsync(operation);
 
         int expected = start + toAdd;
-        entity.Value.Should().Be(expected);
+        context.GetState(typeof(int)).Should().BeOfType<int>().Which.Should().Be(expected);
         result.Should().BeOfType<int>().Which.Should().Be(expected);
     }
 
@@ -59,19 +60,20 @@ public class TaskEntityTests
     {
         int expected = Random.Shared.Next(0, 10);
         string opName = lowercase ? "get" : "Get";
-        Operation operation = new($"{opName}{method}", Mock.Of<TaskEntityContext>(), default);
-        TestEntity entity = new() { Value = expected };
+        Context context = new(expected);
+        Operation operation = new($"{opName}{method}", context, default);
+        TestEntity entity = new();
 
         object? result = await entity.RunAsync(operation);
 
-        entity.Value.Should().Be(expected);
+        context.GetState(typeof(int)).Should().BeOfType<int>().Which.Should().Be(expected);
         result.Should().BeOfType<int>().Which.Should().Be(expected);
     }
 
     [Fact]
     public async Task Add_NoInput_Fails()
     {
-        Operation operation = new("add0", Mock.Of<TaskEntityContext>(), default);
+        Operation operation = new("add0", new Context(null), default);
         TestEntity entity = new();
 
         Func<Task<object?>> action = () => entity.RunAsync(operation).AsTask();
@@ -83,7 +85,7 @@ public class TaskEntityTests
     [CombinatorialData]
     public async Task Dispatch_AmbiguousArgs_Fails([CombinatorialRange(0, 3)] int method)
     {
-        Operation operation = new($"ambiguousArgs{method}", Mock.Of<TaskEntityContext>(), 10);
+        Operation operation = new($"ambiguousArgs{method}", new Context(null), 10);
         TestEntity entity = new();
 
         Func<Task<object?>> action = () => entity.RunAsync(operation).AsTask();
@@ -94,7 +96,7 @@ public class TaskEntityTests
     [Fact]
     public async Task Dispatch_AmbiguousMatch_Fails()
     {
-        Operation operation = new("ambiguousMatch", Mock.Of<TaskEntityContext>(), 10);
+        Operation operation = new("ambiguousMatch", new Context(null), 10);
         TestEntity entity = new();
 
         Func<Task<object?>> action = () => entity.RunAsync(operation).AsTask();
@@ -104,7 +106,7 @@ public class TaskEntityTests
     [Fact]
     public async Task DefaultValue_NoInput_Succeeds()
     {
-        Operation operation = new("defaultValue", Mock.Of<TaskEntityContext>(), default);
+        Operation operation = new("defaultValue", new Context(null), default);
         TestEntity entity = new();
 
         object? result = await entity.RunAsync(operation);
@@ -115,12 +117,51 @@ public class TaskEntityTests
     [Fact]
     public async Task DefaultValue_Input_Succeeds()
     {
-        Operation operation = new("defaultValue", Mock.Of<TaskEntityContext>(), "not-default");
+        Operation operation = new("defaultValue", new Context(null), "not-default");
         TestEntity entity = new();
 
         object? result = await entity.RunAsync(operation);
 
         result.Should().BeOfType<string>().Which.Should().Be("not-default");
+    }
+
+    class Context : TaskEntityContext
+    {
+        public Context(object? state)
+        {
+            this.State = state;
+        }
+
+        public object? State { get; private set; }
+
+        public override EntityInstanceId Id { get; }
+
+        public override object? GetState(Type type)
+        {
+            return this.State switch
+            {
+                null => null,
+                _ when type.IsAssignableFrom(this.State.GetType()) => this.State,
+                _ => throw new InvalidCastException()
+            };
+        }
+
+        public override void SetState(object? state)
+        {
+            this.State = state;
+        }
+
+        public override void SignalEntity(
+            EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void StartOrchestration(
+            TaskName name, object? input = null, StartOrchestrationOptions? options = null)
+        {
+            throw new NotImplementedException();
+        }
     }
 
     class Operation : TaskEntityOperation
@@ -161,10 +202,8 @@ public class TaskEntityTests
         }
     }
 
-    class TestEntity : TaskEntity
+    class TestEntity : TaskEntity<int>
     {
-        public int Value { get; set; }
-
         public static string StaticMethod() => throw new NotImplementedException();
 
         // All possible permutations of the 3 inputs we support: object, context, operation
@@ -210,9 +249,9 @@ public class TaskEntityTests
 
         public int Get1(TaskEntityContext context) => this.Get(context);
 
-        public int AmbiguousMatch(TaskEntityContext context) => this.Value;
+        public int AmbiguousMatch(TaskEntityContext context) => this.State;
 
-        public int AmbiguousMatch(TaskEntityOperation operation) => this.Value;
+        public int AmbiguousMatch(TaskEntityOperation operation) => this.State;
 
         public int AmbiguousArgs0(int value, object other) => this.Add0(value);
 
@@ -283,7 +322,7 @@ public class TaskEntityTests
             }
 
             value.HasValue.Should().BeTrue();
-            return this.Value += value!.Value;
+            return this.State += value!.Value;
         }
 
         int Get(Optional<TaskEntityContext> context)
@@ -293,7 +332,7 @@ public class TaskEntityTests
                 context.Value.Should().NotBeNull();
             }
 
-            return this.Value;
+            return this.State;
         }
     }
 }

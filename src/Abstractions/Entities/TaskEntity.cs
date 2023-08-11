@@ -78,6 +78,12 @@ public interface ITaskEntity
 public abstract class TaskEntity<TState> : ITaskEntity
 {
     /// <summary>
+    /// Gets a value indicating whether dispatching operations to <see cref="State"/> is allowed. State dispatch will
+    /// only be attempted if entity-level dispatch does not succeed. Default is <c>true</c>.
+    /// </summary>
+    protected bool AllowStateDispatch => true;
+
+    /// <summary>
     /// Gets or sets the state for this entity.
     /// </summary>
     protected TState State { get; set; } = default!; // leave null-checks to end implementation.
@@ -99,7 +105,7 @@ public abstract class TaskEntity<TState> : ITaskEntity
         object? state = operation.Context.GetState(typeof(TState));
         this.State = state is null ? default! : (TState)state;
         if (!operation.TryDispatch(this, out object? result, out Type returnType)
-            && !operation.TryDispatch(this.State, out result, out returnType))
+            && (this.AllowStateDispatch && !operation.TryDispatch(this.State, out result, out returnType)))
         {
             throw new NotSupportedException($"No suitable method found for entity operation '{operation}'.");
         }

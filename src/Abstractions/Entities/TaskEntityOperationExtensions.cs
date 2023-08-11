@@ -18,31 +18,6 @@ public static class TaskEntityOperationExtensions
             = BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase;
 
     /// <summary>
-    /// Dispatches an operation to a type <typeparamref see="T"/>. Entity state will be resolved as
-    /// <typeparamref name="T"/> and then the operation dispatch will be attempted on the constructed instance.
-    /// </summary>
-    /// <typeparam name="T">The type to dispatch to.</typeparam>
-    /// <param name="operation">The operation to dispatch.</param>
-    /// <returns>The result returned by the method on <typeparamref name="T"/> the operation is dispatched to.</returns>
-    /// <exception cref="NotSupportedException">
-    /// If no suitable method is found on <typeparamref name="T"/> for dispatch.
-    /// </exception>
-    public static ValueTask<object?> DispatchAsync<T>(this TaskEntityOperation operation)
-    {
-        // NOTE: when dispatching this way, we do not support value types as we have no way of capturing the changed
-        // value due to defensive copies.
-        Check.NotNull(operation);
-        object target = operation.GetInput(typeof(T)) ?? Activator.CreateInstance(typeof(T));
-        if (!operation.TryDispatch(target, out object? result, out Type returnType))
-        {
-            throw new NotSupportedException(
-                $"No suitable method on {typeof(T)} found for entity operation '{operation}'.");
-        }
-
-        return TaskEntityHelpers.UnwrapAsync(operation.Context, () => target, result, returnType);
-    }
-
-    /// <summary>
     /// Try to dispatch this operation via reflection to a method on <paramref name="target"/>.
     /// </summary>
     /// <param name="operation">The operation that is being dispatched.</param>

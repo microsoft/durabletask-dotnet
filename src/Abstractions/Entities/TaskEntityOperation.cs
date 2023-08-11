@@ -1,8 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Reflection;
-
 namespace Microsoft.DurableTask.Entities;
 
 /// <summary>
@@ -10,13 +8,6 @@ namespace Microsoft.DurableTask.Entities;
 /// </summary>
 public abstract class TaskEntityOperation
 {
-    /**
-     * TODO:
-     * 1. Consider caching a compiled delegate for a given operation name.
-     */
-    static readonly BindingFlags InstanceBindingFlags
-            = BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase;
-
     /// <summary>
     /// Gets the name of the operation.
     /// </summary>

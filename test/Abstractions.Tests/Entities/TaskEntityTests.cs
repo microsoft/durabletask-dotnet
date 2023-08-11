@@ -6,7 +6,7 @@ using DotNext;
 
 namespace Microsoft.DurableTask.Entities.Tests;
 
-public class TaskEntityTests
+public partial class TaskEntityTests
 {
     [Theory]
     [InlineData("doesNotExist")] // method does not exist.
@@ -14,7 +14,7 @@ public class TaskEntityTests
     [InlineData("staticMethod")] // public static methods are not supported.
     public async Task OperationNotSupported_Fails(string name)
     {
-        Operation operation = new(name, new Context(null), 10);
+        TestEntityOperation operation = new(name, 10);
         TestEntity entity = new();
 
         Func<Task<object?>> action = () => entity.RunAsync(operation).AsTask();
@@ -28,7 +28,7 @@ public class TaskEntityTests
         [CombinatorialValues("TaskOp", "TaskOfStringOp", "ValueTaskOp", "ValueTaskOfStringOp")] string name, bool sync)
     {
         object? expected = name.Contains("OfString") ? "success" : null;
-        Operation operation = new(name, new Context(null), sync);
+        TestEntityOperation operation = new(name, sync);
         TestEntity entity = new();
 
         object? result = await entity.RunAsync(operation);
@@ -43,8 +43,8 @@ public class TaskEntityTests
         int start = Random.Shared.Next(0, 10);
         int toAdd = Random.Shared.Next(0, 10);
         string opName = lowercase ? "add" : "Add";
-        Context context = new(start);
-        Operation operation = new($"{opName}{method}", context, toAdd);
+        TestEntityContext context = new(start);
+        TestEntityOperation operation = new($"{opName}{method}", start, toAdd);
         TestEntity entity = new();
 
         object? result = await entity.RunAsync(operation);
@@ -60,8 +60,8 @@ public class TaskEntityTests
     {
         int expected = Random.Shared.Next(0, 10);
         string opName = lowercase ? "get" : "Get";
-        Context context = new(expected);
-        Operation operation = new($"{opName}{method}", context, default);
+        TestEntityContext context = new(expected);
+        TestEntityOperation operation = new($"{opName}{method}", context, default);
         TestEntity entity = new();
 
         object? result = await entity.RunAsync(operation);
@@ -73,7 +73,7 @@ public class TaskEntityTests
     [Fact]
     public async Task Add_NoInput_Fails()
     {
-        Operation operation = new("add0", new Context(null), default);
+        TestEntityOperation operation = new("add0", new TestEntityContext(null), default);
         TestEntity entity = new();
 
         Func<Task<object?>> action = () => entity.RunAsync(operation).AsTask();
@@ -85,7 +85,7 @@ public class TaskEntityTests
     [CombinatorialData]
     public async Task Dispatch_AmbiguousArgs_Fails([CombinatorialRange(0, 3)] int method)
     {
-        Operation operation = new($"ambiguousArgs{method}", new Context(null), 10);
+        TestEntityOperation operation = new($"ambiguousArgs{method}", new TestEntityContext(null), 10);
         TestEntity entity = new();
 
         Func<Task<object?>> action = () => entity.RunAsync(operation).AsTask();
@@ -96,7 +96,7 @@ public class TaskEntityTests
     [Fact]
     public async Task Dispatch_AmbiguousMatch_Fails()
     {
-        Operation operation = new("ambiguousMatch", new Context(null), 10);
+        TestEntityOperation operation = new("ambiguousMatch", new TestEntityContext(null), 10);
         TestEntity entity = new();
 
         Func<Task<object?>> action = () => entity.RunAsync(operation).AsTask();
@@ -106,7 +106,7 @@ public class TaskEntityTests
     [Fact]
     public async Task DefaultValue_NoInput_Succeeds()
     {
-        Operation operation = new("defaultValue", new Context(null), default);
+        TestEntityOperation operation = new("defaultValue", new TestEntityContext(null), default);
         TestEntity entity = new();
 
         object? result = await entity.RunAsync(operation);
@@ -117,89 +117,12 @@ public class TaskEntityTests
     [Fact]
     public async Task DefaultValue_Input_Succeeds()
     {
-        Operation operation = new("defaultValue", new Context(null), "not-default");
+        TestEntityOperation operation = new("defaultValue", new TestEntityContext(null), "not-default");
         TestEntity entity = new();
 
         object? result = await entity.RunAsync(operation);
 
         result.Should().BeOfType<string>().Which.Should().Be("not-default");
-    }
-
-    class Context : TaskEntityContext
-    {
-        public Context(object? state)
-        {
-            this.State = state;
-        }
-
-        public object? State { get; private set; }
-
-        public override EntityInstanceId Id { get; }
-
-        public override object? GetState(Type type)
-        {
-            return this.State switch
-            {
-                null => null,
-                _ when type.IsAssignableFrom(this.State.GetType()) => this.State,
-                _ => throw new InvalidCastException()
-            };
-        }
-
-        public override void SetState(object? state)
-        {
-            this.State = state;
-        }
-
-        public override void SignalEntity(
-            EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public override void StartOrchestration(
-            TaskName name, object? input = null, StartOrchestrationOptions? options = null)
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    class Operation : TaskEntityOperation
-    {
-        readonly Optional<object?> input;
-
-        public Operation(string name, TaskEntityContext context, Optional<object?> input)
-        {
-            this.Name = name;
-            this.Context = context;
-            this.input = input;
-        }
-
-        public override string Name { get; }
-
-        public override TaskEntityContext Context { get; }
-
-        public override bool HasInput => this.input.IsPresent;
-
-        public override object? GetInput(Type inputType)
-        {
-            if (!this.input.IsPresent)
-            {
-                throw new InvalidOperationException("No input available.");
-            }
-
-            if (this.input.Value is null)
-            {
-                return null;
-            }
-
-            if (!inputType.IsAssignableFrom(this.input.Value.GetType()))
-            {
-                throw new InvalidCastException("Cannot convert input type.");
-            }
-
-            return this.input.Value;
-        }
     }
 
     class TestEntity : TaskEntity<int>

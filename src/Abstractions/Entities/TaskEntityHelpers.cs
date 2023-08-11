@@ -80,16 +80,11 @@ static class TaskEntityHelpers
         return new(Await(t));
     }
 
-    static ValueTask<object?> UnwrapValueTaskOfT(TaskEntityContext context, Func<object?> state, object result, Type type)
+    static ValueTask<object?> UnwrapValueTaskOfT(
+        TaskEntityContext context, Func<object?> state, object result, Type type)
     {
-        async Task<object?> Await(Task t)
-        {
-            await t;
-            context.SetState(state());
-            return null;
-        }
-
-        // result and type here must be some form of ValueTask<T>.
+        // Result and type here must be some form of ValueTask<T>.
+        // TODO: can this amount of reflection be avoided?
         if ((bool)type.GetProperty("IsCompletedSuccessfully").GetValue(result))
         {
             context.SetState(state());
@@ -97,9 +92,9 @@ static class TaskEntityHelpers
         }
         else
         {
-            Task t = (Task)type.GetMethod("AsTask", BindingFlags.Instance | BindingFlags.Public)
-                .Invoke(result, null);
-            return new(Await(t));
+            Task t = (Task)type.GetMethod("AsTask", BindingFlags.Instance | BindingFlags.Public).Invoke(result, null);
+            Type taskType = typeof(Task<>).MakeGenericType(type.GetGenericArguments()[0]);
+            return new(UnwrapTask(context, state, t, taskType));
         }
     }
 }

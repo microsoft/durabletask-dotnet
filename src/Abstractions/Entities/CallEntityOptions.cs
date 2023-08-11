@@ -8,21 +8,8 @@ namespace Microsoft.DurableTask.Entities;
 /// </summary>
 public record CallEntityOptions
 {
-    /// <summary>
-    /// Gets options indicating whether to signal the entity or not.
-    /// </summary>
-    /// <remarks>
-    /// Setting this to non-<c>null</c> will signal the entity without waiting for a response.
-    /// </remarks>
-    /// <example>
-    /// Signal without start time:
-    /// <code>new CallEntityOptions { Signal = true };</code>
-    /// </example>
-    /// <example>
-    /// Signal with start time:
-    /// <code>new CallEntityOptions { Signal = DateTimeOffset };</code>
-    /// </example>
-    public SignalEntityOptions? Signal { get; init; }
+    // No call options at the moment. Keeping this class so we can ship with options in the API. This will
+    // allow us to easily add them later without adjusting API surface.
 }
 
 /// <summary>

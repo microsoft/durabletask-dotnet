@@ -30,21 +30,21 @@ public class TestEntityOperation : TaskEntityOperation
 
     public override TaskEntityContext Context { get; }
 
-    public override bool HasInput => this.input.IsPresent;
+    public override bool HasInput => this.input.HasValue;
 
     public override object? GetInput(Type inputType)
     {
-        if (!this.input.IsPresent)
+        if (this.input.IsUndefined)
         {
             throw new InvalidOperationException("No input available.");
         }
 
-        if (this.input.Value is null)
+        if (this.input.IsNull)
         {
             return null;
         }
 
-        if (!inputType.IsAssignableFrom(this.input.Value.GetType()))
+        if (!inputType.IsAssignableFrom(this.input.Value!.GetType()))
         {
             throw new InvalidCastException("Cannot convert input type.");
         }

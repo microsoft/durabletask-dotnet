@@ -41,10 +41,10 @@ public partial class TaskEntityTests
     public async Task Add_Success([CombinatorialRange(0, 14)] int method, bool lowercase)
     {
         int start = Random.Shared.Next(0, 10);
-        int toAdd = Random.Shared.Next(0, 10);
+        int toAdd = Random.Shared.Next(1, 10);
         string opName = lowercase ? "add" : "Add";
         TestEntityContext context = new(start);
-        TestEntityOperation operation = new($"{opName}{method}", start, toAdd);
+        TestEntityOperation operation = new($"{opName}{method}", context, toAdd);
         TestEntity entity = new();
 
         object? result = await entity.RunAsync(operation);
@@ -229,17 +229,17 @@ public partial class TaskEntityTests
 
         int Add(int? value, Optional<TaskEntityContext> context, Optional<TaskEntityOperation> operation)
         {
-            if (context.IsPresent)
+            if (context.HasValue)
             {
                 context.Value.Should().NotBeNull();
             }
 
-            if (operation.IsPresent)
+            if (operation.HasValue)
             {
                 operation.Value.Should().NotBeNull();
             }
 
-            if (!value.HasValue && operation.TryGet(out TaskEntityOperation op))
+            if (!value.HasValue && operation.TryGet(out TaskEntityOperation? op))
             {
                 value = (int)op.GetInput(typeof(int))!;
             }
@@ -250,7 +250,7 @@ public partial class TaskEntityTests
 
         int Get(Optional<TaskEntityContext> context)
         {
-            if (context.IsPresent)
+            if (context.HasValue)
             {
                 context.Value.Should().NotBeNull();
             }

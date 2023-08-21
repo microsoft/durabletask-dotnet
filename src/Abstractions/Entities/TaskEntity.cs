@@ -118,10 +118,11 @@ public abstract class TaskEntity<TState> : ITaskEntity
     }
 
     /// <summary>
-    /// Initializes the entity state.
+    /// Initializes the entity state. This is only called when there is no current state for this entity.
     /// </summary>
     /// <returns>The entity state.</returns>
-    protected virtual TState? InitializeState() => default;
+    /// <remarks>The default implementation uses <see cref="Activator.CreateInstance{TState}()"/>.</remarks>
+    protected virtual TState? InitializeState() => Activator.CreateInstance<TState>();
 
     bool TryDispatchState(out object? result, out Type returnType)
     {

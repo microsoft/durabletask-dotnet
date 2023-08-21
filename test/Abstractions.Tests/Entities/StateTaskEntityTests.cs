@@ -177,8 +177,6 @@ public class StateTaskEntityTests
         protected override bool AllowStateDispatch => this.allowStateDispatch;
 
         public int Precedence() => this.State!.Precedence() * 2;
-
-        protected override TestState InitializeState() => new();
     }
 
 #pragma warning disable CA1822 // Mark members as static

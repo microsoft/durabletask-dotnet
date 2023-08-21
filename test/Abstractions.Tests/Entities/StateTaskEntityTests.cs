@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.Reflection;
@@ -6,8 +6,41 @@ using DotNext;
 
 namespace Microsoft.DurableTask.Entities.Tests;
 
-public partial class TaskEntityTests
+public class StateTaskEntityTests
 {
+    [Fact]
+    public async Task Precedence_ChoosesEntity()
+    {
+        TestEntityOperation operation = new("Precedence", default);
+        TestEntity entity = new();
+
+        object? result = await entity.RunAsync(operation);
+
+        result.Should().Be(20);
+    }
+
+    [Fact]
+    public async Task StateDispatchDisallowed_Throws()
+    {
+        TestEntityOperation operation = new("add0", 10);
+        TestEntity entity = new(false);
+
+        Func<Task<object?>> action = () => entity.RunAsync(operation).AsTask();
+
+        await action.Should().ThrowAsync<NotSupportedException>();
+    }
+
+    [Fact]
+    public async Task StateDispatch_NullState_Throws()
+    {
+        TestEntityOperation operation = new("add0", 10);
+        NullStateEntity entity = new();
+
+        Func<Task<object?>> action = () => entity.RunAsync(operation).AsTask();
+
+        await action.Should().ThrowAsync<InvalidOperationException>();
+    }
+
     [Theory]
     [InlineData("doesNotExist")] // method does not exist.
     [InlineData("add")] // private method, should not work.
@@ -43,14 +76,14 @@ public partial class TaskEntityTests
         int start = Random.Shared.Next(0, 10);
         int toAdd = Random.Shared.Next(1, 10);
         string opName = lowercase ? "add" : "Add";
-        TestEntityContext context = new(start);
+        TestEntityContext context = new(State(start));
         TestEntityOperation operation = new($"{opName}{method}", context, toAdd);
         TestEntity entity = new();
 
         object? result = await entity.RunAsync(operation);
 
         int expected = start + toAdd;
-        context.GetState(typeof(int)).Should().BeOfType<int>().Which.Should().Be(expected);
+        context.GetState(typeof(TestState)).Should().BeOfType<TestState>().Which.Value.Should().Be(expected);
         result.Should().BeOfType<int>().Which.Should().Be(expected);
     }
 
@@ -60,13 +93,13 @@ public partial class TaskEntityTests
     {
         int expected = Random.Shared.Next(0, 10);
         string opName = lowercase ? "get" : "Get";
-        TestEntityContext context = new(expected);
+        TestEntityContext context = new(State(expected));
         TestEntityOperation operation = new($"{opName}{method}", context, default);
         TestEntity entity = new();
 
         object? result = await entity.RunAsync(operation);
 
-        context.GetState(typeof(int)).Should().BeOfType<int>().Which.Should().Be(expected);
+        context.GetState(typeof(TestState)).Should().BeOfType<TestState>().Which.Value.Should().Be(expected);
         result.Should().BeOfType<int>().Which.Should().Be(expected);
     }
 
@@ -125,9 +158,38 @@ public partial class TaskEntityTests
         result.Should().BeOfType<string>().Which.Should().Be("not-default");
     }
 
-    class TestEntity : TaskEntity<int>
+    static TestState State(int value) => new() { Value = value };
+
+    class NullStateEntity : TestEntity
     {
+        protected override TestState InitializeState() => null!;
+    }
+
+    class TestEntity : TaskEntity<TestState>
+    {
+        readonly bool allowStateDispatch;
+
+        public TestEntity(bool allowStateDispatch = true)
+        {
+            this.allowStateDispatch = allowStateDispatch;
+        }
+
+        protected override bool AllowStateDispatch => this.allowStateDispatch;
+
+        public int Precedence() => this.State!.Precedence() * 2;
+
+        protected override TestState InitializeState() => new();
+    }
+
+#pragma warning disable CA1822 // Mark members as static
+#pragma warning disable IDE0060 // Remove unused parameter
+    class TestState
+    {
+        public int Value { get; set; }
+
         public static string StaticMethod() => throw new NotImplementedException();
+
+        public int Precedence() => 10;
 
         // All possible permutations of the 3 inputs we support: object, context, operation
         // 14 via Add, 2 via Get: 16 total.
@@ -172,9 +234,9 @@ public partial class TaskEntityTests
 
         public int Get1(TaskEntityContext context) => this.Get(context);
 
-        public int AmbiguousMatch(TaskEntityContext context) => this.State;
+        public int AmbiguousMatch(TaskEntityContext context) => this.Value;
 
-        public int AmbiguousMatch(TaskEntityOperation operation) => this.State;
+        public int AmbiguousMatch(TaskEntityOperation operation) => this.Value;
 
         public int AmbiguousArgs0(int value, object other) => this.Add0(value);
 
@@ -245,7 +307,7 @@ public partial class TaskEntityTests
             }
 
             value.HasValue.Should().BeTrue();
-            return this.State += value!.Value;
+            return this.Value += value!.Value;
         }
 
         int Get(Optional<TaskEntityContext> context)
@@ -255,7 +317,9 @@ public partial class TaskEntityTests
                 context.Value.Should().NotBeNull();
             }
 
-            return this.State;
+            return this.Value;
         }
     }
+#pragma warning restore IDE0060 // Remove unused parameter
+#pragma warning restore CA1822 // Mark members as static
 }

@@ -53,7 +53,8 @@ public abstract class TaskEntityContext
         TaskName name, object? input = null, StartOrchestrationOptions? options = null);
 
     /// <summary>
-    /// Gets the current state for the entity this context is for.
+    /// Gets the current state for the entity this context is for. This will return <c>null</c> if no state is present,
+    /// regardless if <paramref name="type"/> is a value-type or not.
     /// </summary>
     /// <param name="type">The type to retrieve the state as.</param>
     /// <returns>The entity state.</returns>

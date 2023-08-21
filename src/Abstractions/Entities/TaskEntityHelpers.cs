@@ -11,7 +11,7 @@ namespace Microsoft.DurableTask.Entities;
 static class TaskEntityHelpers
 {
     /// <summary>
-    /// Unwraps a dispatched result for a <see cref="TaskEntityOperation"/> into a <see cref="ValueTask{Object}"/>
+    /// Unwraps a dispatched result for a <see cref="TaskEntityOperation"/> into a <see cref="ValueTask{Object}"/>.
     /// </summary>
     /// <param name="context">The entity context.</param>
     /// <param name="state">Delegate to resolve new state for the entity.</param>

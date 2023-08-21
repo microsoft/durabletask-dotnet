@@ -24,7 +24,7 @@ static class TaskExtensions
         Type t = task.GetType();
         if (t.IsGenericType)
         {
-            return (T)t.GetProperty("Result", BindingFlags.Public | BindingFlags.Instance).GetValue(task);
+            return (T)t.GetProperty("Result", BindingFlags.Public | BindingFlags.Instance)!.GetValue(task)!;
         }
 
         return default;

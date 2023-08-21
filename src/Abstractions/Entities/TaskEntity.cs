@@ -77,10 +77,10 @@ public interface ITaskEntity
 public abstract class TaskEntity<TState> : ITaskEntity
 {
     /// <summary>
-    /// Gets a value indicating whether dispatching operations to <see cref="State"/> is allowed. State dispatch will
-    /// only be attempted if entity-level dispatch does not succeed. Default is <c>true</c>.
+    /// Gets a value indicating whether dispatching operations to <see cref="State"/> is allowed. State dispatch
+    /// will only be attempted if entity-level dispatch does not succeed. Default is <c>false</c>.
     /// </summary>
-    protected bool AllowStateDispatch => true;
+    protected virtual bool AllowStateDispatch => false;
 
     /// <summary>
     /// Gets or sets the state for this entity.
@@ -90,7 +90,7 @@ public abstract class TaskEntity<TState> : ITaskEntity
     /// will be persisted to <see cref="TaskEntityContext.SetState(object?)"/> when the operation completes. Deleting
     /// entity state can be accomplished by setting this to default(<typeparamref name="TState"/>).
     /// </remarks>
-    protected TState State { get; set; } = default!; // leave null-checks to end implementation.
+    protected TState? State { get; set; }
 
     /// <summary>
     /// Gets the entity operation.
@@ -107,13 +107,36 @@ public abstract class TaskEntity<TState> : ITaskEntity
     {
         this.Operation = Check.NotNull(operation);
         object? state = operation.Context.GetState(typeof(TState));
-        this.State = state is null ? default! : (TState)state;
+        this.State = state is null ? this.InitializeState() : (TState)state;
         if (!operation.TryDispatch(this, out object? result, out Type returnType)
-            && (this.AllowStateDispatch && !operation.TryDispatch(this.State, out result, out returnType)))
+            && !this.TryDispatchState(out result, out returnType))
         {
             throw new NotSupportedException($"No suitable method found for entity operation '{operation}'.");
         }
 
         return TaskEntityHelpers.UnwrapAsync(this.Context, () => this.State, result, returnType);
+    }
+
+    /// <summary>
+    /// Initializes the entity state.
+    /// </summary>
+    /// <returns>The entity state.</returns>
+    protected virtual TState? InitializeState() => default;
+
+    bool TryDispatchState(out object? result, out Type returnType)
+    {
+        if (!this.AllowStateDispatch)
+        {
+            result = null;
+            returnType = typeof(void);
+            return false;
+        }
+
+        if (this.State is null)
+        {
+            throw new InvalidOperationException("Attempting to dispatch to state, but entity state is null.");
+        }
+
+        return this.Operation.TryDispatch(this.State, out result, out returnType);
     }
 }

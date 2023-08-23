@@ -69,16 +69,16 @@ public interface ITaskEntity
 ///
 /// <para><b>Entity State</b></para>
 /// <para>
-/// Entity state will be hydrated into the <see cref="TaskEntity{TState}.State"/> property. The contents of this
-/// property will be persisted to <see cref="TaskEntityContext.SetState(object?)"/> when the operation has completed.
-/// Deleting entity state can be accomplished by setting to default(<typeparamref name="TState"/>).
+/// Entity state will be hydrated into the <see cref="TaskEntity{TState}.State"/> property. See <see cref="State"/> for
+/// more information.
 /// </para>
 /// </remarks>
 public abstract class TaskEntity<TState> : ITaskEntity
 {
     /// <summary>
     /// Gets a value indicating whether dispatching operations to <see cref="State"/> is allowed. State dispatch
-    /// will only be attempted if entity-level dispatch does not succeed. Default is <c>false</c>.
+    /// will only be attempted if entity-level dispatch does not succeed. Default is <c>false</c>. Dispatching to state
+    /// follows the same rules as dispatching to this entity.
     /// </summary>
     protected virtual bool AllowStateDispatch => false;
 
@@ -86,11 +86,24 @@ public abstract class TaskEntity<TState> : ITaskEntity
     /// Gets or sets the state for this entity.
     /// </summary>
     /// <remarks>
-    /// This will be hydrated as part of <see cref="RunAsync(TaskEntityOperation)"/>. The contents of this property
-    /// will be persisted to <see cref="TaskEntityContext.SetState(object?)"/> when the operation completes. Deleting
-    /// entity state can be accomplished by setting this to default(<typeparamref name="TState"/>).
+    /// <para><b>Initialization</b></para>
+    /// <para>
+    /// This will be hydrated as part of <see cref="RunAsync(TaskEntityOperation)"/>. <see cref="InitializeState"/> will
+    /// be called when state is <c>null</c> <b>at the start of an operation only</b>.
+    /// </para>
+    /// <para><b>Persistence</b></para>
+    /// <para>
+    /// The contents of this property will be persisted to <see cref="TaskEntityContext.SetState(object?)"/> at the end
+    /// of the operation.
+    /// </para>
+    /// <para><b>Deletion</b></para>
+    /// <para>
+    /// Deleting entity state is possible by setting this to <c>null</c>. Setting to default of a value-type will
+    /// <b>not</b> delete state. This means deleting entity state is only possible for reference types or using <c>?</c>
+    /// on a value-type (ie: <c>TaskEntity&lt;int?&gt;</c>).
+    /// </para>
     /// </remarks>
-    protected TState? State { get; set; }
+    protected TState State { get; set; } = default!;
 
     /// <summary>
     /// Gets the entity operation.
@@ -121,8 +134,19 @@ public abstract class TaskEntity<TState> : ITaskEntity
     /// Initializes the entity state. This is only called when there is no current state for this entity.
     /// </summary>
     /// <returns>The entity state.</returns>
-    /// <remarks>The default implementation uses <see cref="Activator.CreateInstance{TState}()"/>.</remarks>
-    protected virtual TState? InitializeState() => Activator.CreateInstance<TState>();
+    /// <remarks>The default implementation uses <see cref="Activator.CreateInstance()"/>.</remarks>
+    protected virtual TState InitializeState()
+    {
+        if (Nullable.GetUnderlyingType(typeof(TState)) is Type t)
+        {
+            // Activator.CreateInstance<Nullable<T>>() returns null. To avoid this, we will instantiate via underlying
+            // type if it is Nullable<T>. This keeps the experience consistent between value and reference type. If an
+            // implementation wants null, they must override this method and explicitly provide null.
+            return (TState)Activator.CreateInstance(t);
+        }
+
+        return Activator.CreateInstance<TState>();
+    }
 
     bool TryDispatchState(out object? result, out Type returnType)
     {

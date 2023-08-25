@@ -53,11 +53,16 @@ public abstract class TaskEntityContext
         TaskName name, object? input = null, StartOrchestrationOptions? options = null);
 
     /// <summary>
-    /// Deletes the state of this entity after the current operation completes.
+    /// Gets the current state for the entity this context is for. This will return <c>null</c> if no state is present,
+    /// regardless if <paramref name="type"/> is a value-type or not.
     /// </summary>
-    /// <remarks>
-    /// The state deletion only takes effect after the current operation completes. Any state changes made during the
-    /// current operation will be ignored in favor of the deletion.
-    /// </remarks>
-    public abstract void DeleteState();
+    /// <param name="type">The type to retrieve the state as.</param>
+    /// <returns>The entity state.</returns>
+    public abstract object? GetState(Type type);
+
+    /// <summary>
+    /// Sets the entity state. Setting of <c>null</c> will delete entity state.
+    /// </summary>
+    /// <param name="state">The state to set.</param>
+    public abstract void SetState(object? state);
 }

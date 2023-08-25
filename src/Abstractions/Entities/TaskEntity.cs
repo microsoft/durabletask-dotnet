@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using System.Reflection;
-using System.Threading.Tasks;
 
 namespace Microsoft.DurableTask.Entities;
 
@@ -12,9 +11,7 @@ namespace Microsoft.DurableTask.Entities;
 /// <remarks>
 /// <para><b>Entity State</b></para>
 /// <para>
-/// All entity implementations are required to be serializable by the configured <see cref="DataConverter"/>. An entity
-/// will have its state deserialized before executing an operation, and then the new state will be the serialized value
-/// of the <see cref="ITaskEntity"/> implementation instance post-operation.
+/// The state of an entity can be retrieved and updated via <see cref="TaskEntityOperation.Context"/>.
 /// </para>
 /// </remarks>
 public interface ITaskEntity
@@ -30,6 +27,7 @@ public interface ITaskEntity
 /// <summary>
 /// An <see cref="ITaskEntity"/> which dispatches its operations to public instance methods or properties.
 /// </summary>
+/// <typeparam name="TState">The state type held by this entity.</typeparam>
 /// <remarks>
 /// <para><b>Method Binding</b></para>
 /// <para>
@@ -71,176 +69,99 @@ public interface ITaskEntity
 ///
 /// <para><b>Entity State</b></para>
 /// <para>
-/// Unchanged from <see cref="ITaskEntity"/>. Entity state is the serialized value of the entity after an operation
-/// completes.
+/// Entity state will be hydrated into the <see cref="TaskEntity{TState}.State"/> property. See <see cref="State"/> for
+/// more information.
 /// </para>
 /// </remarks>
-public abstract class TaskEntity : ITaskEntity
+public abstract class TaskEntity<TState> : ITaskEntity
 {
-    /**
-     * TODO:
-     * 1. Consider caching a compiled delegate for a given operation name.
-     */
-    static readonly BindingFlags InstanceBindingFlags
-            = BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase;
+    /// <summary>
+    /// Gets a value indicating whether dispatching operations to <see cref="State"/> is allowed. State dispatch
+    /// will only be attempted if entity-level dispatch does not succeed. Default is <c>false</c>. Dispatching to state
+    /// follows the same rules as dispatching to this entity.
+    /// </summary>
+    protected virtual bool AllowStateDispatch => false;
+
+    /// <summary>
+    /// Gets or sets the state for this entity.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Initialization</b></para>
+    /// <para>
+    /// This will be hydrated as part of <see cref="RunAsync(TaskEntityOperation)"/>. <see cref="InitializeState"/> will
+    /// be called when state is <c>null</c> <b>at the start of an operation only</b>.
+    /// </para>
+    /// <para><b>Persistence</b></para>
+    /// <para>
+    /// The contents of this property will be persisted to <see cref="TaskEntityContext.SetState(object?)"/> at the end
+    /// of the operation.
+    /// </para>
+    /// <para><b>Deletion</b></para>
+    /// <para>
+    /// Deleting entity state is possible by setting this to <c>null</c>. Setting to default of a value-type will
+    /// <b>not</b> perform a delete. This means deleting entity state is only possible for reference types or using <c>?</c>
+    /// on a value-type (ie: <c>TaskEntity&lt;int?&gt;</c>).
+    /// </para>
+    /// </remarks>
+    protected TState State { get; set; } = default!;
+
+    /// <summary>
+    /// Gets the entity operation.
+    /// </summary>
+    protected TaskEntityOperation Operation { get; private set; } = null!;
+
+    /// <summary>
+    /// Gets the entity context.
+    /// </summary>
+    protected TaskEntityContext Context => this.Operation.Context;
 
     /// <inheritdoc/>
     public ValueTask<object?> RunAsync(TaskEntityOperation operation)
     {
-        Check.NotNull(operation);
-        if (!this.TryDispatchMethod(operation, out object? result, out Type returnType))
+        this.Operation = Check.NotNull(operation);
+        object? state = operation.Context.GetState(typeof(TState));
+        this.State = state is null ? this.InitializeState() : (TState)state;
+        if (!operation.TryDispatch(this, out object? result, out Type returnType)
+            && !this.TryDispatchState(out result, out returnType))
         {
             throw new NotSupportedException($"No suitable method found for entity operation '{operation}'.");
         }
 
-        if (typeof(Task).IsAssignableFrom(returnType))
-        {
-            // Task or Task<T>
-            return new(AsGeneric((Task)result!, returnType)); // we assume a declared Task return type is never null.
-        }
-
-        if (returnType == typeof(ValueTask))
-        {
-            // ValueTask
-            return AsGeneric((ValueTask)result!); // we assume a declared ValueTask return type is never null.
-        }
-
-        if (returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(ValueTask<>))
-        {
-            // ValueTask<T>
-            return AsGeneric(result!, returnType); // No inheritance, have to do purely via reflection.
-        }
-
-        return new(result);
+        return TaskEntityHelpers.UnwrapAsync(this.Context, () => this.State, result, returnType);
     }
 
-    static bool TryGetInput(ParameterInfo parameter, TaskEntityOperation operation, out object? input)
+    /// <summary>
+    /// Initializes the entity state. This is only called when there is no current state for this entity.
+    /// </summary>
+    /// <returns>The entity state.</returns>
+    /// <remarks>The default implementation uses <see cref="Activator.CreateInstance()"/>.</remarks>
+    protected virtual TState InitializeState()
     {
-        if (!operation.HasInput)
+        if (Nullable.GetUnderlyingType(typeof(TState)) is Type t)
         {
-            if (parameter.HasDefaultValue)
-            {
-                input = parameter.DefaultValue;
-                return true;
-            }
-
-            input = null;
-            return false;
+            // Activator.CreateInstance<Nullable<T>>() returns null. To avoid this, we will instantiate via underlying
+            // type if it is Nullable<T>. This keeps the experience consistent between value and reference type. If an
+            // implementation wants null, they must override this method and explicitly provide null.
+            return (TState)Activator.CreateInstance(t);
         }
 
-        input = operation.GetInput(parameter.ParameterType);
-        return true;
+        return Activator.CreateInstance<TState>();
     }
 
-    static async Task<object?> AsGeneric(Task task, Type declared)
+    bool TryDispatchState(out object? result, out Type returnType)
     {
-        await task;
-        if (declared.IsGenericType && declared.GetGenericTypeDefinition() == typeof(Task<>))
-        {
-            return declared.GetProperty("Result", BindingFlags.Public | BindingFlags.Instance).GetValue(task);
-        }
-
-        return null;
-    }
-
-    static ValueTask<object?> AsGeneric(ValueTask t)
-    {
-        static async Task<object?> Await(ValueTask t)
-        {
-            await t;
-            return null;
-        }
-
-        if (t.IsCompletedSuccessfully)
-        {
-            return default;
-        }
-
-        return new(Await(t));
-    }
-
-    static ValueTask<object?> AsGeneric(object result, Type type)
-    {
-        // result and type here must be some form of ValueTask<T>.
-        if ((bool)type.GetProperty("IsCompletedSuccessfully").GetValue(result))
-        {
-            return new(type.GetProperty("Result").GetValue(result));
-        }
-        else
-        {
-            Task t = (Task)type.GetMethod("AsTask", BindingFlags.Instance | BindingFlags.Public)
-                .Invoke(result, null);
-            return new(t.ToGeneric<object?>());
-        }
-    }
-
-    bool TryDispatchMethod(TaskEntityOperation operation, out object? result, out Type returnType)
-    {
-        Type t = this.GetType();
-
-        // Will throw AmbiguousMatchException if more than 1 overload for the method name exists.
-        MethodInfo? method = t.GetMethod(operation.Name, InstanceBindingFlags);
-        if (method is null)
+        if (!this.AllowStateDispatch)
         {
             result = null;
             returnType = typeof(void);
             return false;
         }
 
-        ParameterInfo[] parameters = method.GetParameters();
-        object?[] inputs = new object[parameters.Length];
-
-        int i = 0;
-        ParameterInfo? inputResolved = null;
-        ParameterInfo? contextResolved = null;
-        ParameterInfo? operationResolved = null;
-        foreach (ParameterInfo parameter in parameters)
+        if (this.State is null)
         {
-            if (parameter.ParameterType == typeof(TaskEntityContext))
-            {
-                ThrowIfDuplicateBinding(contextResolved, parameter, "context", operation);
-                inputs[i] = operation.Context;
-                contextResolved = parameter;
-            }
-            else if (parameter.ParameterType == typeof(TaskEntityOperation))
-            {
-                ThrowIfDuplicateBinding(operationResolved, parameter, "operation", operation);
-                inputs[i] = operation;
-                operationResolved = parameter;
-            }
-            else
-            {
-                ThrowIfDuplicateBinding(inputResolved, parameter, "input", operation);
-                if (TryGetInput(parameter, operation, out object? input))
-                {
-                    inputs[i] = input;
-                    inputResolved = parameter;
-                }
-                else
-                {
-                    throw new InvalidOperationException($"Error dispatching {operation} to '{method}'.\n" +
-                        $"There was an error binding parameter '{parameter}'. The operation expected an input value, " +
-                        "but no input was provided by the caller.");
-                }
-            }
-
-            i++;
+            throw new InvalidOperationException("Attempting to dispatch to state, but entity state is null.");
         }
 
-        result = method.Invoke(this, inputs);
-        returnType = method.ReturnType;
-        return true;
-
-        static void ThrowIfDuplicateBinding(
-            ParameterInfo? existing, ParameterInfo parameter, string bindingConcept, TaskEntityOperation operation)
-        {
-            if (existing is not null)
-            {
-                throw new InvalidOperationException($"Error dispatching {operation} to '{parameter.Member}'.\n" +
-                    $"Unable to bind {bindingConcept} to '{parameter}' because it has " +
-                    $"already been bound to parameter '{existing}'. Please remove the duplicate parameter in method " +
-                    $"'{parameter.Member}'.\nEntity operation: {operation}.");
-            }
-        }
+        return this.Operation.TryDispatch(this.State, out result, out returnType);
     }
 }

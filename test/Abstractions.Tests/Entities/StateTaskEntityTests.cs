@@ -158,6 +158,20 @@ public class StateTaskEntityTests
         result.Should().BeOfType<string>().Which.Should().Be("not-default");
     }
 
+    [Theory]
+    [InlineData("delete")]
+    [InlineData("Delete")]
+    public async Task ExplicitDelete_Overridden(string op)
+    {
+        TestEntityOperation operation = new(op, State(10), default);
+        TestEntity entity = new();
+
+        object? result = await entity.RunAsync(operation);
+
+        result.Should().BeNull();
+        operation.Context.GetState(typeof(TestState)).Should().BeOfType<TestState>().Which.Value.Should().Be(0);
+    }
+
     static TestState State(int value) => new() { Value = value };
 
     class NullStateEntity : TestEntity
@@ -186,6 +200,8 @@ public class StateTaskEntityTests
         public int Value { get; set; }
 
         public static string StaticMethod() => throw new NotImplementedException();
+
+        public void Delete() => this.Value = 0;
 
         public int Precedence() => 10;
 

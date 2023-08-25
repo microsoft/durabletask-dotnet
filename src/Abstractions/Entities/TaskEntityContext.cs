@@ -61,7 +61,7 @@ public abstract class TaskEntityContext
     public abstract object? GetState(Type type);
 
     /// <summary>
-    /// Sets the entity state. Setting of <c>null</c> will clear entity state.
+    /// Sets the entity state. Setting of <c>null</c> will delete entity state.
     /// </summary>
     /// <param name="state">The state to set.</param>
     public abstract void SetState(object? state);

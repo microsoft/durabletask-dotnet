@@ -99,7 +99,7 @@ public abstract class TaskEntity<TState> : ITaskEntity
     /// <para><b>Deletion</b></para>
     /// <para>
     /// Deleting entity state is possible by setting this to <c>null</c>. Setting to default of a value-type will
-    /// <b>not</b> delete state. This means deleting entity state is only possible for reference types or using <c>?</c>
+    /// <b>not</b> perform a delete. This means deleting entity state is only possible for reference types or using <c>?</c>
     /// on a value-type (ie: <c>TaskEntity&lt;int?&gt;</c>).
     /// </para>
     /// </remarks>

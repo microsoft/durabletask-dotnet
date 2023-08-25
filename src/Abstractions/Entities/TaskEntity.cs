@@ -93,7 +93,7 @@ public abstract class TaskEntity<TState> : ITaskEntity
     /// </para>
     /// <para><b>Persistence</b></para>
     /// <para>
-    /// The contents of this property will be persisted to <see cref="TaskEntityContext.SetState(object?)"/> at the end
+    /// The contents of this property will be persisted to <see cref="TaskEntityState.SetState(object?)"/> at the end
     /// of the operation.
     /// </para>
     /// <para><b>Deletion</b></para>
@@ -106,28 +106,24 @@ public abstract class TaskEntity<TState> : ITaskEntity
     protected TState State { get; set; } = default!;
 
     /// <summary>
-    /// Gets the entity operation.
-    /// </summary>
-    protected TaskEntityOperation Operation { get; private set; } = null!;
-
-    /// <summary>
     /// Gets the entity context.
     /// </summary>
-    protected TaskEntityContext Context => this.Operation.Context;
+    protected TaskEntityContext Context { get; private set; } = null!;
 
     /// <inheritdoc/>
     public ValueTask<object?> RunAsync(TaskEntityOperation operation)
     {
-        this.Operation = Check.NotNull(operation);
-        object? state = operation.Context.GetState(typeof(TState));
+        Check.NotNull(operation);
+        this.Context = operation.Context;
+        object? state = operation.State.GetState(typeof(TState));
         this.State = state is null ? this.InitializeState() : (TState)state;
         if (!operation.TryDispatch(this, out object? result, out Type returnType)
-            && !this.TryDispatchState(out result, out returnType))
+            && !this.TryDispatchState(operation, out result, out returnType))
         {
             throw new NotSupportedException($"No suitable method found for entity operation '{operation}'.");
         }
 
-        return TaskEntityHelpers.UnwrapAsync(this.Context, () => this.State, result, returnType);
+        return TaskEntityHelpers.UnwrapAsync(operation.State, () => this.State, result, returnType);
     }
 
     /// <summary>
@@ -148,7 +144,7 @@ public abstract class TaskEntity<TState> : ITaskEntity
         return Activator.CreateInstance<TState>();
     }
 
-    bool TryDispatchState(out object? result, out Type returnType)
+    bool TryDispatchState(TaskEntityOperation operation, out object? result, out Type returnType)
     {
         if (!this.AllowStateDispatch)
         {
@@ -162,6 +158,6 @@ public abstract class TaskEntity<TState> : ITaskEntity
             throw new InvalidOperationException("Attempting to dispatch to state, but entity state is null.");
         }
 
-        return this.Operation.TryDispatch(this.State, out result, out returnType);
+        return operation.TryDispatch(this.State, out result, out returnType);
     }
 }

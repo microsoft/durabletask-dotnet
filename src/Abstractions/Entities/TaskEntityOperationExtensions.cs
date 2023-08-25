@@ -47,7 +47,6 @@ public static class TaskEntityOperationExtensions
         int i = 0;
         ParameterInfo? inputResolved = null;
         ParameterInfo? contextResolved = null;
-        ParameterInfo? operationResolved = null;
         foreach (ParameterInfo parameter in parameters)
         {
             if (parameter.ParameterType == typeof(TaskEntityContext))
@@ -55,12 +54,6 @@ public static class TaskEntityOperationExtensions
                 ThrowIfDuplicateBinding(contextResolved, parameter, "context", operation);
                 inputs[i] = operation.Context;
                 contextResolved = parameter;
-            }
-            else if (parameter.ParameterType == typeof(TaskEntityOperation))
-            {
-                ThrowIfDuplicateBinding(operationResolved, parameter, "operation", operation);
-                inputs[i] = operation;
-                operationResolved = parameter;
             }
             else
             {

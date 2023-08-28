@@ -125,6 +125,34 @@ public class EntityTaskEntityTests
         result.Should().BeOfType<string>().Which.Should().Be("not-default");
     }
 
+    [Theory]
+    [InlineData("delete")]
+    [InlineData("Delete")]
+    public async Task ImplicitDelete_ClearsState(string op)
+    {
+        TestEntityOperation operation = new(op, 10, default);
+        TestEntity entity = new();
+
+        object? result = await entity.RunAsync(operation);
+
+        result.Should().BeNull();
+        operation.State.GetState(typeof(object)).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("delete")]
+    [InlineData("Delete")]
+    public async Task ExplicitDelete_Overridden(string op)
+    {
+        TestEntityOperation operation = new(op, 10, default);
+        DeleteEntity entity = new();
+
+        object? result = await entity.RunAsync(operation);
+
+        result.Should().BeNull();
+        operation.State.GetState(typeof(int)).Should().Be(0);
+    }
+
 #pragma warning disable CA1822 // Mark members as static
 #pragma warning disable IDE0060 // Remove unused parameter
     class TestEntity : TaskEntity<int>
@@ -214,6 +242,11 @@ public class EntityTaskEntityTests
 
             return this.State;
         }
+    }
+
+    class DeleteEntity : TaskEntity<int>
+    {
+        public void Delete() => this.State = 0;
     }
 #pragma warning restore IDE0060 // Remove unused parameter
 #pragma warning restore CA1822 // Mark members as static

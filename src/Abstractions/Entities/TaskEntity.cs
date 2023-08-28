@@ -72,6 +72,14 @@ public interface ITaskEntity
 /// Entity state will be hydrated into the <see cref="TaskEntity{TState}.State"/> property. See <see cref="State"/> for
 /// more information.
 /// </para>
+///
+/// <para><b>Implicit Operations</b></para>
+/// <para>
+/// This class supports some operations implicitly. Implicit operations have the lowest priority, after entity and state
+/// method dispatching. To override an implicit operation, implement a public method of the same name. Throw
+/// <see cref="NotSupportedException"/> from the method to indicate the implicit operation is not supported at all.
+/// </para>
+/// <para><c>delete</c>: deletes the entity state from storage.</para>
 /// </remarks>
 public abstract class TaskEntity<TState> : ITaskEntity
 {
@@ -120,6 +128,12 @@ public abstract class TaskEntity<TState> : ITaskEntity
         if (!operation.TryDispatch(this, out object? result, out Type returnType)
             && !this.TryDispatchState(operation, out result, out returnType))
         {
+            if (TryDispatchImplicit(operation, out ValueTask<object?> task))
+            {
+                // We do not go into UnwrapAsync for implicit tasks
+                return task;
+            }
+
             throw new NotSupportedException($"No suitable method found for entity operation '{operation}'.");
         }
 
@@ -142,6 +156,20 @@ public abstract class TaskEntity<TState> : ITaskEntity
         }
 
         return Activator.CreateInstance<TState>();
+    }
+
+    static bool TryDispatchImplicit(TaskEntityOperation operation, out ValueTask<object?> result)
+    {
+        // We do not implement implicit operations via methods because then they would supersede state-dispatching.
+        // As such, implicit operations are manually implemented here.
+        result = default;
+        if (string.Equals(operation.Name, "delete", StringComparison.OrdinalIgnoreCase))
+        {
+            operation.State.SetState(null);
+            return true;
+        }
+
+        return false;
     }
 
     bool TryDispatchState(TaskEntityOperation operation, out object? result, out Type returnType)

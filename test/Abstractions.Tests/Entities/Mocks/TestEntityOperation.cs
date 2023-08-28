@@ -10,25 +10,28 @@ public class TestEntityOperation : TaskEntityOperation
     readonly Optional<object?> input;
 
     public TestEntityOperation(string name, Optional<object?> input)
-        : this(name, new TestEntityContext(null), input)
+        : this(name, new TestEntityState(null), input)
     {
     }
 
     public TestEntityOperation(string name, object? state, Optional<object?> input)
-        : this(name, new TestEntityContext(state), input)
+        : this(name, new TestEntityState(state), input)
     {
     }
 
-    public TestEntityOperation(string name, TaskEntityContext context, Optional<object?> input)
+    public TestEntityOperation(string name, TaskEntityState state, Optional<object?> input)
     {
         this.Name = name;
-        this.Context = context;
+        this.State = state;
         this.input = input;
+        this.Context = Mock.Of<TaskEntityContext>();
     }
 
     public override string Name { get; }
 
     public override TaskEntityContext Context { get; }
+
+    public override TaskEntityState State { get; }
 
     public override bool HasInput => this.input.HasValue;
 

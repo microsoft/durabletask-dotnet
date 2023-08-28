@@ -9,12 +9,12 @@ public class TaskEntityHelpersTests
     public async Task UnwrapAsync_Void()
     {
         int state = Random.Shared.Next(1, 10);
-        TestEntityContext context = new(null);
+        TestEntityState entityState = new(null);
 
-        object? result = await TaskEntityHelpers.UnwrapAsync(context, () => state, null, typeof(void));
+        object? result = await TaskEntityHelpers.UnwrapAsync(entityState, () => state, null, typeof(void));
 
         result.Should().BeNull();
-        context.State.Should().BeOfType<int>().Which.Should().Be(state);
+        entityState.State.Should().BeOfType<int>().Which.Should().Be(state);
     }
 
     [Fact]
@@ -22,12 +22,12 @@ public class TaskEntityHelpersTests
     {
         int state = Random.Shared.Next(1, 10);
         int value = Random.Shared.Next(1, 10);
-        TestEntityContext context = new(null);
+        TestEntityState entityState = new(null);
 
-        object? result = await TaskEntityHelpers.UnwrapAsync(context, () => state, value, typeof(int));
+        object? result = await TaskEntityHelpers.UnwrapAsync(entityState, () => state, value, typeof(int));
 
         result.Should().BeOfType<int>().Which.Should().Be(value);
-        context.State.Should().BeOfType<int>().Which.Should().Be(state);
+        entityState.State.Should().BeOfType<int>().Which.Should().Be(state);
     }
 
     [Theory]
@@ -36,14 +36,14 @@ public class TaskEntityHelpersTests
     {
         TaskCompletionSource tcs = new();
         int state = Random.Shared.Next(1, 10);
-        TestEntityContext context = new(null);
+        TestEntityState entityState = new(null);
 
         if (!async)
         {
             tcs.TrySetResult();
         }
 
-        ValueTask<object?> task = TaskEntityHelpers.UnwrapAsync(context, () => state, tcs.Task, typeof(Task));
+        ValueTask<object?> task = TaskEntityHelpers.UnwrapAsync(entityState, () => state, tcs.Task, typeof(Task));
 
         if (async)
         {
@@ -54,7 +54,7 @@ public class TaskEntityHelpersTests
         object? result = await task;
 
         result.Should().BeNull();
-        context.State.Should().BeOfType<int>().Which.Should().Be(state);
+        entityState.State.Should().BeOfType<int>().Which.Should().Be(state);
     }
 
     [Theory]
@@ -62,14 +62,14 @@ public class TaskEntityHelpersTests
     public async Task UnwrapAsync_Task_Throws(bool async)
     {
         TaskCompletionSource tcs = new();
-        TestEntityContext context = new(null);
+        TestEntityState entityState = new(null);
 
         if (!async)
         {
             tcs.SetException(new OperationCanceledException());
         }
 
-        Func<Task> throws = async () => await TaskEntityHelpers.UnwrapAsync(context, () => 0, tcs.Task, typeof(Task));
+        Func<Task> throws = async () => await TaskEntityHelpers.UnwrapAsync(entityState, () => 0, tcs.Task, typeof(Task));
         
         if (async)
         {
@@ -87,14 +87,14 @@ public class TaskEntityHelpersTests
 
         int state = Random.Shared.Next(1, 10);
         int value = Random.Shared.Next(1, 10);
-        TestEntityContext context = new(null);
+        TestEntityState entityState = new(null);
 
         if (!async)
         {
             tcs.TrySetResult(value);
         }
 
-        ValueTask<object?> task = TaskEntityHelpers.UnwrapAsync(context, () => state, tcs.Task, typeof(Task<int>));
+        ValueTask<object?> task = TaskEntityHelpers.UnwrapAsync(entityState, () => state, tcs.Task, typeof(Task<int>));
 
         if (async)
         {
@@ -105,7 +105,7 @@ public class TaskEntityHelpersTests
         object? result = await task;
 
         result.Should().BeOfType<int>().Which.Should().Be(value);
-        context.State.Should().BeOfType<int>().Which.Should().Be(state);
+        entityState.State.Should().BeOfType<int>().Which.Should().Be(state);
     }
 
     [Theory]
@@ -113,7 +113,7 @@ public class TaskEntityHelpersTests
     public async Task UnwrapAsync_TaskOfInt_Throws(bool async)
     {
         TaskCompletionSource<int> tcs = new();
-        TestEntityContext context = new(null);
+        TestEntityState entityState = new(null);
 
         if (!async)
         {
@@ -121,7 +121,7 @@ public class TaskEntityHelpersTests
         }
 
         Func<Task> throws = async () => await TaskEntityHelpers.UnwrapAsync(
-            context, () => 0, tcs.Task, typeof(Task<int>));
+            entityState, () => 0, tcs.Task, typeof(Task<int>));
 
         if (async)
         {
@@ -139,7 +139,7 @@ public class TaskEntityHelpersTests
         TaskCompletionSource tcs = new();
 
         int state = Random.Shared.Next(1, 10);
-        TestEntityContext context = new(null);
+        TestEntityState entityState = new(null);
 
         if (!async)
         {
@@ -147,7 +147,7 @@ public class TaskEntityHelpersTests
         }
 
         ValueTask<object?> task = TaskEntityHelpers.UnwrapAsync(
-            context, () => state, new ValueTask(tcs.Task), typeof(ValueTask));
+            entityState, () => state, new ValueTask(tcs.Task), typeof(ValueTask));
 
         if (async)
         {
@@ -157,7 +157,7 @@ public class TaskEntityHelpersTests
 
         object? result = await task;
         result.Should().BeNull();
-        context.State.Should().BeOfType<int>().Which.Should().Be(state);
+        entityState.State.Should().BeOfType<int>().Which.Should().Be(state);
     }
 
     [Theory]
@@ -165,7 +165,7 @@ public class TaskEntityHelpersTests
     public async Task UnwrapAsync_ValueTask_Throws(bool async)
     {
         TaskCompletionSource tcs = new();
-        TestEntityContext context = new(null);
+        TestEntityState entityState = new(null);
 
         if (!async)
         {
@@ -173,7 +173,7 @@ public class TaskEntityHelpersTests
         }
 
         Func<Task> throws = async () => await TaskEntityHelpers.UnwrapAsync(
-            context, () => 0, new ValueTask(tcs.Task), typeof(ValueTask));
+            entityState, () => 0, new ValueTask(tcs.Task), typeof(ValueTask));
 
         if (async)
         {
@@ -191,7 +191,7 @@ public class TaskEntityHelpersTests
         TaskCompletionSource<int> tcs = new();
         int state = Random.Shared.Next(1, 10);
         int value = Random.Shared.Next(1, 10);
-        TestEntityContext context = new(null);
+        TestEntityState entityState = new(null);
 
         if (!async)
         {
@@ -199,7 +199,7 @@ public class TaskEntityHelpersTests
         }
 
         ValueTask<object?> task = TaskEntityHelpers.UnwrapAsync(
-            context, () => state, new ValueTask<int>(tcs.Task), typeof(ValueTask<int>));
+            entityState, () => state, new ValueTask<int>(tcs.Task), typeof(ValueTask<int>));
 
         if (async)
         {
@@ -210,7 +210,7 @@ public class TaskEntityHelpersTests
         object? result = await task;
 
         result.Should().BeOfType<int>().Which.Should().Be(value);
-        context.State.Should().BeOfType<int>().Which.Should().Be(state);
+        entityState.State.Should().BeOfType<int>().Which.Should().Be(state);
     }
 
     [Theory]
@@ -218,7 +218,7 @@ public class TaskEntityHelpersTests
     public async Task UnwrapAsync_ValueTaskOfInt_Throws(bool async)
     {
         TaskCompletionSource<int> tcs = new();
-        TestEntityContext context = new(null);
+        TestEntityState entityState = new(null);
 
         if (!async)
         {
@@ -226,7 +226,7 @@ public class TaskEntityHelpersTests
         }
 
         Func<Task> throws = async () => await TaskEntityHelpers.UnwrapAsync(
-            context, () => 0, new ValueTask<int>(tcs.Task), typeof(ValueTask<int>));
+            entityState, () => 0, new ValueTask<int>(tcs.Task), typeof(ValueTask<int>));
 
         if (async)
         {

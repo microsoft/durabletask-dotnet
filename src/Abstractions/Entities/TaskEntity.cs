@@ -198,7 +198,7 @@ public abstract class TaskEntity<TState> : ITaskEntity
     bool TryGetState(
         TaskEntityOperation operation, [NotNullWhen(true)] out TState? state, out ValueTask<object?> result)
     {
-        object? stateObj;
+        object? stateObj = null;
         try
         {
             stateObj = operation.State.GetState(typeof(TState));

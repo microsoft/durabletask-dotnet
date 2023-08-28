@@ -169,7 +169,7 @@ public class StateTaskEntityTests
         object? result = await entity.RunAsync(operation);
 
         result.Should().BeNull();
-        operation.Context.GetState(typeof(TestState)).Should().BeOfType<TestState>().Which.Value.Should().Be(0);
+        operation.State.GetState(typeof(TestState)).Should().BeOfType<TestState>().Which.Value.Should().Be(0);
     }
 
     static TestState State(int value) => new() { Value = value };

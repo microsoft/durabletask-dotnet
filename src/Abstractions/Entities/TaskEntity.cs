@@ -128,7 +128,7 @@ public abstract class TaskEntity<TState> : ITaskEntity
         if (!operation.TryDispatch(this, out object? result, out Type returnType)
             && !this.TryDispatchState(operation, out result, out returnType))
         {
-            if (this.TryDispatchImplicit(out ValueTask<object?> task))
+            if (this.TryDispatchImplicit(operation, out ValueTask<object?> task))
             {
                 // We do not go into UnwrapAsync for implicit tasks
                 return task;
@@ -175,14 +175,14 @@ public abstract class TaskEntity<TState> : ITaskEntity
         return operation.TryDispatch(this.State, out result, out returnType);
     }
 
-    bool TryDispatchImplicit(out ValueTask<object?> result)
+    bool TryDispatchImplicit(TaskEntityOperation operation, out ValueTask<object?> result)
     {
         // We do not implement implicit operations via methods because then they would supersede state-dispatching.
         // As such, implicit operations are manually implemented here.
         result = default;
-        if (string.Equals(this.Operation.Name, "delete", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(operation.Name, "delete", StringComparison.OrdinalIgnoreCase))
         {
-            this.Context.SetState(null);
+            operation.State.SetState(null);
             return true;
         }
 

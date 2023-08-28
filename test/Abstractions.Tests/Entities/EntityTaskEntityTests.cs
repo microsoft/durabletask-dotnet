@@ -136,7 +136,7 @@ public class EntityTaskEntityTests
         object? result = await entity.RunAsync(operation);
 
         result.Should().BeNull();
-        operation.Context.GetState(typeof(object)).Should().BeNull();
+        operation.State.GetState(typeof(object)).Should().BeNull();
     }
 
     [Theory]
@@ -150,7 +150,7 @@ public class EntityTaskEntityTests
         object? result = await entity.RunAsync(operation);
 
         result.Should().BeNull();
-        operation.Context.GetState(typeof(int)).Should().Be(0);
+        operation.State.GetState(typeof(int)).Should().Be(0);
     }
 
 #pragma warning disable CA1822 // Mark members as static

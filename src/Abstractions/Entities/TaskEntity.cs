@@ -1,9 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 
 namespace Microsoft.DurableTask.Entities;
 
@@ -125,16 +123,12 @@ public abstract class TaskEntity<TState> : ITaskEntity
     {
         Check.NotNull(operation);
         this.Context = operation.Context;
-        if (!this.TryGetState(operation, out TState? state, out ValueTask<object?> task))
-        {
-            return task;
-        }
-
-        this.State = state;
+        object? state = operation.State.GetState(typeof(TState));
+        this.State = state is null ? this.InitializeState() : (TState)state;
         if (!operation.TryDispatch(this, out object? result, out Type returnType)
             && !this.TryDispatchState(operation, out result, out returnType))
         {
-            if (TryDispatchImplicit(operation, out task))
+            if (this.TryDispatchImplicit(operation, out ValueTask<object?> task))
             {
                 // We do not go into UnwrapAsync for implicit tasks
                 return task;
@@ -164,20 +158,6 @@ public abstract class TaskEntity<TState> : ITaskEntity
         return Activator.CreateInstance<TState>();
     }
 
-    static bool TryDispatchImplicit(TaskEntityOperation operation, out ValueTask<object?> result)
-    {
-        // We do not implement implicit operations via methods because then they would supersede state-dispatching.
-        // As such, implicit operations are manually implemented here.
-        result = default;
-        if (string.Equals(operation.Name, "delete", StringComparison.OrdinalIgnoreCase))
-        {
-            operation.State.SetState(null);
-            return true;
-        }
-
-        return false;
-    }
-
     bool TryDispatchState(TaskEntityOperation operation, out object? result, out Type returnType)
     {
         if (!this.AllowStateDispatch)
@@ -195,28 +175,17 @@ public abstract class TaskEntity<TState> : ITaskEntity
         return operation.TryDispatch(this.State, out result, out returnType);
     }
 
-    bool TryGetState(
-        TaskEntityOperation operation, [NotNullWhen(true)] out TState? state, out ValueTask<object?> result)
+    bool TryDispatchImplicit(TaskEntityOperation operation, out ValueTask<object?> result)
     {
-        object? stateObj = null;
-        try
-        {
-            stateObj = operation.State.GetState(typeof(TState));
-        }
-        catch
-        {
-            // State might be corrupt, check if this is an implicit operation (such as delete).
-            if (TryDispatchImplicit(operation, out result))
-            {
-                state = default;
-                return false;
-            }
-
-            throw;
-        }
-
+        // We do not implement implicit operations via methods because then they would supersede state-dispatching.
+        // As such, implicit operations are manually implemented here.
         result = default;
-        state = stateObj is null ? this.InitializeState()! : (TState)stateObj;
-        return true;
+        if (string.Equals(operation.Name, "delete", StringComparison.OrdinalIgnoreCase))
+        {
+            operation.State.SetState(null);
+            return true;
+        }
+
+        return false;
     }
 }

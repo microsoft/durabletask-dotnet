@@ -19,6 +19,11 @@ public abstract class TaskEntityOperation
     public abstract TaskEntityContext Context { get; }
 
     /// <summary>
+    /// Gets the state of the entity.
+    /// </summary>
+    public abstract TaskEntityState State { get; }
+
+    /// <summary>
     /// Gets a value indicating whether this operation has input or not.
     /// </summary>
     public abstract bool HasInput { get; }

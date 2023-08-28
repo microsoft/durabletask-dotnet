@@ -2,6 +2,10 @@
 
 ## v1.0.3
 
+### Microsoft.DurableTask.Worker
+
+- Fix instance ID not being passed in when using retry policy (https://github.com/microsoft/durabletask-dotnet/issues/174)
+
 ### Microsoft.DurableTask.Worker.Grpc
 
 - Add `GrpcDurableTaskWorkerOptions.CallInvoker` as an alternative to `GrpcDurableTaskWorkerOptions.Channel`

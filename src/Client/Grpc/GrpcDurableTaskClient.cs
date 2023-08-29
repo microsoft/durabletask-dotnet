@@ -3,6 +3,7 @@
 
 using System.Text;
 using Google.Protobuf.WellKnownTypes;
+using Microsoft.DurableTask.Client.Entities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -19,6 +20,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     readonly ILogger logger;
     readonly TaskHubSidecarServiceClient sidecarClient;
     readonly GrpcDurableTaskClientOptions options;
+    readonly DurableEntityClient entityClient;
     AsyncDisposable asyncDisposable;
 
     /// <summary>
@@ -47,9 +49,16 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         this.options = Check.NotNull(options);
         this.asyncDisposable = GetCallInvoker(options, out CallInvoker callInvoker);
         this.sidecarClient = new TaskHubSidecarServiceClient(callInvoker);
+        this.entityClient = new GrpcDurableEntityClient(this, this.sidecarClient, logger);
     }
 
-    DataConverter DataConverter => this.options.DataConverter;
+    /// <inheritdoc/>
+    public override DurableEntityClient Entities => this.entityClient;
+
+    /// <summary>
+    /// Gets the data converter for user-application-defined content, such as inputs, outputs, and entity states.
+    /// </summary>
+    internal DataConverter DataConverter => this.options.DataConverter;
 
     /// <inheritdoc/>
     public override ValueTask DisposeAsync()

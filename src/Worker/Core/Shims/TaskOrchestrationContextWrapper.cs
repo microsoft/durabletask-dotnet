@@ -5,6 +5,8 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using DurableTask.Core;
+using DurableTask.Core.Entities.OperationFormat;
+using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.Worker.Shims;
@@ -23,6 +25,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
     int newGuidCounter;
     object? customStatus;
+    TaskOrchestrationEntityContext? entityFeature;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskOrchestrationContextWrapper"/> class.
@@ -57,9 +60,16 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     public override DateTime CurrentUtcDateTime => this.innerContext.CurrentUtcDateTime;
 
     /// <inheritdoc/>
-    protected override ILoggerFactory LoggerFactory => this.invocationContext.LoggerFactory;
+    public override TaskOrchestrationEntityFeature Entities
+        => this.entityFeature ??= new TaskOrchestrationEntityContext(this, this.innerContext);
 
-    DataConverter DataConverter => this.invocationContext.Options.DataConverter;
+    /// <summary>
+    /// Gets the DataConverter to use for inputs, outputs, and entity states.
+    /// </summary>
+    internal DataConverter DataConverter => this.invocationContext.Options.DataConverter;
+
+    /// <inheritdoc/>
+    protected override ILoggerFactory LoggerFactory => this.invocationContext.LoggerFactory;
 
     /// <inheritdoc/>
     public override T GetInput<T>() => (T)this.deserializedInput!;
@@ -124,6 +134,12 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             => options is SubOrchestrationOptions derived ? derived.InstanceId : null;
         string instanceId = GetInstanceId(options) ?? this.NewGuid().ToString("N");
 
+        // if this orchestration uses entities, first validate that the suborchsestration call is allowed in the current context
+        if (this.entityFeature != null && !this.entityFeature.EntityContext.ValidateSuborchestrationTransition(out string? errorMsg))
+        {
+            throw new InvalidOperationException(errorMsg);
+        }
+
         try
         {
             if (options?.Retry?.Policy is RetryPolicy policy)
@@ -186,6 +202,11 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override Task<T> WaitForExternalEvent<T>(string eventName, CancellationToken cancellationToken = default)
     {
+        if (typeof(T) == typeof(OperationResult))
+        {
+            throw new ArgumentException($"the type {nameof(OperationResult)} cannot be used for application-defined events", nameof(T));
+        }
+
         // Return immediately if this external event has already arrived.
         if (this.externalEventBuffer.TryTake(eventName, out string? bufferedEventPayload))
         {
@@ -300,6 +321,17 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     }
 
     /// <summary>
+    /// exits the critical section, if currently within a critical section. Otherwise, this has no effect.
+    /// </summary>
+    internal void ExitCriticalSectionIfNeeded()
+    {
+        if (this.entityFeature != null)
+        {
+            this.entityFeature.ExitCriticalSection();
+        }
+    }
+
+    /// <summary>
     /// Completes the external event by name, allowing the orchestration to continue if it is waiting on this event.
     /// </summary>
     /// <param name="eventName">The name of the event to complete.</param>
@@ -308,7 +340,18 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     {
         if (this.externalEventSources.TryGetValue(eventName, out IEventSource? waiter))
         {
-            object? value = this.DataConverter.Deserialize(rawEventPayload, waiter.EventType);
+            object? value;
+
+            if (waiter.EventType == typeof(OperationResult))
+            {
+                // use the framework-defined deserialization for entity responses, not the application-defined data converter,
+                // because we are just unwrapping the entity response without yet deserializing any application-defined data.
+                value = this.entityFeature!.EntityContext.DeserializeEntityResponseEvent(rawEventPayload);
+            }
+            else
+            {
+                value = this.DataConverter.Deserialize(rawEventPayload, waiter.EventType);
+            }
 
             // Events are completed in FIFO order. Remove the key if the last event was delivered.
             if (waiter.Next == null)

@@ -138,13 +138,13 @@ sealed class TaskOrchestrationEntityContext : TaskOrchestrationEntityFeature
     public void ExitCriticalSection(Guid? matchCriticalSectionId = null)
     {
         if (this.EntityContext.IsInsideCriticalSection
-            && (matchCriticalSectionId == null || matchCriticalSectionId == this.innerContext.CurrentCriticalSectionId))
+            && (matchCriticalSectionId == null || matchCriticalSectionId == this.EntityContext.CurrentCriticalSectionId))
         {
             foreach (var releaseMessage in this.EntityContext.EmitLockReleaseMessages())
             {
                 if (!this.taskOrchestrationContext.IsReplaying)
                 {
-                    //this.Config.TraceHelper.SendingEntityMessage(
+                    // this.Config.TraceHelper.SendingEntityMessage(
                     //    this.InstanceId,
                     //    this.ExecutionId,
                     //    releaseMessage.TargetInstance.InstanceId,

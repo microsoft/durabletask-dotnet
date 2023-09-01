@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.DurableTask.Entities;
 
 namespace Microsoft.DurableTask.Worker;
 
@@ -12,18 +13,22 @@ sealed class DurableTaskFactory : IDurableTaskFactory
 {
     readonly IDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities;
     readonly IDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>> orchestrators;
+    readonly IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DurableTaskFactory" /> class.
     /// </summary>
     /// <param name="activities">The activity factories.</param>
     /// <param name="orchestrators">The orchestrator factories.</param>
+    /// <param name="entities">The entity factories.</param>
     internal DurableTaskFactory(
         IDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities,
-        IDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>> orchestrators)
+        IDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>> orchestrators,
+        IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities)
     {
         this.activities = Check.NotNull(activities);
         this.orchestrators = Check.NotNull(orchestrators);
+        this.entities = Check.NotNull(entities);
     }
 
     /// <inheritdoc/>
@@ -52,6 +57,20 @@ sealed class DurableTaskFactory : IDurableTaskFactory
         }
 
         orchestrator = null;
+        return false;
+    }
+
+    /// <inheritdoc/>
+    public bool TryCreateEntity(
+       TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskEntity? entity)
+    {
+        if (this.entities.TryGetValue(name, out Func<IServiceProvider, ITaskEntity>? factory))
+        {
+            entity = factory.Invoke(serviceProvider);
+            return true;
+        }
+
+        entity = null;
         return false;
     }
 }

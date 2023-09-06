@@ -74,7 +74,7 @@ sealed class TaskOrchestrationEntityContext : TaskOrchestrationEntityFeature
             //    eventToSend.EventContent);
         }
 
-        this.innerContext.SendEvent(eventToSend.TargetInstance, eventToSend.EventName, eventToSend.EventContent);
+        this.innerContext.SendEvent(eventToSend.TargetInstance, eventToSend.EventName, eventToSend.ContentAsObject());
 
         OperationResult result = await this.taskOrchestrationContext.WaitForExternalEvent<OperationResult>(criticalSectionId.ToString());
 
@@ -152,7 +152,7 @@ sealed class TaskOrchestrationEntityContext : TaskOrchestrationEntityFeature
                     //    releaseMessage.EventContent);
                 }
 
-                this.innerContext.SendEvent(releaseMessage.TargetInstance, releaseMessage.EventName, releaseMessage.EventContent);
+                this.innerContext.SendEvent(releaseMessage.TargetInstance, releaseMessage.EventName, releaseMessage.ContentAsObject());
             }
         }
     }
@@ -206,7 +206,7 @@ sealed class TaskOrchestrationEntityContext : TaskOrchestrationEntityFeature
             //    eventToSend.EventContent);
         }
 
-        this.innerContext.SendEvent(eventToSend.TargetInstance, eventToSend.EventName, eventToSend.EventContent);
+        this.innerContext.SendEvent(eventToSend.TargetInstance, eventToSend.EventName, eventToSend.ContentAsObject());
 
         if (!oneWay)
         {

@@ -41,5 +41,5 @@ public readonly record struct CleanEntityStorageResult
     /// <summary>
     /// Gets the number of orphaned locks that were removed.
     /// </summary>
-    public int OrphanedLocksRemoved { get; init; }
+    public int OrphanedLocksReleased { get; init; }
 }

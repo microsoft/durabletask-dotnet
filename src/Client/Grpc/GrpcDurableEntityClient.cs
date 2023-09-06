@@ -4,11 +4,12 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Castle.Core.Logging;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Entities;
+using Microsoft.Extensions.Logging;
 using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
+using DTCore = DurableTask.Core;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Client.Grpc;
@@ -39,39 +40,111 @@ class GrpcDurableEntityClient : DurableEntityClient
     /// <inheritdoc/>
     public override async Task SignalEntityAsync(EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null, CancellationToken cancellation = default)
     {
+        Guid requestId = Guid.NewGuid();
+        DateTimeOffset? scheduledTime = options?.SignalTime;
+
         P.SignalEntityRequest request = new P.SignalEntityRequest()
         {
             InstanceId = id.ToString(),
+            Guid = Google.Protobuf.ByteString.FromStream(new MemoryStream(requestId.ToByteArray())),
             Name = operationName,
             Input = this.durableTaskClient.DataConverter.Serialize(input),
+            HasScheduledTime = scheduledTime.HasValue,
+            ScheduledTime = scheduledTime.HasValue ? Timestamp.FromDateTimeOffset(scheduledTime.Value.ToUniversalTime()) : default,
         };
-
-        DateTimeOffset? scheduledTime = options?.SignalTime;
-        if (scheduledTime.HasValue)
-        {
-            // Convert timestamps to UTC if not already UTC
-            request.ScheduledTime = Timestamp.FromDateTimeOffset(scheduledTime.Value.ToUniversalTime());
-        }
 
         // TODO this.logger.LogSomething
         await this.sidecarClient.SignalEntityAsync(request, cancellationToken: cancellation);
     }
 
     /// <inheritdoc/>
-    public override Task<EntityMetadata?> GetEntityAsync(EntityInstanceId id, bool includeState = false, CancellationToken cancellation = default)
+    public override async Task<EntityMetadata?> GetEntityAsync(EntityInstanceId id, bool includeState = false, CancellationToken cancellation = default)
     {
-        throw new NotImplementedException();
+        P.GetEntityRequest request = new P.GetEntityRequest()
+        {
+            InstanceId = id.ToString(),
+            IncludeState = includeState,
+        };
+
+        P.GetEntityResponse response = await this.sidecarClient.GetEntityAsync(request, cancellationToken: cancellation);
+
+        return response == null ? null : this.ToEntityMetadata(response.Entity, includeState);
     }
 
     /// <inheritdoc/>
     public override AsyncPageable<EntityMetadata> GetAllEntitiesAsync(EntityQuery? filter = null)
     {
-        throw new NotImplementedException();
+        bool includeState = filter?.IncludeState ?? false;
+        string startsWith = filter?.InstanceIdStartsWith ?? string.Empty;
+        DateTimeOffset? lastModifiedFrom = filter?.LastModifiedFrom;
+        DateTimeOffset? lastModifiedTo = filter?.LastModifiedTo;
+
+        return Pageable.Create(async (continuation, pageSize, cancellation) =>
+        {
+            pageSize ??= filter?.PageSize;
+
+            try
+            {
+                P.QueryEntitiesResponse response = await this.sidecarClient.QueryEntitiesAsync(
+                    new P.QueryEntitiesRequest
+                    {
+                        Query = new P.EntityQuery
+                        {
+                            InstanceIdStartsWith = startsWith,
+                            HasLastModifiedFrom = lastModifiedFrom.HasValue,
+                            HasLastModifiedTo = lastModifiedTo.HasValue,
+                            LastModifiedFrom = lastModifiedFrom?.ToTimestamp() ?? default,
+                            LastModifiedTo = lastModifiedTo?.ToTimestamp() ?? default,
+                            IncludeState = includeState,
+                            HasPageSize = pageSize.HasValue,
+                            PageSize = pageSize ?? default,
+                            ContinuationToken = continuation ?? filter?.ContinuationToken,
+                        },
+                    },
+                    cancellationToken: cancellation);
+
+                IReadOnlyList<EntityMetadata> values = response.Entities
+                    .Select(x => this.ToEntityMetadata(x, includeState))
+                    .ToList();
+
+                return new Page<EntityMetadata>(values, response.ContinuationToken);
+            }
+            catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+            {
+                throw new OperationCanceledException(
+                    $"The {nameof(this.GetAllEntitiesAsync)} operation was canceled.", e, cancellation);
+            }
+        });
     }
 
     /// <inheritdoc/>
-    public override Task<CleanEntityStorageResult> CleanEntityStorageAsync(CleanEntityStorageRequest request = default, CancellationToken cancellation = default)
+    public override async Task<CleanEntityStorageResult> CleanEntityStorageAsync(CleanEntityStorageRequest request = default, CancellationToken cancellation = default)
     {
-        throw new NotImplementedException();
+        P.CleanEntityStorageResponse response = await this.sidecarClient.CleanEntityStorageAsync(
+            new P.CleanEntityStorageRequest
+            {
+                RemoveEmptyEntities = request.RemoveEmptyEntities,
+                ReleaseOrphanedLocks = request.ReleaseOrphanedLocks,
+            },
+            cancellationToken: cancellation);
+
+        return new CleanEntityStorageResult
+        {
+            EmptyEntitiesRemoved = response.EmptyEntitiesRemoved,
+            OrphanedLocksReleased = response.OrphanedLocksReleased,
+        };
+    }
+
+    EntityMetadata ToEntityMetadata(P.EntityMetadata metadata, bool includeState)
+    {
+        var coreEntityId = DTCore.Entities.EntityId.FromString(metadata.InstanceId);
+        var entityId = new EntityInstanceId(coreEntityId.Name, coreEntityId.Key);
+
+        return new EntityMetadata(entityId)
+        {
+            DataConverter = includeState ? this.durableTaskClient.DataConverter : null,
+            LastModifiedTime = metadata.LastModifiedTime.ToDateTimeOffset(),
+            SerializedState = includeState ? metadata.SerializedState : null,
+        };
     }
 }

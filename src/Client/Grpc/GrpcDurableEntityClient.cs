@@ -91,12 +91,9 @@ class GrpcDurableEntityClient : DurableEntityClient
                         Query = new P.EntityQuery
                         {
                             InstanceIdStartsWith = startsWith,
-                            HasLastModifiedFrom = lastModifiedFrom.HasValue,
-                            HasLastModifiedTo = lastModifiedTo.HasValue,
                             LastModifiedFrom = lastModifiedFrom?.ToTimestamp() ?? default,
                             LastModifiedTo = lastModifiedTo?.ToTimestamp() ?? default,
                             IncludeState = includeState,
-                            HasPageSize = pageSize.HasValue,
                             PageSize = pageSize ?? default,
                             ContinuationToken = continuation ?? filter?.ContinuationToken,
                         },

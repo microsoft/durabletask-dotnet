@@ -392,7 +392,7 @@ sealed partial class GrpcDurableTaskWorker
                     };
                 }
             }
-            catch (Exception frameworkException) // application exceptions were already caught earlier
+            catch (Exception frameworkException)
             {
                 // return a result with no results, same state,
                 // and which contains failure details

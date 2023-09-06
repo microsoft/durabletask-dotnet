@@ -6,14 +6,14 @@ using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
-using DurableTaskCoreTaskEntity = DurableTask.Core.Entities.TaskEntity;
+using DTCore = DurableTask.Core;
 
 namespace Microsoft.DurableTask.Worker.Shims;
 
 /// <summary>
 /// Shim that provides the entity context and implements batched execution.
 /// </summary>
-class TaskEntityShim : DurableTaskCoreTaskEntity
+class TaskEntityShim : DTCore.Entities.TaskEntity
 {
     readonly DataConverter dataConverter;
     readonly ITaskEntity taskEntity;
@@ -23,6 +23,7 @@ class TaskEntityShim : DurableTaskCoreTaskEntity
     readonly ContextShim context;
     readonly OperationShim operation;
 
+    // entities roll back the state and actions when the user code throws an unhandled exception
     string? checkpointedState;
     int checkpointedPosition;
 
@@ -46,7 +47,7 @@ class TaskEntityShim : DurableTaskCoreTaskEntity
     }
 
     /// <inheritdoc />
-    public override async Task<OperationBatchResult> ExecuteOperationBatchAsync(OperationBatchRequest operations, EntityExecutionOptions options)
+    public override async Task<EntityBatchResult> ExecuteOperationBatchAsync(EntityBatchRequest operations)
     {
         // initialize/reset the state and action list
         this.state.CurrentState = operations.EntityState;
@@ -79,9 +80,9 @@ class TaskEntityShim : DurableTaskCoreTaskEntity
             }
         }
 
-        this.ClearCheckpoint(); // want to GC the old state, even if this shim is being cached somewhere
+        this.ClearCheckpoint(); // want to ensure the old state can be GC'd even if this shim is being cached
 
-        return new OperationBatchResult()
+        return new EntityBatchResult()
         {
             Results = results,
             Actions = this.context.Actions.ToList(), // make copy to avoid concurrent modification if this shim is reused

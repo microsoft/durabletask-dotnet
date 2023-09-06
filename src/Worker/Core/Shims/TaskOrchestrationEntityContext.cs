@@ -21,6 +21,10 @@ sealed class TaskOrchestrationEntityContext : TaskOrchestrationEntityFeature
 {
     static readonly List<EntityInstanceId> EmptyEntityList = new List<EntityInstanceId>();
 
+    // we don't know the actual max delay, because we don't have backend information, so we choose
+    // a value conservatively that should work for all backends
+    static readonly TimeSpan MaxSignalDelay = TimeSpan.FromDays(6);
+
     readonly TaskOrchestrationContextWrapper taskOrchestrationContext;
     readonly OrchestrationContext innerContext;
     readonly string instanceId;
@@ -62,19 +66,19 @@ sealed class TaskOrchestrationEntityContext : TaskOrchestrationEntityFeature
         var criticalSectionId = this.taskOrchestrationContext.NewGuid();
 
         // send a message to the first entity to be acquired
-        var eventToSend = this.EntityContext.EmitAcquireMessage(criticalSectionId, dtEntities);
+        var entityMessageEvent = this.EntityContext.EmitAcquireMessage(criticalSectionId, dtEntities);
 
         if (!this.taskOrchestrationContext.IsReplaying)
         {
             // this.Config.TraceHelper.SendingEntityMessage(
             //    this.InstanceId,
             //    this.ExecutionId,
-            //    eventToSend.TargetInstance.InstanceId,
-            //    eventToSend.EventName,
-            //    eventToSend.EventContent);
+            //    entityMessageEvent.TargetInstance.InstanceId,
+            //    entityMessageEvent.EventName,
+            //    entityMessageEvent.ToString());
         }
 
-        this.innerContext.SendEvent(eventToSend.TargetInstance, eventToSend.EventName, eventToSend.ContentAsObject());
+        this.innerContext.SendEvent(entityMessageEvent.TargetInstance, entityMessageEvent.EventName, entityMessageEvent.ContentAsObject());
 
         OperationResult result = await this.taskOrchestrationContext.WaitForExternalEvent<OperationResult>(criticalSectionId.ToString());
 
@@ -157,18 +161,6 @@ sealed class TaskOrchestrationEntityContext : TaskOrchestrationEntityFeature
         }
     }
 
-    static (DateTime Original, DateTime Capped) ConvertDateTime(DateTimeOffset original)
-    {
-        // we don't know the actual max delay, because we don't have backend information, so we choose
-        // a value conservatively that should work for all backends
-        TimeSpan maxDelay = TimeSpan.FromDays(6);
-
-        DateTime utcNow = DateTime.UtcNow;
-        DateTime originalUtc = original.UtcDateTime;
-        DateTime cappedUtc = (originalUtc - utcNow <= maxDelay) ? originalUtc : utcNow + maxDelay;
-        return (originalUtc, cappedUtc);
-    }
-
     static TaskFailureDetails ConvertFailureDetails(FailureDetails failureDetails)
      => new TaskFailureDetails(
          failureDetails.ErrorType,
@@ -188,12 +180,12 @@ sealed class TaskOrchestrationEntityContext : TaskOrchestrationEntityFeature
         string? serializedInput = this.taskOrchestrationContext.DataConverter.Serialize(input);
         var target = new OrchestrationInstance() { InstanceId = id.ToString() };
 
-        var eventToSend = this.EntityContext.EmitRequestMessage(
+        var entityMessageEvent = this.EntityContext.EmitRequestMessage(
                 target,
                 operationName,
                 oneWay,
                 guid,
-                scheduledTime.HasValue ? ConvertDateTime(scheduledTime.Value) : null,
+                EntityMessageEvent.GetCappedScheduledTime(this.innerContext.CurrentUtcDateTime, MaxSignalDelay, scheduledTime?.UtcDateTime),
                 serializedInput);
 
         if (!this.taskOrchestrationContext.IsReplaying)
@@ -202,11 +194,11 @@ sealed class TaskOrchestrationEntityContext : TaskOrchestrationEntityFeature
             //    this.InstanceId,
             //    this.ExecutionId,
             //    target.InstanceId,
-            //    eventToSend.EventName,
-            //    eventToSend.EventContent);
+            //    entityMessageEvent.EventName,
+            //    entityMessageEvent.ToString());
         }
 
-        this.innerContext.SendEvent(eventToSend.TargetInstance, eventToSend.EventName, eventToSend.ContentAsObject());
+        this.innerContext.SendEvent(entityMessageEvent.TargetInstance, entityMessageEvent.EventName, entityMessageEvent.ContentAsObject());
 
         if (!oneWay)
         {

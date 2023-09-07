@@ -47,7 +47,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
     }
 
     /// <inheritdoc />
-    public override async Task<EntityBatchResult> ExecuteOperationBatchAsync(EntityBatchRequest batch)
+    public override async Task<EntityBatchResult> ExecuteOperationBatchAsync(EntityBatchRequest operations)
     {
         // initialize/reset the state and action list
         this.state.CurrentState = operations.EntityState;
@@ -57,8 +57,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
 
         foreach (OperationRequest current in operations.Operations!)
         {
-            OperationRequest currentOperation = operations.Operations![i];
-            this.operation.SetNameAndInput(currentOperation.Operation!, currentOperation.Input);
+            this.operation.SetNameAndInput(current.Operation!, current.Input);
             this.Checkpoint();
 
             try

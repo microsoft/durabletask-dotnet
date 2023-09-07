@@ -424,7 +424,7 @@ static class ProtoUtils
         {
             Operation = operationRequest.Operation,
             Input = operationRequest.Input,
-            Id = new Guid(operationRequest.Guid.ToByteArray()),
+            Id = new Guid(operationRequest.RequestId.ToByteArray()),
         };
     }
 

@@ -361,7 +361,9 @@ sealed partial class GrpcDurableTaskWorker
             try
             {
                 await using AsyncServiceScope scope = this.worker.services.CreateAsyncScope();
-                if (this.worker.Factory.TryCreateEntity(name, scope.ServiceProvider, out ITaskEntity? entity))
+                IDurableTaskFactory2 factory = (IDurableTaskFactory2)this.worker.Factory;
+
+                if (factory.TryCreateEntity(name, scope.ServiceProvider, out ITaskEntity? entity))
                 {
                     // Both the factory invocation and the RunAsync could involve user code and need to be handled as
                     // part of try/catch.

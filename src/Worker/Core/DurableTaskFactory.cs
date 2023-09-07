@@ -9,7 +9,7 @@ namespace Microsoft.DurableTask.Worker;
 /// <summary>
 /// A factory for creating orchestrators and activities.
 /// </summary>
-sealed class DurableTaskFactory : IDurableTaskFactory
+sealed class DurableTaskFactory : IDurableTaskFactory2
 {
     readonly IDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities;
     readonly IDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>> orchestrators;

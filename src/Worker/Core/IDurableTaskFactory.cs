@@ -35,7 +35,13 @@ public interface IDurableTaskFactory
     /// </remarks>
     bool TryCreateOrchestrator(
         TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskOrchestrator? orchestrator);
+}
 
+/// <summary>
+/// A newer version of <see cref="IDurableTaskFactory"/> that adds support for entities.
+/// </summary>
+public interface IDurableTaskFactory2 : IDurableTaskFactory
+{
     /// <summary>
     /// Tries to create an entity given a name.
     /// </summary>

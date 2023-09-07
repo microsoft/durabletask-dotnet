@@ -23,20 +23,13 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
     readonly ContextShim context;
     readonly OperationShim operation;
 
-    // entities roll back the state and actions when the user code throws an unhandled exception
-    string? checkpointedState;
-    int checkpointedPosition;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskEntityShim"/> class.
     /// </summary>
     /// <param name="dataConverter">The data converter.</param>
     /// <param name="taskEntity">The task entity.</param>
     /// <param name="entityId">The entity ID.</param>
-    public TaskEntityShim(
-        DataConverter dataConverter,
-        ITaskEntity taskEntity,
-        EntityId entityId)
+    public TaskEntityShim(DataConverter dataConverter, ITaskEntity taskEntity, EntityId entityId)
     {
         this.dataConverter = Check.NotNull(dataConverter);
         this.taskEntity = Check.NotNull(taskEntity);
@@ -49,22 +42,29 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
     /// <inheritdoc />
     public override async Task<EntityBatchResult> ExecuteOperationBatchAsync(EntityBatchRequest operations)
     {
-        // initialize/reset the state and action list
+        // set the current state, and commit it so we can roll back to it later.
+        // The commit/rollback mechanism is needed since we treat entity operations transactionally.
+        // This means that if an operation throws an unhandled exception, all its effects are rolled back.
+        // In particular, (1) the entity state is reverted to what it was prior to the operation, and
+        // (2) all of the messages sent by the operation (e.g. if it started a new orchestrations) are discarded.
         this.state.CurrentState = operations.EntityState;
-        this.context.Rollback(0);
+        this.state.Commit();
 
         List<OperationResult> results = new();
 
         foreach (OperationRequest current in operations.Operations!)
         {
             this.operation.SetNameAndInput(current.Operation!, current.Input);
-            this.Checkpoint();
 
             try
             {
                 object? result = await this.taskEntity.RunAsync(this.operation);
                 string? serializedResult = this.dataConverter.Serialize(result);
                 results.Add(new OperationResult() { Result = serializedResult });
+
+                // the user code completed without exception, so we commit the current state and actions.
+                this.state.Commit();
+                this.context.Commit();
             }
             catch (Exception applicationException)
             {
@@ -75,36 +75,24 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
                     FailureDetails = new FailureDetails(applicationException),
                 });
 
-                this.Rollback();
+                // the user code threw an unhandled exception, so we roll back the state and the actions.
+                this.state.Rollback();
+                this.context.Rollback();
             }
         }
 
-        this.ClearCheckpoint(); // want to ensure the old state can be GC'd even if this shim is being cached
-
-        return new EntityBatchResult()
+        var batchResult = new EntityBatchResult()
         {
             Results = results,
             Actions = this.context.Actions.ToList(), // make copy to avoid concurrent modification if this shim is reused
             EntityState = this.state.CurrentState,
         };
-    }
 
-    void Checkpoint()
-    {
-        this.checkpointedPosition = this.context.CurrentPosition;
-        this.checkpointedState = this.state.CurrentState;
-    }
+        // we reset only the context, but keep the current state.
+        // this makes it possible to reuse the cached state object if the TaskEntityShim is reused.
+        this.context.Reset();
 
-    void ClearCheckpoint()
-    {
-        this.checkpointedPosition = 0;
-        this.checkpointedState = null;
-    }
-
-    void Rollback()
-    {
-        this.state.CurrentState = this.checkpointedState;
-        this.context.Rollback(this.checkpointedPosition);
+        return batchResult;
     }
 
     class StateShim : TaskEntityState
@@ -115,6 +103,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
         string? value;
         object? cachedValue;
         bool cacheValid;
+        string? checkpointValue;
 
         public StateShim(TaskEntityShim taskEntityShim, DataConverter dataConverter)
         {
@@ -134,6 +123,21 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
                     this.cacheValid = false;
                 }
             }
+        }
+
+        public void Commit()
+        {
+            this.checkpointValue = this.value;
+        }
+
+        public void Rollback()
+        {
+            this.CurrentState = this.checkpointValue;
+        }
+
+        public void Reset()
+        {
+            this.CurrentState = default;
         }
 
         public override object? GetState(Type type)
@@ -161,6 +165,8 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
         readonly DataConverter dataConverter;
         readonly List<OperationAction> operationActions;
 
+        int checkpointPosition;
+
         public ContextShim(TaskEntityShim taskEntityShim, DataConverter dataConverter)
         {
             this.taskEntityShim = taskEntityShim;
@@ -174,12 +180,20 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
 
         public override EntityInstanceId Id => this.taskEntityShim.entityId!;
 
-        public void Rollback(int position)
+        public void Commit()
         {
-            if (position < this.operationActions.Count)
-            {
-                this.operationActions.RemoveRange(position, this.operationActions.Count - position);
-            }
+            this.checkpointPosition = this.CurrentPosition;
+        }
+
+        public void Rollback()
+        {
+            this.operationActions.RemoveRange(this.checkpointPosition, this.operationActions.Count - this.checkpointPosition);
+        }
+
+        public void Reset()
+        {
+            this.operationActions?.Clear();
+            this.checkpointPosition = 0;
         }
 
         public override void SignalEntity(EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null)

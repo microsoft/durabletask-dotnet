@@ -47,15 +47,15 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
     }
 
     /// <inheritdoc />
-    public override async Task<EntityBatchResult> ExecuteOperationBatchAsync(EntityBatchRequest operations)
+    public override async Task<EntityBatchResult> ExecuteOperationBatchAsync(EntityBatchRequest batch)
     {
         // initialize/reset the state and action list
         this.state.CurrentState = operations.EntityState;
         this.context.Rollback(0);
 
-        List<OperationResult> results = new List<OperationResult>();
+        List<OperationResult> results = new();
 
-        for (int i = 0; i < operations.Operations!.Count; i++)
+        foreach (OperationRequest current in operations.Operations!)
         {
             OperationRequest currentOperation = operations.Operations![i];
             this.operation.SetNameAndInput(currentOperation.Operation!, currentOperation.Input);

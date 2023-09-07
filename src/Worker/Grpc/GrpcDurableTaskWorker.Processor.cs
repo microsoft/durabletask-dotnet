@@ -350,7 +350,7 @@ sealed partial class GrpcDurableTaskWorker
         {
             string instanceId = request.InstanceId;
             var coreEntityId = DTCore.Entities.EntityId.FromString(request.InstanceId);
-            var entityId = new EntityId(coreEntityId.Name, coreEntityId.Key);
+            EntityId entityId = new(coreEntityId.Name, coreEntityId.Key);
 
             TaskContext innerContext = new(new OrchestrationInstance() { InstanceId = instanceId });
             TaskName name = new(entityId.Name);

@@ -46,10 +46,9 @@ class GrpcDurableEntityClient : DurableEntityClient
         P.SignalEntityRequest request = new P.SignalEntityRequest()
         {
             InstanceId = id.ToString(),
-            Guid = Google.Protobuf.ByteString.FromStream(new MemoryStream(requestId.ToByteArray())),
+            RequestId = Google.Protobuf.ByteString.FromStream(new MemoryStream(requestId.ToByteArray())),
             Name = operationName,
             Input = this.durableTaskClient.DataConverter.Serialize(input),
-            HasScheduledTime = scheduledTime.HasValue,
             ScheduledTime = scheduledTime.HasValue ? Timestamp.FromDateTimeOffset(scheduledTime.Value.ToUniversalTime()) : default,
         };
 

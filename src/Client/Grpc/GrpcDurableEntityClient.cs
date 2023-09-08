@@ -141,6 +141,7 @@ class GrpcDurableEntityClient : DurableEntityClient
                 {
                     RemoveEmptyEntities = request.RemoveEmptyEntities,
                     ReleaseOrphanedLocks = request.ReleaseOrphanedLocks,
+                    ContinuationToken = request.ContinuationToken,
                 },
                 cancellationToken: cancellation);
 
@@ -148,6 +149,7 @@ class GrpcDurableEntityClient : DurableEntityClient
             {
                 EmptyEntitiesRemoved = response.EmptyEntitiesRemoved,
                 OrphanedLocksReleased = response.OrphanedLocksReleased,
+                ContinuationToken = response.ContinuationToken,
             };
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)

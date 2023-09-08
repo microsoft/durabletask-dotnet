@@ -49,16 +49,13 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         this.options = Check.NotNull(options);
         this.asyncDisposable = GetCallInvoker(options, out CallInvoker callInvoker);
         this.sidecarClient = new TaskHubSidecarServiceClient(callInvoker);
-        this.entityClient = new GrpcDurableEntityClient(this, this.sidecarClient, logger);
+        this.entityClient = new GrpcDurableEntityClient(this.Name, this.DataConverter, this.sidecarClient, logger);
     }
 
     /// <inheritdoc/>
     public override DurableEntityClient Entities => this.entityClient;
 
-    /// <summary>
-    /// Gets the data converter for user-application-defined content, such as inputs, outputs, and entity states.
-    /// </summary>
-    internal DataConverter DataConverter => this.options.DataConverter;
+    DataConverter DataConverter => this.options.DataConverter;
 
     /// <inheritdoc/>
     public override ValueTask DisposeAsync()

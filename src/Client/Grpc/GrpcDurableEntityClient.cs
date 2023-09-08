@@ -20,19 +20,20 @@ namespace Microsoft.DurableTask.Client.Grpc;
 class GrpcDurableEntityClient : DurableEntityClient
 {
     readonly TaskHubSidecarServiceClient sidecarClient;
-    readonly GrpcDurableTaskClient durableTaskClient;
+    readonly DataConverter dataConverter;
     readonly ILogger logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GrpcDurableEntityClient"/> class.
     /// </summary>
-    /// <param name="durableTaskClient">The durable Task client.</param>
+    /// <param name="name">The name of the client.</param>
+    /// <param name="dataConverter">The data converter.</param>
     /// <param name="sidecarClient">The client for the GRPC connection to the sidecar.</param>
     /// <param name="logger">The logger for logging client requests.</param>
-    public GrpcDurableEntityClient(GrpcDurableTaskClient durableTaskClient, TaskHubSidecarServiceClient sidecarClient, ILogger logger)
-        : base(durableTaskClient.Name)
+    public GrpcDurableEntityClient(string name, DataConverter dataConverter, TaskHubSidecarServiceClient sidecarClient, ILogger logger)
+        : base(name)
     {
-        this.durableTaskClient = durableTaskClient;
+        this.dataConverter = dataConverter;
         this.sidecarClient = sidecarClient;
         this.logger = logger;
     }
@@ -48,12 +49,21 @@ class GrpcDurableEntityClient : DurableEntityClient
             InstanceId = id.ToString(),
             RequestId = Google.Protobuf.ByteString.FromStream(new MemoryStream(requestId.ToByteArray())),
             Name = operationName,
-            Input = this.durableTaskClient.DataConverter.Serialize(input),
-            ScheduledTime = scheduledTime.HasValue ? Timestamp.FromDateTimeOffset(scheduledTime.Value.ToUniversalTime()) : default,
+            Input = this.dataConverter.Serialize(input),
+            ScheduledTime = scheduledTime.ToTimestamp() ?? default,
         };
 
         // TODO this.logger.LogSomething
-        await this.sidecarClient.SignalEntityAsync(request, cancellationToken: cancellation);
+
+        try
+        {
+            await this.sidecarClient.SignalEntityAsync(request, cancellationToken: cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.SignalEntityAsync)} operation was canceled.", e, cancellation);
+        }
     }
 
     /// <inheritdoc/>
@@ -65,9 +75,17 @@ class GrpcDurableEntityClient : DurableEntityClient
             IncludeState = includeState,
         };
 
-        P.GetEntityResponse response = await this.sidecarClient.GetEntityAsync(request, cancellationToken: cancellation);
+        try
+        {
+            P.GetEntityResponse response = await this.sidecarClient.GetEntityAsync(request, cancellationToken: cancellation);
 
-        return response == null ? null : this.ToEntityMetadata(response.Entity, includeState);
+            return response.Exists ? this.ToEntityMetadata(response.Entity, includeState) : null;
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.GetEntityAsync)} operation was canceled.", e, cancellation);
+        }
     }
 
     /// <inheritdoc/>
@@ -116,19 +134,27 @@ class GrpcDurableEntityClient : DurableEntityClient
     /// <inheritdoc/>
     public override async Task<CleanEntityStorageResult> CleanEntityStorageAsync(CleanEntityStorageRequest request = default, CancellationToken cancellation = default)
     {
-        P.CleanEntityStorageResponse response = await this.sidecarClient.CleanEntityStorageAsync(
-            new P.CleanEntityStorageRequest
-            {
-                RemoveEmptyEntities = request.RemoveEmptyEntities,
-                ReleaseOrphanedLocks = request.ReleaseOrphanedLocks,
-            },
-            cancellationToken: cancellation);
-
-        return new CleanEntityStorageResult
+        try
         {
-            EmptyEntitiesRemoved = response.EmptyEntitiesRemoved,
-            OrphanedLocksReleased = response.OrphanedLocksReleased,
-        };
+            P.CleanEntityStorageResponse response = await this.sidecarClient.CleanEntityStorageAsync(
+                new P.CleanEntityStorageRequest
+                {
+                    RemoveEmptyEntities = request.RemoveEmptyEntities,
+                    ReleaseOrphanedLocks = request.ReleaseOrphanedLocks,
+                },
+                cancellationToken: cancellation);
+
+            return new CleanEntityStorageResult
+            {
+                EmptyEntitiesRemoved = response.EmptyEntitiesRemoved,
+                OrphanedLocksReleased = response.OrphanedLocksReleased,
+            };
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.CleanEntityStorageAsync)} operation was canceled.", e, cancellation);
+        }
     }
 
     EntityMetadata ToEntityMetadata(P.EntityMetadata metadata, bool includeState)
@@ -138,7 +164,7 @@ class GrpcDurableEntityClient : DurableEntityClient
 
         return new EntityMetadata(entityId)
         {
-            DataConverter = includeState ? this.durableTaskClient.DataConverter : null,
+            DataConverter = includeState ? this.dataConverter : null,
             LastModifiedTime = metadata.LastModifiedTime.ToDateTimeOffset(),
             SerializedState = includeState ? metadata.SerializedState : null,
         };

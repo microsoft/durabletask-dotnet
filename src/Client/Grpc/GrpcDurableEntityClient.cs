@@ -134,7 +134,7 @@ class GrpcDurableEntityClient : DurableEntityClient
     EntityMetadata ToEntityMetadata(P.EntityMetadata metadata, bool includeState)
     {
         var coreEntityId = DTCore.Entities.EntityId.FromString(metadata.InstanceId);
-        var entityId = new EntityInstanceId(coreEntityId.Name, coreEntityId.Key);
+        EntityInstanceId entityId = new(coreEntityId.Name, coreEntityId.Key);
 
         return new EntityMetadata(entityId)
         {

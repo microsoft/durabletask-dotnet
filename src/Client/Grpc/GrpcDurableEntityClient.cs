@@ -44,7 +44,7 @@ class GrpcDurableEntityClient : DurableEntityClient
         Guid requestId = Guid.NewGuid();
         DateTimeOffset? scheduledTime = options?.SignalTime;
 
-        P.SignalEntityRequest request = new P.SignalEntityRequest()
+        P.SignalEntityRequest request = new()
         {
             InstanceId = id.ToString(),
             RequestId = requestId.ToString(),
@@ -69,7 +69,7 @@ class GrpcDurableEntityClient : DurableEntityClient
     /// <inheritdoc/>
     public override async Task<EntityMetadata?> GetEntityAsync(EntityInstanceId id, bool includeState = false, CancellationToken cancellation = default)
     {
-        P.GetEntityRequest request = new P.GetEntityRequest()
+        P.GetEntityRequest request = new()
         {
             InstanceId = id.ToString(),
             IncludeState = includeState,

@@ -325,10 +325,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// </summary>
     internal void ExitCriticalSectionIfNeeded()
     {
-        if (this.entityFeature != null)
-        {
-            this.entityFeature.ExitCriticalSection();
-        }
+        this.entityFeature?.ExitCriticalSection();
     }
 
     /// <summary>

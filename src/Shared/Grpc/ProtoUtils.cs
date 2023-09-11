@@ -424,7 +424,7 @@ static class ProtoUtils
         {
             Operation = operationRequest.Operation,
             Input = operationRequest.Input,
-            Id = new Guid(operationRequest.RequestId.ToByteArray()),
+            Id = Guid.Parse(operationRequest.RequestId),
         };
     }
 
@@ -517,7 +517,7 @@ static class ProtoUtils
                     Name = operationAction.SendSignal.Name,
                     Input = operationAction.SendSignal.Input,
                     InstanceId = operationAction.SendSignal.InstanceId,
-                    ScheduledTime = operationAction.SendSignal.HasScheduledTime ? operationAction.SendSignal.ScheduledTime.ToDateTime() : null,
+                    ScheduledTime = operationAction.SendSignal.ScheduledTime?.ToDateTime(),
                 };
 
             case P.OperationAction.OperationActionTypeOneofCase.StartNewOrchestration:
@@ -553,13 +553,12 @@ static class ProtoUtils
         {
             case SendSignalOperationAction sendSignalAction:
 
-                var signalAction = action.SendSignal = new P.SendSignalAction()
+                action.SendSignal = new P.SendSignalAction()
                 {
                     Name = sendSignalAction.Name,
                     Input = sendSignalAction.Input,
                     InstanceId = sendSignalAction.InstanceId,
-                    HasScheduledTime = sendSignalAction.ScheduledTime.HasValue,
-                    ScheduledTime = sendSignalAction.ScheduledTime.HasValue ? sendSignalAction.ScheduledTime.Value.ToTimestamp() : default(Timestamp),
+                    ScheduledTime = sendSignalAction.ScheduledTime?.ToTimestamp(),
                 };
                 break;
 

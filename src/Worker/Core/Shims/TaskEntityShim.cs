@@ -34,8 +34,8 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
         this.dataConverter = Check.NotNull(dataConverter);
         this.taskEntity = Check.NotNull(taskEntity);
         this.entityId = new EntityInstanceId(entityId.Name, entityId.Key);
-        this.state = new StateShim(this, dataConverter);
-        this.context = new ContextShim(this, dataConverter);
+        this.state = new StateShim(dataConverter);
+        this.context = new ContextShim(this.entityId, dataConverter);
         this.operation = new OperationShim(this);
     }
 
@@ -95,7 +95,6 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
 
     class StateShim : TaskEntityState
     {
-        readonly TaskEntityShim taskEntityShim;
         readonly DataConverter dataConverter;
 
         string? value;
@@ -103,9 +102,8 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
         bool cacheValid;
         string? checkpointValue;
 
-        public StateShim(TaskEntityShim taskEntityShim, DataConverter dataConverter)
+        public StateShim(DataConverter dataConverter)
         {
-            this.taskEntityShim = taskEntityShim;
             this.dataConverter = dataConverter;
         }
 
@@ -159,15 +157,15 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
 
     class ContextShim : TaskEntityContext
     {
-        readonly TaskEntityShim taskEntityShim;
+        readonly EntityInstanceId entityInstanceId;
         readonly DataConverter dataConverter;
         readonly List<OperationAction> operationActions;
 
         int checkpointPosition;
 
-        public ContextShim(TaskEntityShim taskEntityShim, DataConverter dataConverter)
+        public ContextShim(EntityInstanceId entityInstanceId, DataConverter dataConverter)
         {
-            this.taskEntityShim = taskEntityShim;
+            this.entityInstanceId = entityInstanceId;
             this.dataConverter = dataConverter;
             this.operationActions = new List<OperationAction>();
         }
@@ -176,7 +174,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
 
         public int CurrentPosition => this.operationActions?.Count ?? 0;
 
-        public override EntityInstanceId Id => this.taskEntityShim.entityId!;
+        public override EntityInstanceId Id => this.entityInstanceId;
 
         public void Commit()
         {

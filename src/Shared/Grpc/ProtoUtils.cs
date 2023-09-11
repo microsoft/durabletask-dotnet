@@ -616,12 +616,12 @@ static class ProtoUtils
             EntityState = entityBatchResult.EntityState,
         };
 
-        foreach (var action in entityBatchResult.Actions!)
+        foreach (OperationAction action in entityBatchResult.Actions!)
         {
             batchResult.Actions.Add(action.ToOperationAction());
         }
 
-        foreach (var result in entityBatchResult.Results!)
+        foreach (OperationResult result in entityBatchResult.Results!)
         {
             batchResult.Results.Add(result.ToOperationResult());
         }

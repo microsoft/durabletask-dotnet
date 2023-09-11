@@ -348,11 +348,9 @@ sealed partial class GrpcDurableTaskWorker
 
         async Task OnRunEntityBatchAsync(P.EntityBatchRequest request)
         {
-            string instanceId = request.InstanceId;
             var coreEntityId = DTCore.Entities.EntityId.FromString(request.InstanceId);
             EntityId entityId = new(coreEntityId.Name, coreEntityId.Key);
 
-            TaskContext innerContext = new(new OrchestrationInstance() { InstanceId = instanceId });
             TaskName name = new(entityId.Name);
 
             EntityBatchRequest batchRequest = request.ToEntityBatchRequest();

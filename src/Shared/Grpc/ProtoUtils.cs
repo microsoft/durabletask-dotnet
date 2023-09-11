@@ -441,12 +441,23 @@ static class ProtoUtils
             return null;
         }
 
-        return new OperationResult()
+        switch (operationResult.ResultTypeCase)
         {
-            Result = operationResult.Result,
-            ErrorMessage = operationResult.ErrorCategory,
-            FailureDetails = ToCore(operationResult.FailureDetails),
-        };
+            case P.OperationResult.ResultTypeOneofCase.Success:
+                return new OperationResult()
+                {
+                    Result = operationResult.Success.Result,
+                };
+
+            case P.OperationResult.ResultTypeOneofCase.Failure:
+                return new OperationResult()
+                {
+                    FailureDetails = operationResult.Failure.FailureDetails.ToCore(),
+                };
+
+            default:
+                throw new NotSupportedException($"Deserialization of {operationResult.ResultTypeCase} is not supported.");
+        }
     }
 
     /// <summary>
@@ -462,12 +473,26 @@ static class ProtoUtils
             return null;
         }
 
-        return new P.OperationResult()
+        if (operationResult.FailureDetails == null)
         {
-             Result = operationResult.Result,
-             ErrorCategory = operationResult.ErrorMessage,
-             FailureDetails = ToProtobuf(operationResult.FailureDetails),
-        };
+            return new P.OperationResult()
+            {
+                Success = new P.OperationResultSuccess()
+                {
+                    Result = operationResult.Result,
+                },
+            };
+        }
+        else
+        {
+            return new P.OperationResult()
+            {
+                Failure = new P.OperationResultFailure()
+                {
+                    FailureDetails = ToProtobuf(operationResult.FailureDetails),
+                },
+            };
+        }
     }
 
     /// <summary>

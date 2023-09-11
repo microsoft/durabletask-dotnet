@@ -70,8 +70,6 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             {
                 results.Add(new OperationResult()
                 {
-                    Result = null,
-                    ErrorMessage = "exception in application code",
                     FailureDetails = new FailureDetails(applicationException),
                 });
 

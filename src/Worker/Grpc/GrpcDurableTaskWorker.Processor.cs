@@ -381,8 +381,6 @@ sealed partial class GrpcDurableTaskWorker
                         Results = Enumerable.Repeat(
                             new OperationResult()
                             {
-                                Result = null,
-                                ErrorMessage = "entity dispatch failed",
                                 FailureDetails = new FailureDetails(
                                     errorType: "EntityTaskNotFound",
                                     errorMessage: $"No entity task named '{name}' was found.",

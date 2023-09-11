@@ -47,10 +47,10 @@ class GrpcDurableEntityClient : DurableEntityClient
         P.SignalEntityRequest request = new P.SignalEntityRequest()
         {
             InstanceId = id.ToString(),
-            RequestId = Google.Protobuf.ByteString.FromStream(new MemoryStream(requestId.ToByteArray())),
+            RequestId = requestId.ToString(),
             Name = operationName,
             Input = this.dataConverter.Serialize(input),
-            ScheduledTime = scheduledTime.ToTimestamp() ?? default,
+            ScheduledTime = scheduledTime?.ToTimestamp(),
         };
 
         // TODO this.logger.LogSomething
@@ -108,10 +108,10 @@ class GrpcDurableEntityClient : DurableEntityClient
                         Query = new P.EntityQuery
                         {
                             InstanceIdStartsWith = startsWith,
-                            LastModifiedFrom = lastModifiedFrom?.ToTimestamp() ?? default,
-                            LastModifiedTo = lastModifiedTo?.ToTimestamp() ?? default,
+                            LastModifiedFrom = lastModifiedFrom?.ToTimestamp(),
+                            LastModifiedTo = lastModifiedTo?.ToTimestamp(),
                             IncludeState = includeState,
-                            PageSize = pageSize ?? default,
+                            PageSize = pageSize,
                             ContinuationToken = continuation ?? filter?.ContinuationToken,
                         },
                     },

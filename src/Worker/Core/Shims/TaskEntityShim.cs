@@ -84,6 +84,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             Results = results,
             Actions = this.context.Actions.ToList(), // make copy to avoid concurrent modification if this shim is reused
             EntityState = this.state.CurrentState,
+            FailureDetails = null,
         };
 
         // we reset only the context, but keep the current state.

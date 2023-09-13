@@ -595,6 +595,7 @@ static class ProtoUtils
             Actions = entityBatchResult.Actions.Select(operationAction => operationAction!.ToOperationAction()).ToList(),
             EntityState = entityBatchResult.EntityState,
             Results = entityBatchResult.Results.Select(operationResult => operationResult!.ToOperationResult()).ToList(),
+            FailureDetails = entityBatchResult.FailureDetails.ToCore(),
         };
     }
 
@@ -614,6 +615,7 @@ static class ProtoUtils
         var batchResult = new P.EntityBatchResult()
         {
             EntityState = entityBatchResult.EntityState,
+            FailureDetails = entityBatchResult.FailureDetails.ToProtobuf(),
         };
 
         foreach (OperationAction action in entityBatchResult.Actions!)

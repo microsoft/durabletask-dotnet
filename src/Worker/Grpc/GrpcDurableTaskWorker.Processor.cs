@@ -387,6 +387,7 @@ sealed partial class GrpcDurableTaskWorker
                                     isNonRetriable: true),
                             },
                             batchRequest.Operations!.Count).ToList(),
+                        FailureDetails = null,
                     };
                 }
             }

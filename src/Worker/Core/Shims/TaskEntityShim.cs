@@ -82,7 +82,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
         var batchResult = new EntityBatchResult()
         {
             Results = results,
-            Actions = this.context.Actions.ToList(), // make copy to avoid concurrent modification if this shim is reused
+            Actions = this.context.Actions,
             EntityState = this.state.CurrentState,
             FailureDetails = null,
         };
@@ -160,8 +160,8 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
     {
         readonly EntityInstanceId entityInstanceId;
         readonly DataConverter dataConverter;
-        readonly List<OperationAction> operationActions;
 
+        List<OperationAction> operationActions;
         int checkpointPosition;
 
         public ContextShim(EntityInstanceId entityInstanceId, DataConverter dataConverter)
@@ -171,9 +171,9 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             this.operationActions = new List<OperationAction>();
         }
 
-        public IEnumerable<OperationAction> Actions => this.operationActions ?? Enumerable.Empty<OperationAction>();
+        public List<OperationAction> Actions => this.operationActions;
 
-        public int CurrentPosition => this.operationActions?.Count ?? 0;
+        public int CurrentPosition => this.operationActions.Count;
 
         public override EntityInstanceId Id => this.entityInstanceId;
 
@@ -189,7 +189,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
 
         public void Reset()
         {
-            this.operationActions?.Clear();
+            this.operationActions = new List<OperationAction>();
             this.checkpointPosition = 0;
         }
 

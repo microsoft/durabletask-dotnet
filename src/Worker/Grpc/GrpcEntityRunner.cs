@@ -1,6 +1,8 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using DurableTask.Core.Entities;
+using DurableTask.Core.Entities.OperationFormat;
 using Google.Protobuf;
 using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Worker.Shims;
@@ -47,7 +49,7 @@ public static class GrpcEntityRunner
     /// <exception cref="ArgumentException">
     /// Thrown if <paramref name="encodedEntityRequest"/> contains invalid data.
     /// </exception>
-    public static async string LoadAndRun(
+    public static async Task<string> LoadAndRunAsync(
         string encodedEntityRequest, ITaskEntity implementation, IServiceProvider? services = null)
     {
         Check.NotNullOrEmpty(encodedEntityRequest);
@@ -57,7 +59,7 @@ public static class GrpcEntityRunner
             encodedEntityRequest);
 
         EntityBatchRequest batch = request.ToEntityBatchRequest();
-        EntityId id = EntityId.FromString(batch.InstanceId);
+        EntityId id = EntityId.FromString(batch.InstanceId!);
         TaskName entityName = new(id.Name);
 
         DurableTaskShimFactory factory = services is null
@@ -65,10 +67,10 @@ public static class GrpcEntityRunner
             : ActivatorUtilities.GetServiceOrCreateInstance<DurableTaskShimFactory>(services);
 
         TaskEntity entity = factory.CreateEntity(entityName, implementation, id);
-        EntityBatchReqesult result = await entity.ExecuteOperationBatchAsync(batch);
+        EntityBatchResult result = await entity.ExecuteOperationBatchAsync(batch);
 
         P.EntityBatchResult response = result.ToEntityBatchResult();
-        byte[] responseBytes = result.ToByteArray();
+        byte[] responseBytes = response.ToByteArray();
         return Convert.ToBase64String(responseBytes);
     }
 }

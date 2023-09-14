@@ -132,24 +132,36 @@ class GrpcDurableEntityClient : DurableEntityClient
     }
 
     /// <inheritdoc/>
-    public override async Task<CleanEntityStorageResult> CleanEntityStorageAsync(CleanEntityStorageRequest request = default, CancellationToken cancellation = default)
+    public override async Task<CleanEntityStorageResult> CleanEntityStorageAsync(CleanEntityStorageRequest request = default, bool continueUntilComplete = true, CancellationToken cancellation = default)
     {
+        string? continuationToken = request.ContinuationToken;
+        int emptyEntitiesRemoved = 0;
+        int orphanedLocksReleased = 0;
+
         try
         {
-            P.CleanEntityStorageResponse response = await this.sidecarClient.CleanEntityStorageAsync(
-                new P.CleanEntityStorageRequest
-                {
-                    RemoveEmptyEntities = request.RemoveEmptyEntities,
-                    ReleaseOrphanedLocks = request.ReleaseOrphanedLocks,
-                    ContinuationToken = request.ContinuationToken,
-                },
-                cancellationToken: cancellation);
+            do
+            {
+                P.CleanEntityStorageResponse response = await this.sidecarClient.CleanEntityStorageAsync(
+                    new P.CleanEntityStorageRequest
+                    {
+                        RemoveEmptyEntities = request.RemoveEmptyEntities,
+                        ReleaseOrphanedLocks = request.ReleaseOrphanedLocks,
+                        ContinuationToken = continuationToken,
+                    },
+                    cancellationToken: cancellation);
+
+                continuationToken = response.ContinuationToken;
+                emptyEntitiesRemoved += response.EmptyEntitiesRemoved;
+                orphanedLocksReleased += response.OrphanedLocksReleased;
+            }
+            while (continueUntilComplete && continuationToken != null);
 
             return new CleanEntityStorageResult
             {
-                EmptyEntitiesRemoved = response.EmptyEntitiesRemoved,
-                OrphanedLocksReleased = response.OrphanedLocksReleased,
-                ContinuationToken = response.ContinuationToken,
+                ContinuationToken = continuationToken,
+                EmptyEntitiesRemoved = emptyEntitiesRemoved,
+                OrphanedLocksReleased = orphanedLocksReleased,
             };
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)

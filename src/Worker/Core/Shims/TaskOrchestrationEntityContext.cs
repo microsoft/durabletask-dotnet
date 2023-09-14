@@ -46,16 +46,18 @@ sealed partial class TaskOrchestrationContextWrapper
         /// <inheritdoc/>
         public override async Task<IAsyncDisposable> LockEntitiesAsync(IEnumerable<EntityInstanceId> entityIds)
         {
-            if (!this.EntityContext.ValidateAcquireTransition(out string? errormsg))
-            {
-                throw new InvalidOperationException(errormsg);
-            }
+            Check.NotNull(entityIds);
 
             EntityId[] dtEntities = entityIds.Select(x => new DurableTaskCore.Entities.EntityId(x.Name, x.Key)).ToArray();
 
             if (dtEntities.Length == 0)
             {
                 throw new ArgumentException("The list of entities to lock must not be empty.", nameof(entityIds));
+            }
+
+            if (!this.EntityContext.ValidateAcquireTransition(out string? errormsg))
+            {
+                throw new InvalidOperationException(errormsg);
             }
 
             // use a deterministically replayable unique ID for this lock request, and to receive the response
@@ -87,7 +89,7 @@ sealed partial class TaskOrchestrationContextWrapper
         /// <inheritdoc/>
         public override async Task<TResult> CallEntityAsync<TResult>(EntityInstanceId id, string operationName, object? input = null, CallEntityOptions? options = null)
         {
-            OperationResult operationResult = await this.SignalOrCallEntityInternalAsync(id, operationName, input, oneWay: false, scheduledTime: null);
+            OperationResult operationResult = await this.CallEntityInternalAsync(id, operationName, input);
 
             if (operationResult.ErrorMessage != null)
             {
@@ -102,7 +104,7 @@ sealed partial class TaskOrchestrationContextWrapper
         /// <inheritdoc/>
         public override async Task CallEntityAsync(EntityInstanceId id, string operationName, object? input = null, CallEntityOptions? options = null)
         {
-            OperationResult operationResult = await this.SignalOrCallEntityInternalAsync(id, operationName, input, oneWay: false, scheduledTime: null);
+            OperationResult operationResult = await this.CallEntityInternalAsync(id, operationName, input);
 
             if (operationResult.ErrorMessage != null)
             {
@@ -111,9 +113,10 @@ sealed partial class TaskOrchestrationContextWrapper
         }
 
         /// <inheritdoc/>
-        public override async Task SignalEntityAsync(EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null)
+        public override Task SignalEntityAsync(EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null)
         {
-            await this.SignalOrCallEntityInternalAsync(id, operationName, input, oneWay: true, scheduledTime: options?.SignalTime);
+            this.SendOperationMessage(id.ToString(), operationName, input, oneWay: true, scheduledTime: options?.SignalTime);
+            return Task.CompletedTask;
         }
 
         /// <inheritdoc/>
@@ -164,16 +167,32 @@ sealed partial class TaskOrchestrationContextWrapper
              failureDetails.StackTrace,
              failureDetails.InnerFailure != null ? ConvertFailureDetails(failureDetails.InnerFailure) : null);
 
-        async ValueTask<OperationResult> SignalOrCallEntityInternalAsync(EntityInstanceId id, string operationName, object? input, bool oneWay = false, DateTimeOffset? scheduledTime = null)
+        async Task<OperationResult> CallEntityInternalAsync(EntityInstanceId id, string operationName, object? input)
         {
-            if (!this.EntityContext.ValidateOperationTransition(id.ToString(), oneWay, out string? errorMessage))
+            string instanceId = id.ToString();
+            Guid requestId = this.SendOperationMessage(instanceId, operationName, input, oneWay: false, scheduledTime: null);
+
+            OperationResult response = await this.wrapper.WaitForExternalEvent<OperationResult>(requestId.ToString());
+
+            if (this.EntityContext.IsInsideCriticalSection)
+            {
+                // the lock is available again now that the entity call returned
+                this.EntityContext.RecoverLockAfterCall(id.ToString());
+            }
+
+            return response;
+        }
+
+        Guid SendOperationMessage(string instanceId, string operationName, object? input, bool oneWay, DateTimeOffset? scheduledTime)
+        {
+            if (!this.EntityContext.ValidateOperationTransition(instanceId, oneWay, out string? errorMessage))
             {
                 throw new InvalidOperationException(errorMessage);
             }
 
             Guid guid = this.wrapper.NewGuid(); // deterministically replayable unique id for this request
             string? serializedInput = this.wrapper.DataConverter.Serialize(input);
-            var target = new OrchestrationInstance() { InstanceId = id.ToString() };
+            var target = new OrchestrationInstance() { InstanceId = instanceId };
 
             EntityMessageEvent entityMessageEvent = this.EntityContext.EmitRequestMessage(
                     target,
@@ -195,22 +214,7 @@ sealed partial class TaskOrchestrationContextWrapper
 
             this.wrapper.innerContext.SendEvent(entityMessageEvent.TargetInstance, entityMessageEvent.EventName, entityMessageEvent.ContentAsObject());
 
-            if (!oneWay)
-            {
-                OperationResult response = await this.wrapper.WaitForExternalEvent<OperationResult>(guid.ToString());
-
-                if (this.EntityContext.IsInsideCriticalSection)
-                {
-                    // the lock is available again now that the entity call returned
-                    this.EntityContext.RecoverLockAfterCall(target.InstanceId);
-                }
-
-                return response;
-            }
-            else
-            {
-                return null!; // ignored by caller
-            }
+            return guid;
         }
 
         class LockReleaser : IAsyncDisposable

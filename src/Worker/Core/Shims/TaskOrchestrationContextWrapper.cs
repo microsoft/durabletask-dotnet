@@ -61,7 +61,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
     /// <inheritdoc/>
     public override TaskOrchestrationEntityFeature Entities
-        => this.entityFeature ??= new TaskOrchestrationEntityContext(this, this.innerContext);
+        => this.entityFeature ??= new TaskOrchestrationEntityContext(this);
 
     /// <summary>
     /// Gets the DataConverter to use for inputs, outputs, and entity states.

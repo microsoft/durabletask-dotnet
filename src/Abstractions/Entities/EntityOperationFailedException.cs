@@ -10,16 +10,16 @@ namespace Microsoft.DurableTask.Entities;
 /// Detailed information associated with a particular operation failure, including exception details, can be found in the
 /// <see cref="FailureDetails"/> property.
 /// </remarks>
-public sealed class OperationFailedException : Exception
+public sealed class EntityOperationFailedException : Exception
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="OperationFailedException"/> class.
+    /// Initializes a new instance of the <see cref="EntityOperationFailedException"/> class.
     /// </summary>
     /// <param name="operationName">The operation name.</param>
     /// <param name="entityId">The entity ID.</param>
     /// <param name="errorContext">The context in which the error was caught.</param>
     /// <param name="failureDetails">The failure details.</param>
-    public OperationFailedException(EntityInstanceId entityId, string operationName, string errorContext, TaskFailureDetails failureDetails)
+    public EntityOperationFailedException(EntityInstanceId entityId, string operationName, string errorContext, TaskFailureDetails failureDetails)
         : base(GetExceptionMessage(operationName, entityId, errorContext, failureDetails))
     {
         this.EntityId = entityId;

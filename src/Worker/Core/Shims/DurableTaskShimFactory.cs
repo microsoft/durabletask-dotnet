@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 using DurableTask.Core;
+using DurableTask.Core.Entities;
+using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -106,5 +108,25 @@ public class DurableTaskShimFactory
         Check.NotDefault(name);
         Check.NotNull(implementation);
         return this.CreateOrchestration(name, FuncTaskOrchestrator.Create(implementation), parent);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="TaskEntity" /> from a <see cref="ITaskEntity" />.
+    /// </summary>
+    /// <param name="name">
+    /// The name of the entity. This should be the name the entity was invoked with.
+    /// </param>
+    /// <param name="entity">The entity to wrap.</param>
+    /// <param name="entityId">The entity id for the shim.</param>
+    /// <returns>A new <see cref="TaskEntity" />.</returns>
+    public TaskEntity CreateEntity(TaskName name, ITaskEntity entity, EntityId entityId)
+    {
+        Check.NotDefault(name);
+        Check.NotNull(entity);
+
+        // For now, we simply create a new shim for each entity batch operation.
+        // In the future we may consider caching those shims and reusing them, which can reduce
+        // deserialization and allocation overheads.
+        return new TaskEntityShim(this.options.DataConverter, entity, entityId);
     }
 }

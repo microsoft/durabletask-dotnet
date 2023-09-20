@@ -14,6 +14,7 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// </summary>
 sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 {
+    // TODO: Change externalEventSources value from IEventSource to queue<IEventSource> to preserve FIFO in O(1)
     readonly Dictionary<string, IEventSource> externalEventSources = new(StringComparer.OrdinalIgnoreCase);
     readonly NamedQueue<string> externalEventBuffer = new();
     readonly OrchestrationContext innerContext;
@@ -202,6 +203,10 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                     + $" {existing.EventType.FullName}.");
             }
 
+            while (existing.Next != null)
+            {
+                existing = existing.Next;
+            }
             existing.Next = eventSource;
         }
         else

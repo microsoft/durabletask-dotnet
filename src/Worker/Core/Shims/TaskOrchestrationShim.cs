@@ -46,10 +46,19 @@ partial class TaskOrchestrationShim : TaskOrchestration
 
         object? input = this.DataConverter.Deserialize(rawInput, this.implementation.InputType);
         this.wrapperContext = new(innerContext, this.invocationContext, input);
-        object? output = await this.implementation.RunAsync(this.wrapperContext, input);
 
-        // Return the output (if any) as a serialized string.
-        return this.DataConverter.Serialize(output);
+        try
+        {
+            object? output = await this.implementation.RunAsync(this.wrapperContext, input);
+
+            // Return the output (if any) as a serialized string.
+            return this.DataConverter.Serialize(output);
+        }
+        finally
+        {
+            // if user code crashed inside a critical section, or did not exit it, do that now
+            this.wrapperContext.ExitCriticalSectionIfNeeded();
+        }
     }
 
     /// <inheritdoc/>

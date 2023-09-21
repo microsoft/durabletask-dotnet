@@ -131,6 +131,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                 return await this.innerContext.CreateSubOrchestrationInstanceWithRetry<TResult>(
                     orchestratorName.Name,
                     orchestratorName.Version,
+                    instanceId,
                     policy.ToDurableTaskCoreRetryOptions(),
                     input);
             }

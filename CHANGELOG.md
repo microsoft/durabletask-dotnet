@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.0.4
+
+### Microsoft.DurableTask.Worker
+
+- Fix handling of concurrent external events with the same name (https://github.com/microsoft/durabletask-dotnet/pull/194)
+
 ## v1.0.3
 
 ### Microsoft.DurableTask.Worker

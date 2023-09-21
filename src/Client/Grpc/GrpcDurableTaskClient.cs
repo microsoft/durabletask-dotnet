@@ -3,6 +3,7 @@
 
 using System.Text;
 using Google.Protobuf.WellKnownTypes;
+using Microsoft.DurableTask.Client.Entities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -19,6 +20,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     readonly ILogger logger;
     readonly TaskHubSidecarServiceClient sidecarClient;
     readonly GrpcDurableTaskClientOptions options;
+    readonly DurableEntityClient entityClient;
     AsyncDisposable asyncDisposable;
 
     /// <summary>
@@ -47,7 +49,11 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         this.options = Check.NotNull(options);
         this.asyncDisposable = GetCallInvoker(options, out CallInvoker callInvoker);
         this.sidecarClient = new TaskHubSidecarServiceClient(callInvoker);
+        this.entityClient = new GrpcDurableEntityClient(this.Name, this.DataConverter, this.sidecarClient, logger);
     }
+
+    /// <inheritdoc/>
+    public override DurableEntityClient Entities => this.entityClient;
 
     DataConverter DataConverter => this.options.DataConverter;
 

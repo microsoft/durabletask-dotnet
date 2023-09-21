@@ -102,8 +102,9 @@ public abstract class DurableEntityClient
     /// Cleans entity storage. See <see cref="CleanEntityStorageRequest"/> for the different forms of cleaning available.
     /// </summary>
     /// <param name="request">The request which describes what to clean.</param>
+    /// <param name="continueUntilComplete">whether to keep going until the cleaning is complete, or to return intermediate results with a continuation token.</param>
     /// <param name="cancellation">The cancellation token to cancel the operation.</param>
     /// <returns>A task that completes when the operation is finished.</returns>
     public abstract Task<CleanEntityStorageResult> CleanEntityStorageAsync(
-        CleanEntityStorageRequest request = default, CancellationToken cancellation = default);
+        CleanEntityStorageRequest request = default, bool continueUntilComplete = true, CancellationToken cancellation = default);
 }

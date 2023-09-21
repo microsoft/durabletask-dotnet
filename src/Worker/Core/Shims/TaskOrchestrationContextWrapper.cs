@@ -14,8 +14,7 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// </summary>
 sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 {
-    // TODO: Change externalEventSources value from IEventSource to queue<IEventSource> to preserve FIFO in O(1)
-    readonly Dictionary<string, IEventSource> externalEventSources = new(StringComparer.OrdinalIgnoreCase);
+    readonly Dictionary<string, Queue<IEventSource>> externalEventSources = new(StringComparer.OrdinalIgnoreCase);
     readonly NamedQueue<string> externalEventBuffer = new();
     readonly OrchestrationContext innerContext;
     readonly OrchestrationInvocationContext invocationContext;
@@ -195,23 +194,21 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
         // Create a task completion source that will be set when the external event arrives.
         EventTaskCompletionSource<T> eventSource = new();
-        if (this.externalEventSources.TryGetValue(eventName, out IEventSource? existing))
+        if (this.externalEventSources.TryGetValue(eventName, out Queue<IEventSource>? existing))
         {
-            if (existing.EventType != typeof(T))
+            if (existing.Peek().EventType != typeof(T))
             {
                 throw new ArgumentException("Events with the same name must have the same type argument. Expected"
-                    + $" {existing.EventType.FullName}.");
+                    + $" {existing.Peek().GetType().FullName}.");
             }
-
-            while (existing.Next != null)
-            {
-                existing = existing.Next;
-            }
-            existing.Next = eventSource;
+            
+            existing.Enqueue(eventSource);
         }
         else
         {
-            this.externalEventSources.Add(eventName, eventSource);
+            Queue<IEventSource> eventSourceQueue = new();
+            eventSourceQueue.Enqueue(eventSource);
+            this.externalEventSources.Add(eventName, eventSourceQueue);
         }
 
         // TODO: this needs to be tracked and disposed appropriately.
@@ -311,18 +308,15 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <param name="rawEventPayload">The serialized event payload.</param>
     internal void CompleteExternalEvent(string eventName, string rawEventPayload)
     {
-        if (this.externalEventSources.TryGetValue(eventName, out IEventSource? waiter))
+        if (this.externalEventSources.TryGetValue(eventName, out Queue<IEventSource>? waiters))
         {
+            IEventSource waiter = waiters.Dequeue();
             object? value = this.DataConverter.Deserialize(rawEventPayload, waiter.EventType);
 
             // Events are completed in FIFO order. Remove the key if the last event was delivered.
-            if (waiter.Next == null)
+            if (waiters.Count == 0)
             {
                 this.externalEventSources.Remove(eventName);
-            }
-            else
-            {
-                this.externalEventSources[eventName] = waiter.Next;
             }
 
             waiter.TrySetResult(value);

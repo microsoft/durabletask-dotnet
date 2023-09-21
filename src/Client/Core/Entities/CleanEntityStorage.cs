@@ -26,6 +26,11 @@ public readonly record struct CleanEntityStorageRequest
     /// explicitly purged.
     /// </remarks>
     public bool ReleaseOrphanedLocks { get; init; }
+
+    /// <summary>
+    /// Gets the continuation token to resume a previous <see cref="CleanEntityStorageRequest"/>.
+    /// </summary>
+    public string? ContinuationToken { get; init; }
 }
 
 /// <summary>
@@ -39,7 +44,12 @@ public readonly record struct CleanEntityStorageResult
     public int EmptyEntitiesRemoved { get; init; }
 
     /// <summary>
-    /// Gets the number of orphaned locks that were removed.
+    /// Gets the number of orphaned locks that were released.
     /// </summary>
-    public int OrphanedLocksRemoved { get; init; }
+    public int OrphanedLocksReleased { get; init; }
+
+    /// <summary>
+    /// Gets the continuation token to continue the <see cref="CleanEntityStorageRequest"/>, if not null.
+    /// </summary>
+    public string? ContinuationToken { get; init; }
 }

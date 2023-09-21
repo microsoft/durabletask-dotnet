@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.DurableTask.Entities;
 
 namespace Microsoft.DurableTask.Worker;
 
@@ -34,4 +35,25 @@ public interface IDurableTaskFactory
     /// </remarks>
     bool TryCreateOrchestrator(
         TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskOrchestrator? orchestrator);
+}
+
+/// <summary>
+/// A newer version of <see cref="IDurableTaskFactory"/> that adds support for entities.
+/// </summary>
+public interface IDurableTaskFactory2 : IDurableTaskFactory
+{
+    /// <summary>
+    /// Tries to create an entity given a name.
+    /// </summary>
+    /// <param name="name">The name of the orchestrator.</param>
+    /// <param name="serviceProvider">The service provider.</param>
+    /// <param name="entity">The entity or <c>null</c> if it does not exist.</param>
+    /// <returns>True if entity was created, false otherwise.</returns>
+    /// <remarks>
+    /// While <paramref name="serviceProvider" /> is provided here, it is not required to be used to construct
+    /// orchestrators. Individual implementations of this contract may use it in different ways. The default
+    /// implementation does not use it.
+    /// </remarks>
+    bool TryCreateEntity(
+        TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskEntity? entity);
 }

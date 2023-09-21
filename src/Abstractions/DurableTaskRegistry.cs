@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.Entities;
+
 namespace Microsoft.DurableTask;
 
 /// <summary>
@@ -21,6 +23,12 @@ public sealed partial class DurableTaskRegistry
     /// </summary>
     internal IDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>> Orchestrators { get; }
         = new Dictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>>();
+
+    /// <summary>
+    /// Gets the currently registered entities.
+    /// </summary>
+    internal IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> Entities { get; }
+        = new Dictionary<TaskName, Func<IServiceProvider, ITaskEntity>>();
 
     /// <summary>
     /// Registers an activity factory.
@@ -74,6 +82,33 @@ public sealed partial class DurableTaskRegistry
         }
 
         this.Orchestrators.Add(name, _ => factory());
+        return this;
+    }
+
+    /// <summary>
+    /// Registers an entity factory.
+    /// </summary>
+    /// <param name="name">The name of the entity.</param>
+    /// <param name="factory">The entity factory.</param>
+    /// <returns>This registry instance, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if any of the following are true:
+    /// <list type="bullet">
+    ///   <item>If <paramref name="name"/> is <c>default</c>.</item>
+    ///   <item>If <paramref name="name" /> is already registered.</item>
+    ///   <item>If <paramref name="factory"/> is <c>null</c>.</item>
+    /// </list>
+    /// </exception>
+    public DurableTaskRegistry AddEntity(TaskName name, Func<IServiceProvider, ITaskEntity> factory)
+    {
+        Check.NotDefault(name);
+        Check.NotNull(factory);
+        if (this.Entities.ContainsKey(name))
+        {
+            throw new ArgumentException($"An {nameof(ITaskEntity)} named '{name}' is already added.", nameof(name));
+        }
+
+        this.Entities.Add(name, factory);
         return this;
     }
 }

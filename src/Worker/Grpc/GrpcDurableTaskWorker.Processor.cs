@@ -371,7 +371,7 @@ sealed partial class GrpcDurableTaskWorker
                 else
                 {
                     // we could not find the entity. This is considered an application error,
-                    // so we return a non-retriable error-OperationResult for each operation in the batch.
+                    // so we return a non-retryable error-OperationResult for each operation in the batch.
                     batchResult = new EntityBatchResult()
                     {
                         Actions = new List<OperationAction>(), // no actions
@@ -387,7 +387,7 @@ sealed partial class GrpcDurableTaskWorker
                                     isNonRetriable: true),
                             },
                             batchRequest.Operations!.Count).ToList(),
-                            FailureDetails = null,
+                        FailureDetails = null,
                     };
                 }
             }

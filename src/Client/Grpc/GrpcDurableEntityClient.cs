@@ -1,11 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-using System.Collections.Generic;
-using System.Net.NetworkInformation;
-using System.Text;
-using Google.Protobuf.WellKnownTypes;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
@@ -165,7 +160,7 @@ class GrpcDurableEntityClient : DurableEntityClient
         EntityQuery? filter, Func<P.EntityMetadata, bool, TMetadata> select)
         where TMetadata : class
     {
-        bool includeState = filter?.IncludeState ?? false;
+        bool includeState = filter?.IncludeState ?? true;
         string startsWith = filter?.InstanceIdStartsWith ?? string.Empty;
         DateTimeOffset? lastModifiedFrom = filter?.LastModifiedFrom;
         DateTimeOffset? lastModifiedTo = filter?.LastModifiedTo;

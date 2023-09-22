@@ -1,1 +1,1 @@
-- Fix issue with `TaskOrchestrationContext.Parent` not being set.
+- Fix instance ID not being passed in when using retry policy (https://github.com/microsoft/durabletask-dotnet/issues/174)

@@ -1,22 +1,39 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.DurableTask.Entities;
 
 namespace Microsoft.DurableTask.Client.Entities;
 
 /// <summary>
-/// Represents the metadata for a durable entity instance.
+/// Represents entity metadata.
 /// </summary>
-public class EntityMetadata
+/// <typeparam name="TState">The type of state held by the metadata.</typeparam>
+public class EntityMetadata<TState>
 {
+    readonly TState? state;
+
     /// <summary>
-    /// Initializes a new instance of the <see cref="EntityMetadata"/> class.
+    /// Initializes a new instance of the <see cref="EntityMetadata{TState}"/> class.
     /// </summary>
     /// <param name="id">The ID of the entity.</param>
     public EntityMetadata(EntityInstanceId id)
     {
         this.Id = Check.NotDefault(id);
+        this.IncludesState = false;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="EntityMetadata{TState}"/> class.
+    /// </summary>
+    /// <param name="id">The ID of the entity.</param>
+    /// <param name="state">The state of the entity.</param>
+    public EntityMetadata(EntityInstanceId id, TState? state)
+        : this(id)
+    {
+        this.IncludesState = state is not null;
+        this.state = state;
     }
 
     /// <summary>
@@ -30,38 +47,41 @@ public class EntityMetadata
     public DateTimeOffset LastModifiedTime { get; init; }
 
     /// <summary>
-    /// Gets the data converter for this metadata.
+    /// Gets a value indicating if entity metadata 
     /// </summary>
-    public DataConverter? DataConverter { get; init; }
+    [MemberNotNullWhen(true, "State")]
+    [MemberNotNullWhen(true, "state")]
+    public bool IncludesState { get; }
 
     /// <summary>
-    /// Gets the serialized state for this entity.
+    /// Gets the state for this entity.
     /// </summary>
-    public string? SerializedState { get; init; }
-
-    /// <summary>
-    /// Deserializes the entity's state into an object of the specified type.
-    /// </summary>
-    /// <remarks>
-    /// This method can only be used when state are explicitly requested from the
-    /// <see cref="DurableEntityClient.GetEntityAsync(EntityInstanceId, CancellationToken)"/> or
-    /// <see cref="DurableEntityClient.GetAllEntitiesAsync(EntityQuery)"/> method that produced
-    /// this <see cref="EntityMetadata"/> object.
-    /// </remarks>
-    /// <typeparam name="T">The type to deserialize the entity state into.</typeparam>
-    /// <returns>Returns the deserialized state value.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown if this metadata object was fetched without the option to read state.
-    /// </exception>
-    public T? ReadStateAs<T>()
+    public TState State
     {
-        if (this.DataConverter is null)
+        get
         {
-            throw new InvalidOperationException(
-                $"The {nameof(this.ReadStateAs)} method can only be used on {nameof(EntityMetadata)} objects " +
-                "that are fetched with the option to include state data.");
-        }
+            if (this.IncludesState)
+            {
+                return this.state;
+            }
 
-        return this.DataConverter.Deserialize<T>(this.SerializedState);
+            throw new InvalidOperationException($"Cannot retrieve state when {nameof(this.IncludesState)}=false");
+        }
+    }
+}
+
+/// <summary>
+/// Represents the metadata for a durable entity instance.
+/// </summary>
+public sealed class EntityMetadata : EntityMetadata<SerializedData>
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="EntityMetadata"/> class.
+    /// </summary>
+    /// <param name="id">The ID of the entity.</param>
+    /// <param name="state">The state of this entity.</param>
+    public EntityMetadata(EntityInstanceId id, SerializedData? state = null)
+        : base(id, state)
+    {
     }
 }

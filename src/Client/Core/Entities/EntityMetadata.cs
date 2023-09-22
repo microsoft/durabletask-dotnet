@@ -56,6 +56,7 @@ public class EntityMetadata<TState>
     /// <summary>
     /// Gets the state for this entity.
     /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown if <see cref="IncludesState"/> is <c>false</c>.</exception>
     public TState State
     {
         get

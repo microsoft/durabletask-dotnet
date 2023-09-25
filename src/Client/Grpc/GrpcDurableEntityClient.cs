@@ -127,7 +127,7 @@ class GrpcDurableEntityClient : DurableEntityClient
                 $"The {nameof(this.CleanEntityStorageAsync)} operation was canceled.", e, cancellation);
         }
     }
-    
+
     async Task<TMetadata?> GetEntityCoreAsync<TMetadata>(
         EntityInstanceId id,
         bool includeState,

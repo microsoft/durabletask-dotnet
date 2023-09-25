@@ -56,9 +56,9 @@ public record EntityQuery
     public DateTimeOffset? LastModifiedTo { get; init; }
 
     /// <summary>
-    /// Gets a value indicating whether to include state in the query results or not.
+    /// Gets a value indicating whether to include state in the query results or not. Defaults to true.
     /// </summary>
-    public bool IncludeState { get; init; }
+    public bool IncludeState { get; init; } = true;
 
     /// <summary>
     /// Gets the size of each page to return.

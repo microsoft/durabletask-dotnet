@@ -72,24 +72,46 @@ public abstract class DurableEntityClient
         => this.SignalEntityAsync(id, operationName, null, null, cancellation);
 
     /// <summary>
-    /// Tries to get the entity with ID of <paramref name="id"/>.
+    /// Tries to get the entity with ID of <paramref name="id"/>. Includes entity state by default.
     /// </summary>
     /// <param name="id">The ID of the entity to get.</param>
     /// <param name="includeState"><c>true</c> to include entity state in the response, <c>false</c> to not.</param>
     /// <param name="cancellation">The cancellation token to cancel the operation.</param>
-    /// <returns>a response containing metadata describing the entity.</returns>
+    /// <returns>A response containing metadata describing the entity, or null if the entity does not exist.</returns>
     public abstract Task<EntityMetadata?> GetEntityAsync(
-        EntityInstanceId id, bool includeState = false, CancellationToken cancellation = default);
+        EntityInstanceId id, bool includeState = true, CancellationToken cancellation = default);
 
     /// <summary>
-    /// Tries to get the entity with ID of <paramref name="id"/>.
+    /// Tries to get the entity with ID of <paramref name="id"/>. Includes entity state.
     /// </summary>
     /// <param name="id">The ID of the entity to get.</param>
     /// <param name="cancellation">The cancellation token to cancel the operation.</param>
-    /// <returns>a response containing metadata describing the entity.</returns>
+    /// <returns>A response containing metadata describing the entity, or null if the entity does not exist.</returns>
     public virtual Task<EntityMetadata?> GetEntityAsync(
         EntityInstanceId id, CancellationToken cancellation)
-            => this.GetEntityAsync(id, includeState: false, cancellation);
+            => this.GetEntityAsync(id, includeState: true, cancellation);
+
+    /// <summary>
+    /// Tries to get the entity with ID of <paramref name="id"/>. Includes entity state by default.
+    /// </summary>
+    /// <typeparam name="T">The type of the entity state.</typeparam>
+    /// <param name="id">The ID of the entity to get.</param>
+    /// <param name="includeState"><c>true</c> to include entity state in the response, <c>false</c> to not.</param>
+    /// <param name="cancellation">The cancellation token to cancel the operation.</param>
+    /// <returns>A response containing metadata describing the entity, or null if the entity does not exist.</returns>
+    public abstract Task<EntityMetadata<T>?> GetEntityAsync<T>(
+        EntityInstanceId id, bool includeState = true, CancellationToken cancellation = default);
+
+    /// <summary>
+    /// Tries to get the entity with ID of <paramref name="id"/>. Includes entity state.
+    /// </summary>
+    /// <typeparam name="T">The type of the entity state.</typeparam>
+    /// <param name="id">The ID of the entity to get.</param>
+    /// <param name="cancellation">The cancellation token to cancel the operation.</param>
+    /// <returns>A response containing metadata describing the entity, or null if the entity does not exist.</returns>
+    public virtual Task<EntityMetadata<T>?> GetEntityAsync<T>(
+        EntityInstanceId id, CancellationToken cancellation)
+            => this.GetEntityAsync<T>(id, includeState: true, cancellation);
 
     /// <summary>
     /// Queries entity instances, optionally filtering results with <paramref name="filter"/>.
@@ -99,12 +121,24 @@ public abstract class DurableEntityClient
     public abstract AsyncPageable<EntityMetadata> GetAllEntitiesAsync(EntityQuery? filter = null);
 
     /// <summary>
+    /// Queries entity instances, optionally filtering results with <paramref name="filter"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of the entity state.</typeparam>
+    /// <param name="filter">The optional query filter.</param>
+    /// <returns>An async pageable of the query results.</returns>
+    public abstract AsyncPageable<EntityMetadata<T>> GetAllEntitiesAsync<T>(EntityQuery? filter = null);
+
+    /// <summary>
     /// Cleans entity storage. See <see cref="CleanEntityStorageRequest"/> for the different forms of cleaning available.
     /// </summary>
     /// <param name="request">The request which describes what to clean.</param>
-    /// <param name="continueUntilComplete">whether to keep going until the cleaning is complete, or to return intermediate results with a continuation token.</param>
+    /// <param name="continueUntilComplete">
+    /// Whether to keep going until the cleaning is complete, or to return intermediate results with a continuation token.
+    /// </param>
     /// <param name="cancellation">The cancellation token to cancel the operation.</param>
     /// <returns>A task that completes when the operation is finished.</returns>
     public abstract Task<CleanEntityStorageResult> CleanEntityStorageAsync(
-        CleanEntityStorageRequest request = default, bool continueUntilComplete = true, CancellationToken cancellation = default);
+        CleanEntityStorageRequest request = default,
+        bool continueUntilComplete = true,
+        CancellationToken cancellation = default);
 }

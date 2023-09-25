@@ -47,8 +47,11 @@ public class EntityMetadata<TState>
     public DateTimeOffset LastModifiedTime { get; init; }
 
     /// <summary>
-    /// Gets a value indicating if entity metadata 
+    /// Gets a value indicating whether this metadata response includes the entity state.
     /// </summary>
+    /// <remarks>
+    /// Queries can exclude the state of the entity from the metadata that is retrieved.
+    /// </remarks>
     [MemberNotNullWhen(true, "State")]
     [MemberNotNullWhen(true, "state")]
     public bool IncludesState { get; }
@@ -56,7 +59,14 @@ public class EntityMetadata<TState>
     /// <summary>
     /// Gets the state for this entity.
     /// </summary>
-    /// <exception cref="InvalidOperationException">Thrown if <see cref="IncludesState"/> is <c>false</c>.</exception>
+    /// <remarks>
+    /// This method can only be used when <see cref="IncludesState"/> = <c>true</c>, meaning  that the entity state was
+    /// included in the response returned by the query.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if this metadata object was fetched without including the entity state. In which case,
+    /// <see cref="IncludesState" /> will be <c>false</c>.
+    /// </exception>
     public TState State
     {
         get

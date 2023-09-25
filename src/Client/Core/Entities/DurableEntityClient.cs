@@ -77,7 +77,7 @@ public abstract class DurableEntityClient
     /// <param name="id">The ID of the entity to get.</param>
     /// <param name="includeState"><c>true</c> to include entity state in the response, <c>false</c> to not.</param>
     /// <param name="cancellation">The cancellation token to cancel the operation.</param>
-    /// <returns>A response containing metadata describing the entity.</returns>
+    /// <returns>A response containing metadata describing the entity, or null if the entity does not exist.</returns>
     public abstract Task<EntityMetadata?> GetEntityAsync(
         EntityInstanceId id, bool includeState = true, CancellationToken cancellation = default);
 
@@ -86,7 +86,7 @@ public abstract class DurableEntityClient
     /// </summary>
     /// <param name="id">The ID of the entity to get.</param>
     /// <param name="cancellation">The cancellation token to cancel the operation.</param>
-    /// <returns>A response containing metadata describing the entity.</returns>
+    /// <returns>A response containing metadata describing the entity, or null if the entity does not exist.</returns>
     public virtual Task<EntityMetadata?> GetEntityAsync(
         EntityInstanceId id, CancellationToken cancellation)
             => this.GetEntityAsync(id, includeState: true, cancellation);
@@ -98,7 +98,7 @@ public abstract class DurableEntityClient
     /// <param name="id">The ID of the entity to get.</param>
     /// <param name="includeState"><c>true</c> to include entity state in the response, <c>false</c> to not.</param>
     /// <param name="cancellation">The cancellation token to cancel the operation.</param>
-    /// <returns>A response containing metadata describing the entity.</returns>
+    /// <returns>A response containing metadata describing the entity, or null if the entity does not exist.</returns>
     public abstract Task<EntityMetadata<T>?> GetEntityAsync<T>(
         EntityInstanceId id, bool includeState = true, CancellationToken cancellation = default);
 
@@ -108,7 +108,7 @@ public abstract class DurableEntityClient
     /// <typeparam name="T">The type of the entity state.</typeparam>
     /// <param name="id">The ID of the entity to get.</param>
     /// <param name="cancellation">The cancellation token to cancel the operation.</param>
-    /// <returns>A response containing metadata describing the entity.</returns>
+    /// <returns>A response containing metadata describing the entity, or null if the entity does not exist.</returns>
     public virtual Task<EntityMetadata<T>?> GetEntityAsync<T>(
         EntityInstanceId id, CancellationToken cancellation)
             => this.GetEntityAsync<T>(id, includeState: true, cancellation);

@@ -1,1 +1,1 @@
-- Fix issue with `TaskOrchestrationContext.Parent` not being set.
+- Add support for durable entities

@@ -1,1 +1,1 @@
-- Add `GrpcDurableTaskWorkerOptions.CallInvoker` as an alternative to `GrpcDurableTaskWorkerOptions.Channel`
+- Add support for durable entities

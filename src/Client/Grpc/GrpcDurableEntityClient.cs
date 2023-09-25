@@ -56,7 +56,6 @@ class GrpcDurableEntityClient : DurableEntityClient
         };
 
         // TODO this.logger.LogSomething
-
         try
         {
             await this.sidecarClient.SignalEntityAsync(request, cancellationToken: cancellation);

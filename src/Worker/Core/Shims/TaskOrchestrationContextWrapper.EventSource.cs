@@ -22,11 +22,6 @@ sealed partial class TaskOrchestrationContextWrapper
         Type EventType { get; }
 
         /// <summary>
-        /// Gets or sets the next task completion source in the stack.
-        /// </summary>
-        IEventSource? Next { get; set; }
-
-        /// <summary>
         /// Tries to set the result on tcs.
         /// </summary>
         /// <param name="result">The result.</param>
@@ -38,8 +33,6 @@ sealed partial class TaskOrchestrationContextWrapper
         /// <inheritdoc/>
         public Type EventType => typeof(T);
 
-        /// <inheritdoc/>
-        public IEventSource? Next { get; set; }
 
         /// <inheritdoc/>
         void IEventSource.TrySetResult(object result) => this.TrySetResult((T)result);

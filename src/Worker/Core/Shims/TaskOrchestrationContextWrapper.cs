@@ -197,12 +197,12 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         EventTaskCompletionSource<T> eventSource = new();
         if (this.externalEventSources.TryGetValue(eventName, out Queue<IEventSource>? existing))
         {
-            if (existing.Peek().EventType != typeof(T))
+            if (existing.Count > 0 && existing.Peek().EventType != typeof(T))
             {
                 throw new ArgumentException("Events with the same name must have the same type argument. Expected"
-                    + $" {existing.Peek().GetType().FullName}.");
+                    + $" {existing.Peek().GetType().FullName} but was requested {typeof(T).FullName}.");
             }
-            
+
             existing.Enqueue(eventSource);
         }
         else

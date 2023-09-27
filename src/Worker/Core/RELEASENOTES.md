@@ -1,1 +1,1 @@
-- Fix instance ID not being passed in when using retry policy (https://github.com/microsoft/durabletask-dotnet/issues/174)
+- Fix handling of concurrent external events with the same name (https://github.com/microsoft/durabletask-dotnet/pull/194)

@@ -91,9 +91,9 @@ sealed partial class TaskOrchestrationContextWrapper
         {
             OperationResult operationResult = await this.CallEntityInternalAsync(id, operationName, input);
 
-            if (operationResult.ErrorMessage != null)
+            if (operationResult.IsError)
             {
-                throw new EntityOperationFailedException(id, operationName, operationResult.ErrorMessage, ConvertFailureDetails(operationResult.FailureDetails!));
+                throw new EntityOperationFailedException(id, operationName, ConvertFailureDetails(operationResult.FailureDetails!));
             }
             else
             {
@@ -106,9 +106,9 @@ sealed partial class TaskOrchestrationContextWrapper
         {
             OperationResult operationResult = await this.CallEntityInternalAsync(id, operationName, input);
 
-            if (operationResult.ErrorMessage != null)
+            if (operationResult.IsError)
             {
-                throw new EntityOperationFailedException(id, operationName, operationResult.ErrorMessage, ConvertFailureDetails(operationResult.FailureDetails!));
+                throw new EntityOperationFailedException(id, operationName, ConvertFailureDetails(operationResult.FailureDetails!));
             }
         }
 

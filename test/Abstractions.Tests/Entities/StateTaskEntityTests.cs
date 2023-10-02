@@ -176,7 +176,7 @@ public class StateTaskEntityTests
 
     class NullStateEntity : TestEntity
     {
-        protected override TestState InitializeState() => null!;
+        protected override TestState InitializeState(TaskEntityOperation entityOperation) => null!;
     }
 
     class TestEntity : TaskEntity<TestState>

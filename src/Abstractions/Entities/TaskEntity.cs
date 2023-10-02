@@ -124,7 +124,7 @@ public abstract class TaskEntity<TState> : ITaskEntity
         Check.NotNull(operation);
         this.Context = operation.Context;
         object? state = operation.State.GetState(typeof(TState));
-        this.State = state is null ? this.InitializeState() : (TState)state;
+        this.State = state is null ? this.InitializeState(operation) : (TState)state;
         if (!operation.TryDispatch(this, out object? result, out Type returnType)
             && !this.TryDispatchState(operation, out result, out returnType))
         {
@@ -143,9 +143,10 @@ public abstract class TaskEntity<TState> : ITaskEntity
     /// <summary>
     /// Initializes the entity state. This is only called when there is no current state for this entity.
     /// </summary>
+    /// <param name="entityOperation">The entity operation to be executed.</param>
     /// <returns>The entity state.</returns>
     /// <remarks>The default implementation uses <see cref="Activator.CreateInstance()"/>.</remarks>
-    protected virtual TState InitializeState()
+    protected virtual TState InitializeState(TaskEntityOperation entityOperation)
     {
         if (Nullable.GetUnderlyingType(typeof(TState)) is Type t)
         {

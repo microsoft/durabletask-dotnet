@@ -195,6 +195,9 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
 
         public override void SignalEntity(EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null)
         {
+            Check.NotNullOrEmpty(id.Name);
+            Check.NotNull(id.Key);
+
             this.operationActions.Add(new SendSignalOperationAction()
             {
                 InstanceId = id.ToString(),

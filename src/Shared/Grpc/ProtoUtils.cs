@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Command;
+using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
 using Google.Protobuf;
@@ -629,6 +630,25 @@ static class ProtoUtils
         }
 
         return batchResult;
+    }
+
+    /// <summary>
+    /// Converts the gRPC representation of orchestrator entity parameters to the DT.Core representation.
+    /// </summary>
+    /// <param name="parameters">The DT.Core representation.</param>
+    /// <returns>The gRPC representation.</returns>
+    [return: NotNullIfNotNull("parameters")]
+    internal static TaskOrchestrationEntityParameters? ToCore(this P.OrchestratorEntityParameters? parameters)
+    {
+        if (parameters == null)
+        {
+            return null;
+        }
+
+        return new TaskOrchestrationEntityParameters()
+        {
+            EntityMessageReorderWindow = parameters.EntityMessageReorderWindow.ToTimeSpan(),
+        };
     }
 
     /// <summary>

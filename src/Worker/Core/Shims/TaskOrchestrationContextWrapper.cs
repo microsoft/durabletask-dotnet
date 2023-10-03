@@ -202,11 +202,6 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override Task<T> WaitForExternalEvent<T>(string eventName, CancellationToken cancellationToken = default)
     {
-        if (typeof(T) == typeof(OperationResult))
-        {
-            throw new ArgumentException($"the type {nameof(OperationResult)} cannot be used for application-defined events", nameof(T));
-        }
-
         // Return immediately if this external event has already arrived.
         if (this.externalEventBuffer.TryTake(eventName, out string? bufferedEventPayload))
         {

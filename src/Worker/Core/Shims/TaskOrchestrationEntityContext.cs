@@ -89,11 +89,14 @@ sealed partial class TaskOrchestrationContextWrapper
         /// <inheritdoc/>
         public override async Task<TResult> CallEntityAsync<TResult>(EntityInstanceId id, string operationName, object? input = null, CallEntityOptions? options = null)
         {
+            Check.NotNullOrEmpty(id.Name);
+            Check.NotNull(id.Key);
+
             OperationResult operationResult = await this.CallEntityInternalAsync(id, operationName, input);
 
-            if (operationResult.ErrorMessage != null)
+            if (operationResult.IsError)
             {
-                throw new EntityOperationFailedException(id, operationName, operationResult.ErrorMessage, ConvertFailureDetails(operationResult.FailureDetails!));
+                throw new EntityOperationFailedException(id, operationName, ConvertFailureDetails(operationResult.FailureDetails!));
             }
             else
             {
@@ -104,17 +107,23 @@ sealed partial class TaskOrchestrationContextWrapper
         /// <inheritdoc/>
         public override async Task CallEntityAsync(EntityInstanceId id, string operationName, object? input = null, CallEntityOptions? options = null)
         {
+            Check.NotNullOrEmpty(id.Name);
+            Check.NotNull(id.Key);
+
             OperationResult operationResult = await this.CallEntityInternalAsync(id, operationName, input);
 
-            if (operationResult.ErrorMessage != null)
+            if (operationResult.IsError)
             {
-                throw new EntityOperationFailedException(id, operationName, operationResult.ErrorMessage, ConvertFailureDetails(operationResult.FailureDetails!));
+                throw new EntityOperationFailedException(id, operationName, ConvertFailureDetails(operationResult.FailureDetails!));
             }
         }
 
         /// <inheritdoc/>
         public override Task SignalEntityAsync(EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null)
         {
+            Check.NotNullOrEmpty(id.Name);
+            Check.NotNull(id.Key);
+
             this.SendOperationMessage(id.ToString(), operationName, input, oneWay: true, scheduledTime: options?.SignalTime);
             return Task.CompletedTask;
         }

@@ -43,6 +43,8 @@ class GrpcDurableEntityClient : DurableEntityClient
         SignalEntityOptions? options = null,
         CancellationToken cancellation = default)
     {
+        Check.NotNullOrEmpty(id.Name);
+        Check.NotNull(id.Key);
         Guid requestId = Guid.NewGuid();
         DateTimeOffset? scheduledTime = options?.SignalTime;
 
@@ -135,6 +137,9 @@ class GrpcDurableEntityClient : DurableEntityClient
         CancellationToken cancellation)
         where TMetadata : class
     {
+        Check.NotNullOrEmpty(id.Name);
+        Check.NotNull(id.Key);
+
         P.GetEntityRequest request = new()
         {
             InstanceId = id.ToString(),

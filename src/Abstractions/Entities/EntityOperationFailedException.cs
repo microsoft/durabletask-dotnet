@@ -17,10 +17,9 @@ public sealed class EntityOperationFailedException : Exception
     /// </summary>
     /// <param name="operationName">The operation name.</param>
     /// <param name="entityId">The entity ID.</param>
-    /// <param name="errorContext">The context in which the error was caught.</param>
     /// <param name="failureDetails">The failure details.</param>
-    public EntityOperationFailedException(EntityInstanceId entityId, string operationName, string errorContext, TaskFailureDetails failureDetails)
-        : base(GetExceptionMessage(operationName, entityId, errorContext, failureDetails))
+    public EntityOperationFailedException(EntityInstanceId entityId, string operationName, TaskFailureDetails failureDetails)
+        : base(GetExceptionMessage(operationName, entityId, failureDetails))
     {
         this.EntityId = entityId;
         this.OperationName = operationName;
@@ -42,8 +41,8 @@ public sealed class EntityOperationFailedException : Exception
     /// </summary>
     public TaskFailureDetails FailureDetails { get; }
 
-    static string GetExceptionMessage(string operationName, EntityInstanceId entityId, string errorContext, TaskFailureDetails failureDetails)
+    static string GetExceptionMessage(string operationName, EntityInstanceId entityId, TaskFailureDetails failureDetails)
     {
-        return $"Operation '{operationName}' of entity '{entityId}' failed: {errorContext}: {failureDetails.ErrorMessage}";
+        return $"Operation '{operationName}' of entity '{entityId}' failed: {failureDetails.ErrorMessage}";
     }
 }

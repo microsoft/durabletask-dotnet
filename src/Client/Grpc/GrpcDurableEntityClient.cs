@@ -166,6 +166,7 @@ class GrpcDurableEntityClient : DurableEntityClient
         where TMetadata : class
     {
         bool includeState = filter?.IncludeState ?? true;
+        bool includeStateless = filter?.IncludeStateless ?? false;
         string startsWith = filter?.InstanceIdStartsWith ?? string.Empty;
         DateTimeOffset? lastModifiedFrom = filter?.LastModifiedFrom;
         DateTimeOffset? lastModifiedTo = filter?.LastModifiedTo;
@@ -185,6 +186,7 @@ class GrpcDurableEntityClient : DurableEntityClient
                             LastModifiedFrom = lastModifiedFrom?.ToTimestamp(),
                             LastModifiedTo = lastModifiedTo?.ToTimestamp(),
                             IncludeState = includeState,
+                            IncludeStateless = includeStateless,
                             PageSize = pageSize,
                             ContinuationToken = continuation ?? filter?.ContinuationToken,
                         },
@@ -209,11 +211,14 @@ class GrpcDurableEntityClient : DurableEntityClient
     {
         var coreEntityId = DTCore.Entities.EntityId.FromString(metadata.InstanceId);
         EntityInstanceId entityId = new(coreEntityId.Name, coreEntityId.Key);
+        bool hasState = metadata.SerializedState != null;
 
-        SerializedData? data = includeState ? new(metadata.SerializedState, this.dataConverter) : null;
+        SerializedData? data = (includeState && hasState) ? new(metadata.SerializedState!, this.dataConverter) : null;
         return new EntityMetadata(entityId, data)
         {
             LastModifiedTime = metadata.LastModifiedTime.ToDateTimeOffset(),
+            BacklogQueueSize = metadata.BacklogQueueSize,
+            LockedBy = metadata.LockedBy,
         };
     }
 
@@ -221,13 +226,27 @@ class GrpcDurableEntityClient : DurableEntityClient
     {
         var coreEntityId = DTCore.Entities.EntityId.FromString(metadata.InstanceId);
         EntityInstanceId entityId = new(coreEntityId.Name, coreEntityId.Key);
-
-        T? data = includeState ? this.dataConverter.Deserialize<T>(metadata.SerializedState) : default;
         DateTimeOffset lastModified = metadata.LastModifiedTime.ToDateTimeOffset();
+        bool hasState = metadata.SerializedState != null;
 
-        // Use separate constructors to ensure default structs get correct state inclusion value.
-        return includeState
-            ? new EntityMetadata<T>(entityId, data) { LastModifiedTime = lastModified }
-            : new EntityMetadata<T>(entityId) { LastModifiedTime = lastModified };
+        if (includeState && hasState)
+        {
+            T? data = includeState ? this.dataConverter.Deserialize<T>(metadata.SerializedState) : default;
+            return new EntityMetadata<T>(entityId, data)
+            {
+                LastModifiedTime = lastModified,
+                BacklogQueueSize = metadata.BacklogQueueSize,
+                LockedBy = metadata.LockedBy,
+            };
+        }
+        else
+        {
+            return new EntityMetadata<T>(entityId)
+            {
+                LastModifiedTime = lastModified,
+                BacklogQueueSize = metadata.BacklogQueueSize,
+                LockedBy = metadata.LockedBy,
+            };
+        }
     }
 }

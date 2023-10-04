@@ -47,6 +47,16 @@ public class EntityMetadata<TState>
     public DateTimeOffset LastModifiedTime { get; init; }
 
     /// <summary>
+    /// Gets the size of the backlog queue, if there is a backlog, and if that metric is supported by the backend.
+    /// </summary>
+    public int BacklogQueueSize { get; init; }
+
+    /// <summary>
+    /// Gets the instance id of the orchestration that has locked this entity, or null if the entity is not locked.
+    /// </summary>
+    public string? LockedBy { get; init; }
+
+    /// <summary>
     /// Gets a value indicating whether this metadata response includes the entity state.
     /// </summary>
     /// <remarks>

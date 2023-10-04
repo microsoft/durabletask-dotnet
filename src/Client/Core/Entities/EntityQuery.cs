@@ -61,15 +61,18 @@ public record EntityQuery
     public bool IncludeState { get; init; } = true;
 
     /// <summary>
-    /// Gets the size of each page to return.
+    /// Gets a value indicating whether to include metadata about entities that have no user-defined state. Defaults to false.
     /// </summary>
-    public int PageSize { get; init; } = DefaultPageSize;
     /// <remarks> Stateless entities occur when the storage provider is tracking metadata about an entity for synchronization purposes
     /// even though the entity does not "logically" exist, in the sense that it has no application-defined state.
     /// Stateless entities are usually transient. For example, they may be in the process of being created or deleted, or they may have been locked by a critical section.
     /// </remarks>
     public bool IncludeStateless { get; init; }
 
+    /// <summary>
+    /// Gets the size of each page to return. If null, the page size is determined by the backend.
+    /// </summary>
+    public int? PageSize { get; init; }
 
     /// <summary>
     /// Gets the continuation token to resume a previous query.

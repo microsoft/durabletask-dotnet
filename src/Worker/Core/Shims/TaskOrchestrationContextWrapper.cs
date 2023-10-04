@@ -233,6 +233,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override void SendEvent(string instanceId, string eventName, object eventData)
     {
+        Check.NotEntity(instanceId);
         this.innerContext.SendEvent(new OrchestrationInstance { InstanceId = instanceId }, eventName, eventData);
     }
 

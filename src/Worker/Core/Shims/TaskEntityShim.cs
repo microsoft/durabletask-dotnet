@@ -195,8 +195,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
 
         public override void SignalEntity(EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null)
         {
-            Check.NotNullOrEmpty(id.Name);
-            Check.NotNull(id.Key);
+            Check.NotDefault(id);
 
             this.operationActions.Add(new SendSignalOperationAction()
             {
@@ -209,6 +208,8 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
 
         public override void StartOrchestration(TaskName name, object? input = null, StartOrchestrationOptions? options = null)
         {
+            Check.NotEntity(options?.InstanceId);
+
             this.operationActions.Add(new StartNewOrchestrationOperationAction()
             {
                 Name = name.Name,

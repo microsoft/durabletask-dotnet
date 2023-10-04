@@ -95,6 +95,21 @@ static class Check
     }
 
     /// <summary>
+    /// Checks if the provided string is an entity instance id, throwing if it is.
+    /// Throws <see cref="ArgumentException" /> if the conditions are not met.
+    /// </summary>
+    /// <param name="argument">The string to check.</param>
+    /// <param name="name">The name of the string for the exception.</param>
+    public static void NotEntity(
+        string? argument, [CallerArgumentExpression("argument")] string? name = default)
+    {
+        if (argument?.Length > 0 && argument[0] == '@')
+        {
+            throw new ArgumentException("Parameter cannot be an entity instance id", name);
+        }
+    }
+
+    /// <summary>
     /// Checks if the supplied type is a concrete non-abstract type and implements the provided generic type.
     /// Throws <see cref="ArgumentException" /> if the conditions are not met.
     /// </summary>

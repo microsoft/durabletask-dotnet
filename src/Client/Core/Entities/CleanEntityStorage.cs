@@ -6,18 +6,18 @@ namespace Microsoft.DurableTask.Client.Entities;
 /// <summary>
 /// Request struct for <see cref="DurableEntityClient.CleanEntityStorageAsync"/>.
 /// </summary>
-public readonly record struct CleanEntityStorageRequest
+public record CleanEntityStorageRequest
 {
     /// <summary>
-    /// Gets a value indicating whether to remove empty entities.
+    /// Gets a value indicating whether to remove empty entities. Defaults to true.
     /// </summary>
     /// <remarks>
     /// An entity is considered empty, and is removed, if it has no state, is not locked.
     /// </remarks>
-    public bool RemoveEmptyEntities { get; init; }
+    public bool RemoveEmptyEntities { get; init; } = true;
 
     /// <summary>
-    /// Gets a value indicating whether to release orphaned locks or not.
+    /// Gets a value indicating whether to release orphaned locks or not. Defaults to true.
     /// </summary>
     /// <remarks>
     /// Locks are considered orphaned, and are released, and if the orchestration that holds them is not in state
@@ -25,10 +25,10 @@ public readonly record struct CleanEntityStorageRequest
     /// occur if the orchestration instance holding the lock exhibits replay nondeterminism failures, or if it is
     /// explicitly purged.
     /// </remarks>
-    public bool ReleaseOrphanedLocks { get; init; }
+    public bool ReleaseOrphanedLocks { get; init; } = true;
 
     /// <summary>
-    /// Gets the continuation token to resume a previous <see cref="CleanEntityStorageRequest"/>.
+    /// Gets the continuation token to resume a previous <see cref="CleanEntityStorageRequest"/>. Defaults to null.
     /// </summary>
     public string? ContinuationToken { get; init; }
 }

@@ -89,12 +89,12 @@ class GrpcDurableEntityClient : DurableEntityClient
 
     /// <inheritdoc/>
     public override async Task<CleanEntityStorageResult> CleanEntityStorageAsync(
-        CleanEntityStorageRequest request,
+        CleanEntityStorageRequest? request = null,
         bool continueUntilComplete = true,
         CancellationToken cancellation = default)
     {
-        request ??= new CleanEntityStorageRequest(); // establishes default values to use
-        string? continuationToken = request.ContinuationToken;
+        CleanEntityStorageRequest req = request ?? CleanEntityStorageRequest.Default;
+        string? continuationToken = req.ContinuationToken;
         int emptyEntitiesRemoved = 0;
         int orphanedLocksReleased = 0;
 
@@ -105,8 +105,8 @@ class GrpcDurableEntityClient : DurableEntityClient
                 P.CleanEntityStorageResponse response = await this.sidecarClient.CleanEntityStorageAsync(
                     new P.CleanEntityStorageRequest
                     {
-                        RemoveEmptyEntities = request.RemoveEmptyEntities,
-                        ReleaseOrphanedLocks = request.ReleaseOrphanedLocks,
+                        RemoveEmptyEntities = req.RemoveEmptyEntities,
+                        ReleaseOrphanedLocks = req.ReleaseOrphanedLocks,
                         ContinuationToken = continuationToken,
                     },
                     cancellationToken: cancellation);

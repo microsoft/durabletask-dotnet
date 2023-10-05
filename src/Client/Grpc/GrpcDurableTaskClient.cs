@@ -20,7 +20,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     readonly ILogger logger;
     readonly TaskHubSidecarServiceClient sidecarClient;
     readonly GrpcDurableTaskClientOptions options;
-    readonly DurableEntityClient entityClient;
+    readonly DurableEntityClient? entityClient;
     AsyncDisposable asyncDisposable;
 
     /// <summary>
@@ -49,11 +49,16 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         this.options = Check.NotNull(options);
         this.asyncDisposable = GetCallInvoker(options, out CallInvoker callInvoker);
         this.sidecarClient = new TaskHubSidecarServiceClient(callInvoker);
-        this.entityClient = new GrpcDurableEntityClient(this.Name, this.DataConverter, this.sidecarClient, logger);
+
+        if (this.options.SupportEntities)
+        {
+            this.entityClient = new GrpcDurableEntityClient(this.Name, this.DataConverter, this.sidecarClient, logger);
+        }
     }
 
     /// <inheritdoc/>
-    public override DurableEntityClient Entities => this.entityClient;
+    public override DurableEntityClient Entities => this.entityClient
+        ?? throw new NotSupportedException($"Durable entities are disabled because DurableTaskClientOptions.SupportEntities=false");
 
     DataConverter DataConverter => this.options.DataConverter;
 
@@ -70,7 +75,10 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         StartOrchestrationOptions? options = null,
         CancellationToken cancellation = default)
     {
-        Check.NotEntity(options?.InstanceId);
+        if (this.options.SupportEntities)
+        {
+            Check.NotEntity(options?.InstanceId);
+        }
 
         var request = new P.CreateInstanceRequest
         {
@@ -104,7 +112,11 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     {
         Check.NotNullOrEmpty(instanceId);
         Check.NotNullOrEmpty(eventName);
-        Check.NotEntity(instanceId);
+
+        if (this.options.SupportEntities)
+        {
+            Check.NotEntity(instanceId);
+        }
 
         P.RaiseEventRequest request = new()
         {
@@ -121,7 +133,11 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         string instanceId, object? output = null, CancellationToken cancellation = default)
     {
         Check.NotNullOrEmpty(instanceId);
-        Check.NotEntity(instanceId);
+        if (this.options.SupportEntities)
+        {
+            Check.NotEntity(instanceId);
+        }
+
         this.logger.TerminatingInstance(instanceId);
 
         string? serializedOutput = this.DataConverter.Serialize(output);
@@ -138,7 +154,10 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override async Task SuspendInstanceAsync(
         string instanceId, string? reason = null, CancellationToken cancellation = default)
     {
-        Check.NotEntity(instanceId);
+        if (this.options.SupportEntities)
+        {
+            Check.NotEntity(instanceId);
+        }
 
         P.SuspendRequest request = new()
         {
@@ -161,7 +180,10 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override async Task ResumeInstanceAsync(
         string instanceId, string? reason = null, CancellationToken cancellation = default)
     {
-        Check.NotEntity(instanceId);
+        if (this.options.SupportEntities)
+        {
+            Check.NotEntity(instanceId);
+        }
 
         P.ResumeRequest request = new()
         {
@@ -184,7 +206,10 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override async Task<OrchestrationMetadata?> GetInstancesAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {
-        Check.NotEntity(instanceId);
+        if (this.options.SupportEntities)
+        {
+            Check.NotEntity(instanceId);
+        }
 
         if (string.IsNullOrEmpty(instanceId))
         {
@@ -211,7 +236,10 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     /// <inheritdoc/>
     public override AsyncPageable<OrchestrationMetadata> GetAllInstancesAsync(OrchestrationQuery? filter = null)
     {
-        Check.NotEntity(filter?.InstanceIdPrefix);
+        if (this.options.SupportEntities)
+        {
+            Check.NotEntity(filter?.InstanceIdPrefix);
+        }
 
         return Pageable.Create(async (continuation, pageSize, cancellation) =>
         {
@@ -262,7 +290,11 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override async Task<OrchestrationMetadata> WaitForInstanceStartAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {
-        Check.NotEntity(instanceId);
+        if (this.options.SupportEntities)
+        {
+            Check.NotEntity(instanceId);
+        }
+
         this.logger.WaitingForInstanceStart(instanceId, getInputsAndOutputs);
 
         P.GetInstanceRequest request = new()
@@ -288,7 +320,11 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override async Task<OrchestrationMetadata> WaitForInstanceCompletionAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {
-        Check.NotEntity(instanceId);
+        if (this.options.SupportEntities)
+        {
+            Check.NotEntity(instanceId);
+        }
+
         this.logger.WaitingForInstanceCompletion(instanceId, getInputsAndOutputs);
 
         P.GetInstanceRequest request = new()

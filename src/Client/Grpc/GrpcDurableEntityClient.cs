@@ -166,7 +166,7 @@ class GrpcDurableEntityClient : DurableEntityClient
         where TMetadata : class
     {
         bool includeState = filter?.IncludeState ?? true;
-        bool includeStateless = filter?.IncludeStateless ?? false;
+        bool includeTransient = filter?.IncludeTransient ?? false;
         string startsWith = filter?.InstanceIdStartsWith ?? string.Empty;
         DateTimeOffset? lastModifiedFrom = filter?.LastModifiedFrom;
         DateTimeOffset? lastModifiedTo = filter?.LastModifiedTo;
@@ -186,7 +186,7 @@ class GrpcDurableEntityClient : DurableEntityClient
                             LastModifiedFrom = lastModifiedFrom?.ToTimestamp(),
                             LastModifiedTo = lastModifiedTo?.ToTimestamp(),
                             IncludeState = includeState,
-                            IncludeStateless = includeStateless,
+                            IncludeTransient = includeTransient,
                             PageSize = pageSize,
                             ContinuationToken = continuation ?? filter?.ContinuationToken,
                         },

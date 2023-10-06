@@ -8,7 +8,7 @@ using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
-namespace AzureFunctionsApp.State;
+namespace AzureFunctionsApp.Entities.State;
 
 /// <summary>
 /// Example on how to dispatch to a POCO as the entity implementation.

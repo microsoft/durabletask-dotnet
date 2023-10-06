@@ -8,7 +8,7 @@ using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
-namespace AzureFunctionsApp.Entity;
+namespace AzureFunctionsApp.Entities.Entity;
 
 /// <summary>
 /// Example on how to dispatch to an entity which directly implements TaskEntity<TState>. Using TaskEntity<TState> gives
@@ -76,6 +76,12 @@ public class Counter : TaskEntity<int>
 
         logger.LogInformation("Counter value: {Value}", result);
         return result;
+    }
+
+    protected override int InitializeState()
+    {
+        // Optional method to override to customize initialization of state for a new instance.
+        return base.InitializeState();
     }
 
     public record Payload(string Key, int Add);

@@ -76,7 +76,7 @@ sealed partial class TaskOrchestrationContextWrapper
                 //    entityMessageEvent.ToString());
             }
 
-            this.wrapper.innerContext.SendEvent(entityMessageEvent.TargetInstance, entityMessageEvent.EventName, entityMessageEvent);
+            this.wrapper.innerContext.SendEvent(entityMessageEvent.TargetInstance, entityMessageEvent.EventName, entityMessageEvent.AsRawInput());
 
             OperationResult result = await this.wrapper.WaitForExternalEvent<OperationResult>(criticalSectionId.ToString());
 
@@ -164,7 +164,7 @@ sealed partial class TaskOrchestrationContextWrapper
                         //    releaseMessage.EventContent);
                     }
 
-                    this.wrapper.innerContext.SendEvent(releaseMessage.TargetInstance, releaseMessage.EventName, releaseMessage);
+                    this.wrapper.innerContext.SendEvent(releaseMessage.TargetInstance, releaseMessage.EventName, releaseMessage.AsRawInput());
                 }
             }
         }
@@ -221,7 +221,7 @@ sealed partial class TaskOrchestrationContextWrapper
                 //    entityMessageEvent.ToString());
             }
 
-            this.wrapper.innerContext.SendEvent(entityMessageEvent.TargetInstance, entityMessageEvent.EventName, entityMessageEvent);
+            this.wrapper.innerContext.SendEvent(entityMessageEvent.TargetInstance, entityMessageEvent.EventName, entityMessageEvent.AsRawInput());
 
             return guid;
         }

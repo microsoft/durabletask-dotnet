@@ -20,6 +20,11 @@ public readonly record struct EntityInstanceId
     public EntityInstanceId(string name, string key)
     {
         Check.NotNullOrEmpty(name);
+        if (name.Contains('@'))
+        {
+            throw new ArgumentException("entity names may not contain `@` characters.", nameof(name));
+        }
+
         Check.NotNull(key);
         this.Name = name.ToLowerInvariant();
         this.Key = key;

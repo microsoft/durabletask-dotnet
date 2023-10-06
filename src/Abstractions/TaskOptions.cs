@@ -66,7 +66,6 @@ public record SubOrchestrationOptions : TaskOptions
     public SubOrchestrationOptions(TaskRetryOptions? retry = null, string? instanceId = null)
         : base(retry)
     {
-        Check.NotEntity(instanceId);
         this.InstanceId = instanceId;
     }
 
@@ -78,7 +77,6 @@ public record SubOrchestrationOptions : TaskOptions
     public SubOrchestrationOptions(TaskOptions options, string? instanceId = null)
         : base(options)
     {
-        Check.NotEntity(instanceId);
         this.InstanceId = instanceId;
         if (instanceId is null && options is SubOrchestrationOptions derived)
         {

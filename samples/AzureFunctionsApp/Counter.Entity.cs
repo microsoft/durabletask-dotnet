@@ -11,18 +11,49 @@ using Microsoft.Extensions.Logging;
 namespace AzureFunctionsApp.Entity;
 
 /// <summary>
-/// Example on how to dispatch to an entity which directly implements TaskEntity<TState>.
+/// Example on how to dispatch to an entity which directly implements TaskEntity<TState>. Using TaskEntity<TState> gives
+/// the added benefit of being able to use DI.
 /// </summary>
 public class Counter : TaskEntity<int>
 {
-    public int Add(int input) => this.State += input;
+    readonly ILogger logger;
+
+    public Counter(ILogger<Counter> logger)
+    {
+        this.logger = logger;
+    }
+
+    public int Add(int input)
+    {
+        this.logger.LogInformation("Adding {Input} to {State}", input, this.State);
+        return this.State += input;
+    }
+
+    public int OperationWithContext(int input, TaskEntityContext context)
+    {
+        // Get access to TaskEntityContext by adding it as a parameter. Can be with or without an input parameter.
+        // Order does not matter.
+        context.StartOrchestration("SomeOrchestration", "SomeInput");
+
+        // When using TaskEntity<TState>, the TaskEntityContext can also be accessed via this.Context.
+        this.Context.StartOrchestration("SomeOrchestration", "SomeInput");
+        return this.Add(input);
+    }
 
     public int Get() => this.State;
 
     [Function("Counter2")]
     public Task RunEntityAsync([EntityTrigger] TaskEntityDispatcher dispatcher)
     {
+        // Can dispatch to a TaskEntity<TState> by passing a instance.
         return dispatcher.DispatchAsync(this);
+    }
+
+    [Function("Counter3")]
+    public static Task RunEntityStaticAsync([EntityTrigger] TaskEntityDispatcher dispatcher)
+    {
+        // Can also dispatch to a TaskEntity<TState> by using a static method.
+        return dispatcher.DispatchAsync<Counter>();
     }
 
     [Function("StartCounter2")]

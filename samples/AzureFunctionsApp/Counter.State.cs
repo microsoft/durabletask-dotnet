@@ -19,11 +19,22 @@ public class Counter
 
     public int Add(int input) => this.Value += input;
 
+    public int OperationWithContext(int input, TaskEntityContext context)
+    {
+        // Get access to TaskEntityContext by adding it as a parameter. Can be with or without an input parameter.
+        // Order does not matter.
+        context.StartOrchestration("SomeOrchestration", "SomeInput");
+        return this.Add(input);
+    }
+
     public int Get() => this.Value;
 
     [Function("Counter1")]
     public static Task RunEntityAsync([EntityTrigger] TaskEntityDispatcher dispatcher)
     {
+        // Using the dispatch to a state object will deserialize the state directly to that instance and dispatch to an
+        // appropriate method.
+        // Can only dispatch to a state object via generic argument.
         return dispatcher.DispatchAsync<Counter>();
     }
 

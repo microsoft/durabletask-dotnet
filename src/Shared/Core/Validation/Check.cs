@@ -95,17 +95,16 @@ static class Check
     }
 
     /// <summary>
-    /// Checks if the provided string is an entity instance id, throwing if it is.
-    /// Throws <see cref="ArgumentException" /> if the conditions are not met.
+    /// Checks that, if entity support is enabled, the given string is not an entity instance id, and throws an <see cref="ArgumentException"/> otherwise.
     /// </summary>
-    /// <param name="argument">The string to check.</param>
-    /// <param name="name">The name of the string for the exception.</param>
-    public static void NotEntity(
-        string? argument, [CallerArgumentExpression("argument")] string? name = default)
+    /// <param name="entitySupportEnabled">Whether entity support is enabled.</param>
+    /// <param name="instanceId">The instance id.</param>
+    /// <param name="argument">The name of the argument.</param>
+    public static void NotEntity(bool entitySupportEnabled, string? instanceId, [CallerArgumentExpression("instanceId")] string? argument = default)
     {
-        if (argument?.Length > 0 && argument[0] == '@')
+        if (entitySupportEnabled && instanceId?.Length > 0 && instanceId[0] == '@')
         {
-            throw new ArgumentException("Parameter cannot be an entity instance id", name);
+            throw new ArgumentException("Instance IDs starting with '@' are reserved for entities, and must not be used for orchestrations, when entity support is enabled.", argument);
         }
     }
 

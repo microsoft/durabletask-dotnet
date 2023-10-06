@@ -40,9 +40,6 @@ public readonly record struct EntityInstanceId
     /// </summary>
     public string Key { get; }
 
-    /// <inheritdoc/>
-    public override string ToString() => $"@{this.Name}@{this.Key}";
-
     /// <summary>
     /// Constructs a <see cref="EntityInstanceId"/> from a string containing the instance ID.
     /// </summary>
@@ -61,6 +58,9 @@ public readonly record struct EntityInstanceId
         var entityKey = instanceId.Substring(pos + 1);
         return new EntityInstanceId(entityName, entityKey);
     }
+
+    /// <inheritdoc/>
+    public override string ToString() => $"@{this.Name}@{this.Key}";
 
     /// <summary>
     /// We override the default json conversion so we can use a more compact string representation for entity instance ids.

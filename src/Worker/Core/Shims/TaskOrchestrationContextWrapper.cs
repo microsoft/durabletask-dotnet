@@ -66,13 +66,13 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         {
             if (this.entityFeature == null)
             {
-                if (this.invocationContext.Options.SupportEntities)
+                if (this.invocationContext.Options.EnableEntitySupport)
                 {
                     this.entityFeature = new TaskOrchestrationEntityContext(this);
                 }
                 else
                 {
-                    throw new NotSupportedException($"Durable entities are disabled because DurableTaskWorkerOptions.SupportEntities=false");
+                    throw new NotSupportedException($"Durable entities are disabled because {nameof(DurableTaskWorkerOptions)}.{nameof(DurableTaskWorkerOptions.EnableEntitySupport)}=false");
                 }
             }
 
@@ -151,10 +151,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             => options is SubOrchestrationOptions derived ? derived.InstanceId : null;
         string instanceId = GetInstanceId(options) ?? this.NewGuid().ToString("N");
 
-        if (this.invocationContext.Options.SupportEntities)
-        {
-            Check.NotEntity(instanceId);
-        }
+        Check.NotEntity(this.invocationContext.Options.EnableEntitySupport, instanceId);
 
         // if this orchestration uses entities, first validate that the suborchsestration call is allowed in the current context
         if (this.entityFeature != null && !this.entityFeature.EntityContext.ValidateSuborchestrationTransition(out string? errorMsg))
@@ -255,10 +252,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override void SendEvent(string instanceId, string eventName, object eventData)
     {
-        if (this.invocationContext.Options.SupportEntities)
-        {
-            Check.NotEntity(instanceId);
-        }
+        Check.NotEntity(this.invocationContext.Options.EnableEntitySupport, instanceId);
 
         this.innerContext.SendEvent(new OrchestrationInstance { InstanceId = instanceId }, eventName, eventData);
     }

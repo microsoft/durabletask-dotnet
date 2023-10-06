@@ -45,10 +45,10 @@ public class DurableTaskWorkerOptions
     }
 
     /// <summary>
-    /// Gets or sets a value indicating whether this client supports entities. If true, all instance ids starting with '@' are reserved for entities,
+    /// Gets or sets a value indicating whether this client should support entities. If true, all instance ids starting with '@' are reserved for entities,
     /// and validation checks are performed where appropriate.
     /// </summary>
-    public bool SupportEntities { get; set; }
+    public bool EnableEntitySupport { get; set; }
 
     /// <summary>
     /// Gets or sets the maximum timer interval for the
@@ -105,7 +105,7 @@ public class DurableTaskWorkerOptions
             // Make sure to keep this up to date as values are added.
             other.DataConverter = this.DataConverter;
             other.MaximumTimerInterval = this.MaximumTimerInterval;
-            other.SupportEntities = this.SupportEntities;
+            other.EnableEntitySupport = this.EnableEntitySupport;
         }
     }
 }

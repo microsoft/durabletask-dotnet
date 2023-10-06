@@ -208,7 +208,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
 
         public override void StartOrchestration(TaskName name, object? input = null, StartOrchestrationOptions? options = null)
         {
-            Check.NotEntity(options?.InstanceId);
+            Check.NotEntity(true, options?.InstanceId);
 
             this.operationActions.Add(new StartNewOrchestrationOperationAction()
             {

@@ -12,7 +12,8 @@ namespace AzureFunctionsApp.Entities.Entity;
 
 /// <summary>
 /// Example on how to dispatch to an entity which directly implements TaskEntity<TState>. Using TaskEntity<TState> gives
-/// the added benefit of being able to use DI.
+/// the added benefit of being able to use DI. When using TaskEntity<TState>, state is deserialized to the "State"
+/// property. No other properties on this type will be serialized/deserialized.
 /// </summary>
 public class Counter : TaskEntity<int>
 {

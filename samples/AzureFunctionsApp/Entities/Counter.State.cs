@@ -11,7 +11,8 @@ using Microsoft.Extensions.Logging;
 namespace AzureFunctionsApp.Entities.State;
 
 /// <summary>
-/// Example on how to dispatch to a POCO as the entity implementation.
+/// Example on how to dispatch to a POCO as the entity implementation. When using POCO, the entire object is serialized
+/// and deserialized.
 /// </summary>
 public class Counter
 {

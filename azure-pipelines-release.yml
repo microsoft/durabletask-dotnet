@@ -134,5 +134,6 @@ steps:
   artifact: pkg
 
 - publish: $(log_dir)
+  condition: eq('${{ parameters.binlog }}', true)
   displayName: 'Publish logs to Artifacts'
   artifact: log

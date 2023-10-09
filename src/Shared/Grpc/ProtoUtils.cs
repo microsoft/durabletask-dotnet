@@ -529,6 +529,7 @@ static class ProtoUtils
                     Input = operationAction.StartNewOrchestration.Input,
                     InstanceId = operationAction.StartNewOrchestration.InstanceId,
                     Version = operationAction.StartNewOrchestration.Version,
+                    ScheduledStartTime = operationAction.StartNewOrchestration.ScheduledTime?.ToDateTime(),
                 };
             default:
                 throw new NotSupportedException($"Deserialization of {operationAction.OperationActionTypeCase} is not supported.");
@@ -571,6 +572,7 @@ static class ProtoUtils
                     Input = startNewOrchestrationAction.Input,
                     Version = startNewOrchestrationAction.Version,
                     InstanceId = startNewOrchestrationAction.InstanceId,
+                    ScheduledTime = startNewOrchestrationAction.ScheduledStartTime?.ToTimestamp(),
                 };
                 break;
         }

@@ -9,7 +9,18 @@ namespace Microsoft.DurableTask.Client.Entities;
 public readonly record struct CleanEntityStorageRequest
 {
     /// <summary>
-    /// Gets a value indicating whether to remove empty entities.
+    /// Gets the default request parameters. The default is meant to represent
+    /// "maximal" cleaning that is safe to call at all times.
+    /// </summary>
+    public static CleanEntityStorageRequest Default => new()
+    {
+        RemoveEmptyEntities = true,
+        ReleaseOrphanedLocks = true,
+        ContinuationToken = null,
+    };
+
+    /// <summary>
+    /// Gets a value indicating whether to remove empty entities. Defaults to true.
     /// </summary>
     /// <remarks>
     /// An entity is considered empty, and is removed, if it has no state, is not locked.
@@ -17,7 +28,7 @@ public readonly record struct CleanEntityStorageRequest
     public bool RemoveEmptyEntities { get; init; }
 
     /// <summary>
-    /// Gets a value indicating whether to release orphaned locks or not.
+    /// Gets a value indicating whether to release orphaned locks or not. Defaults to true.
     /// </summary>
     /// <remarks>
     /// Locks are considered orphaned, and are released, and if the orchestration that holds them is not in state
@@ -28,7 +39,7 @@ public readonly record struct CleanEntityStorageRequest
     public bool ReleaseOrphanedLocks { get; init; }
 
     /// <summary>
-    /// Gets the continuation token to resume a previous <see cref="CleanEntityStorageRequest"/>.
+    /// Gets the continuation token to resume a previous <see cref="CleanEntityStorageRequest"/>. Defaults to null.
     /// </summary>
     public string? ContinuationToken { get; init; }
 }

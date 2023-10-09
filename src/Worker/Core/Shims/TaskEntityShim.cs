@@ -206,17 +206,20 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             });
         }
 
-        public override void StartOrchestration(TaskName name, object? input = null, StartOrchestrationOptions? options = null)
+        public override string ScheduleNewOrchestration(TaskName name, object? input = null, StartOrchestrationOptions? options = null)
         {
             Check.NotEntity(true, options?.InstanceId);
 
+            string instanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N");
             this.operationActions.Add(new StartNewOrchestrationOperationAction()
             {
                 Name = name.Name,
                 Version = name.Version,
-                InstanceId = Guid.NewGuid().ToString("N"),
+                InstanceId = instanceId,
                 Input = this.dataConverter.Serialize(input),
+                ScheduledStartTime = options?.StartAt?.UtcDateTime,
             });
+            return instanceId;
         }
     }
 

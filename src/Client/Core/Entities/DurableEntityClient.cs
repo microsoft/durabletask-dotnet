@@ -138,7 +138,7 @@ public abstract class DurableEntityClient
     /// <param name="cancellation">The cancellation token to cancel the operation.</param>
     /// <returns>A task that completes when the operation is finished.</returns>
     public abstract Task<CleanEntityStorageResult> CleanEntityStorageAsync(
-        CleanEntityStorageRequest request = default,
+        CleanEntityStorageRequest? request = null,
         bool continueUntilComplete = true,
         CancellationToken cancellation = default);
 }

@@ -40,8 +40,9 @@ public abstract class TaskEntityContext
     /// </summary>
     /// <param name="name">The name of the orchestration to start.</param>
     /// <param name="options">The options for starting the orchestration.</param>
-    public virtual void StartOrchestration(TaskName name, StartOrchestrationOptions options)
-        => this.StartOrchestration(name, null, options);
+    /// <returns>The instance id for the new orchestration.</returns>
+    public virtual string ScheduleNewOrchestration(TaskName name, StartOrchestrationOptions options)
+        => this.ScheduleNewOrchestration(name, null, options);
 
     /// <summary>
     /// Starts an orchestration.
@@ -49,6 +50,7 @@ public abstract class TaskEntityContext
     /// <param name="name">The name of the orchestration to start.</param>
     /// <param name="input">The input for the orchestration.</param>
     /// <param name="options">The options for starting the orchestration.</param>
-    public abstract void StartOrchestration(
+    /// <returns>The instance id for the new orchestration.</returns>
+    public abstract string ScheduleNewOrchestration(
         TaskName name, object? input = null, StartOrchestrationOptions? options = null);
 }

@@ -33,7 +33,6 @@ sealed partial class TaskOrchestrationContextWrapper
         /// <inheritdoc/>
         public Type EventType => typeof(T);
 
-
         /// <inheritdoc/>
         void IEventSource.TrySetResult(object result) => this.TrySetResult((T)result);
     }

@@ -9,8 +9,16 @@ namespace Microsoft.DurableTask.Entities;
 public abstract class TaskEntityState
 {
     /// <summary>
-    /// Gets the current state for the entity this context is for. This will return <c>null</c> if no state is present,
-    /// regardless if <paramref name="type"/> is a value-type or not.
+    /// Gets the current state of the entity. This will return <c>null</c> if no state is present, regardless if
+    /// <typeparamref name="T"/> is a value-type or not.
+    /// </summary>
+    /// <typeparam name="T">The type to retrieve.</typeparam>
+    /// <returns>The entity state.</returns>
+    public virtual T? GetState<T>() => (T?)this.GetState(typeof(T));
+
+    /// <summary>
+    /// Gets the current state of the entity. This will return <c>null</c> if no state is present, regardless if
+    /// <paramref name="type"/> is a value-type or not.
     /// </summary>
     /// <param name="type">The type to retrieve the state as.</param>
     /// <returns>The entity state.</returns>

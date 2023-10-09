@@ -76,7 +76,7 @@ sealed partial class TaskOrchestrationContextWrapper
                 //    entityMessageEvent.ToString());
             }
 
-            this.wrapper.innerContext.SendEvent(entityMessageEvent.TargetInstance, entityMessageEvent.EventName, entityMessageEvent);
+            this.wrapper.innerContext.SendEvent(entityMessageEvent.TargetInstance, entityMessageEvent.EventName, entityMessageEvent.AsRawInput());
 
             OperationResult result = await this.wrapper.WaitForExternalEvent<OperationResult>(criticalSectionId.ToString());
 
@@ -89,9 +89,7 @@ sealed partial class TaskOrchestrationContextWrapper
         /// <inheritdoc/>
         public override async Task<TResult> CallEntityAsync<TResult>(EntityInstanceId id, string operationName, object? input = null, CallEntityOptions? options = null)
         {
-            Check.NotNullOrEmpty(id.Name);
-            Check.NotNull(id.Key);
-
+            Check.NotDefault(id);
             OperationResult operationResult = await this.CallEntityInternalAsync(id, operationName, input);
 
             if (operationResult.IsError)
@@ -107,9 +105,7 @@ sealed partial class TaskOrchestrationContextWrapper
         /// <inheritdoc/>
         public override async Task CallEntityAsync(EntityInstanceId id, string operationName, object? input = null, CallEntityOptions? options = null)
         {
-            Check.NotNullOrEmpty(id.Name);
-            Check.NotNull(id.Key);
-
+            Check.NotDefault(id);
             OperationResult operationResult = await this.CallEntityInternalAsync(id, operationName, input);
 
             if (operationResult.IsError)
@@ -121,9 +117,7 @@ sealed partial class TaskOrchestrationContextWrapper
         /// <inheritdoc/>
         public override Task SignalEntityAsync(EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null)
         {
-            Check.NotNullOrEmpty(id.Name);
-            Check.NotNull(id.Key);
-
+            Check.NotDefault(id);
             this.SendOperationMessage(id.ToString(), operationName, input, oneWay: true, scheduledTime: options?.SignalTime);
             return Task.CompletedTask;
         }
@@ -164,7 +158,7 @@ sealed partial class TaskOrchestrationContextWrapper
                         //    releaseMessage.EventContent);
                     }
 
-                    this.wrapper.innerContext.SendEvent(releaseMessage.TargetInstance, releaseMessage.EventName, releaseMessage);
+                    this.wrapper.innerContext.SendEvent(releaseMessage.TargetInstance, releaseMessage.EventName, releaseMessage.AsRawInput());
                 }
             }
         }
@@ -221,7 +215,7 @@ sealed partial class TaskOrchestrationContextWrapper
                 //    entityMessageEvent.ToString());
             }
 
-            this.wrapper.innerContext.SendEvent(entityMessageEvent.TargetInstance, entityMessageEvent.EventName, entityMessageEvent);
+            this.wrapper.innerContext.SendEvent(entityMessageEvent.TargetInstance, entityMessageEvent.EventName, entityMessageEvent.AsRawInput());
 
             return guid;
         }

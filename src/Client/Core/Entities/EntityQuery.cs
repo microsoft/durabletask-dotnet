@@ -39,9 +39,24 @@ public record EntityQuery
         get => this.instanceIdStartsWith;
         init
         {
-            // prefix '@' if filter value provided and not already prefixed with '@'.
-            this.instanceIdStartsWith = value?.Length > 0 && value[0] != '@'
-                ? $"@{value}" : value;
+            if (value != null)
+            {
+                // prefix '@' if filter value provided and not already prefixed with '@'.
+                string prefix = value.Length == 0 || value[0] != '@' ? $"@{value}" : value;
+
+                // check if there is a name-key separator in the string
+                int pos = prefix.IndexOf('@', 1);
+                if (pos != -1)
+                {
+                    // selectively normalize only the part up until that separator
+                    this.instanceIdStartsWith = prefix.Substring(0, pos).ToLowerInvariant() + prefix.Substring(pos);
+                }
+                else
+                {
+                    // normalize the entire prefix
+                    this.instanceIdStartsWith = prefix.ToLowerInvariant();
+                }
+            }
         }
     }
 

@@ -95,6 +95,20 @@ static class Check
     }
 
     /// <summary>
+    /// Checks that, if entity support is enabled, the given string is not an entity instance id, and throws an <see cref="ArgumentException"/> otherwise.
+    /// </summary>
+    /// <param name="entitySupportEnabled">Whether entity support is enabled.</param>
+    /// <param name="instanceId">The instance id.</param>
+    /// <param name="argument">The name of the argument.</param>
+    public static void NotEntity(bool entitySupportEnabled, string? instanceId, [CallerArgumentExpression("instanceId")] string? argument = default)
+    {
+        if (entitySupportEnabled && instanceId?.Length > 0 && instanceId[0] == '@')
+        {
+            throw new ArgumentException("Instance IDs starting with '@' are reserved for entities, and must not be used for orchestrations, when entity support is enabled.", argument);
+        }
+    }
+
+    /// <summary>
     /// Checks if the supplied type is a concrete non-abstract type and implements the provided generic type.
     /// Throws <see cref="ArgumentException" /> if the conditions are not met.
     /// </summary>

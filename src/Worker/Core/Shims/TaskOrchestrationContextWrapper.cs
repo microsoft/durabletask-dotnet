@@ -61,7 +61,24 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
     /// <inheritdoc/>
     public override TaskOrchestrationEntityFeature Entities
-        => this.entityFeature ??= new TaskOrchestrationEntityContext(this);
+    {
+        get
+        {
+            if (this.entityFeature == null)
+            {
+                if (this.invocationContext.Options.EnableEntitySupport)
+                {
+                    this.entityFeature = new TaskOrchestrationEntityContext(this);
+                }
+                else
+                {
+                    throw new NotSupportedException($"Durable entities are disabled because {nameof(DurableTaskWorkerOptions)}.{nameof(DurableTaskWorkerOptions.EnableEntitySupport)}=false");
+                }
+            }
+
+            return this.entityFeature;
+        }
+    }
 
     /// <summary>
     /// Gets the DataConverter to use for inputs, outputs, and entity states.
@@ -133,6 +150,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         static string? GetInstanceId(TaskOptions? options)
             => options is SubOrchestrationOptions derived ? derived.InstanceId : null;
         string instanceId = GetInstanceId(options) ?? this.NewGuid().ToString("N");
+
+        Check.NotEntity(this.invocationContext.Options.EnableEntitySupport, instanceId);
 
         // if this orchestration uses entities, first validate that the suborchsestration call is allowed in the current context
         if (this.entityFeature != null && !this.entityFeature.EntityContext.ValidateSuborchestrationTransition(out string? errorMsg))
@@ -233,6 +252,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override void SendEvent(string instanceId, string eventName, object eventData)
     {
+        Check.NotEntity(this.invocationContext.Options.EnableEntitySupport, instanceId);
+
         this.innerContext.SendEvent(new OrchestrationInstance { InstanceId = instanceId }, eventName, eventData);
     }
 

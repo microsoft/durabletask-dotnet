@@ -4,7 +4,7 @@
 
 ### Microsoft.DurableTask.Worker
 
-- Fix re-encoding of events when using `TaskOrchestrationContext.ContinueAsNew(preserveUnprocessedEvents: true)`
+- Fix re-encoding of events when using `TaskOrchestrationContext.ContinueAsNew(preserveUnprocessedEvents: true)` (https://github.com/microsoft/durabletask-dotnet/pull/212)
 
 ## v1.0.4
 

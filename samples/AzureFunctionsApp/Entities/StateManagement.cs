@@ -43,7 +43,7 @@ public class StateManagement : TaskEntity<MyState>
         this.State = null!;
     }
 
-    protected override MyState InitializeState()
+    protected override MyState InitializeState(TaskEntityOperation operation)
     {
         // This method allows for customizing the default state value for a new entity.
         return new("Default", 10);

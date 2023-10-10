@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.0.5
+
+### Microsoft.DurableTask.Worker
+
+- Fix re-encoding of events when using `TaskOrchestrationContext.ContinueAsNew(preserveUnprocessedEvents: true)`
+
 ## v1.0.4
 
 ### Microsoft.DurableTask.Worker

@@ -45,8 +45,8 @@ public class DurableTaskWorkerOptions
     }
 
     /// <summary>
-    /// Gets or sets a value indicating whether this client should support entities. If true, all instance ids starting with '@' are reserved for entities,
-    /// and validation checks are performed where appropriate.
+    /// Gets or sets a value indicating whether this client should support entities. If true, all instance ids starting
+    /// with '@' are reserved for entities, and validation checks are performed where appropriate.
     /// </summary>
     public bool EnableEntitySupport { get; set; }
 

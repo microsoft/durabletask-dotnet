@@ -11,6 +11,10 @@ using Microsoft.Extensions.Logging;
 
 namespace AzureFunctionsApp.Entities;
 
+/// <summary>
+/// Example showing the lifetime of an entity. An entity is initialized on the first operation it receives and then
+/// is considered deleted when <see cref="TaskEntity{TState}.State"/> is <c>null</c> at the end of an operation.
+/// </summary>
 public class Lifetime : TaskEntity<MyState>
 {
     readonly ILogger logger;
@@ -64,7 +68,7 @@ public class Lifetime : TaskEntity<MyState>
     }
 }
 
-public static class LifetimeHelpers
+public static class LifetimeApis
 {
     [Function("GetLifetime")]
     public static async Task<HttpResponseData> GetAsync(

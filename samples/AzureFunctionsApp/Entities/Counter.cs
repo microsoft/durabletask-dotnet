@@ -30,17 +30,6 @@ public class Counter : TaskEntity<int>
         return this.State += input;
     }
 
-    public int OperationWithContext(int input, TaskEntityContext context)
-    {
-        // Get access to TaskEntityContext by adding it as a parameter. Can be with or without an input parameter.
-        // Order does not matter.
-        context.ScheduleNewOrchestration("SomeOrchestration", "SomeInput");
-
-        // When using TaskEntity<TState>, the TaskEntityContext can also be accessed via this.Context.
-        this.Context.ScheduleNewOrchestration("SomeOrchestration", "SomeInput");
-        return this.Add(input);
-    }
-
     public int Get() => this.State;
 
     [Function("Counter")]
@@ -54,13 +43,9 @@ public class Counter : TaskEntity<int>
     public static Task DispatchStaticAsync([EntityTrigger] TaskEntityDispatcher dispatcher)
     {
         // Can also dispatch to a TaskEntity<TState> by using a static method.
+        // However, this is a different entity ID - "counter_alt" and not "counter". Even though it uses the same
+        // entity implementation, the function attribute has a different name, which determines the entity ID.
         return dispatcher.DispatchAsync<Counter>();
-    }
-
-    protected override int InitializeState(TaskEntityOperation operation)
-    {
-        // Optional method to override to customize initialization of state for a new instance.
-        return base.InitializeState(operation);
     }
 }
 
@@ -80,14 +65,6 @@ public class StateCounter
 
     public int Add(int input) => this.Value += input;
 
-    public int OperationWithContext(int input, TaskEntityContext context)
-    {
-        // Get access to TaskEntityContext by adding it as a parameter. Can be with or without an input parameter.
-        // Order does not matter.
-        context.ScheduleNewOrchestration("SomeOrchestration", "SomeInput");
-        return this.Add(input);
-    }
-
     public int Get() => this.Value;
 
     [Function("Counter_State")]
@@ -100,7 +77,7 @@ public class StateCounter
     }
 }
 
-public static class CounterHelpers
+public static class CounterApis
 {
     /// <summary>
     /// Usage:

@@ -30,7 +30,9 @@ public class UserEntity : TaskEntity<User>
 
     public void Set(User user)
     {
+        User previous = this.State;
         this.State = user;
+        this.logger.LogInformation("User {Id} set {Old} -> {New}", this.Context.Id.Key, previous, this.State);
     }
 
     public void Update(UserUpdate update)
@@ -39,7 +41,7 @@ public class UserEntity : TaskEntity<User>
         User previous = this.State;
         this.State = previous with { Name = n, Age = a };
 
-        this.logger.LogInformation("User updated {Old} -> {New}", previous, this.State);
+        this.logger.LogInformation("User {Id} updated {Old} -> {New}", this.Context.Id.Key, previous, this.State);
     }
 
     /// <summary>
@@ -71,6 +73,12 @@ public class UserEntity : TaskEntity<User>
     {
         // Can dispatch to a TaskEntity<TState> by passing a instance.
         return dispatcher.DispatchAsync(this);
+    }
+
+    protected override User InitializeState(TaskEntityOperation entityOperation)
+    {
+        // No parameterless constructor, must initialize state manually.
+        return new(null!, -1);
     }
 }
 

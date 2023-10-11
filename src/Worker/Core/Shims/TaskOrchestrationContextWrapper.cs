@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using DurableTask.Core;
+using DurableTask.Core.Serializing.Internal;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.Worker.Shims;
@@ -240,7 +241,9 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             OrchestrationInstance instance = new() { InstanceId = this.InstanceId };
             foreach ((string eventName, string eventPayload) in this.externalEventBuffer.TakeAll())
             {
-                this.innerContext.SendEvent(instance, eventName, eventPayload);
+#pragma warning disable CS0618 // Type or member is obsolete -- 'internal' usage.
+                this.innerContext.SendEvent(instance, eventName, new RawInput(eventPayload));
+#pragma warning restore CS0618 // Type or member is obsolete
             }
         }
     }

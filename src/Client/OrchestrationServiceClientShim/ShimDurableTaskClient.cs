@@ -3,8 +3,10 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DurableTask.Core;
+using DurableTask.Core.Entities;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
+using Microsoft.DurableTask.Client.Entities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Core = DurableTask.Core;
@@ -18,6 +20,7 @@ namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
 class ShimDurableTaskClient : DurableTaskClient
 {
     readonly ShimDurableTaskClientOptions options;
+    ShimDurableEntityClient? entities;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ShimDurableTaskClient"/> class.
@@ -40,6 +43,26 @@ class ShimDurableTaskClient : DurableTaskClient
         : base(name)
     {
         this.options = Check.NotNull(options);
+    }
+
+    /// <inheritdoc/>
+    public override DurableEntityClient Entities
+    {
+        get
+        {
+            if (this.entities is null)
+            {
+                if (this.options.Client is not IEntityOrchestrationService entityService)
+                {
+                    throw new NotSupportedException(
+                        "The configured IOrchestrationServiceClient does not support entities.");
+                }
+
+                this.entities = new(this.Name, this.options.Client, entityService, this.options.DataConverter);
+            }
+
+            return this.entities;
+        }
     }
 
     DataConverter DataConverter => this.options.DataConverter;

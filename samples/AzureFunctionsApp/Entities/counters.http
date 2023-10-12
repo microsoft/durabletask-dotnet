@@ -1,5 +1,5 @@
 @host = http://localhost:7071/api
-@mode = 1
+@mode = 0
 
 // The counter example shows the 3 different ways to dispatch to an entity.
 // The mode query string is what controls this:

@@ -13,25 +13,22 @@ namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
 /// </summary>
 class ShimDurableEntityClient : DurableEntityClient
 {
-    readonly IOrchestrationServiceClient client;
-    readonly IEntityOrchestrationService service;
-    readonly DataConverter converter;
+    readonly ShimDurableTaskClientOptions options;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ShimDurableEntityClient"/> class.
     /// </summary>
     /// <param name="name">The name of this client.</param>
-    /// <param name="client">The orchestration service client.</param>
-    /// <param name="service">The entity service.</param>
-    /// <param name="converter">The data converter.</param>
-    public ShimDurableEntityClient(
-        string name, IOrchestrationServiceClient client, IEntityOrchestrationService service, DataConverter converter)
+    /// <param name="options">The client options..</param>
+    public ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
         : base(name)
     {
-        this.client = Check.NotNull(client);
-        this.service = Check.NotNull(service);
-        this.converter = Check.NotNull(converter);
+        this.options = Check.NotNull(options);
     }
+
+    EntityBackendQueries Queries => this.options.Entities.Queries!;
+
+    DataConverter Converter => this.options.DataConverter;
 
     /// <inheritdoc/>
     public override async Task<CleanEntityStorageResult> CleanEntityStorageAsync(
@@ -40,15 +37,14 @@ class ShimDurableEntityClient : DurableEntityClient
         CancellationToken cancellation = default)
     {
         CleanEntityStorageRequest r = request ?? CleanEntityStorageRequest.Default;
-        EntityBackendQueries.CleanEntityStorageResult result = await this.service
-            .EntityBackendQueries!.CleanEntityStorageAsync(
-                new EntityBackendQueries.CleanEntityStorageRequest()
-                {
-                    RemoveEmptyEntities = r.RemoveEmptyEntities,
-                    ReleaseOrphanedLocks = r.ReleaseOrphanedLocks,
-                    ContinuationToken = r.ContinuationToken,
-                },
-                cancellation);
+        EntityBackendQueries.CleanEntityStorageResult result = await this.Queries.CleanEntityStorageAsync(
+            new EntityBackendQueries.CleanEntityStorageRequest()
+            {
+                RemoveEmptyEntities = r.RemoveEmptyEntities,
+                ReleaseOrphanedLocks = r.ReleaseOrphanedLocks,
+                ContinuationToken = r.ContinuationToken,
+            },
+            cancellation);
 
         return new()
         {
@@ -69,13 +65,13 @@ class ShimDurableEntityClient : DurableEntityClient
     /// <inheritdoc/>
     public override async Task<EntityMetadata?> GetEntityAsync(
         EntityInstanceId id, bool includeState = true, CancellationToken cancellation = default)
-        => this.Convert(await this.service.EntityBackendQueries!.GetEntityAsync(
+        => this.Convert(await this.Queries.GetEntityAsync(
             new EntityId(id.Name, id.Key), includeState, false, cancellation));
 
     /// <inheritdoc/>
     public override async Task<EntityMetadata<T>?> GetEntityAsync<T>(
         EntityInstanceId id, bool includeState = true, CancellationToken cancellation = default)
-        => this.Convert<T>(await this.service.EntityBackendQueries!.GetEntityAsync(
+        => this.Convert<T>(await this.Queries.GetEntityAsync(
             new EntityId(id.Name, id.Key), includeState, false, cancellation));
 
     /// <inheritdoc/>
@@ -90,7 +86,7 @@ class ShimDurableEntityClient : DurableEntityClient
         Check.NotNull(id.Key);
 
         DateTimeOffset? scheduledTime = options?.SignalTime;
-        string? serializedInput = this.converter.Serialize(input);
+        string? serializedInput = this.Converter.Serialize(input);
 
         EntityMessageEvent eventToSend = ClientEntityHelpers.EmitOperationSignal(
             new OrchestrationInstance() { InstanceId = id.ToString() },
@@ -99,10 +95,10 @@ class ShimDurableEntityClient : DurableEntityClient
             serializedInput,
             EntityMessageEvent.GetCappedScheduledTime(
                 DateTime.UtcNow,
-                this.service.EntityBackendProperties!.MaximumSignalDelayTime,
+                this.options.Entities.MaxSignalDelayTimeOrDefault,
                 scheduledTime?.UtcDateTime));
 
-        await this.client.SendTaskOrchestrationMessageAsync(eventToSend.AsTaskMessage());
+        await this.options.Client!.SendTaskOrchestrationMessageAsync(eventToSend.AsTaskMessage());
     }
 
     AsyncPageable<TMetadata> GetAllEntitiesAsync<TMetadata>(
@@ -119,19 +115,18 @@ class ShimDurableEntityClient : DurableEntityClient
         return Pageable.Create(async (continuation, size, cancellation) =>
         {
             size ??= filter?.PageSize;
-            EntityBackendQueries.EntityQueryResult result = await this.service
-                .EntityBackendQueries!.QueryEntitiesAsync(
-                    new EntityBackendQueries.EntityQuery()
-                    {
-                        InstanceIdStartsWith = startsWith,
-                        LastModifiedFrom = lastModifiedFrom,
-                        LastModifiedTo = lastModifiedTo,
-                        IncludeTransient = includeTransient,
-                        IncludeState = includeState,
-                        ContinuationToken = continuation,
-                        PageSize = size,
-                    },
-                    cancellation);
+            EntityBackendQueries.EntityQueryResult result = await this.Queries.QueryEntitiesAsync(
+                new EntityBackendQueries.EntityQuery()
+                {
+                    InstanceIdStartsWith = startsWith,
+                    LastModifiedFrom = lastModifiedFrom,
+                    LastModifiedTo = lastModifiedTo,
+                    IncludeTransient = includeTransient,
+                    IncludeState = includeState,
+                    ContinuationToken = continuation,
+                    PageSize = size,
+                },
+                cancellation);
 
             return new Page<TMetadata>(result.Results.Select(select).ToList(), result.ContinuationToken);
         });
@@ -141,7 +136,7 @@ class ShimDurableEntityClient : DurableEntityClient
     {
         return new(
             new EntityInstanceId(metadata.EntityId.Name, metadata.EntityId.Key),
-            this.converter.Deserialize<T>(metadata.SerializedState))
+            this.Converter.Deserialize<T>(metadata.SerializedState))
             {
                 LastModifiedTime = metadata.LastModifiedTime,
                 BacklogQueueSize = metadata.BacklogQueueSize,
@@ -161,7 +156,7 @@ class ShimDurableEntityClient : DurableEntityClient
 
     EntityMetadata Convert(EntityBackendQueries.EntityMetadata metadata)
     {
-        SerializedData? data = metadata.SerializedState is null ? null : new(metadata.SerializedState, this.converter);
+        SerializedData? data = metadata.SerializedState is null ? null : new(metadata.SerializedState, this.Converter);
         return new(new EntityInstanceId(metadata.EntityId.Name, metadata.EntityId.Key), data)
         {
             LastModifiedTime = metadata.LastModifiedTime,

@@ -50,15 +50,20 @@ class ShimDurableTaskClient : DurableTaskClient
     {
         get
         {
+            if (!this.options.EnableEntitySupport)
+            {
+                throw new InvalidOperationException("Entity support is not enabled.");
+            }
+
             if (this.entities is null)
             {
-                if (this.options.Client is not IEntityOrchestrationService entityService)
+                if (this.options.Entities.Queries is null)
                 {
                     throw new NotSupportedException(
                         "The configured IOrchestrationServiceClient does not support entities.");
                 }
 
-                this.entities = new(this.Name, this.options.Client, entityService, this.options.DataConverter);
+                this.entities = new(this.Name, this.options);
             }
 
             return this.entities;

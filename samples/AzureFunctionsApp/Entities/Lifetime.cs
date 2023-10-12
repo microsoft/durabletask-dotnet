@@ -52,7 +52,7 @@ public class Lifetime : TaskEntity<MyState>
         // This method shows that entity deletion can be accomplished from any operation by nulling out the state. The
         // operation does not have to be named "delete". The only requirement for deletion is that state is <c>null</c>
         // when the operation returns.
-        // The '!' in `null!;` is only needed because we are using C# explicit nullability.
+        // The '!' in `null!;` is only needed because C# explicit nullability is enabled.
         // This can be avoided by either:
         // 1) Declare TaskEntity<MyState?> instead.
         // 2) Disable explicit nullability.

@@ -30,37 +30,22 @@ public class Counter : TaskEntity<int>
         return this.State += input;
     }
 
-    public int OperationWithContext(int input, TaskEntityContext context)
-    {
-        // Get access to TaskEntityContext by adding it as a parameter. Can be with or without an input parameter.
-        // Order does not matter.
-        context.ScheduleNewOrchestration("SomeOrchestration", "SomeInput");
-
-        // When using TaskEntity<TState>, the TaskEntityContext can also be accessed via this.Context.
-        this.Context.ScheduleNewOrchestration("SomeOrchestration", "SomeInput");
-        return this.Add(input);
-    }
-
     public int Get() => this.State;
 
     [Function("Counter")]
-    public Task RunEntityAsync([EntityTrigger] TaskEntityDispatcher dispatcher)
+    public Task DispatchAsync([EntityTrigger] TaskEntityDispatcher dispatcher)
     {
         // Can dispatch to a TaskEntity<TState> by passing a instance.
         return dispatcher.DispatchAsync(this);
     }
 
     [Function("Counter_Alt")]
-    public static Task RunEntityStaticAsync([EntityTrigger] TaskEntityDispatcher dispatcher)
+    public static Task DispatchStaticAsync([EntityTrigger] TaskEntityDispatcher dispatcher)
     {
         // Can also dispatch to a TaskEntity<TState> by using a static method.
+        // However, this is a different entity ID - "counter_alt" and not "counter". Even though it uses the same
+        // entity implementation, the function attribute has a different name, which determines the entity ID.
         return dispatcher.DispatchAsync<Counter>();
-    }
-
-    protected override int InitializeState(TaskEntityOperation operation)
-    {
-        // Optional method to override to customize initialization of state for a new instance.
-        return base.InitializeState(operation);
     }
 }
 
@@ -80,18 +65,10 @@ public class StateCounter
 
     public int Add(int input) => this.Value += input;
 
-    public int OperationWithContext(int input, TaskEntityContext context)
-    {
-        // Get access to TaskEntityContext by adding it as a parameter. Can be with or without an input parameter.
-        // Order does not matter.
-        context.ScheduleNewOrchestration("SomeOrchestration", "SomeInput");
-        return this.Add(input);
-    }
-
     public int Get() => this.Value;
 
-    [Function("StateCounter")]
-    public static Task RunEntityAsync([EntityTrigger] TaskEntityDispatcher dispatcher)
+    [Function("Counter_State")]
+    public static Task DispatchAsync([EntityTrigger] TaskEntityDispatcher dispatcher)
     {
         // Using the dispatch to a state object will deserialize the state directly to that instance and dispatch to an
         // appropriate method.
@@ -100,7 +77,7 @@ public class StateCounter
     }
 }
 
-public static class CounterHelpers
+public static class CounterApis
 {
     /// <summary>
     /// Usage:
@@ -125,17 +102,27 @@ public static class CounterHelpers
     {
         _ = int.TryParse(request.Query["value"], out int value);
 
-        string name = "counter";
-
-        // switch to StateCounter if ?mode=1 or ?mode=state is supplied.
+        // switch to Counter_State if ?mode=1 or ?mode=state is supplied.
+        // or to Counter_Alt if ?mode=2 or ?mode=static is supplied.
+        string name;
         string? mode = request.Query["mode"];
-        if (int.TryParse(mode, out int m) && m == 1)
+        if (int.TryParse(mode, out int m))
         {
-            name = "state";
+            name = m switch
+            {
+                1 => "counter_state",
+                2 => "counter_alt",
+                _ => "counter",
+            };
         }
-        else if (mode == "state")
+        else
         {
-            name = "statecounter";
+            name = mode switch
+            {
+                "state" => "counter_state",
+                "static" => "counter_alt",
+                _ => "counter",
+            };
         }
 
         string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(

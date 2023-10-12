@@ -10,14 +10,7 @@ using Microsoft.Extensions.Logging;
 namespace AzureFunctionsApp;
 
 /// <summary>
-/// An example of performing the fibonacci sequence in Durable Functions. While this is both a (naive) recursive
-/// implementation of fibonacci and also not the best use of Durable, it does a good job at highlighting some patterns
-/// that can be used in durable. Particularly:
-/// 1. Sub orchestrations
-/// 2. Orchestration flexibility - can be both a top level AND a sub orchestration
-/// 3. Recursion can be performed with orchestrations!
-/// 4. Control flow you are used to from regular C# programming works here as well! Particularly branching.
-/// 5. Concurrency can be controlled like any other C# Task.
+/// A simple greeting orchestration to demonstrate passing custom input and output data.
 /// </summary>
 public static class Greeting
 {

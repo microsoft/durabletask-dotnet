@@ -1,0 +1,26 @@
+@host = http://localhost:7071/api
+@mode = 1
+
+// The counter example shows the 3 different ways to dispatch to an entity.
+// The mode query string is what controls this:
+// mode=0 or mode=entity (default) - dispatch to "counter" entity
+// mode=1 or mode=state - dispatch to "counter_state" entity
+// mode=2 or mode=static - dispatch to "counter_alt" entity
+//
+// "counter" and "counter_alt" are the same entities, however they use
+// two different functions to dispatch, and thus are different entities when
+// persisted in the backend.
+
+POST {{host}}/counters/1/add/10?mode={{mode}}
+
+###
+
+GET {{host}}/counters/1?mode={{mode}}
+
+###
+
+POST {{host}}/counters/1/reset?mode={{mode}}
+
+###
+
+DELETE {{host}}/counters/1?mode={{mode}}

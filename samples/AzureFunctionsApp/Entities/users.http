@@ -1,0 +1,19 @@
+@host = http://localhost:7071/api
+
+PUT {{host}}/users/1?name=John&Age=21
+
+###
+
+PATCH {{host}}/users/1?Age=22
+
+###
+
+GET {{host}}/users/1
+
+###
+
+POST {{host}}/users/1/greet?message=custom greeting
+
+###
+
+DELETE {{host}}/users/1

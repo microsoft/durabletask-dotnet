@@ -82,11 +82,19 @@ public class UserEntity : TaskEntity<User>
     }
 }
 
+/// <summary>
+/// APIs:
+/// Create User: PUT /api/users/{id}?name={name}&age={age} -- both name and age are required
+/// Update User: PATCH /api/users/{id}?name={name}&age={age} -- either name or age can be updated
+/// Get User: GET /api/users/{id}
+/// Delete User: DELETE /api/users/{id}
+/// Greet User: POST /api/users/{id}/greet?message={message}
+/// </summary>
 public static class UserApis
 {
     [Function("PutUser")]
     public static async Task<HttpResponseData> PutAsync(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "user/{id}")] HttpRequestData request,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "users/{id}")] HttpRequestData request,
         [DurableClient] DurableTaskClient client,
         string id)
     {
@@ -111,7 +119,7 @@ public static class UserApis
 
     [Function("PatchUser")]
     public static async Task<HttpResponseData> PatchAsync(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "patch", Route = "user/{id}")] HttpRequestData request,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "patch", Route = "users/{id}")] HttpRequestData request,
         [DurableClient] DurableTaskClient client,
         string id)
     {
@@ -131,7 +139,7 @@ public static class UserApis
 
     [Function("DeleteUser")]
     public static async Task<HttpResponseData> DeleteAsync(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "user/{id}")] HttpRequestData request,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "users/{id}")] HttpRequestData request,
         [DurableClient] DurableTaskClient client,
         string id)
     {
@@ -142,7 +150,7 @@ public static class UserApis
 
     [Function("GetUser")]
     public static async Task<HttpResponseData> GetAsync(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "user/{id}")] HttpRequestData request,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "users/{id}")] HttpRequestData request,
         [DurableClient] DurableTaskClient client,
         string id)
     {
@@ -160,7 +168,7 @@ public static class UserApis
 
     [Function("GreetUser")]
     public static async Task<HttpResponseData> GreetAsync(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "user/{id}/greet")] HttpRequestData request,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "users/{id}/greet")] HttpRequestData request,
         [DurableClient] DurableTaskClient client,
         string id)
     {

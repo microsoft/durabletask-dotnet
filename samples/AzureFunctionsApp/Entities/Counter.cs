@@ -97,6 +97,40 @@ public class StateCounter
     }
 }
 
+public static class ManualCounter
+{
+    [Function("Counter_Manual")]
+    public static Task DispatchAsync([EntityTrigger] TaskEntityDispatcher dispatcher)
+    {
+        return dispatcher.DispatchAsync(operation =>
+        {
+            if (operation.State.GetState(typeof(int)) is null)
+            {
+                operation.State.SetState(0);
+            }
+
+            switch (operation.Name.ToLowerInvariant())
+            {
+                case "add":
+                    int state = operation.State.GetState<int>();
+                    state += operation.GetInput<int>();
+                    operation.State.SetState(state);
+                    return new(state);
+                case "reset":
+                    operation.State.SetState(0);
+                    break;
+                case "get":
+                    return new((operation.State.GetState(typeof(int)) as int?) ?? 0);
+                case "delete": 
+                    operation.State.SetState(null);
+                    break; 
+            }
+
+            return default;
+        });
+    }
+}
+
 public static class CounterApis
 {
     /// <summary>
@@ -113,6 +147,10 @@ public static class CounterApis
     /// Add to <see cref="Counter"/>, using the static method.
     /// POST /api/counters/{id}/add/{value}?&mode=2
     /// POST /api/counters/{id}/add/{value}?&mode=static
+    /// 
+    /// Add to <see cref="ManualCounter"/>.
+    /// POST /api/counters/{id}/add/{value}?&mode=3
+    /// POST /api/counters/{id}/add/{value}?&mode=manual
     /// </summary>
     [Function("Counter_Add")]
     public static async Task<HttpResponseData> AddAsync(
@@ -242,6 +280,7 @@ public static class CounterApis
             {
                 1 => "counter_state",
                 2 => "counter_alt",
+                3 => "counter_manual",
                 _ => "counter",
             };
         }
@@ -251,6 +290,7 @@ public static class CounterApis
             {
                 "state" => "counter_state",
                 "static" => "counter_alt",
+                "manual" => "counter_manual",
                 _ => "counter",
             };
         }

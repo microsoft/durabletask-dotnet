@@ -6,6 +6,7 @@
 // mode=0 or mode=entity (default) - dispatch to "counter" entity
 // mode=1 or mode=state - dispatch to "counter_state" entity
 // mode=2 or mode=static - dispatch to "counter_alt" entity
+// mode=3 or mode=manual - dispatch to "counter_manual" entity
 //
 // "counter" and "counter_alt" are the same entities, however they use
 // two different functions to dispatch, and thus are different entities when

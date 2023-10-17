@@ -100,13 +100,15 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
 
         string? value;
         object? cachedValue;
-        bool cacheValid;
         string? checkpointValue;
 
         public StateShim(DataConverter dataConverter)
         {
             this.dataConverter = dataConverter;
         }
+
+        /// <inheritdoc />
+        public override bool HasState => this.value != null;
 
         public string? CurrentState
         {
@@ -117,7 +119,6 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
                 {
                     this.value = value;
                     this.cachedValue = null;
-                    this.cacheValid = false;
                 }
             }
         }
@@ -130,21 +131,23 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
         public void Rollback()
         {
             this.CurrentState = this.checkpointValue;
+            this.cachedValue = null;
         }
 
         public void Reset()
         {
             this.CurrentState = default;
+            this.cachedValue = null;
         }
 
         public override object? GetState(Type type)
         {
-            if (!this.cacheValid)
+            if (this.cachedValue?.GetType() is Type t && t.IsAssignableFrom(type))
             {
-                this.cachedValue = this.dataConverter.Deserialize(this.value, type);
-                this.cacheValid = true;
+                return this.cachedValue;
             }
 
+            this.cachedValue = this.dataConverter.Deserialize(this.value, type);
             return this.cachedValue;
         }
 
@@ -152,7 +155,6 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
         {
             this.value = this.dataConverter.Serialize(state);
             this.cachedValue = state;
-            this.cacheValid = true;
         }
     }
 

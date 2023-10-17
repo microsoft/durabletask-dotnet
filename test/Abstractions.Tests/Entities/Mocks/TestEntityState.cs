@@ -10,6 +10,8 @@ public class TestEntityState : TaskEntityState
         this.State = state;
     }
 
+    public override bool HasState => this.State != null;
+
     public object? State { get; private set; }
 
     public override object? GetState(Type type)

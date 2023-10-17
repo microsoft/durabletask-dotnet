@@ -9,7 +9,7 @@ namespace Microsoft.DurableTask.Entities;
 public abstract class TaskEntityState
 {
     /// <summary>
-    /// Gets a value indicating whether this entity has state or not yet.
+    /// Gets a value indicating whether this entity has state or not yet / anymore.
     /// </summary>
     public abstract bool HasState { get; }
 

@@ -18,7 +18,7 @@
 
   <PropertyGroup>
     <VersionPrefix>1.1.0</VersionPrefix>
-    <VersionSuffix>entities-preview.2</VersionSuffix>
+    <VersionSuffix>preview.1</VersionSuffix>
   </PropertyGroup>
 
 </Project>

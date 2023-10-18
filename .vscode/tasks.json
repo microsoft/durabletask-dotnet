@@ -9,17 +9,40 @@
         "args": [
           "build",
           "${workspaceRoot}/Microsoft.DurableTask.sln",
-          // Ask dotnet build to generate full paths for file names.
           "/property:GenerateFullPaths=true",
-          // Do not generate summary otherwise it leads to duplicate errors in Problems panel
           "/consoleloggerparameters:NoSummary"
         ],
         "label": "build",
-        "group": "build",
-        "presentation": {
-          "reveal": "silent"
+        "group": {
+          "kind": "build",
+          "isDefault": true
         },
         "problemMatcher": "$msCompile"
+      },
+      {
+        "label": "build (AzureFunctionsApp)",
+        "command": "dotnet",
+        "args": [
+          "build",
+          "${workspaceFolder}/samples/AzureFunctionsApp",
+          "/property:GenerateFullPaths=true",
+          "/consoleloggerparameters:NoSummary"
+        ],
+        "type": "shell",
+        "group": {
+          "kind": "build"
+        },
+        "problemMatcher": "$msCompile",
+      },
+      {
+        "type": "func",
+        "dependsOn": "build (AzureFunctionsApp)",
+        "options": {
+          "cwd": "${workspaceFolder}/out/samples/bin/Debug/AzureFunctionsApp/net6.0"
+        },
+        "command": "host start",
+        "isBackground": true,
+        "problemMatcher": "$func-dotnet-watch"
       }
     ]
   }

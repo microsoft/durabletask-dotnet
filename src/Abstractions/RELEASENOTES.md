@@ -1,1 +1,2 @@
 - Add support for durable entities
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.16.0-preview.1`

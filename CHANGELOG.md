@@ -1,6 +1,26 @@
 ﻿# Changelog
 
+## v1.0.5
+
+### Microsoft.DurableTask.Abstractions
+
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.15.0` (https://github.com/microsoft/durabletask-dotnet/pull/212)
+
+### Microsoft.DurableTask.Worker
+
+- Fix re-encoding of events when using `TaskOrchestrationContext.ContinueAsNew(preserveUnprocessedEvents: true)` (https://github.com/microsoft/durabletask-dotnet/pull/212)
+
+## v1.0.4
+
+### Microsoft.DurableTask.Worker
+
+- Fix handling of concurrent external events with the same name (https://github.com/microsoft/durabletask-dotnet/pull/194)
+
 ## v1.0.3
+
+### Microsoft.DurableTask.Worker
+
+- Fix instance ID not being passed in when using retry policy (https://github.com/microsoft/durabletask-dotnet/issues/174)
 
 ### Microsoft.DurableTask.Worker.Grpc
 

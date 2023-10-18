@@ -311,6 +311,49 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal<int>(expected, metadata.ReadOutputAs<int[]>());
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(5)]
+    public async Task ExternalEventsInParallel(int eventCount)
+    {
+        TaskName orchestratorName = nameof(ExternalEvents);
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
+            {
+                List<Task<int>> events = new();
+                for (int i = 0; i < eventCount; i++)
+                {
+                    events.Add(ctx.WaitForExternalEvent<int>("Event"));
+                }
+
+                return await Task.WhenAll(events);
+            }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+
+        // To ensure consistency, wait for the instance to start before sending the events
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceStartAsync(
+            instanceId,
+            this.TimeoutToken);
+
+        // Send events one-at-a-time to that we can better ensure ordered processing.
+        for (int i = 0; i < eventCount; i++)
+        {
+            await server.Client.RaiseEventAsync(metadata.InstanceId, "Event", eventPayload: i);
+        }
+
+        // Once the orchestration receives all the events it is expecting, it should complete.
+        metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true);
+        Assert.NotNull(metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+
+        int[] expected = Enumerable.Range(0, eventCount).ToArray();
+        Assert.Equal<int>(expected, metadata.ReadOutputAs<int[]>());
+    }
+
     [Fact]
     public async Task Termination()
     {

@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Entities.OperationFormat;
+using DurableTask.Core.Serializing.Internal;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -16,7 +17,7 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// </summary>
 sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 {
-    readonly Dictionary<string, IEventSource> externalEventSources = new(StringComparer.OrdinalIgnoreCase);
+    readonly Dictionary<string, Queue<IEventSource>> externalEventSources = new(StringComparer.OrdinalIgnoreCase);
     readonly NamedQueue<string> externalEventBuffer = new();
     readonly OrchestrationContext innerContext;
     readonly OrchestrationInvocationContext invocationContext;
@@ -166,6 +167,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                 return await this.innerContext.CreateSubOrchestrationInstanceWithRetry<TResult>(
                     orchestratorName.Name,
                     orchestratorName.Version,
+                    instanceId,
                     policy.ToDurableTaskCoreRetryOptions(),
                     input);
             }
@@ -229,19 +231,21 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
         // Create a task completion source that will be set when the external event arrives.
         EventTaskCompletionSource<T> eventSource = new();
-        if (this.externalEventSources.TryGetValue(eventName, out IEventSource? existing))
+        if (this.externalEventSources.TryGetValue(eventName, out Queue<IEventSource>? existing))
         {
-            if (existing.EventType != typeof(T))
+            if (existing.Count > 0 && existing.Peek().EventType != typeof(T))
             {
                 throw new ArgumentException("Events with the same name must have the same type argument. Expected"
-                    + $" {existing.EventType.FullName}.");
+                    + $" {existing.Peek().GetType().FullName} but was requested {typeof(T).FullName}.");
             }
 
-            existing.Next = eventSource;
+            existing.Enqueue(eventSource);
         }
         else
         {
-            this.externalEventSources.Add(eventName, eventSource);
+            Queue<IEventSource> eventSourceQueue = new();
+            eventSourceQueue.Enqueue(eventSource);
+            this.externalEventSources.Add(eventName, eventSourceQueue);
         }
 
         // TODO: this needs to be tracked and disposed appropriately.
@@ -274,7 +278,9 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             OrchestrationInstance instance = new() { InstanceId = this.InstanceId };
             foreach ((string eventName, string eventPayload) in this.externalEventBuffer.TakeAll())
             {
-                this.innerContext.SendEvent(instance, eventName, eventPayload);
+#pragma warning disable CS0618 // Type or member is obsolete -- 'internal' usage.
+                this.innerContext.SendEvent(instance, eventName, new RawInput(eventPayload));
+#pragma warning restore CS0618 // Type or member is obsolete
             }
         }
     }
@@ -351,10 +357,11 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <param name="rawEventPayload">The serialized event payload.</param>
     internal void CompleteExternalEvent(string eventName, string rawEventPayload)
     {
-        if (this.externalEventSources.TryGetValue(eventName, out IEventSource? waiter))
+        if (this.externalEventSources.TryGetValue(eventName, out Queue<IEventSource>? waiters))
         {
             object? value;
 
+            IEventSource waiter = waiters.Dequeue();
             if (waiter.EventType == typeof(OperationResult))
             {
                 // use the framework-defined deserialization for entity responses, not the application-defined data converter,
@@ -367,13 +374,9 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             }
 
             // Events are completed in FIFO order. Remove the key if the last event was delivered.
-            if (waiter.Next == null)
+            if (waiters.Count == 0)
             {
                 this.externalEventSources.Remove(eventName);
-            }
-            else
-            {
-                this.externalEventSources[eventName] = waiter.Next;
             }
 
             waiter.TrySetResult(value);

@@ -1,5 +1,9 @@
 ﻿# Changelog
 
+## v1.1.0-preview.2
+
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.16.0-preview.2`
+
 ## v1.1.0-preview.1
 
 Adds support for durable entities. Learn more [here](https://learn.microsoft.com/azure/azure-functions/durable/durable-functions-entities?tabs=csharp).

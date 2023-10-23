@@ -6,7 +6,7 @@ Adds support for durable entities. Learn more [here](https://learn.microsoft.com
 
 ### Microsoft.DurableTask.Abstractions
 
-- Microsoft.Azure.DurableTask.Core dependency increased to `2.16.0-preview.2`
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.16.0-preview.1`
 
 ## v1.0.5
 

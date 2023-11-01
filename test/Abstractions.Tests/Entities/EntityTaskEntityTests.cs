@@ -3,6 +3,7 @@
 
 using System.Reflection;
 using DotNext;
+using FluentAssertions.Specialized;
 
 namespace Microsoft.DurableTask.Entities.Tests;
 
@@ -153,6 +154,21 @@ public class EntityTaskEntityTests
         operation.State.GetState(typeof(int)).Should().Be(0);
     }
 
+    [Fact]
+    public async Task Throws_ExceptionPreserved()
+    {
+        string error = "this message should be preserved";
+        TestEntityOperation operation = new("throws", error);
+        TestEntity entity = new();
+
+        Func<Task> act = async () => await entity.RunAsync(operation);
+
+        ExceptionAssertions<InvalidOperationException> ex = await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage(error)
+            .Where(x => x.StackTrace!.StartsWith("   at Microsoft.DurableTask.Entities.Tests.EntityTaskEntityTests.TestEntity.Throws(String message)"));
+    }
+
 #pragma warning disable CA1822 // Mark members as static
 #pragma warning disable IDE0060 // Remove unused parameter
     class TestEntity : TaskEntity<int>
@@ -220,6 +236,11 @@ public class EntityTaskEntityTests
             }
 
             return sync ? new("success") : new(Slow());
+        }
+
+        public void Throws(string message)
+        {
+            throw new InvalidOperationException(message);
         }
 
         int Add(int? value, Optional<TaskEntityContext> context)

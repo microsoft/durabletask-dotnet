@@ -3,7 +3,6 @@
 
 using System.Reflection;
 using DotNext;
-using FluentAssertions.Specialized;
 
 namespace Microsoft.DurableTask.Entities.Tests;
 
@@ -163,7 +162,7 @@ public class EntityTaskEntityTests
 
         Func<Task> act = async () => await entity.RunAsync(operation);
 
-        ExceptionAssertions<InvalidOperationException> ex = await act.Should()
+        await act.Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage(error)
             .Where(x => x.StackTrace!.StartsWith("   at Microsoft.DurableTask.Entities.Tests.EntityTaskEntityTests.TestEntity.Throws(String message)"));

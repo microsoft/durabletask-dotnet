@@ -81,7 +81,7 @@ public static class TaskEntityOperationExtensions
             returnType = method.ReturnType;
             return true;
         }
-        catch (TargetInvocationException ex)
+        catch (TargetInvocationException ex) when (ex.InnerException is not null)
         {
             // Re-throw the inner exception so that the stack trace is preserved.
             ExceptionDispatchInfo.Capture(ex.InnerException).Throw();

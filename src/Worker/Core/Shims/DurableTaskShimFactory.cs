@@ -127,6 +127,7 @@ public class DurableTaskShimFactory
         // For now, we simply create a new shim for each entity batch operation.
         // In the future we may consider caching those shims and reusing them, which can reduce
         // deserialization and allocation overheads.
-        return new TaskEntityShim(this.options.DataConverter, entity, entityId);
+        ILogger logger = this.loggerFactory.CreateLogger(entity.GetType());
+        return new TaskEntityShim(this.options.DataConverter, entity, entityId, logger);
     }
 }

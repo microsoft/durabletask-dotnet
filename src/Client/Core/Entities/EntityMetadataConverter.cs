@@ -49,34 +49,6 @@ class EntityMetadataConverter : JsonConverterFactory
             culture: null)!;
     }
 
-    class Converter<TState> : JsonConverter<EntityMetadata<TState>>
-    {
-        public override EntityMetadata<TState>? Read(
-            ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        {
-            throw new NotSupportedException("EntityMetadata cannot be deserialized");
-        }
-
-        public override void Write(Utf8JsonWriter writer, EntityMetadata<TState> value, JsonSerializerOptions options)
-        {
-            EntityMetadataConverter.Write(writer, value, options);
-        }
-    }
-    
-    class Converter : JsonConverter<EntityMetadata>
-    {
-        public override EntityMetadata? Read(
-            ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        {
-            throw new NotSupportedException("EntityMetadata cannot be deserialized");
-        }
-
-        public override void Write(Utf8JsonWriter writer, EntityMetadata value, JsonSerializerOptions options)
-        {
-            EntityMetadataConverter.Write(writer, value, options);
-        }
-    }
-
     static void Write<TState>(Utf8JsonWriter writer, EntityMetadata<TState> value, JsonSerializerOptions options)
     {
         writer.WriteStartObject();
@@ -113,5 +85,33 @@ class EntityMetadataConverter : JsonConverterFactory
         }
 
         writer.WriteEndObject();
+    }
+
+    class Converter<TState> : JsonConverter<EntityMetadata<TState>>
+    {
+        public override EntityMetadata<TState>? Read(
+            ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            throw new NotSupportedException("EntityMetadata cannot be deserialized");
+        }
+
+        public override void Write(Utf8JsonWriter writer, EntityMetadata<TState> value, JsonSerializerOptions options)
+        {
+            EntityMetadataConverter.Write(writer, value, options);
+        }
+    }
+
+    class Converter : JsonConverter<EntityMetadata>
+    {
+        public override EntityMetadata? Read(
+            ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            throw new NotSupportedException("EntityMetadata cannot be deserialized");
+        }
+
+        public override void Write(Utf8JsonWriter writer, EntityMetadata value, JsonSerializerOptions options)
+        {
+            EntityMetadataConverter.Write(writer, value, options);
+        }
     }
 }

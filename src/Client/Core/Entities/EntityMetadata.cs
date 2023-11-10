@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
 using Microsoft.DurableTask.Entities;
 
 namespace Microsoft.DurableTask.Client.Entities;
@@ -10,6 +11,7 @@ namespace Microsoft.DurableTask.Client.Entities;
 /// Represents entity metadata.
 /// </summary>
 /// <typeparam name="TState">The type of state held by the metadata.</typeparam>
+[JsonConverter(typeof(EntityMetadataConverter))]
 public class EntityMetadata<TState>
 {
     readonly TState? state;
@@ -94,6 +96,7 @@ public class EntityMetadata<TState>
 /// <summary>
 /// Represents the metadata for a durable entity instance.
 /// </summary>
+[JsonConverter(typeof(EntityMetadataConverter))]
 public sealed class EntityMetadata : EntityMetadata<SerializedData>
 {
     /// <summary>

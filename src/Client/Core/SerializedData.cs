@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.Converters;
+
 namespace Microsoft.DurableTask.Client;
 
 /// <summary>
@@ -13,10 +15,10 @@ public sealed class SerializedData
     /// </summary>
     /// <param name="data">The serialized data.</param>
     /// <param name="converter">The data converter.</param>
-    public SerializedData(string data, DataConverter converter)
+    public SerializedData(string data, DataConverter? converter = null)
     {
         this.Value = Check.NotNull(data);
-        this.Converter = Check.NotNull(converter);
+        this.Converter = converter ?? JsonDataConverter.Default;
     }
 
     /// <summary>
@@ -35,4 +37,16 @@ public sealed class SerializedData
     /// <typeparam name="T">The type to deserialize into.</typeparam>
     /// <returns>The deserialized type.</returns>
     public T ReadAs<T>() => this.Converter.Deserialize<T>(this.Value);
+
+    /// <summary>
+    /// Creates a new instance of <see cref="SerializedData"/> from the specified data.
+    /// </summary>
+    /// <param name="data">The data to serialize.</param>
+    /// <param name="converter">The data converter.</param>
+    /// <returns>Serialized data.</returns>
+    internal static SerializedData Create(object data, DataConverter? converter = null)
+    {
+        converter ??= JsonDataConverter.Default;
+        return new SerializedData(converter.Serialize(data), converter);
+    }
 }

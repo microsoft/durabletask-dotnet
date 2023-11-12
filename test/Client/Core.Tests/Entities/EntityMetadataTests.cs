@@ -21,7 +21,7 @@ public class EntityMetadataTests
 
         public override void Write(Utf8JsonWriter writer, DateTimeOffset value, JsonSerializerOptions options)
         {
-            writer.WriteStringValue(value.ToString("dd/MM/yyyy"));
+            writer.WriteStringValue("test!");
         }
     }
 

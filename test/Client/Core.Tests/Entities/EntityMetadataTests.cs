@@ -25,7 +25,7 @@ public class EntityMetadataTests
         }
     }
 
-    readonly JsonSerializerOptions defaultSettings = new JsonSerializerOptions() {
+    readonly JsonSerializerOptions settings = new JsonSerializerOptions() {
         Converters = { new DateTimeConverter() }
     };
 
@@ -57,7 +57,7 @@ public class EntityMetadataTests
             LockedBy = lockedBy,
         };
 
-        string json = JsonSerializer.Serialize(metadata);
+        string json = JsonSerializer.Serialize(metadata, settings);
         json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{now:O}\",\"BacklogQueueSize\":10,\"LockedBy\""
             + $":\"{lockedBy}\"}}");
     }
@@ -75,7 +75,7 @@ public class EntityMetadataTests
             LockedBy = lockedBy,
         };
 
-        string json = JsonSerializer.Serialize(metadata);
+        string json = JsonSerializer.Serialize(metadata,settings);
         json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{now:O}\",\"BacklogQueueSize\":10,\"LockedBy\""
             + $":\"{lockedBy}\",\"State\":{state}}}");
     }
@@ -93,7 +93,7 @@ public class EntityMetadataTests
             LockedBy = lockedBy,
         };
 
-        string json = JsonSerializer.Serialize(metadata);
+        string json = JsonSerializer.Serialize(metadata, settings);
         json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{now:O}\",\"BacklogQueueSize\":10,\"LockedBy\""
             + $":\"{lockedBy}\",\"State\":{{\"Number\":{state.Number}}}}}");
     }
@@ -108,7 +108,7 @@ public class EntityMetadataTests
             LastModifiedTime = now,
         };
 
-        string json = JsonSerializer.Serialize(metadata);
+        string json = JsonSerializer.Serialize(metadata, settings);
         json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{now:O}\",\"State\":"
             + $"{{\"Number\":{state.Number}}}}}");
     }
@@ -123,7 +123,7 @@ public class EntityMetadataTests
             LastModifiedTime = now,
         };
 
-        string json = JsonSerializer.Serialize(metadata);
+        string json = JsonSerializer.Serialize(metadata, settings);
         json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{now:O}\"}}");
     }
 
@@ -138,7 +138,7 @@ public class EntityMetadataTests
             LastModifiedTime = now,
         };
 
-        string json = JsonSerializer.Serialize(metadata);
+        string json = JsonSerializer.Serialize(metadata, settings);
         json.Should().Be($@"{{""Id"":""{this.id}"",""LastModifiedTime"":""{now:O}"",""State"":""{{\u0022Number\u0022:{state.Number}}}""}}");
     }
 

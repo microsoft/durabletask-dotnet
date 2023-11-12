@@ -57,8 +57,9 @@ public class EntityMetadataTests
             LockedBy = lockedBy,
         };
 
-        string json = JsonSerializer.Serialize(metadata, settings);
-        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{now:O}\",\"BacklogQueueSize\":10,\"LockedBy\""
+        string nowStr = JsonSerializer.Serialize(now);
+        string json = JsonSerializer.Serialize(metadata);
+        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{nowStr}\",\"BacklogQueueSize\":10,\"LockedBy\""
             + $":\"{lockedBy}\"}}");
     }
 
@@ -75,8 +76,9 @@ public class EntityMetadataTests
             LockedBy = lockedBy,
         };
 
-        string json = JsonSerializer.Serialize(metadata,settings);
-        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{now:O}\",\"BacklogQueueSize\":10,\"LockedBy\""
+        string nowStr = JsonSerializer.Serialize(now);
+        string json = JsonSerializer.Serialize(metadata);
+        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{nowStr}\",\"BacklogQueueSize\":10,\"LockedBy\""
             + $":\"{lockedBy}\",\"State\":{state}}}");
     }
 
@@ -93,8 +95,9 @@ public class EntityMetadataTests
             LockedBy = lockedBy,
         };
 
-        string json = JsonSerializer.Serialize(metadata, settings);
-        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{now:O}\",\"BacklogQueueSize\":10,\"LockedBy\""
+        string nowStr = JsonSerializer.Serialize(now);
+        string json = JsonSerializer.Serialize(metadata);
+        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{nowStr}\",\"BacklogQueueSize\":10,\"LockedBy\""
             + $":\"{lockedBy}\",\"State\":{{\"Number\":{state.Number}}}}}");
     }
     
@@ -108,8 +111,9 @@ public class EntityMetadataTests
             LastModifiedTime = now,
         };
 
-        string json = JsonSerializer.Serialize(metadata, settings);
-        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{now:O}\",\"State\":"
+        string nowStr = JsonSerializer.Serialize(now);
+        string json = JsonSerializer.Serialize(metadata);
+        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{nowStr}\",\"State\":"
             + $"{{\"Number\":{state.Number}}}}}");
     }
 
@@ -123,8 +127,9 @@ public class EntityMetadataTests
             LastModifiedTime = now,
         };
 
-        string json = JsonSerializer.Serialize(metadata, settings);
-        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{now:O}\"}}");
+        string nowStr = JsonSerializer.Serialize(now);
+        string json = JsonSerializer.Serialize(metadata);
+        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{nowStr}\"}}");
     }
 
 
@@ -138,8 +143,9 @@ public class EntityMetadataTests
             LastModifiedTime = now,
         };
 
-        string json = JsonSerializer.Serialize(metadata, settings);
-        json.Should().Be($@"{{""Id"":""{this.id}"",""LastModifiedTime"":""{now:O}"",""State"":""{{\u0022Number\u0022:{state.Number}}}""}}");
+        string nowStr = JsonSerializer.Serialize(now);
+        string json = JsonSerializer.Serialize(metadata);
+        json.Should().Be($@"{{""Id"":""{this.id}"",""LastModifiedTime"":""{nowStr}"",""State"":""{{\u0022Number\u0022:{state.Number}}}""}}");
     }
 
     record class State(int Number)

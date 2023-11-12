@@ -145,7 +145,7 @@ public class EntityMetadataTests
 
         string nowStr = JsonSerializer.Serialize(now);
         string json = JsonSerializer.Serialize(metadata);
-        json.Should().Be($@"{{""Id"":""{this.id}"",""LastModifiedTime"":""{nowStr}"",""State"":""{{\u0022Number\u0022:{state.Number}}}""}}");
+        json.Should().Be($@"{{""Id"":""{this.id}"",""LastModifiedTime"":{nowStr},""State"":""{{\u0022Number\u0022:{state.Number}}}""}}");
     }
 
     record class State(int Number)

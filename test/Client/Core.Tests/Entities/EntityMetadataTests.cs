@@ -9,10 +9,18 @@ namespace Microsoft.DurableTask.Client.Entities.Tests;
 public class EntityMetadataTests
 {
     readonly EntityInstanceId id = new("test", Random.Shared.Next(0, 100).ToString());
-    readonly IsoDateTimeConverter dateConverter = new IsoDateTimeConverter
+
+    // create customize convert class
+    public class DateTimeConverter : JsonConverter<DateTime>
     {
-        DateTimeFormat = "yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fffffffzzz"
-    };
+        public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
+        {
+            writer.WriteStringValue(value.ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fffffffzzz"));
+        }
+    }
+
+    JsonSerializerOptions defaultSettings = new JsonSerializerOptions();
+    defaultSettings.Converters.Add(new DateTimeConverter());
 
     [Fact]
     public void GetState_NotIncluded_Throws()

@@ -59,7 +59,7 @@ public class EntityMetadataTests
 
         string nowStr = JsonSerializer.Serialize(now);
         string json = JsonSerializer.Serialize(metadata);
-        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{nowStr}\",\"BacklogQueueSize\":10,\"LockedBy\""
+        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":{nowStr},\"BacklogQueueSize\":10,\"LockedBy\""
             + $":\"{lockedBy}\"}}");
     }
 
@@ -78,7 +78,7 @@ public class EntityMetadataTests
 
         string nowStr = JsonSerializer.Serialize(now);
         string json = JsonSerializer.Serialize(metadata);
-        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{nowStr}\",\"BacklogQueueSize\":10,\"LockedBy\""
+        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":{nowStr},\"BacklogQueueSize\":10,\"LockedBy\""
             + $":\"{lockedBy}\",\"State\":{state}}}");
     }
 
@@ -97,7 +97,7 @@ public class EntityMetadataTests
 
         string nowStr = JsonSerializer.Serialize(now);
         string json = JsonSerializer.Serialize(metadata);
-        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{nowStr}\",\"BacklogQueueSize\":10,\"LockedBy\""
+        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":{nowStr},\"BacklogQueueSize\":10,\"LockedBy\""
             + $":\"{lockedBy}\",\"State\":{{\"Number\":{state.Number}}}}}");
     }
     
@@ -113,7 +113,7 @@ public class EntityMetadataTests
 
         string nowStr = JsonSerializer.Serialize(now);
         string json = JsonSerializer.Serialize(metadata);
-        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{nowStr}\",\"State\":"
+        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":{nowStr},\"State\":"
             + $"{{\"Number\":{state.Number}}}}}");
     }
 
@@ -129,7 +129,7 @@ public class EntityMetadataTests
 
         string nowStr = JsonSerializer.Serialize(now);
         string json = JsonSerializer.Serialize(metadata);
-        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{nowStr}\"}}");
+        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":{nowStr}}}");
     }
 
 

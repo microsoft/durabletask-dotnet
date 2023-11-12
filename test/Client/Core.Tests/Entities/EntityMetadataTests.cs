@@ -11,24 +11,6 @@ public class EntityMetadataTests
 {
     readonly EntityInstanceId id = new("test", Random.Shared.Next(0, 100).ToString());
 
-    // create customize convert class
-    public class DateTimeConverter : JsonConverter<DateTimeOffset>
-    {
-        public override DateTimeOffset Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        {
-            return DateTimeOffset.Parse(reader.GetString());
-        }
-
-        public override void Write(Utf8JsonWriter writer, DateTimeOffset value, JsonSerializerOptions options)
-        {
-            writer.WriteStringValue("test!");
-        }
-    }
-
-    readonly JsonSerializerOptions settings = new JsonSerializerOptions() {
-        Converters = { new DateTimeConverter() }
-    };
-
     [Fact]
     public void GetState_NotIncluded_Throws()
     {

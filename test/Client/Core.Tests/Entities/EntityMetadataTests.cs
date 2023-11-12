@@ -9,6 +9,10 @@ namespace Microsoft.DurableTask.Client.Entities.Tests;
 public class EntityMetadataTests
 {
     readonly EntityInstanceId id = new("test", Random.Shared.Next(0, 100).ToString());
+    readonly IsoDateTimeConverter dateConverter = new IsoDateTimeConverter
+    {
+        DateTimeFormat = "yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fffffffzzz"
+    };
 
     [Fact]
     public void GetState_NotIncluded_Throws()

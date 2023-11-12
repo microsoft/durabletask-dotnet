@@ -19,8 +19,9 @@ public class EntityMetadataTests
         }
     }
 
-    JsonSerializerOptions defaultSettings = new JsonSerializerOptions();
-    defaultSettings.Converters.Add(new DateTimeConverter());
+    readonly JsonSerializerOptions defaultSettings = new JsonSerializerOptions() {
+        Converters = { new DateTimeConverter() }
+    };
 
     [Fact]
     public void GetState_NotIncluded_Throws()

@@ -12,14 +12,14 @@ public class EntityMetadataTests
     readonly EntityInstanceId id = new("test", Random.Shared.Next(0, 100).ToString());
 
     // create customize convert class
-    public class DateTimeConverter : JsonConverter<DateTime>
+    public class DateTimeConverter : JsonConverter<DateTimeOffset>
     {
-        public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        public override DateTimeOffset Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            return DateTime.Parse(reader.GetString());
+            return DateTimeOffset.Parse(reader.GetString());
         }
 
-        public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
+        public override void Write(Utf8JsonWriter writer, DateTimeOffset value, JsonSerializerOptions options)
         {
             writer.WriteStringValue(value.ToString("dd/MM/yyyy"));
         }

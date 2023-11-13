@@ -1,5 +1,10 @@
 ﻿# Changelog
 
+# v1.1.0
+
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.16.0`
+
+
 ## v1.1.0-preview.2
 
 - Microsoft.Azure.DurableTask.Core dependency increased to `2.16.0-preview.2`

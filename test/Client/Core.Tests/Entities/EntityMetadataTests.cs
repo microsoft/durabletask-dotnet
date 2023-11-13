@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.DurableTask.Entities;
 
 namespace Microsoft.DurableTask.Client.Entities.Tests;
@@ -38,8 +39,9 @@ public class EntityMetadataTests
             LockedBy = lockedBy,
         };
 
+        string nowStr = JsonSerializer.Serialize(now); // STJ drops trailing zeroes from dates. see: https://github.com/microsoft/durabletask-dotnet/pull/239
         string json = JsonSerializer.Serialize(metadata);
-        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{now:O}\",\"BacklogQueueSize\":10,\"LockedBy\""
+        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":{nowStr},\"BacklogQueueSize\":10,\"LockedBy\""
             + $":\"{lockedBy}\"}}");
     }
 
@@ -56,8 +58,9 @@ public class EntityMetadataTests
             LockedBy = lockedBy,
         };
 
+        string nowStr = JsonSerializer.Serialize(now); // STJ drops trailing zeroes from dates. see: https://github.com/microsoft/durabletask-dotnet/pull/239
         string json = JsonSerializer.Serialize(metadata);
-        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{now:O}\",\"BacklogQueueSize\":10,\"LockedBy\""
+        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":{nowStr},\"BacklogQueueSize\":10,\"LockedBy\""
             + $":\"{lockedBy}\",\"State\":{state}}}");
     }
 
@@ -74,8 +77,9 @@ public class EntityMetadataTests
             LockedBy = lockedBy,
         };
 
+        string nowStr = JsonSerializer.Serialize(now); // STJ drops trailing zeroes from dates. see: https://github.com/microsoft/durabletask-dotnet/pull/239
         string json = JsonSerializer.Serialize(metadata);
-        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{now:O}\",\"BacklogQueueSize\":10,\"LockedBy\""
+        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":{nowStr},\"BacklogQueueSize\":10,\"LockedBy\""
             + $":\"{lockedBy}\",\"State\":{{\"Number\":{state.Number}}}}}");
     }
     
@@ -89,8 +93,9 @@ public class EntityMetadataTests
             LastModifiedTime = now,
         };
 
+        string nowStr = JsonSerializer.Serialize(now); // STJ drops trailing zeroes from dates. see: https://github.com/microsoft/durabletask-dotnet/pull/239
         string json = JsonSerializer.Serialize(metadata);
-        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{now:O}\",\"State\":"
+        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":{nowStr},\"State\":"
             + $"{{\"Number\":{state.Number}}}}}");
     }
 
@@ -104,8 +109,9 @@ public class EntityMetadataTests
             LastModifiedTime = now,
         };
 
+        string nowStr = JsonSerializer.Serialize(now); // STJ drops trailing zeroes from dates. see: https://github.com/microsoft/durabletask-dotnet/pull/239
         string json = JsonSerializer.Serialize(metadata);
-        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":\"{now:O}\"}}");
+        json.Should().Be($"{{\"Id\":\"{this.id}\",\"LastModifiedTime\":{nowStr}}}");
     }
 
 
@@ -119,8 +125,9 @@ public class EntityMetadataTests
             LastModifiedTime = now,
         };
 
+        string nowStr = JsonSerializer.Serialize(now); // STJ drops trailing zeroes from dates. see: https://github.com/microsoft/durabletask-dotnet/pull/239
         string json = JsonSerializer.Serialize(metadata);
-        json.Should().Be($@"{{""Id"":""{this.id}"",""LastModifiedTime"":""{now:O}"",""State"":""{{\u0022Number\u0022:{state.Number}}}""}}");
+        json.Should().Be($@"{{""Id"":""{this.id}"",""LastModifiedTime"":{nowStr},""State"":""{{\u0022Number\u0022:{state.Number}}}""}}");
     }
 
     record class State(int Number)

@@ -52,11 +52,7 @@ public static class GrpcOrchestrationRunner
         Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> orchestratorFunc,
         IServiceProvider? services = null)
     {
-        if (orchestratorFunc == null)
-        {
-            throw new ArgumentNullException(nameof(orchestratorFunc));
-        }
-
+        Check.NotNull(orchestratorFunc);
         return LoadAndRun(encodedOrchestratorRequest, FuncTaskOrchestrator.Create(orchestratorFunc), services);
     }
 

@@ -12,8 +12,6 @@ namespace WebAPI.Controllers;
 [ApiController]
 public class OrderProcessingController(DurableTaskClient durableTaskClient) : ControllerBase
 {
-    readonly DurableTaskClient durableTaskClient = durableTaskClient;
-
     // HTTPie command:
     // http POST http://localhost:8080/orders/new Item=catfood Quantity=5 Price=600
     [HttpPost("new")]
@@ -26,7 +24,7 @@ public class OrderProcessingController(DurableTaskClient durableTaskClient) : Co
 
         // Generate an order ID and start the order processing workflow orchestration
         string orderId = $"{orderInfo.Item}-{Guid.NewGuid().ToString()[..4]}";
-        await this.durableTaskClient.ScheduleNewProcessOrderOrchestratorInstanceAsync(
+        await durableTaskClient.ScheduleNewProcessOrderOrchestratorInstanceAsync(
             orderInfo, new StartOrchestrationOptions() { InstanceId = orderId });
 
         // Return 202 with a link to the GetOrderStatus API
@@ -40,7 +38,7 @@ public class OrderProcessingController(DurableTaskClient durableTaskClient) : Co
     [HttpGet("{orderId}")]
     public async Task<ActionResult> GetOrderStatus(string orderId)
     {
-        OrchestrationMetadata? metadata = await this.durableTaskClient.GetInstancesAsync(
+        OrchestrationMetadata? metadata = await durableTaskClient.GetInstancesAsync(
             instanceId: orderId,
             getInputsAndOutputs: true);
 

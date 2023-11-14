@@ -12,11 +12,7 @@ public class CheckInventoryActivity(ILogger<CheckInventoryActivity> logger)
 {
     public override Task<bool> RunAsync(TaskActivityContext context, OrderInfo orderInfo)
     {
-        if (orderInfo == null)
-        {
-            throw new ArgumentException("Failed to read order info!");
-        }
-
+        ArgumentNullException.ThrowIfNull(context);
         logger.LogInformation(
             "{instanceId}: Checking inventory for '{item}'...found some!",
             context.InstanceId,

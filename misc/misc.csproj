@@ -22,6 +22,7 @@
     <None Include="$(RepoRoot)nuget.config" />
     <None Include="$(EngRoot)**" LinkBase="eng" />
     <None Include="$(RepoRoot).github/**" LinkBase="github" />
+    <None Include="$(RepoRoot)doc/**" LinkBase="doc" />
   </ItemGroup>
 
 </Project>

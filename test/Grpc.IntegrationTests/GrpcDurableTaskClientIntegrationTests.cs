@@ -10,14 +10,10 @@ using Xunit.Abstractions;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
-public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
+public class DurableTaskGrpcClientIntegrationTests(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
+    : IntegrationTestBase(output, sidecarFixture)
 {
     const string OrchestrationName = "TestOrchestration";
-
-    public DurableTaskGrpcClientIntegrationTests(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
-        : base(output, sidecarFixture)
-    {
-    }
 
     [Theory]
     [InlineData(false)]

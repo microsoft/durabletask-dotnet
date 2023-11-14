@@ -7,16 +7,11 @@ using Xunit.Abstractions;
 
 namespace Microsoft.DurableTask.Tests.Logging;
 
-public sealed class TestLogProvider : ILoggerProvider
+public sealed class TestLogProvider(ITestOutputHelper output) : ILoggerProvider
 {
-    readonly ITestOutputHelper output;
-    readonly ConcurrentDictionary<string, TestLogger> loggers;
-
-    public TestLogProvider(ITestOutputHelper output)
-    {
-        this.output = output ?? throw new ArgumentNullException(nameof(output));
-        this.loggers = new ConcurrentDictionary<string, TestLogger>(StringComparer.OrdinalIgnoreCase);
-    }
+    readonly ITestOutputHelper output = output ?? throw new ArgumentNullException(nameof(output));
+    readonly ConcurrentDictionary<string, TestLogger> loggers
+        = new ConcurrentDictionary<string, TestLogger>(StringComparer.OrdinalIgnoreCase);
 
     public bool TryGetLogs(string category, out IReadOnlyCollection<LogEntry> logs)
     {
@@ -48,18 +43,9 @@ public sealed class TestLogProvider : ILoggerProvider
         // no-op
     }
 
-    class TestLogger : ILogger
+    class TestLogger(string category, ITestOutputHelper output) : ILogger
     {
-        readonly string category;
-        readonly ITestOutputHelper output;
-        readonly List<LogEntry> entries;
-
-        public TestLogger(string category, ITestOutputHelper output)
-        {
-            this.category = category;
-            this.output = output;
-            this.entries = new List<LogEntry>();
-        }
+        readonly List<LogEntry> entries = new List<LogEntry>();
 
         public IReadOnlyCollection<LogEntry> GetLogs() => this.entries.AsReadOnly();
 
@@ -77,7 +63,7 @@ public sealed class TestLogProvider : ILoggerProvider
             Func<TState, Exception?, string> formatter)
         {
             var entry = new LogEntry(
-                this.category,
+                category,
                 level,
                 eventId,
                 exception,
@@ -87,7 +73,7 @@ public sealed class TestLogProvider : ILoggerProvider
 
             try
             {
-                this.output.WriteLine(entry.ToString());
+                output.WriteLine(entry.ToString());
             }
             catch (InvalidOperationException)
             {

@@ -29,23 +29,17 @@ public static class FuncTaskOrchestrator
     /// </summary>
     /// <typeparam name="TInput">The orchestrator input type.</typeparam>
     /// <typeparam name="TOutput">The orchestrator output type.</typeparam>
-    class Implementation<TInput, TOutput> : TaskOrchestrator<TInput, TOutput>
+    /// <remarks>
+    /// Initializes a new instance of the <see cref="Implementation{TInput, TOutput}"/> class.
+    /// </remarks>
+    /// <param name="implementation">The orchestrator function.</param>
+    class Implementation<TInput, TOutput>(Func<TaskOrchestrationContext, TInput, Task<TOutput>> implementation)
+        : TaskOrchestrator<TInput, TOutput>
     {
-        readonly Func<TaskOrchestrationContext, TInput, Task<TOutput>> implementation;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Implementation{TInput, TOutput}"/> class.
-        /// </summary>
-        /// <param name="implementation">The orchestrator function.</param>
-        public Implementation(Func<TaskOrchestrationContext, TInput, Task<TOutput>> implementation)
-        {
-            this.implementation = implementation;
-        }
-
         /// <inheritdoc/>
         public override Task<TOutput> RunAsync(TaskOrchestrationContext context, TInput input)
         {
-            return this.implementation(context, input);
+            return implementation(context, input);
         }
     }
 }

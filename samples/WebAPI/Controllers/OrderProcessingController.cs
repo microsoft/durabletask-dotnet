@@ -10,14 +10,9 @@ namespace WebAPI.Controllers;
 
 [Route("orders")]
 [ApiController]
-public class OrderProcessingController : ControllerBase
+public class OrderProcessingController(DurableTaskClient durableTaskClient) : ControllerBase
 {
-    readonly DurableTaskClient durableTaskClient;
-
-    public OrderProcessingController(DurableTaskClient durableTaskClient)
-    {
-        this.durableTaskClient = durableTaskClient;
-    }
+    readonly DurableTaskClient durableTaskClient = durableTaskClient;
 
     // HTTPie command:
     // http POST http://localhost:8080/orders/new Item=catfood Quantity=5 Price=600

@@ -13,27 +13,18 @@ namespace Microsoft.DurableTask.Client.Grpc;
 /// <summary>
 /// The client for entities.
 /// </summary>
-class GrpcDurableEntityClient : DurableEntityClient
+/// <remarks>
+/// Initializes a new instance of the <see cref="GrpcDurableEntityClient"/> class.
+/// </remarks>
+/// <param name="name">The name of the client.</param>
+/// <param name="dataConverter">The data converter.</param>
+/// <param name="sidecarClient">The client for the GRPC connection to the sidecar.</param>
+class GrpcDurableEntityClient(
+    string name, DataConverter dataConverter, TaskHubSidecarServiceClient sidecarClient)
+    : DurableEntityClient(name)
 {
-    readonly TaskHubSidecarServiceClient sidecarClient;
-    readonly DataConverter dataConverter;
-    readonly ILogger logger;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="GrpcDurableEntityClient"/> class.
-    /// </summary>
-    /// <param name="name">The name of the client.</param>
-    /// <param name="dataConverter">The data converter.</param>
-    /// <param name="sidecarClient">The client for the GRPC connection to the sidecar.</param>
-    /// <param name="logger">The logger for logging client requests.</param>
-    public GrpcDurableEntityClient(
-        string name, DataConverter dataConverter, TaskHubSidecarServiceClient sidecarClient, ILogger logger)
-        : base(name)
-    {
-        this.dataConverter = dataConverter;
-        this.sidecarClient = sidecarClient;
-        this.logger = logger;
-    }
+    readonly TaskHubSidecarServiceClient sidecarClient = Check.NotNull(sidecarClient);
+    readonly DataConverter dataConverter = Check.NotNull(dataConverter);
 
     /// <inheritdoc/>
     public override async Task SignalEntityAsync(
@@ -72,20 +63,20 @@ class GrpcDurableEntityClient : DurableEntityClient
     /// <inheritdoc/>
     public override Task<EntityMetadata?> GetEntityAsync(
         EntityInstanceId id, bool includeState = false, CancellationToken cancellation = default)
-        => this.GetEntityCoreAsync(id, includeState, (e, s) => this.ToEntityMetadata(e, s), cancellation);
+        => this.GetEntityCoreAsync(id, includeState, this.ToEntityMetadata, cancellation);
 
     /// <inheritdoc/>
     public override Task<EntityMetadata<TState>?> GetEntityAsync<TState>(
         EntityInstanceId id, bool includeState = false, CancellationToken cancellation = default)
-        => this.GetEntityCoreAsync(id, includeState, (e, s) => this.ToEntityMetadata<TState>(e, s), cancellation);
+        => this.GetEntityCoreAsync(id, includeState, this.ToEntityMetadata<TState>, cancellation);
 
     /// <inheritdoc/>
     public override AsyncPageable<EntityMetadata> GetAllEntitiesAsync(EntityQuery? filter = null)
-        => this.GetAllEntitiesCoreAsync(filter, (x, s) => this.ToEntityMetadata(x, s));
+        => this.GetAllEntitiesCoreAsync(filter, this.ToEntityMetadata);
 
     /// <inheritdoc/>
     public override AsyncPageable<EntityMetadata<TState>> GetAllEntitiesAsync<TState>(EntityQuery? filter = null)
-        => this.GetAllEntitiesCoreAsync(filter, (x, s) => this.ToEntityMetadata<TState>(x, s));
+        => this.GetAllEntitiesCoreAsync(filter, this.ToEntityMetadata<TState>);
 
     /// <inheritdoc/>
     public override async Task<CleanEntityStorageResult> CleanEntityStorageAsync(

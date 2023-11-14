@@ -5,38 +5,27 @@ using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.Tests.Logging;
 
-public class LogEntry
+public class LogEntry(
+    string category,
+    LogLevel level,
+    EventId eventId,
+    Exception? exception,
+    string message,
+    object? state)
 {
-    public LogEntry(
-        string category,
-        LogLevel level,
-        EventId eventId,
-        Exception? exception,
-        string message,
-        object? state)
-    {
-        this.Category = category;
-        this.LogLevel = level;
-        this.EventId = eventId;
-        this.Exception = exception;
-        this.Message = message;
-        this.Timestamp = DateTime.Now;
-        this.State = state;
-    }
+    public string Category { get; } = category;
 
-    public string Category { get; }
+    public DateTime Timestamp { get; } = DateTime.Now;
 
-    public DateTime Timestamp { get; }
+    public EventId EventId { get; } = eventId;
 
-    public EventId EventId { get; }
+    public LogLevel LogLevel { get; } = level;
 
-    public LogLevel LogLevel { get; }
+    public Exception? Exception { get; } = exception;
 
-    public Exception? Exception { get; }
+    public string Message { get; } = message;
 
-    public string Message { get; }
-
-    public object? State { get; }
+    public object? State { get; } = state;
 
     public override string ToString()
     {

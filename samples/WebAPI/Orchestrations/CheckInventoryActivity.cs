@@ -4,31 +4,23 @@
 using Microsoft.DurableTask;
 using WebAPI.Models;
 
-namespace WebAPI.Orchestrations
+namespace WebAPI.Orchestrations;
+
+[DurableTask("CheckInventory")]
+public class CheckInventoryActivity(ILogger<CheckInventoryActivity> logger)
+    : TaskActivity<OrderInfo, bool>
 {
-    [DurableTask("CheckInventory")]
-    public class CheckInventoryActivity : TaskActivity<OrderInfo, bool>
+    public override Task<bool> RunAsync(TaskActivityContext context, OrderInfo orderInfo)
     {
-        readonly ILogger logger;
-
-        // Dependencies are injected from ASP.NET host service container
-        public CheckInventoryActivity(ILogger<CheckInventoryActivity> logger)
+        if (orderInfo == null)
         {
-            this.logger = logger;
+            throw new ArgumentException("Failed to read order info!");
         }
 
-        public override Task<bool> RunAsync(TaskActivityContext context, OrderInfo orderInfo)
-        {
-            if (orderInfo == null)
-            {
-                throw new ArgumentException("Failed to read order info!");
-            }
-
-            this.logger.LogInformation(
-                "{instanceId}: Checking inventory for '{item}'...found some!",
-                context.InstanceId,
-                orderInfo.Item);
-            return Task.FromResult(true);
-        }
+        logger.LogInformation(
+            "{instanceId}: Checking inventory for '{item}'...found some!",
+            context.InstanceId,
+            orderInfo.Item);
+        return Task.FromResult(true);
     }
 }

@@ -13,28 +13,20 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// This class is intended for use with alternate .NET-based durable task runtimes. It's not intended for use
 /// in application code.
 /// </remarks>
-partial class TaskOrchestrationShim : TaskOrchestration
+/// <remarks>
+/// Initializes a new instance of the <see cref="TaskOrchestrationShim"/> class.
+/// </remarks>
+/// <param name="invocationContext">The invocation context for this orchestration.</param>
+/// <param name="implementation">The orchestration's implementation.</param>
+partial class TaskOrchestrationShim(
+    OrchestrationInvocationContext invocationContext,
+    ITaskOrchestrator implementation) : TaskOrchestration
 {
-    readonly ITaskOrchestrator implementation;
-    readonly OrchestrationInvocationContext invocationContext;
+    readonly ITaskOrchestrator implementation = Check.NotNull(implementation);
+    readonly OrchestrationInvocationContext invocationContext = Check.NotNull(invocationContext);
     TaskOrchestrationContextWrapper? wrapperContext;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="TaskOrchestrationShim"/> class.
-    /// </summary>
-    /// <param name="invocationContext">The invocation context for this orchestration.</param>
-    /// <param name="implementation">The orchestration's implementation.</param>
-    public TaskOrchestrationShim(
-        OrchestrationInvocationContext invocationContext,
-        ITaskOrchestrator implementation)
-    {
-        this.invocationContext = Check.NotNull(invocationContext);
-        this.implementation = Check.NotNull(implementation);
-    }
-
     DataConverter DataConverter => this.invocationContext.Options.DataConverter;
-
-    ILoggerFactory LoggerFactory => this.invocationContext.LoggerFactory;
 
     /// <inheritdoc/>
     public override async Task<string?> Execute(OrchestrationContext innerContext, string rawInput)

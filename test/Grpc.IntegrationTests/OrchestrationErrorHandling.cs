@@ -11,11 +11,9 @@ namespace Microsoft.DurableTask.Grpc.Tests;
 /// Integration tests that are designed to exercise the error handling and retry functionality
 /// of the Durable Task SDK.
 /// </summary>
-public class OrchestrationErrorHandling : IntegrationTestBase
+public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
+    : IntegrationTestBase(output, sidecarFixture)
 {
-    public OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
-        : base(output, sidecarFixture)
-    { }
 
     /// <summary>
     /// Tests the behavior and output of an unhandled exception that originates from an activity.

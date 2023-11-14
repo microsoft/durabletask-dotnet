@@ -60,17 +60,11 @@ public class DefaultDurableTaskClientBuilderTests
     {
     }
 
-    class GoodBuildTarget : DurableTaskClient
+    class GoodBuildTarget(string name, IOptionsMonitor<DurableTaskClientOptions> options) : DurableTaskClient(name)
     {
-        public GoodBuildTarget(string name, IOptionsMonitor<DurableTaskClientOptions> options)
-            : base(name)
-        {
-            this.Options = options.Get(name);
-        }
-
         public new string Name => base.Name;
 
-        public DurableTaskClientOptions Options { get; }
+        public DurableTaskClientOptions Options { get; } = options.Get(name);
 
         public override ValueTask DisposeAsync()
         {

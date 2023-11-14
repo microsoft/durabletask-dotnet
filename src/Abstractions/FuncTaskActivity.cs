@@ -29,23 +29,17 @@ public static class FuncTaskActivity
     /// </summary>
     /// <typeparam name="TInput">The Activity input type.</typeparam>
     /// <typeparam name="TOutput">The Activity output type.</typeparam>
-    class Implementation<TInput, TOutput> : TaskActivity<TInput, TOutput>
+    /// <remarks>
+    /// Initializes a new instance of the <see cref="Implementation{TInput, TOutput}"/> class.
+    /// </remarks>
+    /// <param name="implementation">The Activity function.</param>
+    class Implementation<TInput, TOutput>(Func<TaskActivityContext, TInput, Task<TOutput>> implementation)
+        : TaskActivity<TInput, TOutput>
     {
-        readonly Func<TaskActivityContext, TInput, Task<TOutput>> implementation;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Implementation{TInput, TOutput}"/> class.
-        /// </summary>
-        /// <param name="implementation">The Activity function.</param>
-        public Implementation(Func<TaskActivityContext, TInput, Task<TOutput>> implementation)
-        {
-            this.implementation = implementation;
-        }
-
         /// <inheritdoc/>
         public override Task<TOutput> RunAsync(TaskActivityContext context, TInput input)
         {
-            return this.implementation(context, input);
+            return implementation(context, input);
         }
     }
 }

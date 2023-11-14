@@ -93,20 +93,15 @@ public class DefaultDurableTaskWorkerBuilderTests
         }
     }
 
-    class GoodBuildTarget : DurableTaskWorker
+    class GoodBuildTarget(
+        string name, DurableTaskFactory factory, IOptionsMonitor<DurableTaskWorkerOptions> options)
+        : DurableTaskWorker(name, factory)
     {
-        public GoodBuildTarget(
-            string name, DurableTaskFactory factory, IOptionsMonitor<DurableTaskWorkerOptions> options)
-            : base(name, factory)
-        {
-            this.Options = options.Get(name);
-        }
-
         public new string Name => base.Name;
 
         public new IDurableTaskFactory Factory => base.Factory;
 
-        public DurableTaskWorkerOptions Options { get; }
+        public DurableTaskWorkerOptions Options { get; } = options.Get(name);
 
         protected override Task ExecuteAsync(CancellationToken stoppingToken)
         {

@@ -8,18 +8,13 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// <summary>
 /// A shim to go from <see cref="DataConverter" /> to <see cref="CoreJsonDataConverter" />.
 /// </summary>
-sealed class JsonDataConverterShim : CoreJsonDataConverter
+/// <remarks>
+/// Initializes a new instance of the <see cref="JsonDataConverterShim"/> class.
+/// </remarks>
+/// <param name="innerConverter">The converter to wrap.</param>
+sealed class JsonDataConverterShim(DataConverter innerConverter) : CoreJsonDataConverter
 {
-    readonly DataConverter innerConverter;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="JsonDataConverterShim"/> class.
-    /// </summary>
-    /// <param name="innerConverter">The converter to wrap.</param>
-    public JsonDataConverterShim(DataConverter innerConverter)
-    {
-        this.innerConverter = Check.NotNull(innerConverter);
-    }
+    readonly DataConverter innerConverter = Check.NotNull(innerConverter);
 
     /// <inheritdoc/>
     public override string Serialize(object value)

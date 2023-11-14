@@ -8,13 +8,9 @@ using Xunit.Abstractions;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
-public class PageableIntegrationTests : IntegrationTestBase
+public class PageableIntegrationTests(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
+    : IntegrationTestBase(output, sidecarFixture)
 {
-    public PageableIntegrationTests(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
-        : base(output, sidecarFixture)
-    {
-    }
-
     [Fact]
     public async Task PageableActivity_Enumerates()
     {

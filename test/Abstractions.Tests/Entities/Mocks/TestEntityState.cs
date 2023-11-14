@@ -3,16 +3,11 @@
 
 namespace Microsoft.DurableTask.Entities.Tests;
 
-public class TestEntityState : TaskEntityState
+public class TestEntityState(object? state) : TaskEntityState
 {
-    public TestEntityState(object? state)
-    {
-        this.State = state;
-    }
-
     public override bool HasState => this.State != null;
 
-    public object? State { get; private set; }
+    public object? State { get; private set; } = state;
 
     public override object? GetState(Type type)
     {

@@ -19,20 +19,13 @@ public record UserUpdate(string? Name, int? Age);
 /// <summary>
 /// This sample demonstrates how to bind to <see cref="TaskEntityContext"/> as well as dispatch to orchestrations.
 /// </summary>
-public class UserEntity : TaskEntity<User>
+public class UserEntity(ILogger<UserEntity> logger) : TaskEntity<User>
 {
-    readonly ILogger logger;
-
-    public UserEntity(ILogger<UserEntity> logger)
-    {
-        this.logger = logger;
-    }
-
     public void Set(User user)
     {
         User previous = this.State;
         this.State = user;
-        this.logger.LogInformation("User {Id} set {Old} -> {New}", this.Context.Id.Key, previous, this.State);
+        logger.LogInformation("User {Id} set {Old} -> {New}", this.Context.Id.Key, previous, this.State);
     }
 
     public void Update(UserUpdate update)
@@ -40,8 +33,7 @@ public class UserEntity : TaskEntity<User>
         (string n, int a) = (update.Name ?? this.State.Name, update.Age ?? this.State.Age);
         User previous = this.State;
         this.State = previous with { Name = n, Age = a };
-
-        this.logger.LogInformation("User {Id} updated {Old} -> {New}", this.Context.Id.Key, previous, this.State);
+        logger.LogInformation("User {Id} updated {Old} -> {New}", this.Context.Id.Key, previous, this.State);
     }
 
     /// <summary>
@@ -55,7 +47,7 @@ public class UserEntity : TaskEntity<User>
     {
         if (this.State.Name is null)
         {
-            this.logger.LogError("User is not in a valid state for a greet operation.");
+            logger.LogError("User is not in a valid state for a greet operation.");
             throw new InvalidOperationException("User has not been initialized.");
         }
 

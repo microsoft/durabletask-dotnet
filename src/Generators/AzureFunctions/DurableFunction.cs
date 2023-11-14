@@ -13,30 +13,25 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
         Activity
     }
 
-    public class DurableFunction
+    public class DurableFunction(
+        string fullTypeName,
+        string name,
+        DurableFunctionKind kind,
+        TypedParameter parameter,
+        ITypeSymbol returnType,
+        HashSet<string> requiredNamespaces)
     {
-        public string FullTypeName { get; }
-        public HashSet<string> RequiredNamespaces { get; }
-        public string Name { get; }
-        public DurableFunctionKind Kind { get; }
-        public TypedParameter Parameter { get; }
-        public string ReturnType { get; }
+        public string FullTypeName { get; } = fullTypeName;
 
-        public DurableFunction(
-            string fullTypeName,
-            string name,
-            DurableFunctionKind kind,
-            TypedParameter parameter,
-            ITypeSymbol returnType,
-            HashSet<string> requiredNamespaces)
-        {
-            this.FullTypeName = fullTypeName;
-            this.RequiredNamespaces = requiredNamespaces;
-            this.Name = name;
-            this.Kind = kind;
-            this.Parameter = parameter;
-            this.ReturnType = SyntaxNodeUtility.GetRenderedTypeExpression(returnType, false);
-        }
+        public HashSet<string> RequiredNamespaces { get; } = requiredNamespaces;
+
+        public string Name { get; } = name;
+
+        public DurableFunctionKind Kind { get; } = kind;
+
+        public TypedParameter Parameter { get; } = parameter;
+
+        public string ReturnType { get; } = SyntaxNodeUtility.GetRenderedTypeExpression(returnType, false);
 
         public static bool TryParse(SemanticModel model, MethodDeclarationSyntax method, out DurableFunction? function)
         {

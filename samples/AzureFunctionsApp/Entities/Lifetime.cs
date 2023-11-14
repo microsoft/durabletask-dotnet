@@ -17,15 +17,8 @@ namespace AzureFunctionsApp.Entities;
 /// is also possible to design an entity which remains stateless by always returning <c>null</c> from
 /// <see cref="InitializeState"/> and never assigning a non-null state.
 /// </summary>
-public class Lifetime : TaskEntity<MyState>
+public class Lifetime(ILogger<Lifetime> logger) : TaskEntity<MyState>
 {
-    readonly ILogger logger;
-
-    public Lifetime(ILogger<Lifetime> logger)
-    {
-        this.logger = logger;
-    }
-
     /// <summary>
     /// Optional property to override. When 'true', this will allow dispatching of operations to the <see cref="State">
     /// object if there is no matching method on the entity. Default is 'false'.
@@ -39,7 +32,7 @@ public class Lifetime : TaskEntity<MyState>
     [Function(nameof(Lifetime))]
     public Task DispatchAsync([EntityTrigger] TaskEntityDispatcher dispatcher)
     {
-        this.logger.LogInformation("Dispatching entity");
+        logger.LogInformation("Dispatching entity");
         return dispatcher.DispatchAsync(this);
     }
 

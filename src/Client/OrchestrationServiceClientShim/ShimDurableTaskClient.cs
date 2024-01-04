@@ -130,6 +130,7 @@ class ShimDurableTaskClient : DurableTaskClient
         TaskName orchestratorName,
         object? input = null,
         StartOrchestrationOptions? options = null,
+        HashSet<string>? orchestrationIdReusePolicy = null,
         CancellationToken cancellation = default)
     {
         cancellation.ThrowIfCancellationRequested();

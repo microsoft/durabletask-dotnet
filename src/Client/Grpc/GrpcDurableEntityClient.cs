@@ -41,6 +41,7 @@ class GrpcDurableEntityClient : DurableEntityClient
         string operationName,
         object? input = null,
         SignalEntityOptions? options = null,
+        HashSet<string>? orchestrationIdReusePolicy = null,
         CancellationToken cancellation = default)
     {
         Check.NotNullOrEmpty(id.Name);

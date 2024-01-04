@@ -51,20 +51,25 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     public virtual DurableEntityClient Entities =>
         throw new NotSupportedException($"{this.GetType()} does not support durable entities.");
 
-    /// <inheritdoc cref="ScheduleNewOrchestrationInstanceAsync(TaskName, object, StartOrchestrationOptions, CancellationToken)"/>
+    /// <inheritdoc cref="ScheduleNewOrchestrationInstanceAsync(TaskName, object, StartOrchestrationOptions, HashSet, CancellationToken)"/>
     public virtual Task<string> ScheduleNewOrchestrationInstanceAsync(
         TaskName orchestratorName, CancellationToken cancellation)
-        => this.ScheduleNewOrchestrationInstanceAsync(orchestratorName, null, null, cancellation);
+        => this.ScheduleNewOrchestrationInstanceAsync(orchestratorName, null, null, null, cancellation);
 
-    /// <inheritdoc cref="ScheduleNewOrchestrationInstanceAsync(TaskName, object, StartOrchestrationOptions, CancellationToken)"/>
+    /// <inheritdoc cref="ScheduleNewOrchestrationInstanceAsync(TaskName, object, StartOrchestrationOptions, HashSet, CancellationToken)"/>
     public virtual Task<string> ScheduleNewOrchestrationInstanceAsync(
         TaskName orchestratorName, object? input, CancellationToken cancellation)
-        => this.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input, null, cancellation);
+        => this.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input, null, null, cancellation);
 
-    /// <inheritdoc cref="ScheduleNewOrchestrationInstanceAsync(TaskName, object, StartOrchestrationOptions, CancellationToken)"/>
+    /// <inheritdoc cref="ScheduleNewOrchestrationInstanceAsync(TaskName, object, StartOrchestrationOptions, HashSet, CancellationToken)"/>
     public virtual Task<string> ScheduleNewOrchestrationInstanceAsync(
         TaskName orchestratorName, StartOrchestrationOptions options, CancellationToken cancellation = default)
-        => this.ScheduleNewOrchestrationInstanceAsync(orchestratorName, null, options, cancellation);
+        => this.ScheduleNewOrchestrationInstanceAsync(orchestratorName, null, options, null, cancellation);
+
+    /// <inheritdoc cref="ScheduleNewOrchestrationInstanceAsync(TaskName, object, StartOrchestrationOptions, HashSet, CancellationToken)"/>
+    public virtual Task<string> ScheduleNewOrchestrationInstanceAsync(
+        TaskName orchestratorName, StartOrchestrationOptions options, HashSet<string> orchestrationIdReusePolicy, CancellationToken cancellation = default)
+        => this.ScheduleNewOrchestrationInstanceAsync(orchestratorName, null, null, orchestrationIdReusePolicy, cancellation);
 
     /// <summary>
     /// Schedules a new orchestration instance for execution.
@@ -96,6 +101,9 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// The optional input to pass to the scheduled orchestration instance. This must be a serializable value.
     /// </param>
     /// <param name="options">The options to start the new orchestration with.</param>
+    /// <param name="orchestrationIdReusePolicy">
+    /// The orchestration reuse policy. This allows for the reuse of an instance ID as well as the options for it.
+    /// </param>
     /// <param name="cancellation">
     /// The cancellation token. This only cancels enqueueing the new orchestration to the backend. Does not cancel the
     /// orchestration once enqueued.
@@ -110,6 +118,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         TaskName orchestratorName,
         object? input = null,
         StartOrchestrationOptions? options = null,
+        HashSet<string>? orchestrationIdReusePolicy = null,
         CancellationToken cancellation = default);
 
     /// <inheritdoc cref="RaiseEventAsync(string, string, object, CancellationToken)"/>

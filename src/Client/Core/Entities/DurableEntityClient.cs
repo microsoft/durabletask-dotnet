@@ -31,6 +31,7 @@ public abstract class DurableEntityClient
     /// <param name="operationName">The name of the operation.</param>
     /// <param name="input">The input for the operation.</param>
     /// <param name="options">The options to signal the entity with.</param>
+    /// <param name="orchestrationIdReusePolicy">The policy for reusing an orchestration ID.</param>
     /// <param name="cancellation">The cancellation token to cancel enqueuing of the operation.</param>
     /// <returns>A task that completes when the message has been reliably enqueued.</returns>
     /// <remarks>This does not wait for the operation to be processed by the receiving entity.</remarks>
@@ -39,6 +40,7 @@ public abstract class DurableEntityClient
         string operationName,
         object? input = null,
         SignalEntityOptions? options = null,
+        HashSet<string>? orchestrationIdReusePolicy = null,
         CancellationToken cancellation = default);
 
     /// <summary>
@@ -55,7 +57,7 @@ public abstract class DurableEntityClient
         string operationName,
         SignalEntityOptions options,
         CancellationToken cancellation = default)
-        => this.SignalEntityAsync(id, operationName, null, options, cancellation);
+        => this.SignalEntityAsync(id, operationName, null, options, null, cancellation);
 
     /// <summary>
     /// Signals an entity to perform an operation.
@@ -69,7 +71,7 @@ public abstract class DurableEntityClient
         EntityInstanceId id,
         string operationName,
         CancellationToken cancellation)
-        => this.SignalEntityAsync(id, operationName, null, null, cancellation);
+        => this.SignalEntityAsync(id, operationName, null, null, null, cancellation);
 
     /// <summary>
     /// Tries to get the entity with ID of <paramref name="id"/>. Includes entity state by default.

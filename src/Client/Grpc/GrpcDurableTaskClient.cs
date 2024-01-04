@@ -73,6 +73,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         TaskName orchestratorName,
         object? input = null,
         StartOrchestrationOptions? options = null,
+        HashSet<string>? orchestrationIdReusePolicy = null,
         CancellationToken cancellation = default)
     {
         Check.NotEntity(this.options.EnableEntitySupport, options?.InstanceId);
@@ -83,6 +84,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             Version = orchestratorName.Version,
             InstanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N"),
             Input = this.DataConverter.Serialize(input),
+            OrchestrationIdReusePolicy = { },
         };
 
         DateTimeOffset? startAt = options?.StartAt;

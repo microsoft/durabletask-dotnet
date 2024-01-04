@@ -27,6 +27,7 @@ public interface IOrchestrationSubmitter
     /// The optional input to pass to the scheduled orchestration instance. This must be a serializable value.
     /// </param>
     /// <param name="options">The options to start the new orchestration with.</param>
+    /// <param name="orchestrationIdReusePolicy">The policy for reusing an orchestration ID.</param>
     /// <param name="cancellation">
     /// The cancellation token. This only cancels enqueueing the new orchestration to the backend. Does not cancel the
     /// orchestration once enqueued.
@@ -40,5 +41,6 @@ public interface IOrchestrationSubmitter
         TaskName orchestratorName,
         object? input = null,
         StartOrchestrationOptions? options = null,
+        HashSet<string>? orchestrationIdReusePolicy = null,
         CancellationToken cancellation = default);
 }

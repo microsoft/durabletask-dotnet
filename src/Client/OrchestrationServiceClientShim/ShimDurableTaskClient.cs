@@ -10,6 +10,8 @@ using Microsoft.Extensions.Options;
 using Core = DurableTask.Core;
 using CoreOrchestrationQuery = DurableTask.Core.Query.OrchestrationQuery;
 
+using P = Microsoft.DurableTask.Protobuf;
+
 namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
 
 /// <summary>
@@ -130,11 +132,11 @@ class ShimDurableTaskClient : DurableTaskClient
         TaskName orchestratorName,
         object? input = null,
         StartOrchestrationOptions? options = null,
-        HashSet<string>? orchestrationIdReusePolicy = null,
         CancellationToken cancellation = default)
     {
         cancellation.ThrowIfCancellationRequested();
         string instanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N");
+        Dictionary<P.OrchestrationStatus, P.CreateOrchestrationAction> idReusePolicy = options?.OrchestrationIdReusePolicy ?? new Dictionary<P.OrchestrationStatus, P.CreateOrchestrationAction>();
         OrchestrationInstance instance = new()
         {
             InstanceId = instanceId,

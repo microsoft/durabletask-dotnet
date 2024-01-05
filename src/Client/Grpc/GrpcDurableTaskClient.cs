@@ -73,7 +73,6 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         TaskName orchestratorName,
         object? input = null,
         StartOrchestrationOptions? options = null,
-        HashSet<string>? orchestrationIdReusePolicy = null,
         CancellationToken cancellation = default)
     {
         Check.NotEntity(this.options.EnableEntitySupport, options?.InstanceId);

@@ -1,8 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask;
+using P = Microsoft.DurableTask.Protobuf;
 
+namespace Microsoft.DurableTask;
 /// <summary>
 /// Options that can be used to control the behavior of orchestrator task execution.
 /// </summary>
@@ -100,4 +101,7 @@ public record SubOrchestrationOptions : TaskOptions
 /// The time when the orchestration instance should start executing. If not specified or if a date-time in the past
 /// is specified, the orchestration instance will be scheduled immediately.
 /// </param>
-public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null);
+/// <param name="OrchestrationIdReusePolicy">The orchestration reuse policy. This allows for the reuse of an instance ID
+/// as well as the options for it.</param>
+public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null, Dictionary<P.OrchestrationStatus, P.CreateOrchestrationAction>?
+ OrchestrationIdReusePolicy = null);

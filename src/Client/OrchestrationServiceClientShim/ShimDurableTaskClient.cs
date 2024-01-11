@@ -136,7 +136,7 @@ class ShimDurableTaskClient : DurableTaskClient
     {
         cancellation.ThrowIfCancellationRequested();
         string instanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N");
-        Dictionary<P.OrchestrationStatus, P.CreateOrchestrationAction> idReusePolicy = options?.OrchestrationIdReusePolicy ?? new Dictionary<P.OrchestrationStatus, P.CreateOrchestrationAction>();
+        Dictionary<List<OrchestrationOptions.OrchestrationRuntimeStatus>, OrchestrationOptions.InstanceIdReuseAction> idReusePolicy = options?.OrchestrationIdReusePolicy ?? new Dictionary<List<OrchestrationOptions.OrchestrationRuntimeStatus>, OrchestrationOptions.InstanceIdReuseAction>();
         OrchestrationInstance instance = new()
         {
             InstanceId = instanceId,

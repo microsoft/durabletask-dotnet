@@ -1,9 +1,8 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using P = Microsoft.DurableTask.Protobuf;
-
 namespace Microsoft.DurableTask;
+
 /// <summary>
 /// Options that can be used to control the behavior of orchestrator task execution.
 /// </summary>
@@ -64,7 +63,10 @@ public record SubOrchestrationOptions : TaskOptions
     /// </summary>
     /// <param name="retry">The task retry options.</param>
     /// <param name="instanceId">The orchestration instance ID.</param>
-    public SubOrchestrationOptions(TaskRetryOptions? retry = null, string? instanceId = null)
+    /// <param name="orchestrationIdReusePolicy">The orchestration reuse policy. This allows for the reuse of an
+    /// instance ID as well as the options for it.</param>
+    public SubOrchestrationOptions(TaskRetryOptions? retry = null, string? instanceId = null, Dictionary<OrchestrationOptions.OrchestrationRuntimeStatus, OrchestrationOptions.InstanceIdReuseAction>?
+    orchestrationIdReusePolicy = null)
         : base(retry)
     {
         this.InstanceId = instanceId;
@@ -103,5 +105,5 @@ public record SubOrchestrationOptions : TaskOptions
 /// </param>
 /// <param name="OrchestrationIdReusePolicy">The orchestration reuse policy. This allows for the reuse of an instance ID
 /// as well as the options for it.</param>
-public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null, Dictionary<P.OrchestrationStatus, P.CreateOrchestrationAction>?
- OrchestrationIdReusePolicy = null);
+public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null,
+ Dictionary<List<OrchestrationOptions.OrchestrationRuntimeStatus>, OrchestrationOptions.InstanceIdReuseAction>? OrchestrationIdReusePolicy = null);

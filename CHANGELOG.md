@@ -1,5 +1,9 @@
 ﻿# Changelog
 
+# v1.1.1
+
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.16.1`
+
 # v1.1.0
 
 - Microsoft.Azure.DurableTask.Core dependency increased to `2.16.0`

@@ -63,10 +63,7 @@ public record SubOrchestrationOptions : TaskOptions
     /// </summary>
     /// <param name="retry">The task retry options.</param>
     /// <param name="instanceId">The orchestration instance ID.</param>
-    /// <param name="orchestrationIdReusePolicy">The orchestration reuse policy. This allows for the reuse of an
-    /// instance ID as well as the options for it.</param>
-    public SubOrchestrationOptions(TaskRetryOptions? retry = null, string? instanceId = null, Dictionary<OrchestrationOptions.OrchestrationRuntimeStatus, OrchestrationOptions.InstanceIdReuseAction>?
-    orchestrationIdReusePolicy = null)
+    public SubOrchestrationOptions(TaskRetryOptions? retry = null, string? instanceId = null)
         : base(retry)
     {
         this.InstanceId = instanceId;
@@ -104,6 +101,6 @@ public record SubOrchestrationOptions : TaskOptions
 /// is specified, the orchestration instance will be scheduled immediately.
 /// </param>
 /// <param name="OrchestrationIdReusePolicy">The orchestration reuse policy. This allows for the reuse of an instance ID
-/// as well as the options for it.</param>
+/// if the instance ID referenced is in any of the states supplied in this parameter.</param>
 public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null,
- Dictionary<List<OrchestrationOptions.OrchestrationRuntimeStatus>, OrchestrationOptions.InstanceIdReuseAction>? OrchestrationIdReusePolicy = null);
+ OrchestrationRuntimeStatus[]? OrchestrationIdReusePolicy = null);

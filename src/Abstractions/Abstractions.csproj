@@ -9,20 +9,13 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Azure.DurableTask.Core" Version="2.16.0" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="6.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="6.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="6.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="6.0.0" />
     <PackageReference Include="System.Text.Json" Version="6.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../src/Grpc/Grpc.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <SharedSection Include="Core" />
-    <SharedSection Include="DependencyInjection" />
-    <SharedSection Include="Grpc" />
   </ItemGroup>
 
   <ItemGroup>

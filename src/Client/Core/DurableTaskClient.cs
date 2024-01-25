@@ -338,6 +338,10 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <returns>An async pageable of the query results.</returns>
     public abstract AsyncPageable<OrchestrationMetadata> GetAllInstancesAsync(OrchestrationQuery? filter = null);
 
+    /// <inheritdoc cref="PurgeInstanceAsync(string, bool, CancellationToken)"/>
+    public virtual Task<PurgeResult> PurgeInstancesAsync(string instanceId, CancellationToken cancellation)
+        => this.PurgeInstanceAsync(instanceId, true, cancellation);
+
     /// <summary>
     /// Purges orchestration instance metadata from the durable store.
     /// </summary>
@@ -349,13 +353,17 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <see cref="OrchestrationRuntimeStatus.Completed"/>, <see cref="OrchestrationRuntimeStatus.Failed"/>, or
     /// <see cref="OrchestrationRuntimeStatus.Terminated"/> state can be purged.
     /// </para><para>
+    /// Purging an orchestration will by default purge all of the child sub-orchestrations that were started by the
+    /// orchetration instance. If you don't want to purge sub-orchestration instances, you can set `recursive` flag to
+    /// false which will disable purging of child sub-orchestration instances.
     /// If <paramref name="instanceId"/> is not found in the data store, or if the instance is found but not in a
     /// terminal state, then the returned <see cref="PurgeResult"/> object will have a
     /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>0</c>. Otherwise, the existing data will be purged and
-    /// <see cref="PurgeResult.PurgedInstanceCount"/> will be <c>1</c>.
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> will be <c>countOfInstancesPurged</c>.
     /// </para>
     /// </remarks>
     /// <param name="instanceId">The unique ID of the orchestration instance to purge.</param>
+    /// <param name="recursive">The optional parameter to recursively purge sub-orchestrations, true by default.</param>
     /// <param name="cancellation">
     /// A <see cref="CancellationToken"/> that can be used to cancel the purge operation.
     /// </param>
@@ -365,12 +373,17 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// instance was successfully purged.
     /// </returns>
     public abstract Task<PurgeResult> PurgeInstanceAsync(
-        string instanceId, CancellationToken cancellation = default);
+        string instanceId, bool recursive = true, CancellationToken cancellation = default);
+
+    /// <inheritdoc cref="PurgeAllInstancesAsync(PurgeInstancesFilter, bool, CancellationToken)"/>
+    public virtual Task<PurgeResult> PurgeAllInstancesAsync(PurgeInstancesFilter filter, CancellationToken cancellation)
+        => this.PurgeAllInstancesAsync(new PurgeInstancesFilter(), true, cancellation);
 
     /// <summary>
     /// Purges orchestration instances metadata from the durable store.
     /// </summary>
     /// <param name="filter">The filter for which orchestrations to purge.</param>
+    /// <param name="recursive">The optional parameter to recursively purge sub-orchestrations, true by default.</param>
     /// <param name="cancellation">
     /// A <see cref="CancellationToken"/> that can be used to cancel the purge operation.
     /// </param>
@@ -379,7 +392,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged.
     /// </returns>
     public abstract Task<PurgeResult> PurgeAllInstancesAsync(
-        PurgeInstancesFilter filter, CancellationToken cancellation = default);
+        PurgeInstancesFilter filter, bool recursive = true, CancellationToken cancellation = default);
 
     // TODO: Create task hub
 

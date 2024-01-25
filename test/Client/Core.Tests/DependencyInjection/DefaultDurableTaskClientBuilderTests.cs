@@ -128,7 +128,7 @@ public class DefaultDurableTaskClientBuilderTests
         }
 
         public override Task TerminateInstanceAsync(
-            string instanceId, object? output = null, CancellationToken cancellation = default)
+            string instanceId, object? output = null, bool recursive = true, CancellationToken cancellation = default)
         {
             throw new NotImplementedException();
         }

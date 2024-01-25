@@ -209,9 +209,17 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     public abstract Task<OrchestrationMetadata> WaitForInstanceCompletionAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default);
 
-    /// <inheritdoc cref="TerminateInstanceAsync(string, object, CancellationToken)"/>
+    /// <inheritdoc cref="TerminateInstanceAsync(string, object, bool, CancellationToken)"/>
     public virtual Task TerminateInstanceAsync(string instanceId, CancellationToken cancellation)
-        => this.TerminateInstanceAsync(instanceId, null, cancellation);
+        => this.TerminateInstanceAsync(instanceId, null, true, cancellation);
+
+    /// <inheritdoc cref="TerminateInstanceAsync(string, object, bool, CancellationToken)"/>
+    public virtual Task TerminateInstanceAsync(string instanceId, object? output, CancellationToken cancellation)
+        => this.TerminateInstanceAsync(instanceId, output, true, cancellation);
+
+    /// <inheritdoc cref="TerminateInstanceAsync(string, object, bool, CancellationToken)"/>
+    public virtual Task TerminateInstanceAsync(string instanceId, bool recursive, CancellationToken cancellation)
+        => this.TerminateInstanceAsync(instanceId, null, recursive, cancellation);
 
     /// <summary>
     /// Terminates a running orchestration instance and updates its runtime status to
@@ -226,10 +234,12 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// the terminated state.
     /// </para>
     /// <para>
+    /// Terminating an orchestration by default will terminate all of the child sub-orchestrations that were started by
+    /// the orchetration instance. If you don't want to terminate sub-orchestration instances, you can set `recursive`
+    /// flag to false which will disable termination of child sub-orchestration instances.
     /// Terminating an orchestration instance has no effect on any in-flight activity function executions
-    /// or sub-orchestrations that were started by the terminated instance. Those actions will continue to run
-    /// without interruption. However, their results will be discarded. If you want to terminate sub-orchestrations,
-    /// you must issue separate terminate commands for each sub-orchestration instance.
+    /// that were started by the terminated instance. Those actions will continue to run
+    /// without interruption. However, their results will be discarded.
     /// </para><para>
     /// At the time of writing, there is no way to terminate an in-flight activity execution.
     /// </para><para>
@@ -238,13 +248,14 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// </remarks>
     /// <param name="instanceId">The ID of the orchestration instance to terminate.</param>
     /// <param name="output">The optional output to set for the terminated orchestration instance.</param>
+    /// <param name="recursive">The optional parameter to recursively termintate sub-orchestrations, true by default.</param>
     /// <param name="cancellation">
     /// The cancellation token. This only cancels enqueueing the termination request to the backend. Does not abort
     /// termination of the orchestration once enqueued.
     /// </param>
     /// <returns>A task that completes when the terminate message is enqueued.</returns>
     public abstract Task TerminateInstanceAsync(
-        string instanceId, object? output = null, CancellationToken cancellation = default);
+        string instanceId, object? output = null, bool recursive = true, CancellationToken cancellation = default);
 
     /// <inheritdoc cref="SuspendInstanceAsync(string, string, CancellationToken)"/>
     public virtual Task SuspendInstanceAsync(string instanceId, CancellationToken cancellation)

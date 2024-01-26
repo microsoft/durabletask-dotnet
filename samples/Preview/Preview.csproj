@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="McMaster.Extensions.Hosting.CommandLine" Version="4.0.2" />
+    <PackageReference Include="Microsoft.DurableTask.Sidecar" Version="0.3.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(SrcRoot)Client/Grpc/Client.Grpc.csproj" />
+    <ProjectReference Include="$(SrcRoot)Worker/Grpc/Worker.Grpc.csproj" />
+  </ItemGroup>
+
+</Project>

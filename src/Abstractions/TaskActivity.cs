@@ -1,8 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Diagnostics.CodeAnalysis;
-
 namespace Microsoft.DurableTask;
 
 /// <summary>
@@ -74,11 +72,7 @@ public abstract class TaskActivity<TInput, TOutput> : ITaskActivity
     async Task<object?> ITaskActivity.RunAsync(TaskActivityContext context, object? input)
     {
         Check.NotNull(context, nameof(context));
-        if (!IsValidInput(input, out TInput? typedInput))
-        {
-            throw new ArgumentException($"Input type '{input?.GetType()}' does not match expected type '{typeof(TInput)}'.");
-        }
-
+        InputHelper.ValidateInput(input, out TInput typedInput);
         return await this.RunAsync(context, typedInput);
     }
 
@@ -89,31 +83,31 @@ public abstract class TaskActivity<TInput, TOutput> : ITaskActivity
     /// <param name="input">The deserialized activity input.</param>
     /// <returns>The output of the activity as a task.</returns>
     public abstract Task<TOutput> RunAsync(TaskActivityContext context, TInput input);
+}
+
+/// <inheritdoc cref="TaskActivity{TInput, Unit}" />
+public abstract class TaskActivity<TInput> : ITaskActivity
+{
+    /// <inheritdoc/>
+    Type ITaskActivity.InputType => typeof(TInput);
+
+    /// <inheritdoc/>
+    Type ITaskActivity.OutputType => typeof(Unit);
+
+    /// <inheritdoc/>
+    async Task<object?> ITaskActivity.RunAsync(TaskActivityContext context, object? input)
+    {
+        Check.NotNull(context, nameof(context));
+        InputHelper.ValidateInput(input, out TInput typedInput);
+        await this.RunAsync(context, typedInput);
+        return Unit.Value;
+    }
 
     /// <summary>
-    /// Due to nullable reference types being static analysis only, we need to do our best efforts for validating the
-    /// input type, but also give control of nullability to the implementation. It is not ideal, but we do not want to
-    /// force 'TInput?' on the RunAsync implementation.
+    /// Override to implement async (non-blocking) task activity logic.
     /// </summary>
-    static bool IsValidInput(object? input, [NotNullWhen(true)] out TInput? typedInput)
-    {
-        if (input is TInput typed)
-        {
-            // Quick pattern check.
-            typedInput = typed;
-            return true;
-        }
-        else if (input is not null && typeof(TInput) != input.GetType())
-        {
-            typedInput = default;
-            return false;
-        }
-
-        // Input is null and did not match a nullable value type. We do not have enough information to tell if it is
-        // valid or not. We will have to defer this decision to the implementation. Additionally, we will coerce a null
-        // input to a default value type here. This is to keep the two RunAsync(context, default) overloads to have
-        // identical behavior.
-        typedInput = default!;
-        return true;
-    }
+    /// <param name="context">Provides access to additional context for the current activity execution.</param>
+    /// <param name="input">The deserialized activity input.</param>
+    /// <returns>The output of the activity as a task.</returns>
+    public abstract Task RunAsync(TaskActivityContext context, TInput input);
 }

@@ -51,4 +51,49 @@ public static class DurableTaskClientExtensions
         DateTimeOffset? createdTo,
         CancellationToken cancellation = default)
         => PurgeInstancesAsync(client, createdFrom, createdTo, null, cancellation);
+
+    /// <summary>
+    /// Starts a new orchestration instance for execution.
+    /// </summary>
+    /// <param name="client">The client to schedule the orchestration with.</param>
+    /// <param name="request">The orchestration request to schedule.</param>
+    /// <param name="cancellation">The cancellation token.</param>
+    /// <returns>
+    /// A task that completes when the orchestration instance is successfully scheduled. The value of this task is the
+    /// instance ID the orchestration was scheduled with.
+    /// </returns>
+    /// <seealso cref="DurableTaskClient.ScheduleNewOrchestrationInstanceAsync(TaskName, object?, CancellationToken)" />
+    public static Task<string> StartNewAsync(
+        this DurableTaskClient client, IBaseOrchestrationRequest request, CancellationToken cancellation)
+    {
+        Check.NotNull(client);
+        Check.NotNull(request);
+        TaskName name = request.GetTaskName();
+        return client.ScheduleNewOrchestrationInstanceAsync(name, request.GetInput(), cancellation);
+    }
+
+    /// <summary>
+    /// Starts a new orchestration instance for execution.
+    /// </summary>
+    /// <param name="client">The client to schedule the orchestration with.</param>
+    /// <param name="request">The orchestration request to schedule.</param>
+    /// <param name="options">The options for starting this orchestration with.</param>
+    /// <param name="cancellation">The cancellation token.</param>
+    /// <returns>
+    /// A task that completes when the orchestration instance is successfully scheduled. The value of this task is
+    /// the instance ID of the scheduled orchestration instance. If a non-null instance ID was provided via
+    /// <paramref name="options" />, the same value will be returned by the completed task.
+    /// </returns>
+    /// <seealso cref="DurableTaskClient.ScheduleNewOrchestrationInstanceAsync(TaskName, object?, StartOrchestrationOptions?, CancellationToken)" />
+    public static Task<string> StartNewAsync(
+        this DurableTaskClient client,
+        IBaseOrchestrationRequest request,
+        StartOrchestrationOptions? options = null,
+        CancellationToken cancellation = default)
+    {
+        Check.NotNull(client);
+        Check.NotNull(request);
+        TaskName name = request.GetTaskName();
+        return client.ScheduleNewOrchestrationInstanceAsync(name, request.GetInput(), options, cancellation);
+    }
 }

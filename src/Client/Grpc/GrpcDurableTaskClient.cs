@@ -124,20 +124,25 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
     /// <inheritdoc/>
     public override async Task TerminateInstanceAsync(
-        string instanceId, object? output = null, bool recursive = true, CancellationToken cancellation = default)
+        string instanceId, TerminateInstanceOptions? options = null, CancellationToken cancellation = default)
     {
+        if (options is null)
+        {
+            options = new TerminateInstanceOptions();
+        }
+
         Check.NotNullOrEmpty(instanceId);
         Check.NotEntity(this.options.EnableEntitySupport, instanceId);
 
         this.logger.TerminatingInstance(instanceId);
 
-        string? serializedOutput = this.DataConverter.Serialize(output);
+        string? serializedOutput = this.DataConverter.Serialize(options.Output);
         await this.sidecarClient.TerminateInstanceAsync(
             new P.TerminateRequest
             {
                 InstanceId = instanceId,
                 Output = serializedOutput,
-                Recursive = recursive,
+                Recursive = options.Recursive,
             },
             cancellationToken: cancellation);
     }

@@ -209,20 +209,40 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     public abstract Task<OrchestrationMetadata> WaitForInstanceCompletionAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default);
 
-    /// <inheritdoc cref="TerminateInstanceAsync(string, object, bool, CancellationToken)"/>
+    /// <inheritdoc cref="TerminateInstanceAsync(string, TerminateInstanceOptions, CancellationToken)"/>
     public virtual Task TerminateInstanceAsync(string instanceId, CancellationToken cancellation)
-        => this.TerminateInstanceAsync(instanceId, null, true, cancellation);
+        => this.TerminateInstanceAsync(instanceId, null, cancellation);
 
-    /// <inheritdoc cref="TerminateInstanceAsync(string, object, bool, CancellationToken)"/>
+    /// <inheritdoc cref="TerminateInstanceAsync(string, TerminateInstanceOptions, CancellationToken)"/>
+    public virtual Task TerminateInstanceAsync(string instanceId, object? output)
+    {
+        TerminateInstanceOptions? options = output is null ? null : new() { Output = output };
+        return this.TerminateInstanceAsync(instanceId, options);
+    }
+
+    /// <inheritdoc cref="TerminateInstanceAsync(string, TerminateInstanceOptions, CancellationToken)"/>
     public virtual Task TerminateInstanceAsync(string instanceId, object? output, CancellationToken cancellation)
-        => this.TerminateInstanceAsync(instanceId, output, true, cancellation);
+    {
+        TerminateInstanceOptions? options = output is null ? null : new() { Output = output };
+        return this.TerminateInstanceAsync(instanceId, options, cancellation);
+    }
 
-    /// <inheritdoc cref="TerminateInstanceAsync(string, object, bool, CancellationToken)"/>
+    /// <inheritdoc cref="TerminateInstanceAsync(string, TerminateInstanceOptions, CancellationToken)"/>
+    public virtual Task TerminateInstanceAsync(string instanceId, bool recursive)
+    {
+        TerminateInstanceOptions options = new() { Recursive = recursive };
+        return this.TerminateInstanceAsync(instanceId, options);
+    }
+
+    /// <inheritdoc cref="TerminateInstanceAsync(string, TerminateInstanceOptions, CancellationToken)"/>
     public virtual Task TerminateInstanceAsync(string instanceId, bool recursive, CancellationToken cancellation)
-        => this.TerminateInstanceAsync(instanceId, null, recursive, cancellation);
+    {
+        TerminateInstanceOptions options = new() { Recursive = recursive };
+        return this.TerminateInstanceAsync(instanceId, options, cancellation);
+    }
 
     /// <summary>
-    /// Terminates a running orchestration instance and updates its runtime status to
+    /// Terminates an orchestration instance and updates its runtime status to
     /// <see cref="OrchestrationRuntimeStatus.Terminated"/>.
     /// </summary>
     /// <remarks>
@@ -247,15 +267,14 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// </para>
     /// </remarks>
     /// <param name="instanceId">The ID of the orchestration instance to terminate.</param>
-    /// <param name="output">The optional output to set for the terminated orchestration instance.</param>
-    /// <param name="recursive">The optional parameter to recursively termintate sub-orchestrations, true by default.</param>
+    /// <param name="options">The optional options for terminating the orchestration.</param>
     /// <param name="cancellation">
     /// The cancellation token. This only cancels enqueueing the termination request to the backend. Does not abort
     /// termination of the orchestration once enqueued.
     /// </param>
     /// <returns>A task that completes when the terminate message is enqueued.</returns>
-    public abstract Task TerminateInstanceAsync(
-        string instanceId, object? output = null, bool recursive = true, CancellationToken cancellation = default);
+    public virtual Task TerminateInstanceAsync(string instanceId, TerminateInstanceOptions? options = null, CancellationToken cancellation = default)
+        => throw new NotSupportedException($"{this.GetType()} does not support orchestration termination.");
 
     /// <inheritdoc cref="SuspendInstanceAsync(string, string, CancellationToken)"/>
     public virtual Task SuspendInstanceAsync(string instanceId, CancellationToken cancellation)

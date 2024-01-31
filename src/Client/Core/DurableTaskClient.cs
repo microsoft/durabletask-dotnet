@@ -391,8 +391,11 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target
     /// instance was successfully purged.
     /// </returns>
-    public abstract Task<PurgeResult> PurgeInstanceAsync(
-        string instanceId, bool recursive = true, CancellationToken cancellation = default);
+    public virtual Task<PurgeResult> PurgeInstanceAsync(
+        string instanceId, bool recursive = true, CancellationToken cancellation = default)
+    {
+        throw new NotSupportedException($"{this.GetType()} does not support purging of orchestration instances.");
+    }
 
     /// <inheritdoc cref="PurgeAllInstancesAsync(PurgeInstancesFilter, bool, CancellationToken)"/>
     public virtual Task<PurgeResult> PurgeAllInstancesAsync(PurgeInstancesFilter filter, CancellationToken cancellation)
@@ -410,8 +413,11 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
     /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged.
     /// </returns>
-    public abstract Task<PurgeResult> PurgeAllInstancesAsync(
-        PurgeInstancesFilter filter, bool recursive = true, CancellationToken cancellation = default);
+    public virtual Task<PurgeResult> PurgeAllInstancesAsync(
+        PurgeInstancesFilter filter, bool recursive = true, CancellationToken cancellation = default)
+    {
+        throw new NotSupportedException($"{this.GetType()} does not support purging of orchestration instances.");
+    }
 
     // TODO: Create task hub
 

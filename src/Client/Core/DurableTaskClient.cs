@@ -214,30 +214,9 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         => this.TerminateInstanceAsync(instanceId, null, cancellation);
 
     /// <inheritdoc cref="TerminateInstanceAsync(string, TerminateInstanceOptions, CancellationToken)"/>
-    public virtual Task TerminateInstanceAsync(string instanceId, object? output)
+    public virtual Task TerminateInstanceAsync(string instanceId, object? output, CancellationToken cancellation = default)
     {
         TerminateInstanceOptions? options = output is null ? null : new() { Output = output };
-        return this.TerminateInstanceAsync(instanceId, options);
-    }
-
-    /// <inheritdoc cref="TerminateInstanceAsync(string, TerminateInstanceOptions, CancellationToken)"/>
-    public virtual Task TerminateInstanceAsync(string instanceId, object? output, CancellationToken cancellation)
-    {
-        TerminateInstanceOptions? options = output is null ? null : new() { Output = output };
-        return this.TerminateInstanceAsync(instanceId, options, cancellation);
-    }
-
-    /// <inheritdoc cref="TerminateInstanceAsync(string, TerminateInstanceOptions, CancellationToken)"/>
-    public virtual Task TerminateInstanceAsync(string instanceId, bool recursive)
-    {
-        TerminateInstanceOptions options = new() { Recursive = recursive };
-        return this.TerminateInstanceAsync(instanceId, options);
-    }
-
-    /// <inheritdoc cref="TerminateInstanceAsync(string, TerminateInstanceOptions, CancellationToken)"/>
-    public virtual Task TerminateInstanceAsync(string instanceId, bool recursive, CancellationToken cancellation)
-    {
-        TerminateInstanceOptions options = new() { Recursive = recursive };
         return this.TerminateInstanceAsync(instanceId, options, cancellation);
     }
 
@@ -378,7 +357,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// If <paramref name="instanceId"/> is not found in the data store, or if the instance is found but not in a
     /// terminal state, then the returned <see cref="PurgeResult"/> object will have a
     /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>0</c>. Otherwise, the existing data will be purged and
-    /// <see cref="PurgeResult.PurgedInstanceCount"/> will be <c>countOfInstancesPurged</c>.
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> will be the count of purged instances.
     /// </para>
     /// </remarks>
     /// <param name="instanceId">The unique ID of the orchestration instance to purge.</param>
@@ -388,8 +367,8 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// </param>
     /// <returns>
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
-    /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target
-    /// instance was successfully purged.
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged,
+    /// including the count of sub-orchestrations purged if any.
     /// </returns>
     public virtual Task<PurgeResult> PurgeInstanceAsync(
         string instanceId, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
@@ -411,7 +390,8 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// </param>
     /// <returns>
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
-    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged.
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged,
+    /// including the count of sub-orchestrations purged if any.
     /// </returns>
     public virtual Task<PurgeResult> PurgeAllInstancesAsync(
         PurgeInstancesFilter filter, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)

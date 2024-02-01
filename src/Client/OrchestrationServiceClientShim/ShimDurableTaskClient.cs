@@ -171,14 +171,10 @@ class ShimDurableTaskClient : DurableTaskClient
     public override Task TerminateInstanceAsync(
         string instanceId, TerminateInstanceOptions? options = null, CancellationToken cancellation = default)
     {
-        if (options is null)
-        {
-            options = new TerminateInstanceOptions();
-        }
-
+        object? output = options?.Output;
         Check.NotNullOrEmpty(instanceId);
         cancellation.ThrowIfCancellationRequested();
-        string? reason = this.DataConverter.Serialize(options.Output);
+        string? reason = this.DataConverter.Serialize(output);
         return this.Client.ForceTerminateTaskOrchestrationAsync(instanceId, reason);
     }
 

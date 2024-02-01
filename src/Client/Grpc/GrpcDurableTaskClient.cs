@@ -126,23 +126,21 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override async Task TerminateInstanceAsync(
         string instanceId, TerminateInstanceOptions? options = null, CancellationToken cancellation = default)
     {
-        if (options is null)
-        {
-            options = new TerminateInstanceOptions();
-        }
+        object? output = options?.Output;
+        bool recursive = options?.Recursive ?? true;
 
         Check.NotNullOrEmpty(instanceId);
         Check.NotEntity(this.options.EnableEntitySupport, instanceId);
 
         this.logger.TerminatingInstance(instanceId);
 
-        string? serializedOutput = this.DataConverter.Serialize(options.Output);
+        string? serializedOutput = this.DataConverter.Serialize(output);
         await this.sidecarClient.TerminateInstanceAsync(
             new P.TerminateRequest
             {
                 InstanceId = instanceId,
                 Output = serializedOutput,
-                Recursive = options.Recursive,
+                Recursive = recursive,
             },
             cancellationToken: cancellation);
     }
@@ -329,14 +327,10 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override Task<PurgeResult> PurgeInstanceAsync(
         string instanceId, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
-        if options is null
-        {
-            options = new PurgeInstanceOptions();
-        }
-
+        bool recursive = options?.Recursive ?? true;
         this.logger.PurgingInstanceMetadata(instanceId);
 
-        P.PurgeInstancesRequest request = new() { InstanceId = instanceId, Recursive = options.Recursive };
+        P.PurgeInstancesRequest request = new() { InstanceId = instanceId, Recursive = recursive };
         return this.PurgeInstancesCoreAsync(request, cancellation);
     }
 
@@ -344,10 +338,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override Task<PurgeResult> PurgeAllInstancesAsync(
         PurgeInstancesFilter filter, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
-        if options is null
-        {
-            options = new PurgeInstanceOptions();
-        }
+        bool recursive = options?.Recursive ?? true;
         this.logger.PurgingInstances(filter);
         P.PurgeInstancesRequest request = new()
         {
@@ -356,7 +347,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
                 CreatedTimeFrom = filter?.CreatedFrom.ToTimestamp(),
                 CreatedTimeTo = filter?.CreatedTo.ToTimestamp(),
             },
-            Recursive = options.Recursive,
+            Recursive = recursive,
         };
 
         if (filter?.Statuses is not null)

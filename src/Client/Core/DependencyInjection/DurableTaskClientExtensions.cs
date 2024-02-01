@@ -19,15 +19,15 @@ public static class DurableTaskClientExtensions
     /// <param name="cancellation">The cancellation token.</param>
     /// <returns>
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
-    /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target
-    /// instance was successfully purged.
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged,
+    /// including the count of sub-orchestrations purged if any.
     /// </returns>
     public static Task<PurgeResult> PurgeInstancesAsync(
         this DurableTaskClient client,
         DateTimeOffset? createdFrom,
         DateTimeOffset? createdTo,
         IEnumerable<OrchestrationRuntimeStatus>? statuses,
-        PurgeInstanceOptons? options,
+        PurgeInstanceOptions? options,
         CancellationToken cancellation = default)
     {
         Check.NotNull(client);
@@ -45,8 +45,8 @@ public static class DurableTaskClientExtensions
     /// <param name="cancellation">The cancellation token.</param>
     /// <returns>
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
-    /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target
-    /// instance was successfully purged.
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged,
+    /// including the count of sub-orchestrations purged if any.
     /// </returns>
     public static Task<PurgeResult> PurgeInstancesAsync(
         this DurableTaskClient client,
@@ -66,8 +66,8 @@ public static class DurableTaskClientExtensions
     /// <param name="cancellation">The cancellation token.</param>
     /// <returns>
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
-    /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target
-    /// instance was successfully purged.
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged,
+    /// including the count of sub-orchestrations purged if any.
     /// </returns>
     public static Task<PurgeResult> PurgeInstancesAsync(
         this DurableTaskClient client,
@@ -86,8 +86,8 @@ public static class DurableTaskClientExtensions
     /// <param name="cancellation">The cancellation token.</param>
     /// <returns>
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
-    /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target
-    /// instance was successfully purged.
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged,
+    /// including the count of sub-orchestrations purged if any.
     /// </returns>
     public static Task<PurgeResult> PurgeInstancesAsync(
         this DurableTaskClient client,

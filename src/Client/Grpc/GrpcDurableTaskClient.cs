@@ -127,7 +127,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         string instanceId, TerminateInstanceOptions? options = null, CancellationToken cancellation = default)
     {
         object? output = options?.Output;
-        bool recursive = options?.Recursive ?? true;
+        bool recursive = options?.Recursive ?? false;
 
         Check.NotNullOrEmpty(instanceId);
         Check.NotEntity(this.options.EnableEntitySupport, instanceId);
@@ -327,7 +327,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override Task<PurgeResult> PurgeInstanceAsync(
         string instanceId, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
-        bool recursive = options?.Recursive ?? true;
+        bool recursive = options?.Recursive ?? false;
         this.logger.PurgingInstanceMetadata(instanceId);
 
         P.PurgeInstancesRequest request = new() { InstanceId = instanceId, Recursive = recursive };
@@ -338,7 +338,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override Task<PurgeResult> PurgeAllInstancesAsync(
         PurgeInstancesFilter filter, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
-        bool recursive = options?.Recursive ?? true;
+        bool recursive = options?.Recursive ?? false;
         this.logger.PurgingInstances(filter);
         P.PurgeInstancesRequest request = new()
         {

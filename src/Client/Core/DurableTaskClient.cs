@@ -233,9 +233,9 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// the terminated state.
     /// </para>
     /// <para>
-    /// Terminating an orchestration by default will terminate all of the child sub-orchestrations that were started by
-    /// the orchetration instance. If you don't want to terminate sub-orchestration instances, you can set <see cref="TerminateInstanceOptions.Recursive"/>
-    /// flag to false which will disable termination of child sub-orchestration instances. It is set to true by default.
+    /// Terminating an orchestration by default will not terminate any of the child sub-orchestrations that were started by
+    /// the orchetration instance. If you want to terminate sub-orchestration instances as well, you can set <see cref="TerminateInstanceOptions.Recursive"/>
+    /// flag to true which will enable termination of child sub-orchestration instances. It is set to false by default.
     /// Terminating an orchestration instance has no effect on any in-flight activity function executions
     /// that were started by the terminated instance. Those actions will continue to run
     /// without interruption. However, their results will be discarded.
@@ -351,9 +351,9 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <see cref="OrchestrationRuntimeStatus.Completed"/>, <see cref="OrchestrationRuntimeStatus.Failed"/>, or
     /// <see cref="OrchestrationRuntimeStatus.Terminated"/> state can be purged.
     /// </para><para>
-    /// Purging an orchestration will by default purge all of the child sub-orchestrations that were started by the
-    /// orchetration instance. If you don't want to purge sub-orchestration instances, you can set <see cref="PurgeInstanceOptions.Recursive"/> flag to
-    /// false which will disable purging of child sub-orchestration instances. It is set to true by default.
+    /// Purging an orchestration will by default not purge any of the child sub-orchestrations that were started by the
+    /// orchetration instance. If you want to purge sub-orchestration instances, you can set <see cref="PurgeInstanceOptions.Recursive"/> flag to
+    /// true which will enable purging of child sub-orchestration instances. It is set to false by default.
     /// If <paramref name="instanceId"/> is not found in the data store, or if the instance is found but not in a
     /// terminal state, then the returned <see cref="PurgeResult"/> object will have a
     /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>0</c>. Otherwise, the existing data will be purged and

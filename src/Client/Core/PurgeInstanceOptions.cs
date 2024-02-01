@@ -6,19 +6,5 @@ namespace Microsoft.DurableTask.Client;
 /// <summary>
 /// Options to purge an orchestration.
 /// </summary>
-public record PurgeInstanceOptions
-{
-    /// <summary>
-    /// Initializes a new instance of the <see cref="PurgeInstanceOptions"/> class.
-    /// </summary>
-    /// <param name="recursive">The optional boolean value indicating whether to purge sub-orchestrations as well.</param>
-    public PurgeInstanceOptions(bool recursive = true)
-    {
-        this.Recursive = recursive;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether to purge sub-orchestrations as well.
-    /// </summary>
-    public bool Recursive { get; init; }
-}
+/// <param name="Recursive">The optional boolean value indicating whether to purge sub-orchestrations as well.</param>
+public record PurgeInstanceOptions(bool Recursive = false);

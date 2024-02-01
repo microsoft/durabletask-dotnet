@@ -95,7 +95,7 @@ class ShimDurableTaskClient : DurableTaskClient
 
     /// <inheritdoc/>
     public override async Task<PurgeResult> PurgeInstanceAsync(
-        string instanceId, bool recursive = true, CancellationToken cancellation = default)
+        string instanceId, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
         Check.NotNullOrEmpty(instanceId);
         cancellation.ThrowIfCancellationRequested();
@@ -105,7 +105,7 @@ class ShimDurableTaskClient : DurableTaskClient
 
     /// <inheritdoc/>
     public override async Task<PurgeResult> PurgeAllInstancesAsync(
-        PurgeInstancesFilter filter, bool recursive = true, CancellationToken cancellation = default)
+        PurgeInstancesFilter filter, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
         Check.NotNull(filter);
         cancellation.ThrowIfCancellationRequested();

@@ -15,6 +15,33 @@ public static class DurableTaskClientExtensions
     /// <param name="createdFrom">Filter purging to orchestrations after this date.</param>
     /// <param name="createdTo">Filter purging to orchestrations before this date.</param>
     /// <param name="statuses">Filter purging to orchestrations with these statuses.</param>
+    /// <param name="options">The optional options for purging the orchestration.</param>
+    /// <param name="cancellation">The cancellation token.</param>
+    /// <returns>
+    /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target
+    /// instance was successfully purged.
+    /// </returns>
+    public static Task<PurgeResult> PurgeInstancesAsync(
+        this DurableTaskClient client,
+        DateTimeOffset? createdFrom,
+        DateTimeOffset? createdTo,
+        IEnumerable<OrchestrationRuntimeStatus>? statuses,
+        PurgeInstanceOptons? options,
+        CancellationToken cancellation = default)
+    {
+        Check.NotNull(client);
+        PurgeInstancesFilter filter = new(createdFrom, createdTo, statuses);
+        return client.PurgeAllInstancesAsync(filter, options, cancellation);
+    }
+
+    /// <summary>
+    /// Purges orchestration instances metadata from the durable store.
+    /// </summary>
+    /// <param name="client">The DurableTask client.</param>
+    /// <param name="createdFrom">Filter purging to orchestrations after this date.</param>
+    /// <param name="createdTo">Filter purging to orchestrations before this date.</param>
+    /// <param name="statuses">Filter purging to orchestrations with these statuses.</param>
     /// <param name="cancellation">The cancellation token.</param>
     /// <returns>
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
@@ -27,11 +54,28 @@ public static class DurableTaskClientExtensions
         DateTimeOffset? createdTo,
         IEnumerable<OrchestrationRuntimeStatus>? statuses,
         CancellationToken cancellation = default)
-    {
-        Check.NotNull(client);
-        PurgeInstancesFilter filter = new(createdFrom, createdTo, statuses);
-        return client.PurgeAllInstancesAsync(filter, cancellation);
-    }
+        => PurgeInstancesAsync(client, createdFrom, createdTo, statuses, null, cancellation);
+
+    /// <summary>
+    /// Purges orchestration instances metadata from the durable store.
+    /// </summary>
+    /// <param name="client">The DurableTask client.</param>
+    /// <param name="createdFrom">Filter purging to orchestrations after this date.</param>
+    /// <param name="createdTo">Filter purging to orchestrations before this date.</param>
+    /// <param name="options">The optional options for purging the orchestration.</param>
+    /// <param name="cancellation">The cancellation token.</param>
+    /// <returns>
+    /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target
+    /// instance was successfully purged.
+    /// </returns>
+    public static Task<PurgeResult> PurgeInstancesAsync(
+        this DurableTaskClient client,
+        DateTimeOffset? createdFrom,
+        DateTimeOffset? createdTo,
+        PurgeInstanceOptions? options,
+        CancellationToken cancellation = default)
+        => PurgeInstancesAsync(client, createdFrom, createdTo, null, options, cancellation);
 
     /// <summary>
     /// Purges orchestration instances metadata from the durable store.
@@ -50,5 +94,5 @@ public static class DurableTaskClientExtensions
         DateTimeOffset? createdFrom,
         DateTimeOffset? createdTo,
         CancellationToken cancellation = default)
-        => PurgeInstancesAsync(client, createdFrom, createdTo, null, cancellation);
+        => PurgeInstancesAsync(client, createdFrom, createdTo, null, null, cancellation);
 }

@@ -89,13 +89,13 @@ public class DefaultDurableTaskClientBuilderTests
         }
 
         public override Task<PurgeResult> PurgeInstanceAsync(
-            string instanceId, bool recursive = true, CancellationToken cancellation = default)
+            string instanceId, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
         {
             throw new NotImplementedException();
         }
 
         public override Task<PurgeResult> PurgeAllInstancesAsync(
-            PurgeInstancesFilter filter, bool recursive = true, CancellationToken cancellation = default)
+            PurgeInstancesFilter filter, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
         {
             throw new NotImplementedException();
         }

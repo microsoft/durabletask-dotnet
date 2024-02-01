@@ -327,18 +327,27 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
     /// <inheritdoc/>
     public override Task<PurgeResult> PurgeInstanceAsync(
-        string instanceId, bool recursive = true, CancellationToken cancellation = default)
+        string instanceId, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
+        if options is null
+        {
+            options = new PurgeInstanceOptions();
+        }
+
         this.logger.PurgingInstanceMetadata(instanceId);
 
-        P.PurgeInstancesRequest request = new() { InstanceId = instanceId, Recursive = recursive };
+        P.PurgeInstancesRequest request = new() { InstanceId = instanceId, Recursive = options.Recursive };
         return this.PurgeInstancesCoreAsync(request, cancellation);
     }
 
     /// <inheritdoc/>
     public override Task<PurgeResult> PurgeAllInstancesAsync(
-        PurgeInstancesFilter filter, bool recursive = true, CancellationToken cancellation = default)
+        PurgeInstancesFilter filter, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
+        if options is null
+        {
+            options = new PurgeInstanceOptions();
+        }
         this.logger.PurgingInstances(filter);
         P.PurgeInstancesRequest request = new()
         {
@@ -347,7 +356,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
                 CreatedTimeFrom = filter?.CreatedFrom.ToTimestamp(),
                 CreatedTimeTo = filter?.CreatedTo.ToTimestamp(),
             },
-            Recursive = recursive,
+            Recursive = options.Recursive,
         };
 
         if (filter?.Statuses is not null)

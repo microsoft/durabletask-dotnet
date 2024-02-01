@@ -6,7 +6,7 @@ namespace Microsoft.DurableTask.Client;
 /// <summary>
 /// Options to terminate an orchestration.
 /// </summary>
-public class TerminateInstanceOptions
+public record TerminateInstanceOptions
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminateInstanceOptions"/> class.

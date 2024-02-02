@@ -95,20 +95,24 @@ class ShimDurableTaskClient : DurableTaskClient
 
     /// <inheritdoc/>
     public override async Task<PurgeResult> PurgeInstanceAsync(
-        string instanceId, CancellationToken cancellation = default)
+        string instanceId, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
         Check.NotNullOrEmpty(instanceId);
         cancellation.ThrowIfCancellationRequested();
+
+        // TODO: Support recursive purge of sub-orchestrations
         Core.PurgeResult result = await this.PurgeClient.PurgeInstanceStateAsync(instanceId);
         return result.ConvertFromCore();
     }
 
     /// <inheritdoc/>
     public override async Task<PurgeResult> PurgeAllInstancesAsync(
-        PurgeInstancesFilter filter, CancellationToken cancellation = default)
+        PurgeInstancesFilter filter, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
         Check.NotNull(filter);
         cancellation.ThrowIfCancellationRequested();
+
+        // TODO: Support recursive purge of sub-orchestrations
         Core.PurgeResult result = await this.PurgeClient.PurgeInstanceStateAsync(filter.ConvertToCore());
         return result.ConvertFromCore();
     }
@@ -169,11 +173,14 @@ class ShimDurableTaskClient : DurableTaskClient
 
     /// <inheritdoc/>
     public override Task TerminateInstanceAsync(
-        string instanceId, object? output = null, CancellationToken cancellation = default)
+        string instanceId, TerminateInstanceOptions? options = null, CancellationToken cancellation = default)
     {
+        object? output = options?.Output;
         Check.NotNullOrEmpty(instanceId);
         cancellation.ThrowIfCancellationRequested();
         string? reason = this.DataConverter.Serialize(output);
+
+        // TODO: Support recursive termination of sub-orchestrations
         return this.Client.ForceTerminateTaskOrchestrationAsync(instanceId, reason);
     }
 

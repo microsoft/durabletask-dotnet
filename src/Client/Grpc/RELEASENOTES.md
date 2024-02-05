@@ -1,0 +1,1 @@
+- Adds support to recursively terminate/purge sub-orchestrations in `GrpcDurableTaskClient` (https://github.com/microsoft/durabletask-dotnet/pull/262)

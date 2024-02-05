@@ -1,0 +1,1 @@
+- Adds option to recursively terminate/purge sub-orchestrations in `DurableTaskClient` (https://github.com/microsoft/durabletask-dotnet/pull/262)

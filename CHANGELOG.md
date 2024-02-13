@@ -1,5 +1,9 @@
 ﻿# Changelog
 
+# v1.2.1
+
+- Fix typo in `PurgeInstanceAsync`  in `DurableTaskClient` (https://github.com/microsoft/durabletask-dotnet/pull/264)
+
 # v1.2.0
 
 - Adds support to recursively terminate/purge sub-orchestrations in `GrpcDurableTaskClient` (https://github.com/microsoft/durabletask-dotnet/pull/262)

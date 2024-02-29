@@ -1,0 +1,15 @@
+@host = http://localhost:7071/api
+
+PUT {{host}}/lifetimes/1
+
+###
+
+GET {{host}}/lifetimes/1
+
+###
+
+DELETE {{host}}/lifetimes/1
+
+###
+
+DELETE {{host}}/lifetimes/1?custom=true

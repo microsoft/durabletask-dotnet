@@ -8,6 +8,13 @@ The client is responsible for interacting with orchestrations from outside the w
     <EnableStyleCop>true</EnableStyleCop>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <!-- We are still working on this package for entities preview. -->
+    <VersionPrefix>1.0.5</VersionPrefix>
+    <VersionSuffix></VersionSuffix> <!-- Need this here to set it back to empty. -->
+  </PropertyGroup>
+
+
   <ItemGroup>
     <ProjectReference Include="../Core/Client.csproj" />
   </ItemGroup>

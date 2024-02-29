@@ -38,7 +38,7 @@ public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     return client.ScheduleNewOrchestrationInstanceAsync(""MyOrchestrator"", input, options);
 }}
 
-/// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync""/>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallMyOrchestratorAsync(
     this TaskOrchestrationContext context, {input}, TaskOptions? options = null)
 {{
@@ -87,7 +87,7 @@ public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     return client.ScheduleNewOrchestrationInstanceAsync(""MyOrchestrator"", input, options);
 }
 
-/// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync""/>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallMyOrchestratorAsync(
     this TaskOrchestrationContext context, int input, TaskOptions? options = null)
 {

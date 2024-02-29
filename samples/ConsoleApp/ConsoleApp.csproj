@@ -8,8 +8,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="6.0.0" />
-    <PackageReference Include="Microsoft.DurableTask.Client.Grpc" Version="1.0.0" />
-    <PackageReference Include="Microsoft.DurableTask.Worker.Grpc" Version="1.0.0" />
+    <PackageReference Include="Microsoft.DurableTask.Client.Grpc" Version="1.1.0" />
+    <PackageReference Include="Microsoft.DurableTask.Worker.Grpc" Version="1.1.0" />
   </ItemGroup>
 
 </Project>

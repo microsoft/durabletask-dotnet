@@ -52,11 +52,7 @@ public static class GrpcOrchestrationRunner
         Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> orchestratorFunc,
         IServiceProvider? services = null)
     {
-        if (orchestratorFunc == null)
-        {
-            throw new ArgumentNullException(nameof(orchestratorFunc));
-        }
-
+        Check.NotNull(orchestratorFunc);
         return LoadAndRun(encodedOrchestratorRequest, FuncTaskOrchestrator.Create(orchestratorFunc), services);
     }
 
@@ -113,7 +109,7 @@ public static class GrpcOrchestrationRunner
             ? DurableTaskShimFactory.Default
             : ActivatorUtilities.GetServiceOrCreateInstance<DurableTaskShimFactory>(services);
         TaskOrchestration shim = factory.CreateOrchestration(orchestratorName, implementation, parent);
-        TaskOrchestrationExecutor executor = new(runtimeState, shim, BehaviorOnContinueAsNew.Carryover, ErrorPropagationMode.UseFailureDetails);
+        TaskOrchestrationExecutor executor = new(runtimeState, shim, BehaviorOnContinueAsNew.Carryover, request.EntityParameters.ToCore(), ErrorPropagationMode.UseFailureDetails);
         OrchestratorExecutionResult result = executor.Execute();
 
         P.OrchestratorResponse response = ProtoUtils.ConstructOrchestratorResponse(

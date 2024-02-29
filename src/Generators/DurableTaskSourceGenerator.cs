@@ -178,7 +178,7 @@ namespace Microsoft.DurableTask
         static void AddSubOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator)
         {
             sourceBuilder.AppendLine($@"
-        /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync""/>
+        /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
         public static Task<{orchestrator.OutputType}> Call{orchestrator.TaskName}Async(
             this TaskOrchestrationContext context, {orchestrator.InputParameter}, TaskOptions? options = null)
         {{

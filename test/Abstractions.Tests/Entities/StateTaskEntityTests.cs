@@ -179,16 +179,9 @@ public class StateTaskEntityTests
         protected override TestState InitializeState(TaskEntityOperation entityOperation) => null!;
     }
 
-    class TestEntity : TaskEntity<TestState>
+    class TestEntity(bool allowStateDispatch = true) : TaskEntity<TestState>
     {
-        readonly bool allowStateDispatch;
-
-        public TestEntity(bool allowStateDispatch = true)
-        {
-            this.allowStateDispatch = allowStateDispatch;
-        }
-
-        protected override bool AllowStateDispatch => this.allowStateDispatch;
+        protected override bool AllowStateDispatch { get; } = allowStateDispatch;
 
         public int Precedence() => this.State!.Precedence() * 2;
     }

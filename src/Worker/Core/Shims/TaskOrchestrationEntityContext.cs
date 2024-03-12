@@ -220,20 +220,11 @@ sealed partial class TaskOrchestrationContextWrapper
             return guid;
         }
 
-        class LockReleaser : IAsyncDisposable
+        class LockReleaser(TaskOrchestrationEntityContext context, Guid criticalSectionId) : IAsyncDisposable
         {
-            readonly TaskOrchestrationEntityContext context;
-            readonly Guid criticalSectionId;
-
-            public LockReleaser(TaskOrchestrationEntityContext context, Guid criticalSectionId)
-            {
-                this.context = context;
-                this.criticalSectionId = criticalSectionId;
-            }
-
             public ValueTask DisposeAsync()
             {
-                this.context.ExitCriticalSection(this.criticalSectionId);
+                context.ExitCriticalSection(criticalSectionId);
                 return default;
             }
         }

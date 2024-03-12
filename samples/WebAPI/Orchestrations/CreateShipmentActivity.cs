@@ -7,19 +7,12 @@ using WebAPI.Models;
 namespace WebAPI.Orchestrations;
 
 [DurableTask("CreateShipment")]
-public class CreateShipmentActivity : TaskActivity<OrderInfo, object?>
+public class CreateShipmentActivity(ILogger<CreateShipmentActivity> logger)
+    : TaskActivity<OrderInfo, object?>
 {
-    readonly ILogger logger;
-
-    // Dependencies are injected from ASP.NET host service container
-    public CreateShipmentActivity(ILogger<CreateShipmentActivity> logger)
-    {
-        this.logger = logger;
-    }
-
     public override async Task<object?> RunAsync(TaskActivityContext context, OrderInfo orderInfo)
     {
-        this.logger.LogInformation(
+        logger.LogInformation(
             "{instanceId}: Shipping customer order of {quantity} {item}(s)...",
             context.InstanceId,
             orderInfo?.Quantity ?? 0,

@@ -6,16 +6,10 @@ using Microsoft.CodeAnalysis;
 
 namespace Microsoft.DurableTask.Generators.AzureFunctions
 {
-    public class TypedParameter
+    public class TypedParameter(INamedTypeSymbol type, string name)
     {
-        public INamedTypeSymbol Type { get; }
-        public string Name { get; }
-
-        public TypedParameter(INamedTypeSymbol type, string name)
-        {
-            this.Type = type;
-            this.Name = name;
-        }
+        public INamedTypeSymbol Type { get; } = type;
+        public string Name { get; } = name;
 
         public override string ToString()
         {

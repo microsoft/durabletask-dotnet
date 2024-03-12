@@ -15,26 +15,20 @@ namespace Microsoft.DurableTask.Client;
 /// <see cref="DurableTaskClient.WaitForInstanceStartAsync(string, CancellationToken)"/> and
 /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync(string, CancellationToken)"/>.
 /// </remarks>
-public sealed class OrchestrationMetadata
+/// <remarks>
+/// Initializes a new instance of the <see cref="OrchestrationMetadata" /> class.
+/// </remarks>
+/// <param name="name">The name of the orchestration.</param>
+/// <param name="instanceId">The instance ID of the orchestration.</param>
+public sealed class OrchestrationMetadata(string name, string instanceId)
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="OrchestrationMetadata" /> class.
-    /// </summary>
-    /// <param name="name">The name of the orchestration.</param>
-    /// <param name="instanceId">The instance ID of the orchestration.</param>
-    public OrchestrationMetadata(string name, string instanceId)
-    {
-        this.Name = name;
-        this.InstanceId = instanceId;
-    }
-
     /// <summary>Gets the name of the orchestration.</summary>
     /// <value>The name of the orchestration.</value>
-    public string Name { get; }
+    public string Name { get; } = name;
 
     /// <summary>Gets the unique ID of the orchestration instance.</summary>
     /// <value>The unique ID of the orchestration instance.</value>
-    public string InstanceId { get; }
+    public string InstanceId { get; } = instanceId;
 
     /// <summary>
     /// Gets the data converter used to deserialized the serialized data on this instance.

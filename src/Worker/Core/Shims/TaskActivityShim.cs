@@ -8,24 +8,17 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// <summary>
 /// Shims a <see cref="ITaskActivity" /> to a <see cref="TaskActivity" />.
 /// </summary>
-class TaskActivityShim : TaskActivity
+/// <remarks>
+/// Initializes a new instance of the <see cref="TaskActivityShim"/> class.
+/// </remarks>
+/// <param name="dataConverter">The data converter.</param>
+/// <param name="name">The name of the activity.</param>
+/// <param name="implementation">The activity implementation to wrap.</param>
+class TaskActivityShim(DataConverter dataConverter, TaskName name, ITaskActivity implementation) : TaskActivity
 {
-    readonly ITaskActivity implementation;
-    readonly DataConverter dataConverter;
-    readonly TaskName name;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="TaskActivityShim"/> class.
-    /// </summary>
-    /// <param name="dataConverter">The data converter.</param>
-    /// <param name="name">The name of the activity.</param>
-    /// <param name="implementation">The activity implementation to wrap.</param>
-    public TaskActivityShim(DataConverter dataConverter, TaskName name, ITaskActivity implementation)
-    {
-        this.dataConverter = Check.NotNull(dataConverter);
-        this.name = Check.NotDefault(name);
-        this.implementation = Check.NotNull(implementation);
-    }
+    readonly ITaskActivity implementation = Check.NotNull(implementation);
+    readonly DataConverter dataConverter = Check.NotNull(dataConverter);
+    readonly TaskName name = Check.NotDefault(name);
 
     /// <inheritdoc/>
     public override async Task<string?> RunAsync(TaskContext coreContext, string? rawInput)
@@ -56,19 +49,10 @@ class TaskActivityShim : TaskActivity
         return input;
     }
 
-    sealed class TaskActivityContextWrapper : TaskActivityContext
+    sealed class TaskActivityContextWrapper(TaskContext taskContext, TaskName name) : TaskActivityContext
     {
-        readonly TaskContext innerContext;
-        readonly TaskName name;
+        public override TaskName Name => name;
 
-        public TaskActivityContextWrapper(TaskContext taskContext, TaskName name)
-        {
-            this.innerContext = taskContext;
-            this.name = name;
-        }
-
-        public override TaskName Name => this.name;
-
-        public override string InstanceId => this.innerContext.OrchestrationInstance.InstanceId;
+        public override string InstanceId => taskContext.OrchestrationInstance.InstanceId;
     }
 }

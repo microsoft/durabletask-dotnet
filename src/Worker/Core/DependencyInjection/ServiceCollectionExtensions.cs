@@ -87,22 +87,16 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// A container which is used to store and retrieve builders from within the <see cref="IServiceCollection" />.
     /// </summary>
-    class BuilderContainer
+    class BuilderContainer(IServiceCollection services)
     {
         readonly Dictionary<string, IDurableTaskWorkerBuilder> builders = new();
-        readonly IServiceCollection services;
-
-        public BuilderContainer(IServiceCollection services)
-        {
-            this.services = services;
-        }
 
         public IDurableTaskWorkerBuilder GetOrAdd(string name, out bool added)
         {
             added = false;
             if (!this.builders.TryGetValue(name, out IDurableTaskWorkerBuilder builder))
             {
-                builder = new DefaultDurableTaskWorkerBuilder(name, this.services);
+                builder = new DefaultDurableTaskWorkerBuilder(name, services);
                 this.builders[name] = builder;
                 added = true;
             }

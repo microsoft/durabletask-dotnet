@@ -10,36 +10,30 @@ namespace Microsoft.DurableTask.Entities;
 /// Detailed information associated with a particular operation failure, including exception details, can be found in the
 /// <see cref="FailureDetails"/> property.
 /// </remarks>
-public sealed class EntityOperationFailedException : Exception
+/// <remarks>
+/// Initializes a new instance of the <see cref="EntityOperationFailedException"/> class.
+/// </remarks>
+/// <param name="operationName">The operation name.</param>
+/// <param name="entityId">The entity ID.</param>
+/// <param name="failureDetails">The failure details.</param>
+public sealed class EntityOperationFailedException(
+    EntityInstanceId entityId, string operationName, TaskFailureDetails failureDetails)
+    : Exception(GetExceptionMessage(operationName, entityId, failureDetails))
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="EntityOperationFailedException"/> class.
-    /// </summary>
-    /// <param name="operationName">The operation name.</param>
-    /// <param name="entityId">The entity ID.</param>
-    /// <param name="failureDetails">The failure details.</param>
-    public EntityOperationFailedException(EntityInstanceId entityId, string operationName, TaskFailureDetails failureDetails)
-        : base(GetExceptionMessage(operationName, entityId, failureDetails))
-    {
-        this.EntityId = entityId;
-        this.OperationName = operationName;
-        this.FailureDetails = failureDetails;
-    }
-
     /// <summary>
     /// Gets the ID of the entity.
     /// </summary>
-    public EntityInstanceId EntityId { get; }
+    public EntityInstanceId EntityId { get; } = entityId;
 
     /// <summary>
     /// Gets the name of the operation.
     /// </summary>
-    public string OperationName { get; }
+    public string OperationName { get; } = operationName;
 
-     /// <summary>
+    /// <summary>
     /// Gets the details of the task failure, including exception information.
     /// </summary>
-    public TaskFailureDetails FailureDetails { get; }
+    public TaskFailureDetails FailureDetails { get; } = failureDetails;
 
     static string GetExceptionMessage(string operationName, EntityInstanceId entityId, TaskFailureDetails failureDetails)
     {

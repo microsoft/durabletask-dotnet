@@ -11,20 +11,14 @@ namespace Microsoft.DurableTask.Client.Entities;
 /// Represents entity metadata.
 /// </summary>
 /// <typeparam name="TState">The type of state held by the metadata.</typeparam>
+/// <remarks>
+/// Initializes a new instance of the <see cref="EntityMetadata{TState}"/> class.
+/// </remarks>
+/// <param name="id">The ID of the entity.</param>
 [JsonConverter(typeof(EntityMetadataConverter))]
-public class EntityMetadata<TState>
+public class EntityMetadata<TState>(EntityInstanceId id)
 {
     readonly TState? state;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="EntityMetadata{TState}"/> class.
-    /// </summary>
-    /// <param name="id">The ID of the entity.</param>
-    public EntityMetadata(EntityInstanceId id)
-    {
-        this.Id = Check.NotDefault(id);
-        this.IncludesState = false;
-    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EntityMetadata{TState}"/> class.
@@ -41,7 +35,7 @@ public class EntityMetadata<TState>
     /// <summary>
     /// Gets the ID for this entity.
     /// </summary>
-    public EntityInstanceId Id { get; }
+    public EntityInstanceId Id { get; } = Check.NotDefault(id);
 
     /// <summary>
     /// Gets the time the entity was last modified.
@@ -64,9 +58,9 @@ public class EntityMetadata<TState>
     /// <remarks>
     /// Queries can exclude the state of the entity from the metadata that is retrieved.
     /// </remarks>
-    [MemberNotNullWhen(true, "State")]
-    [MemberNotNullWhen(true, "state")]
-    public bool IncludesState { get; }
+    [MemberNotNullWhen(true, nameof(State))]
+    [MemberNotNullWhen(true, nameof(state))]
+    public bool IncludesState { get; } = false;
 
     /// <summary>
     /// Gets the state for this entity.
@@ -96,16 +90,13 @@ public class EntityMetadata<TState>
 /// <summary>
 /// Represents the metadata for a durable entity instance.
 /// </summary>
+/// <remarks>
+/// Initializes a new instance of the <see cref="EntityMetadata"/> class.
+/// </remarks>
+/// <param name="id">The ID of the entity.</param>
+/// <param name="state">The state of this entity.</param>
 [JsonConverter(typeof(EntityMetadataConverter))]
-public sealed class EntityMetadata : EntityMetadata<SerializedData>
+public sealed class EntityMetadata(EntityInstanceId id, SerializedData? state = null)
+    : EntityMetadata<SerializedData>(id, state)
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="EntityMetadata"/> class.
-    /// </summary>
-    /// <param name="id">The ID of the entity.</param>
-    /// <param name="state">The state of this entity.</param>
-    public EntityMetadata(EntityInstanceId id, SerializedData? state = null)
-        : base(id, state)
-    {
-    }
 }

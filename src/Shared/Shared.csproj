@@ -20,4 +20,8 @@
     <PackageReference Include="Microsoft.DurableTask.Sidecar.Protobuf" Version="0.3.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="**/*.cs" />
+  </ItemGroup>
+
 </Project>

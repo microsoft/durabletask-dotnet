@@ -99,18 +99,11 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
         return batchResult;
     }
 
-    class StateShim : TaskEntityState
+    class StateShim(DataConverter dataConverter) : TaskEntityState
     {
-        readonly DataConverter dataConverter;
-
         string? value;
         object? cachedValue;
         string? checkpointValue;
-
-        public StateShim(DataConverter dataConverter)
-        {
-            this.dataConverter = dataConverter;
-        }
 
         /// <inheritdoc />
         public override bool HasState => this.value != null;
@@ -152,37 +145,27 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
                 return this.cachedValue;
             }
 
-            this.cachedValue = this.dataConverter.Deserialize(this.value, type);
+            this.cachedValue = dataConverter.Deserialize(this.value, type);
             return this.cachedValue;
         }
 
         public override void SetState(object? state)
         {
-            this.value = this.dataConverter.Serialize(state);
+            this.value = dataConverter.Serialize(state);
             this.cachedValue = state;
         }
     }
 
-    class ContextShim : TaskEntityContext
+    class ContextShim(EntityInstanceId entityInstanceId, DataConverter dataConverter) : TaskEntityContext
     {
-        readonly EntityInstanceId entityInstanceId;
-        readonly DataConverter dataConverter;
-
-        List<OperationAction> operationActions;
+        List<OperationAction> operationActions = new List<OperationAction>();
         int checkpointPosition;
-
-        public ContextShim(EntityInstanceId entityInstanceId, DataConverter dataConverter)
-        {
-            this.entityInstanceId = entityInstanceId;
-            this.dataConverter = dataConverter;
-            this.operationActions = new List<OperationAction>();
-        }
 
         public List<OperationAction> Actions => this.operationActions;
 
         public int CurrentPosition => this.operationActions.Count;
 
-        public override EntityInstanceId Id => this.entityInstanceId;
+        public override EntityInstanceId Id { get; } = entityInstanceId;
 
         public void Commit()
         {
@@ -208,7 +191,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             {
                 InstanceId = id.ToString(),
                 Name = operationName,
-                Input = this.dataConverter.Serialize(input),
+                Input = dataConverter.Serialize(input),
                 ScheduledTime = options?.SignalTime?.UtcDateTime,
             });
         }
@@ -223,36 +206,29 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
                 Name = name.Name,
                 Version = name.Version,
                 InstanceId = instanceId,
-                Input = this.dataConverter.Serialize(input),
+                Input = dataConverter.Serialize(input),
                 ScheduledStartTime = options?.StartAt?.UtcDateTime,
             });
             return instanceId;
         }
     }
 
-    class OperationShim : TaskEntityOperation
+    class OperationShim(TaskEntityShim taskEntityShim) : TaskEntityOperation
     {
-        readonly TaskEntityShim taskEntityShim;
-
         string? name;
         string? input;
 
-        public OperationShim(TaskEntityShim taskEntityShim)
-        {
-            this.taskEntityShim = taskEntityShim;
-        }
-
         public override string Name => this.name!; // name is always set before user code can access this property
 
-        public override TaskEntityContext Context => this.taskEntityShim.context;
+        public override TaskEntityContext Context => taskEntityShim.context;
 
-        public override TaskEntityState State => this.taskEntityShim.state;
+        public override TaskEntityState State => taskEntityShim.state;
 
         public override bool HasInput => this.input != null;
 
         public override object? GetInput(Type inputType)
         {
-            return this.taskEntityShim.dataConverter.Deserialize(this.input, inputType);
+            return taskEntityShim.dataConverter.Deserialize(this.input, inputType);
         }
 
         public void SetNameAndInput(string name, string? input)

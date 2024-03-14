@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Reflection;
 using CoreOrchestrationException = DurableTask.Core.Exceptions.OrchestrationException;
 
 namespace Microsoft.DurableTask;
@@ -35,12 +36,37 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
     /// </remarks>
     /// <typeparam name="T">The type of exception to test against.</typeparam>
     /// <returns>
-    /// Returns <c>true</c> if the <see cref="ErrorType"/> value matches <typeparamref name="T"/>; <c>false</c> otherwise.
+    /// <c>true</c> if the <see cref="ErrorType"/> value matches <typeparamref name="T"/>; <c>false</c> otherwise.
     /// </returns>
     public bool IsCausedBy<T>() where T : Exception
     {
+        return this.IsCausedBy(typeof(T));
+    }
+
+    /// <returns>
+    /// <c>true</c> if the <see cref="ErrorType"/> value matches <paramref name="type"/>; <c>false</c> otherwise.
+    /// </returns>
+    /// <exception cref="ArgumentException">If <paramref name="type"/> is not an exception type.</exception>
+    /// <inheritdoc cref="IsCausedBy{T}"/>
+    public bool IsCausedBy(Type type)
+    {
+        if (!typeof(Exception).IsAssignableFrom(type))
+        {
+            throw new ArgumentException($"The type {type} is not an exception type.", nameof(type));
+        }
+
+        // This check works for core .NET exception types
         this.exceptionType ??= Type.GetType(this.ErrorType, throwOnError: false);
-        return this.exceptionType != null && typeof(T).IsAssignableFrom(this.exceptionType);
+
+        // This check works for custom exception types defined in the app's assembly
+        this.exceptionType ??= Assembly.GetCallingAssembly().GetType(this.ErrorType);
+
+        // This last check works for exception types defined in any loaded assembly (e.g. NuGet packages, etc.)
+        this.exceptionType ??= AppDomain.CurrentDomain.GetAssemblies()
+            .Select(a => a.GetType(this.ErrorType, throwOnError: false))
+            .FirstOrDefault(t => t is not null);
+
+        return this.exceptionType is not null && type.IsAssignableFrom(this.exceptionType);
     }
 
     /// <summary>

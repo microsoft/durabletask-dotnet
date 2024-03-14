@@ -15,7 +15,7 @@ namespace Microsoft.DurableTask;
 /// <param name="InnerFailure">The inner cause of the task failure.</param>
 public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? StackTrace, TaskFailureDetails? InnerFailure)
 {
-    Type? exceptionType;
+    Type? loadedExceptionType;
 
     /// <summary>
     /// Gets a debug-friendly description of the failure information.
@@ -44,29 +44,35 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
     }
 
     /// <returns>
-    /// <c>true</c> if the <see cref="ErrorType"/> value matches <paramref name="type"/>; <c>false</c> otherwise.
+    /// <c>true</c> if the <see cref="ErrorType"/> value matches <paramref name="targetBaseExceptionType"/>; <c>false</c> otherwise.
     /// </returns>
-    /// <exception cref="ArgumentException">If <paramref name="type"/> is not an exception type.</exception>
+    /// <exception cref="ArgumentException">If <paramref name="targetBaseExceptionType"/> is not an exception type.</exception>
     /// <inheritdoc cref="IsCausedBy{T}"/>
-    public bool IsCausedBy(Type type)
+    public bool IsCausedBy(Type targetBaseExceptionType)
     {
-        if (!typeof(Exception).IsAssignableFrom(type))
+        if (!typeof(Exception).IsAssignableFrom(targetBaseExceptionType))
         {
-            throw new ArgumentException($"The type {type} is not an exception type.", nameof(type));
+            throw new ArgumentException($"The type {targetBaseExceptionType} is not an exception type.", nameof(targetBaseExceptionType));
         }
 
-        // This check works for core .NET exception types
-        this.exceptionType ??= Type.GetType(this.ErrorType, throwOnError: false);
+        // This check works for .NET exception types defined in System.Core.PrivateLib (aka mscorelib.dll)
+        this.loadedExceptionType ??= Type.GetType(this.ErrorType, throwOnError: false);
 
         // This check works for custom exception types defined in the app's assembly
-        this.exceptionType ??= Assembly.GetCallingAssembly().GetType(this.ErrorType);
+        this.loadedExceptionType ??= Assembly.GetCallingAssembly().GetType(this.ErrorType);
 
         // This last check works for exception types defined in any loaded assembly (e.g. NuGet packages, etc.)
-        this.exceptionType ??= AppDomain.CurrentDomain.GetAssemblies()
+        this.loadedExceptionType ??= AppDomain.CurrentDomain.GetAssemblies()
             .Select(a => a.GetType(this.ErrorType, throwOnError: false))
             .FirstOrDefault(t => t is not null);
 
-        return this.exceptionType is not null && type.IsAssignableFrom(this.exceptionType);
+        if (this.loadedExceptionType is null)
+        {
+            // The actual exception type could not be loaded, so we cannot determine if it matches the target type.
+            return false;
+        }
+
+        return targetBaseExceptionType.IsAssignableFrom(this.loadedExceptionType);
     }
 
     /// <summary>

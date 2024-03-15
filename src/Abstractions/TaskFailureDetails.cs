@@ -35,6 +35,7 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
     /// for any reason, this method will return <c>false</c>. Base types are supported.
     /// </remarks>
     /// <typeparam name="T">The type of exception to test against.</typeparam>
+    /// <exception cref="AmbiguousMatchException">If multiple exception types with the same name are found.</exception>
     /// <returns>
     /// <c>true</c> if the <see cref="ErrorType"/> value matches <typeparamref name="T"/>; <c>false</c> otherwise.
     /// </returns>
@@ -50,21 +51,44 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
     /// <inheritdoc cref="IsCausedBy{T}"/>
     public bool IsCausedBy(Type targetBaseExceptionType)
     {
+        Check.NotNull(targetBaseExceptionType);
+
         if (!typeof(Exception).IsAssignableFrom(targetBaseExceptionType))
         {
             throw new ArgumentException($"The type {targetBaseExceptionType} is not an exception type.", nameof(targetBaseExceptionType));
         }
 
+        if (string.IsNullOrEmpty(this.ErrorType))
+        {
+            return false;
+        }
+
         // This check works for .NET exception types defined in System.Core.PrivateLib (aka mscorelib.dll)
         this.loadedExceptionType ??= Type.GetType(this.ErrorType, throwOnError: false);
 
-        // This check works for custom exception types defined in the app's assembly
+        // For exception types defined in the same assembly as the target exception type.
+        this.loadedExceptionType ??= targetBaseExceptionType.Assembly.GetType(this.ErrorType, throwOnError: false);
+
+        // For custom exception types defined in the app's assembly
         this.loadedExceptionType ??= Assembly.GetCallingAssembly().GetType(this.ErrorType);
 
-        // This last check works for exception types defined in any loaded assembly (e.g. NuGet packages, etc.)
-        this.loadedExceptionType ??= AppDomain.CurrentDomain.GetAssemblies()
-            .Select(a => a.GetType(this.ErrorType, throwOnError: false))
-            .FirstOrDefault(t => t is not null);
+        if (this.loadedExceptionType is null)
+        {
+            // This last check works for exception types defined in any loaded assembly (e.g. NuGet packages, etc.).
+            // This is a fallback that should rarely be needed except in obscure cases.
+            List<Type> matchingExceptionTypes = AppDomain.CurrentDomain.GetAssemblies()
+                .Select(a => a.GetType(this.ErrorType, throwOnError: false))
+                .Where(t => t is not null)
+                .ToList();
+            if (matchingExceptionTypes.Count == 1)
+            {
+                this.loadedExceptionType = matchingExceptionTypes[0];
+            }
+            else if (matchingExceptionTypes.Count > 1)
+            {
+                throw new AmbiguousMatchException($"Multiple exception types with the name '{this.ErrorType}' were found.");
+            }
+        }
 
         if (this.loadedExceptionType is null)
         {

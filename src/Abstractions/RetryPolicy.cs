@@ -123,8 +123,11 @@ public class RetryPolicy
     /// </value>
     public TimeSpan RetryTimeout { get; }
 
+#pragma warning disable SA1623 // Property summary documentation should match accessors
     /// <summary>
-    /// Gets or sets a Func to call on exception to determine if retries should proceed.
+    /// This functionality is not implemented. Will be removed in the future. Use TaskOptions.FromRetryHandler instead.
     /// </summary>
+    [Obsolete("This functionality is not implemented. Will be removed in the future. Use TaskOptions.FromRetryHandler instead.")]
     public Func<Exception, Task<bool>>? HandleAsync { get; set; }
+#pragma warning restore SA1623 // Property summary documentation should match accessors
 }

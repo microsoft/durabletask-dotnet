@@ -1,5 +1,18 @@
 ﻿# Changelog
 
+# v1.2.1
+
+- Fix `TaskFailureDetails.IsCausedBy` to support custom exceptions and 3rd party exceptions ([#273](https://github.com/microsoft/durabletask-dotnet/pull/273))
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.16.2`
+
+# v1.2.0
+
+- Adds support to recursively terminate/purge sub-orchestrations in `GrpcDurableTaskClient` (https://github.com/microsoft/durabletask-dotnet/pull/262)
+
+# v1.1.1
+
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.16.1`
+
 # v1.1.0
 
 - Microsoft.Azure.DurableTask.Core dependency increased to `2.16.0`

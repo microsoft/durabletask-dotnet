@@ -49,7 +49,6 @@ static class ProtoUtils
                         OrchestrationInstance = proto.ExecutionStarted.ParentInstance.OrchestrationInstance.ToCore(),
                         TaskScheduleId = proto.ExecutionStarted.ParentInstance.TaskScheduledId,
                     },
-                    Correlation = proto.ExecutionStarted.CorrelationData,
                     ScheduledStartTime = proto.ExecutionStarted.ScheduledStartTimestamp?.ToDateTime(),
                 };
                 break;

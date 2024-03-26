@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Reflection;
 using CoreOrchestrationException = DurableTask.Core.Exceptions.OrchestrationException;
 
 namespace Microsoft.DurableTask;
@@ -14,7 +15,7 @@ namespace Microsoft.DurableTask;
 /// <param name="InnerFailure">The inner cause of the task failure.</param>
 public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? StackTrace, TaskFailureDetails? InnerFailure)
 {
-    Type? exceptionType;
+    Type? loadedExceptionType;
 
     /// <summary>
     /// Gets a debug-friendly description of the failure information.
@@ -34,13 +35,68 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
     /// for any reason, this method will return <c>false</c>. Base types are supported.
     /// </remarks>
     /// <typeparam name="T">The type of exception to test against.</typeparam>
+    /// <exception cref="AmbiguousMatchException">If multiple exception types with the same name are found.</exception>
     /// <returns>
-    /// Returns <c>true</c> if the <see cref="ErrorType"/> value matches <typeparamref name="T"/>; <c>false</c> otherwise.
+    /// <c>true</c> if the <see cref="ErrorType"/> value matches <typeparamref name="T"/>; <c>false</c> otherwise.
     /// </returns>
     public bool IsCausedBy<T>() where T : Exception
     {
-        this.exceptionType ??= Type.GetType(this.ErrorType, throwOnError: false);
-        return this.exceptionType != null && typeof(T).IsAssignableFrom(this.exceptionType);
+        return this.IsCausedBy(typeof(T));
+    }
+
+    /// <returns>
+    /// <c>true</c> if the <see cref="ErrorType"/> value matches <paramref name="targetBaseExceptionType"/>; <c>false</c> otherwise.
+    /// </returns>
+    /// <exception cref="ArgumentException">If <paramref name="targetBaseExceptionType"/> is not an exception type.</exception>
+    /// <inheritdoc cref="IsCausedBy{T}"/>
+    public bool IsCausedBy(Type targetBaseExceptionType)
+    {
+        Check.NotNull(targetBaseExceptionType);
+
+        if (!typeof(Exception).IsAssignableFrom(targetBaseExceptionType))
+        {
+            throw new ArgumentException($"The type {targetBaseExceptionType} is not an exception type.", nameof(targetBaseExceptionType));
+        }
+
+        if (string.IsNullOrEmpty(this.ErrorType))
+        {
+            return false;
+        }
+
+        // This check works for .NET exception types defined in System.Core.PrivateLib (aka mscorelib.dll)
+        this.loadedExceptionType ??= Type.GetType(this.ErrorType, throwOnError: false);
+
+        // For exception types defined in the same assembly as the target exception type.
+        this.loadedExceptionType ??= targetBaseExceptionType.Assembly.GetType(this.ErrorType, throwOnError: false);
+
+        // For custom exception types defined in the app's assembly
+        this.loadedExceptionType ??= Assembly.GetCallingAssembly().GetType(this.ErrorType);
+
+        if (this.loadedExceptionType is null)
+        {
+            // This last check works for exception types defined in any loaded assembly (e.g. NuGet packages, etc.).
+            // This is a fallback that should rarely be needed except in obscure cases.
+            List<Type> matchingExceptionTypes = AppDomain.CurrentDomain.GetAssemblies()
+                .Select(a => a.GetType(this.ErrorType, throwOnError: false))
+                .Where(t => t is not null)
+                .ToList();
+            if (matchingExceptionTypes.Count == 1)
+            {
+                this.loadedExceptionType = matchingExceptionTypes[0];
+            }
+            else if (matchingExceptionTypes.Count > 1)
+            {
+                throw new AmbiguousMatchException($"Multiple exception types with the name '{this.ErrorType}' were found.");
+            }
+        }
+
+        if (this.loadedExceptionType is null)
+        {
+            // The actual exception type could not be loaded, so we cannot determine if it matches the target type.
+            return false;
+        }
+
+        return targetBaseExceptionType.IsAssignableFrom(this.loadedExceptionType);
     }
 
     /// <summary>

@@ -125,8 +125,11 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
     /// <inheritdoc/>
     public override async Task TerminateInstanceAsync(
-        string instanceId, object? output = null, CancellationToken cancellation = default)
+        string instanceId, TerminateInstanceOptions? options = null, CancellationToken cancellation = default)
     {
+        object? output = options?.Output;
+        bool recursive = options?.Recursive ?? false;
+
         Check.NotNullOrEmpty(instanceId);
         Check.NotEntity(this.options.EnableEntitySupport, instanceId);
 
@@ -138,6 +141,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             {
                 InstanceId = instanceId,
                 Output = serializedOutput,
+                Recursive = recursive,
             },
             cancellationToken: cancellation);
     }
@@ -322,18 +326,20 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
     /// <inheritdoc/>
     public override Task<PurgeResult> PurgeInstanceAsync(
-        string instanceId, CancellationToken cancellation = default)
+        string instanceId, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
+        bool recursive = options?.Recursive ?? false;
         this.logger.PurgingInstanceMetadata(instanceId);
 
-        P.PurgeInstancesRequest request = new() { InstanceId = instanceId };
+        P.PurgeInstancesRequest request = new() { InstanceId = instanceId, Recursive = recursive };
         return this.PurgeInstancesCoreAsync(request, cancellation);
     }
 
     /// <inheritdoc/>
     public override Task<PurgeResult> PurgeAllInstancesAsync(
-        PurgeInstancesFilter filter, CancellationToken cancellation = default)
+        PurgeInstancesFilter filter, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
+        bool recursive = options?.Recursive ?? false;
         this.logger.PurgingInstances(filter);
         P.PurgeInstancesRequest request = new()
         {
@@ -342,6 +348,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
                 CreatedTimeFrom = filter?.CreatedFrom.ToTimestamp(),
                 CreatedTimeTo = filter?.CreatedTo.ToTimestamp(),
             },
+            Recursive = recursive,
         };
 
         if (filter?.Statuses is not null)

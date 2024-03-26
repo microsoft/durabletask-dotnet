@@ -109,7 +109,7 @@ public static class GrpcOrchestrationRunner
             ? DurableTaskShimFactory.Default
             : ActivatorUtilities.GetServiceOrCreateInstance<DurableTaskShimFactory>(services);
         TaskOrchestration shim = factory.CreateOrchestration(orchestratorName, implementation, parent);
-        TaskOrchestrationExecutor executor = new(runtimeState, shim, BehaviorOnContinueAsNew.Carryover, request.EntityParameters.ToCore());
+        TaskOrchestrationExecutor executor = new(runtimeState, shim, BehaviorOnContinueAsNew.Carryover, request.EntityParameters.ToCore(), ErrorPropagationMode.UseFailureDetails);
         OrchestratorExecutionResult result = executor.Execute();
 
         P.OrchestratorResponse response = ProtoUtils.ConstructOrchestratorResponse(

@@ -113,13 +113,13 @@ public class DurableTaskClientBuilderExtensionsTests
         }
 
         public override Task<PurgeResult> PurgeInstanceAsync(
-            string instanceId, CancellationToken cancellation = default)
+            string instanceId, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
         {
             throw new NotImplementedException();
         }
 
         public override Task<PurgeResult> PurgeAllInstancesAsync(
-            PurgeInstancesFilter filter, CancellationToken cancellation = default)
+            PurgeInstancesFilter filter, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
         {
             throw new NotImplementedException();
         }
@@ -152,7 +152,7 @@ public class DurableTaskClientBuilderExtensionsTests
         }
 
         public override Task TerminateInstanceAsync(
-            string instanceId, object? output = null, CancellationToken cancellation = default)
+            string instanceId, TerminateInstanceOptions? options = null, CancellationToken cancellation = default)
         {
             throw new NotImplementedException();
         }

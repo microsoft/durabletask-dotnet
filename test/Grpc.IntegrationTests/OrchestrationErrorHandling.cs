@@ -4,6 +4,7 @@
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
 using Xunit.Abstractions;
+using Xunit.Sdk;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
@@ -69,8 +70,11 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
     /// This is different from <see cref="UnhandledActivityException"/> in that the source of the
     /// exception is in the orchestrator code directly, and not from an unhandled activity task.
     /// </remarks>
-    [Fact]
-    public async Task UnhandledOrchestratorException()
+    [Theory]
+    [InlineData(typeof(ApplicationException))] // built-in exception type
+    [InlineData(typeof(CustomException))] // custom exception type
+    [InlineData(typeof(XunitException))] // 3rd party exception type
+    public async Task UnhandledOrchestratorException(Type exceptionType)
     {
         string errorMessage = "Kah-BOOOOOM!!!"; // Use an obviously fake error message to avoid confusion when debugging
         string? expectedCallStack = null;
@@ -83,7 +87,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
                 // The Environment.StackTrace and throw statements need to be on the same line
                 // to keep line numbers consistent between the expected stack trace and the actual stack trace.
                 // Also need to remove the top frame from Environment.StackTrace.
-                expectedCallStack = Environment.StackTrace.Replace("at System.Environment.get_StackTrace()", string.Empty).TrimStart(); throw new Exception(errorMessage);
+                expectedCallStack = Environment.StackTrace.Replace("at System.Environment.get_StackTrace()", string.Empty).TrimStart(); throw MakeException(exceptionType, errorMessage)!;
             }));
         });
 
@@ -97,11 +101,12 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
 
         Assert.NotNull(metadata.FailureDetails);
         TaskFailureDetails failureDetails = metadata.FailureDetails!;
-        Assert.Equal(typeof(Exception).FullName, failureDetails.ErrorType);
+        Assert.Equal(exceptionType.FullName, failureDetails.ErrorType);
         Assert.Equal(errorMessage, failureDetails.ErrorMessage);
         Assert.NotNull(failureDetails.StackTrace);
         Assert.NotNull(expectedCallStack);
         Assert.Contains(expectedCallStack![..300], failureDetails.StackTrace);
+        Assert.True(failureDetails.IsCausedBy(exceptionType));
     }
 
     /// <summary>
@@ -147,10 +152,10 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
     }
 
     [Theory]
-    [InlineData(1)]
-    [InlineData(2)]
-    [InlineData(10)]
-    public async Task RetryActivityFailuresCustomLogic(int expectedNumberOfAttempts)
+    [InlineData(1, typeof(ApplicationException))] // 1 attempt, built-in exception type
+    [InlineData(2, typeof(CustomException))] // 2 attempts, custom exception type
+    [InlineData(10, typeof(XunitException))] // 10 attempts, 3rd party exception type
+    public async Task RetryActivityFailuresCustomLogic(int expectedNumberOfAttempts, Type exceptionType)
     {
         string errorMessage = "Kah-BOOOOOM!!!"; // Use an obviously fake error message to avoid confusion when debugging
 
@@ -169,8 +174,8 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
                 return false;
             }
 
-            // This handler only works with ApplicationException
-            if (!retryContext.LastFailure.IsCausedBy<ApplicationException>())
+            // This handler only works with CustomException
+            if (!retryContext.LastFailure.IsCausedBy(exceptionType))
             {
                 return false;
             }
@@ -192,7 +197,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
                 .AddActivityFunc("Foo", (TaskActivityContext context) =>
                 {
                     actualNumberOfAttempts++;
-                    throw new ApplicationException(errorMessage);
+                    throw MakeException(exceptionType, errorMessage);
                 }));
         });
 
@@ -211,10 +216,10 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
     /// Tests retry policies for sub-orchestration calls.
     /// </summary>
     [Theory]
-    [InlineData(1)]
-    [InlineData(2)]
-    [InlineData(10)]
-    public async Task RetrySubOrchestrationFailures(int expectedNumberOfAttempts)
+    [InlineData(1, typeof(ApplicationException))] // 1 attempt, built-in exception type
+    [InlineData(2, typeof(CustomException))] // 2 attempts, custom exception type
+    [InlineData(10, typeof(XunitException))] // 10 attempts, 3rd party exception type
+    public async Task RetrySubOrchestrationFailures(int expectedNumberOfAttempts, Type exceptionType)
     {
         string errorMessage = "Kah-BOOOOOM!!!"; // Use an obviously fake error message to avoid confusion when debugging
 
@@ -235,7 +240,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
                 .AddOrchestratorFunc("BustedSubOrchestrator", context =>
                 {
                     actualNumberOfAttempts++;
-                    throw new ApplicationException(errorMessage);
+                    throw MakeException(exceptionType, errorMessage);
                 }));
         });
 
@@ -247,13 +252,18 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
         Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
+        Assert.NotNull(metadata.FailureDetails);
+        Assert.Contains(errorMessage, metadata.FailureDetails!.ErrorMessage);
+
+        // The root orchestration failed due to a failure with the sub-orchestration, resulting in a TaskFailedException
+        Assert.True(metadata.FailureDetails.IsCausedBy<TaskFailedException>());
     }
 
     [Theory]
-    [InlineData(1)]
-    [InlineData(2)]
-    [InlineData(10)]
-    public async Task RetrySubOrchestratorFailuresCustomLogic(int expectedNumberOfAttempts)
+    [InlineData(1, typeof(ApplicationException))] // 1 attempt, built-in exception type
+    [InlineData(2, typeof(CustomException))] // 2 attempts, custom exception type
+    [InlineData(10, typeof(XunitException))] // 10 attempts, 3rd party exception type
+    public async Task RetrySubOrchestratorFailuresCustomLogic(int expectedNumberOfAttempts, Type exceptionType)
     {
         string errorMessage = "Kah-BOOOOOM!!!"; // Use an obviously fake error message to avoid confusion when debugging
 
@@ -272,8 +282,8 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
                 return false;
             }
 
-            // This handler only works with ApplicationException
-            if (!retryContext.LastFailure.IsCausedBy<ApplicationException>())
+            // This handler only works with CustomException
+            if (!retryContext.LastFailure.IsCausedBy(exceptionType))
             {
                 return false;
             }
@@ -295,7 +305,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
                 .AddOrchestratorFunc("BustedSubOrchestrator", context =>
                 {
                     actualNumberOfAttempts++;
-                    throw new ApplicationException(errorMessage);
+                    throw MakeException(exceptionType, errorMessage);
                 }));
         });
 
@@ -308,6 +318,10 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
         Assert.Equal(expectedNumberOfAttempts, retryHandlerCalls);
         Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
+
+        // The root orchestration failed due to a failure with the sub-orchestration, resulting in a TaskFailedException
+        Assert.NotNull(metadata.FailureDetails);
+        Assert.True(metadata.FailureDetails!.IsCausedBy<TaskFailedException>());
     }
 
     [Theory]
@@ -349,5 +363,15 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
 
         // The retry handler should never get called for a missing activity or sub-orchestrator exception
         Assert.Equal(0, retryHandlerCalls);
+    }
+
+    static Exception MakeException(Type exceptionType, string message)
+    {
+        // We assume the contructor of the exception type takes a single string argument
+        return (Exception)Activator.CreateInstance(exceptionType, message)!;
+    }
+
+    class CustomException(string message) : Exception(message)
+    {
     }
 }

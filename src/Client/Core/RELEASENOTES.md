@@ -1,1 +1,1 @@
-- Add support for durable entities 
+- Fix typo in `PurgeInstanceAsync`  in `DurableTaskClient` (https://github.com/microsoft/durabletask-dotnet/pull/264)

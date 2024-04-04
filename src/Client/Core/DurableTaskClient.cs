@@ -209,12 +209,19 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     public abstract Task<OrchestrationMetadata> WaitForInstanceCompletionAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default);
 
-    /// <inheritdoc cref="TerminateInstanceAsync(string, object, CancellationToken)"/>
+    /// <inheritdoc cref="TerminateInstanceAsync(string, TerminateInstanceOptions, CancellationToken)"/>
     public virtual Task TerminateInstanceAsync(string instanceId, CancellationToken cancellation)
         => this.TerminateInstanceAsync(instanceId, null, cancellation);
 
+    /// <inheritdoc cref="TerminateInstanceAsync(string, TerminateInstanceOptions, CancellationToken)"/>
+    public virtual Task TerminateInstanceAsync(string instanceId, object? output, CancellationToken cancellation = default)
+    {
+        TerminateInstanceOptions? options = output is null ? null : new() { Output = output };
+        return this.TerminateInstanceAsync(instanceId, options, cancellation);
+    }
+
     /// <summary>
-    /// Terminates a running orchestration instance and updates its runtime status to
+    /// Terminates an orchestration instance and updates its runtime status to
     /// <see cref="OrchestrationRuntimeStatus.Terminated"/>.
     /// </summary>
     /// <remarks>
@@ -226,10 +233,12 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// the terminated state.
     /// </para>
     /// <para>
+    /// Terminating an orchestration by default will not terminate any of the child sub-orchestrations that were started by
+    /// the orchetration instance. If you want to terminate sub-orchestration instances as well, you can set <see cref="TerminateInstanceOptions.Recursive"/>
+    /// flag to true which will enable termination of child sub-orchestration instances. It is set to false by default.
     /// Terminating an orchestration instance has no effect on any in-flight activity function executions
-    /// or sub-orchestrations that were started by the terminated instance. Those actions will continue to run
-    /// without interruption. However, their results will be discarded. If you want to terminate sub-orchestrations,
-    /// you must issue separate terminate commands for each sub-orchestration instance.
+    /// that were started by the terminated instance. Those actions will continue to run
+    /// without interruption. However, their results will be discarded.
     /// </para><para>
     /// At the time of writing, there is no way to terminate an in-flight activity execution.
     /// </para><para>
@@ -237,14 +246,14 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// </para>
     /// </remarks>
     /// <param name="instanceId">The ID of the orchestration instance to terminate.</param>
-    /// <param name="output">The optional output to set for the terminated orchestration instance.</param>
+    /// <param name="options">The optional options for terminating the orchestration.</param>
     /// <param name="cancellation">
     /// The cancellation token. This only cancels enqueueing the termination request to the backend. Does not abort
     /// termination of the orchestration once enqueued.
     /// </param>
     /// <returns>A task that completes when the terminate message is enqueued.</returns>
-    public abstract Task TerminateInstanceAsync(
-        string instanceId, object? output = null, CancellationToken cancellation = default);
+    public virtual Task TerminateInstanceAsync(string instanceId, TerminateInstanceOptions? options = null, CancellationToken cancellation = default)
+        => throw new NotSupportedException($"{this.GetType()} does not support orchestration termination.");
 
     /// <inheritdoc cref="SuspendInstanceAsync(string, string, CancellationToken)"/>
     public virtual Task SuspendInstanceAsync(string instanceId, CancellationToken cancellation)
@@ -327,6 +336,10 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <returns>An async pageable of the query results.</returns>
     public abstract AsyncPageable<OrchestrationMetadata> GetAllInstancesAsync(OrchestrationQuery? filter = null);
 
+    /// <inheritdoc cref="PurgeInstanceAsync(string, PurgeInstanceOptions, CancellationToken)"/>
+    public virtual Task<PurgeResult> PurgeInstanceAsync(string instanceId, CancellationToken cancellation)
+        => this.PurgeInstanceAsync(instanceId, null, cancellation);
+
     /// <summary>
     /// Purges orchestration instance metadata from the durable store.
     /// </summary>
@@ -338,37 +351,53 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <see cref="OrchestrationRuntimeStatus.Completed"/>, <see cref="OrchestrationRuntimeStatus.Failed"/>, or
     /// <see cref="OrchestrationRuntimeStatus.Terminated"/> state can be purged.
     /// </para><para>
+    /// Purging an orchestration will by default not purge any of the child sub-orchestrations that were started by the
+    /// orchetration instance. If you want to purge sub-orchestration instances, you can set <see cref="PurgeInstanceOptions.Recursive"/> flag to
+    /// true which will enable purging of child sub-orchestration instances. It is set to false by default.
     /// If <paramref name="instanceId"/> is not found in the data store, or if the instance is found but not in a
     /// terminal state, then the returned <see cref="PurgeResult"/> object will have a
     /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>0</c>. Otherwise, the existing data will be purged and
-    /// <see cref="PurgeResult.PurgedInstanceCount"/> will be <c>1</c>.
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> will be the count of purged instances.
     /// </para>
     /// </remarks>
     /// <param name="instanceId">The unique ID of the orchestration instance to purge.</param>
+    /// <param name="options">The optional options for purging the orchestration.</param>
     /// <param name="cancellation">
     /// A <see cref="CancellationToken"/> that can be used to cancel the purge operation.
     /// </param>
     /// <returns>
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
-    /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>1</c> or <c>0</c>, depending on whether the target
-    /// instance was successfully purged.
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged,
+    /// including the count of sub-orchestrations purged if any.
     /// </returns>
-    public abstract Task<PurgeResult> PurgeInstanceAsync(
-        string instanceId, CancellationToken cancellation = default);
+    public virtual Task<PurgeResult> PurgeInstanceAsync(
+        string instanceId, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
+    {
+        throw new NotSupportedException($"{this.GetType()} does not support purging of orchestration instances.");
+    }
+
+    /// <inheritdoc cref="PurgeAllInstancesAsync(PurgeInstancesFilter, PurgeInstanceOptions, CancellationToken)"/>
+    public virtual Task<PurgeResult> PurgeAllInstancesAsync(PurgeInstancesFilter filter, CancellationToken cancellation)
+        => this.PurgeAllInstancesAsync(new PurgeInstancesFilter(), null, cancellation);
 
     /// <summary>
     /// Purges orchestration instances metadata from the durable store.
     /// </summary>
     /// <param name="filter">The filter for which orchestrations to purge.</param>
+    /// <param name="options">The optional options for purging the orchestration.</param>
     /// <param name="cancellation">
     /// A <see cref="CancellationToken"/> that can be used to cancel the purge operation.
     /// </param>
     /// <returns>
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
-    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged.
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged,
+    /// including the count of sub-orchestrations purged if any.
     /// </returns>
-    public abstract Task<PurgeResult> PurgeAllInstancesAsync(
-        PurgeInstancesFilter filter, CancellationToken cancellation = default);
+    public virtual Task<PurgeResult> PurgeAllInstancesAsync(
+        PurgeInstancesFilter filter, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
+    {
+        throw new NotSupportedException($"{this.GetType()} does not support purging of orchestration instances.");
+    }
 
     // TODO: Create task hub
 

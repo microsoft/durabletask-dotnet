@@ -1,12 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using DurableTask.Core;
+using DurableTask.Core.Common;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.Serializing.Internal;
+using DurableTask.Core.Tracing;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -115,11 +118,23 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             // TODO: Cancellation (https://github.com/microsoft/durabletask-dotnet/issues/7)
             if (options?.Retry?.Policy is RetryPolicy policy)
             {
-                return await this.innerContext.ScheduleWithRetry<T>(
-                    name.Name,
-                    name.Version,
-                    policy.ToDurableTaskCoreRetryOptions(),
-                    input);
+                if (options?.Retry?.Handler is AsyncRetryHandler handler)
+                {
+                    return await this.InvokeWithCustomRetryHandler(
+                        () => this.innerContext.ScheduleTask<T>(name.Name, name.Version, input),
+                        name.Name,
+                        policy,
+                        handler,
+                        default);
+                }
+                else
+                {
+                    return await this.innerContext.ScheduleWithRetry<T>(
+                        name.Name,
+                        name.Version,
+                        policy.ToDurableTaskCoreRetryOptions(),
+                        input);
+                }
             }
             else if (options?.Retry?.Handler is AsyncRetryHandler handler)
             {
@@ -164,12 +179,28 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         {
             if (options?.Retry?.Policy is RetryPolicy policy)
             {
-                return await this.innerContext.CreateSubOrchestrationInstanceWithRetry<TResult>(
+                if (options?.Retry?.Handler is AsyncRetryHandler handler)
+                {
+                    return await this.InvokeWithCustomRetryHandler(
+                    () => this.innerContext.CreateSubOrchestrationInstance<TResult>(
+                        orchestratorName.Name,
+                        orchestratorName.Version,
+                        instanceId,
+                        input),
                     orchestratorName.Name,
-                    orchestratorName.Version,
-                    instanceId,
-                    policy.ToDurableTaskCoreRetryOptions(),
-                    input);
+                    policy,
+                    handler,
+                    default);
+                }
+                else
+                {
+                    return await this.innerContext.CreateSubOrchestrationInstanceWithRetry<TResult>(
+                        orchestratorName.Name,
+                        orchestratorName.Version,
+                        instanceId,
+                        policy.ToDurableTaskCoreRetryOptions(),
+                        input);
+                }
             }
             else if (options?.Retry?.Handler is AsyncRetryHandler handler)
             {
@@ -448,5 +479,102 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                 }
             }
         }
+    }
+
+    async Task<T> InvokeWithCustomRetryHandler<T>(
+        Func<Task<T>> action,
+        string taskName,
+        RetryPolicy retryPolicy,
+        AsyncRetryHandler retryHandler,
+        CancellationToken cancellationToken)
+    {
+        DateTime startTime = this.CurrentUtcDateTime;
+        int failureCount = 0;
+
+        for (int retryCount = 0; retryCount < retryPolicy.MaxNumberOfAttempts; retryCount++)
+        {
+            try
+            {
+                return await action();
+            }
+            catch (global::DurableTask.Core.Exceptions.OrchestrationException e)
+            {
+                // Some failures are not retryable, like failures for missing activities or sub-orchestrations
+                if (e.FailureDetails?.IsNonRetriable == true)
+                {
+                    throw;
+                }
+
+                failureCount++;
+
+                this.logger.RetryingTask(
+                    this.InstanceId,
+                    taskName,
+                    attempt: failureCount);
+
+                RetryContext retryContext = new(
+                    this,
+                    failureCount,
+                    TaskFailureDetails.FromException(e),
+                    this.CurrentUtcDateTime.Subtract(startTime),
+                    cancellationToken);
+
+                bool keepRetrying = await retryHandler(retryContext);
+                if (!keepRetrying)
+                {
+                    throw;
+                }
+
+                TimeSpan nextDelay = this.ComputeNextDelay(retryPolicy, failureCount, startTime);
+
+                // If not more retries and integer overflow safety check
+                if (nextDelay == TimeSpan.Zero)
+                {
+                    throw;
+                }
+
+                if (failureCount == int.MaxValue)
+                {
+                    throw;
+                }
+            }
+        }
+
+        // Should never execute.
+        return default!;
+    }
+
+    TimeSpan ComputeNextDelay(
+        RetryPolicy retryPolicy,
+        int attempt,
+        DateTime firstAttempt)
+    {
+        TimeSpan nextDelay = TimeSpan.Zero;
+        try
+        {
+            if (attempt < retryPolicy.MaxNumberOfAttempts)
+            {
+                DateTime retryExpiration = (retryPolicy.RetryTimeout != Timeout.InfiniteTimeSpan)
+                    ? firstAttempt.Add(retryPolicy.RetryTimeout)
+                    : DateTime.MaxValue;
+                if (this.CurrentUtcDateTime < retryExpiration)
+                {
+                    double nextDelayInMilliseconds = 
+                        retryPolicy.FirstRetryInterval.TotalMilliseconds *
+                        Math.Pow(retryPolicy.BackoffCoefficient, attempt);
+
+                    nextDelay = nextDelayInMilliseconds < retryPolicy.MaxRetryInterval.TotalMilliseconds
+                        ? TimeSpan.FromMilliseconds(nextDelayInMilliseconds)
+                        : retryPolicy.MaxRetryInterval;
+                }
+            }
+        }
+        catch (Exception e) when (!Utils.IsFatal(e))
+        {
+            // Catch any exceptions during ComputeNextDelay so we don't override original error with new error
+            TraceHelper.TraceExceptionInstance(TraceEventType.Error, "RetryInterceptor-ComputeNextDelayException", this.innerContext.OrchestrationInstance, e);
+        }
+
+        return nextDelay;
     }
 }

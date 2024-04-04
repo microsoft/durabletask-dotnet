@@ -29,12 +29,29 @@ public record TaskOptions
     /// <returns>A <see cref="TaskOptions" /> built from the policy.</returns>
     public static TaskOptions FromRetryPolicy(RetryPolicy policy) => new(policy);
 
+
+    /// <summary>
+    /// Returns a new <see cref="TaskOptions" /> from the provided <see cref="RetryPolicy" /> and  <see cref="AsyncRetryHandler" />.
+    /// </summary>
+    /// <param name="policy">The policy to convert from.</param>
+    /// <param name="handler">The handler to convert from.</param>
+    /// <returns>A <see cref="TaskOptions" /> built from the policy.</returns>
+    public static TaskOptions FromRetryPolicy(RetryPolicy policy, AsyncRetryHandler handler) => new(new TaskRetryOptions(policy, handler));
+
     /// <summary>
     /// Returns a new <see cref="TaskOptions" /> from the provided <see cref="AsyncRetryHandler" />.
     /// </summary>
     /// <param name="handler">The handler to convert from.</param>
     /// <returns>A <see cref="TaskOptions" /> built from the handler.</returns>
     public static TaskOptions FromRetryHandler(AsyncRetryHandler handler) => new(handler);
+
+    /// <summary>
+    /// Returns a new <see cref="TaskOptions" /> from the provided <see cref="AsyncRetryHandler" /> and <see cref="RetryPolicy" />.
+    /// </summary>
+    /// <param name="handler">The handler to convert from.</param>
+    /// <param name="policy">The policy to convert from.</param>
+    /// <returns>A <see cref="TaskOptions" /> built from the handler.</returns>
+    public static TaskOptions FromRetryHandler(AsyncRetryHandler handler, RetryPolicy policy) => new(new TaskRetryOptions(policy, handler));
 
     /// <summary>
     /// Returns a new <see cref="TaskOptions" /> from the provided <see cref="RetryHandler" />.

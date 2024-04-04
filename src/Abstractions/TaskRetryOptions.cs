@@ -28,6 +28,17 @@ public sealed class TaskRetryOptions
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="TaskRetryOptions"/> class.
+    /// </summary>
+    /// <param name="policy">The retry policy to use.</param>
+    /// <param name="handler">The retry handler to use.</param>
+    public TaskRetryOptions(RetryPolicy policy, AsyncRetryHandler handler)
+    {
+        this.Policy = Check.NotNull(policy);
+        this.Handler = Check.NotNull(handler);
+    }
+
+    /// <summary>
     /// Gets the retry policy. <c>null</c> if <see cref="Handler" /> is set.
     /// </summary>
     public RetryPolicy? Policy { get; }
@@ -61,6 +72,14 @@ public sealed class TaskRetryOptions
     /// <param name="policy">The policy to convert from.</param>
     /// <returns>A <see cref="TaskRetryOptions" /> built from the policy.</returns>
     public static TaskRetryOptions FromRetryPolicy(RetryPolicy policy) => new(policy);
+
+    /// <summary>
+    /// Returns a new <see cref="TaskRetryOptions" /> from the provided <see cref="RetryPolicy" />.
+    /// </summary>
+    /// <param name="policy">The policy to convert from.</param>
+    /// <param name="handler">The handler to convert from.</param>
+    /// <returns>A <see cref="TaskRetryOptions" /> built from the policy.</returns>
+    public static TaskRetryOptions FromRetryPolicy(RetryPolicy policy, AsyncRetryHandler handler) => new(policy, handler);
 
     /// <summary>
     /// Returns a new <see cref="TaskRetryOptions" /> from the provided <see cref="AsyncRetryHandler" />.

@@ -16,7 +16,6 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <PackageId>Microsoft.DurableTask.Analyzers</PackageId>
     <PackageDescription>.NET Analyzers for the Durable Task Framework.</PackageDescription>
   </PropertyGroup>
 

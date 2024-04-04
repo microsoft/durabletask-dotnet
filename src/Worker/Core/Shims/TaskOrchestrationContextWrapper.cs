@@ -572,7 +572,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         catch (Exception e) when (!Utils.IsFatal(e))
         {
             // Catch any exceptions during ComputeNextDelay so we don't override original error with new error
-            TraceHelper.TraceExceptionInstance(TraceEventType.Error, "RetryInterceptor-ComputeNextDelayException", this.innerContext.OrchestrationInstance, e);
+            TraceHelper.TraceExceptionInstance(TraceEventType.Error, "TaskOrchestrationContextWrapper-ComputeNextDelayException", this.innerContext.OrchestrationInstance, e);
         }
 
         return nextDelay;

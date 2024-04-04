@@ -16,9 +16,6 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// This class is intended for use with alternate .NET-based durable task runtimes. It's not intended for use
 /// in application code.
 /// </remarks>
-/// <remarks>
-/// Initializes a new instance of the <see cref="DurableTaskShimFactory" /> class.
-/// </remarks>
 /// <param name="options">The data converter.</param>
 /// <param name="loggerFactory">The logger factory.</param>
 public class DurableTaskShimFactory(

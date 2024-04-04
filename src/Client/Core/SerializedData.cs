@@ -8,9 +8,6 @@ namespace Microsoft.DurableTask.Client;
 /// <summary>
 /// Gets a type representing serialized data.
 /// </summary>
-/// <remarks>
-/// Initializes a new instance of the <see cref="SerializedData"/> class.
-/// </remarks>
 /// <param name="data">The serialized data.</param>
 /// <param name="converter">The data converter.</param>
 public sealed class SerializedData(string data, DataConverter? converter = null)

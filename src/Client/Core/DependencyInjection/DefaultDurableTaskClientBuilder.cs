@@ -9,9 +9,6 @@ namespace Microsoft.DurableTask.Client;
 /// <summary>
 /// Default builder for <see cref="IDurableTaskClientBuilder" />.
 /// </summary>
-/// <remarks>
-/// Initializes a new instance of the <see cref="DefaultDurableTaskClientBuilder"/> class.
-/// </remarks>
 /// <param name="name">The name of the builder.</param>
 /// <param name="services">The service collection.</param>
 public class DefaultDurableTaskClientBuilder(string? name, IServiceCollection services) : IDurableTaskClientBuilder

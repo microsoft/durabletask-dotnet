@@ -64,10 +64,7 @@ public class HelloCitiesTyped : TaskOrchestrator<string?, string>
 /// definition that creates an instance of this class and invokes its <see cref="OnRun"/> method.
 /// </summary>
 /// <remarks>
-/// Initializes a new instance of the <see cref="SayHelloTyped"/> class.
 /// This class is initialized once for every activity execution.
-/// </remarks>
-/// <remarks>
 /// Activity class constructors support constructor-based dependency injection.
 /// The injected services are provided by the function's <see cref="FunctionContext.InstanceServices"/> property.
 /// </remarks>

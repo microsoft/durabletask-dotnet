@@ -12,9 +12,6 @@ namespace Microsoft.DurableTask;
 /// It is used specifically by build-time source generators to generate type-safe methods for invoking
 /// orchestrations or activities.
 /// </remarks>
-/// <remarks>
-/// Initializes a new instance of the <see cref="DurableTaskAttribute"/> class.
-/// </remarks>
 /// <param name="name">
 /// The name of the durable task. If not specified, the class name is used as the implied name of the durable task.
 /// </param>

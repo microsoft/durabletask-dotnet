@@ -10,9 +10,6 @@ namespace Microsoft.DurableTask.Worker.Grpc;
 /// <summary>
 /// The gRPC Durable Task worker.
 /// </summary>
-/// <remarks>
-/// Initializes a new instance of the <see cref="GrpcDurableTaskWorker" /> class.
-/// </remarks>
 /// <param name="name">The name of the worker.</param>
 /// <param name="factory">The task factory.</param>
 /// <param name="options">The gRPC worker options.</param>

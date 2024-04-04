@@ -29,9 +29,6 @@ public static class FuncTaskOrchestrator
     /// </summary>
     /// <typeparam name="TInput">The orchestrator input type.</typeparam>
     /// <typeparam name="TOutput">The orchestrator output type.</typeparam>
-    /// <remarks>
-    /// Initializes a new instance of the <see cref="Implementation{TInput, TOutput}"/> class.
-    /// </remarks>
     /// <param name="implementation">The orchestrator function.</param>
     class Implementation<TInput, TOutput>(Func<TaskOrchestrationContext, TInput, Task<TOutput>> implementation)
         : TaskOrchestrator<TInput, TOutput>

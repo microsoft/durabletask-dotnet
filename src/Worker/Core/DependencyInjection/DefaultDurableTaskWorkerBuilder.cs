@@ -10,9 +10,6 @@ namespace Microsoft.DurableTask.Worker;
 /// <summary>
 /// The default builder for durable task.
 /// </summary>
-/// <remarks>
-/// Initializes a new instance of the <see cref="DefaultDurableTaskWorkerBuilder" /> class.
-/// </remarks>
 /// <param name="services">The service collection for this builder.</param>
 /// <param name="name">The name for this builder.</param>
 public class DefaultDurableTaskWorkerBuilder(string? name, IServiceCollection services) : IDurableTaskWorkerBuilder

@@ -8,9 +8,6 @@ namespace Microsoft.DurableTask.Client;
 /// <summary>
 /// Default implementation of <see cref="IDurableTaskClientProvider" />.
 /// </summary>
-/// <remarks>
-/// Initializes a new instance of the <see cref="DefaultDurableTaskClientProvider"/> class.
-/// </remarks>
 /// <param name="clients">The set of clients.</param>
 class DefaultDurableTaskClientProvider(IEnumerable<DefaultDurableTaskClientProvider.ClientContainer> clients)
     : IDurableTaskClientProvider
@@ -37,9 +34,6 @@ class DefaultDurableTaskClientProvider(IEnumerable<DefaultDurableTaskClientProvi
     /// <summary>
     /// Container for holding a client in memory.
     /// </summary>
-    /// <remarks>
-    /// Initializes a new instance of the <see cref="ClientContainer"/> class.
-    /// </remarks>
     /// <param name="client">The client.</param>
     internal class ClientContainer(DurableTaskClient client) : IAsyncDisposable
     {

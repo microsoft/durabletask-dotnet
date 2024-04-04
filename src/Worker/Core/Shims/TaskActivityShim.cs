@@ -8,9 +8,6 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// <summary>
 /// Shims a <see cref="ITaskActivity" /> to a <see cref="TaskActivity" />.
 /// </summary>
-/// <remarks>
-/// Initializes a new instance of the <see cref="TaskActivityShim"/> class.
-/// </remarks>
 /// <param name="dataConverter">The data converter.</param>
 /// <param name="name">The name of the activity.</param>
 /// <param name="implementation">The activity implementation to wrap.</param>

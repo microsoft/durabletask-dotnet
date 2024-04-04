@@ -367,7 +367,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
 
     static Exception MakeException(Type exceptionType, string message)
     {
-        // We assume the contructor of the exception type takes a single string argument
+        // We assume the constructor of the exception type takes a single string argument
         return (Exception)Activator.CreateInstance(exceptionType, message)!;
     }
 

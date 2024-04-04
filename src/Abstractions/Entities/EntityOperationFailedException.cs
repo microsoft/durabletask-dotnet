@@ -10,9 +10,6 @@ namespace Microsoft.DurableTask.Entities;
 /// Detailed information associated with a particular operation failure, including exception details, can be found in the
 /// <see cref="FailureDetails"/> property.
 /// </remarks>
-/// <remarks>
-/// Initializes a new instance of the <see cref="EntityOperationFailedException"/> class.
-/// </remarks>
 /// <param name="operationName">The operation name.</param>
 /// <param name="entityId">The entity ID.</param>
 /// <param name="failureDetails">The failure details.</param>

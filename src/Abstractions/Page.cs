@@ -7,9 +7,6 @@ namespace Microsoft.DurableTask;
 /// Represents a single page of results.
 /// </summary>
 /// <typeparam name="T">The type of values held by the page.</typeparam>
-/// <remarks>
-/// Initializes a new instance of the <see cref="Page{T}" /> class.
-/// </remarks>
 /// <param name="values">The values this holds.</param>
 /// <param name="continuationToken">The continuation token.</param>
 public sealed class Page<T>(IReadOnlyList<T> values, string? continuationToken = null)

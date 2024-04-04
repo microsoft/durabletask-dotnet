@@ -8,9 +8,6 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// <summary>
 /// A shim to go from <see cref="DataConverter" /> to <see cref="CoreJsonDataConverter" />.
 /// </summary>
-/// <remarks>
-/// Initializes a new instance of the <see cref="JsonDataConverterShim"/> class.
-/// </remarks>
 /// <param name="innerConverter">The converter to wrap.</param>
 sealed class JsonDataConverterShim(DataConverter innerConverter) : CoreJsonDataConverter
 {

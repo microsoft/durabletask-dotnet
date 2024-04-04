@@ -13,9 +13,6 @@ namespace Microsoft.DurableTask.Client.Grpc;
 /// <summary>
 /// The client for entities.
 /// </summary>
-/// <remarks>
-/// Initializes a new instance of the <see cref="GrpcDurableEntityClient"/> class.
-/// </remarks>
 /// <param name="name">The name of the client.</param>
 /// <param name="dataConverter">The data converter.</param>
 /// <param name="sidecarClient">The client for the GRPC connection to the sidecar.</param>

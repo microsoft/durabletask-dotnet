@@ -13,9 +13,6 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// This class is intended for use with alternate .NET-based durable task runtimes. It's not intended for use
 /// in application code.
 /// </remarks>
-/// <remarks>
-/// Initializes a new instance of the <see cref="TaskOrchestrationShim"/> class.
-/// </remarks>
 /// <param name="invocationContext">The invocation context for this orchestration.</param>
 /// <param name="implementation">The orchestration's implementation.</param>
 partial class TaskOrchestrationShim(

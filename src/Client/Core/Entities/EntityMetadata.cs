@@ -11,9 +11,6 @@ namespace Microsoft.DurableTask.Client.Entities;
 /// Represents entity metadata.
 /// </summary>
 /// <typeparam name="TState">The type of state held by the metadata.</typeparam>
-/// <remarks>
-/// Initializes a new instance of the <see cref="EntityMetadata{TState}"/> class.
-/// </remarks>
 /// <param name="id">The ID of the entity.</param>
 [JsonConverter(typeof(EntityMetadataConverter))]
 public class EntityMetadata<TState>(EntityInstanceId id)
@@ -90,9 +87,6 @@ public class EntityMetadata<TState>(EntityInstanceId id)
 /// <summary>
 /// Represents the metadata for a durable entity instance.
 /// </summary>
-/// <remarks>
-/// Initializes a new instance of the <see cref="EntityMetadata"/> class.
-/// </remarks>
 /// <param name="id">The ID of the entity.</param>
 /// <param name="state">The state of this entity.</param>
 [JsonConverter(typeof(EntityMetadataConverter))]

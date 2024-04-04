@@ -15,9 +15,6 @@ namespace Microsoft.DurableTask.Client;
 /// <see cref="DurableTaskClient.WaitForInstanceStartAsync(string, CancellationToken)"/> and
 /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync(string, CancellationToken)"/>.
 /// </remarks>
-/// <remarks>
-/// Initializes a new instance of the <see cref="OrchestrationMetadata" /> class.
-/// </remarks>
 /// <param name="name">The name of the orchestration.</param>
 /// <param name="instanceId">The instance ID of the orchestration.</param>
 public sealed class OrchestrationMetadata(string name, string instanceId)

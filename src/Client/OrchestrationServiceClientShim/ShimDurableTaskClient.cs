@@ -15,9 +15,6 @@ namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
 /// <summary>
 /// A shim client for interacting with the backend via <see cref="Core.IOrchestrationServiceClient" />.
 /// </summary>
-/// <remarks>
-/// Initializes a new instance of the <see cref="ShimDurableTaskClient"/> class.
-/// </remarks>
 /// <param name="name">The name of the client.</param>
 /// <param name="options">The client options.</param>
 class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) : DurableTaskClient(name)

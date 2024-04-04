@@ -8,9 +8,6 @@ namespace Microsoft.DurableTask.Converters;
 /// <summary>
 /// An implementation of <see cref="DataConverter"/> that uses System.Text.Json APIs for data serialization.
 /// </summary>
-/// <remarks>
-/// Initializes a new instance of the <see cref="JsonDataConverter"/> class.
-/// </remarks>
 /// <param name="options">The serializer options.</param>
 public class JsonDataConverter(JsonSerializerOptions? options = null) : DataConverter
 {

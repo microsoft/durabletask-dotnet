@@ -9,6 +9,8 @@
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <IncludeShared>false</IncludeShared>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Do not publish it until it is ready to release -->
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <PropertyGroup>

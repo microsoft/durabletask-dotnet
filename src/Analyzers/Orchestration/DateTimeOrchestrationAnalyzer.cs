@@ -17,8 +17,8 @@ public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer
 
     static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
-        "DateTime calls must be deterministic inside an orchestration function",
-        "The method '{0}' uses '{1}' that may cause non-deterministic behavior when invoked from Orchestration Function '{2}'",
+        "System.DateTime calls must be deterministic inside an orchestration",
+        "The method '{0}' uses '{1}' that may cause non-deterministic behavior when invoked from orchestration '{2}'",
         AnalyzersCategories.Orchestration,
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
@@ -54,14 +54,14 @@ public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer
             {
                 if (symbol is IMethodSymbol method)
                 {
-                    if (orchestrationAnalysisResult.OrchestrationsByMethod.TryGetValue(method, out ConcurrentBag<OrchestrationMethod> orchestrations))
+                    if (orchestrationAnalysisResult.OrchestrationsByMethod.TryGetValue(method, out ConcurrentBag<AnalyzedOrchestration> orchestrations))
                     {
                         string methodName = symbol.Name;
                         string dateTimePropertyName = operation.Property.ToString();
-                        string functionsNames = string.Join(", ", orchestrations.Select(o => o.FunctionName).OrderBy(n => n));
+                        string orchestrationNames = string.Join(", ", orchestrations.Select(o => o.Name).OrderBy(n => n));
 
-                        // e.g.: "The method 'Method1' uses 'System.Date.Now' that may cause non-deterministic behavior when invoked from Orchestration Function 'Run1'"
-                        ctx.ReportDiagnostic(Rule, operation, methodName, dateTimePropertyName, functionsNames);
+                        // e.g.: "The method 'Method1' uses 'System.Date.Now' that may cause non-deterministic behavior when invoked from orchestration 'MyOrchestrator'"
+                        ctx.ReportDiagnostic(Rule, operation, methodName, dateTimePropertyName, orchestrationNames);
                     }
                 }
             }

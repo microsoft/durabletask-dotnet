@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -23,47 +22,182 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
         {
             var knownSymbols = new KnownTypeSymbols(context.Compilation);
 
-            if (knownSymbols.OrchestrationTriggerAttribute == null || knownSymbols.FunctionAttribute == null)
+            if (knownSymbols.FunctionOrchestrationAttribute == null || knownSymbols.FunctionNameAttribute == null ||
+                knownSymbols.TaskOrchestratorInterface == null || knownSymbols.TaskOrchestratorBaseClass == null ||
+                knownSymbols.DurableTaskRegistry == null)
             {
                 // symbols not available in this compilation, skip analysis
                 return;
             }
 
+            IMethodSymbol runAsyncTaskOrchestratorInterface = knownSymbols.TaskOrchestratorInterface.GetMembers("RunAsync").OfType<IMethodSymbol>().First();
+            IMethodSymbol runAsyncTaskOrchestratorBase = knownSymbols.TaskOrchestratorBaseClass.GetMembers("RunAsync").OfType<IMethodSymbol>().First();
+
             OrchestrationAnalysisResult result = new();
 
+            // look for Durable Functions Orchestrations
             context.RegisterSyntaxNodeAction(ctx =>
             {
                 ctx.CancellationToken.ThrowIfCancellationRequested();
 
-                // Checks whether the declared method is an orchestration, if not, returns
-                if (ctx.ContainingSymbol is not IMethodSymbol methodSymbol ||
-                    !methodSymbol.ContainsAttributeInAnyMethodArguments(knownSymbols.OrchestrationTriggerAttribute) ||
-                    !methodSymbol.TryGetSingleValueFromAttribute(knownSymbols.FunctionAttribute, out string functionName))
+                if (ctx.ContainingSymbol is not IMethodSymbol methodSymbol)
                 {
                     return;
                 }
 
-                var orchestration = new OrchestrationMethod(functionName, methodSymbol);
-                var methodSyntax = (MethodDeclarationSyntax)ctx.Node;
+                if (!methodSymbol.ContainsAttributeInAnyMethodArguments(knownSymbols.FunctionOrchestrationAttribute))
+                {
+                    return;
+                }
 
-                FindInvokedMethods(ctx.SemanticModel, methodSyntax, methodSymbol, orchestration, result);
+                if (!methodSymbol.TryGetSingleValueFromAttribute(knownSymbols.FunctionNameAttribute, out string functionName))
+                {
+                    return;
+                }
+
+                var orchestration = new AnalyzedOrchestration(functionName);
+                var rootMethodSyntax = (MethodDeclarationSyntax)ctx.Node;
+
+                FindInvokedMethods(ctx.SemanticModel, rootMethodSyntax, methodSymbol, orchestration, result);
             }, SyntaxKind.MethodDeclaration);
+
+            // look for TaskOrchestrator`2 Orchestrations
+            context.RegisterSyntaxNodeAction(ctx =>
+            {
+                ctx.CancellationToken.ThrowIfCancellationRequested();
+
+                if (ctx.ContainingSymbol is not INamedTypeSymbol classSymbol)
+                {
+                    return;
+                }
+
+                if (!classSymbol.InheritsFromOpenGeneric(knownSymbols.TaskOrchestratorBaseClass))
+                {
+                    return;
+                }
+
+                // Get the method that overrides TaskOrchestrator.RunAsync
+                IMethodSymbol? methodSymbol = classSymbol.GetOverridenMethod(runAsyncTaskOrchestratorBase);
+                if (methodSymbol == null)
+                {
+                    return;
+                }
+
+                var orchestration = new AnalyzedOrchestration(classSymbol.Name);
+
+                IEnumerable<MethodDeclarationSyntax> methodSyntaxes = methodSymbol.GetSyntaxNodes();
+                foreach (MethodDeclarationSyntax rootMethodSyntax in methodSyntaxes)
+                {
+                    FindInvokedMethods(ctx.SemanticModel, rootMethodSyntax, methodSymbol, orchestration, result);
+                }
+            }, SyntaxKind.ClassDeclaration);
+
+            // look for ITaskOrchestrator Orchestrations
+            context.RegisterSyntaxNodeAction(ctx =>
+            {
+                ctx.CancellationToken.ThrowIfCancellationRequested();
+
+                if (ctx.ContainingSymbol is not INamedTypeSymbol classSymbol)
+                {
+                    return;
+                }
+
+                // Gets the method that implements ITaskOrchestrator.RunAsync
+                if (classSymbol.FindImplementationForInterfaceMember(runAsyncTaskOrchestratorInterface) is not IMethodSymbol methodSymbol)
+                {
+                    return;
+                }
+
+                // Skip if the found method is implemented in TaskOrchestrator<TInput, TOutput>
+                if (methodSymbol.ContainingType.ConstructedFrom.Equals(knownSymbols.TaskOrchestratorBaseClass, SymbolEqualityComparer.Default))
+                {
+                    return;
+                }
+
+                var orchestration = new AnalyzedOrchestration(classSymbol.Name);
+
+                IEnumerable<MethodDeclarationSyntax> methodSyntaxes = methodSymbol.GetSyntaxNodes();
+                foreach (MethodDeclarationSyntax rootMethodSyntax in methodSyntaxes)
+                {
+                    FindInvokedMethods(ctx.SemanticModel, rootMethodSyntax, methodSymbol, orchestration, result);
+                }
+            }, SyntaxKind.ClassDeclaration);
+
+            // look for OrchestratorFunc Orchestrations
+            context.RegisterOperationAction(ctx =>
+            {
+                if (ctx.Operation is not IInvocationOperation invocation)
+                {
+                    return;
+                }
+
+                if (!SymbolEqualityComparer.Default.Equals(invocation.Type, knownSymbols.DurableTaskRegistry))
+                {
+                    return;
+                }
+
+                // there are 8 AddOrchestratorFunc overloads
+                if (invocation.TargetMethod.Name != "AddOrchestratorFunc")
+                {
+                    return;
+                }
+
+                // all overloads have the parameter orchestrator, either as an Action or a Func
+                IArgumentOperation orchestratorArgument = invocation.Arguments.First(a => a.Parameter!.Name == "orchestrator");
+                if (orchestratorArgument.Value is not IDelegateCreationOperation delegateCreationOperation)
+                {
+                    return;
+                }
+
+                IMethodSymbol? methodSymbol = null;
+                switch (delegateCreationOperation.Target)
+                {
+                    case IAnonymousFunctionOperation lambdaOperation:
+                        // use the containing symbol of the lambda (e.g. the class declaring it) as the root method symbol
+                        methodSymbol = ctx.ContainingSymbol as IMethodSymbol;
+                        break;
+                    case IMethodReferenceOperation methodReferenceOperation:
+                        // use the method reference as the root method symbol
+                        methodSymbol = methodReferenceOperation.Method;
+                        break;
+                    default:
+                        break;
+                }
+
+                if (methodSymbol == null)
+                {
+                    return;
+                }
+
+                // try to get the name of the orchestration from the method call, otherwise use the containing type name
+                IArgumentOperation nameArgument = invocation.Arguments.First(a => a.Parameter!.Name == "name");
+                Optional<object?> name = nameArgument.GetConstantValueFromAttribute(ctx.Operation.SemanticModel!, ctx.CancellationToken);
+                string orchestrationName = name.Value?.ToString() ?? methodSymbol.Name;
+
+                var orchestration = new AnalyzedOrchestration(orchestrationName);
+
+                SyntaxNode funcRootSyntax = delegateCreationOperation.Syntax;
+
+                FindInvokedMethods(ctx.Operation.SemanticModel!, funcRootSyntax, methodSymbol, orchestration, result);
+            }, OperationKind.Invocation);
 
             // allows concrete implementations to register specific actions/analysis and then check if they happen in any of the orchestration methods
             this.RegisterAdditionalCompilationStartAction(context, result);
         });
     }
 
-    // Recursively find all methods invoked by the orchestration method
+    // Recursively find all methods invoked by the orchestration root method and call the appropriate visitor method
     static void FindInvokedMethods(
-        SemanticModel semanticModel, MethodDeclarationSyntax callerSyntax, IMethodSymbol callerSymbol,
-        OrchestrationMethod rootOrchestration, OrchestrationAnalysisResult result)
+        SemanticModel semanticModel, SyntaxNode callerSyntax, IMethodSymbol callerSymbol,
+        AnalyzedOrchestration rootOrchestration, OrchestrationAnalysisResult result)
     {
-        if (!TryTrackMethod(semanticModel, callerSyntax, callerSymbol, rootOrchestration, result))
+        ConcurrentBag<AnalyzedOrchestration> orchestrations = result.OrchestrationsByMethod.GetOrAdd(callerSymbol, []);
+        if (orchestrations.Contains(rootOrchestration))
         {
             // previously tracked method, leave to avoid infinite recursion
             return;
         }
+        orchestrations.Add(rootOrchestration);
 
         foreach (InvocationExpressionSyntax invocationSyntax in callerSyntax.DescendantNodes().OfType<InvocationExpressionSyntax>())
         {
@@ -80,26 +214,12 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
             }
 
             // iterating over multiple syntax references is needed because the same method can be declared in multiple places (e.g. partial classes)
-            IEnumerable<MethodDeclarationSyntax> calleeSyntaxes = calleeMethodSymbol.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).OfType<MethodDeclarationSyntax>();
+            IEnumerable<MethodDeclarationSyntax> calleeSyntaxes = calleeMethodSymbol.GetSyntaxNodes();
             foreach (MethodDeclarationSyntax calleeSyntax in calleeSyntaxes)
             {
                 FindInvokedMethods(semanticModel, calleeSyntax, calleeMethodSymbol, rootOrchestration, result);
             }
         }
-    }
-
-    static bool TryTrackMethod(SemanticModel semanticModel, MethodDeclarationSyntax callerSyntax, IMethodSymbol callerSymbol,
-        OrchestrationMethod rootOrchestration, OrchestrationAnalysisResult result)
-    {
-        ConcurrentBag<OrchestrationMethod> orchestrations = result.OrchestrationsByMethod.GetOrAdd(callerSymbol, []);
-        if (orchestrations.Contains(rootOrchestration))
-        {
-            return false;
-        }
-
-        orchestrations.Add(rootOrchestration);
-
-        return true;
     }
 
     /// <summary>
@@ -114,7 +234,7 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
 
     protected readonly struct OrchestrationAnalysisResult
     {
-        public ConcurrentDictionary<IMethodSymbol, ConcurrentBag<OrchestrationMethod>> OrchestrationsByMethod { get; }
+        public ConcurrentDictionary<IMethodSymbol, ConcurrentBag<AnalyzedOrchestration>> OrchestrationsByMethod { get; }
 
         public OrchestrationAnalysisResult()
         {
@@ -122,10 +242,8 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    [DebuggerDisplay("[{FunctionName}] {OrchestrationMethodSymbol.Name}")]
-    protected readonly struct OrchestrationMethod(string functionName, IMethodSymbol orchestrationMethodSymbol)
+    protected readonly struct AnalyzedOrchestration(string name)
     {
-        public string FunctionName { get; } = functionName;
-        public IMethodSymbol OrchestrationMethodSymbol { get; } = orchestrationMethodSymbol;
+        public string Name { get; } = name;
     }
 }

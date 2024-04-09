@@ -15,11 +15,20 @@ sealed class KnownTypeSymbols(Compilation compilation)
 {
     readonly Compilation compilation = compilation;
 
-    Cached<INamedTypeSymbol?> orchestrationTriggerAttribute;
-    public INamedTypeSymbol? OrchestrationTriggerAttribute => this.GetOrResolveFullyQualifiedType("Microsoft.Azure.Functions.Worker.OrchestrationTriggerAttribute", ref this.orchestrationTriggerAttribute);
+    Cached<INamedTypeSymbol?> functionOrchestrationAttribute;
+    public INamedTypeSymbol? FunctionOrchestrationAttribute => this.GetOrResolveFullyQualifiedType("Microsoft.Azure.Functions.Worker.OrchestrationTriggerAttribute", ref this.functionOrchestrationAttribute);
 
-    Cached<INamedTypeSymbol?> functionAttribute;
-    public INamedTypeSymbol? FunctionAttribute => this.GetOrResolveFullyQualifiedType("Microsoft.Azure.Functions.Worker.FunctionAttribute", ref this.functionAttribute);
+    Cached<INamedTypeSymbol?> functionNameAttribute;
+    public INamedTypeSymbol? FunctionNameAttribute => this.GetOrResolveFullyQualifiedType("Microsoft.Azure.Functions.Worker.FunctionAttribute", ref this.functionNameAttribute);
+
+    Cached<INamedTypeSymbol?> taskOrchestratorInterface;
+    public INamedTypeSymbol? TaskOrchestratorInterface => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.ITaskOrchestrator", ref this.taskOrchestratorInterface);
+
+    Cached<INamedTypeSymbol?> taskOrchestratorBaseClass;
+    public INamedTypeSymbol? TaskOrchestratorBaseClass => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.TaskOrchestrator`2", ref this.taskOrchestratorBaseClass);
+
+    Cached<INamedTypeSymbol?> durableTaskRegistry;
+    public INamedTypeSymbol? DurableTaskRegistry => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.DurableTaskRegistry", ref this.durableTaskRegistry);
 
     INamedTypeSymbol? GetOrResolveFullyQualifiedType(string fullyQualifiedName, ref Cached<INamedTypeSymbol?> field)
     {

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using Microsoft.CodeAnalysis.Testing;
@@ -42,51 +42,21 @@ void Method(){
         await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
     }
 
-
-    [Fact]
-    public async Task DurableFunctionOrchestrationUsingDateTimeNowHasDiag()
+    [Theory]
+    [InlineData("DateTime.Now")]
+    [InlineData("DateTime.UtcNow")]
+    [InlineData("DateTime.Today")]
+    public async Task DurableFunctionOrchestrationUsingDateTimeNonDeterministicPropertiesHasDiag(string expression)
     {
-        string code = WrapDurableFunctionOrchestration(@"
+        string code = WrapDurableFunctionOrchestration($@"
 [Function(""Run"")]
 DateTime Run([OrchestrationTrigger] TaskOrchestrationContext context)
-{
-    return {|#0:DateTime.Now|};
-}
+{{
+    return {{|#0:{expression}|}};
+}}
 ");
 
-        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Run", "System.DateTime.Now", "Run");
-
-        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
-    }
-
-    [Fact]
-    public async Task DurableFunctionOrchestrationUsingDateTimeUtcNowHasDiag()
-    {
-        string code = WrapDurableFunctionOrchestration(@"
-[Function(""Run"")]
-DateTime Run([OrchestrationTrigger] TaskOrchestrationContext context)
-{
-    return {|#0:DateTime.UtcNow|};
-}
-");
-
-        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Run", "System.DateTime.UtcNow", "Run");
-
-        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
-    }
-
-    [Fact]
-    public async Task DurableFunctionOrchestrationUsingDateTimeTodayNowHasDiag()
-    {
-        string code = WrapDurableFunctionOrchestration(@"
-[Function(""Run"")]
-DateTime Run([OrchestrationTrigger] TaskOrchestrationContext context)
-{
-    return {|#0:DateTime.Today|};
-}
-");
-
-        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Run", "System.DateTime.Today", "Run");
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Run", $"System.{expression}", "Run");
 
         await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
     }

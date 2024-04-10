@@ -152,11 +152,11 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
                 switch (delegateCreationOperation.Target)
                 {
                     case IAnonymousFunctionOperation lambdaOperation:
-                        // use the containing symbol of the lambda (e.g. the class declaring it) as the root method symbol
+                        // use the containing symbol of the lambda (e.g. the class declaring it) as the method symbol
                         methodSymbol = ctx.ContainingSymbol as IMethodSymbol;
                         break;
                     case IMethodReferenceOperation methodReferenceOperation:
-                        // use the method reference as the root method symbol
+                        // use the method reference as the method symbol
                         methodSymbol = methodReferenceOperation.Method;
                         break;
                     default:

@@ -15,39 +15,28 @@ sealed class KnownTypeSymbols(Compilation compilation)
 {
     readonly Compilation compilation = compilation;
 
-    Cached<INamedTypeSymbol?> functionOrchestrationAttribute;
+    INamedTypeSymbol? functionOrchestrationAttribute;
     public INamedTypeSymbol? FunctionOrchestrationAttribute => this.GetOrResolveFullyQualifiedType("Microsoft.Azure.Functions.Worker.OrchestrationTriggerAttribute", ref this.functionOrchestrationAttribute);
 
-    Cached<INamedTypeSymbol?> functionNameAttribute;
+    INamedTypeSymbol? functionNameAttribute;
     public INamedTypeSymbol? FunctionNameAttribute => this.GetOrResolveFullyQualifiedType("Microsoft.Azure.Functions.Worker.FunctionAttribute", ref this.functionNameAttribute);
 
-    Cached<INamedTypeSymbol?> taskOrchestratorInterface;
+    INamedTypeSymbol? taskOrchestratorInterface;
     public INamedTypeSymbol? TaskOrchestratorInterface => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.ITaskOrchestrator", ref this.taskOrchestratorInterface);
 
-    Cached<INamedTypeSymbol?> taskOrchestratorBaseClass;
+    INamedTypeSymbol? taskOrchestratorBaseClass;
     public INamedTypeSymbol? TaskOrchestratorBaseClass => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.TaskOrchestrator`2", ref this.taskOrchestratorBaseClass);
 
-    Cached<INamedTypeSymbol?> durableTaskRegistry;
+    INamedTypeSymbol? durableTaskRegistry;
     public INamedTypeSymbol? DurableTaskRegistry => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.DurableTaskRegistry", ref this.durableTaskRegistry);
 
-    INamedTypeSymbol? GetOrResolveFullyQualifiedType(string fullyQualifiedName, ref Cached<INamedTypeSymbol?> field)
+    INamedTypeSymbol? GetOrResolveFullyQualifiedType(string fullyQualifiedName, ref INamedTypeSymbol? field)
     {
-        if (field.HasValue)
+        if (field != null)
         {
-            return field.Value;
+            return field;
         }
 
-        INamedTypeSymbol? type = this.compilation.GetTypeByMetadataName(fullyQualifiedName);
-        field = new(type);
-        return type;
-    }
-
-    // We could use Lazy<T> here, but because we need to use the `compilation` variable instance,
-    // that would require us to initiate the Lazy<T> lambdas in the constructor.
-    // Because not all analyzers use all symbols, we would be allocating unnecessary lambdas.
-    readonly struct Cached<T>(T value)
-    {
-        public readonly bool HasValue = true;
-        public readonly T Value = value;
+        return field = this.compilation.GetTypeByMetadataName(fullyQualifiedName);
     }
 }

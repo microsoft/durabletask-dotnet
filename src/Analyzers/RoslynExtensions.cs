@@ -7,7 +7,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Operations;
 
-namespace Microsoft.DurableTask.Analyzers.Helpers;
+namespace Microsoft.DurableTask.Analyzers;
 
 static class RoslynExtensions
 {

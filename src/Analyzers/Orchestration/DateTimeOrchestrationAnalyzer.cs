@@ -14,10 +14,13 @@ public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer
 {
     public const string DiagnosticId = "DURABLE0001";
 
+    static readonly LocalizableString title = new LocalizableResourceString(nameof(Resources.DateTimeOrchestrationAnalyzerTitle), Resources.ResourceManager, typeof(Resources));
+    static readonly LocalizableString messageFormat = new LocalizableResourceString(nameof(Resources.DateTimeOrchestrationAnalyzerMessageFormat), Resources.ResourceManager, typeof(Resources));
+
     static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
-        "System.DateTime calls must be deterministic inside an orchestration",
-        "The method '{0}' uses '{1}' that may cause non-deterministic behavior when invoked from orchestration '{2}'",
+        title,
+        messageFormat,
         AnalyzersCategories.Orchestration,
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true);

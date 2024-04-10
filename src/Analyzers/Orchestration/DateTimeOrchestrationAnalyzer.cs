@@ -42,8 +42,12 @@ public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer
             var operation = (IPropertyReferenceOperation)ctx.Operation;
             IPropertySymbol property = operation.Property;
 
-            if (property.ContainingSymbol.Equals(systemDateTimeSymbol, SymbolEqualityComparer.Default) &&
-                property.Name is nameof(DateTime.Now) or nameof(DateTime.UtcNow) or nameof(DateTime.Today))
+            if (!property.ContainingSymbol.Equals(systemDateTimeSymbol, SymbolEqualityComparer.Default))
+            {
+                return;
+            }
+
+            if (property.Name is nameof(DateTime.Now) or nameof(DateTime.UtcNow) or nameof(DateTime.Today))
             {
                 ISymbol method = ctx.ContainingSymbol;
                 dateTimeUsage.Add((method, operation));

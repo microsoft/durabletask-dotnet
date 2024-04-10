@@ -4,9 +4,9 @@
 using Microsoft.CodeAnalysis.Testing;
 using Microsoft.DurableTask.Analyzers.Orchestration;
 
-using VerifyCS = Microsoft.DurableTask.Analyzers.Test.Verifiers.CSharpAnalyzerVerifier<Microsoft.DurableTask.Analyzers.Orchestration.DateTimeOrchestrationAnalyzer>;
+using VerifyCS = Microsoft.DurableTask.Analyzers.Tests.Verifiers.CSharpAnalyzerVerifier<Microsoft.DurableTask.Analyzers.Orchestration.DateTimeOrchestrationAnalyzer>;
 
-namespace Microsoft.DurableTask.Analyzers.Test.Orchestration;
+namespace Microsoft.DurableTask.Analyzers.Tests.Orchestration;
 
 public class DateTimeOrchestrationAnalyzerTests
 {

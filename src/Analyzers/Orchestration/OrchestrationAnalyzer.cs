@@ -191,6 +191,7 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel, SyntaxNode callerSyntax, IMethodSymbol callerSymbol,
         AnalyzedOrchestration rootOrchestration, OrchestrationAnalysisResult result)
     {
+        // add the visited method to the list of orchestrations
         ConcurrentBag<AnalyzedOrchestration> orchestrations = result.OrchestrationsByMethod.GetOrAdd(callerSymbol, []);
         if (orchestrations.Contains(rootOrchestration))
         {

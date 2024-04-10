@@ -29,6 +29,7 @@ public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer
     {
         INamedTypeSymbol systemDateTimeSymbol = context.Compilation.GetSpecialType(SpecialType.System_DateTime);
 
+        // stores the symbols (such as methods) and the DateTime references used in them
         ConcurrentBag<(ISymbol symbol, IPropertyReferenceOperation operation)> dateTimeUsage = [];
 
         // search for usages of DateTime.Now, DateTime.UtcNow, DateTime.Today and store them

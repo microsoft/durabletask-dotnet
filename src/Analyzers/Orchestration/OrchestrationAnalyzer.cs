@@ -29,8 +29,12 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
                 return;
             }
 
-            IMethodSymbol runAsyncTaskOrchestratorInterface = knownSymbols.TaskOrchestratorInterface.GetMembers("RunAsync").OfType<IMethodSymbol>().First();
-            IMethodSymbol runAsyncTaskOrchestratorBase = knownSymbols.TaskOrchestratorBaseClass.GetMembers("RunAsync").OfType<IMethodSymbol>().First();
+            IMethodSymbol? runAsyncTaskOrchestratorInterface = knownSymbols.TaskOrchestratorInterface.GetMembers("RunAsync").OfType<IMethodSymbol>().FirstOrDefault();
+            IMethodSymbol? runAsyncTaskOrchestratorBase = knownSymbols.TaskOrchestratorBaseClass.GetMembers("RunAsync").OfType<IMethodSymbol>().FirstOrDefault();
+            if (runAsyncTaskOrchestratorInterface == null || runAsyncTaskOrchestratorBase == null)
+            {
+                return;
+            }
 
             OrchestrationAnalysisResult result = new();
 

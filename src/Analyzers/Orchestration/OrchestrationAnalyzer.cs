@@ -70,7 +70,7 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
                     return;
                 }
 
-                if (!classSymbol.InheritsFromOpenGeneric(knownSymbols.TaskOrchestratorBaseClass))
+                if (!classSymbol.BaseTypeIsConstructedFrom(knownSymbols.TaskOrchestratorBaseClass))
                 {
                     return;
                 }

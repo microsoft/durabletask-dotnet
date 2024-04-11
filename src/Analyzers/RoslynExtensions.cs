@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.Collections.Immutable;
@@ -56,7 +56,7 @@ static class RoslynExtensions
         return symbol.AllInterfaces.Any(i => interfaceSymbol.Equals(i, SymbolEqualityComparer.Default));
     }
 
-    public static bool InheritsFromOpenGeneric(this INamedTypeSymbol symbol, ITypeSymbol type)
+    public static bool BaseTypeIsConstructedFrom(this INamedTypeSymbol symbol, ITypeSymbol type)
     {
         INamedTypeSymbol? baseType = symbol.BaseType;
         while (baseType != null)

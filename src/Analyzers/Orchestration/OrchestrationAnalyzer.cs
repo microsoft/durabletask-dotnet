@@ -19,7 +19,7 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
 
         context.RegisterCompilationStartAction(context =>
         {
-            var knownSymbols = new KnownTypeSymbols(context.Compilation);
+            KnownTypeSymbols knownSymbols = new(context.Compilation);
 
             if (knownSymbols.FunctionOrchestrationAttribute == null || knownSymbols.FunctionNameAttribute == null ||
                 knownSymbols.TaskOrchestratorInterface == null || knownSymbols.TaskOrchestratorBaseClass == null ||
@@ -54,7 +54,7 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
                     return;
                 }
 
-                var orchestration = new AnalyzedOrchestration(functionName);
+                AnalyzedOrchestration orchestration = new(functionName);
                 var rootMethodSyntax = (MethodDeclarationSyntax)ctx.Node;
 
                 FindInvokedMethods(ctx.SemanticModel, rootMethodSyntax, methodSymbol, orchestration, result);
@@ -82,7 +82,7 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
                     return;
                 }
 
-                var orchestration = new AnalyzedOrchestration(classSymbol.Name);
+                AnalyzedOrchestration orchestration = new(classSymbol.Name);
 
                 IEnumerable<MethodDeclarationSyntax> methodSyntaxes = methodSymbol.GetSyntaxNodes();
                 foreach (MethodDeclarationSyntax rootMethodSyntax in methodSyntaxes)
@@ -113,7 +113,7 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
                     return;
                 }
 
-                var orchestration = new AnalyzedOrchestration(classSymbol.Name);
+                AnalyzedOrchestration orchestration = new(classSymbol.Name);
 
                 IEnumerable<MethodDeclarationSyntax> methodSyntaxes = methodSymbol.GetSyntaxNodes();
                 foreach (MethodDeclarationSyntax rootMethodSyntax in methodSyntaxes)
@@ -173,7 +173,7 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
                 Optional<object?> name = nameArgument.GetConstantValueFromAttribute(ctx.Operation.SemanticModel!, ctx.CancellationToken);
                 string orchestrationName = name.Value?.ToString() ?? methodSymbol.Name;
 
-                var orchestration = new AnalyzedOrchestration(orchestrationName);
+                AnalyzedOrchestration orchestration = new(orchestrationName);
 
                 SyntaxNode funcRootSyntax = delegateCreationOperation.Syntax;
 

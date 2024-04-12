@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(EnableStyleCop)' == 'true'">
-    <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.435" PrivateAssets="All"/>
+    <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556" PrivateAssets="All"/>
   </ItemGroup>
 
   <ItemGroup>

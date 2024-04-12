@@ -9,9 +9,15 @@ using Microsoft.CodeAnalysis.Operations;
 
 namespace Microsoft.DurableTask.Analyzers.Orchestration;
 
+/// <summary>
+/// Analyzer that reports a warning when a non-deterministic DateTime property is used in an orchestration method.
+/// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer
 {
+    /// <summary>
+    /// Diagnostic ID supported for the analyzer.
+    /// </summary>
     public const string DiagnosticId = "DURABLE0001";
 
     static readonly LocalizableString Title = new LocalizableResourceString(nameof(Resources.DateTimeOrchestrationAnalyzerTitle), Resources.ResourceManager, typeof(Resources));
@@ -25,8 +31,10 @@ public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
+    /// <inheritdoc/>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];
 
+    /// <inheritdoc/>
     protected override void RegisterAdditionalCompilationStartAction(CompilationStartAnalysisContext context, OrchestrationAnalysisResult orchestrationAnalysisResult)
     {
         INamedTypeSymbol systemDateTimeSymbol = context.Compilation.GetSpecialType(SpecialType.System_DateTime);

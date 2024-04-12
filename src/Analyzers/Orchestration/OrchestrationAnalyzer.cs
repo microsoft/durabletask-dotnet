@@ -10,8 +10,12 @@ using Microsoft.CodeAnalysis.Operations;
 
 namespace Microsoft.DurableTask.Analyzers.Orchestration;
 
+/// <summary>
+/// Base class for analyzers that analyze orchestrations.
+/// </summary>
 public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
 {
+    /// <inheritdoc/>
     public override void Initialize(AnalysisContext context)
     {
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
@@ -248,18 +252,34 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
         }
     }
 
+    /// <summary>
+    /// Data structure to store the result of the orchestration methods analysis.
+    /// </summary>
     protected readonly struct OrchestrationAnalysisResult
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="OrchestrationAnalysisResult"/> struct.
+        /// </summary>
         public OrchestrationAnalysisResult()
         {
             this.OrchestrationsByMethod = new(SymbolEqualityComparer.Default);
         }
 
+        /// <summary>
+        /// Gets the orchestrations that invokes/reaches a given method.
+        /// </summary>
         public ConcurrentDictionary<IMethodSymbol, ConcurrentBag<AnalyzedOrchestration>> OrchestrationsByMethod { get; }
     }
 
+    /// <summary>
+    /// Data structure to store the orchestration data.
+    /// </summary>
+    /// <param name="name">Name of the orchestration.</param>
     protected readonly struct AnalyzedOrchestration(string name)
     {
+        /// <summary>
+        /// Gets the name of the orchestration.
+        /// </summary>
         public string Name { get; } = name;
     }
 }

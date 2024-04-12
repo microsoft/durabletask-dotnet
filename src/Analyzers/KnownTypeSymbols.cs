@@ -16,18 +16,19 @@ sealed class KnownTypeSymbols(Compilation compilation)
     readonly Compilation compilation = compilation;
 
     INamedTypeSymbol? functionOrchestrationAttribute;
+    INamedTypeSymbol? functionNameAttribute;
+    INamedTypeSymbol? taskOrchestratorInterface;
+    INamedTypeSymbol? taskOrchestratorBaseClass;
+    INamedTypeSymbol? durableTaskRegistry;
+
     public INamedTypeSymbol? FunctionOrchestrationAttribute => this.GetOrResolveFullyQualifiedType("Microsoft.Azure.Functions.Worker.OrchestrationTriggerAttribute", ref this.functionOrchestrationAttribute);
 
-    INamedTypeSymbol? functionNameAttribute;
     public INamedTypeSymbol? FunctionNameAttribute => this.GetOrResolveFullyQualifiedType("Microsoft.Azure.Functions.Worker.FunctionAttribute", ref this.functionNameAttribute);
 
-    INamedTypeSymbol? taskOrchestratorInterface;
     public INamedTypeSymbol? TaskOrchestratorInterface => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.ITaskOrchestrator", ref this.taskOrchestratorInterface);
 
-    INamedTypeSymbol? taskOrchestratorBaseClass;
     public INamedTypeSymbol? TaskOrchestratorBaseClass => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.TaskOrchestrator`2", ref this.taskOrchestratorBaseClass);
 
-    INamedTypeSymbol? durableTaskRegistry;
     public INamedTypeSymbol? DurableTaskRegistry => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.DurableTaskRegistry", ref this.durableTaskRegistry);
 
     INamedTypeSymbol? GetOrResolveFullyQualifiedType(string fullyQualifiedName, ref INamedTypeSymbol? field)

@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 using System.Collections.Immutable;
-using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
 
 namespace Microsoft.DurableTask.Analyzers;
@@ -65,8 +65,10 @@ static class RoslynExtensions
             {
                 return true;
             }
+
             baseType = baseType.BaseType;
         }
+
         return false;
     }
 

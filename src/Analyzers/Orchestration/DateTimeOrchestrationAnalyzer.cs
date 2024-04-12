@@ -3,9 +3,9 @@
 
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
-using Microsoft.CodeAnalysis;
 
 namespace Microsoft.DurableTask.Analyzers.Orchestration;
 
@@ -14,13 +14,13 @@ public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer
 {
     public const string DiagnosticId = "DURABLE0001";
 
-    static readonly LocalizableString title = new LocalizableResourceString(nameof(Resources.DateTimeOrchestrationAnalyzerTitle), Resources.ResourceManager, typeof(Resources));
-    static readonly LocalizableString messageFormat = new LocalizableResourceString(nameof(Resources.DateTimeOrchestrationAnalyzerMessageFormat), Resources.ResourceManager, typeof(Resources));
+    static readonly LocalizableString Title = new LocalizableResourceString(nameof(Resources.DateTimeOrchestrationAnalyzerTitle), Resources.ResourceManager, typeof(Resources));
+    static readonly LocalizableString MessageFormat = new LocalizableResourceString(nameof(Resources.DateTimeOrchestrationAnalyzerMessageFormat), Resources.ResourceManager, typeof(Resources));
 
     static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
-        title,
-        messageFormat,
+        Title,
+        MessageFormat,
         AnalyzersCategories.Orchestration,
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
@@ -32,10 +32,11 @@ public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer
         INamedTypeSymbol systemDateTimeSymbol = context.Compilation.GetSpecialType(SpecialType.System_DateTime);
 
         // stores the symbols (such as methods) and the DateTime references used in them
-        ConcurrentBag<(ISymbol symbol, IPropertyReferenceOperation operation)> dateTimeUsage = [];
+        ConcurrentBag<(ISymbol Symbol, IPropertyReferenceOperation Operation)> dateTimeUsage = [];
 
         // search for usages of DateTime.Now, DateTime.UtcNow, DateTime.Today and store them
-        context.RegisterOperationAction(ctx =>
+        context.RegisterOperationAction(
+            ctx =>
         {
             ctx.CancellationToken.ThrowIfCancellationRequested();
 
@@ -52,7 +53,8 @@ public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer
                 ISymbol method = ctx.ContainingSymbol;
                 dateTimeUsage.Add((method, operation));
             }
-        }, OperationKind.PropertyReference);
+        },
+            OperationKind.PropertyReference);
 
         // compare whether the found DateTime usages occur in methods invoked by orchestrations
         context.RegisterCompilationEndAction(ctx =>

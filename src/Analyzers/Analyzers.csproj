@@ -3,6 +3,7 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <IsRoslynComponent>true</IsRoslynComponent>
+    <EnableStyleCop>true</EnableStyleCop>
 
     <!-- Do not include the generator as a lib dependency -->
     <IncludeBuildOutput>false</IncludeBuildOutput>

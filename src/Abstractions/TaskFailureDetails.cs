@@ -106,17 +106,25 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
     /// <returns>A new task failure details.</returns>
     public static TaskFailureDetails FromException(Exception exception)
     {
+
+
         Check.NotNull(exception);
+
+        TaskFailureDetails? innerDetails = null;
+        if (exception.InnerException != null)
+        {
+            innerDetails = TaskFailureDetails.FromException(exception.InnerException);
+        }
+
         if (exception is CoreOrchestrationException coreEx)
         {
             return new TaskFailureDetails(
                 coreEx.FailureDetails?.ErrorType ?? "(unknown)",
                 coreEx.FailureDetails?.ErrorMessage ?? "(unknown)",
                 coreEx.FailureDetails?.StackTrace,
-                null /* InnerFailure */);
+                innerDetails);
         }
 
-        // TODO: consider populating inner details.
-        return new TaskFailureDetails(exception.GetType().ToString(), exception.Message, null, null);
+        return new TaskFailureDetails(exception.GetType().ToString(), exception.Message, exception.StackTrace, innerDetails);
     }
 }

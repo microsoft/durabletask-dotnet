@@ -106,8 +106,6 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
     /// <returns>A new task failure details.</returns>
     public static TaskFailureDetails FromException(Exception exception)
     {
-
-
         Check.NotNull(exception);
 
         TaskFailureDetails? innerDetails = null;

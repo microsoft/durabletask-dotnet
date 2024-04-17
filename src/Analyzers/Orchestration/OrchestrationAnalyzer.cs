@@ -207,7 +207,7 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
     /// Register additional actions to be executed after the compilation has started.
     /// It is expected from a concrete implementation of <see cref="OrchestrationAnalyzer"/> to register a
     /// <see cref="CompilationStartAnalysisContext.RegisterCompilationEndAction"/>
-    /// and then compare that any discovered violations happened in any of the symbols in <paramref name="orchestrationAnalysisResult"/>.
+    /// and then compare that to any discovered violations happened in any of the symbols in <paramref name="orchestrationAnalysisResult"/>.
     /// </summary>
     /// <param name="context">Context originally provided by <see cref="AnalysisContext.RegisterCompilationAction"/>.</param>
     /// <param name="orchestrationAnalysisResult">Collection of symbols referenced by orchestrations.</param>

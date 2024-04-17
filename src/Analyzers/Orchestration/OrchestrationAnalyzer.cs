@@ -18,6 +18,7 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
     /// <inheritdoc/>
     public override void Initialize(AnalysisContext context)
     {
+        // this analyzer uses concurrent collections/operations, so we can enable actions concurrent execution to improve performance
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
 
@@ -156,13 +157,14 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
                     return;
                 }
 
-                // all overloads have the parameter orchestrator, either as an Action or a Func
+                // all overloads have the parameter 'orchestrator', either as an Action or a Func
                 IArgumentOperation orchestratorArgument = invocation.Arguments.First(a => a.Parameter!.Name == "orchestrator");
                 if (orchestratorArgument.Value is not IDelegateCreationOperation delegateCreationOperation)
                 {
                     return;
                 }
 
+                // obtains the method symbol from the delegate creation operation
                 IMethodSymbol? methodSymbol = null;
                 switch (delegateCreationOperation.Target)
                 {

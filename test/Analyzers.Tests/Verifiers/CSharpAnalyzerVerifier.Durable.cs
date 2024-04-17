@@ -6,6 +6,7 @@ using Microsoft.CodeAnalysis.Testing;
 
 namespace Microsoft.DurableTask.Analyzers.Tests.Verifiers;
 
+// Includes Durable Functions NuGet packages to an analyzer test and runs it
 public static partial class CSharpAnalyzerVerifier<TAnalyzer>
     where TAnalyzer : DiagnosticAnalyzer, new()
 {

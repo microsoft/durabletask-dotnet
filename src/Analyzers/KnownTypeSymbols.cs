@@ -22,27 +22,27 @@ sealed class KnownTypeSymbols(Compilation compilation)
     INamedTypeSymbol? durableTaskRegistry;
 
     /// <summary>
-    /// Gets OrchestrationTriggerAttribute type symbol.
+    /// Gets an OrchestrationTriggerAttribute type symbol.
     /// </summary>
     public INamedTypeSymbol? FunctionOrchestrationAttribute => this.GetOrResolveFullyQualifiedType("Microsoft.Azure.Functions.Worker.OrchestrationTriggerAttribute", ref this.functionOrchestrationAttribute);
 
     /// <summary>
-    /// Gets FunctionNameAttribute type symbol.
+    /// Gets a FunctionNameAttribute type symbol.
     /// </summary>
     public INamedTypeSymbol? FunctionNameAttribute => this.GetOrResolveFullyQualifiedType("Microsoft.Azure.Functions.Worker.FunctionAttribute", ref this.functionNameAttribute);
 
     /// <summary>
-    /// Gets ITaskOrchestrator type symbol.
+    /// Gets an ITaskOrchestrator type symbol.
     /// </summary>
     public INamedTypeSymbol? TaskOrchestratorInterface => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.ITaskOrchestrator", ref this.taskOrchestratorInterface);
 
     /// <summary>
-    /// Gets TaskOrchestrator type symbol.
+    /// Gets a TaskOrchestrator type symbol.
     /// </summary>
     public INamedTypeSymbol? TaskOrchestratorBaseClass => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.TaskOrchestrator`2", ref this.taskOrchestratorBaseClass);
 
     /// <summary>
-    /// Gets DurableTaskRegistry type symbol.
+    /// Gets a DurableTaskRegistry type symbol.
     /// </summary>
     public INamedTypeSymbol? DurableTaskRegistry => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.DurableTaskRegistry", ref this.durableTaskRegistry);
 

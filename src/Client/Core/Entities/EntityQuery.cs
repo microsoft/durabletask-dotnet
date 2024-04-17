@@ -8,12 +8,12 @@ namespace Microsoft.DurableTask.Client.Entities;
 /// </summary>
 public record EntityQuery
 {
-    string? instanceIdStartsWith;
-
     /// <summary>
     /// The default page size.
     /// </summary>
     public const int DefaultPageSize = 100;
+
+    string? instanceIdStartsWith;
 
     /// <summary>
     /// Gets the optional starts-with expression for the entity instance ID.

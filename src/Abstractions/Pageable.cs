@@ -41,16 +41,9 @@ public static class Pageable
         return new FuncAsyncPageable<T>(pageFunc);
     }
 
-    class FuncAsyncPageable<T> : AsyncPageable<T>
+    class FuncAsyncPageable<T>(Func<string?, int?, CancellationToken, Task<Page<T>>> pageFunc) : AsyncPageable<T>
         where T : notnull
     {
-        readonly Func<string?, int?, CancellationToken, Task<Page<T>>> pageFunc;
-
-        public FuncAsyncPageable(Func<string?, int?, CancellationToken, Task<Page<T>>> pageFunc)
-        {
-            this.pageFunc = pageFunc;
-        }
-
         public override IAsyncEnumerable<Page<T>> AsPages(
             string? continuationToken = default, int? pageSizeHint = default)
             => this.AsPagesCore(continuationToken, pageSizeHint);
@@ -64,7 +57,7 @@ public static class Pageable
             {
                 // TODO: Do we need to support customizing ConfigureAwait(bool) here?
                 // ConfigureAwait(false) makes this unusable in orchestrations.
-                Page<T> page = await this.pageFunc(continuationToken, pageSizeHint, cancellation);
+                Page<T> page = await pageFunc(continuationToken, pageSizeHint, cancellation);
                 yield return page;
                 continuationToken = page.ContinuationToken;
             }

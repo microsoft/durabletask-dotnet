@@ -16,22 +16,13 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// This class is intended for use with alternate .NET-based durable task runtimes. It's not intended for use
 /// in application code.
 /// </remarks>
-public class DurableTaskShimFactory
+/// <param name="options">The data converter.</param>
+/// <param name="loggerFactory">The logger factory.</param>
+public class DurableTaskShimFactory(
+    DurableTaskWorkerOptions? options = null, ILoggerFactory? loggerFactory = null)
 {
-    readonly DurableTaskWorkerOptions options;
-    readonly ILoggerFactory loggerFactory;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="DurableTaskShimFactory" /> class.
-    /// </summary>
-    /// <param name="options">The data converter.</param>
-    /// <param name="loggerFactory">The logger factory.</param>
-    public DurableTaskShimFactory(
-        DurableTaskWorkerOptions? options = null, ILoggerFactory? loggerFactory = null)
-    {
-        this.options = options ?? new();
-        this.loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
-    }
+    readonly DurableTaskWorkerOptions options = options ?? new();
+    readonly ILoggerFactory loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
 
     /// <summary>
     /// Gets the default <see cref="DurableTaskShimFactory" /> with default values.

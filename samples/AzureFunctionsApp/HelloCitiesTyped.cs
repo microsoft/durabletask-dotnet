@@ -63,28 +63,19 @@ public class HelloCitiesTyped : TaskOrchestrator<string?, string>
 /// Class-based activity function implementation. Source generators are used to a generate an activity function
 /// definition that creates an instance of this class and invokes its <see cref="OnRun"/> method.
 /// </summary>
+/// <remarks>
+/// This class is initialized once for every activity execution.
+/// Activity class constructors support constructor-based dependency injection.
+/// The injected services are provided by the function's <see cref="FunctionContext.InstanceServices"/> property.
+/// </remarks>
+/// <param name="logger">The logger injected by the Azure Functions runtime.</param>
 [DurableTask(nameof(SayHelloTyped))]
-public class SayHelloTyped : TaskActivity<string, string>
+public class SayHelloTyped(ILogger<SayHelloTyped> logger)
+    : TaskActivity<string, string>
 {
-    readonly ILogger logger;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SayHelloTyped"/> class.
-    /// This class is initialized once for every activity execution.
-    /// </summary>
-    /// <remarks>
-    /// Activity class constructors support constructor-based dependency injection.
-    /// The injected services are provided by the function's <see cref="FunctionContext.InstanceServices"/> property.
-    /// </remarks>
-    /// <param name="logger">The logger injected by the Azure Functions runtime.</param>
-    public SayHelloTyped(ILogger<SayHelloTyped> logger)
-    {
-        this.logger = logger;
-    }
-
     public override Task<string> RunAsync(TaskActivityContext context, string cityName)
     {
-        this.logger.LogInformation("Saying hello to {name}", cityName);
+        logger.LogInformation("Saying hello to {name}", cityName);
         return Task.FromResult($"Hello, {cityName}!");
     }
 }

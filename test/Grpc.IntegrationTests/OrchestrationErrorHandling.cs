@@ -12,7 +12,8 @@ namespace Microsoft.DurableTask.Grpc.Tests;
 /// Integration tests that are designed to exercise the error handling and retry functionality
 /// of the Durable Task SDK.
 /// </summary>
-public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture) : IntegrationTestBase(output, sidecarFixture)
+public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
+    : IntegrationTestBase(output, sidecarFixture)
 {
 
     /// <summary>
@@ -366,7 +367,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
 
     static Exception MakeException(Type exceptionType, string message)
     {
-        // We assume the contructor of the exception type takes a single string argument
+        // We assume the constructor of the exception type takes a single string argument
         return (Exception)Activator.CreateInstance(exceptionType, message)!;
     }
 

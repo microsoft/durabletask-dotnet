@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using System.Runtime.CompilerServices;
-using Grpc.Core;
 
 namespace Microsoft.DurableTask;
 

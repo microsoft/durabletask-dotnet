@@ -6,18 +6,10 @@ namespace Microsoft.DurableTask;
 /// <summary>
 /// A struct for calling a simple delegate on dispose.
 /// </summary>
-struct AsyncDisposable : IAsyncDisposable
+/// <param name="callback">The callback to invoke on disposal.</param>
+struct AsyncDisposable(Func<ValueTask> callback) : IAsyncDisposable
 {
-    Func<ValueTask>? callback;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AsyncDisposable"/> struct.
-    /// </summary>
-    /// <param name="callback">The callback to invoke on disposal.</param>
-    public AsyncDisposable(Func<ValueTask> callback)
-    {
-        this.callback = callback;
-    }
+    Func<ValueTask>? callback = callback;
 
     /// <inheritdoc/>
     public ValueTask DisposeAsync()

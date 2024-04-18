@@ -11,12 +11,9 @@ using Microsoft.DurableTask.Client;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
-public class OrchestrationPatterns : IntegrationTestBase
+public class OrchestrationPatterns(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
+    : IntegrationTestBase(output, sidecarFixture)
 {
-    public OrchestrationPatterns(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
-        : base(output, sidecarFixture)
-    { }
-
     [Fact]
     public async Task EmptyOrchestration()
     {

@@ -15,9 +15,11 @@ namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
 /// <summary>
 /// A shim client for interacting with the backend via <see cref="Core.IOrchestrationServiceClient" />.
 /// </summary>
-class ShimDurableTaskClient : DurableTaskClient
+/// <param name="name">The name of the client.</param>
+/// <param name="options">The client options.</param>
+class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) : DurableTaskClient(name)
 {
-    readonly ShimDurableTaskClientOptions options;
+    readonly ShimDurableTaskClientOptions options = Check.NotNull(options);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ShimDurableTaskClient"/> class.
@@ -29,17 +31,6 @@ class ShimDurableTaskClient : DurableTaskClient
         string name, IOptionsMonitor<ShimDurableTaskClientOptions> options)
         : this(name, Check.NotNull(options).Get(name))
     {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ShimDurableTaskClient"/> class.
-    /// </summary>
-    /// <param name="name">The name of the client.</param>
-    /// <param name="options">The client options.</param>
-    public ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options)
-        : base(name)
-    {
-        this.options = Check.NotNull(options);
     }
 
     DataConverter DataConverter => this.options.DataConverter;

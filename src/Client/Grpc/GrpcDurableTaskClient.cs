@@ -52,7 +52,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
         if (this.options.EnableEntitySupport)
         {
-            this.entityClient = new GrpcDurableEntityClient(this.Name, this.DataConverter, this.sidecarClient, logger);
+            this.entityClient = new GrpcDurableEntityClient(this.Name, this.DataConverter, this.sidecarClient);
         }
     }
 

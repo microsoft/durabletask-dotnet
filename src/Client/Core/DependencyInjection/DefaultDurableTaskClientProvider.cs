@@ -8,18 +8,11 @@ namespace Microsoft.DurableTask.Client;
 /// <summary>
 /// Default implementation of <see cref="IDurableTaskClientProvider" />.
 /// </summary>
-class DefaultDurableTaskClientProvider : IDurableTaskClientProvider
+/// <param name="clients">The set of clients.</param>
+class DefaultDurableTaskClientProvider(IEnumerable<DefaultDurableTaskClientProvider.ClientContainer> clients)
+    : IDurableTaskClientProvider
 {
-    readonly IEnumerable<ClientContainer> clients;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="DefaultDurableTaskClientProvider"/> class.
-    /// </summary>
-    /// <param name="clients">The set of clients.</param>
-    public DefaultDurableTaskClientProvider(IEnumerable<ClientContainer> clients)
-    {
-        this.clients = clients;
-    }
+    readonly IEnumerable<ClientContainer> clients = Check.NotNull(clients);
 
     /// <inheritdoc/>
     public DurableTaskClient GetClient(string? name = null)
@@ -41,17 +34,9 @@ class DefaultDurableTaskClientProvider : IDurableTaskClientProvider
     /// <summary>
     /// Container for holding a client in memory.
     /// </summary>
-    internal class ClientContainer : IAsyncDisposable
+    /// <param name="client">The client.</param>
+    internal class ClientContainer(DurableTaskClient client) : IAsyncDisposable
     {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ClientContainer"/> class.
-        /// </summary>
-        /// <param name="client">The client.</param>
-        public ClientContainer(DurableTaskClient client)
-        {
-            this.Client = Check.NotNull(client);
-        }
-
         /// <summary>
         /// Gets the client name.
         /// </summary>
@@ -60,7 +45,7 @@ class DefaultDurableTaskClientProvider : IDurableTaskClientProvider
         /// <summary>
         /// Gets the client.
         /// </summary>
-        public DurableTaskClient Client { get; }
+        public DurableTaskClient Client { get; } = Check.NotNull(client);
 
         /// <inheritdoc/>
         public ValueTask DisposeAsync() => this.Client.DisposeAsync();

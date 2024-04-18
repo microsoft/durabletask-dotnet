@@ -15,21 +15,16 @@ namespace Microsoft.DurableTask.Grpc.Tests;
 /// <summary>
 /// Base class for integration tests that use a in-process sidecar for executing orchestrations.
 /// </summary>
-public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposable
+/// <remarks>
+/// Documentation on xunit test fixtures: https://xunit.net/docs/shared-context.
+/// </remarks>
+public class IntegrationTestBase(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
+    : IClassFixture<GrpcSidecarFixture>, IDisposable
 {
     readonly CancellationTokenSource testTimeoutSource
         = new(Debugger.IsAttached ? TimeSpan.FromMinutes(5) : TimeSpan.FromSeconds(10));
 
-    readonly TestLogProvider logProvider;
-
-    // Documentation on xunit test fixtures: https://xunit.net/docs/shared-context
-    readonly GrpcSidecarFixture sidecarFixture;
-
-    public IntegrationTestBase(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
-    {
-        this.logProvider = new(output);
-        this.sidecarFixture = sidecarFixture;
-    }
+    readonly TestLogProvider logProvider = new(output);
 
     /// <summary>
     /// Gets a <see cref="CancellationToken"/> that triggers after a default test timeout period.
@@ -67,13 +62,13 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
             {
                 services.AddDurableTaskWorker(b =>
                 {
-                    b.UseGrpc(this.sidecarFixture.Channel);
+                    b.UseGrpc(sidecarFixture.Channel);
                     configure(b);
                 });
 
                 services.AddDurableTaskClient(b =>
                 {
-                    b.UseGrpc(this.sidecarFixture.Channel);
+                    b.UseGrpc(sidecarFixture.Channel);
                     b.RegisterDirectly();
                 });
             });
@@ -88,19 +83,12 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
         return logs;
     }
 
-    protected struct HostTestLifetime : IAsyncDisposable
+    protected readonly struct HostTestLifetime(IHost host, CancellationToken cancellation) : IAsyncDisposable
     {
-        readonly IHost host;
-        readonly CancellationToken cancellation;
+        readonly IHost host = host;
+        readonly CancellationToken cancellation = cancellation;
 
-        public HostTestLifetime(IHost host, CancellationToken cancellation)
-        {
-            this.host = host;
-            this.cancellation = cancellation;
-            this.Client = host.Services.GetRequiredService<DurableTaskClient>();
-        }
-
-        public DurableTaskClient Client { get; }
+        public DurableTaskClient Client { get; } = host.Services.GetRequiredService<DurableTaskClient>();
 
         public async ValueTask DisposeAsync()
         {

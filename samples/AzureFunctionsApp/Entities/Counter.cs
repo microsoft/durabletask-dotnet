@@ -30,18 +30,11 @@ namespace AzureFunctionsApp.Entities;
 /// the added benefit of being able to use DI. When using TaskEntity<TState>, state is deserialized to the "State"
 /// property. No other properties on this type will be serialized/deserialized.
 /// </summary>
-public class Counter : TaskEntity<int>
+public class Counter(ILogger<Counter> logger) : TaskEntity<int>
 {
-    readonly ILogger logger;
-
-    public Counter(ILogger<Counter> logger)
-    {
-        this.logger = logger;
-    }
-
     public int Add(int input)
     {
-        this.logger.LogInformation("Adding {Input} to {State}", input, this.State);
+        logger.LogInformation("Adding {Input} to {State}", input, this.State);
         return this.State += input;
     }
 

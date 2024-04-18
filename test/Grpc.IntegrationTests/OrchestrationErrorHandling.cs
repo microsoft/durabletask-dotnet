@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Runtime.Serialization;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
 using Xunit.Abstractions;
@@ -12,9 +13,9 @@ namespace Microsoft.DurableTask.Grpc.Tests;
 /// Integration tests that are designed to exercise the error handling and retry functionality
 /// of the Durable Task SDK.
 /// </summary>
-public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture) : IntegrationTestBase(output, sidecarFixture)
+public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture) :
+    IntegrationTestBase(output, sidecarFixture)
 {
-
     /// <summary>
     /// Tests the behavior and output of an unhandled exception that originates from an activity.
     /// </summary>
@@ -28,7 +29,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
 
         // Use local function definitions to simplify the validation of the call stacks
         async Task MyOrchestrationImpl(TaskOrchestrationContext ctx) => await ctx.CallActivityAsync(activityName);
-        void MyActivityImpl(TaskActivityContext ctx) => throw new Exception(errorMessage);
+        void MyActivityImpl(TaskActivityContext ctx) => throw new Exception(errorMessage, new CustomException("Inner!"));
 
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
@@ -60,6 +61,11 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.NotNull(failureDetails.StackTrace);
         Assert.Contains(nameof(MyOrchestrationImpl), failureDetails.StackTrace);
         Assert.DoesNotContain(nameof(MyActivityImpl), failureDetails.StackTrace);
+
+        // Check that the inner exception was populated correctly
+        Assert.NotNull(failureDetails.InnerFailure);
+        Assert.Equal(typeof(CustomException).FullName, failureDetails.InnerFailure!.ErrorType);
+        Assert.Equal("Inner!", failureDetails.InnerFailure.ErrorMessage);
     }
 
     /// <summary>
@@ -173,7 +179,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
                 return false;
             }
 
-            // This handler only works with CustomException
+            // This handler only works with the specified exception type
             if (!retryContext.LastFailure.IsCausedBy(exceptionType))
             {
                 return false;
@@ -364,13 +370,108 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.Equal(0, retryHandlerCalls);
     }
 
+    [Fact]
+    public async Task InnerExceptionDetailsArePreserved()
+    {
+        static void ValidateInnermostFailureDetailsChain(TaskFailureDetails? failureDetails)
+        {
+            Assert.NotNull(failureDetails);
+            Assert.True(failureDetails!.IsCausedBy<CustomException>());
+            Assert.Equal("first", failureDetails.ErrorMessage);
+            Assert.NotNull(failureDetails.InnerFailure);
+            Assert.True(failureDetails.InnerFailure!.IsCausedBy<ApplicationException>());
+            Assert.Equal("second", failureDetails.InnerFailure.ErrorMessage);
+            Assert.NotNull(failureDetails.InnerFailure.InnerFailure);
+            Assert.True(failureDetails.InnerFailure.InnerFailure!.IsCausedBy<XunitException>());
+            Assert.Equal("third", failureDetails.InnerFailure.InnerFailure.ErrorMessage);
+        }
+
+        // TODO: Write a test where an activity throws an exception, the orchestration catches it and confirms the details,
+        //       then rethrows the exception, and the outer orchestration catches it and does the same, and then rethrows
+        //       again to fail the top-level orchestration. The client should then be able to see the details of the innermost
+        //       exception.
+        TaskName orchestratorName = "Parent";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks =>
+                tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
+                {
+                    try
+                    {
+                        await ctx.CallSubOrchestratorAsync("Sub");
+                    }
+                    catch (TaskFailedException ex)
+                    {
+                        // Outer failure represents the orchestration failure
+                        Assert.NotNull(ex.FailureDetails);
+                        Assert.True(ex.FailureDetails.IsCausedBy<TaskFailedException>());
+                        Assert.Contains("ThrowException", ex.FailureDetails.ErrorMessage);
+
+                        // Inner failure represents the original exception thrown by the activity
+                        ValidateInnermostFailureDetailsChain(ex.FailureDetails.InnerFailure);
+                        throw;
+                    }
+                })
+                .AddOrchestratorFunc("Sub", async context =>
+                {
+                    try
+                    {
+                        await context.CallActivityAsync("ThrowException");
+                    }
+                    catch (TaskFailedException ex)
+                    {
+                        ValidateInnermostFailureDetailsChain(ex.FailureDetails);
+                        throw;
+                    }
+                })
+                .AddActivityFunc("ThrowException", (TaskActivityContext context) =>
+                {
+                    // Raise a deeply nested exception
+                    throw new CustomException("first", new ApplicationException("second", new XunitException("third")));
+                }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId,
+            getInputsAndOutputs: true,
+            this.TimeoutToken);
+
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+
+        // Check to make sure that the wrapper failure details exist as expected
+        Assert.NotNull(metadata.FailureDetails);
+        Assert.True(metadata.FailureDetails!.IsCausedBy<TaskFailedException>());
+        Assert.Contains("Sub", metadata.FailureDetails.ErrorMessage);
+        Assert.NotNull(metadata.FailureDetails.InnerFailure);
+        Assert.True(metadata.FailureDetails.InnerFailure!.IsCausedBy<TaskFailedException>());
+        Assert.Contains("ThrowException", metadata.FailureDetails.InnerFailure.ErrorMessage);
+
+        ValidateInnermostFailureDetailsChain(metadata.FailureDetails.InnerFailure.InnerFailure);
+    }
+
     static Exception MakeException(Type exceptionType, string message)
     {
         // We assume the contructor of the exception type takes a single string argument
         return (Exception)Activator.CreateInstance(exceptionType, message)!;
     }
 
-    class CustomException(string message) : Exception(message)
+    [Serializable]
+    class CustomException : Exception
     {
+        public CustomException(string message)
+            : base(message)
+        {
+        }
+
+        public CustomException(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
+
+        protected CustomException(SerializationInfo info, StreamingContext context)
+            : base(info, context)
+        {
+        }
     }
 }

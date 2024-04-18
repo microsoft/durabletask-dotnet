@@ -67,7 +67,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Benchmarks", "test\Benchmar
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Analyzers", "src\Analyzers\Analyzers.csproj", "{998E9D97-BD36-4A9D-81FC-5DAC1CE40083}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Analyzers.Test", "test\Analyzers.Test\Analyzers.Test.csproj", "{541FCCCE-1059-4691-B027-F761CD80DE92}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Analyzers.Tests", "test\Analyzers.Tests\Analyzers.Tests.csproj", "{541FCCCE-1059-4691-B027-F761CD80DE92}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

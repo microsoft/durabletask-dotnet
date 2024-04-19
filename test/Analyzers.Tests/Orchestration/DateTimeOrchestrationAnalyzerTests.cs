@@ -33,7 +33,7 @@ public class DateTimeOrchestrationAnalyzerTests
     [Fact]
     public async Task NonOrchestrationHasNoDiag()
     {
-        string code = WrapDurableFunctionOrchestration(@"
+        string code = Wrapper.WrapDurableFunctionOrchestration(@"
 void Method(){
     Console.WriteLine(DateTime.Now);
 }
@@ -48,7 +48,7 @@ void Method(){
     [InlineData("DateTime.Today")]
     public async Task DurableFunctionOrchestrationUsingDateTimeNonDeterministicPropertiesHasDiag(string expression)
     {
-        string code = WrapDurableFunctionOrchestration($@"
+        string code = Wrapper.WrapDurableFunctionOrchestration($@"
 [Function(""Run"")]
 DateTime Run([OrchestrationTrigger] TaskOrchestrationContext context)
 {{
@@ -64,7 +64,7 @@ DateTime Run([OrchestrationTrigger] TaskOrchestrationContext context)
     [Fact]
     public async Task DurableFunctionOrchestrationInvokingChainedMethodsHasDiag()
     {
-        string code = WrapDurableFunctionOrchestration(@"
+        string code = Wrapper.WrapDurableFunctionOrchestration(@"
 [Function(""Run1"")]
 long Run1([OrchestrationTrigger] TaskOrchestrationContext context)  => Level1();
 
@@ -86,7 +86,7 @@ long Level3() => {|#0:DateTime.Now|}.Ticks;
     [Fact]
     public async Task DurableFunctionOrchestrationInvokingRecursiveMethodsHasSingleDiag()
     {
-        string code = WrapDurableFunctionOrchestration(@"
+        string code = Wrapper.WrapDurableFunctionOrchestration(@"
 [Function(""Run"")]
 long Run([OrchestrationTrigger] TaskOrchestrationContext context) => RecursiveMethod(0);
 
@@ -105,7 +105,7 @@ long RecursiveMethod(int i){
     [Fact]
     public async Task DurableFunctionOrchestrationInvokingMethodMultipleTimesHasSingleDiag()
     {
-        string code = WrapDurableFunctionOrchestration(@"
+        string code = Wrapper.WrapDurableFunctionOrchestration(@"
 [Function(""Run"")]
 void Run([OrchestrationTrigger] TaskOrchestrationContext context)
 {
@@ -125,7 +125,7 @@ DateTime Method() => {|#0:DateTime.Now|};
     [Fact]
     public async Task DurableFunctionOrchestrationInvokingAsyncMethodsHasDiag()
     {
-        string code = WrapDurableFunctionOrchestration(@"
+        string code = Wrapper.WrapDurableFunctionOrchestration(@"
 [Function(nameof(Run))]
 async Task Run([OrchestrationTrigger] TaskOrchestrationContext context)
 {
@@ -147,7 +147,7 @@ static Task<DateTime> TaskInvocation() => Task.FromResult({|#1:DateTime.Now|});
     [Fact]
     public async Task DurableFunctionOrchestrationUsingLambdasHasDiag()
     {
-        string code = WrapDurableFunctionOrchestration(@"
+        string code = Wrapper.WrapDurableFunctionOrchestration(@"
 [Function(""Run"")]
 void Run([OrchestrationTrigger] TaskOrchestrationContext context)
 {
@@ -167,7 +167,7 @@ void Run([OrchestrationTrigger] TaskOrchestrationContext context)
     [Fact]
     public async Task DurableFunctionOrchestrationNotInvokingMethodHasNoDiag()
     {
-        string code = WrapDurableFunctionOrchestration(@"
+        string code = Wrapper.WrapDurableFunctionOrchestration(@"
 [Function(""Run"")]
 DateTime Run([OrchestrationTrigger] TaskOrchestrationContext context) => new DateTime(2024, 1, 1);
 
@@ -181,7 +181,7 @@ DateTime NotCalled() => DateTime.Now;
     [Fact]
     public async Task TaskOrchestratorHasDiag()
     {
-        string code = WrapTaskOrchestrator(@"
+        string code = Wrapper.WrapTaskOrchestrator(@"
 public class MyOrchestrator : TaskOrchestrator<string, DateTime>
 {
     public override Task<DateTime> RunAsync(TaskOrchestrationContext context, string input)
@@ -201,7 +201,7 @@ public class MyOrchestrator : TaskOrchestrator<string, DateTime>
     [Fact]
     public async Task TaskOrchestratorImplementingInterfaceHasDiag()
     {
-        string code = WrapTaskOrchestrator(@"
+        string code = Wrapper.WrapTaskOrchestrator(@"
 public class MyOrchestrator : ITaskOrchestrator
 {
     public Type InputType => typeof(object);
@@ -225,7 +225,7 @@ public class MyOrchestrator : ITaskOrchestrator
     [Fact]
     public async Task FuncOrchestratorWithLambdaHasDiag()
     {
-        string code = WrapFuncOrchestrator(@"
+        string code = Wrapper.WrapFuncOrchestrator(@"
 tasks.AddOrchestratorFunc(""HelloSequence"", context =>
 {
     return {|#0:DateTime.Now|};
@@ -271,58 +271,6 @@ public class Program
         await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
     }
 
-
-    static string WrapDurableFunctionOrchestration(string code)
-    {
-        return $@"
-{Usings()}
-class Orchestrator
-{{
-{code}
-}}
-";
-    }
-
-    static string WrapTaskOrchestrator(string code)
-    {
-        return $@"
-{Usings()}
-{code}
-";
-    }
-
-    static string WrapFuncOrchestrator(string code)
-    {
-        return $@"
-{Usings()}
-
-public class Program
-{{
-    public static void Main()
-    {{
-        new ServiceCollection().AddDurableTaskWorker(builder =>
-        {{
-            builder.AddTasks(tasks =>
-            {{
-                {code}
-            }});
-        }});
-    }}
-}}
-";
-    }
-
-    static string Usings()
-    {
-        return $@"
-using System;
-using System.Threading.Tasks;
-using Microsoft.Azure.Functions.Worker;
-using Microsoft.DurableTask;
-using Microsoft.DurableTask.Worker;
-using Microsoft.Extensions.DependencyInjection;
-";
-    }
 
     static DiagnosticResult BuildDiagnostic()
     {

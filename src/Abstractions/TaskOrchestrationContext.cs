@@ -23,6 +23,11 @@ public abstract class TaskOrchestrationContext
     public abstract string InstanceId { get; }
 
     /// <summary>
+    /// Gets the version of the current orchestration instance.
+    /// </summary>
+    public abstract string InstanceVersion { get; }
+
+    /// <summary>
     /// Gets the parent instance or <c>null</c> if there is no parent orchestration.
     /// </summary>
     public abstract ParentOrchestrationInstance? Parent { get; }

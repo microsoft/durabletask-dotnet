@@ -30,6 +30,26 @@ public readonly struct TaskName : IEquatable<TaskName>
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="TaskName"/> struct.
+    /// </summary>
+    /// <param name="name">The name of the task. Providing <c>null</c> will yield the default struct.</param>
+    /// <param name="version">The version of the task.</param>
+    public TaskName(string name, string version)
+    {
+        if (name is null)
+        {
+            // Force the default struct when null is passed in.
+            this.Name = null!;
+            this.Version = version!;
+        }
+        else
+        {
+            this.Name = name;
+            this.Version = version;
+        }
+    }
+
+    /// <summary>
     /// Gets the name of the task without the version.
     /// </summary>
     /// <value>

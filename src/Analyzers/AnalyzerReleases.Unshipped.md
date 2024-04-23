@@ -6,3 +6,4 @@
 Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
 DURABLE0001 | Orchestration | Warning | DateTimeOrchestrationAnalyzer
+DURABLE0002 | Orchestration | Warning | GuidOrchestrationAnalyzer

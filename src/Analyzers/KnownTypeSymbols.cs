@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using Microsoft.CodeAnalysis;
@@ -20,6 +20,7 @@ sealed class KnownTypeSymbols(Compilation compilation)
     INamedTypeSymbol? taskOrchestratorInterface;
     INamedTypeSymbol? taskOrchestratorBaseClass;
     INamedTypeSymbol? durableTaskRegistry;
+    INamedTypeSymbol? guid;
 
     /// <summary>
     /// Gets an OrchestrationTriggerAttribute type symbol.
@@ -45,6 +46,11 @@ sealed class KnownTypeSymbols(Compilation compilation)
     /// Gets a DurableTaskRegistry type symbol.
     /// </summary>
     public INamedTypeSymbol? DurableTaskRegistry => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.DurableTaskRegistry", ref this.durableTaskRegistry);
+
+    /// <summary>
+    /// Gets a Guid type symbol.
+    /// </summary>
+    public INamedTypeSymbol? GuidType => this.GetOrResolveFullyQualifiedType(typeof(Guid).FullName, ref this.guid);
 
     INamedTypeSymbol? GetOrResolveFullyQualifiedType(string fullyQualifiedName, ref INamedTypeSymbol? field)
     {

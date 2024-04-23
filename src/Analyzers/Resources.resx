@@ -129,4 +129,10 @@
   <data name="GuidOrchestrationAnalyzerTitle" xml:space="preserve">
     <value>System.Guid calls must be deterministic inside an orchestration</value>
   </data>
+  <data name="DelayOrchestrationAnalyzerMessageFormat" xml:space="preserve">
+    <value>The method '{0}' uses '{1}' that may cause non-deterministic behavior when invoked from orchestration '{2}'</value>
+  </data>
+  <data name="DelayOrchestrationAnalyzerTitle" xml:space="preserve">
+    <value>Thread.Sleep and Task.Delay calls are not allowed inside an orchestrator</value>
+  </data>
 </root>

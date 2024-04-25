@@ -78,9 +78,10 @@ long Level2() => Level3();
 long Level3() => {|#0:DateTime.Now|}.Ticks;
 ");
 
-        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Level3", "System.DateTime.Now", "Run1, Run2");
+        DiagnosticResult expected1 = BuildDiagnostic().WithLocation(0).WithArguments("Level3", "System.DateTime.Now", "Run1");
+        DiagnosticResult expected2 = BuildDiagnostic().WithLocation(0).WithArguments("Level3", "System.DateTime.Now", "Run2");
 
-        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected1, expected2);
     }
 
     [Fact]

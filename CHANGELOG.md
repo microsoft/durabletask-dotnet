@@ -6,6 +6,10 @@
 
 - Fix filter not being passed along in `PurgeAllInstancesAsync` (https://github.com/microsoft/durabletask-dotnet/pull/289)
 
+### Microsoft.DurableTask.Abstractions
+
+- Enable inner exception detail propagation in `TaskFailureDetails` ([#290](https://github.com/microsoft/durabletask-dotnet/pull/290))
+
 ## v1.2.2
 
 ### Microsoft.DurableTask.Abstractions

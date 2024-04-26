@@ -329,7 +329,7 @@ static class ProtoUtils
     /// </summary>
     /// <param name="status">The status to convert.</param>
     /// <returns>The converted status.</returns>
-    [return: NotNullIfNotNull("status")]
+    [return: NotNullIfNotNull(nameof(status))]
     internal static OrchestrationInstance? ToCore(this P.OrchestrationInstance? status)
     {
         if (status == null)
@@ -349,7 +349,7 @@ static class ProtoUtils
     /// </summary>
     /// <param name="failureDetails">The failure details to convert.</param>
     /// <returns>The converted failure details.</returns>
-    [return: NotNullIfNotNull("failureDetails")]
+    [return: NotNullIfNotNull(nameof(failureDetails))]
     internal static TaskFailureDetails? ToTaskFailureDetails(this P.TaskFailureDetails? failureDetails)
     {
         if (failureDetails == null)
@@ -369,7 +369,7 @@ static class ProtoUtils
     /// </summary>
     /// <param name="e">The exception to convert.</param>
     /// <returns>The task failure details.</returns>
-    [return: NotNullIfNotNull("e")]
+    [return: NotNullIfNotNull(nameof(e))]
     internal static P.TaskFailureDetails? ToTaskFailureDetails(this Exception? e)
     {
         if (e == null)
@@ -391,7 +391,7 @@ static class ProtoUtils
     /// </summary>
     /// <param name="entityBatchRequest">The entity batch request to convert.</param>
     /// <returns>The converted entity batch request.</returns>
-    [return: NotNullIfNotNull("entityBatchRequest")]
+    [return: NotNullIfNotNull(nameof(entityBatchRequest))]
     internal static EntityBatchRequest? ToEntityBatchRequest(this P.EntityBatchRequest? entityBatchRequest)
     {
         if (entityBatchRequest == null)
@@ -412,7 +412,7 @@ static class ProtoUtils
     /// </summary>
     /// <param name="operationRequest">The operation request to convert.</param>
     /// <returns>The converted operation request.</returns>
-    [return: NotNullIfNotNull("operationRequest")]
+    [return: NotNullIfNotNull(nameof(operationRequest))]
     internal static OperationRequest? ToOperationRequest(this P.OperationRequest? operationRequest)
     {
         if (operationRequest == null)
@@ -433,7 +433,7 @@ static class ProtoUtils
     /// </summary>
     /// <param name="operationResult">The operation result to convert.</param>
     /// <returns>The converted operation result.</returns>
-    [return: NotNullIfNotNull("operationResult")]
+    [return: NotNullIfNotNull(nameof(operationResult))]
     internal static OperationResult? ToOperationResult(this P.OperationResult? operationResult)
     {
         if (operationResult == null)
@@ -465,7 +465,7 @@ static class ProtoUtils
     /// </summary>
     /// <param name="operationResult">The operation result to convert.</param>
     /// <returns>The converted operation result.</returns>
-    [return: NotNullIfNotNull("operationResult")]
+    [return: NotNullIfNotNull(nameof(operationResult))]
     internal static P.OperationResult? ToOperationResult(this OperationResult? operationResult)
     {
         if (operationResult == null)
@@ -500,7 +500,7 @@ static class ProtoUtils
     /// </summary>
     /// <param name="operationAction">The operation action to convert.</param>
     /// <returns>The converted operation action.</returns>
-    [return: NotNullIfNotNull("operationAction")]
+    [return: NotNullIfNotNull(nameof(operationAction))]
     internal static OperationAction? ToOperationAction(this P.OperationAction? operationAction)
     {
         if (operationAction == null)
@@ -540,7 +540,7 @@ static class ProtoUtils
     /// </summary>
     /// <param name="operationAction">The operation action to convert.</param>
     /// <returns>The converted operation action.</returns>
-    [return: NotNullIfNotNull("operationAction")]
+    [return: NotNullIfNotNull(nameof(operationAction))]
     internal static P.OperationAction? ToOperationAction(this OperationAction? operationAction)
     {
         if (operationAction == null)
@@ -584,7 +584,7 @@ static class ProtoUtils
     /// </summary>
     /// <param name="entityBatchResult">The operation result to convert.</param>
     /// <returns>The converted operation result.</returns>
-    [return: NotNullIfNotNull("entityBatchResult")]
+    [return: NotNullIfNotNull(nameof(entityBatchResult))]
     internal static EntityBatchResult? ToEntityBatchResult(this P.EntityBatchResult? entityBatchResult)
     {
         if (entityBatchResult == null)
@@ -606,7 +606,7 @@ static class ProtoUtils
     /// </summary>
     /// <param name="entityBatchResult">The operation result to convert.</param>
     /// <returns>The converted operation result.</returns>
-    [return: NotNullIfNotNull("entityBatchResult")]
+    [return: NotNullIfNotNull(nameof(entityBatchResult))]
     internal static P.EntityBatchResult? ToEntityBatchResult(this EntityBatchResult? entityBatchResult)
     {
         if (entityBatchResult == null)
@@ -638,7 +638,7 @@ static class ProtoUtils
     /// </summary>
     /// <param name="parameters">The DT.Core representation.</param>
     /// <returns>The gRPC representation.</returns>
-    [return: NotNullIfNotNull("parameters")]
+    [return: NotNullIfNotNull(nameof(parameters))]
     internal static TaskOrchestrationEntityParameters? ToCore(this P.OrchestratorEntityParameters? parameters)
     {
         if (parameters == null)

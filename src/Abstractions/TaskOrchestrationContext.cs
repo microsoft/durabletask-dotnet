@@ -25,7 +25,7 @@ public abstract class TaskOrchestrationContext
     /// <summary>
     /// Gets the version of the current orchestration instance.
     /// </summary>
-    public abstract string InstanceVersion { get; }
+    public virtual string? InstanceVersion => null;
 
     /// <summary>
     /// Gets the parent instance or <c>null</c> if there is no parent orchestration.

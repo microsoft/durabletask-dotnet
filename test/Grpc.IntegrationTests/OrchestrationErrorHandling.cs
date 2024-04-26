@@ -62,10 +62,15 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.Contains(nameof(MyOrchestrationImpl), failureDetails.StackTrace);
         Assert.DoesNotContain(nameof(MyActivityImpl), failureDetails.StackTrace);
 
-        // Check that the inner exception was populated correctly
+        // Check that the inner exception - i.e. the exact exception that failed the orchestration - was populated correctly
         Assert.NotNull(failureDetails.InnerFailure);
-        Assert.Equal(typeof(CustomException).FullName, failureDetails.InnerFailure!.ErrorType);
-        Assert.Equal("Inner!", failureDetails.InnerFailure.ErrorMessage);
+        Assert.Equal(typeof(Exception).FullName, failureDetails.InnerFailure!.ErrorType);
+        Assert.Equal(errorMessage, failureDetails.InnerFailure.ErrorMessage);
+
+        // Check that the inner-most exception was populated correctly too (the custom exception type)
+        Assert.NotNull(failureDetails.InnerFailure.InnerFailure);
+        Assert.Equal(typeof(CustomException).FullName, failureDetails.InnerFailure.InnerFailure!.ErrorType);
+        Assert.Equal("Inner!", failureDetails.InnerFailure.InnerFailure.ErrorMessage);
     }
 
     /// <summary>

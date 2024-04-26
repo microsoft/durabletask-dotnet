@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using Microsoft.CodeAnalysis;
@@ -20,6 +20,10 @@ sealed class KnownTypeSymbols(Compilation compilation)
     INamedTypeSymbol? taskOrchestratorInterface;
     INamedTypeSymbol? taskOrchestratorBaseClass;
     INamedTypeSymbol? durableTaskRegistry;
+    INamedTypeSymbol? guid;
+    INamedTypeSymbol? thread;
+    INamedTypeSymbol? task;
+    INamedTypeSymbol? taskT;
 
     /// <summary>
     /// Gets an OrchestrationTriggerAttribute type symbol.
@@ -45,6 +49,26 @@ sealed class KnownTypeSymbols(Compilation compilation)
     /// Gets a DurableTaskRegistry type symbol.
     /// </summary>
     public INamedTypeSymbol? DurableTaskRegistry => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.DurableTaskRegistry", ref this.durableTaskRegistry);
+
+    /// <summary>
+    /// Gets a Guid type symbol.
+    /// </summary>
+    public INamedTypeSymbol? GuidType => this.GetOrResolveFullyQualifiedType(typeof(Guid).FullName, ref this.guid);
+
+    /// <summary>
+    /// Gets a Thread type symbol.
+    /// </summary>
+    public INamedTypeSymbol? Thread => this.GetOrResolveFullyQualifiedType(typeof(Thread).FullName, ref this.thread);
+
+    /// <summary>
+    /// Gets a Task type symbol.
+    /// </summary>
+    public INamedTypeSymbol? Task => this.GetOrResolveFullyQualifiedType(typeof(Task).FullName, ref this.task);
+
+    /// <summary>
+    /// Gets a Task&lt;T&gt; type symbol.
+    /// </summary>
+    public INamedTypeSymbol? TaskT => this.GetOrResolveFullyQualifiedType(typeof(Task<>).FullName, ref this.taskT);
 
     INamedTypeSymbol? GetOrResolveFullyQualifiedType(string fullyQualifiedName, ref INamedTypeSymbol? field)
     {

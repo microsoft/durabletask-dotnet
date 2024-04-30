@@ -214,7 +214,7 @@ public abstract class OrchestrationAnalyzer<TOrchestrationVisitor> : DiagnosticA
 public abstract class OrchestrationVisitor
 {
     /// <summary>
-    /// Gets the compilation adquired from analyzer context.
+    /// Gets the Compilation instance acquired from the analyzer context, including syntax trees, semantic models, and other information.
     /// </summary>
     protected Compilation Compilation { get; private set; } = null!;
 

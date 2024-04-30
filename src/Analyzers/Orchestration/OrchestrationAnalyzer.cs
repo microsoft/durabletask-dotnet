@@ -11,90 +11,6 @@ using Microsoft.CodeAnalysis.Operations;
 namespace Microsoft.DurableTask.Analyzers.Orchestration;
 
 /// <summary>
-/// Base class for visitors that analyze orchestrations.
-/// </summary>
-public abstract class OrchestrationVisitor
-{
-    /// <summary>
-    /// Gets the compilation adquired from analyzer context.
-    /// </summary>
-    protected Compilation Compilation { get; private set; } = null!;
-
-    /// <summary>
-    /// Gets the set of well-known type symbols.
-    /// </summary>
-    protected KnownTypeSymbols KnownTypeSymbols { get; private set; } = null!;
-
-    /// <summary>
-    /// Initializes the visitor members and returns whether the concrete implementation visitor was initialized.
-    /// </summary>
-    /// <param name="compilation">The compilation acquired from analyzer context.</param>
-    /// <param name="knownTypeSymbols">The set of well-known type symbols instance.</param>
-    /// <returns>True if the analyzer can continue; false otherwise.</returns>
-    public bool Initialize(Compilation compilation, KnownTypeSymbols knownTypeSymbols)
-    {
-        this.Compilation = compilation;
-        this.KnownTypeSymbols = knownTypeSymbols;
-
-        return this.Initialize();
-    }
-
-    /// <summary>
-    /// Initializes a visitor concrete implementation instance and returns whether the analysis should continue.
-    /// </summary>
-    /// <returns>True if the analyzer can continue; false otherwise.</returns>
-    public virtual bool Initialize() => true;
-
-    /// <summary>
-    /// Visits a Durable Function orchestration.
-    /// </summary>
-    /// <param name="semanticModel">Semantic Model.</param>
-    /// <param name="methodSyntax">Method Syntax Node.</param>
-    /// <param name="methodSymbol">Method Symbol.</param>
-    /// <param name="orchestrationName">Durable Function name.</param>
-    /// <param name="reportDiagnostic">Function that can be used to report diagnostics.</param>
-    public virtual void VisitDurableFunction(SemanticModel semanticModel, MethodDeclarationSyntax methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
-    {
-    }
-
-    /// <summary>
-    /// Visits a TaskOrchestrator&lt;T1,T2&gt; orchestration.
-    /// </summary>
-    /// <param name="semanticModel">Semantic Model.</param>
-    /// <param name="methodSyntax">Method Syntax Node.</param>
-    /// <param name="methodSymbol">Method Symbol.</param>
-    /// <param name="orchestrationName">Class name.</param>
-    /// <param name="reportDiagnostic">Function that can be used to report diagnostics.</param>
-    public virtual void VisitTaskOrchestrator(SemanticModel semanticModel, MethodDeclarationSyntax methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
-    {
-    }
-
-    /// <summary>
-    /// Visits an ITaskOrchestrator orchestration.
-    /// </summary>
-    /// <param name="semanticModel">Semantic Model.</param>
-    /// <param name="methodSyntax">Method Syntax Node.</param>
-    /// <param name="methodSymbol">Method Symbol.</param>
-    /// <param name="orchestrationName">Class name.</param>
-    /// <param name="reportDiagnostic">Function that can be used to report diagnostics.</param>
-    public virtual void VisitITaskOrchestrator(SemanticModel semanticModel, MethodDeclarationSyntax methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
-    {
-    }
-
-    /// <summary>
-    /// Visits an Orchestrator Func orchestration.
-    /// </summary>
-    /// <param name="semanticModel">Semantic Model.</param>
-    /// <param name="methodSyntax">Method Syntax Node.</param>
-    /// <param name="methodSymbol">Method Symbol.</param>
-    /// <param name="orchestrationName">Class name.</param>
-    /// <param name="reportDiagnostic">Function that can be used to report diagnostics.</param>
-    public virtual void VisitFuncOrchestrator(SemanticModel semanticModel, SyntaxNode methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
-    {
-    }
-}
-
-/// <summary>
 /// Base class for analyzers that analyze orchestrations.
 /// </summary>
 /// <typeparam name="TOrchestrationVisitor">Orchestration Visitor to be used during Orchestrations discovery.</typeparam>
@@ -285,6 +201,90 @@ public abstract class OrchestrationAnalyzer<TOrchestrationVisitor> : DiagnosticA
             },
                 OperationKind.Invocation);
         });
+    }
+}
+
+/// <summary>
+/// Base class for visitors that analyze orchestrations.
+/// </summary>
+public abstract class OrchestrationVisitor
+{
+    /// <summary>
+    /// Gets the compilation adquired from analyzer context.
+    /// </summary>
+    protected Compilation Compilation { get; private set; } = null!;
+
+    /// <summary>
+    /// Gets the set of well-known type symbols.
+    /// </summary>
+    protected KnownTypeSymbols KnownTypeSymbols { get; private set; } = null!;
+
+    /// <summary>
+    /// Initializes the visitor members and returns whether the concrete implementation visitor was initialized.
+    /// </summary>
+    /// <param name="compilation">The compilation acquired from analyzer context.</param>
+    /// <param name="knownTypeSymbols">The set of well-known type symbols instance.</param>
+    /// <returns>True if the analyzer can continue; false otherwise.</returns>
+    public bool Initialize(Compilation compilation, KnownTypeSymbols knownTypeSymbols)
+    {
+        this.Compilation = compilation;
+        this.KnownTypeSymbols = knownTypeSymbols;
+
+        return this.Initialize();
+    }
+
+    /// <summary>
+    /// Initializes a visitor concrete implementation instance and returns whether the analysis should continue.
+    /// </summary>
+    /// <returns>True if the analyzer can continue; false otherwise.</returns>
+    public virtual bool Initialize() => true;
+
+    /// <summary>
+    /// Visits a Durable Function orchestration.
+    /// </summary>
+    /// <param name="semanticModel">Semantic Model.</param>
+    /// <param name="methodSyntax">Method Syntax Node.</param>
+    /// <param name="methodSymbol">Method Symbol.</param>
+    /// <param name="orchestrationName">Durable Function name.</param>
+    /// <param name="reportDiagnostic">Function that can be used to report diagnostics.</param>
+    public virtual void VisitDurableFunction(SemanticModel semanticModel, MethodDeclarationSyntax methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
+    {
+    }
+
+    /// <summary>
+    /// Visits a TaskOrchestrator&lt;T1,T2&gt; orchestration.
+    /// </summary>
+    /// <param name="semanticModel">Semantic Model.</param>
+    /// <param name="methodSyntax">Method Syntax Node.</param>
+    /// <param name="methodSymbol">Method Symbol.</param>
+    /// <param name="orchestrationName">Class name.</param>
+    /// <param name="reportDiagnostic">Function that can be used to report diagnostics.</param>
+    public virtual void VisitTaskOrchestrator(SemanticModel semanticModel, MethodDeclarationSyntax methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
+    {
+    }
+
+    /// <summary>
+    /// Visits an ITaskOrchestrator orchestration.
+    /// </summary>
+    /// <param name="semanticModel">Semantic Model.</param>
+    /// <param name="methodSyntax">Method Syntax Node.</param>
+    /// <param name="methodSymbol">Method Symbol.</param>
+    /// <param name="orchestrationName">Class name.</param>
+    /// <param name="reportDiagnostic">Function that can be used to report diagnostics.</param>
+    public virtual void VisitITaskOrchestrator(SemanticModel semanticModel, MethodDeclarationSyntax methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
+    {
+    }
+
+    /// <summary>
+    /// Visits an Orchestrator Func orchestration.
+    /// </summary>
+    /// <param name="semanticModel">Semantic Model.</param>
+    /// <param name="methodSyntax">Method Syntax Node.</param>
+    /// <param name="methodSymbol">Method Symbol.</param>
+    /// <param name="orchestrationName">Class name.</param>
+    /// <param name="reportDiagnostic">Function that can be used to report diagnostics.</param>
+    public virtual void VisitFuncOrchestrator(SemanticModel semanticModel, SyntaxNode methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
+    {
     }
 }
 

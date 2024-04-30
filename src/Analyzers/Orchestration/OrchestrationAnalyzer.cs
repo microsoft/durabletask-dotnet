@@ -28,7 +28,7 @@ public abstract class OrchestrationVisitor
     /// <summary>
     /// Initializes the visitor members and returns whether the concrete implementation visitor was initialized.
     /// </summary>
-    /// <param name="compilation">The compilation adquired from analyzer context.</param>
+    /// <param name="compilation">The compilation acquired from analyzer context.</param>
     /// <param name="knownTypeSymbols">The set of well-known type symbols instance.</param>
     /// <returns>True if the analyzer can continue; false otherwise.</returns>
     public bool Initialize(Compilation compilation, KnownTypeSymbols knownTypeSymbols)

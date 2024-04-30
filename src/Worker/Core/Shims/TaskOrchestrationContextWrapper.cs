@@ -226,7 +226,10 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         catch (global::DurableTask.Core.Exceptions.SubOrchestrationFailedException e)
         {
             // Hide the core DTFx types and instead use our own
-            throw new TaskFailedException(orchestratorName, e.ScheduleId, e);
+            throw new TaskFailedException(
+                orchestratorName,
+                e.ScheduleId,
+                TaskFailureDetails.FromCoreFailureDetails(e.FailureDetails!));
         }
     }
 

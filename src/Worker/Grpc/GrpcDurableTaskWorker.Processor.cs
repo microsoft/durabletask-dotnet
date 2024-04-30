@@ -257,16 +257,16 @@ sealed partial class GrpcDurableTaskWorker
                 {
                     InstanceId = request.InstanceId,
                     Actions =
-                {
-                    new P.OrchestratorAction
                     {
-                        CompleteOrchestration = new P.CompleteOrchestrationAction
+                        new P.OrchestratorAction
                         {
-                            OrchestrationStatus = P.OrchestrationStatus.Failed,
-                            FailureDetails = failureDetails,
+                            CompleteOrchestration = new P.CompleteOrchestrationAction
+                            {
+                                OrchestrationStatus = P.OrchestrationStatus.Failed,
+                                FailureDetails = failureDetails,
+                            },
                         },
                     },
-                },
                 };
             }
 
@@ -313,12 +313,7 @@ sealed partial class GrpcDurableTaskWorker
             }
             catch (Exception applicationException)
             {
-                failureDetails = new P.TaskFailureDetails
-                {
-                    ErrorType = applicationException.GetType().FullName,
-                    ErrorMessage = applicationException.Message,
-                    StackTrace = applicationException.StackTrace,
-                };
+                failureDetails = applicationException.ToTaskFailureDetails();
             }
 
             int outputSizeInBytes = 0;

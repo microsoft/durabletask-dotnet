@@ -1,7 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using CoreFailureDetails = DurableTask.Core.FailureDetails;
 using CoreOrchestrationException = DurableTask.Core.Exceptions.OrchestrationException;
 
 namespace Microsoft.DurableTask;
@@ -107,16 +109,78 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
     public static TaskFailureDetails FromException(Exception exception)
     {
         Check.NotNull(exception);
+        return FromExceptionRecursive(exception);
+    }
+
+    [return: NotNullIfNotNull(nameof(exception))]
+    static TaskFailureDetails? FromExceptionRecursive(Exception? exception)
+    {
+        if (exception is null)
+        {
+            return null;
+        }
+
         if (exception is CoreOrchestrationException coreEx)
         {
             return new TaskFailureDetails(
                 coreEx.FailureDetails?.ErrorType ?? "(unknown)",
                 coreEx.FailureDetails?.ErrorMessage ?? "(unknown)",
                 coreEx.FailureDetails?.StackTrace,
-                null /* InnerFailure */);
+                FromCoreFailureDetailsRecursive(coreEx.FailureDetails?.InnerFailure) ?? FromExceptionRecursive(coreEx.InnerException));
         }
 
-        // TODO: consider populating inner details.
-        return new TaskFailureDetails(exception.GetType().ToString(), exception.Message, null, null);
+        return new TaskFailureDetails(
+            exception.GetType().ToString(),
+            exception.Message,
+            exception.StackTrace,
+            FromExceptionRecursive(exception.InnerException));
+    }
+
+    static TaskFailureDetails? FromCoreFailureDetailsRecursive(CoreFailureDetails? coreFailureDetails)
+    {
+        if (coreFailureDetails is null)
+        {
+            return null;
+        }
+
+        return new TaskFailureDetails(
+            coreFailureDetails.ErrorType,
+            coreFailureDetails.ErrorMessage,
+            coreFailureDetails.StackTrace,
+            FromCoreFailureDetailsRecursive(coreFailureDetails.InnerFailure));
+    }
+
+    /// <summary>
+    /// Converts this task failure details to a <see cref="CoreFailureDetails"/> instance.
+    /// </summary>
+    /// <returns>A new <see cref="CoreFailureDetails"/> instance.</returns>
+    internal CoreFailureDetails ToCoreFailureDetails()
+    {
+        return new CoreFailureDetails(
+            this.ErrorType,
+            this.ErrorMessage,
+            this.StackTrace,
+            this.InnerFailure?.ToCoreFailureDetails(),
+            isNonRetriable: false);
+    }
+
+    /// <summary>
+    /// Creates a task failure details from a <see cref="CoreFailureDetails"/> instance.
+    /// </summary>
+    /// <param name="coreFailureDetails">The core failure details to use.</param>
+    /// <returns>A new task failure details.</returns>
+    [return: NotNullIfNotNull(nameof(coreFailureDetails))]
+    internal static TaskFailureDetails? FromCoreFailureDetails(CoreFailureDetails? coreFailureDetails)
+    {
+        if (coreFailureDetails is null)
+        {
+            return null;
+        }
+
+        return new TaskFailureDetails(
+            coreFailureDetails.ErrorType,
+            coreFailureDetails.ErrorMessage,
+            coreFailureDetails.StackTrace,
+            FromCoreFailureDetails(coreFailureDetails.InnerFailure));
     }
 }

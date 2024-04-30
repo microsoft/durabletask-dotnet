@@ -3,6 +3,7 @@
 
 using DurableTask.Core;
 using Microsoft.Extensions.Logging;
+using CoreTaskFailedException = DurableTask.Core.Exceptions.TaskFailedException;
 
 namespace Microsoft.DurableTask.Worker.Shims;
 
@@ -53,6 +54,15 @@ partial class TaskOrchestrationShim : TaskOrchestration
 
             // Return the output (if any) as a serialized string.
             return this.DataConverter.Serialize(output);
+        }
+        catch (TaskFailedException e)
+        {
+            // Convert back to something the Durable Task Framework natively understands so that
+            // failure details are correctly propagated.
+            throw new CoreTaskFailedException(e.Message, e.InnerException)
+            {
+                FailureDetails = new FailureDetails(e, e.FailureDetails.ToCoreFailureDetails()),
+            };
         }
         finally
         {

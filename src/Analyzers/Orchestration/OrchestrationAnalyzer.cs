@@ -205,7 +205,11 @@ public abstract class OrchestrationAnalyzer<TOrchestrationVisitor> : DiagnosticA
 }
 
 /// <summary>
-/// Base class for visitors that analyze orchestrations.
+/// An Orchestration Visitor allows a concrete implementation of an analyzer to visit different types of orchestrations,
+/// such as Durable Functions, TaskOrchestrator, ITaskOrchestrator, and OrchestratorFunc.
+/// It provides a set of methods that can be overridden to inspect different types of orchestrations.
+/// Besides, it provides a method to initialize the visitor members, checking for available symbols and
+/// return whether the concrete implementation visitor should continue running and perform its analysis.
 /// </summary>
 public abstract class OrchestrationVisitor
 {

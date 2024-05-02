@@ -12,4 +12,9 @@ static class AnalyzersCategories
     /// The category for the orchestration related analyzers.
     /// </summary>
     public const string Orchestration = "Orchestration";
+
+    /// <summary>
+    /// The category for the attribute binding related analyzers.
+    /// </summary>
+    public const string AttributeBinding = "Attribute Binding";
 }

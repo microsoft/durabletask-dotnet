@@ -20,6 +20,11 @@ public sealed class KnownTypeSymbols(Compilation compilation)
     INamedTypeSymbol? taskOrchestratorInterface;
     INamedTypeSymbol? taskOrchestratorBaseClass;
     INamedTypeSymbol? durableTaskRegistry;
+    INamedTypeSymbol? taskOrchestrationContext;
+    INamedTypeSymbol? durableClientAttribute;
+    INamedTypeSymbol? durableTaskClient;
+    INamedTypeSymbol? entityTriggerAttribute;
+    INamedTypeSymbol? taskEntityDispatcher;
     INamedTypeSymbol? guid;
     INamedTypeSymbol? thread;
     INamedTypeSymbol? task;
@@ -49,6 +54,31 @@ public sealed class KnownTypeSymbols(Compilation compilation)
     /// Gets a DurableTaskRegistry type symbol.
     /// </summary>
     public INamedTypeSymbol? DurableTaskRegistry => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.DurableTaskRegistry", ref this.durableTaskRegistry);
+
+    /// <summary>
+    /// Gets a TaskOrchestrationContext type symbol.
+    /// </summary>
+    public INamedTypeSymbol? TaskOrchestrationContext => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.TaskOrchestrationContext", ref this.taskOrchestrationContext);
+
+    /// <summary>
+    /// Gets a DurableClientAttribute type symbol.
+    /// </summary>
+    public INamedTypeSymbol? DurableClientAttribute => this.GetOrResolveFullyQualifiedType("Microsoft.Azure.Functions.Worker.DurableClientAttribute", ref this.durableClientAttribute);
+
+    /// <summary>
+    /// Gets a DurableTaskClient type symbol.
+    /// </summary>
+    public INamedTypeSymbol? DurableTaskClient => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.Client.DurableTaskClient", ref this.durableTaskClient);
+
+    /// <summary>
+    /// Gets an EntityTriggerAttribute type symbol.
+    /// </summary>
+    public INamedTypeSymbol? EntityTriggerAttribute => this.GetOrResolveFullyQualifiedType("Microsoft.Azure.Functions.Worker.EntityTriggerAttribute", ref this.entityTriggerAttribute);
+
+    /// <summary>
+    /// Gets a TaskEntityDispatcher type symbol.
+    /// </summary>
+    public INamedTypeSymbol? TaskEntityDispatcher => this.GetOrResolveFullyQualifiedType("Microsoft.Azure.Functions.Worker.TaskEntityDispatcher", ref this.taskEntityDispatcher);
 
     /// <summary>
     /// Gets a Guid type symbol.

@@ -153,4 +153,10 @@
   <data name="DurableClientBindingAnalyzerTitle" xml:space="preserve">
     <value>[DurableClient] must be used with DurableTaskClient</value>
   </data>
+  <data name="CancellationTokenOrchestrationAnalyzerMessageFormat" xml:space="preserve">
+    <value>Orchestration '{0}' is using a non-supported CancellationToken binding</value>
+  </data>
+  <data name="CancellationTokenOrchestrationAnalyzerTitle" xml:space="preserve">
+    <value>Function CancellationToken binding is not supported for OrchestrationTrigger</value>
+  </data>
 </root>

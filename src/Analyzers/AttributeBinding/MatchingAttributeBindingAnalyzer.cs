@@ -60,7 +60,7 @@ public abstract class MatchingAttributeBindingAnalyzer : DiagnosticAnalyzer
     /// After an incorrect attribute/type matching is found, this method is called so the concrete implementation can report a diagnostic.
     /// </summary>
     /// <param name="ctx">Context for a symbol action. Allows reporting a diagnostic.</param>
-    /// <param name="expected">Expected binding for a attribute/type.</param>
+    /// <param name="expected">Expected binding for an attribute/type.</param>
     /// <param name="parameter">Analyzed parameter symbol.</param>
     protected abstract void ReportDiagnostic(SymbolAnalysisContext ctx, ExpectedBinding expected, IParameterSymbol parameter);
 

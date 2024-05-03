@@ -5,21 +5,21 @@ using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 
-namespace Microsoft.DurableTask.Analyzers.AttributeBinding;
+namespace Microsoft.DurableTask.Analyzers.Functions.AttributeBinding;
 
 /// <summary>
-/// Analyzer that matches 'EntityTriggerAttribute' with 'TaskEntityDispatcher' parameters.
+/// Analyzer that matches 'OrchestrationTriggerAttribute' with 'TaskOrchestrationContext' parameters.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
-public sealed class EntityTriggerBindingAnalyzer : MatchingAttributeBindingAnalyzer
+public sealed class OrchestrationTriggerBindingAnalyzer : MatchingAttributeBindingAnalyzer
 {
     /// <summary>
     /// Diagnostic ID supported for the analyzer.
     /// </summary>
-    public const string DiagnosticId = "DURABLE1003";
+    public const string DiagnosticId = "DURABLE1001";
 
-    static readonly LocalizableString Title = new LocalizableResourceString(nameof(Resources.EntityTriggerBindingAnalyzerTitle), Resources.ResourceManager, typeof(Resources));
-    static readonly LocalizableString MessageFormat = new LocalizableResourceString(nameof(Resources.EntityTriggerBindingAnalyzerMessageFormat), Resources.ResourceManager, typeof(Resources));
+    static readonly LocalizableString Title = new LocalizableResourceString(nameof(Resources.OrchestrationTriggerBindingAnalyzerTitle), Resources.ResourceManager, typeof(Resources));
+    static readonly LocalizableString MessageFormat = new LocalizableResourceString(nameof(Resources.OrchestrationTriggerBindingAnalyzerMessageFormat), Resources.ResourceManager, typeof(Resources));
 
     static readonly DiagnosticDescriptor Rule = new(
             DiagnosticId,
@@ -37,8 +37,8 @@ public sealed class EntityTriggerBindingAnalyzer : MatchingAttributeBindingAnaly
     {
         return new ExpectedBinding()
         {
-            Attribute = knownTypeSymbols.EntityTriggerAttribute,
-            Type = knownTypeSymbols.TaskEntityDispatcher,
+            Attribute = knownTypeSymbols.FunctionOrchestrationAttribute,
+            Type = knownTypeSymbols.TaskOrchestrationContext,
         };
     }
 

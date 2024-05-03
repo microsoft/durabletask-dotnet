@@ -1,9 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Analyzers.AttributeBinding;
+using Microsoft.DurableTask.Analyzers.Functions.AttributeBinding;
 
-namespace Microsoft.DurableTask.Analyzers.Tests.AttributeBinding;
+namespace Microsoft.DurableTask.Analyzers.Tests.Functions.AttributeBinding;
 
 public class OrchestrationTriggerBindingAnalyzerTests : MatchingAttributeBindingSpecificationTests<OrchestrationTriggerBindingAnalyzer>
 {

@@ -1,10 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 using Microsoft.DurableTask.Analyzers.Functions.AttributeBinding;
 
 namespace Microsoft.DurableTask.Analyzers.Tests.Functions.AttributeBinding;

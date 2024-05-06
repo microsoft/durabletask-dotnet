@@ -33,7 +33,6 @@ public sealed partial class KnownTypeSymbols
     /// </summary>
     public INamedTypeSymbol? TaskOrchestrationContext => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.TaskOrchestrationContext", ref this.taskOrchestrationContext);
 
-
     /// <summary>
     /// Gets a DurableTaskClient type symbol.
     /// </summary>

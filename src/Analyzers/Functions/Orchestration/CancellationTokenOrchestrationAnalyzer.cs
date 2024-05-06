@@ -11,7 +11,7 @@ using static Microsoft.DurableTask.Analyzers.Functions.Orchestration.Cancellatio
 namespace Microsoft.DurableTask.Analyzers.Functions.Orchestration;
 
 /// <summary>
-/// Analyzer that reports a warning when CancellationToken is used in an Azure Function Orchestration.
+/// Analyzer that reports a warning when CancellationToken is used in a Durable Functions Orchestration.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public class CancellationTokenOrchestrationAnalyzer : OrchestrationAnalyzer<CancellationTokenOrchestrationVisitor>

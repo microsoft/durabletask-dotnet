@@ -17,6 +17,7 @@ public sealed partial class KnownTypeSymbols
     INamedTypeSymbol? thread;
     INamedTypeSymbol? task;
     INamedTypeSymbol? taskT;
+    INamedTypeSymbol? cancellationToken;
 
     /// <summary>
     /// Gets a Guid type symbol.
@@ -37,4 +38,9 @@ public sealed partial class KnownTypeSymbols
     /// Gets a Task&lt;T&gt; type symbol.
     /// </summary>
     public INamedTypeSymbol? TaskT => this.GetOrResolveFullyQualifiedType(typeof(Task<>).FullName, ref this.taskT);
+
+    /// <summary>
+    /// Gets a CancellationToken type symbol.
+    /// </summary>
+    public INamedTypeSymbol? CancellationToken => this.GetOrResolveFullyQualifiedType(typeof(CancellationToken).FullName, ref this.cancellationToken);
 }

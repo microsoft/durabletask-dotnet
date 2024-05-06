@@ -36,7 +36,7 @@ class OtherBindingsOrchestrationAnalyzer : OrchestrationAnalyzer<OtherBindingsOr
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];
 
     /// <summary>
-    /// Visitor that inspects Durable Functions's method signatures for parameters binding other than OrchestrationTrigger.
+    /// Visitor that inspects Durable Functions' method signatures for parameters binding other than OrchestrationTrigger.
     /// </summary>
     public sealed class OtherBindingsOrchestrationOrchestrationVisitor : OrchestrationVisitor
     {

@@ -222,6 +222,32 @@ public class MyOrchestrator : ITaskOrchestrator
         await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
     }
 
+    [Fact]
+    public async Task TaskOrchestratorUsingDifferentSyntaxTreesHasDiag()
+    {
+        string mainCode = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, DateTime>
+{
+    public override Task<DateTime> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        var dependency = new Dependency();
+        return Task.FromResult(dependency.Method());
+    }
+}
+");
+        string codeInAnotherSyntaxTree = Wrapper.WrapTaskOrchestrator(@"
+public class Dependency{
+    public DateTime Method() => {|#0:DateTime.Now|};
+}
+");
+
+        void configureTest(VerifyCS.Test test) => test.TestState.Sources.Add(codeInAnotherSyntaxTree);
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Method", "System.DateTime.Now", "MyOrchestrator");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(mainCode, configureTest, expected);
+    }
+
 
     [Fact]
     public async Task FuncOrchestratorWithLambdaHasDiag()

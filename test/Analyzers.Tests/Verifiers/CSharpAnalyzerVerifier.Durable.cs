@@ -13,6 +13,11 @@ public static partial class CSharpAnalyzerVerifier<TAnalyzer>
     /// <inheritdoc cref="AnalyzerVerifier{TAnalyzer, TTest, TVerifier}.VerifyAnalyzerAsync(string, DiagnosticResult[])"/>
     public static async Task VerifyDurableTaskAnalyzerAsync(string source, params DiagnosticResult[] expected)
     {
+        await VerifyDurableTaskAnalyzerAsync(source, null, expected);
+    }
+
+    public static async Task VerifyDurableTaskAnalyzerAsync(string source, Action<Test>? configureTest = null, params DiagnosticResult[] expected)
+    {
         Test test = new()
         {
             TestCode = source,
@@ -23,6 +28,8 @@ public static partial class CSharpAnalyzerVerifier<TAnalyzer>
         };
 
         test.ExpectedDiagnostics.AddRange(expected);
+
+        configureTest?.Invoke(test);
 
         await test.RunAsync(CancellationToken.None);
     }

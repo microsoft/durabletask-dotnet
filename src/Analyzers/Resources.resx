@@ -157,6 +157,6 @@
     <value>Orchestration '{0}' is using a non-supported CancellationToken binding</value>
   </data>
   <data name="CancellationTokenOrchestrationAnalyzerTitle" xml:space="preserve">
-    <value>Function CancellationToken binding is not supported for OrchestrationTrigger</value>
+    <value>CancellationToken should not be used as an orchestrator function parameter</value>
   </data>
 </root>

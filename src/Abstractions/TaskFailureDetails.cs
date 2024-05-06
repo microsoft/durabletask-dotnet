@@ -112,6 +112,40 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
         return FromExceptionRecursive(exception);
     }
 
+    /// <summary>
+    /// Converts this task failure details to a <see cref="CoreFailureDetails"/> instance.
+    /// </summary>
+    /// <returns>A new <see cref="CoreFailureDetails"/> instance.</returns>
+    internal CoreFailureDetails ToCoreFailureDetails()
+    {
+        return new CoreFailureDetails(
+            this.ErrorType,
+            this.ErrorMessage,
+            this.StackTrace,
+            this.InnerFailure?.ToCoreFailureDetails(),
+            isNonRetriable: false);
+    }
+
+    /// <summary>
+    /// Creates a task failure details from a <see cref="CoreFailureDetails"/> instance.
+    /// </summary>
+    /// <param name="coreFailureDetails">The core failure details to use.</param>
+    /// <returns>A new task failure details.</returns>
+    [return: NotNullIfNotNull(nameof(coreFailureDetails))]
+    internal static TaskFailureDetails? FromCoreFailureDetails(CoreFailureDetails? coreFailureDetails)
+    {
+        if (coreFailureDetails is null)
+        {
+            return null;
+        }
+
+        return new TaskFailureDetails(
+            coreFailureDetails.ErrorType,
+            coreFailureDetails.ErrorMessage,
+            coreFailureDetails.StackTrace,
+            FromCoreFailureDetails(coreFailureDetails.InnerFailure));
+    }
+
     [return: NotNullIfNotNull(nameof(exception))]
     static TaskFailureDetails? FromExceptionRecursive(Exception? exception)
     {
@@ -148,39 +182,5 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
             coreFailureDetails.ErrorMessage,
             coreFailureDetails.StackTrace,
             FromCoreFailureDetailsRecursive(coreFailureDetails.InnerFailure));
-    }
-
-    /// <summary>
-    /// Converts this task failure details to a <see cref="CoreFailureDetails"/> instance.
-    /// </summary>
-    /// <returns>A new <see cref="CoreFailureDetails"/> instance.</returns>
-    internal CoreFailureDetails ToCoreFailureDetails()
-    {
-        return new CoreFailureDetails(
-            this.ErrorType,
-            this.ErrorMessage,
-            this.StackTrace,
-            this.InnerFailure?.ToCoreFailureDetails(),
-            isNonRetriable: false);
-    }
-
-    /// <summary>
-    /// Creates a task failure details from a <see cref="CoreFailureDetails"/> instance.
-    /// </summary>
-    /// <param name="coreFailureDetails">The core failure details to use.</param>
-    /// <returns>A new task failure details.</returns>
-    [return: NotNullIfNotNull(nameof(coreFailureDetails))]
-    internal static TaskFailureDetails? FromCoreFailureDetails(CoreFailureDetails? coreFailureDetails)
-    {
-        if (coreFailureDetails is null)
-        {
-            return null;
-        }
-
-        return new TaskFailureDetails(
-            coreFailureDetails.ErrorType,
-            coreFailureDetails.ErrorMessage,
-            coreFailureDetails.StackTrace,
-            FromCoreFailureDetails(coreFailureDetails.InnerFailure));
     }
 }

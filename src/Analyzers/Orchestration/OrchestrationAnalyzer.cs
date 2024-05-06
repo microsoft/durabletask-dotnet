@@ -28,17 +28,10 @@ public abstract class OrchestrationAnalyzer<TOrchestrationVisitor> : DiagnosticA
             KnownTypeSymbols knownSymbols = new(context.Compilation);
 
             if (knownSymbols.FunctionOrchestrationAttribute == null || knownSymbols.FunctionNameAttribute == null ||
-                knownSymbols.TaskOrchestratorInterface == null || knownSymbols.TaskOrchestratorBaseClass == null ||
+                knownSymbols.TaskOrchestratorInterface == null ||
                 knownSymbols.DurableTaskRegistry == null)
             {
                 // symbols not available in this compilation, skip analysis
-                return;
-            }
-
-            IMethodSymbol? runAsyncTaskOrchestratorInterface = knownSymbols.TaskOrchestratorInterface.GetMembers("RunAsync").OfType<IMethodSymbol>().FirstOrDefault();
-            IMethodSymbol? runAsyncTaskOrchestratorBase = knownSymbols.TaskOrchestratorBaseClass.GetMembers("RunAsync").OfType<IMethodSymbol>().FirstOrDefault();
-            if (runAsyncTaskOrchestratorInterface == null || runAsyncTaskOrchestratorBase == null)
-            {
                 return;
             }
 
@@ -75,7 +68,7 @@ public abstract class OrchestrationAnalyzer<TOrchestrationVisitor> : DiagnosticA
             },
                 SyntaxKind.MethodDeclaration);
 
-            // look for TaskOrchestrator`2 Orchestrations
+            // look for ITaskOrchestrator/TaskOrchestrator`2 Orchestrations
             context.RegisterSyntaxNodeAction(
                 ctx =>
             {
@@ -86,57 +79,24 @@ public abstract class OrchestrationAnalyzer<TOrchestrationVisitor> : DiagnosticA
                     return;
                 }
 
-                if (!classSymbol.BaseTypeIsConstructedFrom(knownSymbols.TaskOrchestratorBaseClass))
+                bool implementsITaskOrchestrator = classSymbol.AllInterfaces.Any(i => i.Equals(knownSymbols.TaskOrchestratorInterface, SymbolEqualityComparer.Default));
+                if (!implementsITaskOrchestrator)
                 {
                     return;
                 }
 
-                // Get the method that overrides TaskOrchestrator.RunAsync
-                IMethodSymbol? methodSymbol = classSymbol.GetOverridenMethod(runAsyncTaskOrchestratorBase);
-                if (methodSymbol == null)
-                {
-                    return;
-                }
+                IEnumerable<IMethodSymbol> orchestrationMethods = classSymbol.GetMembers().OfType<IMethodSymbol>()
+                    .Where(m => m.Parameters.Any(p => p.Type.Equals(knownSymbols.TaskOrchestrationContext, SymbolEqualityComparer.Default)));
 
                 string functionName = classSymbol.Name;
 
-                IEnumerable<MethodDeclarationSyntax> methodSyntaxes = methodSymbol.GetSyntaxNodes();
-                foreach (MethodDeclarationSyntax rootMethodSyntax in methodSyntaxes)
+                foreach (IMethodSymbol? methodSymbol in orchestrationMethods)
                 {
-                    visitor.VisitTaskOrchestrator(ctx.SemanticModel, rootMethodSyntax, methodSymbol, functionName, ctx.ReportDiagnostic);
-                }
-            },
-                SyntaxKind.ClassDeclaration);
-
-            // look for ITaskOrchestrator Orchestrations
-            context.RegisterSyntaxNodeAction(
-                ctx =>
-            {
-                ctx.CancellationToken.ThrowIfCancellationRequested();
-
-                if (ctx.ContainingSymbol is not INamedTypeSymbol classSymbol)
-                {
-                    return;
-                }
-
-                // Gets the method that implements ITaskOrchestrator.RunAsync
-                if (classSymbol.FindImplementationForInterfaceMember(runAsyncTaskOrchestratorInterface) is not IMethodSymbol methodSymbol)
-                {
-                    return;
-                }
-
-                // Skip if the found method is implemented in TaskOrchestrator<TInput, TOutput>
-                if (methodSymbol.ContainingType.ConstructedFrom.Equals(knownSymbols.TaskOrchestratorBaseClass, SymbolEqualityComparer.Default))
-                {
-                    return;
-                }
-
-                string functionName = classSymbol.Name;
-
-                IEnumerable<MethodDeclarationSyntax> methodSyntaxes = methodSymbol.GetSyntaxNodes();
-                foreach (MethodDeclarationSyntax rootMethodSyntax in methodSyntaxes)
-                {
-                    visitor.VisitITaskOrchestrator(ctx.SemanticModel, rootMethodSyntax, methodSymbol, functionName, ctx.ReportDiagnostic);
+                    IEnumerable<MethodDeclarationSyntax> methodSyntaxes = methodSymbol.GetSyntaxNodes();
+                    foreach (MethodDeclarationSyntax rootMethodSyntax in methodSyntaxes)
+                    {
+                        visitor.VisitTaskOrchestrator(ctx.SemanticModel, rootMethodSyntax, methodSymbol, functionName, ctx.ReportDiagnostic);
+                    }
                 }
             },
                 SyntaxKind.ClassDeclaration);
@@ -256,7 +216,7 @@ public abstract class OrchestrationVisitor
     }
 
     /// <summary>
-    /// Visits a TaskOrchestrator&lt;T1,T2&gt; orchestration.
+    /// Visits a strongly typed Task Orchestrator that implements an ITaskOrchestrator orchestration.
     /// </summary>
     /// <param name="semanticModel">Semantic Model.</param>
     /// <param name="methodSyntax">Method Syntax Node.</param>
@@ -264,18 +224,6 @@ public abstract class OrchestrationVisitor
     /// <param name="orchestrationName">Class name.</param>
     /// <param name="reportDiagnostic">Function that can be used to report diagnostics.</param>
     public virtual void VisitTaskOrchestrator(SemanticModel semanticModel, MethodDeclarationSyntax methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
-    {
-    }
-
-    /// <summary>
-    /// Visits an ITaskOrchestrator orchestration.
-    /// </summary>
-    /// <param name="semanticModel">Semantic Model.</param>
-    /// <param name="methodSyntax">Method Syntax Node.</param>
-    /// <param name="methodSymbol">Method Symbol.</param>
-    /// <param name="orchestrationName">Class name.</param>
-    /// <param name="reportDiagnostic">Function that can be used to report diagnostics.</param>
-    public virtual void VisitITaskOrchestrator(SemanticModel semanticModel, MethodDeclarationSyntax methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
     {
     }
 
@@ -307,12 +255,6 @@ public class MethodProbeOrchestrationVisitor : OrchestrationVisitor
 
     /// <inheritdoc/>
     public override void VisitTaskOrchestrator(SemanticModel semanticModel, MethodDeclarationSyntax methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
-    {
-        this.FindInvokedMethods(semanticModel, methodSyntax, methodSymbol, orchestrationName, reportDiagnostic);
-    }
-
-    /// <inheritdoc/>
-    public override void VisitITaskOrchestrator(SemanticModel semanticModel, MethodDeclarationSyntax methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
     {
         this.FindInvokedMethods(semanticModel, methodSyntax, methodSymbol, orchestrationName, reportDiagnostic);
     }
@@ -374,7 +316,12 @@ public class MethodProbeOrchestrationVisitor : OrchestrationVisitor
             IEnumerable<MethodDeclarationSyntax> calleeSyntaxes = calleeMethodSymbol.GetSyntaxNodes();
             foreach (MethodDeclarationSyntax calleeSyntax in calleeSyntaxes)
             {
-                this.FindInvokedMethods(semanticModel, calleeSyntax, calleeMethodSymbol, rootOrchestration, reportDiagnostic);
+                // Since the syntax tree of the callee method might be different from the caller method, we need to get the correct semantic model,
+                // avoiding the exception 'Syntax node is not within syntax tree'.
+                SemanticModel sm = semanticModel.SyntaxTree == calleeSyntax.SyntaxTree ?
+                    semanticModel : semanticModel.Compilation.GetSemanticModel(calleeSyntax.SyntaxTree);
+
+                this.FindInvokedMethods(sm, calleeSyntax, calleeMethodSymbol, rootOrchestration, reportDiagnostic);
             }
         }
     }

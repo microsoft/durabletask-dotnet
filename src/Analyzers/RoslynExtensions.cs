@@ -110,18 +110,50 @@ static class RoslynExtensions
     }
 
     /// <summary>
-    /// Reports a diagnostic for a given operation.
+    /// Compares a method symbol with a type symbol and a method name.
     /// </summary>
-    /// <param name="ctx">Context for a compilation action.</param>
-    /// <param name="descriptor">Diagnostic Descriptor to be reported.</param>
-    /// <param name="operation">Operation which the location will be extracted.</param>
-    /// <param name="messageArgs">Diagnostic message arguments to be reported.</param>
-    public static void ReportDiagnostic(this CompilationAnalysisContext ctx, DiagnosticDescriptor descriptor, IOperation operation, params string[] messageArgs)
+    /// <param name="methodSymbol">The method symbol to compare.</param>
+    /// <param name="typeSymbol">The expected type symbol which the method symbol should be contained.</param>
+    /// <param name="methodName">The expected method name.</param>
+    /// <returns>True if the method symbol is contained in the type symbol and has the method name, false otherwise.</returns>
+    public static bool IsEqualTo(this IMethodSymbol methodSymbol, INamedTypeSymbol? typeSymbol, string methodName)
     {
-        ctx.ReportDiagnostic(BuildDiagnostic(descriptor, operation.Syntax, messageArgs));
+        return methodSymbol.ContainingType.Equals(typeSymbol, SymbolEqualityComparer.Default) &&
+            methodSymbol.Name.Equals(methodName, StringComparison.Ordinal);
     }
 
-    static Diagnostic BuildDiagnostic(DiagnosticDescriptor descriptor, SyntaxNode syntaxNode, params string[] messageArgs)
+    /// <summary>
+    /// Builds a diagnostic based on a symbol location.
+    /// </summary>
+    /// <param name="descriptor">Diagnostic Descriptor to be reported.</param>
+    /// <param name="symbol">Symbol that has the violation. Its location will be extracted and added to the diagnostic.</param>
+    /// <param name="messageArgs">Diagnostic message arguments to be reported.</param>
+    /// <returns>The Diagnostic based on the symbol location.</returns>
+    public static Diagnostic BuildDiagnostic(DiagnosticDescriptor descriptor, ISymbol symbol, params string[] messageArgs)
+    {
+        return BuildDiagnostic(descriptor, symbol.DeclaringSyntaxReferences.First().GetSyntax(), messageArgs);
+    }
+
+    /// <summary>
+    /// Builds a diagnostic based on an operation location.
+    /// </summary>
+    /// <param name="descriptor">Diagnostic Descriptor to be reported.</param>
+    /// <param name="operation">Operation that has the violation. Its location will be extracted and added to the diagnostic.</param>
+    /// <param name="messageArgs">Diagnostic message arguments to be reported.</param>
+    /// <returns>The Diagnostic based on the operation location.</returns>
+    public static Diagnostic BuildDiagnostic(DiagnosticDescriptor descriptor, IOperation operation, params string[] messageArgs)
+    {
+        return BuildDiagnostic(descriptor, operation.Syntax, messageArgs);
+    }
+
+    /// <summary>
+    /// Builds a diagnostic based on a syntax node location.
+    /// </summary>
+    /// <param name="descriptor">Diagnostic Descriptor to be reported.</param>
+    /// <param name="syntaxNode">Syntax Node that has the violation. Its location will be extracted and added to the diagnostic.</param>
+    /// <param name="messageArgs">Diagnostic message arguments to be reported.</param>
+    /// <returns>The Diagnostic based on the syntax node location.</returns>
+    public static Diagnostic BuildDiagnostic(DiagnosticDescriptor descriptor, SyntaxNode syntaxNode, params string[] messageArgs)
     {
         return Diagnostic.Create(descriptor, syntaxNode.GetLocation(), messageArgs);
     }

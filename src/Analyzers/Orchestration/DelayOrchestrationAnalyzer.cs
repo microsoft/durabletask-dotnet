@@ -1,11 +1,11 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
+using static Microsoft.DurableTask.Analyzers.Orchestration.DelayOrchestrationAnalyzer;
 
 namespace Microsoft.DurableTask.Analyzers.Orchestration;
 
@@ -13,7 +13,7 @@ namespace Microsoft.DurableTask.Analyzers.Orchestration;
 /// Analyzer that reports a warning when Task.Delay or Thread.Sleep is used in an orchestration method.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
-public class DelayOrchestrationAnalyzer : OrchestrationAnalyzer
+public class DelayOrchestrationAnalyzer : OrchestrationAnalyzer<DelayOrchestrationVisitor>
 {
     /// <summary>
     /// Diagnostic ID supported for the analyzer.
@@ -34,76 +34,40 @@ public class DelayOrchestrationAnalyzer : OrchestrationAnalyzer
     /// <inheritdoc/>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];
 
-    /// <inheritdoc/>
-    protected override void RegisterAdditionalCompilationStartAction(CompilationStartAnalysisContext context, OrchestrationAnalysisResult orchestrationAnalysisResult)
+    /// <summary>
+    /// Visitor that inspects the method body for Task.Delay or Thread.Sleep calls.
+    /// </summary>
+    public sealed class DelayOrchestrationVisitor : MethodProbeOrchestrationVisitor
     {
-        var knownSymbols = new KnownTypeSymbols(context.Compilation);
-
-        if (knownSymbols.Thread == null || knownSymbols.Task == null || knownSymbols.TaskT == null)
+        /// <inheritdoc/>
+        public override bool Initialize()
         {
-            return;
+            return this.KnownTypeSymbols.Thread != null && this.KnownTypeSymbols.Task != null && this.KnownTypeSymbols.TaskT != null;
         }
 
-        ConcurrentBag<(ISymbol Symbol, IInvocationOperation Invocation)> delayUsage = [];
-
-        context.RegisterOperationAction(
-            ctx =>
-            {
-                ctx.CancellationToken.ThrowIfCancellationRequested();
-
-                IInvocationOperation invocation = (IInvocationOperation)ctx.Operation;
-
-                if (!invocation.TargetMethod.ContainingType.Equals(knownSymbols.Thread, SymbolEqualityComparer.Default))
-                {
-                    return;
-                }
-
-                if (invocation.TargetMethod.Name is nameof(Thread.Sleep))
-                {
-                    ISymbol method = ctx.ContainingSymbol;
-                    delayUsage.Add((method, invocation));
-                }
-            },
-            OperationKind.Invocation);
-
-        context.RegisterOperationAction(
-            ctx =>
-            {
-                ctx.CancellationToken.ThrowIfCancellationRequested();
-
-                IInvocationOperation invocation = (IInvocationOperation)ctx.Operation;
-
-                if (!invocation.TargetMethod.ContainingType.Equals(knownSymbols.Task, SymbolEqualityComparer.Default) &&
-                    !invocation.TargetMethod.ContainingType.Equals(knownSymbols.TaskT, SymbolEqualityComparer.Default))
-                {
-                    return;
-                }
-
-                if (invocation.TargetMethod.Name is nameof(Task.Delay))
-                {
-                    ISymbol method = ctx.ContainingSymbol;
-                    delayUsage.Add((method, invocation));
-                }
-            },
-            OperationKind.Invocation);
-
-        context.RegisterCompilationEndAction(ctx =>
+        /// <inheritdoc/>
+        protected override void VisitMethod(SemanticModel semanticModel, SyntaxNode methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
         {
-            foreach ((ISymbol symbol, IInvocationOperation operation) in delayUsage)
+            IOperation? methodOperation = semanticModel.GetOperation(methodSyntax);
+            if (methodOperation is null)
             {
-                if (symbol is IMethodSymbol method)
-                {
-                    if (orchestrationAnalysisResult.OrchestrationsByMethod.TryGetValue(method, out ConcurrentBag<AnalyzedOrchestration> orchestrations))
-                    {
-                        string methodName = symbol.Name;
-                        string invocationName = operation.TargetMethod.ToDisplayString(SymbolDisplayFormat.CSharpShortErrorMessageFormat);
-                        string orchestrationNames = string.Join(", ", orchestrations.Select(o => o.Name).OrderBy(n => n));
+                return;
+            }
 
-                        // e.g.: "The method 'Method1' uses 'Thread.Sleep(int)' that may cause non-deterministic behavior when invoked from orchestration 'MyOrchestrator'"
-                        ctx.ReportDiagnostic(Rule, operation, methodName, invocationName, orchestrationNames);
-                    }
+            foreach (IInvocationOperation invocation in methodOperation.Descendants().OfType<IInvocationOperation>())
+            {
+                IMethodSymbol targetMethod = invocation.TargetMethod;
+
+                if (targetMethod.IsEqualTo(this.KnownTypeSymbols.Thread, nameof(Thread.Sleep)) ||
+                    targetMethod.IsEqualTo(this.KnownTypeSymbols.Task, nameof(Task.Delay)) ||
+                    targetMethod.IsEqualTo(this.KnownTypeSymbols.TaskT, nameof(Task.Delay)))
+                {
+                    string invocationName = targetMethod.ToDisplayString(SymbolDisplayFormat.CSharpShortErrorMessageFormat);
+
+                    // e.g.: "The method 'Method1' uses 'Thread.Sleep' that may cause non-deterministic behavior when invoked from orchestration 'MyOrchestrator'"
+                    reportDiagnostic(RoslynExtensions.BuildDiagnostic(Rule, invocation, methodSymbol.Name, invocationName, orchestrationName));
                 }
             }
-        });
+        }
     }
 }

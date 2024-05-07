@@ -78,9 +78,10 @@ long Level2() => Level3();
 long Level3() => {|#0:DateTime.Now|}.Ticks;
 ");
 
-        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Level3", "System.DateTime.Now", "Run1, Run2");
+        DiagnosticResult expected1 = BuildDiagnostic().WithLocation(0).WithArguments("Level3", "System.DateTime.Now", "Run1");
+        DiagnosticResult expected2 = BuildDiagnostic().WithLocation(0).WithArguments("Level3", "System.DateTime.Now", "Run2");
 
-        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected1, expected2);
     }
 
     [Fact]
@@ -219,6 +220,32 @@ public class MyOrchestrator : ITaskOrchestrator
         DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Method", "System.DateTime.Now", "MyOrchestrator");
 
         await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+    }
+
+    [Fact]
+    public async Task TaskOrchestratorUsingDifferentSyntaxTreesHasDiag()
+    {
+        string mainCode = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, DateTime>
+{
+    public override Task<DateTime> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        var dependency = new Dependency();
+        return Task.FromResult(dependency.Method());
+    }
+}
+");
+        string codeInAnotherSyntaxTree = Wrapper.WrapTaskOrchestrator(@"
+public class Dependency{
+    public DateTime Method() => {|#0:DateTime.Now|};
+}
+");
+
+        void configureTest(VerifyCS.Test test) => test.TestState.Sources.Add(codeInAnotherSyntaxTree);
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Method", "System.DateTime.Now", "MyOrchestrator");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(mainCode, configureTest, expected);
     }
 
 

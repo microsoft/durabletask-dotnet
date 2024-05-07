@@ -13,7 +13,8 @@ namespace Microsoft.DurableTask.Analyzers.Orchestration;
 /// <summary>
 /// Base class for analyzers that analyze orchestrations.
 /// </summary>
-public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
+/// <typeparam name="TOrchestrationVisitor">Orchestration Visitor to be used during Orchestrations discovery.</typeparam>
+public abstract class OrchestrationAnalyzer<TOrchestrationVisitor> : DiagnosticAnalyzer where TOrchestrationVisitor : OrchestrationVisitor, new()
 {
     /// <inheritdoc/>
     public override void Initialize(AnalysisContext context)
@@ -27,21 +28,18 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
             KnownTypeSymbols knownSymbols = new(context.Compilation);
 
             if (knownSymbols.FunctionOrchestrationAttribute == null || knownSymbols.FunctionNameAttribute == null ||
-                knownSymbols.TaskOrchestratorInterface == null || knownSymbols.TaskOrchestratorBaseClass == null ||
+                knownSymbols.TaskOrchestratorInterface == null ||
                 knownSymbols.DurableTaskRegistry == null)
             {
                 // symbols not available in this compilation, skip analysis
                 return;
             }
 
-            IMethodSymbol? runAsyncTaskOrchestratorInterface = knownSymbols.TaskOrchestratorInterface.GetMembers("RunAsync").OfType<IMethodSymbol>().FirstOrDefault();
-            IMethodSymbol? runAsyncTaskOrchestratorBase = knownSymbols.TaskOrchestratorBaseClass.GetMembers("RunAsync").OfType<IMethodSymbol>().FirstOrDefault();
-            if (runAsyncTaskOrchestratorInterface == null || runAsyncTaskOrchestratorBase == null)
+            TOrchestrationVisitor visitor = new();
+            if (!visitor.Initialize(context.Compilation, knownSymbols))
             {
                 return;
             }
-
-            OrchestrationAnalysisResult result = new();
 
             // look for Durable Functions Orchestrations
             context.RegisterSyntaxNodeAction(
@@ -64,14 +62,13 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
                     return;
                 }
 
-                AnalyzedOrchestration orchestration = new(functionName);
                 var rootMethodSyntax = (MethodDeclarationSyntax)ctx.Node;
 
-                FindInvokedMethods(ctx.SemanticModel, rootMethodSyntax, methodSymbol, orchestration, result);
+                visitor.VisitDurableFunction(ctx.SemanticModel, rootMethodSyntax, methodSymbol, functionName, ctx.ReportDiagnostic);
             },
                 SyntaxKind.MethodDeclaration);
 
-            // look for TaskOrchestrator`2 Orchestrations
+            // look for ITaskOrchestrator/TaskOrchestrator`2 Orchestrations
             context.RegisterSyntaxNodeAction(
                 ctx =>
             {
@@ -82,57 +79,24 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
                     return;
                 }
 
-                if (!classSymbol.BaseTypeIsConstructedFrom(knownSymbols.TaskOrchestratorBaseClass))
+                bool implementsITaskOrchestrator = classSymbol.AllInterfaces.Any(i => i.Equals(knownSymbols.TaskOrchestratorInterface, SymbolEqualityComparer.Default));
+                if (!implementsITaskOrchestrator)
                 {
                     return;
                 }
 
-                // Get the method that overrides TaskOrchestrator.RunAsync
-                IMethodSymbol? methodSymbol = classSymbol.GetOverridenMethod(runAsyncTaskOrchestratorBase);
-                if (methodSymbol == null)
+                IEnumerable<IMethodSymbol> orchestrationMethods = classSymbol.GetMembers().OfType<IMethodSymbol>()
+                    .Where(m => m.Parameters.Any(p => p.Type.Equals(knownSymbols.TaskOrchestrationContext, SymbolEqualityComparer.Default)));
+
+                string functionName = classSymbol.Name;
+
+                foreach (IMethodSymbol? methodSymbol in orchestrationMethods)
                 {
-                    return;
-                }
-
-                AnalyzedOrchestration orchestration = new(classSymbol.Name);
-
-                IEnumerable<MethodDeclarationSyntax> methodSyntaxes = methodSymbol.GetSyntaxNodes();
-                foreach (MethodDeclarationSyntax rootMethodSyntax in methodSyntaxes)
-                {
-                    FindInvokedMethods(ctx.SemanticModel, rootMethodSyntax, methodSymbol, orchestration, result);
-                }
-            },
-                SyntaxKind.ClassDeclaration);
-
-            // look for ITaskOrchestrator Orchestrations
-            context.RegisterSyntaxNodeAction(
-                ctx =>
-            {
-                ctx.CancellationToken.ThrowIfCancellationRequested();
-
-                if (ctx.ContainingSymbol is not INamedTypeSymbol classSymbol)
-                {
-                    return;
-                }
-
-                // Gets the method that implements ITaskOrchestrator.RunAsync
-                if (classSymbol.FindImplementationForInterfaceMember(runAsyncTaskOrchestratorInterface) is not IMethodSymbol methodSymbol)
-                {
-                    return;
-                }
-
-                // Skip if the found method is implemented in TaskOrchestrator<TInput, TOutput>
-                if (methodSymbol.ContainingType.ConstructedFrom.Equals(knownSymbols.TaskOrchestratorBaseClass, SymbolEqualityComparer.Default))
-                {
-                    return;
-                }
-
-                AnalyzedOrchestration orchestration = new(classSymbol.Name);
-
-                IEnumerable<MethodDeclarationSyntax> methodSyntaxes = methodSymbol.GetSyntaxNodes();
-                foreach (MethodDeclarationSyntax rootMethodSyntax in methodSyntaxes)
-                {
-                    FindInvokedMethods(ctx.SemanticModel, rootMethodSyntax, methodSymbol, orchestration, result);
+                    IEnumerable<MethodDeclarationSyntax> methodSyntaxes = methodSymbol.GetSyntaxNodes();
+                    foreach (MethodDeclarationSyntax rootMethodSyntax in methodSyntaxes)
+                    {
+                        visitor.VisitTaskOrchestrator(ctx.SemanticModel, rootMethodSyntax, methodSymbol, functionName, ctx.ReportDiagnostic);
+                    }
                 }
             },
                 SyntaxKind.ClassDeclaration);
@@ -166,21 +130,24 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
 
                 // obtains the method symbol from the delegate creation operation
                 IMethodSymbol? methodSymbol = null;
+                SyntaxNode? methodSyntax = null;
                 switch (delegateCreationOperation.Target)
                 {
                     case IAnonymousFunctionOperation lambdaOperation:
                         // use the containing symbol of the lambda (e.g. the class declaring it) as the method symbol
                         methodSymbol = ctx.ContainingSymbol as IMethodSymbol;
+                        methodSyntax = delegateCreationOperation.Syntax;
                         break;
                     case IMethodReferenceOperation methodReferenceOperation:
                         // use the method reference as the method symbol
                         methodSymbol = methodReferenceOperation.Method;
+                        methodSyntax = methodReferenceOperation.Method.DeclaringSyntaxReferences.First().GetSyntax();
                         break;
                     default:
                         break;
                 }
 
-                if (methodSymbol == null)
+                if (methodSymbol == null || methodSyntax == null)
                 {
                     return;
                 }
@@ -190,39 +157,136 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
                 Optional<object?> name = nameArgument.GetConstantValueFromAttribute(ctx.Operation.SemanticModel!, ctx.CancellationToken);
                 string orchestrationName = name.Value?.ToString() ?? methodSymbol.Name;
 
-                AnalyzedOrchestration orchestration = new(orchestrationName);
-
-                SyntaxNode funcRootSyntax = delegateCreationOperation.Syntax;
-
-                FindInvokedMethods(ctx.Operation.SemanticModel!, funcRootSyntax, methodSymbol, orchestration, result);
+                visitor.VisitFuncOrchestrator(ctx.Operation.SemanticModel!, methodSyntax, methodSymbol, orchestrationName, ctx.ReportDiagnostic);
             },
                 OperationKind.Invocation);
-
-            // allows concrete implementations to register specific actions/analysis and then check if they happen in any of the orchestration methods
-            this.RegisterAdditionalCompilationStartAction(context, result);
         });
+    }
+}
+
+/// <summary>
+/// An Orchestration Visitor allows a concrete implementation of an analyzer to visit different types of orchestrations,
+/// such as Durable Functions, TaskOrchestrator, ITaskOrchestrator, and OrchestratorFunc.
+/// It provides a set of methods that can be overridden to inspect different types of orchestrations.
+/// Besides, it provides a method to initialize the visitor members, checking for available symbols and
+/// return whether the concrete implementation visitor should continue running and perform its analysis.
+/// </summary>
+public abstract class OrchestrationVisitor
+{
+    /// <summary>
+    /// Gets the Compilation instance acquired from the analyzer context, including syntax trees, semantic models, and other information.
+    /// </summary>
+    protected Compilation Compilation { get; private set; } = null!;
+
+    /// <summary>
+    /// Gets the set of well-known type symbols.
+    /// </summary>
+    protected KnownTypeSymbols KnownTypeSymbols { get; private set; } = null!;
+
+    /// <summary>
+    /// Initializes the visitor members and returns whether the concrete implementation visitor was initialized.
+    /// </summary>
+    /// <param name="compilation">The compilation acquired from analyzer context.</param>
+    /// <param name="knownTypeSymbols">The set of well-known type symbols instance.</param>
+    /// <returns>True if the analyzer can continue; false otherwise.</returns>
+    public bool Initialize(Compilation compilation, KnownTypeSymbols knownTypeSymbols)
+    {
+        this.Compilation = compilation;
+        this.KnownTypeSymbols = knownTypeSymbols;
+
+        return this.Initialize();
     }
 
     /// <summary>
-    /// Register additional actions to be executed after the compilation has started.
-    /// It is expected from a concrete implementation of <see cref="OrchestrationAnalyzer"/> to register a
-    /// <see cref="CompilationStartAnalysisContext.RegisterCompilationEndAction"/>
-    /// and then compare that to any discovered violations happened in any of the symbols in <paramref name="orchestrationAnalysisResult"/>.
+    /// Initializes a visitor concrete implementation instance and returns whether the analysis should continue.
     /// </summary>
-    /// <param name="context">Context originally provided by <see cref="AnalysisContext.RegisterCompilationAction"/>.</param>
-    /// <param name="orchestrationAnalysisResult">Collection of symbols referenced by orchestrations.</param>
-    protected abstract void RegisterAdditionalCompilationStartAction(CompilationStartAnalysisContext context, OrchestrationAnalysisResult orchestrationAnalysisResult);
+    /// <returns>True if the analyzer can continue; false otherwise.</returns>
+    public virtual bool Initialize() => true;
+
+    /// <summary>
+    /// Visits a Durable Function orchestration.
+    /// </summary>
+    /// <param name="semanticModel">Semantic Model.</param>
+    /// <param name="methodSyntax">Method Syntax Node.</param>
+    /// <param name="methodSymbol">Method Symbol.</param>
+    /// <param name="orchestrationName">Durable Function name.</param>
+    /// <param name="reportDiagnostic">Function that can be used to report diagnostics.</param>
+    public virtual void VisitDurableFunction(SemanticModel semanticModel, MethodDeclarationSyntax methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
+    {
+    }
+
+    /// <summary>
+    /// Visits a strongly typed Task Orchestrator that implements an ITaskOrchestrator orchestration.
+    /// </summary>
+    /// <param name="semanticModel">Semantic Model.</param>
+    /// <param name="methodSyntax">Method Syntax Node.</param>
+    /// <param name="methodSymbol">Method Symbol.</param>
+    /// <param name="orchestrationName">Class name.</param>
+    /// <param name="reportDiagnostic">Function that can be used to report diagnostics.</param>
+    public virtual void VisitTaskOrchestrator(SemanticModel semanticModel, MethodDeclarationSyntax methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
+    {
+    }
+
+    /// <summary>
+    /// Visits an Orchestrator Func orchestration.
+    /// </summary>
+    /// <param name="semanticModel">Semantic Model.</param>
+    /// <param name="methodSyntax">Method Syntax Node.</param>
+    /// <param name="methodSymbol">Method Symbol.</param>
+    /// <param name="orchestrationName">Class name.</param>
+    /// <param name="reportDiagnostic">Function that can be used to report diagnostics.</param>
+    public virtual void VisitFuncOrchestrator(SemanticModel semanticModel, SyntaxNode methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
+    {
+    }
+}
+
+/// <summary>
+/// Visitor that recursively inspects the methods invoked by an orchestration root method.
+/// </summary>
+public class MethodProbeOrchestrationVisitor : OrchestrationVisitor
+{
+    readonly ConcurrentDictionary<IMethodSymbol, ConcurrentBag<string>> orchestrationsByMethod = new(SymbolEqualityComparer.Default);
+
+    /// <inheritdoc/>
+    public override void VisitDurableFunction(SemanticModel semanticModel, MethodDeclarationSyntax methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
+    {
+        this.FindInvokedMethods(semanticModel, methodSyntax, methodSymbol, orchestrationName, reportDiagnostic);
+    }
+
+    /// <inheritdoc/>
+    public override void VisitTaskOrchestrator(SemanticModel semanticModel, MethodDeclarationSyntax methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
+    {
+        this.FindInvokedMethods(semanticModel, methodSyntax, methodSymbol, orchestrationName, reportDiagnostic);
+    }
+
+    /// <inheritdoc/>
+    public override void VisitFuncOrchestrator(SemanticModel semanticModel, SyntaxNode methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
+    {
+        this.FindInvokedMethods(semanticModel, methodSyntax, methodSymbol, orchestrationName, reportDiagnostic);
+    }
+
+    /// <summary>
+    /// Visits a method independent of the orchestration type.
+    /// </summary>
+    /// <param name="semanticModel">Semantic Model.</param>
+    /// <param name="methodSyntax">Method Syntax Node.</param>
+    /// <param name="methodSymbol">Method Symbol.</param>
+    /// <param name="orchestrationName">Orchestration name.</param>
+    /// <param name="reportDiagnostic">Function that can be used to report diagnostics.</param>
+    protected virtual void VisitMethod(SemanticModel semanticModel, SyntaxNode methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
+    {
+    }
 
     // Recursively find all methods invoked by the orchestration root method and call the appropriate visitor method
-    static void FindInvokedMethods(
+    void FindInvokedMethods(
         SemanticModel semanticModel,
         SyntaxNode callerSyntax,
         IMethodSymbol callerSymbol,
-        AnalyzedOrchestration rootOrchestration,
-        OrchestrationAnalysisResult result)
+        string rootOrchestration,
+        Action<Diagnostic> reportDiagnostic)
     {
         // add the visited method to the list of orchestrations
-        ConcurrentBag<AnalyzedOrchestration> orchestrations = result.OrchestrationsByMethod.GetOrAdd(callerSymbol, []);
+        ConcurrentBag<string> orchestrations = this.orchestrationsByMethod.GetOrAdd(callerSymbol, []);
         if (orchestrations.Contains(rootOrchestration))
         {
             // previously tracked method, leave to avoid infinite recursion
@@ -230,6 +294,9 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
         }
 
         orchestrations.Add(rootOrchestration);
+
+        // allow derived visitors to inspect methods independent of the specific orchestration type:
+        this.VisitMethod(semanticModel, callerSyntax, callerSymbol, rootOrchestration, reportDiagnostic);
 
         foreach (InvocationExpressionSyntax invocationSyntax in callerSyntax.DescendantNodes().OfType<InvocationExpressionSyntax>())
         {
@@ -249,39 +316,13 @@ public abstract class OrchestrationAnalyzer : DiagnosticAnalyzer
             IEnumerable<MethodDeclarationSyntax> calleeSyntaxes = calleeMethodSymbol.GetSyntaxNodes();
             foreach (MethodDeclarationSyntax calleeSyntax in calleeSyntaxes)
             {
-                FindInvokedMethods(semanticModel, calleeSyntax, calleeMethodSymbol, rootOrchestration, result);
+                // Since the syntax tree of the callee method might be different from the caller method, we need to get the correct semantic model,
+                // avoiding the exception 'Syntax node is not within syntax tree'.
+                SemanticModel sm = semanticModel.SyntaxTree == calleeSyntax.SyntaxTree ?
+                    semanticModel : semanticModel.Compilation.GetSemanticModel(calleeSyntax.SyntaxTree);
+
+                this.FindInvokedMethods(sm, calleeSyntax, calleeMethodSymbol, rootOrchestration, reportDiagnostic);
             }
         }
-    }
-
-    /// <summary>
-    /// Data structure to store the result of the orchestration methods analysis.
-    /// </summary>
-    protected readonly struct OrchestrationAnalysisResult
-    {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="OrchestrationAnalysisResult"/> struct.
-        /// </summary>
-        public OrchestrationAnalysisResult()
-        {
-            this.OrchestrationsByMethod = new(SymbolEqualityComparer.Default);
-        }
-
-        /// <summary>
-        /// Gets the orchestrations that invokes/reaches a given method.
-        /// </summary>
-        public ConcurrentDictionary<IMethodSymbol, ConcurrentBag<AnalyzedOrchestration>> OrchestrationsByMethod { get; }
-    }
-
-    /// <summary>
-    /// Data structure to store the orchestration data.
-    /// </summary>
-    /// <param name="name">Name of the orchestration.</param>
-    protected readonly struct AnalyzedOrchestration(string name)
-    {
-        /// <summary>
-        /// Gets the name of the orchestration.
-        /// </summary>
-        public string Name { get; } = name;
     }
 }

@@ -165,4 +165,22 @@
   <data name="OtherBindingsOrchestrationAnalyzerTitle" xml:space="preserve">
     <value>OrchestrationTrigger methods must not use any other bindings</value>
   </data>
+  <data name="EnvironmentOrchestrationAnalyzerMessageFormat" xml:space="preserve">
+    <value>The method '{0}' uses environment variables through '{1}' that may cause non-deterministic behavior when invoked from orchestration '{2}'</value>
+  </data>
+  <data name="EnvironmentOrchestrationAnalyzerTitle" xml:space="preserve">
+    <value>Environment variables must not be accessed inside an orchestrator function</value>
+  </data>
+  <data name="IOOrchestrationAnalyzerMessageFormat" xml:space="preserve">
+    <value>The method '{0}' performs I/O through '{1}' that may cause non-deterministic behavior when invoked from orchestration '{2}'</value>
+  </data>
+  <data name="IOOrchestrationAnalyzerTitle" xml:space="preserve">
+    <value>I/O operations are not allowed inside an orchestrator function</value>
+  </data>
+  <data name="ThreadTaskOrchestrationAnalyzerMessageFormat" xml:space="preserve">
+    <value>The method '{0}' uses non-deterministic Threads/Tasks operations by the invocation of '{1}' in orchestration '{2}'</value>
+  </data>
+  <data name="ThreadTaskOrchestrationAnalyzerTitle" xml:space="preserve">
+    <value>Thread and Task calls must be deterministic inside an orchestrator function</value>
+  </data>
 </root>

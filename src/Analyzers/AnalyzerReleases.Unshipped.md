@@ -8,6 +8,9 @@ Rule ID | Category | Severity | Notes
 DURABLE0001 | Orchestration | Warning | DateTimeOrchestrationAnalyzer
 DURABLE0002 | Orchestration | Warning | GuidOrchestrationAnalyzer
 DURABLE0003 | Orchestration | Warning | DelayOrchestrationAnalyzer
+DURABLE0004 | Orchestration | Warning | ThreadTaskOrchestrationAnalyzer
+DURABLE0005 | Orchestration | Warning | IOOrchestrationAnalyzer
+DURABLE0006 | Orchestration | Warning | EnvironmentOrchestrationAnalyzer
 DURABLE0007 | Orchestration | Warning | CancellationTokenOrchestrationAnalyzer
 DURABLE0008 | Orchestration | Warning | OtherBindingsOrchestrationAnalyzer
 DURABLE1001 | Attribute Binding | Error | OrchestrationTriggerBindingAnalyzer

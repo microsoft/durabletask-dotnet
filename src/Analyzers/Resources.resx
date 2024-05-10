@@ -183,4 +183,16 @@
   <data name="ThreadTaskOrchestrationAnalyzerTitle" xml:space="preserve">
     <value>Thread and Task calls must be deterministic inside an orchestrator function</value>
   </data>
+  <data name="InputArgumentTypeMismatchAnalyzerMessageFormat" xml:space="preserve">
+    <value>CallActivityAsync is passing the incorrect type '{0}' instead of '{1}' to the activity function '{2}'</value>
+  </data>
+  <data name="InputArgumentTypeMismatchAnalyzerTitle" xml:space="preserve">
+    <value>Activity function calls use the wrong argument type</value>
+  </data>
+  <data name="OutputArgumentTypeMismatchAnalyzerMessageFormat" xml:space="preserve">
+    <value>CallActivityAsync is expecting the return type '{0}' that does not match the return type '{1}' of the activity function '{2}'</value>
+  </data>
+  <data name="OutputArgumentTypeMismatchAnalyzerTitle" xml:space="preserve">
+    <value>Activity function call return type doesn't match function definition return type</value>
+  </data>
 </root>

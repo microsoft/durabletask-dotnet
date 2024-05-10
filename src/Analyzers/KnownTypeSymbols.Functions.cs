@@ -16,6 +16,7 @@ public sealed partial class KnownTypeSymbols
     INamedTypeSymbol? functionOrchestrationAttribute;
     INamedTypeSymbol? functionNameAttribute;
     INamedTypeSymbol? durableClientAttribute;
+    INamedTypeSymbol? activityTriggerAttribute;
     INamedTypeSymbol? entityTriggerAttribute;
     INamedTypeSymbol? taskEntityDispatcher;
 
@@ -33,6 +34,11 @@ public sealed partial class KnownTypeSymbols
     /// Gets a DurableClientAttribute type symbol.
     /// </summary>
     public INamedTypeSymbol? DurableClientAttribute => this.GetOrResolveFullyQualifiedType("Microsoft.Azure.Functions.Worker.DurableClientAttribute", ref this.durableClientAttribute);
+
+    /// <summary>
+    /// Gets an ActivityTriggerAttribute type symbol.
+    /// </summary>
+    public INamedTypeSymbol? ActivityTriggerAttribute => this.GetOrResolveFullyQualifiedType("Microsoft.Azure.Functions.Worker.ActivityTriggerAttribute", ref this.activityTriggerAttribute);
 
     /// <summary>
     /// Gets an EntityTriggerAttribute type symbol.

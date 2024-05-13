@@ -69,6 +69,7 @@ public sealed partial class KnownTypeSymbols
     /// Gets an Environment type symbol.
     /// </summary>
     public INamedTypeSymbol? Environment => this.GetOrResolveFullyQualifiedType(typeof(Environment).FullName, ref this.environment);
+#pragma warning restore RS1035
 
     /// <summary>
     /// Gets an HttpClient type symbol.

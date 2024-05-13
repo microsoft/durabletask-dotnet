@@ -37,7 +37,7 @@ public sealed class EnvironmentOrchestrationAnalyzer : OrchestrationAnalyzer<Env
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];
 
     /// <summary>
-    /// Visitor that inspects the method body for retrivals of Environment Variables through the <see cref="System.Environment" /> type.
+    /// Visitor that inspects the method body for retrievals of Environment Variables through the <see cref="System.Environment" /> type.
     /// </summary>
     public sealed class EnvironmentOrchestrationVisitor : MethodProbeOrchestrationVisitor
     {

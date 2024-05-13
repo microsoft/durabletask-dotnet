@@ -1,6 +1,6 @@
 ﻿# Changelog
 
-## <version>
+## v1.2.3
 
 ### Microsoft.DurableTask.Client
 
@@ -9,6 +9,7 @@
 ### Microsoft.DurableTask.Abstractions
 
 - Enable inner exception detail propagation in `TaskFailureDetails` ([#290](https://github.com/microsoft/durabletask-dotnet/pull/290))
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.17.0`
 
 ## v1.2.2
 

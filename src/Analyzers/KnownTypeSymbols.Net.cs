@@ -17,7 +17,12 @@ public sealed partial class KnownTypeSymbols
     INamedTypeSymbol? thread;
     INamedTypeSymbol? task;
     INamedTypeSymbol? taskT;
+    INamedTypeSymbol? taskFactory;
+    INamedTypeSymbol? taskContinuationOptions;
+    INamedTypeSymbol? taskFactoryT;
     INamedTypeSymbol? cancellationToken;
+    INamedTypeSymbol? environment;
+    INamedTypeSymbol? httpClient;
 
     /// <summary>
     /// Gets a Guid type symbol.
@@ -40,7 +45,34 @@ public sealed partial class KnownTypeSymbols
     public INamedTypeSymbol? TaskT => this.GetOrResolveFullyQualifiedType(typeof(Task<>).FullName, ref this.taskT);
 
     /// <summary>
+    /// Gets a TaskFactory type symbol.
+    /// </summary>
+    public INamedTypeSymbol? TaskFactory => this.GetOrResolveFullyQualifiedType(typeof(TaskFactory).FullName, ref this.taskFactory);
+
+    /// <summary>
+    /// Gets a TaskFactory&lt;T&gt; type symbol.
+    /// </summary>
+    public INamedTypeSymbol? TaskFactoryT => this.GetOrResolveFullyQualifiedType(typeof(TaskFactory<>).FullName, ref this.taskFactoryT);
+
+    /// <summary>
+    /// Gets a TaskContinuationOptions type symbol.
+    /// </summary>
+    public INamedTypeSymbol? TaskContinuationOptions => this.GetOrResolveFullyQualifiedType(typeof(TaskContinuationOptions).FullName, ref this.taskContinuationOptions);
+
+    /// <summary>
     /// Gets a CancellationToken type symbol.
     /// </summary>
     public INamedTypeSymbol? CancellationToken => this.GetOrResolveFullyQualifiedType(typeof(CancellationToken).FullName, ref this.cancellationToken);
+
+#pragma warning disable RS1035 // Environment Variables are not supposed to be used in Analyzers, but here we just reference the API, never using it.
+    /// <summary>
+    /// Gets an Environment type symbol.
+    /// </summary>
+    public INamedTypeSymbol? Environment => this.GetOrResolveFullyQualifiedType(typeof(Environment).FullName, ref this.environment);
+#pragma warning restore RS1035
+
+    /// <summary>
+    /// Gets an HttpClient type symbol.
+    /// </summary>
+    public INamedTypeSymbol? HttpClient => this.GetOrResolveFullyQualifiedType(typeof(HttpClient).FullName, ref this.httpClient);
 }

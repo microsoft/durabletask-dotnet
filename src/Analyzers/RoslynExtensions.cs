@@ -118,7 +118,8 @@ static class RoslynExtensions
     /// <returns>True if the method symbol is contained in the type symbol and has the method name, false otherwise.</returns>
     public static bool IsEqualTo(this IMethodSymbol methodSymbol, INamedTypeSymbol? typeSymbol, string methodName)
     {
-        return methodSymbol.ContainingType.Equals(typeSymbol, SymbolEqualityComparer.Default) &&
+        return (methodSymbol.ContainingType.Equals(typeSymbol, SymbolEqualityComparer.Default) ||
+            methodSymbol.ContainingType.OriginalDefinition.Equals(typeSymbol, SymbolEqualityComparer.Default)) &&
             methodSymbol.Name.Equals(methodName, StringComparison.Ordinal);
     }
 

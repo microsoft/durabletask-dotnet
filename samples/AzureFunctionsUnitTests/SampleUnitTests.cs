@@ -143,7 +143,7 @@ public class SampleUnitTests
 
         public override Uri Url => new Uri("http://localhost:8888/myUrl");
 
-        public override IEnumerable<ClaimsIdentity> Identities => new List<ClaimsIdentity>();
+        public override IEnumerable<ClaimsIdentity> Identities => Enumerable.Empty<ClaimsIdentity>();
 
         public override string Method => "POST";
 

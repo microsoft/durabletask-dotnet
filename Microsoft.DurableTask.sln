@@ -69,7 +69,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Analyzers", "src\Analyzers\
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Analyzers.Tests", "test\Analyzers.Tests\Analyzers.Tests.csproj", "{541FCCCE-1059-4691-B027-F761CD80DE92}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AzureFunctionsUnitTests", "samples\AzureFunctionsUnitTests\AzureFunctionsUnitTests.csproj", "{FC2692E7-79AE-400E-A50F-8E0BCC8C9BD9}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AzureFunctionsApp.Tests", "samples\AzureFunctionsUnitTests\AzureFunctionsApp.Tests.csproj", "{FC2692E7-79AE-400E-A50F-8E0BCC8C9BD9}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

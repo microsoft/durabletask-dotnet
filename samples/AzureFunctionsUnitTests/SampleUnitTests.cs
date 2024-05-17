@@ -127,7 +127,6 @@ public class SampleUnitTests
     // naive implementation of HttpRequestData for testing purposes
     public class TestRequestData : HttpRequestData
     {
-
         readonly FunctionContext context;
 
         public TestRequestData(FunctionContext functionContext) : base(functionContext)
@@ -156,20 +155,16 @@ public class SampleUnitTests
     // naive implementation of HttpResponseData for testing purposes, creating by TestRequestData's `CreateResponse` method
     public class TestResponse : HttpResponseData
     {
-        HttpStatusCode code = HttpStatusCode.NotFound;
-        Stream body = new MemoryStream();
-        HttpHeadersCollection headers = new HttpHeadersCollection();
-
         public TestResponse(FunctionContext functionContext) : base(functionContext)
         {
         }
 
-        public override HttpStatusCode StatusCode { get => this.code; set => this.code = value; }
-        public override HttpHeadersCollection Headers { get => this.headers; set { this.headers = value; } }
+        public override HttpStatusCode StatusCode { get; set; }
+        public override HttpHeadersCollection Headers { get; set; } = new HttpHeadersCollection();
 
         public override HttpCookies Cookies => throw new NotImplementedException();
 
-        public override Stream Body { get => this.body; set { this.body = value; } }
+        public override Stream Body { get; set; } = new MemoryStream();
     }
 
     public class TestLogger : ILogger

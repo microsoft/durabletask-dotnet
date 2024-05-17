@@ -58,7 +58,7 @@ public class SampleUnitTests
     }
 
     [Fact]
-    public async Task ClientReturnsUtrls()
+    public async Task ClientReturnsUrls()
     {
         // orchestrator instanceID ID we expect to generated
         var instanceId = "myInstanceId";

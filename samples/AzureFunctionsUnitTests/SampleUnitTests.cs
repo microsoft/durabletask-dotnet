@@ -87,7 +87,7 @@ public class SampleUnitTests
         var instanceServices = instanceServicesMock.Object;
         contextMock.Setup(x => x.InstanceServices).Returns(instanceServices);
 
-        // instnatiate worker context
+        // instantiate worker context
         var context = contextMock.Object;
 
         // Initialize mock'ed DurableTaskClient with the ability to start orchestrations

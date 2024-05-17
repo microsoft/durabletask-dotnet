@@ -177,7 +177,7 @@ public class SampleUnitTests
         // list of all logs emitted, for validation
         public IList<string> CapturedLogs {get; set;} = new List<string>();
 
-        public IDisposable BeginScope<TState>(TState state) => null;
+        public IDisposable BeginScope<TState>(TState state) => Mock.Of<IDisposable>();
 
         public bool IsEnabled(LogLevel logLevel)
         {

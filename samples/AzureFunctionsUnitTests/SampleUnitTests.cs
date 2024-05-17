@@ -16,6 +16,7 @@ using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using Moq.Protected;
 
 public class SampleUnitTests
 {
@@ -24,6 +25,14 @@ public class SampleUnitTests
     {
         // create mock orchestration context, and mock ILogger.
         Mock<TaskOrchestrationContext> contextMock = new();
+
+        // a simple ILogger that captures emitted logs in a list
+        TestLogger logger = new();
+
+        // The DurableTaskClient CreateReplaySafeLogger API obtains a logger from a protected LoggerFactory property, we mock it here
+        Mock<ILoggerFactory> loggerFactoryMock = new();
+        loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(logger);
+        contextMock.Protected().Setup<ILoggerFactory>("LoggerFactory").Returns(loggerFactoryMock.Object);
 
         // mock activity results
         // In Moq, optional arguments need to be specified as well. We specify them with It.IsAny<T>(), where T is the type of the optional argument
@@ -48,10 +57,28 @@ public class SampleUnitTests
     [Fact]
     public void ActivityReturnsGreeting()
     {
-        var contextMock = new Mock<FunctionContext>();
+        Mock<FunctionContext> contextMock = new();
+
+        // a simple ILogger that captures emitted logs in a list
+        TestLogger logger = new();
+
+        // Mock ILogger service, needed since an ILogger is created in the client via <FunctionContext>.GetLogger(...);
+        Mock<ILoggerFactory> loggerFactoryMock = new();
+        loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(logger);
+        Mock<IServiceProvider> instanceServicesMock = new();
+        instanceServicesMock.Setup(x => x.GetService(typeof(ILoggerFactory))).Returns(loggerFactoryMock.Object);
+
+        // register mock'ed DI services
+        var instanceServices = instanceServicesMock.Object;
+        contextMock.Setup(x => x.InstanceServices).Returns(instanceServices);
+
         var context = contextMock.Object;
 
         string output = AzureFunctionsApp.SayHello("Tokyo", context);
+
+        // Assert expected logs are emitted
+        var capturedLogs = logger.CapturedLogs;
+        Assert.Contains(capturedLogs, log => log.Contains("Saying hello to Tokyo."));
 
         // assert expected outputs  
         Assert.Equal("Hello Tokyo!", output);
@@ -66,15 +93,15 @@ public class SampleUnitTests
         // we need to mock the FunctionContext and provide it with two mocked services needed by the client
         // (1) an ILogger service
         // (2) an ObjectSerializer service,
-        var contextMock = new Mock<FunctionContext>();
+        Mock<FunctionContext> contextMock = new();
 
         // a simple ILogger that captures emitted logs in a list
-        var logger = new TestLogger();
+        TestLogger logger = new();
 
         // Mock ILogger service, needed since an ILogger is created in the client via <FunctionContext>.GetLogger(...);
-        var loggerFactoryMock = new Mock<ILoggerFactory>();
+        Mock<ILoggerFactory> loggerFactoryMock = new();
         loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(logger);
-        var instanceServicesMock = new Mock<IServiceProvider>();
+        Mock<IServiceProvider> instanceServicesMock = new();
         instanceServicesMock.Setup(x => x.GetService(typeof(ILoggerFactory))).Returns(loggerFactoryMock.Object);
 
         // mock JsonObjectSerializer service, used during HTTP response serialization
@@ -91,7 +118,7 @@ public class SampleUnitTests
         var context = contextMock.Object;
 
         // Initialize mock'ed DurableTaskClient with the ability to start orchestrations
-        var clientMock = new Mock<DurableTaskClient>("test client");
+        Mock<DurableTaskClient> clientMock = new("test client");
         clientMock.Setup(x => x.ScheduleNewOrchestrationInstanceAsync(nameof(AzureFunctionsApp),
             It.IsAny<object>(),
             It.IsAny<StartOrchestrationOptions>(),
@@ -100,7 +127,7 @@ public class SampleUnitTests
         var client = clientMock.Object;
 
         // Create dummy request object
-        var request = new TestRequestData(context);
+        TestRequestData request = new(context);
 
         // Invoke the function
         var output = await AzureFunctionsApp.HttpStart(request, client, context);
@@ -111,7 +138,7 @@ public class SampleUnitTests
 
         // deserialize http output
         output.Body.Seek(0, SeekOrigin.Begin);
-        using var reader = new StreamReader(output.Body, Encoding.UTF8);
+        using StreamReader reader = new(output.Body, Encoding.UTF8);
         string content = reader.ReadToEnd();
         Dictionary<string, string>? keyValuePairs = JsonSerializer.Deserialize<Dictionary<string, string>>(content);
 
@@ -136,11 +163,11 @@ public class SampleUnitTests
 
         public override Stream Body => new MemoryStream();
 
-        public override HttpHeadersCollection Headers => new HttpHeadersCollection();
+        public override HttpHeadersCollection Headers => new();
 
         public override IReadOnlyCollection<IHttpCookie> Cookies => new List<IHttpCookie>();
 
-        public override Uri Url => new Uri("http://localhost:8888/myUrl");
+        public override Uri Url => new("http://localhost:8888/myUrl");
 
         public override IEnumerable<ClaimsIdentity> Identities => Enumerable.Empty<ClaimsIdentity>();
 
@@ -160,7 +187,7 @@ public class SampleUnitTests
         }
 
         public override HttpStatusCode StatusCode { get; set; }
-        public override HttpHeadersCollection Headers { get; set; } = new HttpHeadersCollection();
+        public override HttpHeadersCollection Headers { get; set; } = new();
 
         public override HttpCookies Cookies => throw new NotImplementedException();
 

@@ -3,8 +3,18 @@
 
 namespace Company.Function; // same namespace as the Azure Functions app
 
+using System.IO;
+using System.Net;
+using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
+using Azure.Core.Serialization;
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask;
+using Microsoft.DurableTask.Client;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
 
 public class SampleUnitTests
@@ -45,5 +55,140 @@ public class SampleUnitTests
 
         // assert expected outputs  
         Assert.Equal("Hello Tokyo!", output);
+    }
+
+    [Fact]
+    public async Task ClientReturnsUtrls()
+    {
+        // orchestrator instanceID ID we expect to generated
+        var instanceId = "myInstanceId";
+
+        // we need to mock the FunctionContext and provide it with two mocked services needed by the client
+        // (1) an ILogger service
+        // (2) an ObjectSerializer service,
+        var contextMock = new Mock<FunctionContext>();
+
+        // a simple ILogger that captures emitted logs in a list
+        var logger = new TestLogger();
+
+        // Mock ILogger service, needed since an ILogger is created in the client via <FunctionContext>.GetLogger(...);
+        var loggerFactoryMock = new Mock<ILoggerFactory>();
+        loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(logger);
+        var instanceServicesMock = new Mock<IServiceProvider>();
+        instanceServicesMock.Setup(x => x.GetService(typeof(ILoggerFactory))).Returns(loggerFactoryMock.Object);
+
+        // mock JsonObjectSerializer service, used during HTTP response serialization
+        ObjectSerializer serializer = new JsonObjectSerializer();
+        IOptions<WorkerOptions> options = new OptionsWrapper<WorkerOptions>(new WorkerOptions());
+        options.Value.Serializer = serializer;
+        instanceServicesMock.Setup(x => x.GetService(typeof(IOptions<WorkerOptions>))).Returns(options);
+
+        // register mock'ed DI services
+        var instanceServices = instanceServicesMock.Object;
+        contextMock.Setup(x => x.InstanceServices).Returns(instanceServices);
+
+        // instnatiate worker context
+        var context = contextMock.Object;
+
+        // Initialize mock'ed DurableTaskClient with the ability to start orchestrations
+        var clientMock = new Mock<DurableTaskClient>("test client");
+        clientMock.Setup(x => x.ScheduleNewOrchestrationInstanceAsync(nameof(AzureFunctionsApp),
+            It.IsAny<object>(),
+            It.IsAny<StartOrchestrationOptions>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(instanceId);
+        var client = clientMock.Object;
+
+        // Create dummy request object
+        var request = new TestRequestData(context);
+
+        // Invoke the function
+        var output = await AzureFunctionsApp.HttpStart(request, client, context);
+
+        // Assert expected logs are emitted
+        var capturedLogs = logger.CapturedLogs;
+        Assert.Contains(capturedLogs, log => log.Contains($"Started orchestration with ID = '{instanceId}'"));
+
+        // deserialize http output
+        output.Body.Seek(0, SeekOrigin.Begin);
+        using var reader = new StreamReader(output.Body, Encoding.UTF8);
+        string content = reader.ReadToEnd();
+        Dictionary<string, string>? keyValuePairs = JsonSerializer.Deserialize<Dictionary<string, string>>(content);
+
+        // Validate format of response URLs
+        Assert.NotNull(keyValuePairs);
+        Assert.Contains(keyValuePairs, kvp => kvp.Key == "id" && kvp.Value == instanceId);
+        Assert.Contains(keyValuePairs, kvp => kvp.Key == "purgeHistoryDeleteUri" && kvp.Value == $"http://localhost:8888/runtime/webhooks/durabletask/instances/{instanceId}");
+        Assert.Contains(keyValuePairs, kvp => kvp.Key == "sendEventPostUri" && kvp.Value == $"http://localhost:8888/runtime/webhooks/durabletask/instances/{instanceId}/raiseEvent/{{eventName}}");
+        Assert.Contains(keyValuePairs, kvp => kvp.Key == "statusQueryGetUri" && kvp.Value == $"http://localhost:8888/runtime/webhooks/durabletask/instances/{instanceId}");
+
+    }
+
+    // naive implementation of HttpRequestData for testing purposes
+    public class TestRequestData : HttpRequestData
+    {
+
+        readonly FunctionContext context;
+
+        public TestRequestData(FunctionContext functionContext) : base(functionContext)
+        {
+            this.context = functionContext;
+        }
+
+        public override Stream Body => new MemoryStream();
+
+        public override HttpHeadersCollection Headers => new HttpHeadersCollection();
+
+        public override IReadOnlyCollection<IHttpCookie> Cookies => new List<IHttpCookie>();
+
+        public override Uri Url => new Uri("http://localhost:8888/myUrl");
+
+        public override IEnumerable<ClaimsIdentity> Identities => new List<ClaimsIdentity>();
+
+        public override string Method => "POST";
+
+        public override HttpResponseData CreateResponse()
+        {
+            return new TestResponse(this.context);
+        }
+    }
+
+    // naive implementation of HttpResponseData for testing purposes, creating by TestRequestData's `CreateResponse` method
+    public class TestResponse : HttpResponseData
+    {
+        HttpStatusCode code = HttpStatusCode.NotFound;
+        Stream body = new MemoryStream();
+        HttpHeadersCollection headers = new HttpHeadersCollection();
+
+        public TestResponse(FunctionContext functionContext) : base(functionContext)
+        {
+        }
+
+        public override HttpStatusCode StatusCode { get => this.code; set => this.code = value; }
+        public override HttpHeadersCollection Headers { get => this.headers; set { this.headers = value; } }
+
+        public override HttpCookies Cookies => throw new NotImplementedException();
+
+        public override Stream Body { get => this.body; set { this.body = value; } }
+    }
+
+    public class TestLogger : ILogger
+    {
+        // list of all logs emitted, for validation
+        public IList<string> CapturedLogs {get; set;} = new List<string>();
+
+        public IDisposable BeginScope<TState>(TState state) => null;
+
+        public bool IsEnabled(LogLevel logLevel)
+        {
+            return true;
+        }
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            string formattedLog = formatter(state, exception);
+            this.CapturedLogs.Add(formattedLog);
+        }
+
     }
 }

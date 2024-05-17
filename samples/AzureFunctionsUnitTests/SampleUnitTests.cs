@@ -23,7 +23,7 @@ public class SampleUnitTests
     public async Task OrchestrationReturnsMultipleGreetings()
     {
         // create mock orchestration context, and mock ILogger.
-        var contextMock = new Mock<TaskOrchestrationContext>();
+        Mock<TaskOrchestrationContext> contextMock = new();
 
         // mock activity results
         // In Moq, optional arguments need to be specified as well. We specify them with It.IsAny<T>(), where T is the type of the optional argument

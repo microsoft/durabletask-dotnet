@@ -17,6 +17,7 @@ namespace Company.Function
         {
             ILogger logger = context.CreateReplaySafeLogger(nameof(AzureFunctionsApp));
             logger.LogInformation("Saying hello.");
+
             var outputs = new List<string>();
 
             // Replace name and input with values relevant for your Durable Functions Activity

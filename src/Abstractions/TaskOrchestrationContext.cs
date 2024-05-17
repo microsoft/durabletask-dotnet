@@ -385,7 +385,7 @@ public abstract class TaskOrchestrationContext
     /// </summary>
     /// <param name="categoryName">The logger's category name.</param>
     /// <returns>An instance of <see cref="ILogger"/> that is replay-safe.</returns>
-    public ILogger CreateReplaySafeLogger(string categoryName)
+    public virtual ILogger CreateReplaySafeLogger(string categoryName)
         => new ReplaySafeLogger(this, this.LoggerFactory.CreateLogger(categoryName));
 
     /// <inheritdoc cref="CreateReplaySafeLogger(string)" />

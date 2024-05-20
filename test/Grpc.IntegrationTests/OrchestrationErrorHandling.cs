@@ -222,6 +222,56 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
     }
 
+    [Theory]
+    [InlineData(10, typeof(ApplicationException), false, 2, 1)] // 1 attempt since retry timeout expired.
+    [InlineData(2, typeof(ApplicationException), false, null, 1)] // 1 attempt since handler specifies no retry.
+    [InlineData(2, typeof(CustomException), true, null, 2)] // 2 attempts, custom exception type
+    [InlineData(10, typeof(XunitException), true, null, 10)] // 10 attempts, 3rd party exception type
+    public async Task RetryActivityFailuresCustomLogicAndPolicy(int maxNumberOfAttempts, Type exceptionType, bool isRetryException, int? retryTimeout, int expectedNumberOfAttempts)
+    {
+        string errorMessage = "Kah-BOOOOOM!!!"; // Use an obviously fake error message to avoid confusion when debugging
+
+        int retryHandlerCalls = 0;
+        RetryPolicy retryPolicy = new(
+            maxNumberOfAttempts,
+            firstRetryInterval: TimeSpan.FromMilliseconds(1),
+            backoffCoefficient: 2,
+            retryTimeout: retryTimeout.HasValue ? TimeSpan.FromMilliseconds(retryTimeout.Value) : null,
+            handle: taskFailedException =>
+            {
+                retryHandlerCalls++;
+                return !taskFailedException.FailureDetails.IsCausedBy(exceptionType) || isRetryException;
+            });
+        TaskOptions taskOptions = TaskOptions.FromRetryPolicy(retryPolicy);
+
+        int actualNumberOfAttempts = 0;
+
+        TaskName orchestratorName = "BustedOrchestration";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks =>
+                tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
+                {
+                    await ctx.CallActivityAsync("Foo", options: taskOptions);
+                })
+                .AddActivityFunc("Foo", (TaskActivityContext context) =>
+                {
+                    actualNumberOfAttempts++;
+                    throw MakeException(exceptionType, errorMessage);
+                }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+        Assert.Equal(expectedNumberOfAttempts, retryHandlerCalls);
+        Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
+    }
+
     /// <summary>
     /// Tests retry policies for sub-orchestration calls.
     /// </summary>
@@ -267,6 +317,60 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
 
         // The root orchestration failed due to a failure with the sub-orchestration, resulting in a TaskFailedException
         Assert.True(metadata.FailureDetails.IsCausedBy<TaskFailedException>());
+    }
+
+    [Theory]
+    [InlineData(10, typeof(ApplicationException), false, 2, 1)] // 1 attempt since retry timeout expired.
+    [InlineData(2, typeof(ApplicationException), false, null, 1)] // 1 attempt since handler specifies no retry.
+    [InlineData(2, typeof(CustomException), true, null, 2)] // 2 attempts, custom exception type
+    [InlineData(10, typeof(XunitException), true, null, 10)] // 10 attempts, 3rd party exception type
+    public async Task RetrySubOrchestratorFailuresCustomLogicAndPolicy(int maxNumberOfAttempts, Type exceptionType, bool isRetryException, int? retryTimeout, int expectedNumberOfAttempts)
+    {
+        string errorMessage = "Kah-BOOOOOM!!!"; // Use an obviously fake error message to avoid confusion when debugging
+
+        int retryHandlerCalls = 0;
+        RetryPolicy retryPolicy = new(
+            maxNumberOfAttempts,
+            firstRetryInterval: TimeSpan.FromMilliseconds(1),
+            backoffCoefficient: 2,
+            retryTimeout: retryTimeout.HasValue ? TimeSpan.FromMilliseconds(retryTimeout.Value) : null,
+            handle: taskFailedException =>
+            {
+                retryHandlerCalls++;
+                return !taskFailedException.FailureDetails.IsCausedBy(exceptionType) || isRetryException;
+            });
+        TaskOptions taskOptions = TaskOptions.FromRetryPolicy(retryPolicy);
+
+        int actualNumberOfAttempts = 0;
+
+        TaskName orchestratorName = "OrchestrationWithBustedSubOrchestrator";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks =>
+                tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
+                {
+                    await ctx.CallSubOrchestratorAsync("BustedSubOrchestrator", options: taskOptions);
+                })
+                .AddOrchestratorFunc("BustedSubOrchestrator", context =>
+                {
+                    actualNumberOfAttempts++;
+                    throw MakeException(exceptionType, errorMessage);
+                }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+        Assert.Equal(expectedNumberOfAttempts, retryHandlerCalls);
+        Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
+
+        // The root orchestration failed due to a failure with the sub-orchestration, resulting in a TaskFailedException
+        Assert.NotNull(metadata.FailureDetails);
+        Assert.True(metadata.FailureDetails!.IsCausedBy<TaskFailedException>());
     }
 
     [Theory]

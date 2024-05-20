@@ -20,6 +20,7 @@ public class RetryPolicy
     /// The maximum time to delay between attempts, regardless of<paramref name="backoffCoefficient"/>.
     /// </param>
     /// <param name="retryTimeout">The overall timeout for retries.</param>
+    /// <param name="handle">Delegate to call on exception to determine if retries should proceed.</param>
     /// <remarks>
     /// The value <see cref="Timeout.InfiniteTimeSpan"/> can be used to specify an unlimited timeout for
     /// <paramref name="maxRetryInterval"/> or <paramref name="retryTimeout"/>.
@@ -39,7 +40,8 @@ public class RetryPolicy
         TimeSpan firstRetryInterval,
         double backoffCoefficient = 1.0,
         TimeSpan? maxRetryInterval = null,
-        TimeSpan? retryTimeout = null)
+        TimeSpan? retryTimeout = null,
+        Func<TaskFailedException, bool>? handle = null)
     {
         if (maxNumberOfAttempts <= 0)
         {
@@ -86,6 +88,7 @@ public class RetryPolicy
         this.BackoffCoefficient = backoffCoefficient;
         this.MaxRetryInterval = maxRetryInterval ?? TimeSpan.FromHours(1);
         this.RetryTimeout = retryTimeout ?? Timeout.InfiniteTimeSpan;
+        this.SetHandler(handle);
     }
 
     /// <summary>
@@ -122,6 +125,50 @@ public class RetryPolicy
     /// Defaults to <see cref="Timeout.InfiniteTimeSpan"/>.
     /// </value>
     public TimeSpan RetryTimeout { get; }
+
+    /// <summary>
+    /// Gets a delegate to call on exception to determine if retries should proceed.
+    /// </summary>
+    /// <value>
+    /// Defaults delegate that always returns true (i.e., all exceptions are retried).
+    /// </value>
+    public Func<Exception, bool> Handle { get; private set; }
+
+    /// <summary>
+    /// Set <see cref="Handle"/> delegate property.
+    /// </summary>
+    /// <param name="handle">
+    /// Deletegate that receives <see cref="TaskFailedException"/> and returns boolean that
+    /// determines if the task should be retried.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// This represents a defect in this library in that it should always receive wither
+    /// <see cref="global::DurableTask.Core.Exceptions.TaskFailedException"/> or
+    /// <see cref="global::DurableTask.Core.Exceptions.SubOrchestrationFailedException"/>.
+    /// </exception>
+    void SetHandler(Func<TaskFailedException, bool>? handle)
+    {
+        this.Handle = handle is null
+            ? ((ex) => true)
+            : ((ex) =>
+            {
+                if (ex is global::DurableTask.Core.Exceptions.TaskFailedException globalTaskFailedException)
+                {
+                    var taskFailedException = new TaskFailedException(globalTaskFailedException.Name, globalTaskFailedException.ScheduleId, globalTaskFailedException);
+                    return handle.Invoke(taskFailedException);
+                }
+                else if (ex is global::DurableTask.Core.Exceptions.SubOrchestrationFailedException globalSubOrchestrationFailedException)
+                {
+                    var taskFailedException = new TaskFailedException(globalSubOrchestrationFailedException.Name, globalSubOrchestrationFailedException.ScheduleId, globalSubOrchestrationFailedException);
+                    return handle.Invoke(taskFailedException);
+                }
+                else
+                {
+                    throw new InvalidOperationException("TaskFailedException nor SubOrchestrationFailedException were not received.");
+                }
+            });
+    }
+
 
 #pragma warning disable SA1623 // Property summary documentation should match accessors
     /// <summary>

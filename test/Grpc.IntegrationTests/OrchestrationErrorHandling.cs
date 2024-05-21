@@ -245,10 +245,10 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
             firstRetryInterval: TimeSpan.FromMilliseconds(1),
             backoffCoefficient: 2,
             retryTimeout: retryTimeout.HasValue ? TimeSpan.FromMilliseconds(retryTimeout.Value) : null,
-            handle: taskFailedException =>
+            handle: taskFailureDetails =>
             {
                 retryHandlerCalls++;
-                return taskFailedException.FailureDetails.IsCausedBy(exceptionType) && retryException;
+                return taskFailureDetails.IsCausedBy(exceptionType) && retryException;
             });
         TaskOptions taskOptions = TaskOptions.FromRetryPolicy(retryPolicy);
 
@@ -352,10 +352,10 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
             firstRetryInterval: TimeSpan.FromMilliseconds(1),
             backoffCoefficient: 2,
             retryTimeout: retryTimeout.HasValue ? TimeSpan.FromMilliseconds(retryTimeout.Value) : null,
-            handle: taskFailedException =>
+            handle: taskFailureDetails =>
             {
                 retryHandlerCalls++;
-                return taskFailedException.FailureDetails.IsCausedBy(exceptionType) && retryException;
+                return taskFailureDetails.IsCausedBy(exceptionType) && retryException;
             });
         TaskOptions taskOptions = TaskOptions.FromRetryPolicy(retryPolicy);
 

@@ -55,19 +55,21 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebAPI", "samples\WebAPI\We
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shared", "src\Shared\Shared.csproj", "{57A4C812-B0D9-49E9-9EBE-7E94D3D78ED7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "misc", "misc\misc.csproj", "{1E135970-60CF-470A-9270-4560BFA0A7DF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "misc", "misc\misc.csproj", "{1E135970-60CF-470A-9270-4560BFA0A7DF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.OrchestrationServiceClientShim", "src\Client\OrchestrationServiceClientShim\Client.OrchestrationServiceClientShim.csproj", "{505F6151-6E36-4E0A-A740-14751B8A9397}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Client.OrchestrationServiceClientShim", "src\Client\OrchestrationServiceClientShim\Client.OrchestrationServiceClientShim.csproj", "{505F6151-6E36-4E0A-A740-14751B8A9397}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.OrchestrationServiceClientShim.Tests", "test\Client\OrchestrationServiceClientShim.Tests\Client.OrchestrationServiceClientShim.Tests.csproj", "{93E3B973-0FC4-4241-B7BB-064FB538FB50}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Client.OrchestrationServiceClientShim.Tests", "test\Client\OrchestrationServiceClientShim.Tests\Client.OrchestrationServiceClientShim.Tests.csproj", "{93E3B973-0FC4-4241-B7BB-064FB538FB50}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Grpc", "src\Grpc\Grpc.csproj", "{44AD321D-96D4-481E-BD41-D0B12A619833}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Grpc", "src\Grpc\Grpc.csproj", "{44AD321D-96D4-481E-BD41-D0B12A619833}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Benchmarks", "test\Benchmarks\Benchmarks.csproj", "{82C0CD7D-2764-421A-8256-7E2304D5A6E7}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Benchmarks", "test\Benchmarks\Benchmarks.csproj", "{82C0CD7D-2764-421A-8256-7E2304D5A6E7}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Analyzers", "src\Analyzers\Analyzers.csproj", "{998E9D97-BD36-4A9D-81FC-5DAC1CE40083}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Analyzers.Tests", "test\Analyzers.Tests\Analyzers.Tests.csproj", "{541FCCCE-1059-4691-B027-F761CD80DE92}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AzureFunctionsApp.Tests", "samples\AzureFunctionsUnitTests\AzureFunctionsApp.Tests.csproj", "{FC2692E7-79AE-400E-A50F-8E0BCC8C9BD9}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -179,6 +181,10 @@ Global
 		{541FCCCE-1059-4691-B027-F761CD80DE92}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{541FCCCE-1059-4691-B027-F761CD80DE92}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{541FCCCE-1059-4691-B027-F761CD80DE92}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FC2692E7-79AE-400E-A50F-8E0BCC8C9BD9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FC2692E7-79AE-400E-A50F-8E0BCC8C9BD9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FC2692E7-79AE-400E-A50F-8E0BCC8C9BD9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FC2692E7-79AE-400E-A50F-8E0BCC8C9BD9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -213,6 +219,7 @@ Global
 		{82C0CD7D-2764-421A-8256-7E2304D5A6E7} = {E5637F81-2FB9-4CD7-900D-455363B142A7}
 		{998E9D97-BD36-4A9D-81FC-5DAC1CE40083} = {8AFC9781-F6F1-4696-BB4A-9ED7CA9D612B}
 		{541FCCCE-1059-4691-B027-F761CD80DE92} = {E5637F81-2FB9-4CD7-900D-455363B142A7}
+		{FC2692E7-79AE-400E-A50F-8E0BCC8C9BD9} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AB41CB55-35EA-4986-A522-387AB3402E71}

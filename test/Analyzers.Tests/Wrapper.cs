@@ -48,10 +48,16 @@ public class Program
     static string Usings()
     {
         return $@"
+using Azure.Storage.Blobs;
+using Azure.Storage.Queues;
+using Azure.Data.Tables;
 using System;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Cosmos;
+using Microsoft.Data.SqlClient;
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;

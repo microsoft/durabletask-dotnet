@@ -211,7 +211,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
 
     /// <inheritdoc cref="TerminateInstanceAsync(string, TerminateInstanceOptions, CancellationToken)"/>
     public virtual Task TerminateInstanceAsync(string instanceId, CancellationToken cancellation)
-        => this.TerminateInstanceAsync(instanceId, null, cancellation);
+        => this.TerminateInstanceAsync(instanceId, output: null, cancellation);
 
     /// <inheritdoc cref="TerminateInstanceAsync(string, TerminateInstanceOptions, CancellationToken)"/>
     public virtual Task TerminateInstanceAsync(string instanceId, object? output = null, CancellationToken cancellation = default)

@@ -337,7 +337,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     public abstract AsyncPageable<OrchestrationMetadata> GetAllInstancesAsync(OrchestrationQuery? filter = null);
 
     /// <inheritdoc cref="PurgeInstanceAsync(string, PurgeInstanceOptions, CancellationToken)"/>
-    public virtual Task<PurgeResult> PurgeInstanceAsync(string instanceId, CancellationToken cancellation = default)
+    public virtual Task<PurgeResult> PurgeInstanceAsync(string instanceId, CancellationToken cancellation)
         => this.PurgeInstanceAsync(instanceId, null, cancellation);
 
     /// <summary>
@@ -377,7 +377,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     }
 
     /// <inheritdoc cref="PurgeAllInstancesAsync(PurgeInstancesFilter, PurgeInstanceOptions, CancellationToken)"/>
-    public virtual Task<PurgeResult> PurgeAllInstancesAsync(PurgeInstancesFilter filter, CancellationToken cancellation = default)
+    public virtual Task<PurgeResult> PurgeAllInstancesAsync(PurgeInstancesFilter filter, CancellationToken cancellation)
         => this.PurgeAllInstancesAsync(filter, null, cancellation);
 
     /// <summary>

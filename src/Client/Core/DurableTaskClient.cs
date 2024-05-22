@@ -377,7 +377,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     }
 
     /// <inheritdoc cref="PurgeAllInstancesAsync(PurgeInstancesFilter, PurgeInstanceOptions, CancellationToken)"/>
-    public virtual Task<PurgeResult> PurgeAllInstancesAsync(PurgeInstancesFilter filter, CancellationToken cancellation)
+    public virtual Task<PurgeResult> PurgeAllInstancesAsync(PurgeInstancesFilter filter, CancellationToken cancellation = default)
         => this.PurgeAllInstancesAsync(filter, null, cancellation);
 
     /// <summary>

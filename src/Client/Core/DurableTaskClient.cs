@@ -210,11 +210,11 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default);
 
     /// <inheritdoc cref="TerminateInstanceAsync(string, TerminateInstanceOptions, CancellationToken)"/>
-    public virtual Task TerminateInstanceAsync(string instanceId, CancellationToken cancellation = default)
+    public virtual Task TerminateInstanceAsync(string instanceId, CancellationToken cancellation)
         => this.TerminateInstanceAsync(instanceId, null, cancellation);
 
     /// <inheritdoc cref="TerminateInstanceAsync(string, TerminateInstanceOptions, CancellationToken)"/>
-    public virtual Task TerminateInstanceAsync(string instanceId, object? output, CancellationToken cancellation = default)
+    public virtual Task TerminateInstanceAsync(string instanceId, object? output = null, CancellationToken cancellation = default)
     {
         TerminateInstanceOptions? options = output is null ? null : new() { Output = output };
         return this.TerminateInstanceAsync(instanceId, options, cancellation);

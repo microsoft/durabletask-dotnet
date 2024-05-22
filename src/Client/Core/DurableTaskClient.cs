@@ -216,7 +216,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <inheritdoc cref="TerminateInstanceAsync(string, TerminateInstanceOptions, CancellationToken)"/>
     public virtual Task TerminateInstanceAsync(string instanceId, object? output = null, CancellationToken cancellation = default)
     {
-        TerminateInstanceOptions? options = output is null ? null : new() { Output = output };
+        TerminateInstanceOptions? options = new() { Output = output };
         return this.TerminateInstanceAsync(instanceId, options, cancellation);
     }
 
@@ -252,7 +252,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// termination of the orchestration once enqueued.
     /// </param>
     /// <returns>A task that completes when the terminate message is enqueued.</returns>
-    public virtual Task TerminateInstanceAsync(string instanceId, TerminateInstanceOptions? options = null, CancellationToken cancellation = default)
+    public virtual Task TerminateInstanceAsync(string instanceId, TerminateInstanceOptions options, CancellationToken cancellation = default)
         => throw new NotSupportedException($"{this.GetType()} does not support orchestration termination.");
 
     /// <inheritdoc cref="SuspendInstanceAsync(string, string, CancellationToken)"/>

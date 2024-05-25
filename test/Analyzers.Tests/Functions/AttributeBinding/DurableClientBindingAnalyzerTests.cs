@@ -5,7 +5,7 @@ using Microsoft.DurableTask.Analyzers.Functions.AttributeBinding;
 
 namespace Microsoft.DurableTask.Analyzers.Tests.Functions.AttributeBinding;
 
-public class DurableClientBindingAnalyzerTests : MatchingAttributeBindingSpecificationTests<DurableClientBindingAnalyzer>
+public class DurableClientBindingAnalyzerTests : MatchingAttributeBindingSpecificationTests<DurableClientBindingAnalyzer, DurableClientBindingFixer>
 {
     protected override string ExpectedDiagnosticId => DurableClientBindingAnalyzer.DiagnosticId;
 

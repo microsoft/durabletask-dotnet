@@ -5,7 +5,7 @@ using Microsoft.DurableTask.Analyzers.Functions.AttributeBinding;
 
 namespace Microsoft.DurableTask.Analyzers.Tests.Functions.AttributeBinding;
 
-public class OrchestrationTriggerBindingAnalyzerTests : MatchingAttributeBindingSpecificationTests<OrchestrationTriggerBindingAnalyzer>
+public class OrchestrationTriggerBindingAnalyzerTests : MatchingAttributeBindingSpecificationTests<OrchestrationTriggerBindingAnalyzer, OrchestrationTriggerBindingFixer>
 {
     protected override string ExpectedDiagnosticId => OrchestrationTriggerBindingAnalyzer.DiagnosticId;
 

@@ -4,7 +4,7 @@
 using Microsoft.CodeAnalysis.Testing;
 using Microsoft.DurableTask.Analyzers.Orchestration;
 
-using VerifyCS = Microsoft.DurableTask.Analyzers.Tests.Verifiers.CSharpAnalyzerVerifier<Microsoft.DurableTask.Analyzers.Orchestration.DateTimeOrchestrationAnalyzer>;
+using VerifyCS = Microsoft.DurableTask.Analyzers.Tests.Verifiers.CSharpCodeFixVerifier<Microsoft.DurableTask.Analyzers.Orchestration.DateTimeOrchestrationAnalyzer, Microsoft.DurableTask.Analyzers.Orchestration.DateTimeOrchestrationFixer>;
 
 namespace Microsoft.DurableTask.Analyzers.Tests.Orchestration;
 
@@ -45,7 +45,6 @@ void Method(){
     [Theory]
     [InlineData("DateTime.Now")]
     [InlineData("DateTime.UtcNow")]
-    [InlineData("DateTime.Today")]
     public async Task DurableFunctionOrchestrationUsingDateTimeNonDeterministicPropertiesHasDiag(string expression)
     {
         string code = Wrapper.WrapDurableFunctionOrchestration($@"
@@ -56,9 +55,41 @@ DateTime Run([OrchestrationTrigger] TaskOrchestrationContext context)
 }}
 ");
 
+        string fix = Wrapper.WrapDurableFunctionOrchestration($@"
+[Function(""Run"")]
+DateTime Run([OrchestrationTrigger] TaskOrchestrationContext context)
+{{
+    return context.CurrentUtcDateTime;
+}}
+");
+
         DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Run", $"System.{expression}", "Run");
 
-        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
+    }
+
+    [Fact]
+    public async Task DurableFunctionOrchestrationUsingDateTimeTodayHasDiag()
+    {
+        string code = Wrapper.WrapDurableFunctionOrchestration(@"
+[Function(""Run"")]
+DateTime Run([OrchestrationTrigger] TaskOrchestrationContext context)
+{
+    return {|#0:DateTime.Today|};
+}
+");
+
+        string fix = Wrapper.WrapDurableFunctionOrchestration($@"
+[Function(""Run"")]
+DateTime Run([OrchestrationTrigger] TaskOrchestrationContext context)
+{{
+    return context.CurrentUtcDateTime.Date;
+}}
+");
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Run", $"System.DateTime.Today", "Run");
+
+        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
     }
 
     [Fact]
@@ -187,16 +218,24 @@ public class MyOrchestrator : TaskOrchestrator<string, DateTime>
 {
     public override Task<DateTime> RunAsync(TaskOrchestrationContext context, string input)
     {
-        return Task.FromResult(Method());
+        return Task.FromResult({|#0:DateTime.Now|});
     }
-
-    private DateTime Method() => {|#0:DateTime.Now|};
 }
 ");
 
-        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Method", "System.DateTime.Now", "MyOrchestrator");
+        string fix = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, DateTime>
+{
+    public override Task<DateTime> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        return Task.FromResult(context.CurrentUtcDateTime);
+    }
+}
+");
 
-        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("RunAsync", "System.DateTime.Now", "MyOrchestrator");
+
+        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
     }
 
     [Fact]
@@ -259,9 +298,16 @@ tasks.AddOrchestratorFunc(""HelloSequence"", context =>
 });
 ");
 
+        string fix = Wrapper.WrapFuncOrchestrator(@"
+tasks.AddOrchestratorFunc(""HelloSequence"", context =>
+{
+    return context.CurrentUtcDateTime;
+});
+");
+
         DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Main", "System.DateTime.Now", "HelloSequence");
 
-        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
     }
 
     [Fact]
@@ -293,9 +339,35 @@ public class Program
 }
 ";
 
+        string fix = @"
+using System;
+using Microsoft.DurableTask;
+using Microsoft.DurableTask.Worker;
+using Microsoft.Extensions.DependencyInjection;
+
+public class Program
+{
+    public static void Main()
+    {
+        new ServiceCollection().AddDurableTaskWorker(builder =>
+        {
+            builder.AddTasks(tasks =>
+            {
+                tasks.AddOrchestratorFunc(""MyRun"", MyRunAsync);
+            });
+        });
+    }
+
+    static DateTime MyRunAsync(TaskOrchestrationContext context)
+    {
+        return context.CurrentUtcDateTime;
+    }
+}
+";
+
         DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("MyRunAsync", "System.DateTime.Now", "MyRun");
 
-        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
     }
 
 

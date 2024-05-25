@@ -3,8 +3,7 @@
 
 using Microsoft.CodeAnalysis.Testing;
 using Microsoft.DurableTask.Analyzers.Orchestration;
-
-using VerifyCS = Microsoft.DurableTask.Analyzers.Tests.Verifiers.CSharpAnalyzerVerifier<Microsoft.DurableTask.Analyzers.Orchestration.DelayOrchestrationAnalyzer>;
+using VerifyCS = Microsoft.DurableTask.Analyzers.Tests.Verifiers.CSharpCodeFixVerifier<Microsoft.DurableTask.Analyzers.Orchestration.DelayOrchestrationAnalyzer, Microsoft.DurableTask.Analyzers.Orchestration.DelayOrchestrationFixer>;
 
 namespace Microsoft.DurableTask.Analyzers.Tests.Orchestration;
 
@@ -40,12 +39,23 @@ void Method([OrchestrationTrigger] TaskOrchestrationContext context)
 [Function(""Run"")]
 async Task Method([OrchestrationTrigger] TaskOrchestrationContext context)
 {
-    await {|#0:Task.Delay(1000)|};
+    CancellationToken t = CancellationToken.None;
+    await {|#0:Task.Delay(1000, t)|};
 }
 ");
-        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Method", "Task.Delay(int)", "Run");
 
-        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+        string fix = Wrapper.WrapDurableFunctionOrchestration(@"
+[Function(""Run"")]
+async Task Method([OrchestrationTrigger] TaskOrchestrationContext context)
+{
+    CancellationToken t = CancellationToken.None;
+    await context.CreateTimer(TimeSpan.FromMilliseconds(1000), t);
+}
+");
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Method", "Task.Delay(int, CancellationToken)", "Run");
+
+        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
     }
 
     [Fact]

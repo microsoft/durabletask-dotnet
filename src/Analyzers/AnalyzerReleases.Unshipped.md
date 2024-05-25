@@ -16,3 +16,5 @@ DURABLE0008 | Orchestration | Warning | OtherBindingsOrchestrationAnalyzer
 DURABLE1001 | Attribute Binding | Error | OrchestrationTriggerBindingAnalyzer
 DURABLE1002 | Attribute Binding | Error | DurableClientBindingAnalyzer
 DURABLE1003 | Attribute Binding | Error | EntityTriggerBindingAnalyzer
+DURABLE2001 | Activity | Warning | MatchingInputOutputTypeActivityAnalyzer
+DURABLE2002 | Activity | Warning | MatchingInputOutputTypeActivityAnalyzer

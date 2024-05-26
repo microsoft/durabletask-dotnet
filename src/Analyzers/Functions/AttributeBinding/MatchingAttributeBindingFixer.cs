@@ -44,7 +44,7 @@ public abstract class MatchingAttributeBindingFixer : CodeFixProvider
         // e.g: "Use 'TaskOrchestrationContext' instead of 'string'"
         string title = string.Format(
             CultureInfo.InvariantCulture,
-            Resources.MatchingAttributeBindingFixerTitle,
+            Resources.UseInsteadFixerTitle,
             this.ExpectedType,
             incorrectTypeSyntax.ToString());
 

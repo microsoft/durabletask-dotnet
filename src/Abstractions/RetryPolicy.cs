@@ -22,12 +22,6 @@ public class RetryPolicy
     /// The maximum time to delay between attempts, regardless of<paramref name="backoffCoefficient"/>.
     /// </param>
     /// <param name="retryTimeout">The overall timeout for retries.</param>
-    /// <param name="handle">
-    /// Optional delegate to invoke on exceptions to determine if retries should proceed. The delegate shall receive a
-    /// <see cref="TaskFailureDetails"/> instance and returns bool value where true means that a retry
-    /// is attempted and false means no retry is attempted. Time and attempt count constraints
-    /// take precedence over this delegate for determining if retry attempts are performed.
-    /// </param>
     /// <remarks>
     /// The value <see cref="Timeout.InfiniteTimeSpan"/> can be used to specify an unlimited timeout for
     /// <paramref name="maxRetryInterval"/> or <paramref name="retryTimeout"/>.
@@ -47,8 +41,7 @@ public class RetryPolicy
         TimeSpan firstRetryInterval,
         double backoffCoefficient = 1.0,
         TimeSpan? maxRetryInterval = null,
-        TimeSpan? retryTimeout = null,
-        Func<TaskFailureDetails, bool>? handle = null)
+        TimeSpan? retryTimeout = null)
     {
         if (maxNumberOfAttempts <= 0)
         {
@@ -95,7 +88,7 @@ public class RetryPolicy
         this.BackoffCoefficient = backoffCoefficient;
         this.MaxRetryInterval = maxRetryInterval ?? TimeSpan.FromHours(1);
         this.RetryTimeout = retryTimeout ?? Timeout.InfiniteTimeSpan;
-        this.Handle = CreateHandler(handle);
+        this.Handle = (ex) => true;
     }
 
     /// <summary>
@@ -139,7 +132,7 @@ public class RetryPolicy
     /// <value>
     /// Defaults delegate that always returns true (i.e., all exceptions are retried).
     /// </value>
-    public Func<Exception, bool> Handle { get; private set; }
+    public Func<Exception, bool> Handle { get; private init; }
 
 #pragma warning disable SA1623 // Property summary documentation should match accessors
     /// <summary>
@@ -150,39 +143,39 @@ public class RetryPolicy
 #pragma warning restore SA1623 // Property summary documentation should match accessors
 
     /// <summary>
-    /// Create delegate for <see cref="Handle"/> property.
+    /// Optional delegate to invoke on exceptions to determine if retries should proceed. The delegate shall receive a
+    /// <see cref="TaskFailureDetails"/> instance and returns bool value where true means that a retry
+    /// is attempted and false means no retry is attempted. Time and attempt count constraints
+    /// take precedence over this delegate for determining if retry attempts are performed.
     /// </summary>
-    /// <param name="handle">
-    /// Deletegate that receives <see cref="TaskFailedException"/> and returns boolean that
-    /// determines if the task should be retried.
-    /// </param>
     /// <exception cref="InvalidOperationException">
     /// This represents a defect in this library in that it should always receive either
     /// <see cref="global::DurableTask.Core.Exceptions.TaskFailedException"/> or
     /// <see cref="global::DurableTask.Core.Exceptions.SubOrchestrationFailedException"/>.
     /// </exception>
-    static Func<Exception, bool> CreateHandler(Func<TaskFailureDetails, bool>? handle)
+    public Func<TaskFailureDetails, bool> HandleTaskFailureDetails
     {
-        return handle is null
-            ? ((ex) => true)
-            : ((ex) =>
-            {
-                TaskFailureDetails? taskFailureDetails = null;
-                if (ex is global::DurableTask.Core.Exceptions.TaskFailedException taskFailedException)
+        init
+        {
+            this.Handle = ex =>
                 {
-                    taskFailureDetails = taskFailedException.ToTaskFailureDetails();
-                }
-                else if (ex is global::DurableTask.Core.Exceptions.SubOrchestrationFailedException subOrchestrationFailedException)
-                {
-                    taskFailureDetails = subOrchestrationFailedException.ToTaskFailureDetails();
-                }
+                    TaskFailureDetails? taskFailureDetails = null;
+                    if (ex is global::DurableTask.Core.Exceptions.TaskFailedException taskFailedException)
+                    {
+                        taskFailureDetails = taskFailedException.ToTaskFailureDetails();
+                    }
+                    else if (ex is global::DurableTask.Core.Exceptions.SubOrchestrationFailedException subOrchestrationFailedException)
+                    {
+                        taskFailureDetails = subOrchestrationFailedException.ToTaskFailureDetails();
+                    }
 
-                if (taskFailureDetails is null)
-                {
-                    throw new InvalidOperationException("Unable to create TaskFailureDetails since TaskFailedException nor SubOrchestrationFailedException was not received.");
-                }
+                    if (taskFailureDetails is null)
+                    {
+                        throw new InvalidOperationException("Unable to create TaskFailureDetails since TaskFailedException nor SubOrchestrationFailedException was not received.");
+                    }
 
-                return handle.Invoke(taskFailureDetails);
-            });
+                    return value.Invoke(taskFailureDetails);
+                };
+        }
     }
 }

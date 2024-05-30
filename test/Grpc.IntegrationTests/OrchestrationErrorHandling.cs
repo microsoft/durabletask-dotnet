@@ -244,12 +244,14 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
             maxNumberOfAttempts,
             firstRetryInterval: TimeSpan.FromMilliseconds(1),
             backoffCoefficient: 2,
-            retryTimeout: retryTimeout.HasValue ? TimeSpan.FromMilliseconds(retryTimeout.Value) : null,
-            handle: taskFailureDetails =>
+            retryTimeout: retryTimeout.HasValue ? TimeSpan.FromMilliseconds(retryTimeout.Value) : null)
+        {
+            HandleTaskFailureDetails = taskFailureDetails =>
             {
                 retryHandlerCalls++;
                 return taskFailureDetails.IsCausedBy(exceptionType) && retryException;
-            });
+            }
+        };
         TaskOptions taskOptions = TaskOptions.FromRetryPolicy(retryPolicy);
 
 
@@ -351,12 +353,14 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
             maxNumberOfAttempts,
             firstRetryInterval: TimeSpan.FromMilliseconds(1),
             backoffCoefficient: 2,
-            retryTimeout: retryTimeout.HasValue ? TimeSpan.FromMilliseconds(retryTimeout.Value) : null,
-            handle: taskFailureDetails =>
+            retryTimeout: retryTimeout.HasValue ? TimeSpan.FromMilliseconds(retryTimeout.Value) : null)
+        {
+            HandleTaskFailureDetails = taskFailureDetails =>
             {
                 retryHandlerCalls++;
                 return taskFailureDetails.IsCausedBy(exceptionType) && retryException;
-            });
+            }
+        };
         TaskOptions taskOptions = TaskOptions.FromRetryPolicy(retryPolicy);
 
         TaskName orchestratorName = "OrchestrationWithBustedSubOrchestrator";

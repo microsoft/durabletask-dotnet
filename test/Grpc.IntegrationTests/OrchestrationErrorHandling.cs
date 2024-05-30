@@ -246,7 +246,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
             backoffCoefficient: 2,
             retryTimeout: retryTimeout.HasValue ? TimeSpan.FromMilliseconds(retryTimeout.Value) : null)
         {
-            HandleTaskFailureDetails = taskFailureDetails =>
+            HandleFailure = taskFailureDetails =>
             {
                 retryHandlerCalls++;
                 return taskFailureDetails.IsCausedBy(exceptionType) && retryException;
@@ -355,7 +355,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
             backoffCoefficient: 2,
             retryTimeout: retryTimeout.HasValue ? TimeSpan.FromMilliseconds(retryTimeout.Value) : null)
         {
-            HandleTaskFailureDetails = taskFailureDetails =>
+            HandleFailure = taskFailureDetails =>
             {
                 retryHandlerCalls++;
                 return taskFailureDetails.IsCausedBy(exceptionType) && retryException;

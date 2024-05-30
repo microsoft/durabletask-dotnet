@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.ComponentModel;
 using Microsoft.DurableTask.Abstractions;
 
 namespace Microsoft.DurableTask;
@@ -88,7 +89,9 @@ public class RetryPolicy
         this.BackoffCoefficient = backoffCoefficient;
         this.MaxRetryInterval = maxRetryInterval ?? TimeSpan.FromHours(1);
         this.RetryTimeout = retryTimeout ?? Timeout.InfiniteTimeSpan;
+#pragma warning disable CS0618 // Type or member is obsolete
         this.Handle = (ex) => true;
+#pragma warning restore CS0618 // Type or member is obsolete
     }
 
     /// <summary>
@@ -132,6 +135,8 @@ public class RetryPolicy
     /// <value>
     /// Defaults delegate that always returns true (i.e., all exceptions are retried).
     /// </value>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    [Obsolete("This functionality is not implemented. Will be removed in the future. Use TaskOptions.FromRetryHandler or HandleFailure instead.")]
     public Func<Exception, bool> Handle { get; private init; }
 
 #pragma warning disable SA1623 // Property summary documentation should match accessors
@@ -153,10 +158,11 @@ public class RetryPolicy
     /// <see cref="global::DurableTask.Core.Exceptions.TaskFailedException"/> or
     /// <see cref="global::DurableTask.Core.Exceptions.SubOrchestrationFailedException"/>.
     /// </exception>
-    public Func<TaskFailureDetails, bool> HandleTaskFailureDetails
+    public Func<TaskFailureDetails, bool> HandleFailure
     {
         init
         {
+#pragma warning disable CS0618 // Type or member is obsolete
             this.Handle = ex =>
                 {
                     TaskFailureDetails? taskFailureDetails = null;
@@ -176,6 +182,7 @@ public class RetryPolicy
 
                     return value.Invoke(taskFailureDetails);
                 };
+#pragma warning restore CS0618 // Type or member is obsolete
         }
     }
 }

@@ -23,6 +23,7 @@ static class RetryPolicyExtensions
         // to TimeSpan.MaxValue when encountered.
         static TimeSpan ConvertInfiniteTimeSpans(TimeSpan timeout) =>
             timeout == Timeout.InfiniteTimeSpan ? TimeSpan.MaxValue : timeout;
+#pragma warning disable CS0618 // Type or member is obsolete
         return new CoreRetryOptions(retry.FirstRetryInterval, retry.MaxNumberOfAttempts)
         {
             BackoffCoefficient = retry.BackoffCoefficient,
@@ -30,5 +31,6 @@ static class RetryPolicyExtensions
             RetryTimeout = ConvertInfiniteTimeSpans(retry.RetryTimeout),
             Handle = retry.Handle,
         };
+#pragma warning restore CS0618 // Type or member is obsolete
     }
 }

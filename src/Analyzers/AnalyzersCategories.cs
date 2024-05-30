@@ -17,4 +17,9 @@ static class AnalyzersCategories
     /// The category for the attribute binding related analyzers.
     /// </summary>
     public const string AttributeBinding = "Attribute Binding";
+
+    /// <summary>
+    /// The category for the activity related analyzers.
+    /// </summary>
+    public const string Activity = "Activity";
 }

@@ -1,5 +1,9 @@
 ﻿# Changelog
 
+## v1.2.4
+
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.17.1`
+
 ## v1.2.3
 
 ### Microsoft.DurableTask.Client

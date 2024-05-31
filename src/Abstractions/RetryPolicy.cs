@@ -89,9 +89,7 @@ public class RetryPolicy
         this.BackoffCoefficient = backoffCoefficient;
         this.MaxRetryInterval = maxRetryInterval ?? TimeSpan.FromHours(1);
         this.RetryTimeout = retryTimeout ?? Timeout.InfiniteTimeSpan;
-#pragma warning disable CS0618 // Type or member is obsolete
         this.Handle = (ex) => true;
-#pragma warning restore CS0618 // Type or member is obsolete
     }
 
     /// <summary>
@@ -131,19 +129,19 @@ public class RetryPolicy
 
     /// <summary>
     /// Gets a delegate to call on exception to determine if retries should proceed.
+    /// For internal usage, use <see cref="HandleFailure" /> for setting this delegate.
     /// </summary>
     /// <value>
     /// Defaults delegate that always returns true (i.e., all exceptions are retried).
     /// </value>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [Obsolete("This functionality is not implemented. Will be removed in the future. Use TaskOptions.FromRetryHandler or HandleFailure instead.")]
     public Func<Exception, bool> Handle { get; private init; }
 
 #pragma warning disable SA1623 // Property summary documentation should match accessors
     /// <summary>
     /// This functionality is not implemented. Will be removed in the future. Use TaskOptions.FromRetryHandler instead.
     /// </summary>
-    [Obsolete("This functionality is not implemented. Will be removed in the future. Use TaskOptions.FromRetryHandler instead.")]
+    [Obsolete("This functionality is not implemented. Will be removed in the future. Use TaskOptions.FromRetryHandler or HandleFailure instead.")]
     public Func<Exception, Task<bool>>? HandleAsync { get; set; }
 #pragma warning restore SA1623 // Property summary documentation should match accessors
 
@@ -162,7 +160,6 @@ public class RetryPolicy
     {
         init
         {
-#pragma warning disable CS0618 // Type or member is obsolete
             this.Handle = ex =>
                 {
                     TaskFailureDetails? taskFailureDetails = null;
@@ -182,7 +179,6 @@ public class RetryPolicy
 
                     return value.Invoke(taskFailureDetails);
                 };
-#pragma warning restore CS0618 // Type or member is obsolete
         }
     }
 }

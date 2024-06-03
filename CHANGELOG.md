@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.3.0 (Unreleased)
+
+### Microsoft.DurableTask.Abstractions
+
+- Add `RetryPolicy.Handle` property to allow for exception filtering on retries ([#314](https://github.com/microsoft/durabletask-dotnet/pull/314))
+
 ## v1.2.4
 
 - Microsoft.Azure.DurableTask.Core dependency increased to `2.17.1`

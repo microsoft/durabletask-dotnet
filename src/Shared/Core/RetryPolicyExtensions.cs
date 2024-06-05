@@ -28,6 +28,7 @@ static class RetryPolicyExtensions
             BackoffCoefficient = retry.BackoffCoefficient,
             MaxRetryInterval = ConvertInfiniteTimeSpans(retry.MaxRetryInterval),
             RetryTimeout = ConvertInfiniteTimeSpans(retry.RetryTimeout),
+            Handle = retry.Handle,
         };
     }
 }

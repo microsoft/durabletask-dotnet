@@ -7,7 +7,9 @@ using Microsoft.DurableTask.Analyzers.Tests.Verifiers;
 
 namespace Microsoft.DurableTask.Analyzers.Tests.Functions.AttributeBinding;
 
-public abstract class MatchingAttributeBindingSpecificationTests<TAnalyzer> where TAnalyzer : MatchingAttributeBindingAnalyzer, new()
+public abstract class MatchingAttributeBindingSpecificationTests<TAnalyzer, TCodeFix> 
+    where TAnalyzer : MatchingAttributeBindingAnalyzer, new()
+    where TCodeFix : MatchingAttributeBindingFixer, new()
 {
     protected abstract string ExpectedDiagnosticId { get; }
     protected abstract string ExpectedAttribute { get; }
@@ -55,18 +57,29 @@ void Method({{|#0:{this.ExpectedAttribute} {this.WrongType} paramName|}})
 }}
 ");
 
+        string fix = Wrapper.WrapDurableFunctionOrchestration($@"
+void Method({{|#0:{this.ExpectedAttribute} {this.ExpectedType} paramName|}})
+{{
+}}
+");
+
         DiagnosticResult expected = this.BuildDiagnostic().WithLocation(0).WithArguments(this.WrongType);
 
-        await VerifyAsync(code, expected);
+        await VerifyCodeFixAsync(code, expected, fix);
     }
 
     static async Task VerifyAsync(string source, params DiagnosticResult[] expected)
     {
-        await CSharpAnalyzerVerifier<TAnalyzer>.VerifyDurableTaskAnalyzerAsync(source, expected);
+        await CSharpCodeFixVerifier<TAnalyzer, TCodeFix>.VerifyDurableTaskAnalyzerAsync(source, expected);
+    }
+
+    static async Task VerifyCodeFixAsync(string source, DiagnosticResult expected, string fix)
+    {
+        await CSharpCodeFixVerifier<TAnalyzer, TCodeFix>.VerifyDurableTaskCodeFixAsync(source, expected, fix);
     }
 
     DiagnosticResult BuildDiagnostic()
     {
-        return CSharpAnalyzerVerifier<TAnalyzer>.Diagnostic(this.ExpectedDiagnosticId);
+        return CSharpCodeFixVerifier<TAnalyzer, TCodeFix>.Diagnostic(this.ExpectedDiagnosticId);
     }
 }

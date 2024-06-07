@@ -29,11 +29,11 @@ dotnet test ../../test/Analyzers.Tests/
 
 Currently, there are 3 diagnostics [categories](./AnalyzersCategories.cs):
 
-| Category          | Diagnostic Id Prefix | Description                                                                                                                                                                                |   |   |
-|-------------------|----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---|---|
-| Orchestration     | DURABLE0xxx          | Diagnostics that are reported when a [non-deterministic code constraint](https://learn.microsoft.com/en-us/azure/azure-functions/durable/durable-functions-code-constraints?tabs=csharp) occurs. |   |   |
-| Attribute Binding | DURABLE1xxx          | A specific category that only affects Azure Durable Functions. It groups diagnostics that check whether the right C# Attribute is being used with the right type.                          |   |   |
-| Activity          | DURABLE2xxx          | Diagnostics that are reported when an activity is called using wrong parameters.                                                                                                           |   |   |
+| Category          | Diagnostic Id Prefix | Description |
+|-------------------|----------------------| ------------|
+| Orchestration     | DURABLE0xxx          | Diagnostics that are reported when a [non-deterministic code constraint](https://learn.microsoft.com/en-us/azure/azure-functions/durable/durable-functions-code-constraints?tabs=csharp) occurs. |
+| Attribute Binding | DURABLE1xxx          | A specific category that only affects Azure Durable Functions. It groups diagnostics that check whether the right C# Attribute is being used with the right type. |
+| Activity          | DURABLE2xxx          | Diagnostics that are reported when an activity is called using wrong parameters. |
 
 So, when developing a new analyzer, you must either select one of those existing categories or create a new one.
 

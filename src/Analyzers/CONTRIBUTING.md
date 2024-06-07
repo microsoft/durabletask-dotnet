@@ -131,7 +131,7 @@ Then, re-build the solution. You should be able to select an IDE/Debugger and st
 From time to time roslyn Analyzers can become stale, if the analysis they perform is not valid anymore.
 For instance, a given code constraint in Durable Functions may not exist anymore if the runtime is upgraded to support it.
 
-On those cases, we need to deprecate the analyzer or code fixer related to that diagnostics.
+In those cases, we need to deprecate the analyzer or code fixer related to that diagnostic.
 The proposed general strategy depends on whether this feature is part of a major or minor release of the Durable Task .NET Client SDK:
 
 - Major Client SDK release: We can just delete the related analyzer from this project and also release a major version of the analyzer.

@@ -128,7 +128,7 @@ Then, re-build the solution. You should be able to select an IDE/Debugger and st
 
 ## Deprecating Analyzers/Code Fixers
 
-From time to time roslyn Analyzers can become stale, if the analysis they perform is not valid anymore.
+From time to time, Roslyn Analyzers can become stale, if the analysis they perform is not valid anymore.
 For instance, a given code constraint in Durable Functions may not exist anymore if the runtime is upgraded to support it.
 
 In those cases, we need to deprecate the analyzer or code fixer related to that diagnostic.

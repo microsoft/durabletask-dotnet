@@ -99,8 +99,8 @@ Be aware of this behavior when developing new features as well.
 
 ### Debugging
 
-Although debugging the unit tests are a great way to inspect an analyzer internal state,
-it can be useful to attach a debugger to one the samples projects mentioned above.
+Although debugging the unit tests is a great way to inspect an analyzer's internal state,
+it can be useful to attach a debugger to one of the samples projects mentioned above.
 
 In order to do that, go to the specific analyzer you want to debug and add the following lines to its `Initialize` method:
 

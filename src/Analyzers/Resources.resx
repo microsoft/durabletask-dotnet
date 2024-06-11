@@ -195,4 +195,7 @@
   <data name="OutputArgumentTypeMismatchAnalyzerTitle" xml:space="preserve">
     <value>Activity function call return type doesn't match the function definition return type</value>
   </data>
+  <data name="UseInsteadFixerTitle" xml:space="preserve">
+    <value>Use '{0}' instead of '{1}'</value>
+  </data>
 </root>

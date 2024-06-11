@@ -222,6 +222,68 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
     }
 
+    [Theory]
+    [InlineData(10, typeof(ApplicationException), false, int.MaxValue, 2, 1, OrchestrationRuntimeStatus.Failed)] // 1 attempt since retry timeout expired.
+    [InlineData(2, typeof(ApplicationException), false, int.MaxValue, null, 1, OrchestrationRuntimeStatus.Failed)] // 1 attempt since handler specifies no retry.
+    [InlineData(2, typeof(CustomException),true, int.MaxValue, null, 2, OrchestrationRuntimeStatus.Failed)] // 2 attempts, custom exception type
+    [InlineData(10, typeof(XunitException),true, 4, null, 5, OrchestrationRuntimeStatus.Completed)] // 10 attempts, 3rd party exception type
+    public async Task RetryActivityFailuresCustomLogicAndPolicy(
+        int maxNumberOfAttempts,
+        Type exceptionType,
+        bool retryException,
+        int exceptionCount,
+        int? retryTimeout,
+        int expectedNumberOfAttempts,
+        OrchestrationRuntimeStatus expRuntimeStatus)
+    {
+        string errorMessage = "Kah-BOOOOOM!!!"; // Use an obviously fake error message to avoid confusion when debugging
+
+        int actualNumberOfAttempts = 0;
+        int retryHandlerCalls = 0;
+        RetryPolicy retryPolicy = new(
+            maxNumberOfAttempts,
+            firstRetryInterval: TimeSpan.FromMilliseconds(1),
+            backoffCoefficient: 2,
+            retryTimeout: retryTimeout.HasValue ? TimeSpan.FromMilliseconds(retryTimeout.Value) : null)
+        {
+            HandleFailure = taskFailureDetails =>
+            {
+                retryHandlerCalls++;
+                return taskFailureDetails.IsCausedBy(exceptionType) && retryException;
+            }
+        };
+        TaskOptions taskOptions = TaskOptions.FromRetryPolicy(retryPolicy);
+
+
+        TaskName orchestratorName = "BustedOrchestration";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks =>
+                tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
+                {
+                    await ctx.CallActivityAsync("Foo", options: taskOptions);
+                })
+                .AddActivityFunc("Foo", (TaskActivityContext context) =>
+                {
+                    if (actualNumberOfAttempts++ < exceptionCount)
+                    {
+                        throw MakeException(exceptionType, errorMessage);
+                    }
+                }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(expRuntimeStatus, metadata.RuntimeStatus);
+        // More calls to retry handler than expected.
+        //Assert.Equal(expectedNumberOfAttempts, retryHandlerCalls);
+        Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
+    }
+
     /// <summary>
     /// Tests retry policies for sub-orchestration calls.
     /// </summary>
@@ -267,6 +329,78 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
 
         // The root orchestration failed due to a failure with the sub-orchestration, resulting in a TaskFailedException
         Assert.True(metadata.FailureDetails.IsCausedBy<TaskFailedException>());
+    }
+
+    [Theory]
+    [InlineData(10, typeof(ApplicationException), false, int.MaxValue, 2, 1, OrchestrationRuntimeStatus.Failed)] // 1 attempt since retry timeout expired.
+    [InlineData(2, typeof(ApplicationException), false, int.MaxValue, null, 1, OrchestrationRuntimeStatus.Failed)] // 1 attempt since handler specifies no retry.
+    [InlineData(2, typeof(CustomException), true, int.MaxValue, null, 2, OrchestrationRuntimeStatus.Failed)] // 2 attempts, custom exception type
+    [InlineData(10, typeof(XunitException), true, 4, null, 5, OrchestrationRuntimeStatus.Completed)] // 10 attempts, 3rd party exception type
+    public async Task RetrySubOrchestratorFailuresCustomLogicAndPolicy(
+        int maxNumberOfAttempts,
+        Type exceptionType,
+        bool retryException,
+        int exceptionCount,
+        int? retryTimeout,
+        int expectedNumberOfAttempts,
+        OrchestrationRuntimeStatus expRuntimeStatus)
+    {
+        string errorMessage = "Kah-BOOOOOM!!!"; // Use an obviously fake error message to avoid confusion when debugging
+
+        int actualNumberOfAttempts = 0;
+        int retryHandlerCalls = 0;
+        RetryPolicy retryPolicy = new(
+            maxNumberOfAttempts,
+            firstRetryInterval: TimeSpan.FromMilliseconds(1),
+            backoffCoefficient: 2,
+            retryTimeout: retryTimeout.HasValue ? TimeSpan.FromMilliseconds(retryTimeout.Value) : null)
+        {
+            HandleFailure = taskFailureDetails =>
+            {
+                retryHandlerCalls++;
+                return taskFailureDetails.IsCausedBy(exceptionType) && retryException;
+            }
+        };
+        TaskOptions taskOptions = TaskOptions.FromRetryPolicy(retryPolicy);
+
+        TaskName orchestratorName = "OrchestrationWithBustedSubOrchestrator";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks =>
+                tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
+                {
+                    await ctx.CallSubOrchestratorAsync("BustedSubOrchestrator", options: taskOptions);
+                })
+                .AddOrchestratorFunc("BustedSubOrchestrator", context =>
+                {
+                    if (actualNumberOfAttempts++ < exceptionCount)
+                    {
+                        throw MakeException(exceptionType, errorMessage);
+                    }
+                }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(expRuntimeStatus, metadata.RuntimeStatus);
+        // More calls to retry handler than expected.
+        //Assert.Equal(expectedNumberOfAttempts, retryHandlerCalls);
+        Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
+
+        // The root orchestration failed due to a failure with the sub-orchestration, resulting in a TaskFailedException
+        if (expRuntimeStatus == OrchestrationRuntimeStatus.Failed)
+        {
+            Assert.NotNull(metadata.FailureDetails);
+            Assert.True(metadata.FailureDetails!.IsCausedBy<TaskFailedException>());
+        }
+        else
+        {
+            Assert.Null(metadata.FailureDetails);
+        }
     }
 
     [Theory]

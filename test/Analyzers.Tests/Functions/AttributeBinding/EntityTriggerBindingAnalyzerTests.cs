@@ -5,7 +5,7 @@ using Microsoft.DurableTask.Analyzers.Functions.AttributeBinding;
 
 namespace Microsoft.DurableTask.Analyzers.Tests.Functions.AttributeBinding;
 
-public class EntityTriggerBindingAnalyzerTests : MatchingAttributeBindingSpecificationTests<EntityTriggerBindingAnalyzer>
+public class EntityTriggerBindingAnalyzerTests : MatchingAttributeBindingSpecificationTests<EntityTriggerBindingAnalyzer, EntityTriggerBindingFixer>
 {
     protected override string ExpectedDiagnosticId => EntityTriggerBindingAnalyzer.DiagnosticId;
 

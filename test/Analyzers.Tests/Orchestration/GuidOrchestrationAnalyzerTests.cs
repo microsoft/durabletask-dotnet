@@ -4,7 +4,7 @@
 using Microsoft.CodeAnalysis.Testing;
 using Microsoft.DurableTask.Analyzers.Orchestration;
 
-using VerifyCS = Microsoft.DurableTask.Analyzers.Tests.Verifiers.CSharpAnalyzerVerifier<Microsoft.DurableTask.Analyzers.Orchestration.GuidOrchestrationAnalyzer>;
+using VerifyCS = Microsoft.DurableTask.Analyzers.Tests.Verifiers.CSharpCodeFixVerifier<Microsoft.DurableTask.Analyzers.Orchestration.GuidOrchestrationAnalyzer, Microsoft.DurableTask.Analyzers.Orchestration.GuidOrchestrationFixer>;
 
 namespace Microsoft.DurableTask.Analyzers.Tests.Orchestration;
 
@@ -29,9 +29,17 @@ Guid Method([OrchestrationTrigger] TaskOrchestrationContext context)
 }
 ");
 
+        string fix = Wrapper.WrapDurableFunctionOrchestration(@"
+[Function(""Run"")]
+Guid Method([OrchestrationTrigger] TaskOrchestrationContext context)
+{
+    return context.NewGuid();
+}
+");
+
         DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Method", "Guid.NewGuid()", "Run");
 
-        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
     }
 
     [Fact]
@@ -47,9 +55,19 @@ public class MyOrchestrator : TaskOrchestrator<string, Guid>
 }
 ");
 
+        string fix = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, Guid>
+{
+    public override Task<Guid> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        return Task.FromResult(context.NewGuid());
+    }
+}
+");
+
         DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("RunAsync", "Guid.NewGuid()", "MyOrchestrator");
 
-        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
     }
 
     [Fact]
@@ -62,9 +80,16 @@ tasks.AddOrchestratorFunc(""HelloSequence"", context =>
 });
 ");
 
+        string fix = Wrapper.WrapFuncOrchestrator(@"
+tasks.AddOrchestratorFunc(""HelloSequence"", context =>
+{
+    return context.NewGuid();
+});
+");
+
         DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Main", "Guid.NewGuid()", "HelloSequence");
 
-        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
     }
 
     static DiagnosticResult BuildDiagnostic()

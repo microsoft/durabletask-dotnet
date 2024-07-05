@@ -1,6 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.ComponentModel;
+using Microsoft.DurableTask.Abstractions;
+
 namespace Microsoft.DurableTask;
 
 /// <summary>
@@ -86,6 +89,7 @@ public class RetryPolicy
         this.BackoffCoefficient = backoffCoefficient;
         this.MaxRetryInterval = maxRetryInterval ?? TimeSpan.FromHours(1);
         this.RetryTimeout = retryTimeout ?? Timeout.InfiniteTimeSpan;
+        this.Handle = (ex) => true;
     }
 
     /// <summary>
@@ -123,11 +127,58 @@ public class RetryPolicy
     /// </value>
     public TimeSpan RetryTimeout { get; }
 
+    /// <summary>
+    /// Gets a delegate to call on exception to determine if retries should proceed.
+    /// For internal usage, use <see cref="HandleFailure" /> for setting this delegate.
+    /// </summary>
+    /// <value>
+    /// Defaults delegate that always returns true (i.e., all exceptions are retried).
+    /// </value>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public Func<Exception, bool> Handle { get; private init; }
+
 #pragma warning disable SA1623 // Property summary documentation should match accessors
     /// <summary>
     /// This functionality is not implemented. Will be removed in the future. Use TaskOptions.FromRetryHandler instead.
     /// </summary>
-    [Obsolete("This functionality is not implemented. Will be removed in the future. Use TaskOptions.FromRetryHandler instead.")]
+    [Obsolete("This functionality is not implemented. Will be removed in the future. Use TaskOptions.FromRetryHandler or HandleFailure instead.")]
     public Func<Exception, Task<bool>>? HandleAsync { get; set; }
 #pragma warning restore SA1623 // Property summary documentation should match accessors
+
+    /// <summary>
+    /// Optional delegate to invoke on exceptions to determine if retries should proceed. The delegate shall receive a
+    /// <see cref="TaskFailureDetails"/> instance and returns bool value where true means that a retry
+    /// is attempted and false means no retry is attempted. Time and attempt count constraints
+    /// take precedence over this delegate for determining if retry attempts are performed.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// This represents a defect in this library in that it should always receive either
+    /// <see cref="global::DurableTask.Core.Exceptions.TaskFailedException"/> or
+    /// <see cref="global::DurableTask.Core.Exceptions.SubOrchestrationFailedException"/>.
+    /// </exception>
+    public Func<TaskFailureDetails, bool> HandleFailure
+    {
+        init
+        {
+            this.Handle = ex =>
+                {
+                    TaskFailureDetails? taskFailureDetails = null;
+                    if (ex is global::DurableTask.Core.Exceptions.TaskFailedException taskFailedException)
+                    {
+                        taskFailureDetails = taskFailedException.ToTaskFailureDetails();
+                    }
+                    else if (ex is global::DurableTask.Core.Exceptions.SubOrchestrationFailedException subOrchestrationFailedException)
+                    {
+                        taskFailureDetails = subOrchestrationFailedException.ToTaskFailureDetails();
+                    }
+
+                    if (taskFailureDetails is null)
+                    {
+                        throw new InvalidOperationException("Unable to create TaskFailureDetails since TaskFailedException nor SubOrchestrationFailedException was not received.");
+                    }
+
+                    return value.Invoke(taskFailureDetails);
+                };
+        }
+    }
 }

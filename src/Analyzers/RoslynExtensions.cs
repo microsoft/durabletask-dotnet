@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Collections.Immutable;
+using System.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -83,6 +84,28 @@ static class RoslynExtensions
     {
         IEnumerable<IMethodSymbol> methods = typeSymbol.GetMembers(methodSymbol.Name).OfType<IMethodSymbol>();
         return methods.FirstOrDefault(m => m.OverriddenMethod != null && m.OverriddenMethod.OriginalDefinition.Equals(methodSymbol, SymbolEqualityComparer.Default));
+    }
+
+    /// <summary>
+    /// Gets the type argument of a method by its parameter name.
+    /// </summary>
+    /// <param name="method">Method symbol.</param>
+    /// <param name="parameterName">Type argument name.</param>
+    /// <returns>The type argument symbol.</returns>
+    public static ITypeSymbol? GetTypeArgumentByParameterName(this IMethodSymbol method, string parameterName)
+    {
+        (ITypeParameterSymbol param, int idx) = method.TypeParameters
+                                                        .Where(t => t.Name == parameterName)
+                                                        .Select((t, i) => (t, i))
+                                                        .SingleOrDefault();
+
+        if (param != null)
+        {
+            Debug.Assert(idx >= 0, "parameter index is not negative");
+            return method.TypeArguments[idx];
+        }
+
+        return null;
     }
 
     /// <summary>

@@ -14,6 +14,7 @@ namespace Microsoft.DurableTask.Analyzers;
 public sealed partial class KnownTypeSymbols
 {
     INamedTypeSymbol? taskOrchestratorInterface;
+    INamedTypeSymbol? taskActivityBase;
     INamedTypeSymbol? durableTaskRegistry;
     INamedTypeSymbol? taskOrchestrationContext;
     INamedTypeSymbol? durableTaskClient;
@@ -22,6 +23,11 @@ public sealed partial class KnownTypeSymbols
     /// Gets an ITaskOrchestrator type symbol.
     /// </summary>
     public INamedTypeSymbol? TaskOrchestratorInterface => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.ITaskOrchestrator", ref this.taskOrchestratorInterface);
+
+    /// <summary>
+    /// Gets a TaskActivity&lt;TInput,TOutput&gt; type symbol.
+    /// </summary>
+    public INamedTypeSymbol? TaskActivityBase => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.TaskActivity`2", ref this.taskActivityBase);
 
     /// <summary>
     /// Gets a DurableTaskRegistry type symbol.

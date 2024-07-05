@@ -1,1 +1,1 @@
-- Microsoft.Azure.DurableTask.Core dependency increased to `2.17.0`
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.17.1`

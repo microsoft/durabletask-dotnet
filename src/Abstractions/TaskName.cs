@@ -85,7 +85,7 @@ public readonly struct TaskName : IEquatable<TaskName>
   /// Implicitly converts a <see cref="TaskName"/> into a <see cref="string"/> of the <see cref="Name"/> property value.
   /// </summary>
   /// <param name="value">The <see cref="TaskName"/> to be converted into a string.</param>
-  public static implicit operator string(TaskName value) => value.Name;
+  public static implicit operator string(TaskName value) => value.ToString();
 
   /// <summary>
   /// Implicitly converts a <see cref="string"/> into a <see cref="TaskName"/> value.

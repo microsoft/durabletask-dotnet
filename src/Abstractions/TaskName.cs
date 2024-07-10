@@ -123,7 +123,8 @@ public readonly struct TaskName : IEquatable<TaskName>
   /// <returns><c>true</c> if the two objects are equal using value semantics; otherwise <c>false</c>.</returns>
   public bool Equals(TaskName other)
   {
-    return string.Equals(this.Name, other.Name, StringComparison.OrdinalIgnoreCase);
+    return string.Equals(this.Name, other.Name, StringComparison.OrdinalIgnoreCase)
+      && string.Equals(this.Version, other.Version, StringComparison.OrdinalIgnoreCase);
   }
 
   /// <summary>
@@ -148,7 +149,13 @@ public readonly struct TaskName : IEquatable<TaskName>
   /// <returns>A 32-bit hash code value.</returns>
   public override int GetHashCode()
   {
-    return StringComparer.OrdinalIgnoreCase.GetHashCode(this.Name);
+    if (string.IsNullOrEmpty(this.Version))
+    {
+      return StringComparer.OrdinalIgnoreCase.GetHashCode(this.Name);
+    }
+
+    return StringComparer.OrdinalIgnoreCase.GetHashCode(this.Name) * 31
+      + StringComparer.OrdinalIgnoreCase.GetHashCode(this.Version);
   }
 
   /// <summary>

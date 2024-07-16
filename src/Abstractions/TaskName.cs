@@ -54,7 +54,7 @@ public readonly struct TaskName : IEquatable<TaskName>
             if (version is null)
             {
                 this.Name = name;
-                this.Version = string.Empty; // fallback to the contructor without version parameter
+                this.Version = string.Empty; // fallback to the constructor without version parameter
             }
             else
             {

@@ -149,13 +149,7 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// <returns>A 32-bit hash code value.</returns>
     public override int GetHashCode()
     {
-        if (string.IsNullOrEmpty(this.Version))
-        {
-            return StringComparer.OrdinalIgnoreCase.GetHashCode(this.Name);
-        }
-
-        return StringComparer.OrdinalIgnoreCase.GetHashCode(this.Name) * 31
-          + StringComparer.OrdinalIgnoreCase.GetHashCode(this.Version);
+        return HashCode.Combine(this.Name, this.Version);
     }
 
     /// <summary>

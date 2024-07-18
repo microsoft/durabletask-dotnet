@@ -90,7 +90,7 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// Implicitly converts a <see cref="string"/> into a <see cref="TaskName"/> value.
     /// </summary>
     /// <param name="value">The string to convert into a <see cref="TaskName"/>.</param>
-    public static implicit operator TaskName(string value) => string.IsNullOrEmpty(value) ? default : new(value);
+    public static implicit operator TaskName(string value) => FromString(value);
 
     /// <summary>
     /// Compares two <see cref="TaskName"/> objects for equality.
@@ -112,6 +112,32 @@ public readonly struct TaskName : IEquatable<TaskName>
     public static bool operator !=(TaskName a, TaskName b)
     {
         return !a.Equals(b);
+    }
+
+    /// <summary>
+    /// Parses the taskname string and initializes a new instance of the <see cref="TaskName"/> struct.
+    /// </summary>
+    /// <param name="taskname">The taskname string in format of "Name:Version" or "Name".</param>
+    /// <returns>New <see cref="TaskName"/> instance parsed from taskname string.</returns>
+    public static TaskName FromString(string taskname)
+    {
+        if (string.IsNullOrEmpty(taskname))
+        {
+            return default;
+        }
+
+        string[] parts = taskname.Split(':');
+        if (parts.Length == 1)
+        {
+            return new TaskName(parts[0]);
+        }
+
+        if (parts.Length == 2)
+        {
+            return new TaskName(parts[0], parts[1]);
+        }
+
+        throw new ArgumentException("Invalid task name format: taskname=" + taskname);
     }
 
     /// <summary>

@@ -75,10 +75,9 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// <summary>
     /// Gets the version of the task.
     /// </summary>
-    /// <remarks>
-    /// Task versions is currently locked to <see cref="string.Empty" /> as it is not yet integrated into task
-    /// identification. This is being left here as we intend to support it soon.
-    /// </remarks>
+    /// <value>
+    /// The version of the activity task.
+    /// </value>
     public string Version { get; }
 
     /// <summary>

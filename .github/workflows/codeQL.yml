@@ -6,9 +6,9 @@ name: "CodeQL"
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "*" ] # TODO: remove "*" post approval
   pull_request:
-    branches: [ "main"]
+    branches: [ "main", "*"] # TODO: remove "*" post approval
   schedule:
     - cron: '0 0 * * 1' # Weekly Monday run, needed for weekly reports
   workflow_call: # allows to be invoked as part of a larger workflow
@@ -41,8 +41,6 @@ jobs:
         # Learn more about CodeQL language support at https://aka.ms/codeql-docs/language-support
 
     steps:
-    # - name: Checkout repository
-    #   uses: actions/checkout@v3
 
     - name: Download built-code
       uses: actions/download-artifact@v2

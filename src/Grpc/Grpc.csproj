@@ -3,6 +3,8 @@
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net6.0</TargetFrameworks>
     <PackageDescription>The gRPC Protobuf .NET services for Durable Task Framework.</PackageDescription>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Version>1.3.0-preview2</Version>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Grpc.Tools" Version="2.51.0" PrivateAssets="All" />
@@ -19,6 +21,7 @@
 
   <ItemGroup>
     <Protobuf Include="$(EngRoot)proto/protos/orchestrator_service.proto" GrpcServices="both" Link="proto/orchestrator_service.proto" />
+    <Protobuf Include="$(EngRoot)proto/protos/backend_service.proto" GrpcServices="both" Link="proto/backend_service.proto" />
   </ItemGroup>
 
 </Project>

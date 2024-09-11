@@ -1,6 +1,6 @@
 ﻿# Changelog
 
-## v1.3.0 (Unreleased)
+## v1.3.0
 
 ### Microsoft.DurableTask.Abstractions
 

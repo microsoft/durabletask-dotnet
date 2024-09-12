@@ -76,6 +76,6 @@ jobs:
         - template: ci/sign-files.yml@eng
           parameters:
             displayName: Sign NugetPackages
-            folderPath: $(build.artifactStagingDirectory)
+            folderPath: $(pkg_dir)
             pattern: '*.nupkg'
             signType: nuget

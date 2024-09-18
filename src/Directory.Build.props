@@ -13,6 +13,11 @@
     <AnalysisLevel>latest</AnalysisLevel>
     <AnalysisMode>recommended</AnalysisMode>
     <SharedRoot>$(SrcRoot)Shared/</SharedRoot>
+    <!-- This setting makes symbol files (PDBs) available within the DLLs
+    themselves, which is seemingly necessary for having a 'deterministic' build checkmark in our NuGet package.
+    This is recommended for NuGet packages, as per: https://devblogs.microsoft.com/dotnet/producing-packages-with-source-link/
+    The connection to deterministic builds is explored here: https://www.meziantou.net/creating-reproducible-build-in-dotnet.htm -->
+    <DebugType>embedded</DebugType>
   </PropertyGroup>
 
   <Import Project="$(EngRoot)targets/Release.props" />

@@ -1,0 +1,281 @@
+# This is our package-publishing pipeline.
+# When executed, it automatically publishes the output of the 'official pipeline' (the nupkgs) to our internal ADO feed.
+# It may optionally also publish the packages to NuGet, but that is gated behind a manual approval.
+
+trigger: none # only trigger is manual
+pr: none # only trigger is manual
+
+resources:
+    repositories:
+        - repository: 1es
+          type: git
+          name: 1ESPipelineTemplates/1ESPipelineTemplates
+          ref: refs/tags/release
+        - repository: eng
+          type: git
+          name: engineering
+          ref: refs/tags/release
+
+    pipelines:
+    - pipeline: officialPipeline # Reference to the pipeline to be used as an artifact source
+      source: 'durabletask-dotnet.official'
+
+extends:
+  template: v1/1ES.Official.PipelineTemplate.yml@1es
+  parameters:
+    pool:
+        name: 1es-pool-azfunc
+        image: 1es-windows-2022
+        os: windows
+
+    stages:
+    - stage: release
+      jobs:
+
+      # ADO release
+      - job: AdoRelease
+        displayName: ADO Release
+        templateContext:
+          type: releaseJob
+          isProduction: true
+          inputs:
+          - input: pipelineArtifact
+            pipeline: officialPipeline  # Pipeline reference, as defined in the resources section
+            artifactName: drop
+            targetPath: $(System.DefaultWorkingDirectory)/drop
+        steps:
+        - task: 1ES.PublishNuget@1
+          displayName: 'Push to durabletask ADO feed'
+          inputs:
+            command: push
+            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+            packagesToPush: '$(System.DefaultWorkingDirectory)/**/*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg'
+            publishVstsFeed: '3f99e810-c336-441f-8892-84983093ad7f/c895696b-ce37-4fe7-b7ce-74333a04f8bf'
+            allowPackageConflicts: true
+  
+      # NuGet approval gate
+      - job: nugetApproval
+        displayName: NuGetApproval
+        pool: server # This task only works when executed on serverl pools, so this needs to be specified
+        steps:
+          # Wait for manual approval. 
+          - task: ManualValidation@1
+            inputs:
+              instructions: Confirm you want to push to NuGet
+              onTimeout: 'reject'
+
+      #================== NuGet publishing section ==================
+      # Next, we publish the nupkgs to NuGet, one at a time; for good reason.
+      # 
+      # When publishing to NuGet, the `1ES.PublishNuget@1` will fail the ADO job if we attempt
+      # to push any package versions that were already uploaded to NuGet.
+      # For instance, imagine the latest DTFx packages on NuGet are: DTFx.Core@v1.1 and DTFx.AzureStorage@v1.0
+      # and that our official pipeline generated these packages: DTFx.Core@v1.1 and DTFx.AzureStorage@v1.1.
+      # In the end, we want NuGet to have both packages at version v1.1.
+      #
+      # In this case, if we try to publish both packages in the same ADO job, it will fail as soon as it detects
+      # we're trying to push DTFx.Core@v1.1 as that already exists on NuGet, and this could prevent
+      # DTFx.AzureStorage@v1.1 from being published in the first place.
+      # 
+      # Unfortunately, skipping duplicate package versions is only supported for publishing to ADO feeds, which explains
+      # why we did not have this issue when pushing to ADO.
+      # 
+      # So we split each package upload to a separate job, so they be uploaded independently. In our example, the
+      # DTFx.Core upload task would fail (as expected, it was already uploaded), 
+      # but the DTFx.AzureStorage upload would succeed.
+
+      # Implementor's note:
+      # What follows could use some refactoring as there's a lot of repetition, perhaps an ADO template could hide the repeated details.
+      # Pay close attention to the `packagesToPush` property of each job. We need to make sure the pattern specified there uniquely identifies
+      # the package we want to push, and this is difficult when the full name of one package is the prefix of another.
+      # For example: `Microsoft.DurableTask.Client` and `Microsoft.DurableTask.Client.Grpc`.
+      # The trick is to exclude the `Microsoft.DurableTask.Client.Grpc` in the `packagesToPush` property for `Microsoft.DurableTask.Client`
+
+      # NuGet release (Microsoft.DurableTask.Abstractions)
+      - job: nugetRelease_Microsoft_DurableTask_Abstractions
+        displayName: NuGet Release (Microsoft.DurableTask.Abstractions)
+        dependsOn: nugetApproval
+        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        templateContext:
+          type: releaseJob
+          isProduction: true
+          inputs:
+          - input: pipelineArtifact
+            pipeline: officialPipeline  # Pipeline reference as defined in the resources section
+            artifactName: drop
+            targetPath: $(System.DefaultWorkingDirectory)/drop
+        steps:
+        - task: 1ES.PublishNuget@1
+          displayName: 'NuGet push (Microsoft.DurableTask.Abstractions)'
+          inputs:
+            command: push
+            nuGetFeedType: external
+            publishFeedCredentials: 'DurableTask org NuGet API Key'
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Abstractions.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
+            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+
+      # NuGet release (Microsoft.DurableTask.Client)
+      - job: nugetRelease_Microsoft_DurableTask_Client
+        displayName: NuGet Release (Microsoft.DurableTask.Client)
+        dependsOn: nugetApproval
+        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        templateContext:
+          type: releaseJob
+          isProduction: true
+          inputs:
+          - input: pipelineArtifact
+            pipeline: officialPipeline  # Pipeline reference as defined in the resources section
+            artifactName: drop
+            targetPath: $(System.DefaultWorkingDirectory)/drop
+        steps:
+        - task: 1ES.PublishNuget@1
+          displayName: 'NuGet push (Microsoft.DurableTask.Client)'
+          inputs:
+            command: push
+            nuGetFeedType: external
+            publishFeedCredentials: 'DurableTask org NuGet API Key'
+            # the packages to push pattern explicitly excludes:
+            # - 'Microsoft.DurableTask.Client.Grpc'
+            # - 'Microsoft.DurableTask.Client.OrchestrationServiceClientShim'
+            # which are pushed by their respective jobs
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.Grpc.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.OrchestrationServiceClientShim.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
+            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+
+      # NuGet release (Microsoft.DurableTask.Client.Grpc)
+      - job: nugetRelease_Microsoft_DurableTask_Client_Grpc
+        displayName: NuGet Release (Microsoft.DurableTask.Client.Grpc)
+        dependsOn: nugetApproval
+        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        templateContext:
+          type: releaseJob
+          isProduction: true
+          inputs:
+          - input: pipelineArtifact
+            pipeline: officialPipeline  # Pipeline reference as defined in the resources section
+            artifactName: drop
+            targetPath: $(System.DefaultWorkingDirectory)/drop
+        steps:
+        - task: 1ES.PublishNuget@1
+          displayName: 'NuGet push (Microsoft.DurableTask.Client.Grpc)'
+          inputs:
+            command: push
+            nuGetFeedType: external
+            publishFeedCredentials: 'DurableTask org NuGet API Key'
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.Grpc.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
+            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+
+      # NuGet release (Microsoft.DurableTask.Client.OrchestrationServiceClientShim)
+      - job: nugetRelease_Microsoft_DurableTask_Client_OrchestrationServiceClientShim
+        displayName: NuGet Release (Microsoft.DurableTask.Client.OrchestrationServiceClientShim)
+        dependsOn: nugetApproval
+        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        templateContext:
+          type: releaseJob
+          isProduction: true
+          inputs:
+          - input: pipelineArtifact
+            pipeline: officialPipeline  # Pipeline reference as defined in the resources section
+            artifactName: drop
+            targetPath: $(System.DefaultWorkingDirectory)/drop
+        steps:
+        - task: 1ES.PublishNuget@1
+          displayName: 'NuGet push (Microsoft.DurableTask.Client.OrchestrationServiceClientShim)'
+          inputs:
+            command: push
+            nuGetFeedType: external
+            publishFeedCredentials: 'DurableTask org NuGet API Key'
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.OrchestrationServiceClientShim.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
+            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+
+      # NuGet release (Microsoft.DurableTask.Generators)
+      - job: nugetRelease_Microsoft_DurableTask_Generators
+        displayName: NuGet Release (Microsoft.DurableTask.Generators)
+        dependsOn: nugetApproval
+        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        templateContext:
+          type: releaseJob
+          isProduction: true
+          inputs:
+          - input: pipelineArtifact
+            pipeline: officialPipeline  # Pipeline reference as defined in the resources section
+            artifactName: drop
+            targetPath: $(System.DefaultWorkingDirectory)/drop
+        steps:
+        - task: 1ES.PublishNuget@1
+          displayName: 'NuGet push (Microsoft.DurableTask.Generators)'
+          inputs:
+            command: push
+            nuGetFeedType: external
+            publishFeedCredentials: 'DurableTask org NuGet API Key'
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Generators.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
+            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+
+      # NuGet release (Microsoft.DurableTask.Grpc)
+      - job: nugetRelease_Microsoft_DurableTask_Grpc
+        displayName: NuGet Release (Microsoft.DurableTask.Grpc)
+        dependsOn: nugetApproval
+        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        templateContext:
+          type: releaseJob
+          isProduction: true
+          inputs:
+          - input: pipelineArtifact
+            pipeline: officialPipeline  # Pipeline reference as defined in the resources section
+            artifactName: drop
+            targetPath: $(System.DefaultWorkingDirectory)/drop
+        steps:
+        - task: 1ES.PublishNuget@1
+          displayName: 'NuGet push (Microsoft.DurableTask.Grpc)'
+          inputs:
+            command: push
+            nuGetFeedType: external
+            publishFeedCredentials: 'DurableTask org NuGet API Key'
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Grpc.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
+            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+
+      # NuGet release (Microsoft.DurableTask.Worker)
+      - job: nugetRelease_Microsoft_DurableTask_Worker
+        displayName: NuGet Release (Microsoft.DurableTask.Worker)
+        dependsOn: nugetApproval
+        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        templateContext:
+          type: releaseJob
+          isProduction: true
+          inputs:
+          - input: pipelineArtifact
+            pipeline: officialPipeline  # Pipeline reference as defined in the resources section
+            artifactName: drop
+            targetPath: $(System.DefaultWorkingDirectory)/drop
+        steps:
+        - task: 1ES.PublishNuget@1
+          displayName: 'NuGet push (Microsoft.DurableTask.Worker)'
+          inputs:
+            command: push
+            nuGetFeedType: external
+            publishFeedCredentials: 'DurableTask org NuGet API Key'
+            # the packages to push pattern explicitly excludes 'Microsoft.DurableTask.Worker.Grpc', which is pushed by another job in this file
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.Grpc*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
+            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+
+      # NuGet release (Microsoft.DurableTask.Worker.Grpc)
+      - job: nugetRelease_Microsoft_DurableTask_Worker_Grpc
+        displayName: NuGet Release (Microsoft.DurableTask.Worker.Grpc)
+        dependsOn: nugetApproval
+        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        templateContext:
+          type: releaseJob
+          isProduction: true
+          inputs:
+          - input: pipelineArtifact
+            pipeline: officialPipeline  # Pipeline reference as defined in the resources section
+            artifactName: drop
+            targetPath: $(System.DefaultWorkingDirectory)/drop
+        steps:
+        - task: 1ES.PublishNuget@1
+          displayName: 'NuGet push (Microsoft.DurableTask.Worker.Grpc)'
+          inputs:
+            command: push
+            nuGetFeedType: external
+            publishFeedCredentials: 'DurableTask org NuGet API Key'
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.Grpc.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
+            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling

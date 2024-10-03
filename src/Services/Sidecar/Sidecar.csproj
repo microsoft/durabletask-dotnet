@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Import common properties for build settings -->
+  <Import Project="../common.props" />
+  
+  <!-- NuGet configuration -->
+  <PropertyGroup>
+    <PackageId>Microsoft.DurableTask.Sidecar</PackageId>
+    <Title>Durable Task Sidecar</Title>
+    <Description>gRPC sidecar implementation for the Durable Task Framework.</Description>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Azure.DurableTask.Core" Version="2.17.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="6.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="6.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Grpc\Grpc.csproj" />
+  </ItemGroup>
+
+</Project>

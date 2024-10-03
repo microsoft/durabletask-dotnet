@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "DurableTask.Sidecar.App": {
+      "commandName": "Project",
+      "commandLineArgs": "--backend Emulator"
+    }
+  }
+}

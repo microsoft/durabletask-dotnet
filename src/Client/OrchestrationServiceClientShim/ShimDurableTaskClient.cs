@@ -185,6 +185,16 @@ class ShimDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
+    public override Task RewindInstanceAsync(
+        string instanceId, string? reason = null, CancellationToken cancellation = default)
+    {
+        // At the time of writing, there is no IOrchestrationXXXClient interface that supports rewind.
+        // Rather, it's only supported by specific backend implementations like Azure Storage. Once an interface
+        // with rewind is added to DurableTask.Core, we can add support for it here.
+        throw new NotSupportedException("Rewind is not supported by the current client.");
+    }
+
+    /// <inheritdoc/>
     public override async Task<OrchestrationMetadata> WaitForInstanceCompletionAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {
@@ -219,7 +229,7 @@ class ShimDurableTaskClient : DurableTaskClient
         }
     }
 
-    [return: NotNullIfNotNull("state")]
+    [return: NotNullIfNotNull(nameof(state))]
     OrchestrationMetadata? ToMetadata(Core.OrchestrationState? state, bool getInputsAndOutputs)
     {
         if (state is null)

@@ -1,5 +1,9 @@
 ﻿# Changelog
 
+## v1.4.0
+
+- Microsoft.Azure.DurableTask.Core dependency increased to `3.0.0`
+
 ## v1.3.0
 
 ### Microsoft.DurableTask.Abstractions

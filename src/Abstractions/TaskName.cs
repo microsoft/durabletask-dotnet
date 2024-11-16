@@ -30,6 +30,41 @@ public readonly struct TaskName : IEquatable<TaskName>
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="TaskName"/> struct.
+    /// </summary>
+    /// <param name="name">The name of the task. Providing <c>null</c> will yield the default struct.</param>
+    /// <param name="version">The version of the task.</param>
+    public TaskName(string name, string version)
+    {
+        if (name is null)
+        {
+            if (version is null)
+            {
+                // Force the default struct when null is passed in.
+                this.Name = null!;
+                this.Version = null!;
+            }
+            else
+            {
+                throw new ArgumentException("name must not be null when version is non-null");
+            }
+        }
+        else
+        {
+            if (version is null)
+            {
+                this.Name = name;
+                this.Version = string.Empty; // fallback to the constructor without version parameter
+            }
+            else
+            {
+                this.Name = name;
+                this.Version = version;
+            }
+        }
+    }
+
+    /// <summary>
     /// Gets the name of the task without the version.
     /// </summary>
     /// <value>
@@ -40,23 +75,22 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// <summary>
     /// Gets the version of the task.
     /// </summary>
-    /// <remarks>
-    /// Task versions is currently locked to <see cref="string.Empty" /> as it is not yet integrated into task
-    /// identification. This is being left here as we intend to support it soon.
-    /// </remarks>
+    /// <value>
+    /// The version of the activity task.
+    /// </value>
     public string Version { get; }
 
     /// <summary>
     /// Implicitly converts a <see cref="TaskName"/> into a <see cref="string"/> of the <see cref="Name"/> property value.
     /// </summary>
     /// <param name="value">The <see cref="TaskName"/> to be converted into a string.</param>
-    public static implicit operator string(TaskName value) => value.Name;
+    public static implicit operator string(TaskName value) => value.ToString();
 
     /// <summary>
     /// Implicitly converts a <see cref="string"/> into a <see cref="TaskName"/> value.
     /// </summary>
     /// <param name="value">The string to convert into a <see cref="TaskName"/>.</param>
-    public static implicit operator TaskName(string value) => string.IsNullOrEmpty(value) ? default : new(value);
+    public static implicit operator TaskName(string value) => FromString(value);
 
     /// <summary>
     /// Compares two <see cref="TaskName"/> objects for equality.
@@ -81,6 +115,32 @@ public readonly struct TaskName : IEquatable<TaskName>
     }
 
     /// <summary>
+    /// Parses the taskname string and initializes a new instance of the <see cref="TaskName"/> struct.
+    /// </summary>
+    /// <param name="taskname">The taskname string in format of "Name:Version" or "Name".</param>
+    /// <returns>New <see cref="TaskName"/> instance parsed from taskname string.</returns>
+    public static TaskName FromString(string taskname)
+    {
+        if (string.IsNullOrEmpty(taskname))
+        {
+            return default;
+        }
+
+        string[] parts = taskname.Split(':');
+        if (parts.Length == 1)
+        {
+            return new TaskName(parts[0]);
+        }
+
+        if (parts.Length == 2)
+        {
+            return new TaskName(parts[0], parts[1]);
+        }
+
+        throw new ArgumentException("Invalid task name format: taskname=" + taskname);
+    }
+
+    /// <summary>
     /// Gets a value indicating whether to <see cref="TaskName"/> objects
     /// are equal using value semantics.
     /// </summary>
@@ -88,7 +148,8 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// <returns><c>true</c> if the two objects are equal using value semantics; otherwise <c>false</c>.</returns>
     public bool Equals(TaskName other)
     {
-        return string.Equals(this.Name, other.Name, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(this.Name, other.Name, StringComparison.OrdinalIgnoreCase)
+          && string.Equals(this.Version, other.Version, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -113,7 +174,7 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// <returns>A 32-bit hash code value.</returns>
     public override int GetHashCode()
     {
-        return StringComparer.OrdinalIgnoreCase.GetHashCode(this.Name);
+        return HashCode.Combine(this.Name, this.Version);
     }
 
     /// <summary>

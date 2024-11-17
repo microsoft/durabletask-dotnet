@@ -290,6 +290,32 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     public abstract Task ResumeInstanceAsync(
         string instanceId, string? reason = null, CancellationToken cancellation = default);
 
+    /// <summary>
+    /// Rewinds the specified orchestration instance to a previous, non-failed state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Only orchestrations in a failed state can be rewound. Attempting to rewind an orchestration in a non-failed
+    /// state may result in either a no-op or a failure depending on the backend implementation.
+    /// </para><para>
+    /// Rewind works by rewriting an orchestration's history to remove the most recent failure records, and then
+    /// re-executing the orchestration with the modified history. This effectively "rewinds" the orchestration to a
+    /// previous "good" state, allowing it to re-execute the logic that caused the original failure.
+    /// </para><para>
+    /// Rewinding an orchestration is intended to be used in cases where a failure is caused by a transient issue that
+    /// has since been resolved. It is not intended to be used as a general-purpose retry mechanism.
+    /// </para>
+    /// </remarks>
+    /// <param name="instanceId">The instance ID of the orchestration to rewind.</param>
+    /// <param name="reason">The optional rewind reason, which is recorded in the orchestration history.</param>
+    /// <param name="cancellation">
+    /// A <see cref="CancellationToken"/> that can be used to cancel the rewind API call. Note that cancelling this
+    /// token does not cancel the rewind operation once it has been successfully enqueued.
+    /// </param>
+    /// <returns>A task that completes when the rewind operation was been successfully.</returns>
+    public abstract Task RewindInstanceAsync(
+        string instanceId, string? reason = null, CancellationToken cancellation = default);
+
     /// <inheritdoc cref="GetInstanceAsync(string, bool, CancellationToken)"/>
     public virtual Task<OrchestrationMetadata?> GetInstanceAsync(
         string instanceId, CancellationToken cancellation)

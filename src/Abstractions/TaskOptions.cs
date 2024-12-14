@@ -100,4 +100,6 @@ public record SubOrchestrationOptions : TaskOptions
 /// The time when the orchestration instance should start executing. If not specified or if a date-time in the past
 /// is specified, the orchestration instance will be scheduled immediately.
 /// </param>
-public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null);
+/// <param name="ParentTraceId">Parent Trace Id.</param>
+/// <param name="ParentSpanId">Parent Span Id.</param>
+public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null, string? ParentTraceId = null);

@@ -167,7 +167,7 @@ sealed partial class GrpcDurableTaskWorker
                     {
                         this.RunBackgroundTask(
                             workItem,
-                            () => this.OnRunEntityBatchAsync(workItem.EntityRequest, workItem.CompletionToken));
+                            () => this.OnRunEntityBatchAsync(workItem.EntityRequest));
                     }
                     else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
                     {
@@ -361,7 +361,7 @@ sealed partial class GrpcDurableTaskWorker
             await this.sidecar.CompleteActivityTaskAsync(response);
         }
 
-        async Task OnRunEntityBatchAsync(P.EntityBatchRequest request, string completionToken)
+        async Task OnRunEntityBatchAsync(P.EntityBatchRequest request)
         {
             var coreEntityId = DTCore.Entities.EntityId.FromString(request.InstanceId);
             EntityId entityId = new(coreEntityId.Name, coreEntityId.Key);
@@ -420,7 +420,7 @@ sealed partial class GrpcDurableTaskWorker
             }
 
             // convert the result to protobuf format and send it back
-            P.EntityBatchResult response = batchResult.ToEntityBatchResult(completionToken);
+            P.EntityBatchResult response = batchResult.ToEntityBatchResult();
             await this.sidecar.CompleteEntityTaskAsync(response);
         }
     }

@@ -608,12 +608,9 @@ static class ProtoUtils
     /// Converts a <see cref="EntityBatchResult" /> to <see cref="P.EntityBatchResult" />.
     /// </summary>
     /// <param name="entityBatchResult">The operation result to convert.</param>
-    /// <param name="completionToken">The completion token from the work item.</param>
     /// <returns>The converted operation result.</returns>
     [return: NotNullIfNotNull(nameof(entityBatchResult))]
-    internal static P.EntityBatchResult? ToEntityBatchResult(
-        this EntityBatchResult? entityBatchResult,
-        string completionToken)
+    internal static P.EntityBatchResult? ToEntityBatchResult(this EntityBatchResult? entityBatchResult)
     {
         if (entityBatchResult == null)
         {

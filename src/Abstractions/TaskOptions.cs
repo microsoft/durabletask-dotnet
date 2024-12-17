@@ -101,5 +101,4 @@ public record SubOrchestrationOptions : TaskOptions
 /// is specified, the orchestration instance will be scheduled immediately.
 /// </param>
 /// <param name="ParentTraceId">Parent Trace Id.</param>
-/// <param name="ParentSpanId">Parent Span Id.</param>
 public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null, string? ParentTraceId = null);

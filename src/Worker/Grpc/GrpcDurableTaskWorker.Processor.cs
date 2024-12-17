@@ -139,8 +139,10 @@ sealed partial class GrpcDurableTaskWorker
             return this.sidecar!.GetWorkItems(
                 new P.GetWorkItemsRequest
                 {
-                    MaxConcurrentActivityWorkItems = workerOptions.MaximumConcurrentActivityWorkItems,
-                    MaxConcurrentOrchestrationWorkItems = workerOptions.MaximumConcurrentOrchestrationWorkItems,
+                    MaxConcurrentActivityWorkItems =
+                        workerOptions.Concurrency.MaximumConcurrentActivityWorkItems,
+                    MaxConcurrentOrchestrationWorkItems =
+                        workerOptions.Concurrency.MaximumConcurrentOrchestrationWorkItems,
                 },
                 cancellationToken: cancellation);
         }

@@ -84,19 +84,14 @@ public class DurableTaskWorkerOptions
     public TimeSpan MaximumTimerInterval { get; set; } = TimeSpan.FromDays(3);
 
     /// <summary>
-    /// Gets or sets the maximum number of concurrent activity work items that can be processed by the worker.
+    /// Gets options for the Durable Task worker concurrency.
     /// </summary>
-    public int MaximumConcurrentActivityWorkItems { get; set; } = 100 * Environment.ProcessorCount;
-
-    /// <summary>
-    /// Gets or sets the maximum number of concurrent orchestration work items that can be processed by the worker.
-    /// </summary>
-    public int MaximumConcurrentOrchestrationWorkItems { get; set; } = 100 * Environment.ProcessorCount;
-
-    /// <summary>
-    /// Gets or sets the maximum number of concurrent entity work items that can be processed by the worker.
-    /// </summary>
-    public int MaximumConcurrentEntityWorkItems { get; set; } = 100 * Environment.ProcessorCount;
+    /// <remarks>
+    /// Worker concurrency options control how many work items of a particular type (e.g., orchestration, activity,
+    /// or entity) can be processed concurrently by the worker. It is recommended to set these values based on the
+    /// expected workload and the resources available on the machine running the worker.
+    /// </remarks>
+    public ConcurrencyOptions Concurrency { get; } = new();
 
     /// <summary>
     /// Gets a value indicating whether <see cref="DataConverter" /> was explicitly set or not.
@@ -122,5 +117,26 @@ public class DurableTaskWorkerOptions
             other.MaximumTimerInterval = this.MaximumTimerInterval;
             other.EnableEntitySupport = this.EnableEntitySupport;
         }
+    }
+
+    /// <summary>
+    /// Options for the Durable Task worker concurrency.
+    /// </summary>
+    public class ConcurrencyOptions
+    {
+        /// <summary>
+        /// Gets or sets the maximum number of concurrent activity work items that can be processed by the worker.
+        /// </summary>
+        public int MaximumConcurrentActivityWorkItems { get; set; } = 100 * Environment.ProcessorCount;
+
+        /// <summary>
+        /// Gets or sets the maximum number of concurrent orchestration work items that can be processed by the worker.
+        /// </summary>
+        public int MaximumConcurrentOrchestrationWorkItems { get; set; } = 100 * Environment.ProcessorCount;
+
+        /// <summary>
+        /// Gets or sets the maximum number of concurrent entity work items that can be processed by the worker.
+        /// </summary>
+        public int MaximumConcurrentEntityWorkItems { get; set; } = 100 * Environment.ProcessorCount;
     }
 }

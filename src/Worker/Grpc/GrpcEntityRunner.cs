@@ -69,7 +69,7 @@ public static class GrpcEntityRunner
         TaskEntity entity = factory.CreateEntity(entityName, implementation, id);
         EntityBatchResult result = await entity.ExecuteOperationBatchAsync(batch);
 
-        P.EntityBatchResult response = result.ToEntityBatchResult();
+        P.EntityBatchResult response = result.ToEntityBatchResult(completionToken: string.Empty /* doesn't apply */);
         byte[] responseBytes = response.ToByteArray();
         return Convert.ToBase64String(responseBytes);
     }

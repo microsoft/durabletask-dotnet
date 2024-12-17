@@ -84,6 +84,21 @@ public class DurableTaskWorkerOptions
     public TimeSpan MaximumTimerInterval { get; set; } = TimeSpan.FromDays(3);
 
     /// <summary>
+    /// Gets or sets the maximum number of concurrent activity work items that can be processed by the worker.
+    /// </summary>
+    public int MaximumConcurrentActivityWorkItems { get; set; } = 100 * Environment.ProcessorCount;
+
+    /// <summary>
+    /// Gets or sets the maximum number of concurrent orchestration work items that can be processed by the worker.
+    /// </summary>
+    public int MaximumConcurrentOrchestrationWorkItems { get; set; } = 100 * Environment.ProcessorCount;
+
+    /// <summary>
+    /// Gets or sets the maximum number of concurrent entity work items that can be processed by the worker.
+    /// </summary>
+    public int MaximumConcurrentEntityWorkItems { get; set; } = 100 * Environment.ProcessorCount;
+
+    /// <summary>
     /// Gets a value indicating whether <see cref="DataConverter" /> was explicitly set or not.
     /// </summary>
     /// <remarks>

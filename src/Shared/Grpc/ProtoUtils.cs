@@ -223,18 +223,21 @@ static class ProtoUtils
     /// <param name="instanceId">The orchestrator instance ID.</param>
     /// <param name="customStatus">The orchestrator customer status or <c>null</c> if no custom status.</param>
     /// <param name="actions">The orchestrator actions.</param>
+    /// <param name="completionToken">The completion token from the work item.</param>
     /// <returns>The orchestrator response.</returns>
     /// <exception cref="NotSupportedException">When an orchestrator action is unknown.</exception>
     internal static P.OrchestratorResponse ConstructOrchestratorResponse(
         string instanceId,
         string? customStatus,
-        IEnumerable<OrchestratorAction> actions)
+        IEnumerable<OrchestratorAction> actions,
+        string completionToken)
     {
         Check.NotNull(actions);
         var response = new P.OrchestratorResponse
         {
             InstanceId = instanceId,
             CustomStatus = customStatus,
+            CompletionToken = completionToken,
         };
 
         foreach (OrchestratorAction action in actions)
@@ -605,9 +608,12 @@ static class ProtoUtils
     /// Converts a <see cref="EntityBatchResult" /> to <see cref="P.EntityBatchResult" />.
     /// </summary>
     /// <param name="entityBatchResult">The operation result to convert.</param>
+    /// <param name="completionToken">The completion token from the work item.</param>
     /// <returns>The converted operation result.</returns>
     [return: NotNullIfNotNull(nameof(entityBatchResult))]
-    internal static P.EntityBatchResult? ToEntityBatchResult(this EntityBatchResult? entityBatchResult)
+    internal static P.EntityBatchResult? ToEntityBatchResult(
+        this EntityBatchResult? entityBatchResult,
+        string completionToken)
     {
         if (entityBatchResult == null)
         {
@@ -618,6 +624,7 @@ static class ProtoUtils
         {
             EntityState = entityBatchResult.EntityState,
             FailureDetails = entityBatchResult.FailureDetails.ToProtobuf(),
+            CompletionToken = completionToken,
         };
 
         foreach (OperationAction action in entityBatchResult.Actions!)

@@ -115,7 +115,8 @@ public static class GrpcOrchestrationRunner
         P.OrchestratorResponse response = ProtoUtils.ConstructOrchestratorResponse(
             request.InstanceId,
             result.CustomStatus,
-            result.Actions);
+            result.Actions,
+            completionToken: string.Empty /* doesn't apply */);
         byte[] responseBytes = response.ToByteArray();
         return Convert.ToBase64String(responseBytes);
     }

@@ -223,7 +223,10 @@ static class ProtoUtils
     /// <param name="instanceId">The orchestrator instance ID.</param>
     /// <param name="customStatus">The orchestrator customer status or <c>null</c> if no custom status.</param>
     /// <param name="actions">The orchestrator actions.</param>
-    /// <param name="completionToken">The completion token from the work item.</param>
+    /// <param name="completionToken">
+    /// The completion token for the work item. It must be the exact same <see cref="P.WorkItem.CompletionToken" />
+    /// value that was provided by the corresponding <see cref="P.WorkItem"/> that triggered the orchestrator execution.
+    /// </param>
     /// <returns>The orchestrator response.</returns>
     /// <exception cref="NotSupportedException">When an orchestrator action is unknown.</exception>
     internal static P.OrchestratorResponse ConstructOrchestratorResponse(

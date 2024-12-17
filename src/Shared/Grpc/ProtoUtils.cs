@@ -624,7 +624,6 @@ static class ProtoUtils
         {
             EntityState = entityBatchResult.EntityState,
             FailureDetails = entityBatchResult.FailureDetails.ToProtobuf(),
-            CompletionToken = completionToken,
         };
 
         foreach (OperationAction action in entityBatchResult.Actions!)

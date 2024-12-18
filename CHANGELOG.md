@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## v1.5.0
+
+- Implement work item completion tokens for standalone worker scenarios ([#359](https://github.com/microsoft/durabletask-dotnet/pull/359))
+- Support for worker concurrency configuration ([#359](https://github.com/microsoft/durabletask-dotnet/pull/359))
+- Bump System.Text.Json to 6.0.10
+
 ## v1.4.0
 
 - Microsoft.Azure.DurableTask.Core dependency increased to `3.0.0`

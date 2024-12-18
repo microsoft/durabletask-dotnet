@@ -223,18 +223,24 @@ static class ProtoUtils
     /// <param name="instanceId">The orchestrator instance ID.</param>
     /// <param name="customStatus">The orchestrator customer status or <c>null</c> if no custom status.</param>
     /// <param name="actions">The orchestrator actions.</param>
+    /// <param name="completionToken">
+    /// The completion token for the work item. It must be the exact same <see cref="P.WorkItem.CompletionToken" />
+    /// value that was provided by the corresponding <see cref="P.WorkItem"/> that triggered the orchestrator execution.
+    /// </param>
     /// <returns>The orchestrator response.</returns>
     /// <exception cref="NotSupportedException">When an orchestrator action is unknown.</exception>
     internal static P.OrchestratorResponse ConstructOrchestratorResponse(
         string instanceId,
         string? customStatus,
-        IEnumerable<OrchestratorAction> actions)
+        IEnumerable<OrchestratorAction> actions,
+        string completionToken)
     {
         Check.NotNull(actions);
         var response = new P.OrchestratorResponse
         {
             InstanceId = instanceId,
             CustomStatus = customStatus,
+            CompletionToken = completionToken,
         };
 
         foreach (OrchestratorAction action in actions)

@@ -138,6 +138,18 @@ class ShimDurableTaskClient : DurableTaskClient
     {
         cancellation.ThrowIfCancellationRequested();
         string instanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N");
+        OrchestrationStatus[] runtimeStates = Array.Empty<OrchestrationStatus>();
+
+        // Convert from DurableTask.OrchestrationRuntimeStatus to DurableTask.Core.OrchestrationRuntimeStatus
+        if (options?.OrchestrationIdReusePolicy != null)
+        {
+            runtimeStates = new OrchestrationStatus[options.OrchestrationIdReusePolicy.Length];
+            for (int i = 0; i < options.OrchestrationIdReusePolicy.Length; i++)
+            {
+                runtimeStates[i] = ConvertState(options.OrchestrationIdReusePolicy[i]);
+            }
+        }
+
         OrchestrationInstance instance = new()
         {
             InstanceId = instanceId,
@@ -157,7 +169,7 @@ class ShimDurableTaskClient : DurableTaskClient
             },
         };
 
-        await this.Client.CreateTaskOrchestrationAsync(message);
+        await this.Client.CreateTaskOrchestrationAsync(message, runtimeStates);
         return instanceId;
     }
 
@@ -216,6 +228,28 @@ class ShimDurableTaskClient : DurableTaskClient
             }
 
             await Task.Delay(TimeSpan.FromSeconds(1), cancellation);
+        }
+    }
+
+    // Converts from DurableTask.OrchestrationRuntimeStatus to OrchestrationStatus for policy reuse.
+    static OrchestrationStatus ConvertState(DurableTask.OrchestrationRuntimeStatus state)
+    {
+        switch (state)
+        {
+            case DurableTask.OrchestrationRuntimeStatus.Running:
+                return OrchestrationStatus.Running;
+            case DurableTask.OrchestrationRuntimeStatus.Completed:
+                return OrchestrationStatus.Completed;
+            case DurableTask.OrchestrationRuntimeStatus.Failed:
+                return OrchestrationStatus.Failed;
+            case DurableTask.OrchestrationRuntimeStatus.Terminated:
+                return OrchestrationStatus.Terminated;
+            case DurableTask.OrchestrationRuntimeStatus.Pending:
+                return OrchestrationStatus.Pending;
+            case DurableTask.OrchestrationRuntimeStatus.Suspended:
+                return OrchestrationStatus.Suspended;
+            default:
+                return OrchestrationStatus.Terminated;
         }
     }
 

@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageDescription>Azure extensions for the Durable Task Framework.</PackageDescription>
+    <EnableStyleCop>true</EnableStyleCop>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.Core" Version="1.35.0" />
+    <PackageReference Include="Grpc.Net.Client" Version="2.52.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Client/Core/Client.csproj" />
+    <ProjectReference Include="../../Worker/Core/Worker.csproj" />
+  </ItemGroup>
+
+</Project>

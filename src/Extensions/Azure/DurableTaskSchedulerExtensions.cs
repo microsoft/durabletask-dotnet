@@ -1,4 +1,5 @@
 ﻿using Azure.Core;
+using Grpc.Net.Client;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
 using System.Diagnostics;
@@ -79,12 +80,8 @@ public static class DurableTaskSchedulerExtensions
         }
 
         string resourceId = options.ResourceId ?? "https://durabletask.io";
-#if NET6_0
         int processId = Environment.ProcessId;
-#else
-        int processId = Process.GetCurrentProcess().Id;
-#endif
-        string workerId = options.WorkerId ?? $"{Environment.MachineName},{processId},{Guid.NewGuid()}";
+        string workerId = options.WorkerId ?? $"{Environment.MachineName},{processId},{Guid.NewGuid():N}";
 
         TokenCache? cache =
             options.Credential is not null
@@ -114,8 +111,7 @@ public static class DurableTaskSchedulerExtensions
         ChannelCredentials channelCreds = endpoint.StartsWith("https://") ?
             ChannelCredentials.SecureSsl :
             ChannelCredentials.Insecure;
-    #if NET6_0
-        return GrpcChannel.ForAddress(this.options.Address, new GrpcChannelOptions
+        return GrpcChannel.ForAddress(options.EndpointAddress, new GrpcChannelOptions
             {
                 // The same credential is being used for all operations.
                 // https://learn.microsoft.com/aspnet/core/grpc/authn-and-authz#set-the-bearer-token-with-callcredentials
@@ -125,21 +121,6 @@ public static class DurableTaskSchedulerExtensions
                 //       only be done for local testing. We should hide this setting behind some kind of flag.
                 UnsafeUseInsecureChannelCallCredentials = true,
             });
-    #else
-        return new GrpcChannel(
-            endpoint,
-            ChannelCredentials.Create(channelCreds, managedBackendCreds),
-            new GrpcChannelOptions
-            {
-                // The same credential is being used for all operations.
-                // https://learn.microsoft.com/aspnet/core/grpc/authn-and-authz#set-the-bearer-token-with-callcredentials
-                Credentials = ChannelCredentials.Create(channelCreds, managedBackendCreds),
-
-                // TODO: This is not appropriate for use in production settings. Setting this to true should
-                //       only be done for local testing. We should hide this setting behind some kind of flag.
-                UnsafeUseInsecureChannelCallCredentials = true,
-            });
-    #endif
     }
 
     static Exception RequiredOptionMissing(string optionName)

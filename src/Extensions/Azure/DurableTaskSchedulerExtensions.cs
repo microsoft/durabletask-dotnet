@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+﻿﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using Azure.Core;
@@ -141,18 +141,20 @@ public static class DurableTaskSchedulerExtensions
             ChannelCredentials.SecureSsl :
             ChannelCredentials.Insecure;
         return GrpcChannel.ForAddress(endpoint, new GrpcChannelOptions
-            {
-                // The same credential is being used for all operations.
-                // https://learn.microsoft.com/aspnet/core/grpc/authn-and-authz#set-the-bearer-token-with-callcredentials
-                Credentials = ChannelCredentials.Create(channelCreds, managedBackendCreds),
 
-                // TODO: This is not appropriate for use in production settings. Setting this to true should
-                //       only be done for local testing. We should hide this setting behind some kind of flag.
-                UnsafeUseInsecureChannelCallCredentials = true,
-            });
+        return GrpcChannel.ForAddress(endpoint, new GrpcChannelOptions
+        {
+            // The same credential is being used for all operations.
+            // https://learn.microsoft.com/aspnet/core/grpc/authn-and-authz#set-the-bearer-token-with-callcredentials
+            Credentials = ChannelCredentials.Create(channelCreds, managedBackendCreds),
+
+            // TODO: This is not appropriate for use in production settings. Setting this to true should
+            //       only be done for local testing. We should hide this setting behind some kind of flag.
+            UnsafeUseInsecureChannelCallCredentials = true,
+        });
     }
 
-    static Exception RequiredOptionMissing(string optionName)
+    static ArgumentException RequiredOptionMissing(string optionName)
     {
         return new ArgumentException(message: $"Required option '{optionName}' was not provided.");
     }

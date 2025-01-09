@@ -1,5 +1,5 @@
 ﻿﻿// Copyright (c) Microsoft Corporation.
-﻿// Licensed under the MIT License.
+// Licensed under the MIT License.
 
 using System.Globalization;
 using Azure.Core;
@@ -15,6 +15,9 @@ public class DurableTaskSchedulerOptions
     /// <summary>
     /// Initializes a new instance of the <see cref="DurableTaskSchedulerOptions"/> class.
     /// </summary>
+    /// <param name="endpointAddress">The endpoint address of the Durable Task Scheduler service.</param>
+    /// <param name="taskHubName">The name of the task hub to connect to.</param>
+    /// <param name="credential">The credential to use for authentication, or null for no authentication.</param>
     internal DurableTaskSchedulerOptions(string endpointAddress, string taskHubName, TokenCredential? credential = null)
     {
         this.EndpointAddress = endpointAddress ?? throw new ArgumentNullException(nameof(endpointAddress));
@@ -74,7 +77,6 @@ public class DurableTaskSchedulerOptions
         // "Endpoint=https://myaccount.westus3.durabletask.io/;Authentication=ManagedIdentity;ClientID=00000000-0000-0000-0000-000000000000;TaskHubName=th01"
         // "Endpoint=https://myaccount.westus3.durabletask.io/;Authentication=DefaultAzure;TaskHubName=th01"
         // "Endpoint=https://myaccount.westus3.durabletask.io/;Authentication=None;TaskHubName=th01" (undocumented and only intended for local testing)
-
         string endpointAddress = connectionString.Endpoint;
 
         if (!endpointAddress.Contains("://"))
@@ -84,7 +86,6 @@ public class DurableTaskSchedulerOptions
         }
 
         string authType = connectionString.Authentication;
-
         TokenCredential? credential;
 
         // Parse the supported auth types, in a case-insensitive way and without spaces

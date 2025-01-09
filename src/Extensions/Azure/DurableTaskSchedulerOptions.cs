@@ -8,8 +8,6 @@ using Azure.Identity;
 
 namespace Microsoft.DurableTask.Extensions.Azure;
 
-// NOTE: These options definitions will eventually be provided by the Durable Task SDK itself.
-
 /// <summary>
 /// Options for configuring the Durable Task Scheduler.
 /// </summary>
@@ -50,12 +48,23 @@ public class DurableTaskSchedulerOptions
     /// </summary>
     public string? WorkerId { get; set; }
 
-
+    /// <summary>
+    /// Creates a new instance of <see cref="DurableTaskSchedulerOptions"/> from a connection string.
+    /// </summary>
+    /// <param name="connectionString">The connection string containing the configuration settings.</param>
+    /// <returns>A new instance of <see cref="DurableTaskSchedulerOptions"/> configured with the connection string settings.</returns>
+    /// <exception cref="ArgumentException">Thrown when the connection string contains an unsupported authentication type.</exception>
     public static DurableTaskSchedulerOptions FromConnectionString(string connectionString)
     {
         return FromConnectionString(new DurableTaskSchedulerConnectionString(connectionString));
     }
 
+    /// <summary>
+    /// Creates a new instance of <see cref="DurableTaskSchedulerOptions"/> from a parsed connection string.
+    /// </summary>
+    /// <param name="connectionString">The parsed connection string containing the configuration settings.</param>
+    /// <returns>A new instance of <see cref="DurableTaskSchedulerOptions"/> configured with the connection string settings.</returns>
+    /// <exception cref="ArgumentException">Thrown when the connection string contains an unsupported authentication type.</exception>
     public static DurableTaskSchedulerOptions FromConnectionString(
         DurableTaskSchedulerConnectionString connectionString)
     {

@@ -1,12 +1,9 @@
 ﻿using Azure.Core;
-using Grpc.Net.Client;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
-using System.Diagnostics;
 
 namespace DurableTask.Extensions.Azure;
 
-// NOTE: These extension methods will eventually be provided by the Durable Task SDK itself.
 public static class DurableTaskSchedulerExtensions
 {
     // Configure the Durable Task *Worker* to use the Durable Task Scheduler service with the specified options.

@@ -14,7 +14,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
 
-namespace DurableTask.Extensions.Azure.Tests;
+namespace Microsoft.DurableTask.Extensions.Azure.Tests;
 
 public class DurableTaskSchedulerExtensionsTests
 {

@@ -6,7 +6,7 @@ using Azure.Identity;
 using FluentAssertions;
 using Xunit;
 
-namespace DurableTask.Extensions.Azure.Tests;
+namespace Microsoft.DurableTask.Extensions.Azure.Tests;
 
 public class DurableTaskSchedulerOptionsTests
 {

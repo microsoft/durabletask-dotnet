@@ -2,7 +2,7 @@
 using Azure.Core;
 using Azure.Identity;
 
-namespace DurableTask.Extensions.Azure;
+namespace Microsoft.DurableTask.Extensions.Azure;
 
 // NOTE: These options definitions will eventually be provided by the Durable Task SDK itself.
 

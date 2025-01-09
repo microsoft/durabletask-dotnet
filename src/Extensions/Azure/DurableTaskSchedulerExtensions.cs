@@ -2,7 +2,7 @@
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
 
-namespace DurableTask.Extensions.Azure;
+namespace Microsoft.DurableTask.Extensions.Azure;
 
 public static class DurableTaskSchedulerExtensions
 {

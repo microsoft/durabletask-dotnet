@@ -4,7 +4,7 @@
 
 using System.Data.Common;
 
-namespace DurableTask.Extensions.Azure;
+namespace Microsoft.DurableTask.Extensions.Azure;
 
 /// <summary>
 /// Represents the constituent parts of a connection string for a Durable Task Scheduler service.

@@ -1,8 +1,7 @@
 ﻿using Azure.Core;
-using Grpc.Core;
-using Grpc.Net.Client;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
+using System.Diagnostics;
 
 namespace DurableTask.Extensions.Azure;
 
@@ -24,6 +23,16 @@ public static class DurableTaskSchedulerExtensions
         builder.UseGrpc(GetGrpcChannelForOptions(options));
     }
 
+    public static void UseDurableTaskScheduler(
+        this IDurableTaskWorkerBuilder builder,
+        string connectionString,
+        Action<DurableTaskSchedulerOptions>? configure = null)
+    {
+        var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
+        configure?.Invoke(options);
+        builder.UseGrpc(GetGrpcChannelForOptions(options));
+    }
+
     // Configure the Durable Task *Client* to use the Durable Task Scheduler service with the specified options.
     public static void UseDurableTaskScheduler(
         this IDurableTaskClientBuilder builder,
@@ -36,6 +45,16 @@ public static class DurableTaskSchedulerExtensions
 
         configure?.Invoke(options);
 
+        builder.UseGrpc(GetGrpcChannelForOptions(options));
+    }
+
+    public static void UseDurableTaskScheduler(
+        this IDurableTaskClientBuilder builder,
+        string connectionString,
+        Action<DurableTaskSchedulerOptions>? configure = null)
+    {
+        var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
+        configure?.Invoke(options);
         builder.UseGrpc(GetGrpcChannelForOptions(options));
     }
 
@@ -62,9 +81,20 @@ public static class DurableTaskSchedulerExtensions
         }
 
         string resourceId = options.ResourceId ?? "https://durabletask.io";
-        string workerId = options.WorkerId ?? $"{Environment.MachineName},{Environment.ProcessId}";
+#if NET6_0
+        int processId = Environment.ProcessId;
+#else
+        int processId = Process.GetCurrentProcess().Id;
+#endif
+        string workerId = options.WorkerId ?? $"{Environment.MachineName},{processId},{Guid.NewGuid()}";
 
-        TokenCache? cache = new(credential, context: new([$"{resourceId}/.default"]), margin: TimeSpan.FromMinutes(5));
+        TokenCache? cache =
+            options.Credential is not null
+                ? new(
+                    options.Credential,
+                    new(new[] { $"{options.ResourceId}/.default" }),
+                    TimeSpan.FromMinutes(5))
+                : null;
 
         CallCredentials managedBackendCreds = CallCredentials.FromInterceptor(
             async (context, metadata) =>
@@ -72,17 +102,28 @@ public static class DurableTaskSchedulerExtensions
                 metadata.Add("taskhub", taskHubName);
                 metadata.Add("workerid", workerId);
 
+                if (cache is null)
+                {
+                    return;
+                }
+
                 AccessToken token = await cache.GetTokenAsync(context.CancellationToken);
 
                 metadata.Add("Authorization", $"Bearer {token.Token}");
             });
 
+    #if NET6_0
         return GrpcChannel.ForAddress(
             endpoint,
             new GrpcChannelOptions
             {
                 Credentials = ChannelCredentials.Create(ChannelCredentials.SecureSsl, managedBackendCreds),
             });
+    #else
+        return new GrpcChannel(
+            endpoint,
+            ChannelCredentials.Create(ChannelCredentials.SecureSsl, managedBackendCreds));
+    #endif
     }
 
     static Exception RequiredOptionMissing(string optionName)

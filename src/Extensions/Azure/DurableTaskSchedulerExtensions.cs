@@ -1,4 +1,8 @@
-﻿using Azure.Core;
+﻿﻿// ------------------------------------------------------------
+//  Copyright (c) Microsoft Corporation.All rights reserved.
+// ------------------------------------------------------------
+
+using Azure.Core;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
 

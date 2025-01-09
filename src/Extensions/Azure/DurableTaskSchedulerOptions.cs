@@ -1,4 +1,8 @@
-﻿using System.Globalization;
+﻿﻿// ------------------------------------------------------------
+//  Copyright (c) Microsoft Corporation.All rights reserved.
+// ------------------------------------------------------------
+
+using System.Globalization;
 using Azure.Core;
 using Azure.Identity;
 

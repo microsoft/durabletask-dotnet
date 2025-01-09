@@ -19,9 +19,7 @@ public static class DurableTaskSchedulerExtensions
         Action<DurableTaskSchedulerOptions>? configure = null)
     {
         DurableTaskSchedulerOptions options = new(endpointAddress, taskHubName, credential);
-
         configure?.Invoke(options);
-
         builder.UseGrpc(GetGrpcChannelForOptions(options));
     }
 
@@ -44,9 +42,7 @@ public static class DurableTaskSchedulerExtensions
         Action<DurableTaskSchedulerOptions>? configure = null)
     {
         DurableTaskSchedulerOptions options = new(endpointAddress, taskHubName, credential);
-
         configure?.Invoke(options);
-
         builder.UseGrpc(GetGrpcChannelForOptions(options));
     }
 
@@ -64,7 +60,7 @@ public static class DurableTaskSchedulerExtensions
     {
         if (string.IsNullOrEmpty(options.EndpointAddress))
         {
-            throw RequiredOptionMissing(nameof(options.TaskHubName));
+            throw RequiredOptionMissing(nameof(options.EndpointAddress));
         }
 
         if (string.IsNullOrEmpty(options.TaskHubName))
@@ -88,7 +84,7 @@ public static class DurableTaskSchedulerExtensions
             options.Credential is not null
                 ? new(
                     options.Credential,
-                    new(new[] { $"{options.ResourceId}/.default" }),
+                    new(new[] { $"{resourceId}/.default" }),
                     TimeSpan.FromMinutes(5))
                 : null;
 
@@ -112,7 +108,7 @@ public static class DurableTaskSchedulerExtensions
         ChannelCredentials channelCreds = endpoint.StartsWith("https://") ?
             ChannelCredentials.SecureSsl :
             ChannelCredentials.Insecure;
-        return GrpcChannel.ForAddress(options.EndpointAddress, new GrpcChannelOptions
+        return GrpcChannel.ForAddress(endpoint, new GrpcChannelOptions
             {
                 // The same credential is being used for all operations.
                 // https://learn.microsoft.com/aspnet/core/grpc/authn-and-authz#set-the-bearer-token-with-callcredentials

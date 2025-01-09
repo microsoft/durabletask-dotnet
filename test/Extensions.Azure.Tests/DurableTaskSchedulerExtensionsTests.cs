@@ -133,7 +133,7 @@ public class DurableTaskSchedulerExtensionsTests
     }
 
     [Fact]
-    public void UseDurableTaskScheduler_WithNullCredential_ShouldThrowArgumentException()
+    public void UseDurableTaskScheduler_WithNullCredential_ShouldSucceed()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -143,8 +143,7 @@ public class DurableTaskSchedulerExtensionsTests
 
         // Act & Assert
         var action = () => mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential!);
-        action.Should().Throw<ArgumentException>()
-            .WithMessage("*Required option 'Credential' was not provided*");
+        action.Should().NotThrow();
     }
 
     [Fact]

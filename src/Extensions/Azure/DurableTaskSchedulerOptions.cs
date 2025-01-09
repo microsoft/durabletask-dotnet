@@ -1,6 +1,5 @@
-﻿﻿// ------------------------------------------------------------
-//  Copyright (c) Microsoft Corporation.All rights reserved.
-// ------------------------------------------------------------
+﻿﻿// Copyright (c) Microsoft Corporation.
+﻿// Licensed under the MIT License.
 
 using System.Globalization;
 using Azure.Core;
@@ -13,6 +12,9 @@ namespace Microsoft.DurableTask.Extensions.Azure;
 /// </summary>
 public class DurableTaskSchedulerOptions
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DurableTaskSchedulerOptions"/> class.
+    /// </summary>
     internal DurableTaskSchedulerOptions(string endpointAddress, string taskHubName, TokenCredential? credential = null)
     {
         this.EndpointAddress = endpointAddress ?? throw new ArgumentNullException(nameof(endpointAddress));
@@ -21,29 +23,29 @@ public class DurableTaskSchedulerOptions
     }
 
     /// <summary>
-    /// The endpoint address of the Durable Task Scheduler resource.
+    /// Gets the endpoint address of the Durable Task Scheduler resource.
     /// Expected to be in the format "https://{scheduler-name}.{region}.durabletask.io".
     /// </summary>
     public string EndpointAddress { get; }
 
     /// <summary>
-    /// The name of the task hub resource associated with the Durable Task Scheduler resource.
+    /// Gets the name of the task hub resource associated with the Durable Task Scheduler resource.
     /// </summary>
     public string TaskHubName { get; }
 
     /// <summary>
-    /// The credential used to authenticate with the Durable Task Scheduler task hub resource.
+    /// Gets the credential used to authenticate with the Durable Task Scheduler task hub resource.
     /// </summary>
     public TokenCredential? Credential { get; }
 
     /// <summary>
-    /// The resource ID of the Durable Task Scheduler resource.
+    /// Gets or sets the resource ID of the Durable Task Scheduler resource.
     /// The default value is https://durabletask.io.
     /// </summary>
     public string? ResourceId { get; set; }
 
     /// <summary>
-    /// The worker ID used to identify the worker instance.
+    /// Gets or sets the worker ID used to identify the worker instance.
     /// The default value is a string containing the machine name and the process ID.
     /// </summary>
     public string? WorkerId { get; set; }

@@ -26,7 +26,17 @@ public class DurableTaskSchedulerOptions
     /// Gets the endpoint address of the Durable Task Scheduler resource.
     /// Expected to be in the format "https://{scheduler-name}.{region}.durabletask.io".
     /// </summary>
-    public string EndpointAddress { get; }
+    public string EndpointAddress
+    {
+        get => this.endpointAddress;
+        set
+        {
+            // Add https:// prefix if no protocol is specified
+            this.endpointAddress = !value.Contains("://") 
+                ? $"https://{value}" 
+                : value;
+        }
+    }
 
     /// <summary>
     /// Gets the name of the task hub resource associated with the Durable Task Scheduler resource.

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+﻿﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using Azure.Core;
@@ -102,11 +102,6 @@ public static class DurableTaskSchedulerExtensions
 
         string taskHubName = options.TaskHubName;
         string endpoint = options.EndpointAddress;
-
-        if (!endpoint.Contains("://"))
-        {
-            endpoint = $"https://{endpoint}";
-        }
 
         string resourceId = options.ResourceId ?? "https://durabletask.io";
         int processId = Environment.ProcessId;

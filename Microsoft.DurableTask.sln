@@ -75,7 +75,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Extensions", "Extensions", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Azure", "src\Extensions\Azure\Azure.csproj", "{662BF73D-A4DD-4910-8625-7C12F1ACDBEC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Extensions.Azure.Tests", "test\Extensions.Azure.Tests\Extensions.Azure.Tests.csproj", "{DBB5DB4E-A1B0-4C86-A233-213789C46929}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Azure.Tests", "test\Extensions\Azure\Azure.Tests.csproj", "{DBB5DB4E-A1B0-4C86-A233-213789C46929}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

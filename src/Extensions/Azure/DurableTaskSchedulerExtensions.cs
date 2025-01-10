@@ -87,9 +87,4 @@ public static class DurableTaskSchedulerExtensions
         configure?.Invoke(options);
         builder.UseGrpc(options.GetGrpcChannel());
     }
-
-    static Exception RequiredOptionMissing(string optionName)
-    {
-        return new ArgumentException(message: $"Required option '{optionName}' was not provided.");
-    }
 }

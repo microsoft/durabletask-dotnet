@@ -81,6 +81,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.AzureManaged.Tests",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Worker.AzureManaged.Tests", "test\Worker\AzureManaged.Tests\Worker.AzureManaged.Tests.csproj", "{B78F1FFD-47AC-45BE-8FF9-0BF8C9F35DEF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AspNetWebApp", "samples\portable-sdk\dotnet\AspNetWebApp\AspNetWebApp.csproj", "{869D2D51-9372-4764-B059-C43B6C1180A3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

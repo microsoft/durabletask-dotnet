@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
-namespace Microsoft.DurableTask.Client;
+namespace Microsoft.DurableTask.Client.AzureManaged;
 
 /// <summary>
 /// Extension methods for configuring Durable Task clients to use the Azure Durable Task Scheduler service.

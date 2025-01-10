@@ -32,6 +32,7 @@ public class DurableTaskSchedulerOptions
         this.Credential = credential;
 
         // Generate the default worker ID once at construction time
+        // TODO: More iteration needed over time https://github.com/microsoft/durabletask-dotnet/pull/362#discussion_r1909547102
         this.defaultWorkerId = $"{Environment.MachineName},{Environment.ProcessId},{Guid.NewGuid():N}";
     }
 

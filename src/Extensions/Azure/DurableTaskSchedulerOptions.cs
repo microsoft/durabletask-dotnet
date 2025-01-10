@@ -81,11 +81,11 @@ public class DurableTaskSchedulerOptions
         int processId = Environment.ProcessId;
         string workerId = this.WorkerId ?? $"{Environment.MachineName},{processId},{Guid.NewGuid():N}";
 
-        TokenCache? cache =
+        AccessTokenCache? cache =
             this.Credential is not null
-                ? new(
+                ? new AccessTokenCache(
                     this.Credential,
-                    new(new[] { $"{resourceId}/.default" }),
+                    new TokenRequestContext(new[] { $"{resourceId}/.default" }),
                     TimeSpan.FromMinutes(5))
                 : null;
 
@@ -95,13 +95,12 @@ public class DurableTaskSchedulerOptions
                 metadata.Add("taskhub", taskHubName);
                 metadata.Add("workerid", workerId);
 
-                if (cache is null)
+                if (cache == null)
                 {
                     return;
                 }
-
+                
                 AccessToken token = await cache.GetTokenAsync(context.CancellationToken);
-
                 metadata.Add("Authorization", $"Bearer {token.Token}");
             });
 
@@ -218,28 +217,5 @@ public class DurableTaskSchedulerOptions
 
         DurableTaskSchedulerOptions options = new(endpointAddress, connectionString.TaskHubName, credential);
         return options;
-    }
-
-    sealed class TokenCache(TokenCredential credential, TokenRequestContext context, TimeSpan margin)
-    {
-        readonly TokenCredential credential = credential;
-        readonly TokenRequestContext context = context;
-        readonly TimeSpan margin = margin;
-
-        AccessToken? token;
-
-        public async Task<AccessToken> GetTokenAsync(CancellationToken cancellationToken)
-        {
-            DateTimeOffset nowWithMargin = DateTimeOffset.UtcNow.Add(this.margin);
-
-            if (this.token is null
-                || this.token.Value.RefreshOn < nowWithMargin
-                || this.token.Value.ExpiresOn < nowWithMargin)
-            {
-                this.token = await this.credential.GetTokenAsync(this.context, cancellationToken);
-            }
-
-            return this.token.Value;
-        }
     }
 }

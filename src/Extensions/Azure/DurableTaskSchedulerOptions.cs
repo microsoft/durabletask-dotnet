@@ -13,6 +13,8 @@ namespace Microsoft.DurableTask.Extensions.Azure;
 /// </summary>
 public class DurableTaskSchedulerOptions
 {
+    private readonly string defaultWorkerId;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DurableTaskSchedulerOptions"/> class.
     /// </summary>
@@ -28,6 +30,9 @@ public class DurableTaskSchedulerOptions
 
         this.TaskHubName = taskHubName;
         this.Credential = credential;
+
+        // Generate the default worker ID once at construction time
+        this.defaultWorkerId = $"{Environment.MachineName},{Environment.ProcessId},{Guid.NewGuid():N}";
     }
 
     /// <summary>
@@ -54,7 +59,7 @@ public class DurableTaskSchedulerOptions
 
     /// <summary>
     /// Gets or sets the worker ID used to identify the worker instance.
-    /// The default value is a string containing the machine name and the process ID.
+    /// The default value is a string containing the machine name, process ID, and a unique identifier.
     /// </summary>
     public string? WorkerId { get; set; }
 
@@ -78,8 +83,7 @@ public class DurableTaskSchedulerOptions
         string endpoint = this.EndpointAddress;
 
         string resourceId = this.ResourceId ?? "https://durabletask.io";
-        int processId = Environment.ProcessId;
-        string workerId = this.WorkerId ?? $"{Environment.MachineName},{processId},{Guid.NewGuid():N}";
+        string workerId = this.WorkerId ?? this.defaultWorkerId;
 
         AccessTokenCache? cache =
             this.Credential is not null

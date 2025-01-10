@@ -4,6 +4,7 @@
 using System.Globalization;
 using Azure.Core;
 using Azure.Identity;
+using Grpc.Core;
 
 namespace Microsoft.DurableTask.Extensions.Azure;
 
@@ -17,8 +18,15 @@ public class DurableTaskSchedulerOptions
     /// </summary>
     internal DurableTaskSchedulerOptions(string endpointAddress, string taskHubName, TokenCredential? credential = null)
     {
-        this.EndpointAddress = endpointAddress ?? throw new ArgumentNullException(nameof(endpointAddress));
-        this.TaskHubName = taskHubName ?? throw new ArgumentNullException(nameof(taskHubName));
+        Check.NotNullOrEmpty(endpointAddress, nameof(endpointAddress));
+        Check.NotNullOrEmpty(taskHubName, nameof(taskHubName));
+        
+        // Add https:// prefix if no protocol is specified
+        this.EndpointAddress = !endpointAddress.Contains("://") 
+            ? $"https://{endpointAddress}" 
+            : endpointAddress;
+            
+        this.TaskHubName = taskHubName;
         this.Credential = credential;
     }
 
@@ -26,17 +34,7 @@ public class DurableTaskSchedulerOptions
     /// Gets the endpoint address of the Durable Task Scheduler resource.
     /// Expected to be in the format "https://{scheduler-name}.{region}.durabletask.io".
     /// </summary>
-    public string EndpointAddress
-    {
-        get => this.endpointAddress;
-        set
-        {
-            // Add https:// prefix if no protocol is specified
-            this.endpointAddress = !value.Contains("://") 
-                ? $"https://{value}" 
-                : value;
-        }
-    }
+    public string EndpointAddress { get; }
 
     /// <summary>
     /// Gets the name of the task hub resource associated with the Durable Task Scheduler resource.
@@ -69,6 +67,58 @@ public class DurableTaskSchedulerOptions
     public static DurableTaskSchedulerOptions FromConnectionString(string connectionString)
     {
         return FromConnectionString(new DurableTaskSchedulerConnectionString(connectionString));
+    }
+
+    internal GrpcChannel GetGrpcChannel()
+    {
+        Check.NotNullOrEmpty(this.EndpointAddress, nameof(this.EndpointAddress));
+        Check.NotNullOrEmpty(this.TaskHubName, nameof(this.TaskHubName));
+
+        string taskHubName = this.TaskHubName;
+        string endpoint = this.EndpointAddress;
+
+        string resourceId = this.ResourceId ?? "https://durabletask.io";
+        int processId = Environment.ProcessId;
+        string workerId = this.WorkerId ?? $"{Environment.MachineName},{processId},{Guid.NewGuid():N}";
+
+        TokenCache? cache =
+            this.Credential is not null
+                ? new(
+                    this.Credential,
+                    new(new[] { $"{resourceId}/.default" }),
+                    TimeSpan.FromMinutes(5))
+                : null;
+
+        CallCredentials managedBackendCreds = CallCredentials.FromInterceptor(
+            async (context, metadata) =>
+            {
+                metadata.Add("taskhub", taskHubName);
+                metadata.Add("workerid", workerId);
+
+                if (cache is null)
+                {
+                    return;
+                }
+
+                AccessToken token = await cache.GetTokenAsync(context.CancellationToken);
+
+                metadata.Add("Authorization", $"Bearer {token.Token}");
+            });
+
+        // Production will use HTTPS, but local testing will use HTTP
+        ChannelCredentials channelCreds = endpoint.StartsWith("https://") ?
+            ChannelCredentials.SecureSsl :
+            ChannelCredentials.Insecure;
+        return GrpcChannel.ForAddress(endpoint, new GrpcChannelOptions
+            {
+                // The same credential is being used for all operations.
+                // https://learn.microsoft.com/aspnet/core/grpc/authn-and-authz#set-the-bearer-token-with-callcredentials
+                Credentials = ChannelCredentials.Create(channelCreds, managedBackendCreds),
+
+                // TODO: This is not appropriate for use in production settings. Setting this to true should
+                //       only be done for local testing. We should hide this setting behind some kind of flag.
+                UnsafeUseInsecureChannelCallCredentials = true,
+            });
     }
 
     /// <summary>
@@ -168,5 +218,28 @@ public class DurableTaskSchedulerOptions
 
         DurableTaskSchedulerOptions options = new(endpointAddress, connectionString.TaskHubName, credential);
         return options;
+    }
+
+    sealed class TokenCache(TokenCredential credential, TokenRequestContext context, TimeSpan margin)
+    {
+        readonly TokenCredential credential = credential;
+        readonly TokenRequestContext context = context;
+        readonly TimeSpan margin = margin;
+
+        AccessToken? token;
+
+        public async Task<AccessToken> GetTokenAsync(CancellationToken cancellationToken)
+        {
+            DateTimeOffset nowWithMargin = DateTimeOffset.UtcNow.Add(this.margin);
+
+            if (this.token is null
+                || this.token.Value.RefreshOn < nowWithMargin
+                || this.token.Value.ExpiresOn < nowWithMargin)
+            {
+                this.token = await this.credential.GetTokenAsync(this.context, cancellationToken);
+            }
+
+            return this.token.Value;
+        }
     }
 }

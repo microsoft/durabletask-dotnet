@@ -20,12 +20,12 @@ public class DurableTaskSchedulerOptions
     {
         Check.NotNullOrEmpty(endpointAddress, nameof(endpointAddress));
         Check.NotNullOrEmpty(taskHubName, nameof(taskHubName));
-        
+
         // Add https:// prefix if no protocol is specified
-        this.EndpointAddress = !endpointAddress.Contains("://") 
-            ? $"https://{endpointAddress}" 
+        this.EndpointAddress = !endpointAddress.Contains("://")
+            ? $"https://{endpointAddress}"
             : endpointAddress;
-            
+
         this.TaskHubName = taskHubName;
         this.Credential = credential;
     }

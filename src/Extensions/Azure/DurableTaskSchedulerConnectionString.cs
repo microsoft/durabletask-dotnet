@@ -70,12 +70,6 @@ public sealed class DurableTaskSchedulerConnectionString
     string GetRequiredValue(string name)
     {
         string? value = this.GetValue(name);
-        if (string.IsNullOrEmpty(value))
-        {
-            throw new ArgumentNullException(
-                $"The connection string is missing the required '{name}' property.");
-        }
-
-        return value!;
+        return Check.NotNullOrEmpty(value, $"The connection string is missing the required '{name}' property.");
     }
 }

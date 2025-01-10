@@ -90,15 +90,8 @@ public static class DurableTaskSchedulerExtensions
 
     static GrpcChannel GetGrpcChannelForOptions(DurableTaskSchedulerOptions options)
     {
-        if (string.IsNullOrEmpty(options.EndpointAddress))
-        {
-            throw RequiredOptionMissing(nameof(options.EndpointAddress));
-        }
-
-        if (string.IsNullOrEmpty(options.TaskHubName))
-        {
-            throw RequiredOptionMissing(nameof(options.TaskHubName));
-        }
+        Check.NotNullOrEmpty(options.EndpointAddress, nameof(options.EndpointAddress));
+        Check.NotNullOrEmpty(options.TaskHubName, nameof(options.TaskHubName));
 
         string taskHubName = options.TaskHubName;
         string endpoint = options.EndpointAddress;

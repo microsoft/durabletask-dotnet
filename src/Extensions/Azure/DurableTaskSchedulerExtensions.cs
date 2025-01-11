@@ -122,6 +122,12 @@ public static class DurableTaskSchedulerExtensions
         var connectionOptions = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
 
         builder.Services.AddOptions<DurableTaskSchedulerOptions>(builder.Name)
+            .Configure(options =>
+            {
+                options.EndpointAddress = connectionOptions.EndpointAddress;
+                options.TaskHubName = connectionOptions.TaskHubName;
+                options.Credential = connectionOptions.Credential;
+            })
             .Configure(configure ?? (_ => { }))
             .ValidateDataAnnotations()
             .ValidateOnStart();

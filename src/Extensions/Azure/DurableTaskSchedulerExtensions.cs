@@ -131,7 +131,7 @@ public static class DurableTaskSchedulerExtensions
         builder.UseGrpc(_ => { });
     }
 
-    class ConfigureGrpcChannel(IOptionsMonitor<DurableTaskSchedulerOptions> schedulerOptions) :
+    internal class ConfigureGrpcChannel(IOptionsMonitor<DurableTaskSchedulerOptions> schedulerOptions) :
         IConfigureNamedOptions<GrpcDurableTaskWorkerOptions>,
         IConfigureNamedOptions<GrpcDurableTaskClientOptions>
     {

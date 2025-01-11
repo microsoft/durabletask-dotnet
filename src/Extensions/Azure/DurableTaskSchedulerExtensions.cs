@@ -27,10 +27,12 @@ public static class DurableTaskSchedulerExtensions
         TokenCredential credential,
         Action<DurableTaskSchedulerOptions>? configure = null)
     {
+        if (configure is not null)
+        {
+            builder.Services.Configure("DurableTaskSchedulerOptionsForWorker", configure);
+        }
+
         DurableTaskSchedulerOptions options = new(endpointAddress, taskHubName, credential);
-
-        configure?.Invoke(options);
-
         builder.UseGrpc(options.GetGrpcChannel());
     }
 
@@ -45,8 +47,12 @@ public static class DurableTaskSchedulerExtensions
         string connectionString,
         Action<DurableTaskSchedulerOptions>? configure = null)
     {
+        if (configure is not null)
+        {
+            builder.Services.Configure(builder.Name, configure);
+        }
+
         var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
-        configure?.Invoke(options);
         builder.UseGrpc(options.GetGrpcChannel());
     }
 
@@ -65,10 +71,12 @@ public static class DurableTaskSchedulerExtensions
         TokenCredential credential,
         Action<DurableTaskSchedulerOptions>? configure = null)
     {
+        if (configure is not null)
+        {
+            builder.Services.Configure(builder.Name, configure);
+        }
+
         DurableTaskSchedulerOptions options = new(endpointAddress, taskHubName, credential);
-
-        configure?.Invoke(options);
-
         builder.UseGrpc(options.GetGrpcChannel());
     }
 
@@ -83,8 +91,12 @@ public static class DurableTaskSchedulerExtensions
         string connectionString,
         Action<DurableTaskSchedulerOptions>? configure = null)
     {
+        if (configure is not null)
+        {
+            builder.Services.Configure(builder.Name, configure);
+        }
+
         var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
-        configure?.Invoke(options);
         builder.UseGrpc(options.GetGrpcChannel());
     }
 }

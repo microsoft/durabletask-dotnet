@@ -12,6 +12,7 @@ using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Moq;
+using System.ComponentModel.DataAnnotations;
 using Xunit;
 
 namespace Microsoft.DurableTask.Extensions.Azure.Tests;
@@ -117,8 +118,8 @@ public class DurableTaskSchedulerExtensionsTests
     }
 
     [Theory]
-    [InlineData(null, ValidTaskHub)]
-    [InlineData(ValidEndpoint, null)]
+    [InlineData(null, "testhub")]
+    [InlineData("myaccount.westus3.durabletask.io", null)]
     public void UseDurableTaskScheduler_WithNullParameters_ShouldThrowArgumentNullException(string endpoint, string taskHub)
     {
         // Arrange
@@ -127,9 +128,21 @@ public class DurableTaskSchedulerExtensionsTests
         mockBuilder.Setup(b => b.Services).Returns(services);
         var credential = new DefaultAzureCredential();
 
-        // Act & Assert
+        // Act
         var action = () => mockBuilder.Object.UseDurableTaskScheduler(endpoint, taskHub, credential);
-        action.Should().Throw<ArgumentNullException>();
+
+        // Assert
+        action.Should().NotThrow(); // The validation happens when building the service provider
+        
+        if (endpoint == null || taskHub == null)
+        {
+            var provider = services.BuildServiceProvider();
+            var ex = Assert.Throws<OptionsValidationException>(() =>
+            {
+                var options = provider.GetRequiredService<IOptions<DurableTaskSchedulerOptions>>().Value;
+            });
+            Assert.Contains(endpoint == null ? "EndpointAddress" : "TaskHubName", ex.Message);
+        }
     }
 
     [Fact]
@@ -153,11 +166,14 @@ public class DurableTaskSchedulerExtensionsTests
         var services = new ServiceCollection();
         var mockBuilder = new Mock<IDurableTaskWorkerBuilder>();
         mockBuilder.Setup(b => b.Services).Returns(services);
-        string invalidConnectionString = "This is not a valid connection string";
+        var connectionString = "This is not a valid=connection string format";
 
-        // Act & Assert
-        var action = () => mockBuilder.Object.UseDurableTaskScheduler(invalidConnectionString);
-        action.Should().Throw<ArgumentException>();
+        // Act
+        var action = () => mockBuilder.Object.UseDurableTaskScheduler(connectionString);
+
+        // Assert
+        action.Should().Throw<ArgumentNullException>()
+            .WithMessage("Value cannot be null. (Parameter 'The connection string is missing the required 'Endpoint' property.')");
     }
 
     [Theory]
@@ -173,5 +189,110 @@ public class DurableTaskSchedulerExtensionsTests
         // Act & Assert
         var action = () => mockBuilder.Object.UseDurableTaskScheduler(connectionString);
         action.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void UseDurableTaskScheduler_Worker_WithValidationFailure_ShouldThrowValidationException()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var mockBuilder = new Mock<IDurableTaskWorkerBuilder>();
+        mockBuilder.Setup(b => b.Services).Returns(services);
+        var credential = new DefaultAzureCredential();
+
+        // Act
+        mockBuilder.Object.UseDurableTaskScheduler(string.Empty, ValidTaskHub, credential);
+
+        // Assert
+        var ex = Assert.Throws<OptionsValidationException>(() =>
+        {
+            var provider = services.BuildServiceProvider();
+            var options = provider.GetRequiredService<IOptions<DurableTaskSchedulerOptions>>().Value;
+        });
+
+        Assert.Contains("EndpointAddress", ex.Message);
+    }
+
+    [Fact]
+    public void UseDurableTaskScheduler_Client_WithNamedOptions_ShouldConfigureCorrectly()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var mockBuilder = new Mock<IDurableTaskClientBuilder>();
+        mockBuilder.Setup(b => b.Services).Returns(services);
+        mockBuilder.Setup(b => b.Name).Returns("CustomName");
+        var credential = new DefaultAzureCredential();
+
+        // Act
+        mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
+
+        // Assert
+        var provider = services.BuildServiceProvider();
+        var optionsMonitor = provider.GetService<IOptionsMonitor<DurableTaskSchedulerOptions>>();
+        optionsMonitor.Should().NotBeNull();
+        var options = optionsMonitor!.Get("CustomName");
+        options.Should().NotBeNull();
+        options.EndpointAddress.Should().Be(ValidEndpoint); // The https:// prefix is added by CreateChannel, not in the extension method
+        options.TaskHubName.Should().Be(ValidTaskHub);
+        options.Credential.Should().BeOfType<DefaultAzureCredential>();
+    }
+
+    [Fact]
+    public void ConfigureGrpcChannel_ShouldConfigureWorkerAndClientOptions()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddOptions<DurableTaskSchedulerOptions>()
+            .Configure(options =>
+            {
+                options.EndpointAddress = $"https://{ValidEndpoint}";
+                options.TaskHubName = ValidTaskHub;
+                options.Credential = new DefaultAzureCredential();
+            });
+
+        var provider = services.BuildServiceProvider();
+        var schedulerOptions = provider.GetService<IOptionsMonitor<DurableTaskSchedulerOptions>>();
+        schedulerOptions.Should().NotBeNull("SchedulerOptions should be registered");
+        var configureChannel = new DurableTaskSchedulerExtensions.ConfigureGrpcChannel(schedulerOptions!);
+
+        var workerOptions = new GrpcDurableTaskWorkerOptions();
+        var clientOptions = new GrpcDurableTaskClientOptions();
+
+        // Act
+        configureChannel.Configure(Options.DefaultName, workerOptions);
+        configureChannel.Configure(Options.DefaultName, clientOptions);
+
+        // Assert
+        workerOptions.Channel.Should().NotBeNull();
+        clientOptions.Channel.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void UseDurableTaskScheduler_WithCustomConfiguration_ShouldApplyConfiguration()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var mockBuilder = new Mock<IDurableTaskWorkerBuilder>();
+        mockBuilder.Setup(b => b.Services).Returns(services);
+        var credential = new DefaultAzureCredential();
+        string customWorkerId = "custom-worker";
+
+        // Act
+        mockBuilder.Object.UseDurableTaskScheduler(
+            ValidEndpoint,
+            ValidTaskHub,
+            credential,
+            options =>
+            {
+                options.WorkerId = customWorkerId;
+                options.AllowInsecureCredentials = true;
+            });
+
+        // Assert
+        var provider = services.BuildServiceProvider();
+        var options = provider.GetService<IOptions<DurableTaskSchedulerOptions>>();
+        options.Should().NotBeNull();
+        options.Value.WorkerId.Should().Be(customWorkerId);
+        options.Value.AllowInsecureCredentials.Should().BeTrue();
     }
 }

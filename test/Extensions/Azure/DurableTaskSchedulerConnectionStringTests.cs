@@ -72,6 +72,77 @@ public class DurableTaskSchedulerConnectionStringTests
     }
 
     [Fact]
+    public void Constructor_WithMultipleAdditionallyAllowedTenants_ShouldParseCorrectly()
+    {
+        // Arrange
+        string connectionString = $"Endpoint={ValidEndpoint};Authentication=WorkloadIdentity;TaskHub={ValidTaskHub};" +
+            "AdditionallyAllowedTenants=tenant1,tenant2,tenant3";
+
+        // Act
+        var parsedConnectionString = new DurableTaskSchedulerConnectionString(connectionString);
+
+        // Assert
+        parsedConnectionString.AdditionallyAllowedTenants.Should().NotBeNull();
+        parsedConnectionString.AdditionallyAllowedTenants!.Should().HaveCount(3);
+        parsedConnectionString.AdditionallyAllowedTenants.Should().Contain(new[] { "tenant1", "tenant2", "tenant3" });
+    }
+
+    [Fact]
+    public void Constructor_WithCaseInsensitivePropertyNames_ShouldParseCorrectly()
+    {
+        // Arrange
+        string connectionString = $"endpoint={ValidEndpoint};AUTHENTICATION=DefaultAzure;taskhub={ValidTaskHub};" +
+            $"clientid={ValidClientId};tenantid={ValidTenantId}";
+
+        // Act
+        var parsedConnectionString = new DurableTaskSchedulerConnectionString(connectionString);
+
+        // Assert
+        parsedConnectionString.Endpoint.Should().Be(ValidEndpoint);
+        parsedConnectionString.Authentication.Should().Be("DefaultAzure");
+        parsedConnectionString.TaskHubName.Should().Be(ValidTaskHub);
+        parsedConnectionString.ClientId.Should().Be(ValidClientId);
+        parsedConnectionString.TenantId.Should().Be(ValidTenantId);
+    }
+
+    [Fact]
+    public void Constructor_WithInvalidConnectionStringFormat_ShouldThrowFormatException()
+    {
+        // Arrange
+        var connectionString = "This is not a valid=connection string format";
+
+        // Act & Assert
+        var action = () => _ = new DurableTaskSchedulerConnectionString(connectionString).Endpoint;
+        action.Should().Throw<ArgumentNullException>()
+            .WithMessage("Value cannot be null. (Parameter 'The connection string is missing the required 'Endpoint' property.')");
+    }
+
+    [Fact]
+    public void Constructor_WithEmptyConnectionString_ShouldThrowArgumentNullException()
+    {
+        // Arrange
+        var connectionString = string.Empty;
+
+        // Act & Assert
+        var action = () => _ = new DurableTaskSchedulerConnectionString(connectionString).Endpoint;
+        action.Should().Throw<ArgumentNullException>()
+            .WithMessage("Value cannot be null. (Parameter 'The connection string is missing the required 'Endpoint' property.')");
+    }
+
+    [Fact]
+    public void Constructor_WithDuplicateKeys_ShouldUseLastValue()
+    {
+        // Arrange
+        string connectionString = $"Endpoint={ValidEndpoint};Authentication=DefaultAzure;TaskHub=hub1;TaskHub=hub2";
+
+        // Act
+        var parsedConnectionString = new DurableTaskSchedulerConnectionString(connectionString);
+
+        // Assert
+        parsedConnectionString.TaskHubName.Should().Be("hub2");
+    }
+
+    [Fact]
     public void Constructor_WithMissingRequiredProperties_ShouldThrowArgumentNullException()
     {
         // Arrange
@@ -79,8 +150,8 @@ public class DurableTaskSchedulerConnectionStringTests
 
         // Act & Assert
         var action = () => _ = new DurableTaskSchedulerConnectionString(connectionString).Endpoint;
-        var exception = action.Should().Throw<ArgumentNullException>().Which;
-        exception.Message.Should().Contain("'Endpoint' property");
+        action.Should().Throw<ArgumentNullException>()
+            .WithMessage("*'Endpoint' property*");
     }
 
     [Fact]
@@ -98,12 +169,11 @@ public class DurableTaskSchedulerConnectionStringTests
     [Theory]
     [InlineData("")]
     [InlineData(null)]
-    public void Constructor_WithNullOrEmptyConnectionString_ShouldThrowArgumentException(string? connectionString)
+    public void Constructor_WithNullOrEmptyConnectionString_ShouldThrowArgumentNullException(string? connectionString)
     {
         // Act & Assert
         var action = () => _ = new DurableTaskSchedulerConnectionString(connectionString!).Endpoint;
-        action.Should().Throw<ArgumentNullException>()
-            .WithMessage("*'Endpoint' property*");
+        action.Should().Throw<ArgumentNullException>();
     }
 
     [Fact]

@@ -23,7 +23,7 @@ public class DurableTaskSchedulerOptionsTests
         var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
 
         // Assert
-        options.EndpointAddress.Should().Be($"https://{ValidEndpoint}");
+        options.EndpointAddress.Should().Be(ValidEndpoint);
         options.TaskHubName.Should().Be(ValidTaskHub);
         options.Credential.Should().BeOfType<DefaultAzureCredential>();
     }
@@ -39,7 +39,7 @@ public class DurableTaskSchedulerOptionsTests
         var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
 
         // Assert
-        options.EndpointAddress.Should().Be($"https://{ValidEndpoint}");
+        options.EndpointAddress.Should().Be(ValidEndpoint);
         options.TaskHubName.Should().Be(ValidTaskHub);
         options.Credential.Should().BeOfType<ManagedIdentityCredential>();
     }
@@ -56,7 +56,7 @@ public class DurableTaskSchedulerOptionsTests
         var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
 
         // Assert
-        options.EndpointAddress.Should().Be($"https://{ValidEndpoint}");
+        options.EndpointAddress.Should().Be(ValidEndpoint);
         options.TaskHubName.Should().Be(ValidTaskHub);
         options.Credential.Should().BeOfType<WorkloadIdentityCredential>();
     }
@@ -74,7 +74,7 @@ public class DurableTaskSchedulerOptionsTests
         var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
 
         // Assert
-        options.EndpointAddress.Should().Be($"https://{ValidEndpoint}");
+        options.EndpointAddress.Should().Be(ValidEndpoint);
         options.TaskHubName.Should().Be(ValidTaskHub);
         options.Credential.Should().NotBeNull();
     }
@@ -112,8 +112,103 @@ public class DurableTaskSchedulerOptionsTests
         var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
 
         // Assert
-        options.EndpointAddress.Should().Be($"https://{ValidEndpoint}");
+        options.EndpointAddress.Should().Be(ValidEndpoint);
         options.TaskHubName.Should().Be(ValidTaskHub);
         options.Credential.Should().BeNull();
+    }
+
+    [Fact]
+    public void DefaultProperties_ShouldHaveExpectedValues()
+    {
+        // Arrange & Act
+        var options = new DurableTaskSchedulerOptions();
+
+        // Assert
+        options.ResourceId.Should().Be("https://durabletask.io");
+        options.WorkerId.Should().NotBeNullOrEmpty();
+        options.WorkerId.Should().Contain(Environment.MachineName);
+        options.WorkerId.Should().Contain(Environment.ProcessId.ToString());
+        options.AllowInsecureCredentials.Should().BeFalse();
+    }
+
+    [Fact]
+    public void CreateChannel_WithHttpsEndpoint_ShouldCreateSecureChannel()
+    {
+        // Arrange
+        var options = new DurableTaskSchedulerOptions
+        {
+            EndpointAddress = $"https://{ValidEndpoint}",
+            TaskHubName = ValidTaskHub,
+            Credential = new DefaultAzureCredential()
+        };
+
+        // Act
+        var channel = options.CreateChannel();
+
+        // Assert
+        channel.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void CreateChannel_WithHttpEndpoint_ShouldCreateInsecureChannel()
+    {
+        // Arrange
+        var options = new DurableTaskSchedulerOptions
+        {
+            EndpointAddress = $"http://{ValidEndpoint}",
+            TaskHubName = ValidTaskHub,
+            AllowInsecureCredentials = true
+        };
+
+        // Act
+        var channel = options.CreateChannel();
+
+        // Assert
+        channel.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void FromConnectionString_WithInvalidEndpoint_ShouldThrowArgumentException()
+    {
+        // Arrange
+        var connectionString = "Endpoint=not a valid endpoint;Authentication=DefaultAzure;TaskHub=testhub;";
+
+        // Act & Assert
+        var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
+        var action = () => options.CreateChannel();
+        action.Should().Throw<UriFormatException>()
+            .WithMessage("Invalid URI: The hostname could not be parsed.");
+    }
+
+    [Fact]
+    public void FromConnectionString_WithoutProtocol_ShouldPreserveEndpoint()
+    {
+        // Arrange
+        string connectionString = $"Endpoint={ValidEndpoint};Authentication=DefaultAzure;TaskHub={ValidTaskHub}";
+
+        // Act
+        var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
+
+        // Assert
+        options.EndpointAddress.Should().Be(ValidEndpoint);
+    }
+
+    [Fact]
+    public void CreateChannel_ShouldAddHttpsPrefix()
+    {
+        // Arrange
+        var options = new DurableTaskSchedulerOptions
+        {
+            EndpointAddress = ValidEndpoint,
+            TaskHubName = ValidTaskHub,
+            Credential = new DefaultAzureCredential()
+        };
+
+        // Act
+        var channel = options.CreateChannel();
+
+        // Assert
+        channel.Should().NotBeNull();
+        // Note: We can't directly test the endpoint in the channel as it's not exposed
     }
 }

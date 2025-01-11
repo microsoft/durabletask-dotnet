@@ -1,6 +1,7 @@
 ﻿﻿// Copyright (c) Microsoft Corporation.
 ﻿// Licensed under the MIT License.
 
+using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using Azure.Core;
 using Azure.Identity;
@@ -13,63 +14,45 @@ namespace Microsoft.DurableTask.Extensions.Azure;
 /// </summary>
 public class DurableTaskSchedulerOptions
 {
-    private readonly string defaultWorkerId;
-
     /// <summary>
-    /// Initializes a new instance of the <see cref="DurableTaskSchedulerOptions"/> class.
-    /// </summary>
-    internal DurableTaskSchedulerOptions(string endpointAddress, string taskHubName, TokenCredential? credential = null)
-    {
-        Check.NotNullOrEmpty(endpointAddress, nameof(endpointAddress));
-        Check.NotNullOrEmpty(taskHubName, nameof(taskHubName));
-
-        // Add https:// prefix if no protocol is specified
-        this.EndpointAddress = !endpointAddress.Contains("://")
-            ? $"https://{endpointAddress}"
-            : endpointAddress;
-
-        this.TaskHubName = taskHubName;
-        this.Credential = credential;
-
-        // Generate the default worker ID once at construction time
-        // TODO: More iteration needed over time https://github.com/microsoft/durabletask-dotnet/pull/362#discussion_r1909547102
-        this.defaultWorkerId = $"{Environment.MachineName},{Environment.ProcessId},{Guid.NewGuid():N}";
-    }
-
-    /// <summary>
-    /// Gets the endpoint address of the Durable Task Scheduler resource.
+    /// Gets or sets the endpoint address of the Durable Task Scheduler resource.
     /// Expected to be in the format "https://{scheduler-name}.{region}.durabletask.io".
     /// </summary>
-    public string EndpointAddress { get; }
+    [Required(ErrorMessage = "Endpoint address is required")]
+    public string EndpointAddress { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets the name of the task hub resource associated with the Durable Task Scheduler resource.
+    /// Gets or sets the name of the task hub resource associated with the Durable Task Scheduler resource.
     /// </summary>
-    public string TaskHubName { get; }
+    [Required(ErrorMessage = "Task hub name is required")]
+    public string TaskHubName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets the credential used to authenticate with the Durable Task Scheduler task hub resource.
+    /// Gets or sets the credential used to authenticate with the Durable Task Scheduler task hub resource.
     /// </summary>
-    public TokenCredential? Credential { get; }
+    public TokenCredential? Credential { get; set; }
 
     /// <summary>
     /// Gets or sets the resource ID of the Durable Task Scheduler resource.
     /// The default value is https://durabletask.io.
     /// </summary>
-    public string? ResourceId { get; set; }
+    public string ResourceId { get; set; } = "https://durabletask.io";
 
     /// <summary>
     /// Gets or sets the worker ID used to identify the worker instance.
     /// The default value is a string containing the machine name, process ID, and a unique identifier.
     /// </summary>
-    public string? WorkerId { get; set; }
+    public string WorkerId { get; set; } = $"{Environment.MachineName},{Environment.ProcessId},{Guid.NewGuid():N}";
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to allow insecure channel credentials.
+    /// This should only be set to true in development/testing scenarios.
+    /// </summary>
+    public bool AllowInsecureCredentials { get; set; }
 
     /// <summary>
     /// Creates a new instance of <see cref="DurableTaskSchedulerOptions"/> from a connection string.
     /// </summary>
-    /// <param name="connectionString">The connection string containing the configuration settings.</param>
-    /// <returns>A new instance of <see cref="DurableTaskSchedulerOptions"/> configured with the connection string settings.</returns>
-    /// <exception cref="ArgumentException">Thrown when the connection string contains an unsupported authentication type.</exception>
     public static DurableTaskSchedulerOptions FromConnectionString(string connectionString)
     {
         return FromConnectionString(new DurableTaskSchedulerConnectionString(connectionString));
@@ -81,16 +64,15 @@ public class DurableTaskSchedulerOptions
         Check.NotNullOrEmpty(this.TaskHubName, nameof(this.TaskHubName));
 
         string taskHubName = this.TaskHubName;
-        string endpoint = this.EndpointAddress;
-
-        string resourceId = this.ResourceId ?? "https://durabletask.io";
-        string workerId = this.WorkerId ?? this.defaultWorkerId;
+        string endpoint = !this.EndpointAddress.Contains("://")
+            ? $"https://{this.EndpointAddress}"
+            : this.EndpointAddress;
 
         AccessTokenCache? cache =
             this.Credential is not null
                 ? new AccessTokenCache(
                     this.Credential,
-                    new TokenRequestContext(new[] { $"{resourceId}/.default" }),
+                    new TokenRequestContext(new[] { $"{this.ResourceId}/.default" }),
                     TimeSpan.FromMinutes(5))
                 : null;
 
@@ -98,90 +80,68 @@ public class DurableTaskSchedulerOptions
             async (context, metadata) =>
             {
                 metadata.Add("taskhub", taskHubName);
-                metadata.Add("workerid", workerId);
+                metadata.Add("workerid", this.WorkerId);
 
                 if (cache == null)
                 {
                     return;
                 }
-                
+
                 AccessToken token = await cache.GetTokenAsync(context.CancellationToken);
                 metadata.Add("Authorization", $"Bearer {token.Token}");
             });
 
         // Production will use HTTPS, but local testing will use HTTP
-        ChannelCredentials channelCreds = endpoint.StartsWith("https://") ?
+        ChannelCredentials channelCreds = endpoint.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ?
             ChannelCredentials.SecureSsl :
             ChannelCredentials.Insecure;
-        return GrpcChannel.ForAddress(endpoint, new GrpcChannelOptions
-            {
-                // The same credential is being used for all operations.
-                // https://learn.microsoft.com/aspnet/core/grpc/authn-and-authz#set-the-bearer-token-with-callcredentials
-                Credentials = ChannelCredentials.Create(channelCreds, managedBackendCreds),
 
-                // TODO: This is not appropriate for use in production settings. Setting this to true should
-                //       only be done for local testing. We should hide this setting behind some kind of flag.
-                UnsafeUseInsecureChannelCallCredentials = true,
-            });
+        return GrpcChannel.ForAddress(endpoint, new GrpcChannelOptions
+        {
+            Credentials = ChannelCredentials.Create(channelCreds, managedBackendCreds),
+            UnsafeUseInsecureChannelCallCredentials = this.AllowInsecureCredentials,
+        });
     }
 
     /// <summary>
     /// Creates a new instance of <see cref="DurableTaskSchedulerOptions"/> from a parsed connection string.
     /// </summary>
-    /// <param name="connectionString">The parsed connection string containing the configuration settings.</param>
-    /// <returns>A new instance of <see cref="DurableTaskSchedulerOptions"/> configured with the connection string settings.</returns>
-    /// <exception cref="ArgumentException">Thrown when the connection string contains an unsupported authentication type.</exception>
     public static DurableTaskSchedulerOptions FromConnectionString(
         DurableTaskSchedulerConnectionString connectionString)
     {
-        // Example connection strings:
-        // "Endpoint=https://myaccount.westus3.durabletask.io/;Authentication=ManagedIdentity;ClientID=00000000-0000-0000-0000-000000000000;TaskHubName=th01"
-        // "Endpoint=https://myaccount.westus3.durabletask.io/;Authentication=DefaultAzure;TaskHubName=th01"
-        // "Endpoint=https://myaccount.westus3.durabletask.io/;Authentication=None;TaskHubName=th01" (undocumented and only intended for local testing)
-
-        string endpointAddress = connectionString.Endpoint;
-
-        if (!endpointAddress.Contains("://"))
+        var options = new DurableTaskSchedulerOptions
         {
-            // If the protocol is missing, assume HTTPS.
-            endpointAddress = "https://" + endpointAddress;
-        }
+            EndpointAddress = connectionString.Endpoint,
+            TaskHubName = connectionString.TaskHubName,
+            Credential = GetCredentialFromConnectionString(connectionString)
+        };
 
+        return options;
+    }
+
+    static TokenCredential? GetCredentialFromConnectionString(DurableTaskSchedulerConnectionString connectionString)
+    {
         string authType = connectionString.Authentication;
-
-        TokenCredential? credential;
 
         // Parse the supported auth types, in a case-insensitive way and without spaces
         switch (authType.ToLower(CultureInfo.InvariantCulture).Replace(" ", string.Empty))
         {
             case "defaultazure":
-                // Default Azure credentials, suitable for a variety of scenarios
-                // In many cases, users will need to pass additional configuration options via env vars
-                credential = new DefaultAzureCredential();
-                break;
+                return new DefaultAzureCredential();
 
             case "managedidentity":
-                // Use Managed identity
-                // Suitable for Azure-hosted scenarios
-                // Note that ClientId could be null for system-assigned managed identities
-                credential = new ManagedIdentityCredential(connectionString.ClientId);
-                break;
+                return new ManagedIdentityCredential(connectionString.ClientId);
 
             case "workloadidentity":
-                // Use Workload Identity Federation.
-                // This is commonly-used in Kubernetes (hosted on Azure or anywhere), or in CI environments like
-                // Azure Pipelines or GitHub Actions. It can also be used with SPIFFE.
-                WorkloadIdentityCredentialOptions opts = new() { };
+                var opts = new WorkloadIdentityCredentialOptions();
                 if (!string.IsNullOrEmpty(connectionString.ClientId))
                 {
                     opts.ClientId = connectionString.ClientId;
                 }
-
                 if (!string.IsNullOrEmpty(connectionString.TenantId))
                 {
                     opts.TenantId = connectionString.TenantId;
                 }
-
                 if (connectionString.AdditionallyAllowedTenants is not null)
                 {
                     foreach (string tenant in connectionString.AdditionallyAllowedTenants)
@@ -189,38 +149,24 @@ public class DurableTaskSchedulerOptions
                         opts.AdditionallyAllowedTenants.Add(tenant);
                     }
                 }
-
-                credential = new WorkloadIdentityCredential(opts);
-                break;
+                return new WorkloadIdentityCredential(opts);
 
             case "environment":
-                // Use credentials from the environment
-                credential = new EnvironmentCredential();
-                break;
+                return new EnvironmentCredential();
 
             case "azurecli":
-                // Use credentials from the Azure CLI
-                credential = new AzureCliCredential();
-                break;
+                return new AzureCliCredential();
 
             case "azurepowershell":
-                // Use credentials from the Azure PowerShell modules
-                credential = new AzurePowerShellCredential();
-                break;
+                return new AzurePowerShellCredential();
 
             case "none":
-                // Do not use any authentication/authorization (for testing only)
-                // This is a no-op
-                credential = null;
-                break;
+                return null;
 
             default:
                 throw new ArgumentException(
                     $"The connection string contains an unsupported authentication type '{authType}'.",
                     nameof(connectionString));
         }
-
-        DurableTaskSchedulerOptions options = new(endpointAddress, connectionString.TaskHubName, credential);
-        return options;
     }
 }

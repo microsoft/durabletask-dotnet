@@ -131,20 +131,43 @@ public static class DurableTaskSchedulerExtensions
         builder.UseGrpc(_ => { });
     }
 
+    /// <summary>
+    /// Internal configuration class that sets up gRPC channels for both worker and client options
+    /// using the provided Durable Task Scheduler options.
+    /// </summary>
+    /// <param name="schedulerOptions">Monitor for accessing the current scheduler options configuration.</param>
     internal class ConfigureGrpcChannel(IOptionsMonitor<DurableTaskSchedulerOptions> schedulerOptions) :
         IConfigureNamedOptions<GrpcDurableTaskWorkerOptions>,
         IConfigureNamedOptions<GrpcDurableTaskClientOptions>
     {
+        /// <summary>
+        /// Configures worker options using the default options name.
+        /// </summary>
+        /// <param name="options">The worker options to configure.</param>
         public void Configure(GrpcDurableTaskWorkerOptions options) => this.Configure(Options.DefaultName, options);
 
+        /// <summary>
+        /// Configures client options using the default options name.
+        /// </summary>
+        /// <param name="options">The client options to configure.</param>
         public void Configure(GrpcDurableTaskClientOptions options) => this.Configure(Options.DefaultName, options);
 
+        /// <summary>
+        /// Configures named worker options by creating and assigning a gRPC channel.
+        /// </summary>
+        /// <param name="name">The name of the options instance being configured, or null for the default instance.</param>
+        /// <param name="options">The worker options to configure.</param>
         public void Configure(string? name, GrpcDurableTaskWorkerOptions options)
         {
             DurableTaskSchedulerOptions source = schedulerOptions.Get(name ?? Options.DefaultName);
             options.Channel = source.CreateChannel();
         }
 
+        /// <summary>
+        /// Configures named client options by creating and assigning a gRPC channel.
+        /// </summary>
+        /// <param name="name">The name of the options instance being configured, or null for the default instance.</param>
+        /// <param name="options">The client options to configure.</param>
         public void Configure(string? name, GrpcDurableTaskClientOptions options)
         {
             DurableTaskSchedulerOptions source = schedulerOptions.Get(name ?? Options.DefaultName);

@@ -77,8 +77,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Azure", "src\Extensions\Azu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Azure.Tests", "test\Extensions\Azure\Azure.Tests.csproj", "{DBB5DB4E-A1B0-4C86-A233-213789C46929}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AspNetWebApp", "samples\portable-sdk\dotnet\AspNetWebApp\AspNetWebApp.csproj", "{869D2D51-9372-4764-B059-C43B6C1180A3}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -201,10 +199,6 @@ Global
 		{DBB5DB4E-A1B0-4C86-A233-213789C46929}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DBB5DB4E-A1B0-4C86-A233-213789C46929}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DBB5DB4E-A1B0-4C86-A233-213789C46929}.Release|Any CPU.Build.0 = Release|Any CPU
-		{869D2D51-9372-4764-B059-C43B6C1180A3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{869D2D51-9372-4764-B059-C43B6C1180A3}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{869D2D51-9372-4764-B059-C43B6C1180A3}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{869D2D51-9372-4764-B059-C43B6C1180A3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -243,7 +237,6 @@ Global
 		{5227C712-2355-403F-90D6-51D0BCAE4D38} = {8AFC9781-F6F1-4696-BB4A-9ED7CA9D612B}
 		{662BF73D-A4DD-4910-8625-7C12F1ACDBEC} = {5227C712-2355-403F-90D6-51D0BCAE4D38}
 		{DBB5DB4E-A1B0-4C86-A233-213789C46929} = {E5637F81-2FB9-4CD7-900D-455363B142A7}
-		{869D2D51-9372-4764-B059-C43B6C1180A3} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AB41CB55-35EA-4986-A522-387AB3402E71}

@@ -58,7 +58,7 @@ public class DurableTaskSchedulerOptions
         return FromConnectionString(new DurableTaskSchedulerConnectionString(connectionString));
     }
 
-    internal GrpcChannel GetGrpcChannel()
+    internal GrpcChannel CreateChannel()
     {
         Check.NotNullOrEmpty(this.EndpointAddress, nameof(this.EndpointAddress));
         Check.NotNullOrEmpty(this.TaskHubName, nameof(this.TaskHubName));

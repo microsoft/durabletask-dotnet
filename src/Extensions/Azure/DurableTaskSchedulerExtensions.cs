@@ -36,11 +36,9 @@ public static class DurableTaskSchedulerExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        var options = builder.Services.BuildServiceProvider()
-            .GetRequiredService<IOptionsMonitor<DurableTaskSchedulerOptions>>()
-            .Get(builder.Name);
-
-        builder.UseGrpc(options.GetGrpcChannel());
+        builder.Services.TryAddEnumerable(
+            ServiceDescription.Singleton<IConfigureOptions<GrpcDurableTaskWorkerOptions>, ConfigureGrpcChannel>());
+        builder.UseGrpc(_ => { });
     }
 
     /// <summary>
@@ -64,11 +62,9 @@ public static class DurableTaskSchedulerExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        var options = builder.Services.BuildServiceProvider()
-            .GetRequiredService<IOptionsMonitor<DurableTaskSchedulerOptions>>()
-            .Get(builder.Name);
-
-        builder.UseGrpc(options.GetGrpcChannel());
+        builder.Services.TryAddEnumerable(
+            ServiceDescription.Singleton<IConfigureOptions<GrpcDurableTaskWorkerOptions>, ConfigureGrpcChannel>());
+        builder.UseGrpc(_ => { });
     }
 
     /// <summary>
@@ -92,11 +88,9 @@ public static class DurableTaskSchedulerExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        var options = builder.Services.BuildServiceProvider()
-            .GetRequiredService<IOptionsMonitor<DurableTaskSchedulerOptions>>()
-            .Get(Options.DefaultName);
-
-        builder.UseGrpc(options.GetGrpcChannel());
+        builder.Services.TryAddEnumerable(
+            ServiceDescription.Singleton<IConfigureOptions<GrpcDurableTaskClientOptions>, ConfigureGrpcChannel>());
+        builder.UseGrpc(_ => { });
     }
 
     /// <summary>
@@ -110,20 +104,24 @@ public static class DurableTaskSchedulerExtensions
         var connectionOptions = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
 
         builder.Services.AddOptions<DurableTaskSchedulerOptions>(Options.DefaultName)
-            .Configure(options =>
-            {
-                options.EndpointAddress = connectionOptions.EndpointAddress;
-                options.TaskHubName = connectionOptions.TaskHubName;
-                options.Credential = connectionOptions.Credential;
-            })
             .Configure(configure ?? (_ => { }))
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        var options = builder.Services.BuildServiceProvider()
-            .GetRequiredService<IOptionsMonitor<DurableTaskSchedulerOptions>>()
-            .Get(Options.DefaultName);
+        builder.Services.TryAddEnumerable(
+            ServiceDescription.Singleton<IConfigureOptions<GrpcDurableTaskClientOptions>, ConfigureGrpcChannel>());
+        builder.UseGrpc(_ => { });
+    }
 
-        builder.UseGrpc(options.GetGrpcChannel());
+    // helper internal class
+    class ConfigureGrpcChannel(IOptionsMonitor<DurableTaskSchedulerOptions> schedulerOptions) : IConfigureNamedOptions<GrpcDurableTaskWorkerOptions>
+    {
+        public void Configure(GrpcDurableTaskWorkerOptions options) => this.Configure(Options.DefaultName, options);
+
+        public void Configure(string name, GrpcDurableTaskWorkerOptions options)
+        {
+            DurableTaskSchedulerOptions source = schedulerOptions.Get(name);
+            options.Channel = source.CreateChannel();
+        }
     }
 }

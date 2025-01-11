@@ -4,6 +4,8 @@
 using Azure.Core;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Microsoft.DurableTask.Extensions.Azure;
 
@@ -12,6 +14,16 @@ namespace Microsoft.DurableTask.Extensions.Azure;
 /// </summary>
 public static class DurableTaskSchedulerExtensions
 {
+    /// <summary>
+    /// Configures DurableTaskScheduler options.
+    /// </summary>
+    public static void ConfigureDurableTaskSchedulerOptions(
+        IServiceCollection services,
+        Action<DurableTaskSchedulerOptions> configure)
+    {
+        services.Configure<DurableTaskSchedulerOptions>(Options.DefaultName, configure);
+    }
+
     /// <summary>
     /// Configures Durable Task worker to use the Azure Durable Task Scheduler service.
     /// </summary>
@@ -24,14 +36,8 @@ public static class DurableTaskSchedulerExtensions
         this IDurableTaskWorkerBuilder builder,
         string endpointAddress,
         string taskHubName,
-        TokenCredential credential,
-        Action<DurableTaskSchedulerOptions>? configure = null)
+        TokenCredential credential)
     {
-        if (configure is not null)
-        {
-            builder.Services.Configure("DurableTaskSchedulerOptionsForWorker", configure);
-        }
-
         DurableTaskSchedulerOptions options = new(endpointAddress, taskHubName, credential);
         builder.UseGrpc(options.GetGrpcChannel());
     }
@@ -44,14 +50,8 @@ public static class DurableTaskSchedulerExtensions
     /// <param name="configure">Optional callback to configure additional options.</param>
     public static void UseDurableTaskScheduler(
         this IDurableTaskWorkerBuilder builder,
-        string connectionString,
-        Action<DurableTaskSchedulerOptions>? configure = null)
+        string connectionString)
     {
-        if (configure is not null)
-        {
-            builder.Services.Configure(builder.Name, configure);
-        }
-
         var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
         builder.UseGrpc(options.GetGrpcChannel());
     }
@@ -68,14 +68,8 @@ public static class DurableTaskSchedulerExtensions
         this IDurableTaskClientBuilder builder,
         string endpointAddress,
         string taskHubName,
-        TokenCredential credential,
-        Action<DurableTaskSchedulerOptions>? configure = null)
+        TokenCredential credential)
     {
-        if (configure is not null)
-        {
-            builder.Services.Configure(builder.Name, configure);
-        }
-
         DurableTaskSchedulerOptions options = new(endpointAddress, taskHubName, credential);
         builder.UseGrpc(options.GetGrpcChannel());
     }
@@ -88,14 +82,8 @@ public static class DurableTaskSchedulerExtensions
     /// <param name="configure">Optional callback to configure additional options.</param>
     public static void UseDurableTaskScheduler(
         this IDurableTaskClientBuilder builder,
-        string connectionString,
-        Action<DurableTaskSchedulerOptions>? configure = null)
+        string connectionString)
     {
-        if (configure is not null)
-        {
-            builder.Services.Configure(builder.Name, configure);
-        }
-
         var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
         builder.UseGrpc(options.GetGrpcChannel());
     }

@@ -3,11 +3,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using Azure.Core;
 using FluentAssertions;
-using Microsoft.DurableTask.Extensions.Azure;
 using Moq;
 using Xunit;
 
-namespace Microsoft.DurableTask.Tests.Extensions.Azure;
+namespace Microsoft.DurableTask.Shared.AzureManaged.Tests;
 
 public class AccessTokenCacheTests
 {

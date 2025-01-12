@@ -1,13 +1,11 @@
-﻿﻿// Copyright (c) Microsoft Corporation.
-﻿// Licensed under the MIT License.
-
+﻿// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using Azure.Core;
 using Azure.Identity;
-using Grpc.Core;
 
-namespace Microsoft.DurableTask.Extensions.Azure;
+namespace Microsoft.DurableTask.Shared.AzureManaged;
 
 /// <summary>
 /// Options for configuring the Durable Task Scheduler.
@@ -53,6 +51,7 @@ public class DurableTaskSchedulerOptions
     /// <summary>
     /// Creates a new instance of <see cref="DurableTaskSchedulerOptions"/> from a connection string.
     /// </summary>
+    /// <returns></returns>
     public static DurableTaskSchedulerOptions FromConnectionString(string connectionString)
     {
         return FromConnectionString(new DurableTaskSchedulerConnectionString(connectionString));
@@ -62,12 +61,10 @@ public class DurableTaskSchedulerOptions
     {
         Check.NotNullOrEmpty(this.EndpointAddress, nameof(this.EndpointAddress));
         Check.NotNullOrEmpty(this.TaskHubName, nameof(this.TaskHubName));
-
         string taskHubName = this.TaskHubName;
         string endpoint = !this.EndpointAddress.Contains("://")
             ? $"https://{this.EndpointAddress}"
             : this.EndpointAddress;
-
         AccessTokenCache? cache =
             this.Credential is not null
                 ? new AccessTokenCache(
@@ -75,13 +72,11 @@ public class DurableTaskSchedulerOptions
                     new TokenRequestContext(new[] { $"{this.ResourceId}/.default" }),
                     TimeSpan.FromMinutes(5))
                 : null;
-
         CallCredentials managedBackendCreds = CallCredentials.FromInterceptor(
             async (context, metadata) =>
             {
                 metadata.Add("taskhub", taskHubName);
                 metadata.Add("workerid", this.WorkerId);
-
                 if (cache == null)
                 {
                     return;
@@ -95,7 +90,6 @@ public class DurableTaskSchedulerOptions
         ChannelCredentials channelCreds = endpoint.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ?
             ChannelCredentials.SecureSsl :
             ChannelCredentials.Insecure;
-
         return GrpcChannel.ForAddress(endpoint, new GrpcChannelOptions
         {
             Credentials = ChannelCredentials.Create(channelCreds, managedBackendCreds),
@@ -106,6 +100,7 @@ public class DurableTaskSchedulerOptions
     /// <summary>
     /// Creates a new instance of <see cref="DurableTaskSchedulerOptions"/> from a parsed connection string.
     /// </summary>
+    /// <returns></returns>
     public static DurableTaskSchedulerOptions FromConnectionString(
         DurableTaskSchedulerConnectionString connectionString)
     {
@@ -113,9 +108,8 @@ public class DurableTaskSchedulerOptions
         {
             EndpointAddress = connectionString.Endpoint,
             TaskHubName = connectionString.TaskHubName,
-            Credential = GetCredentialFromConnectionString(connectionString)
+            Credential = GetCredentialFromConnectionString(connectionString),
         };
-
         return options;
     }
 
@@ -128,20 +122,20 @@ public class DurableTaskSchedulerOptions
         {
             case "defaultazure":
                 return new DefaultAzureCredential();
-
             case "managedidentity":
                 return new ManagedIdentityCredential(connectionString.ClientId);
-
             case "workloadidentity":
                 var opts = new WorkloadIdentityCredentialOptions();
                 if (!string.IsNullOrEmpty(connectionString.ClientId))
                 {
                     opts.ClientId = connectionString.ClientId;
                 }
+
                 if (!string.IsNullOrEmpty(connectionString.TenantId))
                 {
                     opts.TenantId = connectionString.TenantId;
                 }
+
                 if (connectionString.AdditionallyAllowedTenants is not null)
                 {
                     foreach (string tenant in connectionString.AdditionallyAllowedTenants)
@@ -149,20 +143,16 @@ public class DurableTaskSchedulerOptions
                         opts.AdditionallyAllowedTenants.Add(tenant);
                     }
                 }
-                return new WorkloadIdentityCredential(opts);
 
+                return new WorkloadIdentityCredential(opts);
             case "environment":
                 return new EnvironmentCredential();
-
             case "azurecli":
                 return new AzureCliCredential();
-
             case "azurepowershell":
                 return new AzurePowerShellCredential();
-
             case "none":
                 return null;
-
             default:
                 throw new ArgumentException(
                     $"The connection string contains an unsupported authentication type '{authType}'.",

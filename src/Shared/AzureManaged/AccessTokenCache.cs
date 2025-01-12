@@ -3,12 +3,12 @@
 
 using Azure.Core;
 
-namespace Microsoft.DurableTask.Extensions.Azure;
+namespace Microsoft.DurableTask.Shared.AzureManaged;
 
 /// <summary>
 /// Caches and manages refresh for Azure access tokens.
 /// </summary>
-internal sealed class AccessTokenCache
+sealed class AccessTokenCache
 {
     readonly TokenCredential credential;
     readonly TokenRequestContext context;

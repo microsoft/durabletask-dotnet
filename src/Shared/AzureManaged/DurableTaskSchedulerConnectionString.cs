@@ -1,9 +1,8 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-
 using System.Data.Common;
 
-namespace Microsoft.DurableTask.Extensions.Azure;
+namespace Microsoft.DurableTask.Shared.AzureManaged;
 
 /// <summary>
 /// Represents the constituent parts of a connection string for a Durable Task Scheduler service.

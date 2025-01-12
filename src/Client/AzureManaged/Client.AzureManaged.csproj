@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFrameworks>net6.0</TargetFrameworks>
-    <PackageDescription>Azure extensions for the Durable Task Framework.</PackageDescription>
+    <PackageDescription>Azure Managed extensions for the Durable Task Framework client.</PackageDescription>
     <EnableStyleCop>true</EnableStyleCop>
   </PropertyGroup>
 
@@ -14,15 +14,13 @@
 
   <ItemGroup>
     <ProjectReference Include="../../Client/Core/Client.csproj" />
-    <ProjectReference Include="../../Worker/Core/Worker.csproj" />
-    <ProjectReference Include="../../Worker/Grpc/Worker.Grpc.csproj" />
     <ProjectReference Include="../../Client/Grpc/Client.Grpc.csproj" />
+    <ProjectReference Include="../../Shared/AzureManaged/Shared.AzureManaged.csproj" />
   </ItemGroup>
-
+  
   <ItemGroup>
     <SharedSection Include="Core" />
     <SharedSection Include="DependencyInjection" />
     <SharedSection Include="Grpc" />
   </ItemGroup>
-
 </Project>

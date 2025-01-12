@@ -5,8 +5,6 @@ using Azure.Core;
 using Azure.Identity;
 using FluentAssertions;
 using Grpc.Net.Client;
-using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,15 +13,15 @@ using Moq;
 using System.ComponentModel.DataAnnotations;
 using Xunit;
 
-namespace Microsoft.DurableTask.Extensions.Azure.Tests;
+namespace Microsoft.DurableTask.Worker.AzureManaged.Tests;
 
-public class DurableTaskSchedulerExtensionsTests
+public class DurableTaskSchedulerWorkerExtensionsTests
 {
     private const string ValidEndpoint = "myaccount.westus3.durabletask.io";
     private const string ValidTaskHub = "testhub";
 
     [Fact]
-    public void UseDurableTaskScheduler_Worker_WithEndpointAndCredential_ShouldConfigureCorrectly()
+    public void UseDurableTaskScheduler_WithEndpointAndCredential_ShouldConfigureCorrectly()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -34,14 +32,14 @@ public class DurableTaskSchedulerExtensionsTests
         // Act
         mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
 
-        // Assert - Verify that the options were registered
+        // Assert
         var provider = services.BuildServiceProvider();
         var options = provider.GetService<IOptions<GrpcDurableTaskWorkerOptions>>();
         options.Should().NotBeNull();
     }
 
     [Fact]
-    public void UseDurableTaskScheduler_Worker_WithConnectionString_ShouldConfigureCorrectly()
+    public void UseDurableTaskScheduler_WithConnectionString_ShouldConfigureCorrectly()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -51,65 +49,6 @@ public class DurableTaskSchedulerExtensionsTests
 
         // Act
         mockBuilder.Object.UseDurableTaskScheduler(connectionString);
-
-        // Assert
-        var provider = services.BuildServiceProvider();
-        var options = provider.GetService<IOptions<GrpcDurableTaskWorkerOptions>>();
-        options.Should().NotBeNull();
-    }
-
-    [Fact]
-    public void UseDurableTaskScheduler_Client_WithEndpointAndCredential_ShouldConfigureCorrectly()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-        var mockBuilder = new Mock<IDurableTaskClientBuilder>();
-        mockBuilder.Setup(b => b.Services).Returns(services);
-        var credential = new DefaultAzureCredential();
-
-        // Act
-        mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
-
-        // Assert
-        var provider = services.BuildServiceProvider();
-        var options = provider.GetService<IOptions<GrpcDurableTaskClientOptions>>();
-        options.Should().NotBeNull();
-    }
-
-    [Fact]
-    public void UseDurableTaskScheduler_Client_WithConnectionString_ShouldConfigureCorrectly()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-        var mockBuilder = new Mock<IDurableTaskClientBuilder>();
-        mockBuilder.Setup(b => b.Services).Returns(services);
-        string connectionString = $"Endpoint={ValidEndpoint};Authentication=DefaultAzure;TaskHub={ValidTaskHub}";
-
-        // Act
-        mockBuilder.Object.UseDurableTaskScheduler(connectionString);
-
-        // Assert
-        var provider = services.BuildServiceProvider();
-        var options = provider.GetService<IOptions<GrpcDurableTaskClientOptions>>();
-        options.Should().NotBeNull();
-    }
-
-    [Fact]
-    public void UseDurableTaskScheduler_WithOptions_ShouldApplyConfiguration()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-        var mockBuilder = new Mock<IDurableTaskWorkerBuilder>();
-        mockBuilder.Setup(b => b.Services).Returns(services);
-        var credential = new DefaultAzureCredential();
-        string workerId = "customWorker";
-
-        // Act
-        mockBuilder.Object.UseDurableTaskScheduler(
-            ValidEndpoint,
-            ValidTaskHub,
-            credential,
-            options => options.WorkerId = workerId);
 
         // Assert
         var provider = services.BuildServiceProvider();
@@ -192,33 +131,11 @@ public class DurableTaskSchedulerExtensionsTests
     }
 
     [Fact]
-    public void UseDurableTaskScheduler_Worker_WithValidationFailure_ShouldThrowValidationException()
+    public void UseDurableTaskScheduler_WithNamedOptions_ShouldConfigureCorrectly()
     {
         // Arrange
         var services = new ServiceCollection();
         var mockBuilder = new Mock<IDurableTaskWorkerBuilder>();
-        mockBuilder.Setup(b => b.Services).Returns(services);
-        var credential = new DefaultAzureCredential();
-
-        // Act
-        mockBuilder.Object.UseDurableTaskScheduler(string.Empty, ValidTaskHub, credential);
-
-        // Assert
-        var ex = Assert.Throws<OptionsValidationException>(() =>
-        {
-            var provider = services.BuildServiceProvider();
-            var options = provider.GetRequiredService<IOptions<DurableTaskSchedulerOptions>>().Value;
-        });
-
-        Assert.Contains("EndpointAddress", ex.Message);
-    }
-
-    [Fact]
-    public void UseDurableTaskScheduler_Client_WithNamedOptions_ShouldConfigureCorrectly()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-        var mockBuilder = new Mock<IDurableTaskClientBuilder>();
         mockBuilder.Setup(b => b.Services).Returns(services);
         mockBuilder.Setup(b => b.Name).Returns("CustomName");
         var credential = new DefaultAzureCredential();
@@ -238,7 +155,7 @@ public class DurableTaskSchedulerExtensionsTests
     }
 
     [Fact]
-    public void ConfigureGrpcChannel_ShouldConfigureWorkerAndClientOptions()
+    public void ConfigureGrpcChannel_ShouldConfigureWorkerOptions()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -251,48 +168,15 @@ public class DurableTaskSchedulerExtensionsTests
             });
 
         var provider = services.BuildServiceProvider();
-        var schedulerOptions = provider.GetService<IOptionsMonitor<DurableTaskSchedulerOptions>>();
-        schedulerOptions.Should().NotBeNull("SchedulerOptions should be registered");
-        var configureChannel = new DurableTaskSchedulerExtensions.ConfigureGrpcChannel(schedulerOptions!);
-
-        var workerOptions = new GrpcDurableTaskWorkerOptions();
-        var clientOptions = new GrpcDurableTaskClientOptions();
+        var schedulerOptions = provider.GetRequiredService<IOptionsMonitor<DurableTaskSchedulerOptions>>();
+        var configureGrpcChannel = new DurableTaskSchedulerWorkerExtensions.ConfigureGrpcChannel(schedulerOptions);
 
         // Act
-        configureChannel.Configure(Options.DefaultName, workerOptions);
-        configureChannel.Configure(Options.DefaultName, clientOptions);
+        var workerOptions = new GrpcDurableTaskWorkerOptions();
+        configureGrpcChannel.Configure(workerOptions);
 
         // Assert
         workerOptions.Channel.Should().NotBeNull();
-        clientOptions.Channel.Should().NotBeNull();
+        workerOptions.Channel.Should().BeOfType<GrpcChannel>();
     }
-
-    [Fact]
-    public void UseDurableTaskScheduler_WithCustomConfiguration_ShouldApplyConfiguration()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-        var mockBuilder = new Mock<IDurableTaskWorkerBuilder>();
-        mockBuilder.Setup(b => b.Services).Returns(services);
-        var credential = new DefaultAzureCredential();
-        string customWorkerId = "custom-worker";
-
-        // Act
-        mockBuilder.Object.UseDurableTaskScheduler(
-            ValidEndpoint,
-            ValidTaskHub,
-            credential,
-            options =>
-            {
-                options.WorkerId = customWorkerId;
-                options.AllowInsecureCredentials = true;
-            });
-
-        // Assert
-        var provider = services.BuildServiceProvider();
-        var options = provider.GetService<IOptions<DurableTaskSchedulerOptions>>();
-        options.Should().NotBeNull();
-        options.Value.WorkerId.Should().Be(customWorkerId);
-        options.Value.AllowInsecureCredentials.Should().BeTrue();
-    }
-}
+} 

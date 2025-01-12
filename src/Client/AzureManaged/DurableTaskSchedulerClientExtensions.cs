@@ -82,12 +82,21 @@ public static class DurableTaskSchedulerClientExtensions
     internal class ConfigureGrpcChannel(IOptionsMonitor<DurableTaskSchedulerOptions> schedulerOptions) :
         IConfigureNamedOptions<GrpcDurableTaskClientOptions>
     {
+        /// <summary>
+        /// Configures the default named options instance.
+        /// </summary>
+        /// <param name="options">The options instance to configure.</param>
         public void Configure(GrpcDurableTaskClientOptions options) => this.Configure(Options.DefaultName, options);
 
+        /// <summary>
+        /// Configures a named options instance.
+        /// </summary>
+        /// <param name="name">The name of the options instance to configure.</param>
+        /// <param name="options">The options instance to configure.</param>
         public void Configure(string? name, GrpcDurableTaskClientOptions options)
         {
             DurableTaskSchedulerOptions source = schedulerOptions.Get(name ?? Options.DefaultName);
             options.Channel = source.CreateChannel();
         }
     }
-}  
+}

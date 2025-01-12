@@ -7,20 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Azure.Identity" Version="1.13.1" />
-    <PackageReference Include="Grpc.Net.Client" Version="2.67.0" />
-    <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="8.0.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="../../Client/Core/Client.csproj" />
     <ProjectReference Include="../../Client/Grpc/Client.Grpc.csproj" />
     <ProjectReference Include="../../Shared/AzureManaged/Shared.AzureManaged.csproj" />
   </ItemGroup>
-  
-  <ItemGroup>
-    <SharedSection Include="Core" />
-    <SharedSection Include="DependencyInjection" />
-    <SharedSection Include="Grpc" />
-  </ItemGroup>
+
 </Project>

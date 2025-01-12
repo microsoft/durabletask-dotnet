@@ -17,4 +17,9 @@
     <SharedSection Include="DependencyInjection" />
     <SharedSection Include="Grpc" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Client/Core/Client.csproj" />
+    <ProjectReference Include="../../Grpc/Grpc.csproj" />
+  </ItemGroup>
 </Project>

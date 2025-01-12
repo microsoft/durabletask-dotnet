@@ -5,7 +5,7 @@ using System.Globalization;
 using Azure.Core;
 using Azure.Identity;
 
-namespace Microsoft.DurableTask.Shared.AzureManaged;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Options for configuring the Durable Task Scheduler.
@@ -51,12 +51,30 @@ public class DurableTaskSchedulerOptions
     /// <summary>
     /// Creates a new instance of <see cref="DurableTaskSchedulerOptions"/> from a connection string.
     /// </summary>
-    /// <returns></returns>
+    /// <param name="connectionString">The connection string to parse.</param>
+    /// <returns>A new instance of <see cref="DurableTaskSchedulerOptions"/>.</returns>
     public static DurableTaskSchedulerOptions FromConnectionString(string connectionString)
     {
         return FromConnectionString(new DurableTaskSchedulerConnectionString(connectionString));
     }
 
+    /// <summary>
+    /// Creates a new instance of <see cref="DurableTaskSchedulerOptions"/> from a parsed connection string.
+    /// </summary>
+    /// <param name="connectionString">The connection string to parse.</param>
+    /// <returns>A new instance of <see cref="DurableTaskSchedulerOptions"/>.</returns>
+    public static DurableTaskSchedulerOptions FromConnectionString(
+        DurableTaskSchedulerConnectionString connectionString) => new()
+        {
+            EndpointAddress = connectionString.Endpoint,
+            TaskHubName = connectionString.TaskHubName,
+            Credential = GetCredentialFromConnectionString(connectionString),
+        };
+
+    /// <summary>
+    /// Creates a gRPC channel for communicating with the Durable Task Scheduler service.
+    /// </summary>
+    /// <returns>A configured <see cref="GrpcChannel"/> instance that can be used to make gRPC calls.</returns>
     internal GrpcChannel CreateChannel()
     {
         Check.NotNullOrEmpty(this.EndpointAddress, nameof(this.EndpointAddress));
@@ -95,22 +113,6 @@ public class DurableTaskSchedulerOptions
             Credentials = ChannelCredentials.Create(channelCreds, managedBackendCreds),
             UnsafeUseInsecureChannelCallCredentials = this.AllowInsecureCredentials,
         });
-    }
-
-    /// <summary>
-    /// Creates a new instance of <see cref="DurableTaskSchedulerOptions"/> from a parsed connection string.
-    /// </summary>
-    /// <returns></returns>
-    public static DurableTaskSchedulerOptions FromConnectionString(
-        DurableTaskSchedulerConnectionString connectionString)
-    {
-        var options = new DurableTaskSchedulerOptions
-        {
-            EndpointAddress = connectionString.Endpoint,
-            TaskHubName = connectionString.TaskHubName,
-            Credential = GetCredentialFromConnectionString(connectionString),
-        };
-        return options;
     }
 
     static TokenCredential? GetCredentialFromConnectionString(DurableTaskSchedulerConnectionString connectionString)

@@ -2,13 +2,12 @@
 // Licensed under the MIT License.
 
 using Azure.Core;
-using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
-namespace Microsoft.DurableTask.Client.AzureManaged;
+namespace Microsoft.DurableTask.Client;
 
 /// <summary>
 /// Extension methods for configuring Durable Task clients to use the Azure Durable Task Scheduler service.

@@ -8,12 +8,11 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="6.0.1" />
   </ItemGroup>
 
-
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Client\Grpc\Client.Grpc.csproj" />
     <ProjectReference Include="..\..\..\src\Worker\Grpc\Worker.Grpc.csproj" />
     <ProjectReference Include="..\..\..\src\Shared\AzureManaged\Shared.AzureManaged.csproj" />
-    <ProjectReference Include="..\..\..\src\TestHelpers\TestHelpers.csproj" />
+    <ProjectReference Include="..\..\TestHelpers\TestHelpers.csproj" />
   </ItemGroup>
 
 </Project>

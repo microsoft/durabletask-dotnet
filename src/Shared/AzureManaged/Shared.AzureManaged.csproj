@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net6.0</TargetFrameworks>
+    <TargetFramework>net6.0</TargetFramework>
     <PackageDescription>Shared components for Azure Managed extensions for the Durable Task Framework.</PackageDescription>
     <EnableStyleCop>true</EnableStyleCop>
   </PropertyGroup>

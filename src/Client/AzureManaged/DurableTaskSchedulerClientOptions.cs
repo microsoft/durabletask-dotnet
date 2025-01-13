@@ -4,13 +4,15 @@ using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using Azure.Core;
 using Azure.Identity;
+using Grpc.Core;
+using Grpc.Net.Client;
 
 namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Options for configuring the Durable Task Scheduler.
 /// </summary>
-public class DurableTaskSchedulerOptions
+public class DurableTaskSchedulerClientOptions
 {
     /// <summary>
     /// Gets or sets the endpoint address of the Durable Task Scheduler resource.
@@ -53,7 +55,7 @@ public class DurableTaskSchedulerOptions
     /// </summary>
     /// <param name="connectionString">The connection string to parse.</param>
     /// <returns>A new instance of <see cref="DurableTaskSchedulerOptions"/>.</returns>
-    public static DurableTaskSchedulerOptions FromConnectionString(string connectionString)
+    public static DurableTaskSchedulerClientOptions FromConnectionString(string connectionString)
     {
         return FromConnectionString(new DurableTaskSchedulerConnectionString(connectionString));
     }
@@ -63,7 +65,7 @@ public class DurableTaskSchedulerOptions
     /// </summary>
     /// <param name="connectionString">The connection string to parse.</param>
     /// <returns>A new instance of <see cref="DurableTaskSchedulerOptions"/>.</returns>
-    public static DurableTaskSchedulerOptions FromConnectionString(
+    internal static DurableTaskSchedulerClientOptions FromConnectionString(
         DurableTaskSchedulerConnectionString connectionString) => new()
         {
             EndpointAddress = connectionString.Endpoint,
@@ -77,8 +79,8 @@ public class DurableTaskSchedulerOptions
     /// <returns>A configured <see cref="GrpcChannel"/> instance that can be used to make gRPC calls.</returns>
     public GrpcChannel CreateChannel()
     {
-        Check.NotNullOrEmpty(this.EndpointAddress, nameof(this.EndpointAddress));
-        Check.NotNullOrEmpty(this.TaskHubName, nameof(this.TaskHubName));
+        Verify.NotNull(this.EndpointAddress, nameof(this.EndpointAddress));
+        Verify.NotNull(this.TaskHubName, nameof(this.TaskHubName));
         string taskHubName = this.TaskHubName;
         string endpoint = !this.EndpointAddress.Contains("://")
             ? $"https://{this.EndpointAddress}"

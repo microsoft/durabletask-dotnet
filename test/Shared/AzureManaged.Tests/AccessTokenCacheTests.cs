@@ -3,8 +3,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using Azure.Core;
 using FluentAssertions;
+using Microsoft.DurableTask;
 using Moq;
 using Xunit;
+using System.Reflection;
+using DotNext;
 
 namespace Microsoft.DurableTask.Shared.AzureManaged.Tests;
 
@@ -90,7 +93,7 @@ public class AccessTokenCacheTests
         // Act & Assert
         // TODO: The constructor should validate its parameters and throw ArgumentNullException,
         // but currently it allows null parameters and throws NullReferenceException when used.
-        var action = () => cache.GetTokenAsync(cancellationToken);
+        Func<Task> action = () => cache.GetTokenAsync(cancellationToken);
         await action.Should().ThrowAsync<NullReferenceException>();
     }
 

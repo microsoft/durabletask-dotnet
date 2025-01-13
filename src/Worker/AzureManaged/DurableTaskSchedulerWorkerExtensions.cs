@@ -28,9 +28,9 @@ public static class DurableTaskSchedulerWorkerExtensions
         string endpointAddress,
         string taskHubName,
         TokenCredential credential,
-        Action<DurableTaskSchedulerOptions>? configure = null)
+        Action<DurableTaskSchedulerWorkerOptions>? configure = null)
     {
-        builder.Services.AddOptions<DurableTaskSchedulerOptions>(builder.Name)
+        builder.Services.AddOptions<DurableTaskSchedulerWorkerOptions>(builder.Name)
             .Configure(options =>
             {
                 options.EndpointAddress = endpointAddress;
@@ -55,11 +55,11 @@ public static class DurableTaskSchedulerWorkerExtensions
     public static void UseDurableTaskScheduler(
         this IDurableTaskWorkerBuilder builder,
         string connectionString,
-        Action<DurableTaskSchedulerOptions>? configure = null)
+        Action<DurableTaskSchedulerWorkerOptions>? configure = null)
     {
-        var connectionOptions = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
+        var connectionOptions = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
 
-        builder.Services.AddOptions<DurableTaskSchedulerOptions>(builder.Name)
+        builder.Services.AddOptions<DurableTaskSchedulerWorkerOptions>(builder.Name)
             .Configure(options =>
             {
                 options.EndpointAddress = connectionOptions.EndpointAddress;
@@ -80,7 +80,7 @@ public static class DurableTaskSchedulerWorkerExtensions
     /// using the provided Durable Task Scheduler options.
     /// </summary>
     /// <param name="schedulerOptions">Monitor for accessing the current scheduler options configuration.</param>
-    internal class ConfigureGrpcChannel(IOptionsMonitor<DurableTaskSchedulerOptions> schedulerOptions) :
+    internal class ConfigureGrpcChannel(IOptionsMonitor<DurableTaskSchedulerWorkerOptions> schedulerOptions) :
         IConfigureNamedOptions<GrpcDurableTaskWorkerOptions>
     {
         /// <summary>
@@ -96,7 +96,7 @@ public static class DurableTaskSchedulerWorkerExtensions
         /// <param name="options">The options instance to configure.</param>
         public void Configure(string? name, GrpcDurableTaskWorkerOptions options)
         {
-            DurableTaskSchedulerOptions source = schedulerOptions.Get(name ?? Options.DefaultName);
+            DurableTaskSchedulerWorkerOptions source = schedulerOptions.Get(name ?? Options.DefaultName);
             options.Channel = source.CreateChannel();
         }
     }

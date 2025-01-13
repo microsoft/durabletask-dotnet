@@ -21,15 +21,15 @@ public static class DurableTaskSchedulerClientExtensions
     /// <param name="endpointAddress">The endpoint address of the Durable Task Scheduler resource. Expected to be in the format "https://{scheduler-name}.{region}.durabletask.io".</param>
     /// <param name="taskHubName">The name of the task hub resource associated with the Durable Task Scheduler resource.</param>
     /// <param name="credential">The credential used to authenticate with the Durable Task Scheduler task hub resource.</param>
-    /// <param name="configure">Optional callback to dynamically configure DurableTaskSchedulerOptions.</param>
+    /// <param name="configure">Optional callback to dynamically configure DurableTaskSchedulerClientOptions.</param>
     public static void UseDurableTaskScheduler(
         this IDurableTaskClientBuilder builder,
         string endpointAddress,
         string taskHubName,
         TokenCredential credential,
-        Action<DurableTaskSchedulerOptions>? configure = null)
+        Action<DurableTaskSchedulerClientOptions>? configure = null)
     {
-        builder.Services.AddOptions<DurableTaskSchedulerOptions>(builder.Name)
+        builder.Services.AddOptions<DurableTaskSchedulerClientOptions>(builder.Name)
             .Configure(options =>
             {
                 options.EndpointAddress = endpointAddress;
@@ -50,15 +50,15 @@ public static class DurableTaskSchedulerClientExtensions
     /// </summary>
     /// <param name="builder">The Durable Task client builder to configure.</param>
     /// <param name="connectionString">The connection string used to connect to the Durable Task Scheduler service.</param>
-    /// <param name="configure">Optional callback to dynamically configure DurableTaskSchedulerOptions.</param>
+    /// <param name="configure">Optional callback to dynamically configure DurableTaskSchedulerClientOptions.</param>
     public static void UseDurableTaskScheduler(
         this IDurableTaskClientBuilder builder,
         string connectionString,
-        Action<DurableTaskSchedulerOptions>? configure = null)
+        Action<DurableTaskSchedulerClientOptions>? configure = null)
     {
-        var connectionOptions = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
+        var connectionOptions = DurableTaskSchedulerClientOptions.FromConnectionString(connectionString);
 
-        builder.Services.AddOptions<DurableTaskSchedulerOptions>(builder.Name)
+        builder.Services.AddOptions<DurableTaskSchedulerClientOptions>(builder.Name)
             .Configure(options =>
             {
                 options.EndpointAddress = connectionOptions.EndpointAddress;
@@ -79,7 +79,7 @@ public static class DurableTaskSchedulerClientExtensions
     /// using the provided Durable Task Scheduler options.
     /// </summary>
     /// <param name="schedulerOptions">Monitor for accessing the current scheduler options configuration.</param>
-    internal class ConfigureGrpcChannel(IOptionsMonitor<DurableTaskSchedulerOptions> schedulerOptions) :
+    internal class ConfigureGrpcChannel(IOptionsMonitor<DurableTaskSchedulerClientOptions> schedulerOptions) :
         IConfigureNamedOptions<GrpcDurableTaskClientOptions>
     {
         /// <summary>
@@ -95,7 +95,7 @@ public static class DurableTaskSchedulerClientExtensions
         /// <param name="options">The options instance to configure.</param>
         public void Configure(string? name, GrpcDurableTaskClientOptions options)
         {
-            DurableTaskSchedulerOptions source = schedulerOptions.Get(name ?? Options.DefaultName);
+            DurableTaskSchedulerClientOptions source = schedulerOptions.Get(name ?? Options.DefaultName);
             options.Channel = source.CreateChannel();
         }
     }

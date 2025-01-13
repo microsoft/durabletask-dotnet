@@ -78,7 +78,7 @@ public class DurableTaskSchedulerClientExtensionsTests
             var provider = services.BuildServiceProvider();
             var ex = Assert.Throws<OptionsValidationException>(() =>
             {
-                var options = provider.GetRequiredService<IOptions<DurableTaskSchedulerOptions>>().Value;
+                var options = provider.GetRequiredService<IOptions<DurableTaskSchedulerClientOptions>>().Value;
             });
             Assert.Contains(endpoint == null ? "EndpointAddress" : "TaskHubName", ex.Message);
         }
@@ -145,7 +145,7 @@ public class DurableTaskSchedulerClientExtensionsTests
 
         // Assert
         var provider = services.BuildServiceProvider();
-        var optionsMonitor = provider.GetService<IOptionsMonitor<DurableTaskSchedulerOptions>>();
+        var optionsMonitor = provider.GetService<IOptionsMonitor<DurableTaskSchedulerClientOptions>>();
         optionsMonitor.Should().NotBeNull();
         var options = optionsMonitor!.Get("CustomName");
         options.Should().NotBeNull();
@@ -159,7 +159,7 @@ public class DurableTaskSchedulerClientExtensionsTests
     {
         // Arrange
         var services = new ServiceCollection();
-        services.AddOptions<DurableTaskSchedulerOptions>()
+        services.AddOptions<DurableTaskSchedulerClientOptions>()
             .Configure(options =>
             {
                 options.EndpointAddress = $"https://{ValidEndpoint}";
@@ -168,7 +168,7 @@ public class DurableTaskSchedulerClientExtensionsTests
             });
 
         var provider = services.BuildServiceProvider();
-        var schedulerOptions = provider.GetRequiredService<IOptionsMonitor<DurableTaskSchedulerOptions>>();
+        var schedulerOptions = provider.GetRequiredService<IOptionsMonitor<DurableTaskSchedulerClientOptions>>();
         var configureGrpcChannel = new DurableTaskSchedulerClientExtensions.ConfigureGrpcChannel(schedulerOptions);
 
         // Act

@@ -5,14 +5,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="../../../src/Shared/AzureManaged/**/*.cs" />
+    <Compile Include="../../../src/Shared/Core/Validation/*.cs" />
+  </ItemGroup>
+  
+  <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="6.0.1" />
+    <PackageReference Include="Azure.Identity" Version="1.13.1" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\Client\Grpc\Client.Grpc.csproj" />
-    <ProjectReference Include="..\..\..\src\Worker\Grpc\Worker.Grpc.csproj" />
-    <ProjectReference Include="..\..\..\src\Shared\AzureManaged\Shared.AzureManaged.csproj" />
     <ProjectReference Include="..\..\TestHelpers\TestHelpers.csproj" />
   </ItemGroup>
-
 </Project>

@@ -7,7 +7,7 @@ namespace Microsoft.DurableTask;
 /// <summary>
 /// Represents the constituent parts of a connection string for a Durable Task Scheduler service.
 /// </summary>
-public sealed class DurableTaskSchedulerConnectionString
+sealed class DurableTaskSchedulerConnectionString
 {
     readonly DbConnectionStringBuilder builder;
 

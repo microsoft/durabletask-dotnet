@@ -8,7 +8,7 @@ using Xunit;
 
 namespace Microsoft.DurableTask.Shared.AzureManaged.Tests;
 
-public class DurableTaskSchedulerOptionsTests
+public class DurableTaskSchedulerWorkerOptionsTests
 {
     private const string ValidEndpoint = "myaccount.westus3.durabletask.io";
     private const string ValidTaskHub = "testhub";
@@ -20,7 +20,7 @@ public class DurableTaskSchedulerOptionsTests
         string connectionString = $"Endpoint={ValidEndpoint};Authentication=DefaultAzure;TaskHub={ValidTaskHub}";
 
         // Act
-        var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
+        var options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
 
         // Assert
         options.EndpointAddress.Should().Be(ValidEndpoint);
@@ -36,7 +36,7 @@ public class DurableTaskSchedulerOptionsTests
         string connectionString = $"Endpoint={ValidEndpoint};Authentication=ManagedIdentity;ClientID={clientId};TaskHub={ValidTaskHub}";
 
         // Act
-        var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
+        var options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
 
         // Assert
         options.EndpointAddress.Should().Be(ValidEndpoint);
@@ -53,7 +53,7 @@ public class DurableTaskSchedulerOptionsTests
         string connectionString = $"Endpoint={ValidEndpoint};Authentication=WorkloadIdentity;ClientID={clientId};TenantId={tenantId};TaskHub={ValidTaskHub}";
 
         // Act
-        var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
+        var options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
 
         // Assert
         options.EndpointAddress.Should().Be(ValidEndpoint);
@@ -71,7 +71,7 @@ public class DurableTaskSchedulerOptionsTests
         string connectionString = $"Endpoint={ValidEndpoint};Authentication={authType};TaskHub={ValidTaskHub}";
 
         // Act
-        var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
+        var options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
 
         // Assert
         options.EndpointAddress.Should().Be(ValidEndpoint);
@@ -86,7 +86,7 @@ public class DurableTaskSchedulerOptionsTests
         string connectionString = $"Endpoint={ValidEndpoint};Authentication=InvalidAuth;TaskHub={ValidTaskHub}";
 
         // Act & Assert
-        var action = () => DurableTaskSchedulerOptions.FromConnectionString(connectionString);
+        var action = () => DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
         action.Should().Throw<ArgumentException>()
             .WithMessage("*contains an unsupported authentication type*");
     }
@@ -98,7 +98,7 @@ public class DurableTaskSchedulerOptionsTests
         string connectionString = $"Endpoint={ValidEndpoint};Authentication=DefaultAzure";  // Missing TaskHub
 
         // Act & Assert
-        var action = () => DurableTaskSchedulerOptions.FromConnectionString(connectionString);
+        var action = () => DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
         action.Should().Throw<ArgumentNullException>();
     }
 
@@ -109,7 +109,7 @@ public class DurableTaskSchedulerOptionsTests
         string connectionString = $"Endpoint={ValidEndpoint};Authentication=None;TaskHub={ValidTaskHub}";
 
         // Act
-        var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
+        var options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
 
         // Assert
         options.EndpointAddress.Should().Be(ValidEndpoint);
@@ -121,7 +121,7 @@ public class DurableTaskSchedulerOptionsTests
     public void DefaultProperties_ShouldHaveExpectedValues()
     {
         // Arrange & Act
-        var options = new DurableTaskSchedulerOptions();
+        var options = new DurableTaskSchedulerWorkerOptions();
 
         // Assert
         options.ResourceId.Should().Be("https://durabletask.io");
@@ -135,7 +135,7 @@ public class DurableTaskSchedulerOptionsTests
     public void CreateChannel_WithHttpsEndpoint_ShouldCreateSecureChannel()
     {
         // Arrange
-        var options = new DurableTaskSchedulerOptions
+        var options = new DurableTaskSchedulerWorkerOptions
         {
             EndpointAddress = $"https://{ValidEndpoint}",
             TaskHubName = ValidTaskHub,
@@ -153,7 +153,7 @@ public class DurableTaskSchedulerOptionsTests
     public void CreateChannel_WithHttpEndpoint_ShouldCreateInsecureChannel()
     {
         // Arrange
-        var options = new DurableTaskSchedulerOptions
+        var options = new DurableTaskSchedulerWorkerOptions
         {
             EndpointAddress = $"http://{ValidEndpoint}",
             TaskHubName = ValidTaskHub,
@@ -174,7 +174,7 @@ public class DurableTaskSchedulerOptionsTests
         var connectionString = "Endpoint=not a valid endpoint;Authentication=DefaultAzure;TaskHub=testhub;";
 
         // Act & Assert
-        var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
+        var options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
         var action = () => options.CreateChannel();
         action.Should().Throw<UriFormatException>()
             .WithMessage("Invalid URI: The hostname could not be parsed.");
@@ -187,7 +187,7 @@ public class DurableTaskSchedulerOptionsTests
         string connectionString = $"Endpoint={ValidEndpoint};Authentication=DefaultAzure;TaskHub={ValidTaskHub}";
 
         // Act
-        var options = DurableTaskSchedulerOptions.FromConnectionString(connectionString);
+        var options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
 
         // Assert
         options.EndpointAddress.Should().Be(ValidEndpoint);
@@ -197,7 +197,7 @@ public class DurableTaskSchedulerOptionsTests
     public void CreateChannel_ShouldAddHttpsPrefix()
     {
         // Arrange
-        var options = new DurableTaskSchedulerOptions
+        var options = new DurableTaskSchedulerWorkerOptions
         {
             EndpointAddress = ValidEndpoint,
             TaskHubName = ValidTaskHub,

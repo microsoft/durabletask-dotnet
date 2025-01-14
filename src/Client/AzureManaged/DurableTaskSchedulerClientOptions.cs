@@ -51,20 +51,20 @@ public class DurableTaskSchedulerClientOptions
     public bool AllowInsecureCredentials { get; set; }
 
     /// <summary>
-    /// Creates a new instance of <see cref="DurableTaskSchedulerOptions"/> from a connection string.
+    /// Creates a new instance of <see cref="DurableTaskSchedulerClientOptions"/> from a connection string.
     /// </summary>
     /// <param name="connectionString">The connection string to parse.</param>
-    /// <returns>A new instance of <see cref="DurableTaskSchedulerOptions"/>.</returns>
+    /// <returns>A new instance of <see cref="DurableTaskSchedulerClientOptions"/>.</returns>
     public static DurableTaskSchedulerClientOptions FromConnectionString(string connectionString)
     {
         return FromConnectionString(new DurableTaskSchedulerConnectionString(connectionString));
     }
 
     /// <summary>
-    /// Creates a new instance of <see cref="DurableTaskSchedulerOptions"/> from a parsed connection string.
+    /// Creates a new instance of <see cref="DurableTaskSchedulerClientOptions"/> from a parsed connection string.
     /// </summary>
     /// <param name="connectionString">The connection string to parse.</param>
-    /// <returns>A new instance of <see cref="DurableTaskSchedulerOptions"/>.</returns>
+    /// <returns>A new instance of <see cref="DurableTaskSchedulerClientOptions"/>.</returns>
     internal static DurableTaskSchedulerClientOptions FromConnectionString(
         DurableTaskSchedulerConnectionString connectionString) => new()
         {

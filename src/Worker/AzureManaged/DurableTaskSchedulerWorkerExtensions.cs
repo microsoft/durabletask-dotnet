@@ -22,7 +22,7 @@ public static class DurableTaskSchedulerWorkerExtensions
     /// <param name="endpointAddress">The endpoint address of the Durable Task Scheduler resource. Expected to be in the format "https://{scheduler-name}.{region}.durabletask.io".</param>
     /// <param name="taskHubName">The name of the task hub resource associated with the Durable Task Scheduler resource.</param>
     /// <param name="credential">The credential used to authenticate with the Durable Task Scheduler task hub resource.</param>
-    /// <param name="configure">Optional callback to dynamically configure DurableTaskSchedulerOptions.</param>
+    /// <param name="configure">Optional callback to dynamically configure DurableTaskSchedulerWorkerOptions.</param>
     public static void UseDurableTaskScheduler(
         this IDurableTaskWorkerBuilder builder,
         string endpointAddress,
@@ -43,7 +43,7 @@ public static class DurableTaskSchedulerWorkerExtensions
     /// </summary>
     /// <param name="builder">The Durable Task worker builder to configure.</param>
     /// <param name="connectionString">The connection string used to connect to the Durable Task Scheduler service.</param>
-    /// <param name="configure">Optional callback to dynamically configure DurableTaskSchedulerOptions.</param>
+    /// <param name="configure">Optional callback to dynamically configure DurableTaskSchedulerWorkerOptions.</param>
     public static void UseDurableTaskScheduler(
         this IDurableTaskWorkerBuilder builder,
         string connectionString,

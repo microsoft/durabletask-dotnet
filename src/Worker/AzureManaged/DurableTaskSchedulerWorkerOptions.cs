@@ -79,8 +79,8 @@ public class DurableTaskSchedulerWorkerOptions
     /// <returns>A configured <see cref="GrpcChannel"/> instance that can be used to make gRPC calls.</returns>
     public GrpcChannel CreateChannel()
     {
-        Check.NotNullOrEmpty(this.EndpointAddress, nameof(this.EndpointAddress));
-        Check.NotNullOrEmpty(this.TaskHubName, nameof(this.TaskHubName));
+        Verify.NotNull(this.EndpointAddress, nameof(this.EndpointAddress));
+        Verify.NotNull(this.TaskHubName, nameof(this.TaskHubName));
         string taskHubName = this.TaskHubName;
         string endpoint = !this.EndpointAddress.Contains("://")
             ? $"https://{this.EndpointAddress}"

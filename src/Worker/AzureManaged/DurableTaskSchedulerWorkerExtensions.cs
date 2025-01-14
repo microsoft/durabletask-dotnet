@@ -30,20 +30,12 @@ public static class DurableTaskSchedulerWorkerExtensions
         TokenCredential credential,
         Action<DurableTaskSchedulerWorkerOptions>? configure = null)
     {
-        builder.Services.AddOptions<DurableTaskSchedulerWorkerOptions>(builder.Name)
-            .Configure(options =>
-            {
-                options.EndpointAddress = endpointAddress;
-                options.TaskHubName = taskHubName;
-                options.Credential = credential;
-            })
-            .Configure(configure ?? (_ => { }))
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-
-        builder.Services.TryAddEnumerable(
-            ServiceDescriptor.Singleton<IConfigureOptions<GrpcDurableTaskWorkerOptions>, ConfigureGrpcChannel>());
-        builder.UseGrpc(_ => { });
+        ConfigureSchedulerOptions(builder, options =>
+        {
+            options.EndpointAddress = endpointAddress;
+            options.TaskHubName = taskHubName;
+            options.Credential = credential;
+        }, configure);
     }
 
     /// <summary>
@@ -58,15 +50,34 @@ public static class DurableTaskSchedulerWorkerExtensions
         Action<DurableTaskSchedulerWorkerOptions>? configure = null)
     {
         var connectionOptions = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
+        ConfigureSchedulerOptions(builder, options =>
+        {
+            options.EndpointAddress = connectionOptions.EndpointAddress;
+            options.TaskHubName = connectionOptions.TaskHubName;
+            options.Credential = connectionOptions.Credential;
+        }, configure);
+    }
 
+    /// <summary>
+    /// Configures Durable Task worker to use the Azure Durable Task Scheduler service using configuration options.
+    /// </summary>
+    /// <param name="builder">The Durable Task worker builder to configure.</param>
+    /// <param name="configure">Callback to configure DurableTaskSchedulerWorkerOptions.</param>
+    public static void UseDurableTaskScheduler(
+        this IDurableTaskWorkerBuilder builder,
+        Action<DurableTaskSchedulerWorkerOptions>? configure = null)
+    {
+        ConfigureSchedulerOptions(builder, _ => { }, configure);
+    }
+
+    private static void ConfigureSchedulerOptions(
+        IDurableTaskWorkerBuilder builder,
+        Action<DurableTaskSchedulerWorkerOptions> initialConfig,
+        Action<DurableTaskSchedulerWorkerOptions>? additionalConfig)
+    {
         builder.Services.AddOptions<DurableTaskSchedulerWorkerOptions>(builder.Name)
-            .Configure(options =>
-            {
-                options.EndpointAddress = connectionOptions.EndpointAddress;
-                options.TaskHubName = connectionOptions.TaskHubName;
-                options.Credential = connectionOptions.Credential;
-            })
-            .Configure(configure ?? (_ => { }))
+            .Configure(initialConfig)
+            .Configure(additionalConfig ?? (_ => { }))
             .ValidateDataAnnotations()
             .ValidateOnStart();
 

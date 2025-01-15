@@ -33,6 +33,14 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         ServiceProvider provider = services.BuildServiceProvider();
         IOptions<GrpcDurableTaskWorkerOptions>? options = provider.GetService<IOptions<GrpcDurableTaskWorkerOptions>>();
         options.Should().NotBeNull();
+
+        // Validate the configured options
+        var workerOptions = provider.GetRequiredService<IOptions<DurableTaskSchedulerWorkerOptions>>().Value;
+        workerOptions.EndpointAddress.Should().Be(ValidEndpoint);
+        workerOptions.TaskHubName.Should().Be(ValidTaskHub);
+        workerOptions.Credential.Should().BeOfType<DefaultAzureCredential>();
+        workerOptions.ResourceId.Should().Be("https://durabletask.io");
+        workerOptions.AllowInsecureCredentials.Should().BeFalse();
     }
 
     [Fact]
@@ -51,6 +59,14 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         ServiceProvider provider = services.BuildServiceProvider();
         IOptions<GrpcDurableTaskWorkerOptions>? options = provider.GetService<IOptions<GrpcDurableTaskWorkerOptions>>();
         options.Should().NotBeNull();
+
+        // Validate the configured options
+        var workerOptions = provider.GetRequiredService<IOptions<DurableTaskSchedulerWorkerOptions>>().Value;
+        workerOptions.EndpointAddress.Should().Be(ValidEndpoint);
+        workerOptions.TaskHubName.Should().Be(ValidTaskHub);
+        workerOptions.Credential.Should().BeOfType<DefaultAzureCredential>();
+        workerOptions.ResourceId.Should().Be("https://durabletask.io");
+        workerOptions.AllowInsecureCredentials.Should().BeFalse();
     }
 
     [Theory]
@@ -93,6 +109,15 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         // Act & Assert
         Action action = () => mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential!);
         action.Should().NotThrow();
+
+        // Validate the configured options
+        ServiceProvider provider = services.BuildServiceProvider();
+        var workerOptions = provider.GetRequiredService<IOptions<DurableTaskSchedulerWorkerOptions>>().Value;
+        workerOptions.EndpointAddress.Should().Be(ValidEndpoint);
+        workerOptions.TaskHubName.Should().Be(ValidTaskHub);
+        workerOptions.Credential.Should().BeNull();
+        workerOptions.ResourceId.Should().Be("https://durabletask.io");
+        workerOptions.AllowInsecureCredentials.Should().BeFalse();
     }
 
     [Fact]
@@ -149,5 +174,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         options.EndpointAddress.Should().Be(ValidEndpoint); // The https:// prefix is added by CreateChannel, not in the extension method
         options.TaskHubName.Should().Be(ValidTaskHub);
         options.Credential.Should().BeOfType<DefaultAzureCredential>();
+        options.ResourceId.Should().Be("https://durabletask.io");
+        options.AllowInsecureCredentials.Should().BeFalse();
     }
 }

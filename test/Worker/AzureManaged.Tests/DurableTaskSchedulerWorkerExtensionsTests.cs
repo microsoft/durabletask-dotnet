@@ -109,7 +109,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
 
         // Assert
         action.Should().Throw<ArgumentNullException>()
-            .WithMessage("Value cannot be null. (Parameter 'The connection string is missing the required 'Endpoint' property.')");
+            .WithMessage("Value cannot be null. (Parameter 'Endpoint')");
     }
 
     [Theory]
@@ -124,7 +124,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
 
         // Act & Assert
         Action action = () => mockBuilder.Object.UseDurableTaskScheduler(connectionString);
-        action.Should().Throw<ArgumentException>();
+        action.Should().Throw<ArgumentNullException>();
     }
 
     [Fact]

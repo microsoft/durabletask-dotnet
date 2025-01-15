@@ -113,7 +113,7 @@ public class DurableTaskSchedulerConnectionStringTests
         // Act & Assert
         Action action = () => _ = new DurableTaskSchedulerConnectionString(connectionString).Endpoint;
         action.Should().Throw<ArgumentNullException>()
-            .WithMessage("Value cannot be null. (Parameter 'The connection string is missing the required 'Endpoint' property.')");
+            .WithMessage("Value cannot be null. (Parameter 'Endpoint')");
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public class DurableTaskSchedulerConnectionStringTests
         // Act & Assert
         Action action = () => _ = new DurableTaskSchedulerConnectionString(connectionString).Endpoint;
         action.Should().Throw<ArgumentNullException>()
-            .WithMessage("Value cannot be null. (Parameter 'The connection string is missing the required 'Endpoint' property.')");
+            .WithMessage("Value cannot be null. (Parameter 'Endpoint')");
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public class DurableTaskSchedulerConnectionStringTests
         // Act & Assert
         Action action = () => _ = new DurableTaskSchedulerConnectionString(connectionString).Endpoint;
         action.Should().Throw<ArgumentNullException>()
-            .WithMessage("*'Endpoint' property*");
+            .WithMessage("Value cannot be null. (Parameter 'Endpoint')");
     }
 
     [Fact]

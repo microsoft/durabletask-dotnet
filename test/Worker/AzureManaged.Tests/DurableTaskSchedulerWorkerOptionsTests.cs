@@ -142,7 +142,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
         };
 
         // Act
-        Grpc.Core.ChannelBase channel = options.CreateChannel();
+        using Grpc.Net.Client.GrpcChannel channel = options.CreateChannel();
 
         // Assert
         channel.Should().NotBeNull();
@@ -160,7 +160,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
         };
 
         // Act
-        Grpc.Core.ChannelBase channel = options.CreateChannel();
+        using Grpc.Net.Client.GrpcChannel channel = options.CreateChannel();
 
         // Assert
         channel.Should().NotBeNull();
@@ -204,7 +204,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
         };
 
         // Act
-        Grpc.Core.ChannelBase channel = options.CreateChannel();
+        using Grpc.Net.Client.GrpcChannel channel = options.CreateChannel();
 
         // Assert
         channel.Should().NotBeNull();

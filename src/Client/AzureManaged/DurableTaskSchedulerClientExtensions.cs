@@ -29,12 +29,15 @@ public static class DurableTaskSchedulerClientExtensions
         TokenCredential credential,
         Action<DurableTaskSchedulerClientOptions>? configure = null)
     {
-        ConfigureSchedulerOptions(builder, options =>
-        {
-            options.EndpointAddress = endpointAddress;
-            options.TaskHubName = taskHubName;
-            options.Credential = credential;
-        }, configure);
+        ConfigureSchedulerOptions(
+            builder,
+            options =>
+            {
+                options.EndpointAddress = endpointAddress;
+                options.TaskHubName = taskHubName;
+                options.Credential = credential;
+            },
+            configure);
     }
 
     /// <summary>
@@ -49,12 +52,15 @@ public static class DurableTaskSchedulerClientExtensions
         Action<DurableTaskSchedulerClientOptions>? configure = null)
     {
         var connectionOptions = DurableTaskSchedulerClientOptions.FromConnectionString(connectionString);
-        ConfigureSchedulerOptions(builder, options =>
-        {
-            options.EndpointAddress = connectionOptions.EndpointAddress;
-            options.TaskHubName = connectionOptions.TaskHubName;
-            options.Credential = connectionOptions.Credential;
-        }, configure);
+        ConfigureSchedulerOptions(
+            builder,
+            options =>
+            {
+                options.EndpointAddress = connectionOptions.EndpointAddress;
+                options.TaskHubName = connectionOptions.TaskHubName;
+                options.Credential = connectionOptions.Credential;
+            },
+            configure);
     }
 
     /// <summary>
@@ -69,7 +75,7 @@ public static class DurableTaskSchedulerClientExtensions
         ConfigureSchedulerOptions(builder, _ => { }, configure);
     }
 
-    private static void ConfigureSchedulerOptions(
+    static void ConfigureSchedulerOptions(
         IDurableTaskClientBuilder builder,
         Action<DurableTaskSchedulerClientOptions> initialConfig,
         Action<DurableTaskSchedulerClientOptions>? additionalConfig)
@@ -86,11 +92,11 @@ public static class DurableTaskSchedulerClientExtensions
     }
 
     /// <summary>
-    /// Internal configuration class that sets up gRPC channels for client options
+    /// Configuration class that sets up gRPC channels for client options
     /// using the provided Durable Task Scheduler options.
     /// </summary>
     /// <param name="schedulerOptions">Monitor for accessing the current scheduler options configuration.</param>
-    internal class ConfigureGrpcChannel(IOptionsMonitor<DurableTaskSchedulerClientOptions> schedulerOptions) :
+    class ConfigureGrpcChannel(IOptionsMonitor<DurableTaskSchedulerClientOptions> schedulerOptions) :
         IConfigureNamedOptions<GrpcDurableTaskClientOptions>
     {
         /// <summary>

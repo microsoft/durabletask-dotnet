@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using Azure.Core;
-using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -30,12 +29,15 @@ public static class DurableTaskSchedulerWorkerExtensions
         TokenCredential credential,
         Action<DurableTaskSchedulerWorkerOptions>? configure = null)
     {
-        ConfigureSchedulerOptions(builder, options =>
-        {
-            options.EndpointAddress = endpointAddress;
-            options.TaskHubName = taskHubName;
-            options.Credential = credential;
-        }, configure);
+        ConfigureSchedulerOptions(
+            builder,
+            options =>
+            {
+                options.EndpointAddress = endpointAddress;
+                options.TaskHubName = taskHubName;
+                options.Credential = credential;
+            },
+            configure);
     }
 
     /// <summary>
@@ -50,12 +52,15 @@ public static class DurableTaskSchedulerWorkerExtensions
         Action<DurableTaskSchedulerWorkerOptions>? configure = null)
     {
         var connectionOptions = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
-        ConfigureSchedulerOptions(builder, options =>
-        {
-            options.EndpointAddress = connectionOptions.EndpointAddress;
-            options.TaskHubName = connectionOptions.TaskHubName;
-            options.Credential = connectionOptions.Credential;
-        }, configure);
+        ConfigureSchedulerOptions(
+            builder,
+            options =>
+            {
+                options.EndpointAddress = connectionOptions.EndpointAddress;
+                options.TaskHubName = connectionOptions.TaskHubName;
+                options.Credential = connectionOptions.Credential;
+            },
+            configure);
     }
 
     /// <summary>
@@ -70,7 +75,7 @@ public static class DurableTaskSchedulerWorkerExtensions
         ConfigureSchedulerOptions(builder, _ => { }, configure);
     }
 
-    private static void ConfigureSchedulerOptions(
+    static void ConfigureSchedulerOptions(
         IDurableTaskWorkerBuilder builder,
         Action<DurableTaskSchedulerWorkerOptions> initialConfig,
         Action<DurableTaskSchedulerWorkerOptions>? additionalConfig)
@@ -87,11 +92,11 @@ public static class DurableTaskSchedulerWorkerExtensions
     }
 
     /// <summary>
-    /// Internal configuration class that sets up gRPC channels for worker options
+    /// Configuration class that sets up gRPC channels for worker options
     /// using the provided Durable Task Scheduler options.
     /// </summary>
     /// <param name="schedulerOptions">Monitor for accessing the current scheduler options configuration.</param>
-    internal class ConfigureGrpcChannel(IOptionsMonitor<DurableTaskSchedulerWorkerOptions> schedulerOptions) :
+    class ConfigureGrpcChannel(IOptionsMonitor<DurableTaskSchedulerWorkerOptions> schedulerOptions) :
         IConfigureNamedOptions<GrpcDurableTaskWorkerOptions>
     {
         /// <summary>

@@ -1,7 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 using System.ComponentModel.DataAnnotations;
-using System.Globalization;
 using Azure.Core;
 using Azure.Identity;
 using Grpc.Core;
@@ -39,14 +38,8 @@ public class DurableTaskSchedulerClientOptions
     public string ResourceId { get; set; } = "https://durabletask.io";
 
     /// <summary>
-    /// Gets or sets the worker ID used to identify the worker instance.
-    /// The default value is a string containing the machine name, process ID, and a unique identifier.
-    /// </summary>
-    public string WorkerId { get; set; } = $"{Environment.MachineName},{Environment.ProcessId},{Guid.NewGuid():N}";
-
-    /// <summary>
     /// Gets or sets a value indicating whether to allow insecure channel credentials.
-    /// This should only be set to true in development/testing scenarios.
+    /// This should only be set to true in local development/testing scenarios.
     /// </summary>
     public bool AllowInsecureCredentials { get; set; }
 
@@ -59,19 +52,6 @@ public class DurableTaskSchedulerClientOptions
     {
         return FromConnectionString(new DurableTaskSchedulerConnectionString(connectionString));
     }
-
-    /// <summary>
-    /// Creates a new instance of <see cref="DurableTaskSchedulerClientOptions"/> from a parsed connection string.
-    /// </summary>
-    /// <param name="connectionString">The connection string to parse.</param>
-    /// <returns>A new instance of <see cref="DurableTaskSchedulerClientOptions"/>.</returns>
-    internal static DurableTaskSchedulerClientOptions FromConnectionString(
-        DurableTaskSchedulerConnectionString connectionString) => new()
-        {
-            EndpointAddress = connectionString.Endpoint,
-            TaskHubName = connectionString.TaskHubName,
-            Credential = GetCredentialFromConnectionString(connectionString),
-        };
 
     /// <summary>
     /// Creates a gRPC channel for communicating with the Durable Task Scheduler service.
@@ -96,7 +76,6 @@ public class DurableTaskSchedulerClientOptions
             async (context, metadata) =>
             {
                 metadata.Add("taskhub", taskHubName);
-                metadata.Add("workerid", this.WorkerId);
                 if (cache == null)
                 {
                     return;
@@ -117,12 +96,25 @@ public class DurableTaskSchedulerClientOptions
         });
     }
 
+    /// <summary>
+    /// Creates a new instance of <see cref="DurableTaskSchedulerClientOptions"/> from a parsed connection string.
+    /// </summary>
+    /// <param name="connectionString">The connection string to parse.</param>
+    /// <returns>A new instance of <see cref="DurableTaskSchedulerClientOptions"/>.</returns>
+    internal static DurableTaskSchedulerClientOptions FromConnectionString(
+        DurableTaskSchedulerConnectionString connectionString) => new()
+        {
+            EndpointAddress = connectionString.Endpoint,
+            TaskHubName = connectionString.TaskHubName,
+            Credential = GetCredentialFromConnectionString(connectionString),
+        };
+
     static TokenCredential? GetCredentialFromConnectionString(DurableTaskSchedulerConnectionString connectionString)
     {
         string authType = connectionString.Authentication;
 
         // Parse the supported auth types, in a case-insensitive way and without spaces
-        switch (authType.ToLower(CultureInfo.InvariantCulture).Replace(" ", string.Empty))
+        switch (authType.ToLowerInvariant())
         {
             case "defaultazure":
                 return new DefaultAzureCredential();

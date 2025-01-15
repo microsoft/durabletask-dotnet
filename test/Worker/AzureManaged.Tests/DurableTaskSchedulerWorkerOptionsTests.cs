@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Azure.Core;
 using Azure.Identity;
 using FluentAssertions;
 using Xunit;
@@ -10,8 +9,8 @@ namespace Microsoft.DurableTask.Shared.AzureManaged.Tests;
 
 public class DurableTaskSchedulerWorkerOptionsTests
 {
-    private const string ValidEndpoint = "myaccount.westus3.durabletask.io";
-    private const string ValidTaskHub = "testhub";
+    const string ValidEndpoint = "myaccount.westus3.durabletask.io";
+    const string ValidTaskHub = "testhub";
 
     [Fact]
     public void FromConnectionString_WithDefaultAzure_ShouldCreateValidInstance()
@@ -20,7 +19,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
         string connectionString = $"Endpoint={ValidEndpoint};Authentication=DefaultAzure;TaskHub={ValidTaskHub}";
 
         // Act
-        var options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
+        DurableTaskSchedulerWorkerOptions options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
 
         // Assert
         options.EndpointAddress.Should().Be(ValidEndpoint);
@@ -36,7 +35,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
         string connectionString = $"Endpoint={ValidEndpoint};Authentication=ManagedIdentity;ClientID={clientId};TaskHub={ValidTaskHub}";
 
         // Act
-        var options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
+        DurableTaskSchedulerWorkerOptions options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
 
         // Assert
         options.EndpointAddress.Should().Be(ValidEndpoint);
@@ -53,7 +52,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
         string connectionString = $"Endpoint={ValidEndpoint};Authentication=WorkloadIdentity;ClientID={clientId};TenantId={tenantId};TaskHub={ValidTaskHub}";
 
         // Act
-        var options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
+        DurableTaskSchedulerWorkerOptions options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
 
         // Assert
         options.EndpointAddress.Should().Be(ValidEndpoint);
@@ -71,7 +70,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
         string connectionString = $"Endpoint={ValidEndpoint};Authentication={authType};TaskHub={ValidTaskHub}";
 
         // Act
-        var options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
+        DurableTaskSchedulerWorkerOptions options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
 
         // Assert
         options.EndpointAddress.Should().Be(ValidEndpoint);
@@ -86,7 +85,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
         string connectionString = $"Endpoint={ValidEndpoint};Authentication=InvalidAuth;TaskHub={ValidTaskHub}";
 
         // Act & Assert
-        var action = () => DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
+        Action action = () => DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
         action.Should().Throw<ArgumentException>()
             .WithMessage("*contains an unsupported authentication type*");
     }
@@ -98,7 +97,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
         string connectionString = $"Endpoint={ValidEndpoint};Authentication=DefaultAzure";  // Missing TaskHub
 
         // Act & Assert
-        var action = () => DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
+        Action action = () => DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
         action.Should().Throw<ArgumentNullException>();
     }
 
@@ -109,7 +108,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
         string connectionString = $"Endpoint={ValidEndpoint};Authentication=None;TaskHub={ValidTaskHub}";
 
         // Act
-        var options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
+        DurableTaskSchedulerWorkerOptions options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
 
         // Assert
         options.EndpointAddress.Should().Be(ValidEndpoint);
@@ -121,7 +120,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
     public void DefaultProperties_ShouldHaveExpectedValues()
     {
         // Arrange & Act
-        var options = new DurableTaskSchedulerWorkerOptions();
+        DurableTaskSchedulerWorkerOptions options = new DurableTaskSchedulerWorkerOptions();
 
         // Assert
         options.ResourceId.Should().Be("https://durabletask.io");
@@ -135,7 +134,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
     public void CreateChannel_WithHttpsEndpoint_ShouldCreateSecureChannel()
     {
         // Arrange
-        var options = new DurableTaskSchedulerWorkerOptions
+        DurableTaskSchedulerWorkerOptions options = new DurableTaskSchedulerWorkerOptions
         {
             EndpointAddress = $"https://{ValidEndpoint}",
             TaskHubName = ValidTaskHub,
@@ -143,7 +142,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
         };
 
         // Act
-        var channel = options.CreateChannel();
+        Grpc.Core.ChannelBase channel = options.CreateChannel();
 
         // Assert
         channel.Should().NotBeNull();
@@ -153,7 +152,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
     public void CreateChannel_WithHttpEndpoint_ShouldCreateInsecureChannel()
     {
         // Arrange
-        var options = new DurableTaskSchedulerWorkerOptions
+        DurableTaskSchedulerWorkerOptions options = new DurableTaskSchedulerWorkerOptions
         {
             EndpointAddress = $"http://{ValidEndpoint}",
             TaskHubName = ValidTaskHub,
@@ -161,7 +160,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
         };
 
         // Act
-        var channel = options.CreateChannel();
+        Grpc.Core.ChannelBase channel = options.CreateChannel();
 
         // Assert
         channel.Should().NotBeNull();
@@ -171,11 +170,11 @@ public class DurableTaskSchedulerWorkerOptionsTests
     public void FromConnectionString_WithInvalidEndpoint_ShouldThrowArgumentException()
     {
         // Arrange
-        var connectionString = "Endpoint=not a valid endpoint;Authentication=DefaultAzure;TaskHub=testhub;";
+        string connectionString = "Endpoint=not a valid endpoint;Authentication=DefaultAzure;TaskHub=testhub;";
 
         // Act & Assert
-        var options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
-        var action = () => options.CreateChannel();
+        DurableTaskSchedulerWorkerOptions options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
+        Action action = () => options.CreateChannel();
         action.Should().Throw<UriFormatException>()
             .WithMessage("Invalid URI: The hostname could not be parsed.");
     }
@@ -187,7 +186,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
         string connectionString = $"Endpoint={ValidEndpoint};Authentication=DefaultAzure;TaskHub={ValidTaskHub}";
 
         // Act
-        var options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
+        DurableTaskSchedulerWorkerOptions options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
 
         // Assert
         options.EndpointAddress.Should().Be(ValidEndpoint);
@@ -197,7 +196,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
     public void CreateChannel_ShouldAddHttpsPrefix()
     {
         // Arrange
-        var options = new DurableTaskSchedulerWorkerOptions
+        DurableTaskSchedulerWorkerOptions options = new DurableTaskSchedulerWorkerOptions
         {
             EndpointAddress = ValidEndpoint,
             TaskHubName = ValidTaskHub,
@@ -205,7 +204,7 @@ public class DurableTaskSchedulerWorkerOptionsTests
         };
 
         // Act
-        var channel = options.CreateChannel();
+        Grpc.Core.ChannelBase channel = options.CreateChannel();
 
         // Assert
         channel.Should().NotBeNull();

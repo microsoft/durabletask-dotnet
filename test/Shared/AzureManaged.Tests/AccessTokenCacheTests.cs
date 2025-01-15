@@ -1,99 +1,96 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 using Azure.Core;
 using FluentAssertions;
-using Microsoft.DurableTask;
 using Moq;
 using Xunit;
-using System.Reflection;
-using DotNext;
 
 namespace Microsoft.DurableTask.Shared.AzureManaged.Tests;
 
 public class AccessTokenCacheTests
 {
-    private readonly Mock<TokenCredential> mockCredential;
-    private readonly TokenRequestContext tokenRequestContext;
-    private readonly TimeSpan margin;
-    private readonly CancellationToken cancellationToken;
+    readonly Mock<TokenCredential> mockCredential;
+    readonly TokenRequestContext tokenRequestContext;
+    readonly TimeSpan margin;
+    readonly CancellationToken cancellationToken;
 
     public AccessTokenCacheTests()
     {
-        mockCredential = new Mock<TokenCredential>();
-        tokenRequestContext = new TokenRequestContext(new[] { "https://durabletask.azure.com/.default" });
-        margin = TimeSpan.FromMinutes(5);
-        cancellationToken = CancellationToken.None;
+        this.mockCredential = new Mock<TokenCredential>();
+        this.tokenRequestContext = new TokenRequestContext(new[] { "https://durabletask.azure.com/.default" });
+        this.margin = TimeSpan.FromMinutes(5);
+        this.cancellationToken = CancellationToken.None;
     }
 
     [Fact]
     public async Task GetTokenAsync_WhenCalled_ShouldReturnToken()
     {
         // Arrange
-        var expectedToken = new AccessToken("test-token", DateTimeOffset.UtcNow.AddHours(1));
-        mockCredential.Setup(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()))
+        AccessToken expectedToken = new AccessToken("test-token", DateTimeOffset.UtcNow.AddHours(1));
+        this.mockCredential.Setup(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedToken);
-        var cache = new AccessTokenCache(mockCredential.Object, tokenRequestContext, margin);
+        AccessTokenCache cache = new AccessTokenCache(this.mockCredential.Object, this.tokenRequestContext, this.margin);
 
         // Act
-        var token = await cache.GetTokenAsync(cancellationToken);
+        AccessToken token = await cache.GetTokenAsync(this.cancellationToken);
 
         // Assert
         token.Should().Be(expectedToken);
-        mockCredential.Verify(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        this.mockCredential.Verify(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task GetTokenAsync_WhenTokenExpired_ShouldRequestNewToken()
     {
         // Arrange
-        var expiredToken = new AccessToken("expired-token", DateTimeOffset.UtcNow.AddMinutes(-5));
-        var newToken = new AccessToken("new-token", DateTimeOffset.UtcNow.AddHours(1));
-        var cache = new AccessTokenCache(mockCredential.Object, tokenRequestContext, margin);
+        AccessToken expiredToken = new AccessToken("expired-token", DateTimeOffset.UtcNow.AddMinutes(-5));
+        AccessToken newToken = new AccessToken("new-token", DateTimeOffset.UtcNow.AddHours(1));
+        AccessTokenCache cache = new AccessTokenCache(this.mockCredential.Object, this.tokenRequestContext, this.margin);
 
-        mockCredential.SetupSequence(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()))
+        this.mockCredential.SetupSequence(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expiredToken)
             .ReturnsAsync(newToken);
 
         // Act
-        var firstToken = await cache.GetTokenAsync(cancellationToken);
-        var secondToken = await cache.GetTokenAsync(cancellationToken);
+        AccessToken firstToken = await cache.GetTokenAsync(this.cancellationToken);
+        AccessToken secondToken = await cache.GetTokenAsync(this.cancellationToken);
 
         // Assert
         firstToken.Should().Be(expiredToken);
         secondToken.Should().Be(newToken);
-        mockCredential.Verify(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        this.mockCredential.Verify(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]
     public async Task GetTokenAsync_WhenTokenValid_ShouldReturnCachedToken()
     {
         // Arrange
-        var validToken = new AccessToken("valid-token", DateTimeOffset.UtcNow.AddHours(1));
-        mockCredential.Setup(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()))
+        AccessToken validToken = new AccessToken("valid-token", DateTimeOffset.UtcNow.AddHours(1));
+        this.mockCredential.Setup(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(validToken);
-        var cache = new AccessTokenCache(mockCredential.Object, tokenRequestContext, margin);
+        AccessTokenCache cache = new AccessTokenCache(this.mockCredential.Object, this.tokenRequestContext, this.margin);
 
         // Act
-        var firstToken = await cache.GetTokenAsync(cancellationToken);
-        var secondToken = await cache.GetTokenAsync(cancellationToken);
+        AccessToken firstToken = await cache.GetTokenAsync(this.cancellationToken);
+        AccessToken secondToken = await cache.GetTokenAsync(this.cancellationToken);
 
         // Assert
         firstToken.Should().Be(validToken);
         secondToken.Should().Be(validToken);
-        mockCredential.Verify(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        this.mockCredential.Verify(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task Constructor_WithNullCredential_ShouldThrowNullReferenceException()
     {
         // Arrange
-        var cache = new AccessTokenCache(null!, tokenRequestContext, margin);
+        AccessTokenCache cache = new AccessTokenCache(null!, this.tokenRequestContext, this.margin);
 
         // Act & Assert
         // TODO: The constructor should validate its parameters and throw ArgumentNullException,
         // but currently it allows null parameters and throws NullReferenceException when used.
-        Func<Task> action = () => cache.GetTokenAsync(cancellationToken);
+        Func<Task> action = () => cache.GetTokenAsync(this.cancellationToken);
         await action.Should().ThrowAsync<NullReferenceException>();
     }
 
@@ -101,22 +98,22 @@ public class AccessTokenCacheTests
     public async Task GetTokenAsync_WhenTokenNearExpiry_ShouldRequestNewToken()
     {
         // Arrange
-        var expiryTime = DateTimeOffset.UtcNow.AddMinutes(10);
-        var nearExpiryToken = new AccessToken("near-expiry-token", expiryTime);
-        var newToken = new AccessToken("new-token", expiryTime.AddHours(1));
-        var cache = new AccessTokenCache(mockCredential.Object, tokenRequestContext, TimeSpan.FromMinutes(15));
+        DateTimeOffset expiryTime = DateTimeOffset.UtcNow.AddMinutes(10);
+        AccessToken nearExpiryToken = new AccessToken("near-expiry-token", expiryTime);
+        AccessToken newToken = new AccessToken("new-token", expiryTime.AddHours(1));
+        AccessTokenCache cache = new AccessTokenCache(this.mockCredential.Object, this.tokenRequestContext, TimeSpan.FromMinutes(15));
 
-        mockCredential.SetupSequence(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()))
+        this.mockCredential.SetupSequence(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(nearExpiryToken)
             .ReturnsAsync(newToken);
 
         // Act
-        var firstToken = await cache.GetTokenAsync(cancellationToken);
-        var secondToken = await cache.GetTokenAsync(cancellationToken);
+        AccessToken firstToken = await cache.GetTokenAsync(this.cancellationToken);
+        AccessToken secondToken = await cache.GetTokenAsync(this.cancellationToken);
 
         // Assert
         firstToken.Should().Be(nearExpiryToken);
         secondToken.Should().Be(newToken);
-        mockCredential.Verify(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        this.mockCredential.Verify(c => c.GetTokenAsync(It.IsAny<TokenRequestContext>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 }

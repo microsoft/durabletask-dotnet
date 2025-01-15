@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net6.0</TargetFrameworks>
+    <TargetFramework>net6.0</TargetFramework>
     <PackageDescription>Azure Managed extensions for the Durable Task Framework worker.</PackageDescription>
     <EnableStyleCop>true</EnableStyleCop>
   </PropertyGroup>

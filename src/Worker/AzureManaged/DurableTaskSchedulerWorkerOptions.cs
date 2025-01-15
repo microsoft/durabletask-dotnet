@@ -63,7 +63,7 @@ public class DurableTaskSchedulerWorkerOptions
     /// Creates a gRPC channel for communicating with the Durable Task Scheduler service.
     /// </summary>
     /// <returns>A configured <see cref="GrpcChannel"/> instance that can be used to make gRPC calls.</returns>
-    public GrpcChannel CreateChannel()
+    internal GrpcChannel CreateChannel()
     {
         Verify.NotNull(this.EndpointAddress, nameof(this.EndpointAddress));
         Verify.NotNull(this.TaskHubName, nameof(this.TaskHubName));

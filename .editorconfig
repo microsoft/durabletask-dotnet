@@ -1,4 +1,4 @@
-'# Remove the line below if you want to inherit .editorconfig settings from higher directories
+# Remove the line below if you want to inherit .editorconfig settings from higher directories
 root = true
 
 # XML project files
@@ -232,9 +232,3 @@ dotnet_diagnostic.SA1400.severity = none  # Access modifier must be declared
 dotnet_diagnostic.SA1402.severity = none  # File may only contain a single type
 dotnet_diagnostic.SA1633.severity = warning  # File must have header -- TODO: replace with IDE0073 eventually
 dotnet_diagnostic.SA1649.severity = none  # File name must match type name
-
-# Enforce explicit types instead of `var`
-dotnet_style_prefer_var_for_built_in_types = false:error
-dotnet_style_prefer_var_for_simple_types = false:error
-dotnet_style_prefer_var_when_type_is_apparent = false:error
-dotnet_style_prefer_var_when_type_is_not_apparent = false:error

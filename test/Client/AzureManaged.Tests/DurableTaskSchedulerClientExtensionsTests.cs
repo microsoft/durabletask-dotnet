@@ -35,7 +35,7 @@ public class DurableTaskSchedulerClientExtensionsTests
         options.Should().NotBeNull();
 
         // Validate the configured options
-        var clientOptions = provider.GetRequiredService<IOptions<DurableTaskSchedulerClientOptions>>().Value;
+        DurableTaskSchedulerClientOptions clientOptions = provider.GetRequiredService<IOptions<DurableTaskSchedulerClientOptions>>().Value;
         clientOptions.EndpointAddress.Should().Be(ValidEndpoint);
         clientOptions.TaskHubName.Should().Be(ValidTaskHub);
         clientOptions.Credential.Should().BeOfType<DefaultAzureCredential>();
@@ -59,7 +59,7 @@ public class DurableTaskSchedulerClientExtensionsTests
         options.Should().NotBeNull();
 
         // Validate the configured options
-        var clientOptions = provider.GetRequiredService<IOptions<DurableTaskSchedulerClientOptions>>().Value;
+        DurableTaskSchedulerClientOptions clientOptions = provider.GetRequiredService<IOptions<DurableTaskSchedulerClientOptions>>().Value;
         clientOptions.EndpointAddress.Should().Be(ValidEndpoint);
         clientOptions.TaskHubName.Should().Be(ValidTaskHub);
         clientOptions.Credential.Should().BeOfType<DefaultAzureCredential>();
@@ -68,7 +68,7 @@ public class DurableTaskSchedulerClientExtensionsTests
     [Theory]
     [InlineData(null, "testhub")]
     [InlineData("myaccount.westus3.durabletask.io", null)]
-    public void UseDurableTaskScheduler_WithNullParameters_ShouldThrowArgumentNullException(string endpoint, string taskHub)
+    public void UseDurableTaskScheduler_WithNullParameters_ShouldThrowOptionsValidationException(string endpoint, string taskHub)
     {
         // Arrange
         ServiceCollection services = new ServiceCollection();
@@ -77,21 +77,17 @@ public class DurableTaskSchedulerClientExtensionsTests
         DefaultAzureCredential credential = new DefaultAzureCredential();
 
         // Act
-        Action action = () => mockBuilder.Object.UseDurableTaskScheduler(endpoint, taskHub, credential);
+        mockBuilder.Object.UseDurableTaskScheduler(endpoint, taskHub, credential);
+        ServiceProvider provider = services.BuildServiceProvider();
 
         // Assert
-        action.Should().NotThrow(); // The validation happens when building the service provider
-
-        if (endpoint == null || taskHub == null)
-        {
-            ServiceProvider provider = services.BuildServiceProvider();
-            OptionsValidationException ex = Assert.Throws<OptionsValidationException>(() =>
-            {
-                DurableTaskSchedulerClientOptions options = provider.GetRequiredService<IOptions<DurableTaskSchedulerClientOptions>>().Value;
-            });
-            Assert.Contains(endpoint == null ? "EndpointAddress" : "TaskHubName", ex.Message);
-        }
+        var action = () => provider.GetRequiredService<IOptions<DurableTaskSchedulerClientOptions>>().Value;
+        action.Should().Throw<OptionsValidationException>()
+            .WithMessage(endpoint == null 
+                ? "DataAnnotation validation failed for 'DurableTaskSchedulerClientOptions' members: 'EndpointAddress' with the error: 'Endpoint address is required'."
+                : "DataAnnotation validation failed for 'DurableTaskSchedulerClientOptions' members: 'TaskHubName' with the error: 'Task hub name is required'.");
     }
+
 
     [Fact]
     public void UseDurableTaskScheduler_WithNullCredential_ShouldSucceed()
@@ -108,7 +104,7 @@ public class DurableTaskSchedulerClientExtensionsTests
 
         // Validate the configured options
         ServiceProvider provider = services.BuildServiceProvider();
-        var clientOptions = provider.GetRequiredService<IOptions<DurableTaskSchedulerClientOptions>>().Value;
+        DurableTaskSchedulerClientOptions clientOptions = provider.GetRequiredService<IOptions<DurableTaskSchedulerClientOptions>>().Value;
         clientOptions.EndpointAddress.Should().Be(ValidEndpoint);
         clientOptions.TaskHubName.Should().Be(ValidTaskHub);
         clientOptions.Credential.Should().BeNull();

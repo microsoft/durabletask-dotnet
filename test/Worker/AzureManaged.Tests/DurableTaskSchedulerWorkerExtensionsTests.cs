@@ -72,7 +72,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
     [Theory]
     [InlineData(null, "testhub")]
     [InlineData("myaccount.westus3.durabletask.io", null)]
-    public void UseDurableTaskScheduler_WithNullParameters_ShouldThrowArgumentNullException(string endpoint, string taskHub)
+    public void UseDurableTaskScheduler_WithNullParameters_ShouldThrowOptionsValidationException(string endpoint, string taskHub)
     {
         // Arrange
         ServiceCollection services = new ServiceCollection();
@@ -81,20 +81,15 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         DefaultAzureCredential credential = new DefaultAzureCredential();
 
         // Act
-        Action action = () => mockBuilder.Object.UseDurableTaskScheduler(endpoint, taskHub, credential);
+        mockBuilder.Object.UseDurableTaskScheduler(endpoint, taskHub, credential);
+        ServiceProvider provider = services.BuildServiceProvider();
 
         // Assert
-        action.Should().NotThrow(); // The validation happens when building the service provider
-
-        if (endpoint == null || taskHub == null)
-        {
-            ServiceProvider provider = services.BuildServiceProvider();
-            OptionsValidationException ex = Assert.Throws<OptionsValidationException>(() =>
-            {
-                DurableTaskSchedulerWorkerOptions options = provider.GetRequiredService<IOptions<DurableTaskSchedulerWorkerOptions>>().Value;
-            });
-            Assert.Contains(endpoint == null ? "EndpointAddress" : "TaskHubName", ex.Message);
-        }
+        var action = () => provider.GetRequiredService<IOptions<DurableTaskSchedulerWorkerOptions>>().Value;
+        action.Should().Throw<OptionsValidationException>()
+            .WithMessage(endpoint == null 
+                ? "DataAnnotation validation failed for 'DurableTaskSchedulerWorkerOptions' members: 'EndpointAddress' with the error: 'Endpoint address is required'."
+                : "DataAnnotation validation failed for 'DurableTaskSchedulerWorkerOptions' members: 'TaskHubName' with the error: 'Task hub name is required'.");
     }
 
     [Fact]

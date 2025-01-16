@@ -5,6 +5,7 @@
 - Implement work item completion tokens for standalone worker scenarios ([#359](https://github.com/microsoft/durabletask-dotnet/pull/359))
 - Support for worker concurrency configuration ([#359](https://github.com/microsoft/durabletask-dotnet/pull/359))
 - Bump System.Text.Json to 6.0.10
+- Initial support for the Azure-managed [Durable Task Scheduler](https://techcommunity.microsoft.com/blog/appsonazureblog/announcing-limited-early-access-of-the-durable-task-scheduler-for-azure-durable-/4286526) preview.
 
 ## v1.4.0
 

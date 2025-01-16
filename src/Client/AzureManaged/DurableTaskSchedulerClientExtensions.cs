@@ -83,8 +83,7 @@ public static class DurableTaskSchedulerClientExtensions
         builder.Services.AddOptions<DurableTaskSchedulerClientOptions>(builder.Name)
             .Configure(initialConfig)
             .Configure(additionalConfig ?? (_ => { }))
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
+            .ValidateDataAnnotations();
 
         builder.Services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IConfigureOptions<GrpcDurableTaskClientOptions>, ConfigureGrpcChannel>());

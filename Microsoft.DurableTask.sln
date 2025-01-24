@@ -83,6 +83,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shared", "Shared", "{CECADD
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shared.AzureManaged.Tests", "test\Shared\AzureManaged.Tests\Shared.AzureManaged.Tests.csproj", "{3272C041-F81D-4C85-A4FB-2A700B5A7A9D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleAppMinimal", "samples\ConsoleAppMinimal\ConsoleAppMinimal.csproj", "{B48FACA9-A328-452A-BFAE-C4F60F9C7024}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -217,6 +219,10 @@ Global
 		{3272C041-F81D-4C85-A4FB-2A700B5A7A9D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3272C041-F81D-4C85-A4FB-2A700B5A7A9D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3272C041-F81D-4C85-A4FB-2A700B5A7A9D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B48FACA9-A328-452A-BFAE-C4F60F9C7024}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B48FACA9-A328-452A-BFAE-C4F60F9C7024}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B48FACA9-A328-452A-BFAE-C4F60F9C7024}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B48FACA9-A328-452A-BFAE-C4F60F9C7024}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -258,6 +264,7 @@ Global
 		{1E5C2E83-7B6B-425A-9C9B-0B887D273B12} = {51DC98A3-0193-4C66-964B-C26C748E25B6}
 		{CECADDB5-E30A-4CE2-8604-9AC596D4A2DC} = {E5637F81-2FB9-4CD7-900D-455363B142A7}
 		{3272C041-F81D-4C85-A4FB-2A700B5A7A9D} = {CECADDB5-E30A-4CE2-8604-9AC596D4A2DC}
+		{B48FACA9-A328-452A-BFAE-C4F60F9C7024} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AB41CB55-35EA-4986-A522-387AB3402E71}

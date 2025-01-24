@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -11,6 +12,20 @@ namespace Microsoft.DurableTask.Worker;
 /// </summary>
 public static class ServiceCollectionExtensions
 {
+    /// <summary>
+    /// Adds and configures Durable Task worker services to the service collection.
+    /// </summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <param name="name">The name of the builder to add.</param>
+    /// <returns>The builder used to configured the <see cref="DurableTaskWorker"/>.</returns>
+    public static IDurableTaskWorkerBuilder AddDurableTaskWorker(this IServiceCollection services, string? name = null)
+    {
+        Check.NotNull(services);
+        IDurableTaskWorkerBuilder builder = GetBuilder(services, name ?? Options.DefaultName, out bool added);
+        ConditionalConfigureBuilder(services, builder, added);
+        return builder;
+    }
+
     /// <summary>
     /// Adds and configures Durable Task worker services to the service collection.
     /// </summary>
@@ -41,16 +56,22 @@ public static class ServiceCollectionExtensions
 
         IDurableTaskWorkerBuilder builder = GetBuilder(services, name, out bool added);
         configure.Invoke(builder);
+        ConditionalConfigureBuilder(services, builder, added);
+        return services;
+    }
 
-        if (added)
+    static void ConditionalConfigureBuilder(
+        IServiceCollection services, IDurableTaskWorkerBuilder builder, bool configure)
+    {
+        if (!configure)
         {
-            // The added toggle logic is because we cannot use TryAddEnumerable logic as
-            // we would have to dynamically compile a lambda to have it work correctly.
-            ConfigureDurableOptions(services, name);
-            services.AddSingleton(sp => builder.Build(sp));
+            return;
         }
 
-        return services;
+        // The added toggle logic is because we cannot use TryAddEnumerable logic as
+        // we would have to dynamically compile a lambda to have it work correctly.
+        ConfigureDurableOptions(services, builder.Name);
+        services.AddSingleton(sp => builder.Build(sp));
     }
 
     static IServiceCollection ConfigureDurableOptions(IServiceCollection services, string name)
@@ -87,15 +108,10 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// A container which is used to store and retrieve builders from within the <see cref="IServiceCollection" />.
     /// </summary>
-    class BuilderContainer
+    class BuilderContainer(IServiceCollection services)
     {
-        readonly Dictionary<string, IDurableTaskWorkerBuilder> builders = new();
-        readonly IServiceCollection services;
-
-        public BuilderContainer(IServiceCollection services)
-        {
-            this.services = services;
-        }
+        readonly Dictionary<string, IDurableTaskWorkerBuilder> builders = [];
+        readonly IServiceCollection services = services;
 
         public IDurableTaskWorkerBuilder GetOrAdd(string name, out bool added)
         {

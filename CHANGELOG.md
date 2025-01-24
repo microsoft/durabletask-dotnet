@@ -1,5 +1,15 @@
 ﻿# Changelog
 
+## vNext
+
+### Microsoft.DurableTask.Client
+
+- Add new `IDurableTaskClientBuilder AddDurableTaskClient(IServiceCollection, string?)` API
+
+### Microsoft.DurableTask.Worker
+
+- Add new `IDurableTaskWorkerBuilder AddDurableTaskWorker(IServiceCollection, string?)` API
+
 ## v1.5.0
 
 - Implement work item completion tokens for standalone worker scenarios ([#359](https://github.com/microsoft/durabletask-dotnet/pull/359))

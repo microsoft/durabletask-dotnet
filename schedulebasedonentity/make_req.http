@@ -1,0 +1,20 @@
+# Create a schedule
+POST /api/CreateSchedule?cron=0 0 * * *&orchestration=MyOrchestration
+Content-Type: text/plain
+
+MySchedule
+
+# Update a schedule
+PUT /api/UpdateSchedule?cron=0 0 * * *&orchestration=MyNewOrchestration
+Content-Type: text/plain
+
+MySchedule
+
+# Get schedule details
+GET /api/GetSchedule?name=MySchedule
+
+# Enable schedule
+POST /api/EnableSchedule?name=MySchedule
+
+# Disable schedule
+POST /api/DisableSchedule?name=MySchedule

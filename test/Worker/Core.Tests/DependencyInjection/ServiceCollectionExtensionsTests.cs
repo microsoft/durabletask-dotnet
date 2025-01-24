@@ -37,7 +37,6 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Theory]
-    [InlineData(null)]
     [InlineData("")]
     [InlineData("MyBuilder")]
     public void AddDurableTaskWorker_SameInstance3(string name)

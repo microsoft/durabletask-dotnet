@@ -13,6 +13,10 @@ class ScheduleState
 
     internal string ExecutionToken { get; set; } = Guid.NewGuid().ToString("N");
 
+    internal DateTimeOffset? LastRunAt { get; set; }
+
+    internal DateTimeOffset? NextRunAt { get; set; }
+
     internal ScheduleConfiguration? ScheduleConfiguration { get; set; }
 
     public void UpdateConfig(ScheduleConfiguration scheduleUpdateConfig)
@@ -72,6 +76,17 @@ class ScheduleState
     public void RefreshScheduleRunExecutionToken()
     {
         this.ExecutionToken = Guid.NewGuid().ToString("N");
+    }
+
+    public void ResetNextRunAt()
+    {
+        this.NextRunAt = null;
+    }
+
+    public void ResetScheduleRunState()
+    {
+        this.ResetNextRunAt();
+        this.RefreshScheduleRunExecutionToken();
     }
 }
 
@@ -170,7 +185,6 @@ class Schedule : TaskEntity<ScheduleState>
 
         this.State.UpdateConfig(scheduleUpdateConfig);
         this.State.RefreshScheduleRunExecutionToken();
-
         // Run schedule after update
         context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), "RunSchedule", this.State.ExecutionToken);
     }
@@ -214,13 +228,12 @@ class Schedule : TaskEntity<ScheduleState>
         throw new NotImplementedException();
     }
 
-    public void RunSchedule(TaskEntityContext context, string executionToken)
+    public async void RunSchedule(TaskEntityContext context, string executionToken)
     {
         if (executionToken != this.State.ExecutionToken)
         {
-            // Execution token has expired, log and return
             this.logger.LogInformation(
-                "Skipping schedule run - execution token {token} has expired",
+                "Cancel schedule run - execution token {token} has expired",
                 executionToken);
             return;
         }
@@ -230,13 +243,64 @@ class Schedule : TaskEntity<ScheduleState>
             throw new InvalidOperationException("Schedule must be in Active status to run.");
         }
 
-        // TODO: Implement all schedule config properties
-        // if startat is null, then start immediately
-        // first check startat, compute gap with current time, if gap is negative, then start immediately
-        // if gap is positive, then wait for gap seconds and then signal runschedule with delay of gap time
-        // first check if there is already existing orchestration instance with same orchestration name
-        // if there is no existing orchestration instance, then create a new one
-        // if there is existing orchestration instance, then check if it is done, if it is done, then create a new one
-        // if there is existing orchestration instance, then check if it is not done, then skip
+        // run schedule based on next run at
+        // if next run at is null, it is not scheduled yet, we compute the next run at based on startat and update
+        // else if next run at is now, schedule the orchestration, and update next run at = next runat + interval 
+        // if next run at is in the future, signal to run schedule later
+        if (!this.State.NextRunAt.HasValue)
+        {
+            this.State.NextRunAt = this.State.ScheduleConfiguration.StartAt;
+        }
+
+        if (this.State.NextRunAt.Value <= DateTimeOffset.UtcNow) {
+            await this.StartOrchestrationIfNotRunning(context);
+            this.State.NextRunAt = this.State.NextRunAt.Value + this.State.ScheduleConfiguration.Interval.Value;
+        }
+
+        context.SignalEntity(
+            new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId),
+            "RunSchedule",
+            this.State.ExecutionToken, new SignalEntityOptions
+            {
+                SignalTime = this.State.NextRunAt.Value,
+            });
+    }
+
+    // implement a func to check startat internal func
+    void CheckStartAt(TaskEntityContext context)
+    {
+        ScheduleConfiguration? config = this.State.ScheduleConfiguration;
+        DateTime now = DateTime.UtcNow;
+        TimeSpan startDelay = config.StartAt.HasValue ? config.StartAt.Value - now : TimeSpan.Zero;
+
+        if (startDelay <= TimeSpan.Zero)
+        {
+            // Start immediately if no delay or start time has passed
+            this.StartOrchestrationIfNotRunning(context);
+        }
+        else
+        {
+            // Schedule future run
+            context.SignalEntity(
+                new EntityInstanceId(nameof(Schedule), config.ScheduleId),
+                "RunSchedule",
+                this.State.ExecutionToken, new SignalEntityOptions
+                {
+                    SignalTime = config.StartAt.Value,
+                });
+        }
+    }
+
+    void StartOrchestrationIfNotRunning(TaskEntityContext context)
+    {
+        var config = this.State.ScheduleConfiguration;
+        var instance = context.GetOrchestrationInstance(config.OrchestrationName);
+
+        if (instance == null || instance.IsComplete)
+        {
+            context.StartNewOrchestration(
+                config.OrchestrationName,
+                config.OrchestrationInput);
+        }
     }
 }

@@ -180,6 +180,23 @@ class Schedule : TaskEntity<ScheduleState>
 {
     readonly ILogger<Schedule> logger;
 
+    // Valid schedule status transitions
+    readonly Dictionary<ScheduleStatus, HashSet<ScheduleStatus>> validTransitions = new Dictionary<ScheduleStatus, HashSet<ScheduleStatus>>
+    {
+        {
+            ScheduleStatus.Uninitialized,
+            new HashSet<ScheduleStatus> { ScheduleStatus.Active }
+        },
+        {
+            ScheduleStatus.Active,
+            new HashSet<ScheduleStatus> { ScheduleStatus.Paused }
+        },
+        {
+            ScheduleStatus.Paused,
+            new HashSet<ScheduleStatus> { ScheduleStatus.Active }
+        },
+    };
+
     public Schedule(ILogger<Schedule> logger)
     {
         this.logger = logger;
@@ -197,7 +214,7 @@ class Schedule : TaskEntity<ScheduleState>
         this.logger.LogInformation($"Creating schedule with options: {scheduleCreationConfig}");
 
         this.State.ScheduleConfiguration = scheduleCreationConfig;
-        this.State.Status = ScheduleStatus.Active;
+        this.TryStatusTransition(ScheduleStatus.Active);
 
         // Signal to run schedule immediately after creation and let runSchedule determine if it should run immediately
         // or later to separate response from schedule creation and schedule responsibilities
@@ -256,9 +273,10 @@ class Schedule : TaskEntity<ScheduleState>
         }
 
         // Transition to Paused state
-        this.State.Status = ScheduleStatus.Paused;
+        this.TryStatusTransition(ScheduleStatus.Paused);
         this.State.NextRunAt = null;
         this.State.RefreshScheduleRunExecutionToken();
+
         this.logger.LogInformation("Schedule paused.");
     }
 
@@ -273,7 +291,7 @@ class Schedule : TaskEntity<ScheduleState>
             throw new InvalidOperationException("Schedule must be in Paused state to resume.");
         }
 
-        this.State.Status = ScheduleStatus.Active;
+        this.TryStatusTransition(ScheduleStatus.Active);
         this.State.NextRunAt = null;
         this.logger.LogInformation("Schedule resumed.");
 
@@ -354,11 +372,17 @@ class Schedule : TaskEntity<ScheduleState>
         context.ScheduleNewOrchestration(new TaskName(config!.OrchestrationName), config!.OrchestrationInput, new StartOrchestrationOptions(config!.OrchestrationInstanceId));
     }
 
-    void ValidateStateTransition(ScheduleStatus from, ScheduleStatus to)
+    void TryStatusTransition(ScheduleStatus to)
     {
-        if (this.State.Status != from)
+        // Check if transition is valid
+        HashSet<ScheduleStatus> validTargetStates;
+        ScheduleStatus from = this.State.Status;
+
+        if (!this.validTransitions.TryGetValue(from, out validTargetStates) || !validTargetStates.Contains(to))
         {
-            throw new InvalidOperationException($"Cannot transition from {this.State.Status} to {to}");
+            throw new InvalidOperationException($"Invalid state transition: Cannot transition from {from} to {to}");
         }
+
+        this.State.Status = to;
     }
 }

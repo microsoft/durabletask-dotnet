@@ -176,7 +176,7 @@ enum ScheduleStatus
     Paused,       // Schedule is paused
 }
 
-class Schedule : TaskEntity<ScheduleState>
+public class Schedule : TaskEntity<ScheduleState>
 {
     readonly ILogger<Schedule> logger;
 

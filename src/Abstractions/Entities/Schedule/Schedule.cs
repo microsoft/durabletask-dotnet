@@ -1,86 +1,178 @@
-using DurableTask.Core.Entities;
-using DurableTask.Core.Entities.OperationFormat;
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+using Microsoft.DurableTask;
+using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Threading.Tasks;
 
-public class ScheduleEntity : TaskEntity
+namespace DurableTask.Abstractions.Entities.Schedule;
+
+class ScheduleState
 {
-    private readonly ILogger logger;
-    private ScheduleState currentState;
-    private int runScheduleCount = 0; // Track how many times RunSchedule has been called
+    internal ScheduleStatus Status { get; set; } = ScheduleStatus.Uninitialized;
 
-    public ScheduleEntity(ILogger logger)
+    internal string ExecutionToken { get; set; } = Guid.NewGuid().ToString("N");
+
+    internal ScheduleConfiguration? ScheduleConfiguration { get; set; }
+
+    public void UpdateConfig(ScheduleConfiguration scheduleUpdateConfig)
     {
-        this.logger = logger;
-        this.currentState = ScheduleState.Provisioning; // Initial state
+        Check.NotNull(this.ScheduleConfiguration, nameof(this.ScheduleConfiguration));
+        Check.NotNull(scheduleUpdateConfig, nameof(scheduleUpdateConfig));
+
+        this.ScheduleConfiguration.Version++;
+
+        if (!string.IsNullOrEmpty(scheduleUpdateConfig.OrchestrationName))
+        {
+            this.ScheduleConfiguration.OrchestrationName = scheduleUpdateConfig.OrchestrationName;
+        }
+
+        if (!string.IsNullOrEmpty(scheduleUpdateConfig.ScheduleId))
+        {
+            this.ScheduleConfiguration.ScheduleId = scheduleUpdateConfig.ScheduleId;
+        }
+
+        if (scheduleUpdateConfig.OrchestrationInput == null)
+        {
+            this.ScheduleConfiguration.OrchestrationInput = scheduleUpdateConfig.OrchestrationInput;
+        }
+
+        if (scheduleUpdateConfig.StartAt.HasValue)
+        {
+            this.ScheduleConfiguration.StartAt = scheduleUpdateConfig.StartAt;
+        }
+
+        if (scheduleUpdateConfig.EndAt.HasValue)
+        {
+            this.ScheduleConfiguration.EndAt = scheduleUpdateConfig.EndAt;
+        }
+
+        if (scheduleUpdateConfig.Interval.HasValue)
+        {
+            this.ScheduleConfiguration.Interval = scheduleUpdateConfig.Interval;
+        }
+
+        if (!string.IsNullOrEmpty(scheduleUpdateConfig.CronExpression))
+        {
+            this.ScheduleConfiguration.CronExpression = scheduleUpdateConfig.CronExpression;
+        }
+
+        if (scheduleUpdateConfig.MaxOccurrence != 0)
+        {
+            this.ScheduleConfiguration.MaxOccurrence = scheduleUpdateConfig.MaxOccurrence;
+        }
+
+        // Only update if the customer explicitly set a value
+        if (scheduleUpdateConfig.StartImmediatelyIfLate.HasValue)
+        {
+            this.ScheduleConfiguration.StartImmediatelyIfLate = scheduleUpdateConfig.StartImmediatelyIfLate.Value;
+        }
     }
 
-    /// <summary>
-    /// Creates a new schedule.
-    /// </summary>
-    public async Task CreateSchedule(ScheduleCreationDetails details)
+    public void RefreshScheduleRunExecutionToken()
     {
-        if (this.currentState != ScheduleState.Provisioning)
+        this.ExecutionToken = Guid.NewGuid().ToString("N");
+    }
+}
+
+class ScheduleConfiguration
+{
+    public ScheduleConfiguration(string orchestrationName, string scheduleId)
+    {
+        this.orchestrationName = Check.NotNullOrEmpty(orchestrationName, nameof(orchestrationName));
+        this.ScheduleId = scheduleId ?? Guid.NewGuid().ToString("N");
+        this.Version++;
+    }
+
+    string orchestrationName;
+
+    public string OrchestrationName
+    {
+        get => this.orchestrationName;
+        set
+        {
+            this.orchestrationName = Check.NotNullOrEmpty(value, nameof(value));
+        }
+    }
+
+    string scheduleId;
+
+    public string ScheduleId
+    {
+        get => this.scheduleId;
+        set
+        {
+            this.scheduleId = Check.NotNullOrEmpty(value, nameof(value));
+        }
+    }
+
+    public string? OrchestrationInput { get; set; }
+
+    public DateTimeOffset? StartAt { get; set; }
+
+    public DateTimeOffset? EndAt { get; set; }
+
+    public TimeSpan? Interval { get; set; }
+
+    public string? CronExpression { get; set; }
+
+    public int MaxOccurrence { get; set; }
+
+    public bool? StartImmediatelyIfLate { get; set; }
+
+    internal int Version { get; set; } // Tracking schedule config version
+}
+
+enum ScheduleStatus
+{
+    Uninitialized, // Schedule has not been created
+    Active,       // Schedule is active and running
+    Paused,       // Schedule is paused
+    Failed,       // Schedule has failed
+}
+
+class Schedule : TaskEntity<ScheduleState>
+{
+    readonly ILogger<Schedule> logger;
+
+    public Schedule(ILogger<Schedule> logger)
+    {
+        this.logger = logger;
+    }
+
+    public void CreateSchedule(TaskEntityContext context, ScheduleConfiguration scheduleCreationConfig)
+    {
+        Verify.NotNull(scheduleCreationConfig, nameof(scheduleCreationConfig));
+
+        if (this.State.Status != ScheduleStatus.Uninitialized)
         {
             throw new InvalidOperationException("Schedule is already created.");
         }
 
-        // Validate input
-        if (details == null)
-        {
-            throw new ArgumentNullException(nameof(details));
-        }
+        this.logger.LogInformation($"Creating schedule with options: {scheduleCreationConfig}");
 
-        // Simulate schedule creation (e.g., save to database)
-        logger.LogInformation($"Creating schedule with details: {details}");
+        this.State.ScheduleConfiguration = scheduleCreationConfig;
+        this.State.Status = ScheduleStatus.Active;
 
-        // Transition to Active state
-        this.currentState = ScheduleState.Active;
-
-        // Call RunSchedule at the end of CreateSchedule
-        await RunSchedule();
+        // Run schedule after creation
+        context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), "RunSchedule", this.State.ExecutionToken);
     }
 
     /// <summary>
     /// Updates an existing schedule.
     /// </summary>
-    public async Task UpdateSchedule(ScheduleUpdateDetails details)
+    public void UpdateSchedule(TaskEntityContext context, ScheduleConfiguration scheduleUpdateConfig)
     {
-        if (this.currentState == ScheduleState.Provisioning)
-        {
-            throw new InvalidOperationException("Cannot update a schedule that is still provisioning.");
-        }
+        Verify.NotNull(scheduleUpdateConfig, nameof(scheduleUpdateConfig));
+        Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
 
-        if (this.currentState != ScheduleState.Active)
-        {
-            throw new InvalidOperationException("Schedule must be in Active state to update.");
-        }
+        this.logger.LogInformation($"Updating schedule with details: {scheduleUpdateConfig}");
 
-        // Validate input
-        if (details == null)
-        {
-            throw new ArgumentNullException(nameof(details));
-        }
+        this.State.UpdateConfig(scheduleUpdateConfig);
+        this.State.RefreshScheduleRunExecutionToken();
 
-        // Transition to Updating state
-        this.currentState = ScheduleState.Updating;
-
-        try
-        {
-            // Simulate schedule update (e.g., save to database)
-            logger.LogInformation($"Updating schedule with details: {details}");
-
-            // Transition back to Active state
-            this.currentState = ScheduleState.Active;
-        }
-        catch (Exception ex)
-        {
-            // Transition to Failed state if update fails
-            this.currentState = ScheduleState.Failed;
-            logger.LogError(ex, "Failed to update schedule.");
-            throw;
-        }
+        // Run schedule after update
+        context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), "RunSchedule", this.State.ExecutionToken);
     }
 
     /// <summary>
@@ -88,88 +180,63 @@ public class ScheduleEntity : TaskEntity
     /// </summary>
     public void PauseSchedule()
     {
-        if (this.currentState != ScheduleState.Active)
+        if (this.State.Status != ScheduleStatus.Active)
         {
-            throw new InvalidOperationException("Schedule must be in Active state to pause.");
+            throw new InvalidOperationException("Schedule must be in Active status to pause.");
         }
 
         // Transition to Paused state
-        this.currentState = ScheduleState.Paused;
-        logger.LogInformation("Schedule paused.");
+        this.State.Status = ScheduleStatus.Paused;
+        this.State.RefreshScheduleRunExecutionToken();
+        this.logger.LogInformation("Schedule paused.");
     }
 
     /// <summary>
     /// Resumes the schedule.
     /// </summary>
-    public void ResumeSchedule()
+    public void ResumeSchedule(TaskEntityContext context)
     {
-        if (this.currentState != ScheduleState.Paused)
+        Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
+        if (this.State.Status != ScheduleStatus.Paused)
         {
             throw new InvalidOperationException("Schedule must be in Paused state to resume.");
         }
 
-        // Transition to Active state
-        this.currentState = ScheduleState.Active;
-        logger.LogInformation("Schedule resumed.");
+        this.State.Status = ScheduleStatus.Active;
+        this.logger.LogInformation("Schedule resumed.");
+
+        context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), "RunSchedule", this.State.ExecutionToken);
     }
 
-    /// <summary>
-    /// Deletes the schedule.
-    /// </summary>
+    // TODO: Only implement this there is any cleanup shall be performed within entity before purging the instance.
     public void DeleteSchedule()
     {
-        // Simulate schedule deletion (e.g., remove from database)
-        logger.LogInformation("Schedule deleted.");
-
-        // Reset state
-        this.currentState = ScheduleState.Provisioning;
-        this.runScheduleCount = 0;
+        throw new NotImplementedException();
     }
 
-    /// <summary>
-    /// Runs the schedule.
-    /// </summary>
-    private async Task RunSchedule()
+    public void RunSchedule(TaskEntityContext context, string executionToken)
     {
-        if (this.runScheduleCount > 0)
+        if (executionToken != this.State.ExecutionToken)
         {
-            throw new InvalidOperationException("RunSchedule can only be called once.");
+            // Execution token has expired, log and return
+            this.logger.LogInformation(
+                "Skipping schedule run - execution token {token} has expired",
+                executionToken);
+            return;
         }
 
-        if (this.currentState != ScheduleState.Active)
+        if (this.State.Status != ScheduleStatus.Active)
         {
-            throw new InvalidOperationException("Schedule must be in Active state to run.");
+            throw new InvalidOperationException("Schedule must be in Active status to run.");
         }
 
-        // Simulate schedule execution
-        logger.LogInformation("Running schedule.");
-        this.runScheduleCount++;
-
-        // Simulate a long-running task
-        await Task.Delay(1000); // Replace with actual schedule logic
+        // TODO: Implement all schedule config properties
+        // if startat is null, then start immediately
+        // first check startat, compute gap with current time, if gap is negative, then start immediately
+        // if gap is positive, then wait for gap seconds and then signal runschedule with delay of gap time
+        // first check if there is already existing orchestration instance with same orchestration name
+        // if there is no existing orchestration instance, then create a new one
+        // if there is existing orchestration instance, then check if it is done, if it is done, then create a new one
+        // if there is existing orchestration instance, then check if it is not done, then skip
     }
-
-    /// <summary>
-    /// Gets the current state of the schedule.
-    /// </summary>
-    public ScheduleState GetCurrentState()
-    {
-        return this.currentState;
-    }
-}
-
-
-public class ScheduleCreationDetails
-{
-    public string Name { get; set; }
-    public DateTime StartTime { get; set; }
-    public DateTime EndTime { get; set; }
-    public string CronExpression { get; set; }
-}
-
-public class ScheduleUpdateDetails
-{
-    public DateTime? NewStartTime { get; set; }
-    public DateTime? NewEndTime { get; set; }
-    public string NewCronExpression { get; set; }
 }

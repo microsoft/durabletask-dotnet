@@ -14,79 +14,83 @@ class ScheduleState
     internal string ExecutionToken { get; set; } = Guid.NewGuid().ToString("N");
 
     internal DateTimeOffset? LastRunAt { get; set; }
-
     internal DateTimeOffset? NextRunAt { get; set; }
 
     internal ScheduleConfiguration? ScheduleConfiguration { get; set; }
 
-    public void UpdateConfig(ScheduleConfiguration scheduleUpdateConfig)
+    public HashSet<string> UpdateConfig(ScheduleConfiguration scheduleUpdateConfig)
     {
         Check.NotNull(this.ScheduleConfiguration, nameof(this.ScheduleConfiguration));
         Check.NotNull(scheduleUpdateConfig, nameof(scheduleUpdateConfig));
+
+        HashSet<string> updatedFields = new HashSet<string>();
 
         this.ScheduleConfiguration.Version++;
 
         if (!string.IsNullOrEmpty(scheduleUpdateConfig.OrchestrationName))
         {
             this.ScheduleConfiguration.OrchestrationName = scheduleUpdateConfig.OrchestrationName;
+            updatedFields.Add(nameof(this.ScheduleConfiguration.OrchestrationName));
         }
 
         if (!string.IsNullOrEmpty(scheduleUpdateConfig.ScheduleId))
         {
             this.ScheduleConfiguration.ScheduleId = scheduleUpdateConfig.ScheduleId;
+            updatedFields.Add(nameof(this.ScheduleConfiguration.ScheduleId));
         }
 
         if (scheduleUpdateConfig.OrchestrationInput == null)
         {
             this.ScheduleConfiguration.OrchestrationInput = scheduleUpdateConfig.OrchestrationInput;
+            updatedFields.Add(nameof(this.ScheduleConfiguration.OrchestrationInput));
         }
 
         if (scheduleUpdateConfig.StartAt.HasValue)
         {
             this.ScheduleConfiguration.StartAt = scheduleUpdateConfig.StartAt;
+            updatedFields.Add(nameof(this.ScheduleConfiguration.StartAt));
         }
 
         if (scheduleUpdateConfig.EndAt.HasValue)
         {
             this.ScheduleConfiguration.EndAt = scheduleUpdateConfig.EndAt;
+            updatedFields.Add(nameof(this.ScheduleConfiguration.EndAt));
         }
 
         if (scheduleUpdateConfig.Interval.HasValue)
         {
             this.ScheduleConfiguration.Interval = scheduleUpdateConfig.Interval;
+            updatedFields.Add(nameof(this.ScheduleConfiguration.Interval));
         }
 
         if (!string.IsNullOrEmpty(scheduleUpdateConfig.CronExpression))
         {
             this.ScheduleConfiguration.CronExpression = scheduleUpdateConfig.CronExpression;
+            updatedFields.Add(nameof(this.ScheduleConfiguration.CronExpression));
         }
 
         if (scheduleUpdateConfig.MaxOccurrence != 0)
         {
             this.ScheduleConfiguration.MaxOccurrence = scheduleUpdateConfig.MaxOccurrence;
+            updatedFields.Add(nameof(this.ScheduleConfiguration.MaxOccurrence));
         }
 
         // Only update if the customer explicitly set a value
         if (scheduleUpdateConfig.StartImmediatelyIfLate.HasValue)
         {
             this.ScheduleConfiguration.StartImmediatelyIfLate = scheduleUpdateConfig.StartImmediatelyIfLate.Value;
+            updatedFields.Add(nameof(this.ScheduleConfiguration.StartImmediatelyIfLate));
         }
+
+        return updatedFields;
     }
 
+    // To stop potential runSchedule operation scheduled after the schedule update/pause, invalidate the execution token and let it exit gracefully
+    // This could incur little overhead as ideally the runSchedule with old token should be killed immediately
+    // but there is no support to cancel pending entity operations currently, can be a todo item
     public void RefreshScheduleRunExecutionToken()
     {
         this.ExecutionToken = Guid.NewGuid().ToString("N");
-    }
-
-    public void ResetNextRunAt()
-    {
-        this.NextRunAt = null;
-    }
-
-    public void ResetScheduleRunState()
-    {
-        this.ResetNextRunAt();
-        this.RefreshScheduleRunExecutionToken();
     }
 }
 
@@ -169,8 +173,9 @@ class Schedule : TaskEntity<ScheduleState>
         this.State.ScheduleConfiguration = scheduleCreationConfig;
         this.State.Status = ScheduleStatus.Active;
 
-        // Run schedule after creation
-        context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), "RunSchedule", this.State.ExecutionToken);
+        // Signal to run schedule immediately after creation and let runSchedule determine if it should run immediately
+        // or later to separate response from schedule creation and schedule responsibilities
+        context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), nameof(RunSchedule), this.State.ExecutionToken);
     }
 
     /// <summary>
@@ -183,10 +188,34 @@ class Schedule : TaskEntity<ScheduleState>
 
         this.logger.LogInformation($"Updating schedule with details: {scheduleUpdateConfig}");
 
-        this.State.UpdateConfig(scheduleUpdateConfig);
+        HashSet<string> updatedScheduleConfigFields = this.State.UpdateConfig(scheduleUpdateConfig);
+        if (updatedScheduleConfigFields.Count == 0)
+        {
+            // no need to interrupt and update current schedule run as there is no change in the schedule config
+            this.logger.LogInformation("Schedule configuration is up to date.");
+            return;
+        }
+
+        // after schedule config is updated, perform post-config-update logic separately
+        foreach (string updatedScheduleConfigField in updatedScheduleConfigFields)
+        {
+            switch (updatedScheduleConfigField)
+            {
+                case nameof(this.State.ScheduleConfiguration.StartAt):
+                case nameof(this.State.ScheduleConfiguration.Interval):
+                    this.State.NextRunAt = null;
+                    break;
+                // TODO: add other fields's callback logic after config update if any
+                default:
+                    break;
+            }
+        }
+
         this.State.RefreshScheduleRunExecutionToken();
-        // Run schedule after update
-        context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), "RunSchedule", this.State.ExecutionToken);
+
+        // Signal to run schedule immediately after update and let runSchedule determine if it should run immediately
+        // or later to separate response from schedule creation and schedule responsibilities
+        context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), nameof(RunSchedule), this.State.ExecutionToken);
     }
 
     /// <summary>
@@ -201,6 +230,7 @@ class Schedule : TaskEntity<ScheduleState>
 
         // Transition to Paused state
         this.State.Status = ScheduleStatus.Paused;
+        this.State.NextRunAt = null;
         this.State.RefreshScheduleRunExecutionToken();
         this.logger.LogInformation("Schedule paused.");
     }
@@ -217,9 +247,10 @@ class Schedule : TaskEntity<ScheduleState>
         }
 
         this.State.Status = ScheduleStatus.Active;
+        this.State.NextRunAt = null;
         this.logger.LogInformation("Schedule resumed.");
-
-        context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), "RunSchedule", this.State.ExecutionToken);
+        // compute next run based on startat and interval
+        context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), nameof(RunSchedule), this.State.ExecutionToken);
     }
 
     // TODO: Only implement this there is any cleanup shall be performed within entity before purging the instance.
@@ -244,12 +275,21 @@ class Schedule : TaskEntity<ScheduleState>
         }
 
         // run schedule based on next run at
-        // if next run at is null, it is not scheduled yet, we compute the next run at based on startat and update
-        // else if next run at is now, schedule the orchestration, and update next run at = next runat + interval 
-        // if next run at is in the future, signal to run schedule later
+        // need to enforce the constraint here NextRunAt truly represents the next run at
+        // if next run at is null, this means schedule is changed, we compute the next run at based on startat and update
+        // else if next run at is set, then we run at next run at
         if (!this.State.NextRunAt.HasValue)
         {
-            this.State.NextRunAt = this.State.ScheduleConfiguration.StartAt;
+            // check whats last run at time, if not set, meaning it has not run once, we run at startat
+            // else, it has run before, we cant run at startat, need to compute next run at based on last run at + num of intervals between last runtime and now plus 1
+            if (!this.State.LastRunAt.HasValue)
+            {
+                this.State.NextRunAt = this.State.ScheduleConfiguration.StartAt;
+            }
+            else
+            {
+                this.State.NextRunAt = this.State.LastRunAt.Value + this.State.ScheduleConfiguration.Interval.Value;
+            }
         }
 
         if (this.State.NextRunAt.Value <= DateTimeOffset.UtcNow) {

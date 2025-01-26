@@ -82,7 +82,7 @@ public static class DurableTaskSchedulerWorkerExtensions
         Action<DurableTaskSchedulerWorkerOptions>? additionalConfig)
     {
         // Add the Schedule entity by default
-        builder.AddTasks(r => r.AddEntity<Schedule>());
+        builder.AddTasks(r => r.AddEntity(nameof(Schedule), sp => ActivatorUtilities.CreateInstance<Schedule>(sp)));
 
         builder.Services.AddOptions<DurableTaskSchedulerWorkerOptions>(builder.Name)
             .Configure(initialConfig)

@@ -1,19 +1,17 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.Client.AzureManaged;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.AzureManaged;
-using Microsoft.DurableTask.Client.AzureManaged;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using DurableTask.Abstractions.Entities.Schedule;
 
-internal class Program
+class Program
 {
-    private static async Task Main(string[] args)
+    static async Task Main(string[] args)
     {
         // Create the host builder
         IHost host = Host.CreateDefaultBuilder(args)
@@ -26,26 +24,19 @@ internal class Program
                 services.AddDurableTaskWorker(builder =>
                 {
                     // Add the Schedule entity and demo orchestration
-                    builder.AddTasks(r => 
+                    _ = builder.AddTasks(r =>
                     {
-                        r.AddAllGeneratedTasks();
-                        r.AddEntity<Schedule>();
-                        
                         // Add a demo orchestration that will be triggered by the schedule
-                        r.AddOrchestratorFunc("DemoOrchestration", async TaskOrchestrationContext context =>
+                        r.AddOrchestratorFunc("DemoOrchestration", async context =>
                         {
                             string input = context.GetInput<string>();
                             await context.CallActivityAsync("ProcessMessage", input);
                             return $"Completed processing at {DateTime.UtcNow}";
                         });
-
                         // Add a demo activity
-                        r.AddActivityFunc("ProcessMessage", (TaskActivityContext context, string message) =>
-                        {
-                            context.GetLogger().LogInformation($"Processing scheduled message: {message}");
-                            return Task.CompletedTask;
-                        });
+                        r.AddActivityFunc<string, string>("ProcessMessage", (context, message) => $"Processing message: {message}");
                     });
+
                     builder.UseDurableTaskScheduler(connectionString);
                 });
 
@@ -93,7 +84,7 @@ internal class Program
             for (int i = 0; i < 4; i++)
             {
                 await Task.Delay(TimeSpan.FromSeconds(30));
-                Schedule schedule = await client.GetScheduleAsync(scheduleConfig.ScheduleId);
+                var schedule = await client.GetScheduleAsync(scheduleConfig.ScheduleId);
                 Console.WriteLine($"\nSchedule status: {schedule.Status}");
                 Console.WriteLine($"Last run at: {schedule.LastRunAt}");
                 Console.WriteLine($"Next run at: {schedule.NextRunAt}");
@@ -102,15 +93,15 @@ internal class Program
             // Pause the schedule
             Console.WriteLine("\nPausing schedule...");
             await client.PauseScheduleAsync(scheduleConfig.ScheduleId);
-            
-            Schedule pausedSchedule = await client.GetScheduleAsync(scheduleConfig.ScheduleId);
+
+            var pausedSchedule = await client.GetScheduleAsync(scheduleConfig.ScheduleId);
             Console.WriteLine($"Schedule status after pause: {pausedSchedule.Status}");
 
             // Resume the schedule
             Console.WriteLine("\nResuming schedule...");
             await client.ResumeScheduleAsync(scheduleConfig.ScheduleId);
-            
-            Schedule resumedSchedule = await client.GetScheduleAsync(scheduleConfig.ScheduleId);
+
+            var resumedSchedule = await client.GetScheduleAsync(scheduleConfig.ScheduleId);
             Console.WriteLine($"Schedule status after resume: {resumedSchedule.Status}");
             Console.WriteLine($"Next run at: {resumedSchedule.NextRunAt}");
 

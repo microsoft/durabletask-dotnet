@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Text;
+using DurableTask.Abstractions.Entities.Schedule;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.Extensions.DependencyInjection;
@@ -356,6 +357,44 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
 
         return this.PurgeInstancesCoreAsync(request, cancellation);
+    }
+
+    // SCHEDULE SUPPORT
+
+    /// <inheritdoc/>
+    public override Task<ScheduleState> GetScheduleAsync(string scheduleId)
+    {
+        throw new NotSupportedException($"{this.GetType()} does not support schedules.");
+    }
+
+    /// <inheritdoc/>
+    public override Task<string> CreateScheduleAsync(ScheduleConfiguration scheduleConfig)
+    {
+        throw new NotSupportedException($"{this.GetType()} does not support schedules.");
+    }
+
+    /// <inheritdoc/>
+    public override Task DeleteScheduleAsync(string scheduleId)
+    {
+        throw new NotSupportedException($"{this.GetType()} does not support schedules.");
+    }
+
+    /// <inheritdoc/>
+    public override Task PauseScheduleAsync(string scheduleId)
+    {
+        throw new NotSupportedException($"{this.GetType()} does not support schedules.");
+    }
+
+    /// <inheritdoc/>
+    public override Task ResumeScheduleAsync(string scheduleId)
+    {
+        throw new NotSupportedException($"{this.GetType()} does not support schedules.");
+    }
+
+    /// <inheritdoc/>
+    public override Task UpdateScheduleAsync(string scheduleId, ScheduleConfiguration scheduleConfig)
+    {
+        throw new NotSupportedException($"{this.GetType()} does not support schedules.");
     }
 
     static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, out CallInvoker callInvoker)

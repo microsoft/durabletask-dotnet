@@ -1,33 +1,18 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 class ScheduleConfiguration
 {
     public ScheduleConfiguration(string orchestrationName, string scheduleId)
     {
-        this.orchestrationName = Check.NotNullOrEmpty(orchestrationName, nameof(orchestrationName));
+        this.OrchestrationName = orchestrationName;
         this.ScheduleId = scheduleId ?? Guid.NewGuid().ToString("N");
         this.Version++;
     }
 
-    string orchestrationName;
+    public string OrchestrationName { get; set; }
 
-    public string OrchestrationName
-    {
-        get => this.orchestrationName;
-        set
-        {
-            this.orchestrationName = Check.NotNullOrEmpty(value, nameof(value));
-        }
-    }
-
-    string scheduleId;
-
-    public string ScheduleId
-    {
-        get => this.scheduleId;
-        set
-        {
-            this.scheduleId = Check.NotNullOrEmpty(value, nameof(value));
-        }
-    }
+    public string ScheduleId { get; set; }
 
     public string? OrchestrationInput { get; set; }
 

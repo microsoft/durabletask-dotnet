@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DurableTask.Abstractions.Entities.Schedule;
 
-class ScheduleState
+public class ScheduleState
 {
     internal ScheduleStatus Status { get; set; } = ScheduleStatus.Uninitialized;
 
@@ -95,7 +95,7 @@ class ScheduleState
     }
 }
 
-class ScheduleConfiguration
+public class ScheduleConfiguration
 {
     public ScheduleConfiguration(string orchestrationName, string scheduleId)
     {

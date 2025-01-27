@@ -10,26 +10,20 @@ namespace Microsoft.DurableTask.Worker;
 /// <summary>
 /// The default builder for durable task.
 /// </summary>
-public class DefaultDurableTaskWorkerBuilder : IDurableTaskWorkerBuilder
+/// <remarks>
+/// Initializes a new instance of the <see cref="DefaultDurableTaskWorkerBuilder" /> class.
+/// </remarks>
+/// <param name="services">The service collection for this builder.</param>
+/// <param name="name">The name for this builder.</param>
+public class DefaultDurableTaskWorkerBuilder(string? name, IServiceCollection services) : IDurableTaskWorkerBuilder
 {
     Type? buildTarget;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="DefaultDurableTaskWorkerBuilder" /> class.
-    /// </summary>
-    /// <param name="services">The service collection for this builder.</param>
-    /// <param name="name">The name for this builder.</param>
-    public DefaultDurableTaskWorkerBuilder(string? name, IServiceCollection services)
-    {
-        this.Name = name ?? Extensions.Options.Options.DefaultName;
-        this.Services = Check.NotNull(services);
-    }
+    /// <inheritdoc/>
+    public string Name { get; } = name ?? Extensions.Options.Options.DefaultName;
 
     /// <inheritdoc/>
-    public string Name { get; }
-
-    /// <inheritdoc/>
-    public IServiceCollection Services { get; }
+    public IServiceCollection Services { get; } = Check.NotNull(services);
 
     /// <inheritdoc/>
     public Type? BuildTarget

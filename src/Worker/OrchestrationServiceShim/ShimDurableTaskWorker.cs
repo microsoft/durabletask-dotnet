@@ -1,9 +1,13 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
 using DurableTask.Core;
+using DurableTask.Core.Entities;
+using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
 using DurableTask.Core.Middleware;
+using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.DurableTask.Worker.OrchestrationServiceShim.Core;
 using Microsoft.DurableTask.Worker.Shims;
@@ -21,8 +25,9 @@ class ShimDurableTaskWorker : DurableTaskWorker
 {
     readonly ShimDurableTaskWorkerOptions options;
     readonly IServiceProvider services;
-    readonly TaskHubWorker worker;
     readonly DurableTaskShimFactory shimFactory;
+    readonly ILogger logger;
+    readonly TaskHubWorker worker;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ShimDurableTaskWorker" /> class.
@@ -42,13 +47,12 @@ class ShimDurableTaskWorker : DurableTaskWorker
         this.options = Check.NotNull(options).Get(name);
         this.services = Check.NotNull(services);
         this.shimFactory = new(this.options, loggerFactory);
+        this.logger = loggerFactory.CreateLogger<ShimDurableTaskWorker>();
 
         // This should already be validated by options.
         IOrchestrationService service = Verify.NotNull(this.options.Service);
-        this.worker = new TaskHubWorker(
-            service, new ShimOrchestrationManager(), new ShimActivityManager(), loggerFactory);
-        this.worker.AddActivityDispatcherMiddleware(this.InvokeActivityAsync);
-        this.worker.AddOrchestrationDispatcherMiddleware(this.InvokeOrchestrationAsync);
+        this.worker = service is IEntityOrchestrationService entity
+            ? this.CreateWorker(entity, loggerFactory) : this.CreateWorker(service, loggerFactory);
     }
 
     /// <inheritdoc/>
@@ -62,6 +66,43 @@ class ShimDurableTaskWorker : DurableTaskWorker
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         return this.worker.StartAsync().WaitAsync(stoppingToken);
+    }
+
+    TaskHubWorker CreateWorker(IOrchestrationService service, ILoggerFactory loggerFactory)
+    {
+        TaskHubWorker worker = new(
+            service, new ShimOrchestrationManager(), new ShimActivityManager(), loggerFactory);
+        worker.AddActivityDispatcherMiddleware(this.InvokeActivityAsync);
+        worker.AddOrchestrationDispatcherMiddleware(this.InvokeOrchestrationAsync);
+
+        return worker;
+    }
+
+    TaskHubWorker CreateWorker(IEntityOrchestrationService service, ILoggerFactory loggerFactory)
+    {
+        if (!this.options.EnableEntitySupport)
+        {
+            this.logger.EntitiesDisabled();
+            return this.CreateWorker(new OrchestrationServiceNoEntities(service), loggerFactory);
+        }
+
+        if (this.Factory is not IDurableTaskFactory2)
+        {
+            this.logger.TaskFactoryDoesNotSupportEntities();
+            return this.CreateWorker(new OrchestrationServiceNoEntities(service), loggerFactory);
+        }
+
+        TaskHubWorker worker = new(
+            service,
+            new ShimOrchestrationManager(),
+            new ShimActivityManager(),
+            new ShimEntityManager(),
+            loggerFactory);
+        worker.AddActivityDispatcherMiddleware(this.InvokeActivityAsync);
+        worker.AddOrchestrationDispatcherMiddleware(this.InvokeOrchestrationAsync);
+        worker.AddEntityDispatcherMiddleware(this.InvokeEntityAsync);
+
+        return worker;
     }
 
     async Task InvokeActivityAsync(DispatchMiddlewareContext context, Func<Task> next)
@@ -97,9 +138,9 @@ class ShimDurableTaskWorker : DurableTaskWorker
         Check.NotNull(next);
 
         OrchestrationRuntimeState runtimeState = context.GetProperty<OrchestrationRuntimeState>();
-        await using AsyncServiceScope scope = this.services.CreateAsyncScope();
 
         TaskName name = new(runtimeState.Name);
+        await using AsyncServiceScope scope = this.services.CreateAsyncScope();
         if (!this.Factory.TryCreateOrchestrator(name, scope.ServiceProvider, out ITaskOrchestrator? orchestrator))
         {
             throw new InvalidOperationException($"Orchestrator not found: {name}");
@@ -115,6 +156,31 @@ class ShimDurableTaskWorker : DurableTaskWorker
             ErrorPropagationMode.UseFailureDetails);
 
         OrchestratorExecutionResult result = executor.Execute();
+        context.SetProperty(result);
+        await next();
+    }
+
+    async Task InvokeEntityAsync(DispatchMiddlewareContext context, Func<Task> next)
+    {
+        Check.NotNull(context);
+        Check.NotNull(next);
+
+        EntityBatchRequest request = context.GetProperty<EntityBatchRequest>();
+        if (request?.InstanceId is null)
+        {
+            throw new InvalidOperationException("EntityBatchRequest.InstanceId is not set.");
+        }
+
+        EntityId entityId = EntityId.FromString(request.InstanceId);
+        IDurableTaskFactory2 factory = (IDurableTaskFactory2)this.Factory; // verified castable at startup.
+        await using AsyncServiceScope scope = this.services.CreateAsyncScope();
+        if (!factory.TryCreateEntity(entityId.Name, this.services, out ITaskEntity? entity))
+        {
+            throw new InvalidOperationException($"Entity not found: {entityId.Name}");
+        }
+
+        TaskEntity shim = this.shimFactory.CreateEntity(entityId.Name, entity, entityId);
+        EntityBatchResult result = await shim.ExecuteOperationBatchAsync(request);
         context.SetProperty(result);
         await next();
     }

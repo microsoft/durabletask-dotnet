@@ -369,7 +369,9 @@ public class Program
 
         await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix, test =>
         {
-            // TODO: CodeFixBehaviors.SkipLocalDiagnosticCheck is failing this test. This is apparently a bad analyzer practice.
+            // By default, the analyzer will fail the test if the analyzer is 'non-local'. We set this behavior to skip
+            // that check to allow this analyzer to pass, but we should follow up on this as it is a bad practice.
+            // TODO: Investigate and address non-local analyzer behavior.
             test.CodeFixTestBehaviors |= CodeFixTestBehaviors.SkipLocalDiagnosticCheck;
         });
     }

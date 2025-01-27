@@ -1,5 +1,74 @@
 ﻿# Changelog
 
+## vNext
+
+### Microsoft.DurableTask.Client
+
+- Add new `IDurableTaskClientBuilder AddDurableTaskClient(IServiceCollection, string?)` API
+
+### Microsoft.DurableTask.Worker
+
+- Add new `IDurableTaskWorkerBuilder AddDurableTaskWorker(IServiceCollection, string?)` API
+
+## v1.5.0
+
+- Implement work item completion tokens for standalone worker scenarios ([#359](https://github.com/microsoft/durabletask-dotnet/pull/359))
+- Support for worker concurrency configuration ([#359](https://github.com/microsoft/durabletask-dotnet/pull/359))
+- Bump System.Text.Json to 6.0.10
+- Initial support for the Azure-managed [Durable Task Scheduler](https://techcommunity.microsoft.com/blog/appsonazureblog/announcing-limited-early-access-of-the-durable-task-scheduler-for-azure-durable-/4286526) preview.
+
+## v1.4.0
+
+- Microsoft.Azure.DurableTask.Core dependency increased to `3.0.0`
+
+## v1.3.0
+
+### Microsoft.DurableTask.Abstractions
+
+- Add `RetryPolicy.Handle` property to allow for exception filtering on retries ([#314](https://github.com/microsoft/durabletask-dotnet/pull/314))
+
+## v1.2.4
+
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.17.1`
+
+## v1.2.3
+
+### Microsoft.DurableTask.Client
+
+- Fix filter not being passed along in `PurgeAllInstancesAsync` (https://github.com/microsoft/durabletask-dotnet/pull/289)
+
+### Microsoft.DurableTask.Abstractions
+
+- Enable inner exception detail propagation in `TaskFailureDetails` ([#290](https://github.com/microsoft/durabletask-dotnet/pull/290))
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.17.0`
+
+## v1.2.2
+
+### Microsoft.DurableTask.Abstractions
+
+- Fix `TaskFailureDetails.IsCausedBy` to support custom exceptions and 3rd party exceptions ([#273](https://github.com/microsoft/durabletask-dotnet/pull/273))
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.16.2`
+
+### Microsoft.DurableTask.Client
+
+- Fix typo in `PurgeInstanceAsync`  in `DurableTaskClient` (https://github.com/microsoft/durabletask-dotnet/pull/264)
+
+## v1.2.0
+
+- Adds support to recursively terminate/purge sub-orchestrations in `GrpcDurableTaskClient` (https://github.com/microsoft/durabletask-dotnet/pull/262)
+
+## v1.1.1
+
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.16.1`
+
+## v1.1.0
+
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.16.0`
+
+## v1.1.0-preview.2
+
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.16.0-preview.2`
+
 ## v1.1.0-preview.1
 
 Adds support for durable entities. Learn more [here](https://learn.microsoft.com/azure/azure-functions/durable/durable-functions-entities?tabs=csharp).

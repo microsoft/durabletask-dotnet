@@ -1,1 +1,1 @@
-- Add support for durable entities
+- Add new `IDurableTaskWorkerBuilder AddDurableTaskWorker(IServiceCollection, string?)` API

@@ -22,6 +22,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
     readonly StateShim state;
     readonly ContextShim context;
     readonly OperationShim operation;
+    readonly ILogger logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskEntityShim"/> class.
@@ -29,7 +30,9 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
     /// <param name="dataConverter">The data converter.</param>
     /// <param name="taskEntity">The task entity.</param>
     /// <param name="entityId">The entity ID.</param>
-    public TaskEntityShim(DataConverter dataConverter, ITaskEntity taskEntity, EntityId entityId)
+    /// <param name="logger">The logger.</param>
+    public TaskEntityShim(
+        DataConverter dataConverter, ITaskEntity taskEntity, EntityId entityId, ILogger logger)
     {
         this.dataConverter = Check.NotNull(dataConverter);
         this.taskEntity = Check.NotNull(taskEntity);
@@ -37,6 +40,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
         this.state = new StateShim(dataConverter);
         this.context = new ContextShim(this.entityId, dataConverter);
         this.operation = new OperationShim(this);
+        this.logger = logger;
     }
 
     /// <inheritdoc />
@@ -68,6 +72,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             }
             catch (Exception applicationException)
             {
+                this.logger.OperationError(applicationException, this.entityId, current.Operation!);
                 results.Add(new OperationResult()
                 {
                     FailureDetails = new FailureDetails(applicationException),

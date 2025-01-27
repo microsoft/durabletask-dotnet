@@ -13,7 +13,7 @@ namespace Microsoft.DurableTask.Entities;
 public readonly record struct EntityInstanceId
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="EntityInstanceId"/> class.
+    /// Initializes a new instance of the <see cref="EntityInstanceId"/> struct.
     /// </summary>
     /// <param name="name">The entity name.</param>
     /// <param name="key">The entity key.</param>

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 
 namespace Microsoft.DurableTask.Entities;
 
@@ -74,9 +75,18 @@ public static class TaskEntityOperationExtensions
             i++;
         }
 
-        result = method.Invoke(target, inputs);
-        returnType = method.ReturnType;
-        return true;
+        try
+        {
+            result = method.Invoke(target, inputs);
+            returnType = method.ReturnType;
+            return true;
+        }
+        catch (TargetInvocationException ex) when (ex.InnerException is not null)
+        {
+            // Re-throw the inner exception so that the stack trace is preserved.
+            ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            throw; // Unreachable.
+        }
 
         static void ThrowIfDuplicateBinding(
             ParameterInfo? existing, ParameterInfo parameter, string bindingConcept, TaskEntityOperation operation)

@@ -1,6 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
+using CoreFailureDetails = DurableTask.Core.FailureDetails;
 using CoreOrchestrationException = DurableTask.Core.Exceptions.OrchestrationException;
 
 namespace Microsoft.DurableTask;
@@ -14,7 +17,7 @@ namespace Microsoft.DurableTask;
 /// <param name="InnerFailure">The inner cause of the task failure.</param>
 public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? StackTrace, TaskFailureDetails? InnerFailure)
 {
-    Type? exceptionType;
+    Type? loadedExceptionType;
 
     /// <summary>
     /// Gets a debug-friendly description of the failure information.
@@ -34,13 +37,68 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
     /// for any reason, this method will return <c>false</c>. Base types are supported.
     /// </remarks>
     /// <typeparam name="T">The type of exception to test against.</typeparam>
+    /// <exception cref="AmbiguousMatchException">If multiple exception types with the same name are found.</exception>
     /// <returns>
-    /// Returns <c>true</c> if the <see cref="ErrorType"/> value matches <typeparamref name="T"/>; <c>false</c> otherwise.
+    /// <c>true</c> if the <see cref="ErrorType"/> value matches <typeparamref name="T"/>; <c>false</c> otherwise.
     /// </returns>
     public bool IsCausedBy<T>() where T : Exception
     {
-        this.exceptionType ??= Type.GetType(this.ErrorType, throwOnError: false);
-        return this.exceptionType != null && typeof(T).IsAssignableFrom(this.exceptionType);
+        return this.IsCausedBy(typeof(T));
+    }
+
+    /// <returns>
+    /// <c>true</c> if the <see cref="ErrorType"/> value matches <paramref name="targetBaseExceptionType"/>; <c>false</c> otherwise.
+    /// </returns>
+    /// <exception cref="ArgumentException">If <paramref name="targetBaseExceptionType"/> is not an exception type.</exception>
+    /// <inheritdoc cref="IsCausedBy{T}"/>
+    public bool IsCausedBy(Type targetBaseExceptionType)
+    {
+        Check.NotNull(targetBaseExceptionType);
+
+        if (!typeof(Exception).IsAssignableFrom(targetBaseExceptionType))
+        {
+            throw new ArgumentException($"The type {targetBaseExceptionType} is not an exception type.", nameof(targetBaseExceptionType));
+        }
+
+        if (string.IsNullOrEmpty(this.ErrorType))
+        {
+            return false;
+        }
+
+        // This check works for .NET exception types defined in System.Core.PrivateLib (aka mscorelib.dll)
+        this.loadedExceptionType ??= Type.GetType(this.ErrorType, throwOnError: false);
+
+        // For exception types defined in the same assembly as the target exception type.
+        this.loadedExceptionType ??= targetBaseExceptionType.Assembly.GetType(this.ErrorType, throwOnError: false);
+
+        // For custom exception types defined in the app's assembly
+        this.loadedExceptionType ??= Assembly.GetCallingAssembly().GetType(this.ErrorType);
+
+        if (this.loadedExceptionType is null)
+        {
+            // This last check works for exception types defined in any loaded assembly (e.g. NuGet packages, etc.).
+            // This is a fallback that should rarely be needed except in obscure cases.
+            List<Type> matchingExceptionTypes = AppDomain.CurrentDomain.GetAssemblies()
+                .Select(a => a.GetType(this.ErrorType, throwOnError: false))
+                .Where(t => t is not null)
+                .ToList();
+            if (matchingExceptionTypes.Count == 1)
+            {
+                this.loadedExceptionType = matchingExceptionTypes[0];
+            }
+            else if (matchingExceptionTypes.Count > 1)
+            {
+                throw new AmbiguousMatchException($"Multiple exception types with the name '{this.ErrorType}' were found.");
+            }
+        }
+
+        if (this.loadedExceptionType is null)
+        {
+            // The actual exception type could not be loaded, so we cannot determine if it matches the target type.
+            return false;
+        }
+
+        return targetBaseExceptionType.IsAssignableFrom(this.loadedExceptionType);
     }
 
     /// <summary>
@@ -51,16 +109,78 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
     public static TaskFailureDetails FromException(Exception exception)
     {
         Check.NotNull(exception);
+        return FromExceptionRecursive(exception);
+    }
+
+    /// <summary>
+    /// Converts this task failure details to a <see cref="CoreFailureDetails"/> instance.
+    /// </summary>
+    /// <returns>A new <see cref="CoreFailureDetails"/> instance.</returns>
+    internal CoreFailureDetails ToCoreFailureDetails()
+    {
+        return new CoreFailureDetails(
+            this.ErrorType,
+            this.ErrorMessage,
+            this.StackTrace,
+            this.InnerFailure?.ToCoreFailureDetails(),
+            isNonRetriable: false);
+    }
+
+    /// <summary>
+    /// Creates a task failure details from a <see cref="CoreFailureDetails"/> instance.
+    /// </summary>
+    /// <param name="coreFailureDetails">The core failure details to use.</param>
+    /// <returns>A new task failure details.</returns>
+    [return: NotNullIfNotNull(nameof(coreFailureDetails))]
+    internal static TaskFailureDetails? FromCoreFailureDetails(CoreFailureDetails? coreFailureDetails)
+    {
+        if (coreFailureDetails is null)
+        {
+            return null;
+        }
+
+        return new TaskFailureDetails(
+            coreFailureDetails.ErrorType,
+            coreFailureDetails.ErrorMessage,
+            coreFailureDetails.StackTrace,
+            FromCoreFailureDetails(coreFailureDetails.InnerFailure));
+    }
+
+    [return: NotNullIfNotNull(nameof(exception))]
+    static TaskFailureDetails? FromExceptionRecursive(Exception? exception)
+    {
+        if (exception is null)
+        {
+            return null;
+        }
+
         if (exception is CoreOrchestrationException coreEx)
         {
             return new TaskFailureDetails(
                 coreEx.FailureDetails?.ErrorType ?? "(unknown)",
                 coreEx.FailureDetails?.ErrorMessage ?? "(unknown)",
                 coreEx.FailureDetails?.StackTrace,
-                null /* InnerFailure */);
+                FromCoreFailureDetailsRecursive(coreEx.FailureDetails?.InnerFailure) ?? FromExceptionRecursive(coreEx.InnerException));
         }
 
-        // TODO: consider populating inner details.
-        return new TaskFailureDetails(exception.GetType().ToString(), exception.Message, null, null);
+        return new TaskFailureDetails(
+            exception.GetType().ToString(),
+            exception.Message,
+            exception.StackTrace,
+            FromExceptionRecursive(exception.InnerException));
+    }
+
+    static TaskFailureDetails? FromCoreFailureDetailsRecursive(CoreFailureDetails? coreFailureDetails)
+    {
+        if (coreFailureDetails is null)
+        {
+            return null;
+        }
+
+        return new TaskFailureDetails(
+            coreFailureDetails.ErrorType,
+            coreFailureDetails.ErrorMessage,
+            coreFailureDetails.StackTrace,
+            FromCoreFailureDetailsRecursive(coreFailureDetails.InnerFailure));
     }
 }

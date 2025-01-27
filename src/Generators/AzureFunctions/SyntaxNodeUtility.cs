@@ -9,9 +9,11 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
 {
     static class SyntaxNodeUtility
     {
-        public static bool TryGetFunctionName(SemanticModel model, MethodDeclarationSyntax method, out string? functionName)
+        public static bool TryGetFunctionName(
+            SemanticModel model, MethodDeclarationSyntax method, out string? functionName)
         {
-            if (TryGetAttributeByName(method, "Function", out AttributeSyntax? functionNameAttribute) && functionNameAttribute != null)
+            if (TryGetAttributeByName(
+                method, "Function", out AttributeSyntax? functionNameAttribute) && functionNameAttribute != null)
             {
                 if (functionNameAttribute.ArgumentList?.Arguments.Count == 1)
                 {
@@ -42,11 +44,11 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
         {
             SeparatedSyntaxList<ParameterSyntax> parameters = method.ParameterList.Parameters;
 
-            foreach (var parameterSyntax in parameters)
+            foreach (ParameterSyntax parameterSyntax in parameters)
             {
-                IEnumerable<AttributeSyntax> parameterAttributes = parameterSyntax.AttributeLists.SelectMany(a => a.Attributes);
-
-                foreach (var attribute in parameterAttributes)
+                IEnumerable<AttributeSyntax> parameterAttributes = parameterSyntax.AttributeLists
+                    .SelectMany(a => a.Attributes);
+                foreach (AttributeSyntax attribute in parameterAttributes)
                 {
                     if (attribute.ToString().Equals("OrchestrationTrigger", StringComparison.Ordinal))
                     {
@@ -66,13 +68,14 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
             return false;
         }
 
-        public static bool TryGetRequiredNamespaces(List<INamedTypeSymbol> types, out HashSet<string>? requiredNamespaces)
+        public static bool TryGetRequiredNamespaces(
+            List<INamedTypeSymbol> types, out HashSet<string>? requiredNamespaces)
         {
             requiredNamespaces = new HashSet<string>();
 
             var remaining = new Queue<INamedTypeSymbol>(types);
 
-            while (remaining.Any())
+            while (remaining.Count > 0)
             {
                 INamedTypeSymbol typeInfo = remaining.Dequeue();
                 if (typeInfo is null)
@@ -139,7 +142,8 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
             return false;
         }
 
-        public static bool TryGetQualifiedTypeName(SemanticModel model, MethodDeclarationSyntax method, out string? fullTypeName)
+        public static bool TryGetQualifiedTypeName(
+            SemanticModel model, MethodDeclarationSyntax method, out string? fullTypeName)
         {
             ISymbol? symbol = model.GetEnclosingSymbol(method.SpanStart);
             if (symbol == null)
@@ -175,7 +179,8 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
             return expression;
         }
 
-        static bool TryGetAttributeByName(MethodDeclarationSyntax method, string attributeName, out AttributeSyntax? attribute)
+        static bool TryGetAttributeByName(
+            MethodDeclarationSyntax method, string attributeName, out AttributeSyntax? attribute)
         {
             attribute = method.AttributeLists.SelectMany(a => a.Attributes).FirstOrDefault(
                 a => a.Name.NormalizeWhitespace().ToFullString().Equals(attributeName, StringComparison.Ordinal));

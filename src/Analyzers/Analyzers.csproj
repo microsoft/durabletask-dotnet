@@ -13,7 +13,7 @@
   <PropertyGroup>
     <VersionPrefix>0.0.1</VersionPrefix>
     <VersionSuffix>preview.1</VersionSuffix>
-    <PackageDescription>.NET Analyzers for the Durable Task Framework.</PackageDescription>
+    <PackageDescription>.NET Analyzers for the Durable Task SDK.</PackageDescription>
     <NeutralLanguage>en</NeutralLanguage>
     <IncludeBuildOutput>false</IncludeBuildOutput> <!-- Do not include the analyzer as a lib dependency -->
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>

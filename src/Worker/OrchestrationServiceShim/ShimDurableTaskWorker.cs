@@ -27,7 +27,6 @@ class ShimDurableTaskWorker : DurableTaskWorker
     readonly IServiceProvider services;
     readonly DurableTaskShimFactory shimFactory;
     readonly ILogger logger;
-    readonly TaskHubWorker worker;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ShimDurableTaskWorker" /> class.
@@ -51,22 +50,27 @@ class ShimDurableTaskWorker : DurableTaskWorker
 
         // This should already be validated by options.
         IOrchestrationService service = Verify.NotNull(this.options.Service);
-        this.worker = service is IEntityOrchestrationService entity
+        this.Worker = service is IEntityOrchestrationService entity
             ? this.CreateWorker(entity, loggerFactory) : this.CreateWorker(service, loggerFactory);
     }
 
-    /// <inheritdoc/>
-    public override async Task StopAsync(CancellationToken cancellationToken)
-    {
-        await base.StopAsync(cancellationToken);
-        await this.worker.StopAsync();
-    }
+    /// <summary>
+    /// Gets the inner <see cref="TaskHubWorker"/>.
+    /// </summary>
+    /// <remarks>
+    /// For internal test verification.
+    /// </remarks>
+    internal TaskHubWorker Worker { get; }
 
     /// <inheritdoc/>
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        return this.worker.StartAsync().WaitAsync(stoppingToken);
-    }
+    public override Task StopAsync(CancellationToken cancellationToken) => this.Worker.StopAsync();
+
+    /// <inheritdoc/>
+    public override Task StartAsync(CancellationToken cancellationToken) => this.Worker.StartAsync();
+
+    /// <inheritdoc/>
+    /// <remarks>Not actually called.</remarks>
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.CompletedTask;
 
     TaskHubWorker CreateWorker(IOrchestrationService service, ILoggerFactory loggerFactory)
     {

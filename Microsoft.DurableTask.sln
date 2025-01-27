@@ -87,6 +87,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleAppMinimal", "sample
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Worker.OrchestrationServiceShim", "src\Worker\OrchestrationServiceShim\Worker.OrchestrationServiceShim.csproj", "{361E87D2-5CF6-4BB2-8B11-0BE736F88EB8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Worker.OrchestrationServiceShim.Tests", "test\Worker\OrchestrationServiceShim.Tests\Worker.OrchestrationServiceShim.Tests.csproj", "{14822652-388B-4521-924A-2834B75F783C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -229,6 +231,10 @@ Global
 		{361E87D2-5CF6-4BB2-8B11-0BE736F88EB8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{361E87D2-5CF6-4BB2-8B11-0BE736F88EB8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{361E87D2-5CF6-4BB2-8B11-0BE736F88EB8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{14822652-388B-4521-924A-2834B75F783C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{14822652-388B-4521-924A-2834B75F783C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{14822652-388B-4521-924A-2834B75F783C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{14822652-388B-4521-924A-2834B75F783C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -272,6 +278,7 @@ Global
 		{3272C041-F81D-4C85-A4FB-2A700B5A7A9D} = {CECADDB5-E30A-4CE2-8604-9AC596D4A2DC}
 		{B48FACA9-A328-452A-BFAE-C4F60F9C7024} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
 		{361E87D2-5CF6-4BB2-8B11-0BE736F88EB8} = {5B448FF6-EC42-491D-A22E-1DC8B618E6D5}
+		{14822652-388B-4521-924A-2834B75F783C} = {51DC98A3-0193-4C66-964B-C26C748E25B6}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AB41CB55-35EA-4986-A522-387AB3402E71}

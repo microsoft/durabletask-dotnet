@@ -85,6 +85,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shared.AzureManaged.Tests",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleAppMinimal", "samples\ConsoleAppMinimal\ConsoleAppMinimal.csproj", "{B48FACA9-A328-452A-BFAE-C4F60F9C7024}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Worker.OrchestrationServiceShim", "src\Worker\OrchestrationServiceShim\Worker.OrchestrationServiceShim.csproj", "{361E87D2-5CF6-4BB2-8B11-0BE736F88EB8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -223,6 +225,10 @@ Global
 		{B48FACA9-A328-452A-BFAE-C4F60F9C7024}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B48FACA9-A328-452A-BFAE-C4F60F9C7024}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B48FACA9-A328-452A-BFAE-C4F60F9C7024}.Release|Any CPU.Build.0 = Release|Any CPU
+		{361E87D2-5CF6-4BB2-8B11-0BE736F88EB8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{361E87D2-5CF6-4BB2-8B11-0BE736F88EB8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{361E87D2-5CF6-4BB2-8B11-0BE736F88EB8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{361E87D2-5CF6-4BB2-8B11-0BE736F88EB8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -265,6 +271,7 @@ Global
 		{CECADDB5-E30A-4CE2-8604-9AC596D4A2DC} = {E5637F81-2FB9-4CD7-900D-455363B142A7}
 		{3272C041-F81D-4C85-A4FB-2A700B5A7A9D} = {CECADDB5-E30A-4CE2-8604-9AC596D4A2DC}
 		{B48FACA9-A328-452A-BFAE-C4F60F9C7024} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
+		{361E87D2-5CF6-4BB2-8B11-0BE736F88EB8} = {5B448FF6-EC42-491D-A22E-1DC8B618E6D5}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AB41CB55-35EA-4986-A522-387AB3402E71}

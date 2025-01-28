@@ -1,0 +1,2 @@
+# The following files were downloaded from branch cgillum/history-streaming at 2025-01-27 00:38:40 UTC
+https://raw.githubusercontent.com/microsoft/durabletask-protobuf/64417b16a3e32487ff4bf026db015e9f94fd5615/protos/orchestrator_service.proto

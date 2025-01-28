@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Protobuf Include="$(EngRoot)proto/protos/orchestrator_service.proto" GrpcServices="both" Link="proto/orchestrator_service.proto" />
+    <Protobuf Include="*.proto" GrpcServices="Both" />
   </ItemGroup>
 
 </Project>

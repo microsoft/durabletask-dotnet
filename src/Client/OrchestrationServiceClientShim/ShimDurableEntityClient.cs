@@ -11,20 +11,14 @@ namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
 /// <summary>
 /// A shim client for interacting with entities backend via <see cref="IOrchestrationServiceClient"/>.
 /// </summary>
-class ShimDurableEntityClient : DurableEntityClient
+/// <remarks>
+/// Initializes a new instance of the <see cref="ShimDurableEntityClient"/> class.
+/// </remarks>
+/// <param name="name">The name of this client.</param>
+/// <param name="options">The client options..</param>
+class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options) : DurableEntityClient(name)
 {
-    readonly ShimDurableTaskClientOptions options;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ShimDurableEntityClient"/> class.
-    /// </summary>
-    /// <param name="name">The name of this client.</param>
-    /// <param name="options">The client options..</param>
-    public ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
-        : base(name)
-    {
-        this.options = Check.NotNull(options);
-    }
+    readonly ShimDurableTaskClientOptions options = Check.NotNull(options);
 
     EntityBackendQueries Queries => this.options.Entities.Queries!;
 
@@ -128,7 +122,7 @@ class ShimDurableEntityClient : DurableEntityClient
                 },
                 cancellation);
 
-            return new Page<TMetadata>(result.Results.Select(select).ToList(), result.ContinuationToken);
+            return new Page<TMetadata>([.. result.Results.Select(select)], result.ContinuationToken);
         });
     }
 

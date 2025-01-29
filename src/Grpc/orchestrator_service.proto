@@ -670,7 +670,18 @@ message GetWorkItemsRequest {
     int32 maxConcurrentOrchestrationWorkItems = 1;
     int32 maxConcurrentActivityWorkItems = 2;
     int32 maxConcurrentEntityWorkItems = 3;
-    bool supportsHistoryStreaming = 4;
+
+    repeated WorkerCapability capabilities = 10;
+}
+
+enum WorkerCapability {
+    WORKER_CAPABILITY_UNSPECIFIED = 0;
+
+    // Indicates that the worker is capable of streaming instance history as a more optimized
+    // alternative to receiving the full history embedded in the orchestrator work-item.
+    // When set, the service may return work items without any history events as an optimization.
+    // It is strongly recommended that all SDKs support this capability.
+    WORKER_CAPABILITY_HISTORY_STREAMING = 1;
 }
 
 message WorkItem {

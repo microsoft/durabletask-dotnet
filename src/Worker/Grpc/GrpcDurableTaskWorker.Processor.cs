@@ -170,7 +170,7 @@ sealed partial class GrpcDurableTaskWorker
                         workerOptions.Concurrency.MaximumConcurrentOrchestrationWorkItems,
                     MaxConcurrentEntityWorkItems =
                         workerOptions.Concurrency.MaximumConcurrentEntityWorkItems,
-                    SupportsHistoryStreaming = true,
+                    Capabilities = { P.WorkerCapability.HistoryStreaming },
                 },
                 cancellationToken: cancellation);
         }

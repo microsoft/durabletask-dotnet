@@ -60,13 +60,13 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
     public override async Task<EntityMetadata?> GetEntityAsync(
         EntityInstanceId id, bool includeState = true, CancellationToken cancellation = default)
         => this.Convert(await this.Queries.GetEntityAsync(
-            new EntityId(id.Name, id.Key), includeState, false, cancellation));
+            id.ConvertToCore(), includeState, false, cancellation));
 
     /// <inheritdoc/>
     public override async Task<EntityMetadata<T>?> GetEntityAsync<T>(
         EntityInstanceId id, bool includeState = true, CancellationToken cancellation = default)
         => this.Convert<T>(await this.Queries.GetEntityAsync(
-            new EntityId(id.Name, id.Key), includeState, false, cancellation));
+            id.ConvertToCore(), includeState, false, cancellation));
 
     /// <inheritdoc/>
     public override async Task SignalEntityAsync(
@@ -108,6 +108,7 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
 
         return Pageable.Create(async (continuation, size, cancellation) =>
         {
+            continuation ??= filter?.ContinuationToken;
             size ??= filter?.PageSize;
             EntityBackendQueries.EntityQueryResult result = await this.Queries.QueryEntitiesAsync(
                 new EntityBackendQueries.EntityQuery()
@@ -129,7 +130,7 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
     EntityMetadata<T> Convert<T>(EntityBackendQueries.EntityMetadata metadata)
     {
         return new(
-            new EntityInstanceId(metadata.EntityId.Name, metadata.EntityId.Key),
+            metadata.EntityId.ConvertFromCore(),
             this.Converter.Deserialize<T>(metadata.SerializedState))
             {
                 LastModifiedTime = metadata.LastModifiedTime,

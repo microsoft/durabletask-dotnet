@@ -86,19 +86,6 @@ sealed partial class GrpcDurableTaskWorker
             }
         }
 
-        static IEnumerable<T> Append<T>(IEnumerable<T> source, IEnumerable<T> items)
-        {
-            foreach (T item in source)
-            {
-                yield return item;
-            }
-
-            foreach (T item in items)
-            {
-                yield return item;
-            }
-        }
-
         static string GetActionsListForLogging(IReadOnlyList<P.OrchestratorAction> actions)
         {
             if (actions.Count == 0)
@@ -138,11 +125,12 @@ sealed partial class GrpcDurableTaskWorker
 
                 await foreach (P.HistoryChunk chunk in streamResponse.ResponseStream.ReadAllAsync(cancellation))
                 {
-                    pastEvents = Append(pastEvents, chunk.Events.Select(ProtoUtils.ConvertHistoryEvent));
+                    pastEvents = pastEvents.Concat(chunk.Events.Select(ProtoUtils.ConvertHistoryEvent));
                 }
             }
             else
             {
+                // The history was already provided in the work item request
                 pastEvents = orchestratorRequest.PastEvents.Select(ProtoUtils.ConvertHistoryEvent);
             }
 

@@ -167,9 +167,7 @@ There are also several features that aren't yet available:
 
 ## Obtaining the Protobuf definitions
 
-This project utilizes git submodules to obtain Protobuf definitions from [durabletask-protobuf](https://github.com/microsoft/durabletask-protobuf). You will need to obtain these to build the project.
-
-To get the definitions, run `git submodule update --init --recursive`
+This project utilizes protobuf definitions from [durabletask-protobuf](https://github.com/microsoft/durabletask-protobuf), which are copied (vendored) into this repository under the `src/Grpc` directory. See the corresponding [README.md](./src/Grpc/README.md) for more information about how to update the protobuf definitions.
 
 ## Contributing
 

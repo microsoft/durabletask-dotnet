@@ -7,7 +7,11 @@ public static class EnumerableExtensions
 {
     public static IEnumerable<IEnumerable<T>> Batch<T>(this IEnumerable<T> source, int batchSize)
     {
-        ArgumentNullException.ThrowIfNull(source);
+        if (source is null)
+        {
+            throw new ArgumentNullException(nameof(source));
+        }
+
         if (batchSize <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be greater than zero.");

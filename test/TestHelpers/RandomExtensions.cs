@@ -5,6 +5,7 @@ namespace Microsoft.DurableTask;
 
 public static class RandomExtensions
 {
+#if NET6_0_OR_GREATER
     public static DateTimeOffset NextDateTimeOffset(this Random random, DateTimeOffset min, TimeSpan max)
     {
         ArgumentNullException.ThrowIfNull(random);
@@ -26,4 +27,5 @@ public static class RandomExtensions
 
     public static DateTime NextDateTime(this Random random, TimeSpan max)
         => random.NextDateTime(DateTime.UtcNow, max);
+#endif
 }

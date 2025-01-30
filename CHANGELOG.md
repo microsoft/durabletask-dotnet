@@ -9,6 +9,12 @@
 ### Microsoft.DurableTask.Worker
 
 - Add new `IDurableTaskWorkerBuilder AddDurableTaskWorker(IServiceCollection, string?)` API
+- Add support for work item history streaming
+
+### Microsoft.DurableTask.Grpc
+
+- Replace submodule for proto files with download script for easier maintenance
+- Update to latest proto files
 
 ## v1.5.0
 

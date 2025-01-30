@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics.CodeAnalysis;
+using DurableTask.Core.Entities;
+using Microsoft.DurableTask.Entities;
 using Core = DurableTask.Core;
 
 namespace Microsoft.DurableTask.Client;
@@ -109,4 +111,20 @@ static class ShimExtensions
         return new Core.PurgeInstanceFilter(
             (filter.CreatedFrom ?? default).UtcDateTime, filter.CreatedTo?.UtcDateTime, statuses);
     }
+
+    /// <summary>
+    /// Convert <see cref="EntityId" /> to <see cref="EntityInstanceId" />.
+    /// </summary>
+    /// <param name="entityId">The entity ID to convert.</param>
+    /// <returns>The converted entity instance ID.</returns>
+    public static EntityInstanceId ConvertFromCore(this EntityId entityId)
+        => new(entityId.Name, entityId.Key);
+
+    /// <summary>
+    /// Convert <see cref="EntityInstanceId" /> to <see cref="EntityId" />.
+    /// </summary>
+    /// <param name="entityId">The entity instance ID to convert.</param>
+    /// <returns>The converted entity ID.</returns>
+    public static EntityId ConvertToCore(this EntityInstanceId entityId)
+        => new(entityId.Name, entityId.Key);
 }

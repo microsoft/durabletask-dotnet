@@ -2,8 +2,11 @@
 // Licensed under the MIT License.
 
 using DurableTask.Core;
+using DurableTask.Core.Entities;
 using Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace Microsoft.DurableTask.Client;
 
@@ -54,21 +57,74 @@ public static class DurableTaskClientBuilderExtensions
     {
         Check.NotNull(builder);
         Check.NotNull(configure);
-        builder.Services.Configure(builder.Name, configure);
-        builder.Services.AddOptions<ShimDurableTaskClientOptions>(builder.Name)
-            .PostConfigure<IServiceProvider>((opt, sp) =>
-            {
-                if (opt.Client is not null)
-                {
-                    return;
-                }
-
-                // Try to resolve client from service container.
-                opt.Client = sp.GetService<IOrchestrationServiceClient>()
-                    ?? sp.GetService<IOrchestrationService>() as IOrchestrationServiceClient;
-            })
-            .Validate(x => x.Client is not null, "ShimDurableTaskClientOptions.Client must not be null.");
-
+        builder.Services.AddOptions<ShimDurableTaskClientOptions>(builder.Name).Configure(configure);
+        builder.Services.TryAddSingleton<IPostConfigureOptions<ShimDurableTaskClientOptions>, OptionsConfigure>();
+        builder.Services.TryAddSingleton<IValidateOptions<ShimDurableTaskClientOptions>, OptionsValidator>();
         return builder.UseBuildTarget<ShimDurableTaskClient, ShimDurableTaskClientOptions>();
+    }
+
+    static IEntityOrchestrationService? GetEntityService(
+        IServiceProvider services, ShimDurableTaskClientOptions options)
+    {
+        return options.Client as IEntityOrchestrationService
+            ?? services.GetService<IEntityOrchestrationService>()
+            ?? services.GetService<IOrchestrationServiceClient>() as IEntityOrchestrationService
+            ?? services.GetService<IOrchestrationService>() as IEntityOrchestrationService;
+    }
+
+    class OptionsConfigure(IServiceProvider services) : IPostConfigureOptions<ShimDurableTaskClientOptions>
+    {
+        public void PostConfigure(string name, ShimDurableTaskClientOptions options)
+        {
+            ConfigureClient(services, options);
+            ConfigureEntities(name, services, options); // Must be called after ConfigureClient.
+        }
+
+        static void ConfigureClient(IServiceProvider services, ShimDurableTaskClientOptions options)
+        {
+            if (options.Client is not null)
+            {
+                return;
+            }
+
+            // Try to resolve client from service container.
+            options.Client = services.GetService<IOrchestrationServiceClient>()
+                ?? services.GetService<IOrchestrationService>() as IOrchestrationServiceClient;
+        }
+
+        static void ConfigureEntities(string name, IServiceProvider services, ShimDurableTaskClientOptions options)
+        {
+            if (options.Entities.Queries is null)
+            {
+                options.Entities.Queries = services.GetService<EntityBackendQueries>()
+                    ?? GetEntityService(services, options)?.EntityBackendQueries;
+            }
+
+            if (options.Entities.MaxSignalDelayTime is null)
+            {
+                EntityBackendProperties? properties = services.GetService<IOptionsMonitor<EntityBackendProperties>>()?.Get(name)
+                    ?? GetEntityService(services, options)?.EntityBackendProperties;
+                options.Entities.MaxSignalDelayTime = properties?.MaximumSignalDelayTime;
+            }
+        }
+    }
+
+    class OptionsValidator : IValidateOptions<ShimDurableTaskClientOptions>
+    {
+        public ValidateOptionsResult Validate(string name, ShimDurableTaskClientOptions options)
+        {
+            if (options.Client is null)
+            {
+                return ValidateOptionsResult.Fail("ShimDurableTaskClientOptions.Client must not be null.");
+            }
+
+            if (options.EnableEntitySupport && options.Entities.Queries is null)
+            {
+                return ValidateOptionsResult.Fail(
+                    "ShimDurableTaskClientOptions.Entities.Queries must not be null when entity support is enabled.");
+            }
+
+            return ValidateOptionsResult.Success;
+        }
     }
 }

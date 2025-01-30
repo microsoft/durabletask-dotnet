@@ -13,6 +13,20 @@ namespace Microsoft.DurableTask.Client;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
+    /// Adds and configures Durable Task worker services to the service collection.
+    /// </summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <param name="name">The name of the builder to add.</param>
+    /// <returns>The builder used to configured the <see cref="DurableTaskClient"/>.</returns>
+    public static IDurableTaskClientBuilder AddDurableTaskClient(this IServiceCollection services, string? name = null)
+    {
+        Check.NotNull(services);
+        IDurableTaskClientBuilder builder = GetBuilder(services, name ?? Options.DefaultName, out bool added);
+        ConditionalConfigureBuilder(services, builder, added);
+        return builder;
+    }
+
+    /// <summary>
     /// Configures and adds a <see cref="DurableTaskClient" /> to the service collection.
     /// </summary>
     /// <param name="services">The services to add to.</param>
@@ -37,25 +51,31 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IDurableTaskClientProvider, DefaultDurableTaskClientProvider>();
         IDurableTaskClientBuilder builder = GetBuilder(services, name, out bool added);
         configure.Invoke(builder);
+        ConditionalConfigureBuilder(services, builder, added);
+        return services;
+    }
 
-        if (added)
+    static void ConditionalConfigureBuilder(
+        IServiceCollection services, IDurableTaskClientBuilder builder, bool configure)
+    {
+        if (!configure)
         {
-            // The added toggle logic is because we cannot use TryAddEnumerable logic as
-            // we would have to dynamically compile a lambda to have it work correctly.
-            ConfigureDurableOptions(services, name);
-
-            // We do not want to register DurableTaskClient type directly so we can keep a max of 1 DurableTaskClients
-            // registered, allowing for direct-DI of the default client.
-            services.AddSingleton(sp => new DefaultDurableTaskClientProvider.ClientContainer(builder.Build(sp)));
-
-            if (name == Options.DefaultName)
-            {
-                // If we have the default options name here, we will inject this client directly.
-                builder.RegisterDirectly();
-            }
+            return;
         }
 
-        return services;
+        // The added toggle logic is because we cannot use TryAddEnumerable logic as
+        // we would have to dynamically compile a lambda to have it work correctly.
+        ConfigureDurableOptions(services, builder.Name);
+
+        // We do not want to register DurableTaskClient type directly so we can keep a max of 1 DurableTaskClients
+        // registered, allowing for direct-DI of the default client.
+        services.AddSingleton(sp => new DefaultDurableTaskClientProvider.ClientContainer(builder.Build(sp)));
+
+        if (builder.Name == Options.DefaultName)
+        {
+            // If we have the default options name here, we will inject this client directly.
+            builder.RegisterDirectly();
+        }
     }
 
     static IServiceCollection ConfigureDurableOptions(IServiceCollection services, string name)

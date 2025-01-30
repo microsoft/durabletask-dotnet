@@ -11,6 +11,7 @@ namespace Microsoft.DurableTask.Client;
 public class DurableTaskClientOptions
 {
     DataConverter dataConverter = JsonDataConverter.Default;
+    bool enableEntitySupport;
 
     /// <summary>
     /// Gets or sets the data converter. Default value is <see cref="JsonDataConverter.Default" />.
@@ -50,7 +51,15 @@ public class DurableTaskClientOptions
     /// Gets or sets a value indicating whether this client should support entities. If true, all instance ids starting with '@' are reserved for entities,
     /// and validation checks are performed where appropriate.
     /// </summary>
-    public bool EnableEntitySupport { get; set; }
+    public bool EnableEntitySupport
+    {
+        get => this.enableEntitySupport;
+        set
+        {
+            this.enableEntitySupport = value;
+            this.EntitySupportExplicitlySet = true;
+        }
+    }
 
     /// <summary>
     /// Gets a value indicating whether <see cref="DataConverter" /> was explicitly set or not.
@@ -64,6 +73,11 @@ public class DurableTaskClientOptions
     internal bool DataConverterExplicitlySet { get; private set; }
 
     /// <summary>
+    /// Gets a value indicating whether <see cref="EnableEntitySupport" /> was explicitly set or not.
+    /// </summary>
+    internal bool EntitySupportExplicitlySet { get; private set; }
+
+    /// <summary>
     /// Applies these option values to another.
     /// </summary>
     /// <param name="other">The other options object to apply to.</param>
@@ -72,8 +86,15 @@ public class DurableTaskClientOptions
         if (other is not null)
         {
             // Make sure to keep this up to date as values are added.
-            other.DataConverter = this.DataConverter;
-            other.EnableEntitySupport = this.EnableEntitySupport;
+            if (!other.DataConverterExplicitlySet)
+            {
+                other.DataConverter = this.DataConverter;
+            }
+
+            if (!other.EntitySupportExplicitlySet)
+            {
+                other.EnableEntitySupport = this.EnableEntitySupport;
+            }
         }
     }
 }

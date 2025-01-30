@@ -2,30 +2,22 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <IncludeShared>false</IncludeShared>
     <IsRoslynComponent>true</IsRoslynComponent>
     <EnableStyleCop>true</EnableStyleCop>
-
-    <!-- Do not include the generator as a lib dependency -->
-    <IncludeBuildOutput>false</IncludeBuildOutput>
-    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
-    <IncludeShared>false</IncludeShared>
-    <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <!-- Do not publish it until it is ready to release -->
-    <IsPackable>false</IsPackable>
-  </PropertyGroup>
-
-  <PropertyGroup>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
-  </PropertyGroup>
-
-  <PropertyGroup>
-    <PackageDescription>.NET Analyzers for the Durable Task Framework.</PackageDescription>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);SA0001;</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup>
     <VersionPrefix>0.0.1</VersionPrefix>
     <VersionSuffix>preview.1</VersionSuffix>
+    <PackageDescription>.NET Analyzers for the Durable Task SDK.</PackageDescription>
     <NeutralLanguage>en</NeutralLanguage>
+    <IncludeBuildOutput>false</IncludeBuildOutput> <!-- Do not include the analyzer as a lib dependency -->
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <IsPackable>false</IsPackable> <!-- Do not publish it until it is ready to release -->
   </PropertyGroup>
 
   <ItemGroup>

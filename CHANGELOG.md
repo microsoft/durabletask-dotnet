@@ -1,5 +1,28 @@
 ﻿# Changelog
 
+## vNext
+
+### Microsoft.DurableTask.Client
+
+- Add new `IDurableTaskClientBuilder AddDurableTaskClient(IServiceCollection, string?)` API
+
+### Microsoft.DurableTask.Worker
+
+- Add new `IDurableTaskWorkerBuilder AddDurableTaskWorker(IServiceCollection, string?)` API
+- Add support for work item history streaming
+
+### Microsoft.DurableTask.Grpc
+
+- Replace submodule for proto files with download script for easier maintenance
+- Update to latest proto files
+
+## v1.5.0
+
+- Implement work item completion tokens for standalone worker scenarios ([#359](https://github.com/microsoft/durabletask-dotnet/pull/359))
+- Support for worker concurrency configuration ([#359](https://github.com/microsoft/durabletask-dotnet/pull/359))
+- Bump System.Text.Json to 6.0.10
+- Initial support for the Azure-managed [Durable Task Scheduler](https://techcommunity.microsoft.com/blog/appsonazureblog/announcing-limited-early-access-of-the-durable-task-scheduler-for-azure-durable-/4286526) preview.
+
 ## v1.4.0
 
 - Microsoft.Azure.DurableTask.Core dependency increased to `3.0.0`

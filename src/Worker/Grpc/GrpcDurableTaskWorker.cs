@@ -12,7 +12,8 @@ namespace Microsoft.DurableTask.Worker.Grpc;
 /// </summary>
 sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 {
-    readonly GrpcDurableTaskWorkerOptions options;
+    readonly GrpcDurableTaskWorkerOptions grpcOptions;
+    readonly DurableTaskWorkerOptions workerOptions;
     readonly IServiceProvider services;
     readonly ILoggerFactory loggerFactory;
     readonly ILogger logger;
@@ -22,18 +23,21 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     /// </summary>
     /// <param name="name">The name of the worker.</param>
     /// <param name="factory">The task factory.</param>
-    /// <param name="options">The gRPC worker options.</param>
+    /// <param name="grpcOptions">The gRPC-specific worker options.</param>
+    /// <param name="workerOptions">The generic worker options.</param>
     /// <param name="services">The service provider.</param>
     /// <param name="loggerFactory">The logger.</param>
     public GrpcDurableTaskWorker(
         string name,
         IDurableTaskFactory factory,
-        IOptionsMonitor<GrpcDurableTaskWorkerOptions> options,
+        IOptionsMonitor<GrpcDurableTaskWorkerOptions> grpcOptions,
+        IOptionsMonitor<DurableTaskWorkerOptions> workerOptions,
         IServiceProvider services,
         ILoggerFactory loggerFactory)
         : base(name, factory)
     {
-        this.options = Check.NotNull(options).Get(name);
+        this.grpcOptions = Check.NotNull(grpcOptions).Get(name);
+        this.workerOptions = Check.NotNull(workerOptions).Get(name);
         this.services = Check.NotNull(services);
         this.loggerFactory = Check.NotNull(loggerFactory);
         this.logger = loggerFactory.CreateLogger("Microsoft.DurableTask"); // TODO: use better category name.
@@ -73,19 +77,19 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 
     AsyncDisposable GetCallInvoker(out CallInvoker callInvoker)
     {
-        if (this.options.Channel is GrpcChannel c)
+        if (this.grpcOptions.Channel is GrpcChannel c)
         {
             callInvoker = c.CreateCallInvoker();
             return default;
         }
 
-        if (this.options.CallInvoker is CallInvoker invoker)
+        if (this.grpcOptions.CallInvoker is CallInvoker invoker)
         {
             callInvoker = invoker;
             return default;
         }
 
-        c = GetChannel(this.options.Address);
+        c = GetChannel(this.grpcOptions.Address);
         callInvoker = c.CreateCallInvoker();
         return new AsyncDisposable(() => new(c.ShutdownAsync()));
     }

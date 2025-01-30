@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <PackageDescription>Azure Managed extensions for the Durable Task Framework client.</PackageDescription>
+    <EnableStyleCop>true</EnableStyleCop>
+    <VersionSuffix>preview.1</VersionSuffix>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Client/Grpc/Client.Grpc.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.Identity" Version="1.13.1" />
+    <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="6.0.1" />
+    <PackageReference Include="Grpc.Net.Client" Version="2.67.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <SharedSection Include="AzureManaged" />
+    <SharedSection Include="Core" />
+  </ItemGroup>
+
+</Project>

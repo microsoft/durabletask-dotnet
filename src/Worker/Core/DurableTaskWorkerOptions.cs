@@ -10,7 +10,9 @@ namespace Microsoft.DurableTask.Worker;
 /// </summary>
 public class DurableTaskWorkerOptions
 {
-    DataConverter dataConverter = JsonDataConverter.Default;
+    DataConverter? dataConverter;
+    bool? enableEntitySupport;
+    TimeSpan? maximumTimerInterval;
 
     /// <summary>
     /// Gets or sets the data converter. Default value is <see cref="JsonDataConverter.Default" />.
@@ -28,27 +30,19 @@ public class DurableTaskWorkerOptions
     /// </remarks>
     public DataConverter DataConverter
     {
-        get => this.dataConverter;
-        set
-        {
-            if (value is null)
-            {
-                this.dataConverter = JsonDataConverter.Default;
-                this.DataConverterExplicitlySet = false;
-            }
-            else
-            {
-                this.dataConverter = value;
-                this.DataConverterExplicitlySet = true;
-            }
-        }
+        get => this.dataConverter ?? JsonDataConverter.Default;
+        set => this.dataConverter = value;
     }
 
     /// <summary>
     /// Gets or sets a value indicating whether this client should support entities. If true, all instance ids starting
     /// with '@' are reserved for entities, and validation checks are performed where appropriate.
     /// </summary>
-    public bool EnableEntitySupport { get; set; }
+    public bool EnableEntitySupport
+    {
+        get => this.enableEntitySupport ?? false;
+        set => this.enableEntitySupport = value;
+    }
 
     /// <summary>
     /// Gets or sets the maximum timer interval for the
@@ -81,7 +75,11 @@ public class DurableTaskWorkerOptions
     /// orchestrations.
     /// </para>
     /// </remarks>
-    public TimeSpan MaximumTimerInterval { get; set; } = TimeSpan.FromDays(3);
+    public TimeSpan MaximumTimerInterval
+    {
+        get => this.maximumTimerInterval ?? TimeSpan.FromDays(3);
+        set => this.maximumTimerInterval = value;
+    }
 
     /// <summary>
     /// Gets options for the Durable Task worker concurrency.
@@ -102,7 +100,7 @@ public class DurableTaskWorkerOptions
     /// will <b>not</b> resolve it. If not set, we will attempt to resolve it. This is so the
     /// behavior is consistently irrespective of option configuration ordering.
     /// </remarks>
-    internal bool DataConverterExplicitlySet { get; private set; }
+    internal bool DataConverterExplicitlySet => this.dataConverter is not null;
 
     /// <summary>
     /// Applies these option values to another.
@@ -113,9 +111,18 @@ public class DurableTaskWorkerOptions
         if (other is not null)
         {
             // Make sure to keep this up to date as values are added.
-            other.DataConverter = this.DataConverter;
-            other.MaximumTimerInterval = this.MaximumTimerInterval;
-            other.EnableEntitySupport = this.EnableEntitySupport;
+            ApplyIfSet(this.dataConverter, ref other.dataConverter);
+            ApplyIfSet(this.enableEntitySupport, ref other.enableEntitySupport);
+            ApplyIfSet(this.maximumTimerInterval, ref other.maximumTimerInterval);
+            this.Concurrency.ApplyTo(other.Concurrency);
+        }
+    }
+
+    static void ApplyIfSet<T>(T? value, ref T? target)
+    {
+        if (value is not null && target is null)
+        {
+            target = value;
         }
     }
 
@@ -124,19 +131,51 @@ public class DurableTaskWorkerOptions
     /// </summary>
     public class ConcurrencyOptions
     {
+        static readonly int DefaultMaxConcurrency = 100 * Environment.ProcessorCount;
+
+        int? maxActivity;
+        int? maxOrchestration;
+        int? maxEntity;
+
         /// <summary>
         /// Gets or sets the maximum number of concurrent activity work items that can be processed by the worker.
         /// </summary>
-        public int MaximumConcurrentActivityWorkItems { get; set; } = 100 * Environment.ProcessorCount;
+        public int MaximumConcurrentActivityWorkItems
+        {
+            get => this.maxActivity ?? DefaultMaxConcurrency;
+            set => this.maxActivity = value;
+        }
 
         /// <summary>
         /// Gets or sets the maximum number of concurrent orchestration work items that can be processed by the worker.
         /// </summary>
-        public int MaximumConcurrentOrchestrationWorkItems { get; set; } = 100 * Environment.ProcessorCount;
+        public int MaximumConcurrentOrchestrationWorkItems
+        {
+            get => this.maxOrchestration ?? DefaultMaxConcurrency;
+            set => this.maxOrchestration = value;
+        }
 
         /// <summary>
         /// Gets or sets the maximum number of concurrent entity work items that can be processed by the worker.
         /// </summary>
-        public int MaximumConcurrentEntityWorkItems { get; set; } = 100 * Environment.ProcessorCount;
+        public int MaximumConcurrentEntityWorkItems
+        {
+            get => this.maxEntity ?? DefaultMaxConcurrency;
+            set => this.maxEntity = value;
+        }
+
+        /// <summary>
+        /// Applies these option values to another.
+        /// </summary>
+        /// <param name="other">The options to apply this options values to.</param>
+        internal void ApplyTo(ConcurrencyOptions other)
+        {
+            if (other is not null)
+            {
+                ApplyIfSet(this.maxActivity, ref other.maxActivity);
+                ApplyIfSet(this.maxOrchestration, ref other.maxOrchestration);
+                ApplyIfSet(this.maxEntity, ref other.maxEntity);
+            }
+        }
     }
 }

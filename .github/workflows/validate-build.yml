@@ -39,16 +39,18 @@ jobs:
       run: dotnet restore $solution
 
     - name: Build
-      run: dotnet build $solution --configuration $config --no-restore -p:FileVersionRevision=$GITHUB_RUN_NUMBER -p:ContinuousIntegrationBuild=true
+      run: dotnet build $solution --configuration $config --no-restore -p:FileVersionRevision=$GITHUB_RUN_NUMBER
 
     - name: Test
-      run: dotnet test $solution --configuration $config --no-build --verbosity normal --logger trx
+      run: dotnet test $solution --configuration $config --no-build --verbosity normal
 
-    - name: Publish Test Results
-      uses: actions/upload-artifact@v4
+    - name: Test Report
+      uses: dorny/test-reporter@v1
+      if: success() || failure()
       with:
-        name: test-results
-        path: '**/*.trx'
+        name: UnitTests
+        path: out/log/test_results/**/*.trx
+        reporter: dotnet-trx
 
     - name: Pack
       run: dotnet pack $solution --configuration $config --no-build

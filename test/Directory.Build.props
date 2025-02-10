@@ -12,4 +12,9 @@
     <WarnOnPackingNonPackableProject>false</WarnOnPackingNonPackableProject>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(ContinuousIntegrationBuild)' == 'true'">
+    <VSTestResultsDirectory>$(OutRoot)log/test_results/$(Configuration)</VSTestResultsDirectory>
+    <VSTestLogger>trx%3bLogFileName=$(MSBuildProjectName).trx</VSTestLogger>
+  </PropertyGroup>
+
 </Project>

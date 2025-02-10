@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="Grpc.AspNetCore.Server" Version="2.52.0" />
-    <PackageReference Include="Microsoft.DurableTask.Sidecar" Version="1.1.0" />
+    <PackageReference Include="Microsoft.DurableTask.Sidecar" Version="1.1.2" />
   </ItemGroup>
 
 </Project>

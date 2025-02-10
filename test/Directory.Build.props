@@ -14,7 +14,7 @@
 
   <PropertyGroup Condition="'$(ContinuousIntegrationBuild)' == 'true'">
     <VSTestResultsDirectory>$(OutRoot)log/test_results/$(Configuration)</VSTestResultsDirectory>
-    <VSTestLogger>trx%3bLogFileName=$(MSBuildProjectName).trx</VSTestLogger>
+    <VSTestLogger>trx%3bLogFileName=$(MSBuildProjectName)_$(TargetFramework).trx</VSTestLogger>
   </PropertyGroup>
 
 </Project>

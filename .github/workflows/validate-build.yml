@@ -44,6 +44,12 @@ jobs:
     - name: Test
       run: dotnet test $solution --configuration $config --no-build --verbosity normal --logger trx
 
+    - name: Publish Test Results
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: '**/*.trx'
+
     - name: Pack
       run: dotnet pack $solution --configuration $config --no-build
 

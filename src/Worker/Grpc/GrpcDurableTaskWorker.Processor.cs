@@ -1,11 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
+using Grpc.Core;
 using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,12 +30,14 @@ sealed partial class GrpcDurableTaskWorker
         readonly GrpcDurableTaskWorker worker;
         readonly TaskHubSidecarServiceClient client;
         readonly DurableTaskShimFactory shimFactory;
+        readonly GrpcDurableTaskWorkerOptions.InternalOptions internalOptions;
 
         public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient client)
         {
             this.worker = worker;
             this.client = client;
             this.shimFactory = new DurableTaskShimFactory(this.worker.grpcOptions, this.worker.loggerFactory);
+            this.internalOptions = this.worker.grpcOptions.Internal;
         }
 
         ILogger Logger => this.worker.logger;
@@ -107,8 +111,13 @@ sealed partial class GrpcDurableTaskWorker
 
         async ValueTask<OrchestrationRuntimeState> BuildRuntimeStateAsync(
             P.OrchestratorRequest orchestratorRequest,
+            ProtoUtils.EntityConversionState? entityConversionState,
             CancellationToken cancellation)
         {
+            Func<P.HistoryEvent, HistoryEvent> converter = entityConversionState is null
+                ? ProtoUtils.ConvertHistoryEvent
+                : entityConversionState.ConvertFromProto;
+
             IEnumerable<HistoryEvent> pastEvents = [];
             if (orchestratorRequest.RequiresHistoryStreaming)
             {
@@ -125,16 +134,16 @@ sealed partial class GrpcDurableTaskWorker
 
                 await foreach (P.HistoryChunk chunk in streamResponse.ResponseStream.ReadAllAsync(cancellation))
                 {
-                    pastEvents = pastEvents.Concat(chunk.Events.Select(ProtoUtils.ConvertHistoryEvent));
+                    pastEvents = pastEvents.Concat(chunk.Events.Select(converter));
                 }
             }
             else
             {
                 // The history was already provided in the work item request
-                pastEvents = orchestratorRequest.PastEvents.Select(ProtoUtils.ConvertHistoryEvent);
+                pastEvents = orchestratorRequest.PastEvents.Select(converter);
             }
 
-            IEnumerable<HistoryEvent> newEvents = orchestratorRequest.NewEvents.Select(ProtoUtils.ConvertHistoryEvent);
+            IEnumerable<HistoryEvent> newEvents = orchestratorRequest.NewEvents.Select(converter);
 
             // Reconstruct the orchestration state in a way that correctly distinguishes new events from past events
             var runtimeState = new OrchestrationRuntimeState(pastEvents.ToList());
@@ -203,7 +212,21 @@ sealed partial class GrpcDurableTaskWorker
                     {
                         this.RunBackgroundTask(
                             workItem,
-                            () => this.OnRunEntityBatchAsync(workItem.EntityRequest, cancellation));
+                            () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation));
+                    }
+                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequestV2)
+                    {
+                        workItem.EntityRequestV2.ToEntityBatchRequest(
+                            out EntityBatchRequest batchRequest,
+                            out List<P.OperationInfo> operationInfos);
+
+                        this.RunBackgroundTask(
+                             workItem,
+                             () => this.OnRunEntityBatchAsync(
+                                batchRequest,
+                                cancellation,
+                                workItem.CompletionToken,
+                                operationInfos));
                     }
                     else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
                     {
@@ -250,9 +273,18 @@ sealed partial class GrpcDurableTaskWorker
             P.TaskFailureDetails? failureDetails = null;
             TaskName name = new("(unknown)");
 
+            ProtoUtils.EntityConversionState? entityConversionState =
+                this.internalOptions.ConvertOrchestrationEntityEvents
+                ? new(this.internalOptions.InsertEntityUnlocksOnCompletion)
+                : null;
+
             try
             {
-                OrchestrationRuntimeState runtimeState = await this.BuildRuntimeStateAsync(request, cancellationToken);
+                OrchestrationRuntimeState runtimeState = await this.BuildRuntimeStateAsync(
+                    request,
+                    entityConversionState,
+                    cancellationToken);
+
                 name = new TaskName(runtimeState.Name);
 
                 this.Logger.ReceivedOrchestratorRequest(
@@ -278,6 +310,7 @@ sealed partial class GrpcDurableTaskWorker
                         runtimeState,
                         shim,
                         BehaviorOnContinueAsNew.Carryover,
+                        request.EntityParameters.ToCore(),
                         ErrorPropagationMode.UseFailureDetails);
                     result = executor.Execute();
                 }
@@ -305,7 +338,8 @@ sealed partial class GrpcDurableTaskWorker
                     request.InstanceId,
                     result.CustomStatus,
                     result.Actions,
-                    completionToken);
+                    completionToken,
+                    entityConversionState);
             }
             else
             {
@@ -400,14 +434,17 @@ sealed partial class GrpcDurableTaskWorker
             await this.client.CompleteActivityTaskAsync(response, cancellationToken: cancellation);
         }
 
-        async Task OnRunEntityBatchAsync(P.EntityBatchRequest request, CancellationToken cancellation)
+        async Task OnRunEntityBatchAsync(
+            EntityBatchRequest batchRequest,
+            CancellationToken cancellation,
+            string? completionToken = null,
+            List<P.OperationInfo>? operationInfos = null)
         {
-            var coreEntityId = DTCore.Entities.EntityId.FromString(request.InstanceId);
+            var coreEntityId = DTCore.Entities.EntityId.FromString(batchRequest.InstanceId!);
             EntityId entityId = new(coreEntityId.Name, coreEntityId.Key);
 
             TaskName name = new(entityId.Name);
 
-            EntityBatchRequest batchRequest = request.ToEntityBatchRequest();
             EntityBatchResult? batchResult;
 
             try
@@ -428,7 +465,7 @@ sealed partial class GrpcDurableTaskWorker
                     // so we return a non-retriable error-OperationResult for each operation in the batch.
                     batchResult = new EntityBatchResult()
                     {
-                        Actions = new List<OperationAction>(), // no actions
+                        Actions = [], // no actions
                         EntityState = batchRequest.EntityState, // state is unmodified
                         Results = Enumerable.Repeat(
                             new OperationResult()
@@ -447,19 +484,19 @@ sealed partial class GrpcDurableTaskWorker
             }
             catch (Exception frameworkException)
             {
-                // return a result with no results, same state,
-                // and which contains failure details
+                // return a result with failure details.
+                // this will cause the batch to be abandoned and retried
+                // (possibly after a delay and on a different worker).
                 batchResult = new EntityBatchResult()
                 {
-                    Actions = new List<OperationAction>(),
-                    EntityState = batchRequest.EntityState,
-                    Results = new List<OperationResult>(),
                     FailureDetails = new FailureDetails(frameworkException),
                 };
             }
 
-            // convert the result to protobuf format and send it back
-            P.EntityBatchResult response = batchResult.ToEntityBatchResult();
+            P.EntityBatchResult response = batchResult.ToEntityBatchResult(
+                completionToken,
+                operationInfos?.Take(batchResult.Results?.Count ?? 0));
+
             await this.client.CompleteEntityTaskAsync(response, cancellationToken: cancellation);
         }
     }

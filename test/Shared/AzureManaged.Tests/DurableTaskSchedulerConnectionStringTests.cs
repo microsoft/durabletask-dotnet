@@ -1,9 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using FluentAssertions;
-using Xunit;
-
 namespace Microsoft.DurableTask.Shared.AzureManaged.Tests;
 
 public class DurableTaskSchedulerConnectionStringTests

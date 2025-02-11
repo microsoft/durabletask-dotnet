@@ -3,7 +3,6 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DurableTask.Core;
-using DurableTask.Core.Entities;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
 using Microsoft.DurableTask.Client.Entities;

@@ -2,14 +2,10 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using Microsoft.DurableTask.Entities;
-using Microsoft.Extensions.Logging;
 using DurableTaskCore = DurableTask.Core;
 
 namespace Microsoft.DurableTask.Worker.Shims;

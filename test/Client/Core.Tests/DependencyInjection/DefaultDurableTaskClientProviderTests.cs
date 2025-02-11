@@ -6,13 +6,13 @@ namespace Microsoft.DurableTask.Client;
 public class DefaultDurableTaskClientProviderTests
 {
     [Theory]
-    [InlineData(null)]
+    [InlineData("")]
     [InlineData("client1")]
     [InlineData("Not-found")] // case sensitive
     [InlineData("client1", "client2")]
     public void GetClient_NotFound_Throws(params string[] clients)
     {
-        clients ??= Array.Empty<string>();
+        clients ??= [];
         DefaultDurableTaskClientProvider provider = new(CreateClients(clients));
         string allNames = string.Join(", ", clients.Select(x => $"\"{x}\""));
 
@@ -32,7 +32,7 @@ public class DefaultDurableTaskClientProviderTests
     [InlineData("Client1", "client1", "client2")]
     public void GetClient_Found_Returns(params string[] clients)
     {
-        clients ??= Array.Empty<string>();
+        clients ??= [];
         DefaultDurableTaskClientProvider provider = new(CreateClients(clients));
 
         DurableTaskClient client = provider.GetClient("client1");

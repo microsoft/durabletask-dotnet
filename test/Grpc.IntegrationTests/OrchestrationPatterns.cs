@@ -11,12 +11,9 @@ using Microsoft.DurableTask.Client;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
-public class OrchestrationPatterns : IntegrationTestBase
+public class OrchestrationPatterns(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
+    : IntegrationTestBase(output, sidecarFixture)
 {
-    public OrchestrationPatterns(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
-        : base(output, sidecarFixture)
-    { }
-
     [Fact]
     public async Task EmptyOrchestration()
     {
@@ -30,9 +27,9 @@ public class OrchestrationPatterns : IntegrationTestBase
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, this.TimeoutToken);
 
-        Assert.NotNull(metadata);
-        Assert.Equal(instanceId, metadata.InstanceId);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        metadata.Should().NotBeNull();
+        metadata.InstanceId.Should().Be(instanceId);
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
     }
 
     [Fact]
@@ -51,12 +48,12 @@ public class OrchestrationPatterns : IntegrationTestBase
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, this.TimeoutToken);
 
-        Assert.NotNull(metadata);
-        Assert.Equal(instanceId, metadata.InstanceId);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        metadata.Should().NotBeNull();
+        metadata.InstanceId.Should().Be(instanceId);
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
 
         // Verify that the delay actually happened with a 1 second variation
-        Assert.True(metadata.CreatedAt.Add(delay) <= metadata.LastUpdatedAt.AddSeconds(1));
+        metadata.LastUpdatedAt.AddSeconds(1).Should().BeOnOrAfter(metadata.CreatedAt.Add(delay));
     }
 
     [Fact]
@@ -77,17 +74,16 @@ public class OrchestrationPatterns : IntegrationTestBase
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
 
-        Assert.NotNull(metadata);
-        Assert.Equal(instanceId, metadata.InstanceId);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        metadata.Should().NotBeNull();
+        metadata.InstanceId.Should().Be(instanceId);
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
 
         // Verify that the delay actually happened
-        Assert.True(metadata.CreatedAt.Add(delay) <= metadata.LastUpdatedAt.AddSeconds(1));
+        (metadata.CreatedAt.Add(delay) <= metadata.LastUpdatedAt.AddSeconds(1)).Should().BeTrue();
 
         // Verify that the correct number of timers were created
         IReadOnlyCollection<LogEntry> logs = this.GetLogs();
-        int timersCreated = logs.Count(log => log.Message.Contains("CreateTimer"));
-        Assert.Equal(ExpectedTimers, timersCreated);
+        logs.Where(log => log.Message.Contains("CreateTimer")).Should().HaveCount(ExpectedTimers);
     }
 
     [Fact]
@@ -111,13 +107,12 @@ public class OrchestrationPatterns : IntegrationTestBase
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-        List<bool>? results = metadata.ReadOutputAs<List<bool>>();
-        Assert.NotNull(results);
-        Assert.Equal(3, results!.Count);
-        Assert.True(results[0]);
-        Assert.True(results[1]);
-        Assert.False(results[2]);
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+
+        List<bool> results = metadata.ReadOutputAs<List<bool>>()!;
+        results.Should().NotBeNull();
+        results.Should().HaveCount(3);
+        results.Should().BeEquivalentTo([ true, true, false ]);
     }
 
     [Fact]
@@ -153,9 +148,9 @@ public class OrchestrationPatterns : IntegrationTestBase
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-        Assert.NotNull(metadata);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-        Assert.True(metadata.ReadOutputAs<bool>());
+        metadata.Should().NotBeNull();
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+        metadata.ReadOutputAs<bool>().Should().BeTrue();
     }
 
     [Fact]
@@ -175,9 +170,9 @@ public class OrchestrationPatterns : IntegrationTestBase
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-        Assert.NotNull(metadata);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-        Assert.Equal("Hello, World!", metadata.ReadOutputAs<string>());
+        metadata.Should().NotBeNull();
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+        metadata.ReadOutputAs<string>().Should().Be("Hello, World!");
     }
 
     [Fact]
@@ -198,9 +193,9 @@ public class OrchestrationPatterns : IntegrationTestBase
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-        Assert.NotNull(metadata);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-        Assert.Equal("Hello, World!", metadata.ReadOutputAs<string>());
+        metadata.Should().NotBeNull();
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+        metadata.ReadOutputAs<string>().Should().Be("Hello, World!");
     }
 
     [Fact]
@@ -228,9 +223,9 @@ public class OrchestrationPatterns : IntegrationTestBase
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-        Assert.NotNull(metadata);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-        Assert.Equal(10, metadata.ReadOutputAs<int>());
+        metadata.Should().NotBeNull();
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+        metadata.ReadOutputAs<int>().Should().Be(10);
     }
 
     [Fact]
@@ -261,11 +256,9 @@ public class OrchestrationPatterns : IntegrationTestBase
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-        Assert.NotNull(metadata);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-
-        string[] expected = new[] { "9", "8", "7", "6", "5", "4", "3", "2", "1", "0" };
-        Assert.Equal<string>(expected, metadata.ReadOutputAs<string[]>());
+        metadata.Should().NotBeNull();
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+        metadata.ReadOutputAs<string[]>().Should().Equal(["9", "8", "7", "6", "5", "4", "3", "2", "1", "0"]);
     }
 
     [Theory]
@@ -278,7 +271,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         {
             b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
             {
-                List<int> events = new();
+                List<int> events = [];
                 for (int i = 0; i < eventCount; i++)
                 {
                     events.Add(await ctx.WaitForExternalEvent<int>($"Event{i}"));
@@ -304,11 +297,9 @@ public class OrchestrationPatterns : IntegrationTestBase
         // Once the orchestration receives all the events it is expecting, it should complete.
         metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-        Assert.NotNull(metadata);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-
-        int[] expected = Enumerable.Range(0, eventCount).ToArray();
-        Assert.Equal<int>(expected, metadata.ReadOutputAs<int[]>());
+        metadata.Should().NotBeNull();
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+        metadata.ReadOutputAs<int[]>().Should().Equal(Enumerable.Range(0, eventCount));
     }
 
     [Theory]
@@ -321,7 +312,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         {
             b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
             {
-                List<Task<int>> events = new();
+                List<Task<int>> events = [];
                 for (int i = 0; i < eventCount; i++)
                 {
                     events.Add(ctx.WaitForExternalEvent<int>("Event"));
@@ -347,11 +338,9 @@ public class OrchestrationPatterns : IntegrationTestBase
         // Once the orchestration receives all the events it is expecting, it should complete.
         metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true);
-        Assert.NotNull(metadata);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-
-        int[] expected = Enumerable.Range(0, eventCount).ToArray();
-        Assert.Equal<int>(expected, metadata.ReadOutputAs<int[]>());
+        metadata.Should().NotBeNull();
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+        metadata.ReadOutputAs<int[]>().Should().Equal(Enumerable.Range(0, eventCount));
     }
 
     [Fact]
@@ -372,14 +361,14 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-        Assert.NotNull(metadata);
-        Assert.Equal(instanceId, metadata.InstanceId);
-        Assert.Equal(OrchestrationRuntimeStatus.Terminated, metadata.RuntimeStatus);
+        metadata.Should().NotBeNull();
+        metadata.InstanceId.Should().Be(instanceId);
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Terminated);
 
         JsonElement actualOutput = metadata.ReadOutputAs<JsonElement>();
         string? actualQuote = actualOutput.GetProperty("quote").GetString();
-        Assert.NotNull(actualQuote);
-        Assert.Equal(expectedOutput.quote, actualQuote);
+        actualQuote.Should().NotBeNull();
+        actualQuote.Should().Be(expectedOutput.quote);
     }
 
     [Fact]
@@ -404,9 +393,9 @@ public class OrchestrationPatterns : IntegrationTestBase
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-        Assert.NotNull(metadata);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-        Assert.Equal(10, metadata.ReadOutputAs<int>());
+        metadata.Should().NotBeNull();
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+        metadata.ReadOutputAs<int>().Should().Be(10);
     }
 
     [Fact]
@@ -432,9 +421,9 @@ public class OrchestrationPatterns : IntegrationTestBase
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 1);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-        Assert.NotNull(metadata);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-        Assert.Equal(15, metadata.ReadOutputAs<int>());
+        metadata.Should().NotBeNull();
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+        metadata.ReadOutputAs<int>().Should().Be(15);
     }
 
     [Fact]
@@ -457,8 +446,8 @@ public class OrchestrationPatterns : IntegrationTestBase
         // To ensure consistency, wait for the instance to start before sending the events
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceStartAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-        Assert.NotNull(metadata);
-        Assert.Equal("Started!", metadata.ReadCustomStatusAs<string>());
+        metadata.Should().NotBeNull();
+        metadata.ReadCustomStatusAs<string>().Should().Be("Started!");
 
         // Send a tuple payload, which will be used as the custom status
         (string, int) eventPayload = ("Hello", 42);
@@ -470,9 +459,9 @@ public class OrchestrationPatterns : IntegrationTestBase
         // Once the orchestration receives all the events it is expecting, it should complete.
         metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-        Assert.NotNull(metadata);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-        Assert.Equal(eventPayload, metadata.ReadCustomStatusAs<(string, int)>());
+        metadata.Should().NotBeNull();
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+        metadata.ReadCustomStatusAs<(string, int)>().Should().Be(eventPayload);
     }
 
     [Fact]
@@ -518,9 +507,9 @@ public class OrchestrationPatterns : IntegrationTestBase
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-        Assert.NotNull(metadata);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-        Assert.True(metadata.ReadOutputAs<bool>());
+        metadata.Should().NotBeNull();
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+        metadata.ReadOutputAs<bool>().Should().BeTrue();
     }
 
     [Fact]
@@ -556,9 +545,9 @@ public class OrchestrationPatterns : IntegrationTestBase
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         JsonNode? output = result.ReadOutputAs<JsonNode>();
 
-        Assert.NotNull(output);
-        Assert.Equal("original value", output?["originalProperty"]?.ToString());
-        Assert.Equal("new value", output?["newProperty"]?.ToString());
+        output.Should().NotBeNull();
+        (output?["originalProperty"]?.ToString()).Should().Be("original value");
+        (output?["newProperty"]?.ToString()).Should().Be("new value");
     }
 
     // TODO: Test for multiple external events with the same name

@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.DurableTask.Entities;
 
 namespace Microsoft.DurableTask.Client.Entities.Tests;

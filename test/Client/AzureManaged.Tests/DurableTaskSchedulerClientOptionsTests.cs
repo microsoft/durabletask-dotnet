@@ -2,8 +2,6 @@
 // Licensed under the MIT License.
 
 using Azure.Identity;
-using FluentAssertions;
-using Xunit;
 
 namespace Microsoft.DurableTask.Shared.AzureManaged.Tests;
 

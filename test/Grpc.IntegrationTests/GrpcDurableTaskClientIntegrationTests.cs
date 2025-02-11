@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics.CodeAnalysis;
-using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;

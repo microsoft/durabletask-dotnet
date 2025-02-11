@@ -2,9 +2,6 @@
 // Licensed under the MIT License.
 
 using Azure.Core;
-using FluentAssertions;
-using Moq;
-using Xunit;
 
 namespace Microsoft.DurableTask.Shared.AzureManaged.Tests;
 

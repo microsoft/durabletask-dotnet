@@ -5,7 +5,6 @@ using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
-using FluentAssertions.Specialized;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Converters;
 using Microsoft.Extensions.Options;
@@ -94,7 +93,7 @@ public class ShimDurableTaskClientTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async void GetInstanceMetadata_EmptyList_Null(bool isNull)
+    public async Task GetInstanceMetadata_EmptyList_Null(bool isNull)
     {
         // arrange
         List<Core.OrchestrationState>? states = isNull ? null : new();

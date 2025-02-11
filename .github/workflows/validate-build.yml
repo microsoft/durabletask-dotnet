@@ -51,6 +51,7 @@ jobs:
         name: UnitTests
         path: out/log/test_results/**/*.trx
         reporter: dotnet-trx
+        only-summary: true
 
     - name: Pack
       run: dotnet pack $solution --configuration $config --no-build

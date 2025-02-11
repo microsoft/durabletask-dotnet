@@ -14,7 +14,7 @@ on:
 
 env:
   solution: Microsoft.DurableTask.sln
-  config: Release
+  config: release
 
 jobs:
   build:
@@ -22,8 +22,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-      with:
-        submodules: true
 
     - name: Setup .NET 6.0
       uses: actions/setup-dotnet@v3
@@ -36,16 +34,16 @@ jobs:
         global-json-file: global.json
 
     - name: Restore dependencies
-      run: dotnet restore $solution
+      run: dotnet restore $env:solution
 
     - name: Build
-      run: dotnet build $solution --configuration $config --no-restore -p:FileVersionRevision=$GITHUB_RUN_NUMBER
+      run: dotnet build $env:solution --configuration $env:config --no-restore -p:FileVersionRevision=$env:GITHUB_RUN_NUMBER
 
     - name: Test
-      run: dotnet test $solution --configuration $config --no-build --verbosity normal
+      run: dotnet test $env:solution --configuration $env:config --no-build --verbosity normal
 
     - name: Pack
-      run: dotnet pack $solution --configuration $config --no-build
+      run: dotnet pack $env:solution --configuration $env:config --no-build
 
     - name: Upload
       uses: actions/upload-artifact@v4

@@ -42,7 +42,7 @@ jobs:
       run: dotnet build $solution --configuration $config --no-restore -p:FileVersionRevision=$GITHUB_RUN_NUMBER
 
     - name: Test
-      run: dotnet test $solution --configuration $config --no-build --verbosity normal
+      run: dotnet test $solution --framework net6.0 --configuration $config --no-build --verbosity normal
 
     - name: Pack
       run: dotnet pack $solution --configuration $config --no-build

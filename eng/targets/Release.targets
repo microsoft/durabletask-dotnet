@@ -12,8 +12,18 @@
     <PackageReadmeFile Condition="Exists('README.md')">README.md</PackageReadmeFile>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(IsRoslynComponent)' != 'true'">
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <IncludeSymbols>true</IncludeSymbols>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- FileVersionRevision is expected to be set by the CI. -->
+    <FileVersion Condition="'$(FileVersionRevision)' != ''">$(VersionPrefix).$(FileVersionRevision)</FileVersion>
+  </PropertyGroup>
+
   <!-- Embed the SBOM manifest, which is generated as part of the "official" build -->
-  <ItemGroup Condition="'$(Configuration)'=='Release'">
+  <ItemGroup Condition="'$(Configuration)' == 'release'">
     <Content Include="$(RepoRoot)_manifest/**" Pack="true" PackagePath="content/SBOM">
       <Pack>true</Pack>
       <PackagePath>content/SBOM</PackagePath>

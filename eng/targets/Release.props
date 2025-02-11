@@ -8,12 +8,27 @@
 
   <!-- Common NuGet settings -->
   <PropertyGroup>
+    <Company>Microsoft Corporation</Company>
     <Authors>Microsoft</Authors>
     <Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
     <RepositoryUrl>https://github.com/microsoft/durabletask-dotnet</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
     <PackageTags>Microsoft Durable Task Orchestration Workflow Activity Reliable DTFx</PackageTags>
+  </PropertyGroup>
+
+  <!-- Release quality settings -->
+  <PropertyGroup>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!--
+      This setting makes symbol files (PDBs) available, which is seemingly necessary for having a 'deterministic' build in our NuGet package.
+      This is recommended for NuGet packages, as per: https://devblogs.microsoft.com/dotnet/producing-packages-with-source-link/
+      The connection to deterministic builds is explored here: https://www.meziantou.net/creating-reproducible-build-in-dotnet.htm
+    -->
+    <DebugType>portable</DebugType>
   </PropertyGroup>
 
   <PropertyGroup>

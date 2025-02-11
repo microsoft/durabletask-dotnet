@@ -49,4 +49,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: pkg
-        path: out/pkg
+        path: out/pkg/$env:config

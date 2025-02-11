@@ -2,19 +2,23 @@
 
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
+    <IncludeShared>true</IncludeShared>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="../../../src/Shared/AzureManaged/**/*.cs" />
-    <Compile Include="../../../src/Shared/Core/Validation/*.cs" />
-  </ItemGroup>
-  
-  <ItemGroup>
+    <!-- Needed for shared section dependencies -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="6.0.1" />
     <PackageReference Include="Azure.Identity" Version="1.13.1" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\TestHelpers\TestHelpers.csproj" />
+    <!-- needed for 'Core' shared section dependency. -->
+    <ProjectReference Include="$(SrcRoot)Abstractions/Abstractions.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <SharedSection Include="AzureManaged" />
+    <SharedSection Include="Core" />
+  </ItemGroup>
+
 </Project>

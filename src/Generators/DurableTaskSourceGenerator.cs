@@ -275,13 +275,9 @@ namespace Microsoft.DurableTask
 
         class DurableTaskSyntaxReceiver : ISyntaxContextReceiver
         {
-            readonly List<DurableTaskTypeInfo> orchestrators = new();
-            readonly List<DurableTaskTypeInfo> activities = new();
-            readonly List<DurableFunction> durableFunctions = new();
-
-            public IReadOnlyList<DurableTaskTypeInfo> Orchestrators => this.orchestrators;
-            public IReadOnlyList<DurableTaskTypeInfo> Activities => this.activities;
-            public IReadOnlyList<DurableFunction> DurableFunctions => this.durableFunctions;
+            public List<DurableTaskTypeInfo> Orchestrators { get; } = [];
+            public List<DurableTaskTypeInfo> Activities { get; } = [];
+            public List<DurableFunction> DurableFunctions { get; } = [];
 
             public void OnVisitSyntaxNode(GeneratorSyntaxContext context)
             {
@@ -291,7 +287,7 @@ namespace Microsoft.DurableTask
                     function != null)
                 {
                     Debug.WriteLine($"Adding {function.Kind} function '{function.Name}'");
-                    this.durableFunctions.Add(function);
+                    this.DurableFunctions.Add(function);
                     return;
                 }
 
@@ -338,13 +334,13 @@ namespace Microsoft.DurableTask
                     {
                         if (baseType.Name == "TaskActivity")
                         {
-                            taskList = this.activities;
+                            taskList = this.Activities;
                             taskType = baseType;
                             break;
                         }
                         else if (baseType.Name == "TaskOrchestrator")
                         {
-                            taskList = this.orchestrators;
+                            taskList = this.Orchestrators;
                             taskType = baseType;
                             break;
                         }

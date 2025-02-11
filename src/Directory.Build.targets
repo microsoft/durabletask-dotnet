@@ -3,20 +3,6 @@
   <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory)../, $(_DirectoryBuildTargetsFile)))/$(_DirectoryBuildTargetsFile)"
     Condition=" '$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory)../, $(_DirectoryBuildTargetsFile)))' != '' " />
 
-  <PropertyGroup Condition="'$(IsRoslynComponent)' != 'true'">
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <IncludeSymbols>true</IncludeSymbols>
-  </PropertyGroup>
-
-  <PropertyGroup>
-    <!-- FileVersionRevision is expected to be set by the CI. -->
-    <FileVersion Condition="'$(FileVersionRevision)' != ''">$(VersionPrefix).$(FileVersionRevision)</FileVersion>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All" />
-  </ItemGroup>
-
   <ItemGroup Condition="'$(EnableStyleCop)' == 'true'">
     <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556" PrivateAssets="All"/>
   </ItemGroup>
@@ -26,7 +12,6 @@
     <InternalsVisibleTo Include="Benchmarks" Key="$(StrongNamePublicKey)" />
   </ItemGroup>
 
-  <Import Project="$(EngRoot)targets/SharedFiles.targets" />
   <Import Project="$(EngRoot)targets/Release.targets" />
 
 </Project>

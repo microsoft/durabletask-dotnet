@@ -9,6 +9,7 @@
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
+    <IncludeShared>false</IncludeShared>
     <WarnOnPackingNonPackableProject>false</WarnOnPackingNonPackableProject>
   </PropertyGroup>
 

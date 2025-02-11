@@ -9,11 +9,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../../src/Worker/AzureManaged/Worker.AzureManaged.csproj" />
-    <ProjectReference Include="../../TestHelpers/TestHelpers.csproj" />
+    <ProjectReference Include="$(SrcRoot)Worker/AzureManaged/Worker.AzureManaged.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <SharedSection Include="AzureManaged" />
-  </ItemGroup>
 </Project>

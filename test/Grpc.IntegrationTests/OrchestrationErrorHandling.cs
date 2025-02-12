@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Runtime.Serialization;
+using DurableTask.Core;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
 using Xunit.Abstractions;
@@ -587,6 +588,273 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.Contains("ThrowException", metadata.FailureDetails.InnerFailure.ErrorMessage);
 
         ValidateInnermostFailureDetailsChain(metadata.FailureDetails.InnerFailure.InnerFailure);
+    }
+
+    /// <summary>
+    /// Tests the behavior of a failed orchestration when it is rewound and re-executed.
+    /// </summary>
+    [Fact]
+    public async Task RewindSingleFailedActivity()
+    {
+        bool isBusted = true;
+
+        TaskName orchestratorName = "BustedOrchestration";
+        TaskName activityName = "BustedActivity";
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks =>
+                tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
+                {
+                    await ctx.CallActivityAsync(activityName);
+                })
+                .AddActivityFunc(activityName, (TaskActivityContext context) =>
+                {
+                    if (isBusted)
+                    {
+                        throw new Exception("Kah-BOOOOOM!!!");
+                    }
+                }));
+        });
+
+        DurableTaskClient client = server.Client;
+
+        // Start the orchestration and wait for it to fail.
+        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+
+        // Simulate "fixing" the original problem by setting the flag to false.
+        isBusted = false;
+
+        // Rewind the orchestration to put it back into a running state. It should complete successfully this time.
+        await client.RewindInstanceAsync(instanceId, "Rewind failed orchestration");
+        metadata = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+    }
+
+    /// <summary>
+    /// Tests the behavior of a failed orchestration when it is rewound and re-executed multiple times.
+    /// </summary>
+    [Fact]
+    public async Task RewindMultipleFailedActivities_Serial()
+    {
+        bool isBusted1 = true;
+        bool isBusted2 = true;
+
+        TaskName orchestratorName = "BustedOrchestration";
+        TaskName activityName1 = "BustedActivity1";
+        TaskName activityName2 = "BustedActivity2";
+
+        int activity1CompletionCount = 0;
+        int activity2CompletionCount = 0;
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks =>
+                tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
+                {
+                    // Take the result of the first activity and pass it to the second activity
+                    int result = await ctx.CallActivityAsync<int>(activityName1);
+                    return await ctx.CallActivityAsync<int>(activityName2, input: result);
+                })
+                .AddActivityFunc(activityName1, (TaskActivityContext context) =>
+                {
+                    if (isBusted1)
+                    {
+                        throw new Exception("Failure1");
+                    }
+
+                    activity1CompletionCount++;
+                    return 1;
+                })
+                .AddActivityFunc(activityName2, (TaskActivityContext context, int input) =>
+                {
+                    if (isBusted2)
+                    {
+                        throw new Exception("Failure2");
+                    }
+
+                    activity2CompletionCount++;
+                    return input + 1;
+                }));
+        });
+
+        DurableTaskClient client = server.Client;
+
+        // Start the orchestration and wait for it to fail with an ApplicationException.
+        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+        Assert.Equal("Failure1", metadata.FailureDetails?.ErrorMessage);
+
+        // Simulate "fixing" just the first problem by setting the first flag to false.
+        isBusted1 = false;
+
+        // Rewind the orchestration. It should fail again, but this time with a different error message.
+        await client.RewindInstanceAsync(instanceId, "Rewind failed orchestration");
+        metadata = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+        Assert.Equal("Failure2", metadata.FailureDetails?.ErrorMessage);
+
+        // Simulate "fixing" the second problem by setting the second flag to false.
+        isBusted2 = false;
+
+        // Rewind the orchestration again to put it back into a running state. It should now complete successfully.
+        await client.RewindInstanceAsync(instanceId, "Rewind failed orchestration");
+        metadata = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.Equal(2, metadata.ReadOutputAs<int>());
+
+        // Confirm that each activity completed exactly once (i.e. successful activity calls aren't rewound).
+        Assert.Equal(1, activity1CompletionCount);
+        Assert.Equal(1, activity2CompletionCount);
+    }
+
+    /// <summary>
+    /// Tests the behavior of a failed orchestration when multiple failures occur as part of a fan-out/fan-in, and is
+    /// subsequently rewound and re-executed.
+    /// </summary>
+    [Fact]
+    public async Task RewindMultipleFailedActivities_Parallel()
+    {
+        bool isBusted = true;
+
+        TaskName orchestratorName = "BustedOrchestration";
+        TaskName activityName = "BustedActivity";
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks =>
+                tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
+                {
+                    // Run the activity function multiple times in parallel
+                    IList<Task> tasks = Enumerable.Range(0, 10)
+                        .Select(i => ctx.CallActivityAsync(activityName))
+                        .ToList();
+
+                    // Wait for all the activity functions to complete
+                    await Task.WhenAll(tasks);
+                    return "Done";
+                })
+                .AddActivityFunc(activityName, (TaskActivityContext context) =>
+                {
+                    if (isBusted)
+                    {
+                        throw new Exception("Kah-BOOOOOM!!!");
+                    }
+                }));
+        });
+
+        DurableTaskClient client = server.Client;
+
+        // Start the orchestration and wait for it to fail.
+        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+
+        // Simulate "fixing" the original problem by setting the flag to false.
+        isBusted = false;
+
+        // Rewind the orchestration to put it back into a running state. It should complete successfully this time.
+        await client.RewindInstanceAsync(instanceId, "Rewind failed orchestration");
+        metadata = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.Equal("Done", metadata.ReadOutputAs<string>());
+    }
+
+    /// <summary>
+    /// Tests rewinding an orchestration that failed due to a failed sub-orchestration. The sub-orchestration is fixed
+    /// and the parent orchestration is rewound to allow the entire chain to complete successfully.
+    /// </summary>
+    [Fact]
+    public async Task RewindFailedSubOrchestration()
+    {
+        bool isBusted = true;
+
+        TaskName orchestratorName = "BustedOrchestrator";
+        TaskName subOrchestratorName = "BustedSubOrchestrator";
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc(orchestratorName, async ctx =>
+                {
+                    await ctx.CallSubOrchestratorAsync(subOrchestratorName);
+                })
+                .AddOrchestratorFunc(subOrchestratorName, ctx =>
+                {
+                    if (isBusted)
+                    {
+                        throw new Exception("Kah-BOOOOOM!!!");
+                    }
+                }));
+        });
+
+        DurableTaskClient client = server.Client;
+
+        // Start the orchestration and wait for it to fail.
+        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+
+        // Simulate "fixing" the original problem by setting the flag to false.
+        isBusted = false;
+
+        // Rewind the orchestration to put it back into a running state. It should complete successfully this time.
+        await client.RewindInstanceAsync(instanceId, "Rewind failed orchestration");
+        metadata = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+    }
+
+    /// <summary>
+    /// Tests rewinding an orchestration that failed due to a failed sub-orchestration, which itself failed due to an
+    /// activity. The entire orchestration chain is expected to fail, and rewinding the parent orchestration should
+    /// allow the entire chain to complete successfully.
+    /// </summary>
+    [Fact]
+    public async Task RewindFailedSubOrchestrationWithActivity()
+    {
+        bool isBusted = true;
+
+        TaskName orchestratorName = "BustedOrchestrator";
+        TaskName subOrchestratorName = "BustedSubOrchestrator";
+        TaskName activityName = "BustedActivity";
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc(orchestratorName, async ctx =>
+                {
+                    await ctx.CallSubOrchestratorAsync(subOrchestratorName);
+                })
+                .AddOrchestratorFunc(subOrchestratorName, async ctx =>
+                {
+                    await ctx.CallActivityAsync(activityName);
+                })
+                .AddActivityFunc(activityName, (TaskActivityContext _) =>
+                {
+                    if (isBusted)
+                    {
+                        throw new Exception("Kah-BOOOOOM!!!");
+                    }
+                }));
+        });
+
+        DurableTaskClient client = server.Client;
+
+        // Start the orchestration and wait for it to fail.
+        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+
+        // Simulate "fixing" the original problem by setting the flag to false.
+        isBusted = false;
+
+        // Rewind the orchestration to put it back into a running state. It should complete successfully this time.
+        await client.RewindInstanceAsync(instanceId, "Rewind failed orchestration");
+        metadata = await client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
     }
 
     static Exception MakeException(Type exceptionType, string message)

@@ -95,7 +95,7 @@ public class ShimDurableEntityClientTests
             Enumerable.Range(0, 25).Select(i => CreateCoreMetadata(i))];
 
         string? continuationToken = null;
-        foreach (IEnumerable<EntityBackendQueries.EntityMetadata> batch in entities.Batch(10))
+        foreach (IEnumerable<EntityBackendQueries.EntityMetadata> batch in entities.Chunk(10))
         {
             EntityBackendQueries.EntityQuery filter = new()
             {
@@ -139,7 +139,7 @@ public class ShimDurableEntityClientTests
 
         string? continuationToken = Guid.NewGuid().ToString();
         EntityQuery query = new() { IncludeState = false, PageSize = 10, ContinuationToken = continuationToken };
-        foreach (IEnumerable<EntityBackendQueries.EntityMetadata> batch in entities.Batch(10))
+        foreach (IEnumerable<EntityBackendQueries.EntityMetadata> batch in entities.Chunk(10))
         {
             EntityBackendQueries.EntityQuery filter = new()
             {
@@ -182,7 +182,7 @@ public class ShimDurableEntityClientTests
             Enumerable.Range(0, 25).Select(i => CreateCoreMetadata(i, $"state-{i}"))];
 
         string? continuationToken = null;
-        foreach (IEnumerable<EntityBackendQueries.EntityMetadata> batch in entities.Batch(10))
+        foreach (IEnumerable<EntityBackendQueries.EntityMetadata> batch in entities.Chunk(10))
         {
             EntityBackendQueries.EntityQuery filter = new()
             {
@@ -226,7 +226,7 @@ public class ShimDurableEntityClientTests
 
         string? continuationToken = Guid.NewGuid().ToString();
         EntityQuery query = new() { IncludeState = true, PageSize = 10, ContinuationToken = continuationToken };
-        foreach (IEnumerable<EntityBackendQueries.EntityMetadata> batch in entities.Batch(10))
+        foreach (IEnumerable<EntityBackendQueries.EntityMetadata> batch in entities.Chunk(10))
         {
             EntityBackendQueries.EntityQuery filter = new()
             {

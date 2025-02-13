@@ -85,6 +85,11 @@ public static class DurableTaskSchedulerClientExtensions
             .Configure(additionalConfig ?? (_ => { }))
             .ValidateDataAnnotations();
 
+        builder.Configure(options =>
+        {
+            options.EnableEntitySupport = true;
+        });
+
         builder.Services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IConfigureOptions<GrpcDurableTaskClientOptions>, ConfigureGrpcChannel>());
         builder.UseGrpc(_ => { });

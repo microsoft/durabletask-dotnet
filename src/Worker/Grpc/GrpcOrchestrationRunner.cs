@@ -116,7 +116,8 @@ public static class GrpcOrchestrationRunner
             request.InstanceId,
             result.CustomStatus,
             result.Actions,
-            completionToken: string.Empty /* doesn't apply */);
+            completionToken: string.Empty, /* doesn't apply */
+            entityConversionState: null);
         byte[] responseBytes = response.ToByteArray();
         return Convert.ToBase64String(responseBytes);
     }

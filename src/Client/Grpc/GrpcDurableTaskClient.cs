@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
 using System.Text;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.DurableTask.Client.Entities;
@@ -83,6 +84,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             Version = orchestratorName.Version,
             InstanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N"),
             Input = this.DataConverter.Serialize(input),
+            ParentTraceContext = new P.TraceContext() { TraceParent = Activity.Current?.Id },
         };
 
         DateTimeOffset? startAt = options?.StartAt;

@@ -7,8 +7,8 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
 
+  <!-- Microsoft.Extensions.* Packages -->
   <ItemGroup>
-    <!-- Microsoft.Extensions.* Packages -->
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="6.0.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="6.0.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="6.0.0" />
@@ -20,18 +20,21 @@
     <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="6.0.1" />
   </ItemGroup>
 
+  <!-- Azure.* Packages -->
   <ItemGroup>
-    <!-- Azure.* Packages -->
     <PackageVersion Include="Azure.Identity" Version="1.13.1" />
-    <PackageVersion Include="Microsoft.Azure.DurableTask.Core" Version="3.0.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker" Version="1.21.0" />
-    <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.2.2" />
-    <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.0.13" />
-    <PackageVersion Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.16.2" />
   </ItemGroup>
 
+  <!-- DurableTask Packages -->
   <ItemGroup>
-    <!-- Grpc / Protobuf Packages -->
+    <PackageVersion Include="Microsoft.Azure.DurableTask.Core" Version="3.0.0" />
+    <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.2.2" />
+    <PackageVersion Include="Microsoft.DurableTask.Sidecar" Version="1.1.2" />
+  </ItemGroup>
+
+  <!-- Grpc / Protobuf Packages -->
+  <ItemGroup>
     <PackageVersion Include="Google.Protobuf" Version="3.21.12" />
     <PackageVersion Include="Grpc.Core" Version="2.46.5" />
     <PackageVersion Include="Grpc.Net.Client" Version="2.67.0" />
@@ -39,16 +42,8 @@
     <PackageVersion Include="Grpc.AspNetCore.Server" Version="2.52.0" />
   </ItemGroup>
 
+  <!-- Microsoft.CodeAnalysis.* Packages -->
   <ItemGroup>
-    <!-- Microsoft.DurableTask.* Packages -->
-    <PackageVersion Include="Microsoft.DurableTask.Client.Grpc" Version="1.5.0" />
-    <PackageVersion Include="Microsoft.DurableTask.Generators" Version="1.0.0-preview.1" />
-    <PackageVersion Include="Microsoft.DurableTask.Sidecar" Version="1.1.2" />
-    <PackageVersion Include="Microsoft.DurableTask.Worker.Grpc" Version="1.5.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- Microsoft.CodeAnalysis.* Packages -->
     <PackageVersion Include="Microsoft.CodeAnalysis" Version="4.9.2" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.9.2" />
@@ -60,28 +55,28 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.ResxSourceGenerator" Version="3.11.0-beta1.24165.2" />
   </ItemGroup>
 
+  <!-- Testing Frameworks & Analysis Packages -->
   <ItemGroup>
-    <!-- Testing Frameworks & Analysis Packages -->
     <PackageVersion Include="BenchmarkDotNet" Version="0.13.2" />
     <PackageVersion Include="FluentAssertions" Version="6.7.0" />
     <PackageVersion Include="FluentAssertions.Analyzers" Version="0.17.2"/>
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageVersion Include="Moq" Version="4.20.70" />
     <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
-    <PackageVersion Include="coverlet.collector" Version="3.1.2" Condition="'$(TargetFramework)' == 'netstandard2.0' or '$(TargetFramework)' == 'net6.0' or '$(TargetFramework)' == 'net48'" />
-    <PackageVersion Include="coverlet.collector" Version="6.0.0" Condition="'$(TargetFramework)' == 'net8.0'"/>
+    <PackageVersion Include="coverlet.collector" Version="3.1.2" />
     <PackageVersion Include="xunit" Version="2.5.3" />
     <PackageVersion Include="xunit.abstractions" Version="2.0.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.5.3"/>
     <PackageVersion Include="Xunit.Combinatorial" Version="1.6.24" />
   </ItemGroup>
 
+  <!-- Base-class library dependencies -->
   <ItemGroup>
-    <!-- Other Dependencies -->
     <PackageVersion Include="DotNext" Version="4.13.1" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="1.1.1" />
     <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="6.0.0" />
     <PackageVersion Include="System.Linq.Async" Version="6.0.1" />
     <PackageVersion Include="System.Text.Json" Version="6.0.10" />
   </ItemGroup>
+
 </Project>

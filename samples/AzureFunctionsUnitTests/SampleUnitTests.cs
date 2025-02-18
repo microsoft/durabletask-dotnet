@@ -33,6 +33,9 @@ public class SampleUnitTests
         Mock<ILoggerFactory> loggerFactoryMock = new();
         loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(logger);
         contextMock.Protected().Setup<ILoggerFactory>("LoggerFactory").Returns(loggerFactoryMock.Object);
+        contextMock.Setup(x => x.CreateReplaySafeLogger(It.IsAny<string>()))
+               .Returns((string categoryName) => loggerFactoryMock.Object.CreateLogger(categoryName));
+
 
         // mock activity results
         // In Moq, optional arguments need to be specified as well. We specify them with It.IsAny<T>(), where T is the type of the optional argument
@@ -144,10 +147,10 @@ public class SampleUnitTests
 
         // Validate format of response URLs
         Assert.NotNull(keyValuePairs);
-        Assert.Contains(keyValuePairs, kvp => kvp.Key == "id" && kvp.Value == instanceId);
-        Assert.Contains(keyValuePairs, kvp => kvp.Key == "purgeHistoryDeleteUri" && kvp.Value == $"http://localhost:8888/runtime/webhooks/durabletask/instances/{instanceId}");
-        Assert.Contains(keyValuePairs, kvp => kvp.Key == "sendEventPostUri" && kvp.Value == $"http://localhost:8888/runtime/webhooks/durabletask/instances/{instanceId}/raiseEvent/{{eventName}}");
-        Assert.Contains(keyValuePairs, kvp => kvp.Key == "statusQueryGetUri" && kvp.Value == $"http://localhost:8888/runtime/webhooks/durabletask/instances/{instanceId}");
+        Assert.Contains(keyValuePairs, kvp => kvp.Key == "Id" && kvp.Value == instanceId);
+        Assert.Contains(keyValuePairs, kvp => kvp.Key == "PurgeHistoryDeleteUri" && kvp.Value == $"http://localhost:8888/runtime/webhooks/durabletask/instances/{instanceId}");
+        Assert.Contains(keyValuePairs, kvp => kvp.Key == "SendEventPostUri" && kvp.Value == $"http://localhost:8888/runtime/webhooks/durabletask/instances/{instanceId}/raiseEvent/{{eventName}}");
+        Assert.Contains(keyValuePairs, kvp => kvp.Key == "StatusQueryGetUri" && kvp.Value == $"http://localhost:8888/runtime/webhooks/durabletask/instances/{instanceId}");
 
     }
 

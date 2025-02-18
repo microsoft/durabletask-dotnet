@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
@@ -27,14 +28,16 @@ sealed partial class GrpcDurableTaskWorker
         static readonly Google.Protobuf.WellKnownTypes.Empty EmptyMessage = new();
 
         readonly GrpcDurableTaskWorker worker;
-        readonly TaskHubSidecarServiceClient sidecar;
+        readonly TaskHubSidecarServiceClient client;
         readonly DurableTaskShimFactory shimFactory;
+        readonly GrpcDurableTaskWorkerOptions.InternalOptions internalOptions;
 
-        public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient sidecar)
+        public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient client)
         {
             this.worker = worker;
-            this.sidecar = sidecar;
+            this.client = client;
             this.shimFactory = new DurableTaskShimFactory(this.worker.grpcOptions, this.worker.loggerFactory);
+            this.internalOptions = this.worker.grpcOptions.Internal;
         }
 
         ILogger Logger => this.worker.logger;
@@ -87,28 +90,6 @@ sealed partial class GrpcDurableTaskWorker
             }
         }
 
-        static OrchestrationRuntimeState BuildRuntimeState(P.OrchestratorRequest request)
-        {
-            IEnumerable<HistoryEvent> pastEvents = request.PastEvents.Select(ProtoUtils.ConvertHistoryEvent);
-            IEnumerable<HistoryEvent> newEvents = request.NewEvents.Select(ProtoUtils.ConvertHistoryEvent);
-
-            // Reconstruct the orchestration state in a way that correctly distinguishes new events from past events
-            var runtimeState = new OrchestrationRuntimeState(pastEvents.ToList());
-            foreach (HistoryEvent e in newEvents)
-            {
-                // AddEvent() puts events into the NewEvents list.
-                runtimeState.AddEvent(e);
-            }
-
-            if (runtimeState.ExecutionStartedEvent == null)
-            {
-                // TODO: What's the right way to handle this? Callback to the sidecar with a retriable error request?
-                throw new InvalidOperationException("The provided orchestration history was incomplete");
-            }
-
-            return runtimeState;
-        }
-
         static string GetActionsListForLogging(IReadOnlyList<P.OrchestratorAction> actions)
         {
             if (actions.Count == 0)
@@ -128,21 +109,77 @@ sealed partial class GrpcDurableTaskWorker
             }
         }
 
+        async ValueTask<OrchestrationRuntimeState> BuildRuntimeStateAsync(
+            P.OrchestratorRequest orchestratorRequest,
+            ProtoUtils.EntityConversionState? entityConversionState,
+            CancellationToken cancellation)
+        {
+            Func<P.HistoryEvent, HistoryEvent> converter = entityConversionState is null
+                ? ProtoUtils.ConvertHistoryEvent
+                : entityConversionState.ConvertFromProto;
+
+            IEnumerable<HistoryEvent> pastEvents = [];
+            if (orchestratorRequest.RequiresHistoryStreaming)
+            {
+                // Stream the remaining events from the remote service
+                P.StreamInstanceHistoryRequest streamRequest = new()
+                {
+                    InstanceId = orchestratorRequest.InstanceId,
+                    ExecutionId = orchestratorRequest.ExecutionId,
+                    ForWorkItemProcessing = true,
+                };
+
+                using AsyncServerStreamingCall<P.HistoryChunk> streamResponse =
+                    this.client.StreamInstanceHistory(streamRequest, cancellationToken: cancellation);
+
+                await foreach (P.HistoryChunk chunk in streamResponse.ResponseStream.ReadAllAsync(cancellation))
+                {
+                    pastEvents = pastEvents.Concat(chunk.Events.Select(converter));
+                }
+            }
+            else
+            {
+                // The history was already provided in the work item request
+                pastEvents = orchestratorRequest.PastEvents.Select(converter);
+            }
+
+            IEnumerable<HistoryEvent> newEvents = orchestratorRequest.NewEvents.Select(converter);
+
+            // Reconstruct the orchestration state in a way that correctly distinguishes new events from past events
+            var runtimeState = new OrchestrationRuntimeState(pastEvents.ToList());
+            foreach (HistoryEvent e in newEvents)
+            {
+                // AddEvent() puts events into the NewEvents list.
+                runtimeState.AddEvent(e);
+            }
+
+            if (runtimeState.ExecutionStartedEvent == null)
+            {
+                // TODO: What's the right way to handle this? Callback to the sidecar with a retriable error request?
+                throw new InvalidOperationException("The provided orchestration history was incomplete");
+            }
+
+            return runtimeState;
+        }
+
         async Task<AsyncServerStreamingCall<P.WorkItem>> ConnectAsync(CancellationToken cancellation)
         {
-            await this.sidecar!.HelloAsync(EmptyMessage, cancellationToken: cancellation);
+            await this.client!.HelloAsync(EmptyMessage, cancellationToken: cancellation);
             this.Logger.EstablishedWorkItemConnection();
 
             DurableTaskWorkerOptions workerOptions = this.worker.workerOptions;
 
             // Get the stream for receiving work-items
-            return this.sidecar!.GetWorkItems(
+            return this.client!.GetWorkItems(
                 new P.GetWorkItemsRequest
                 {
                     MaxConcurrentActivityWorkItems =
                         workerOptions.Concurrency.MaximumConcurrentActivityWorkItems,
                     MaxConcurrentOrchestrationWorkItems =
                         workerOptions.Concurrency.MaximumConcurrentOrchestrationWorkItems,
+                    MaxConcurrentEntityWorkItems =
+                        workerOptions.Concurrency.MaximumConcurrentEntityWorkItems,
+                    Capabilities = { P.WorkerCapability.HistoryStreaming },
                 },
                 cancellationToken: cancellation);
         }
@@ -157,19 +194,39 @@ sealed partial class GrpcDurableTaskWorker
                     {
                         this.RunBackgroundTask(
                             workItem,
-                            () => this.OnRunOrchestratorAsync(workItem.OrchestratorRequest, workItem.CompletionToken));
+                            () => this.OnRunOrchestratorAsync(
+                                workItem.OrchestratorRequest,
+                                workItem.CompletionToken,
+                                cancellation));
                     }
                     else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
                     {
                         this.RunBackgroundTask(
                             workItem,
-                            () => this.OnRunActivityAsync(workItem.ActivityRequest, workItem.CompletionToken));
+                            () => this.OnRunActivityAsync(
+                                workItem.ActivityRequest,
+                                workItem.CompletionToken,
+                                cancellation));
                     }
                     else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
                     {
                         this.RunBackgroundTask(
                             workItem,
-                            () => this.OnRunEntityBatchAsync(workItem.EntityRequest));
+                            () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation));
+                    }
+                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequestV2)
+                    {
+                        workItem.EntityRequestV2.ToEntityBatchRequest(
+                            out EntityBatchRequest batchRequest,
+                            out List<P.OperationInfo> operationInfos);
+
+                        this.RunBackgroundTask(
+                             workItem,
+                             () => this.OnRunEntityBatchAsync(
+                                batchRequest,
+                                cancellation,
+                                workItem.CompletionToken,
+                                operationInfos));
                     }
                     else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
                     {
@@ -207,16 +264,28 @@ sealed partial class GrpcDurableTaskWorker
             });
         }
 
-        async Task OnRunOrchestratorAsync(P.OrchestratorRequest request, string completionToken)
+        async Task OnRunOrchestratorAsync(
+            P.OrchestratorRequest request,
+            string completionToken,
+            CancellationToken cancellationToken)
         {
             OrchestratorExecutionResult? result = null;
             P.TaskFailureDetails? failureDetails = null;
             TaskName name = new("(unknown)");
 
+            ProtoUtils.EntityConversionState? entityConversionState =
+                this.internalOptions.ConvertOrchestrationEntityEvents
+                ? new(this.internalOptions.InsertEntityUnlocksOnCompletion)
+                : null;
+
             try
             {
-                OrchestrationRuntimeState runtimeState = BuildRuntimeState(request);
-                name = new(runtimeState.Name);
+                OrchestrationRuntimeState runtimeState = await this.BuildRuntimeStateAsync(
+                    request,
+                    entityConversionState,
+                    cancellationToken);
+
+                name = new TaskName(runtimeState.Name);
 
                 this.Logger.ReceivedOrchestratorRequest(
                     name,
@@ -241,6 +310,7 @@ sealed partial class GrpcDurableTaskWorker
                         runtimeState,
                         shim,
                         BehaviorOnContinueAsNew.Carryover,
+                        request.EntityParameters.ToCore(),
                         ErrorPropagationMode.UseFailureDetails);
                     result = executor.Execute();
                 }
@@ -268,7 +338,8 @@ sealed partial class GrpcDurableTaskWorker
                     request.InstanceId,
                     result.CustomStatus,
                     result.Actions,
-                    completionToken);
+                    completionToken,
+                    entityConversionState);
             }
             else
             {
@@ -297,10 +368,10 @@ sealed partial class GrpcDurableTaskWorker
                 response.Actions.Count,
                 GetActionsListForLogging(response.Actions));
 
-            await this.sidecar.CompleteOrchestratorTaskAsync(response);
+            await this.client.CompleteOrchestratorTaskAsync(response, cancellationToken: cancellationToken);
         }
 
-        async Task OnRunActivityAsync(P.ActivityRequest request, string completionToken)
+        async Task OnRunActivityAsync(P.ActivityRequest request, string completionToken, CancellationToken cancellation)
         {
             OrchestrationInstance instance = request.OrchestrationInstance.ToCore();
             string rawInput = request.Input;
@@ -360,17 +431,20 @@ sealed partial class GrpcDurableTaskWorker
                 CompletionToken = completionToken,
             };
 
-            await this.sidecar.CompleteActivityTaskAsync(response);
+            await this.client.CompleteActivityTaskAsync(response, cancellationToken: cancellation);
         }
 
-        async Task OnRunEntityBatchAsync(P.EntityBatchRequest request)
+        async Task OnRunEntityBatchAsync(
+            EntityBatchRequest batchRequest,
+            CancellationToken cancellation,
+            string? completionToken = null,
+            List<P.OperationInfo>? operationInfos = null)
         {
-            var coreEntityId = DTCore.Entities.EntityId.FromString(request.InstanceId);
+            var coreEntityId = DTCore.Entities.EntityId.FromString(batchRequest.InstanceId!);
             EntityId entityId = new(coreEntityId.Name, coreEntityId.Key);
 
             TaskName name = new(entityId.Name);
 
-            EntityBatchRequest batchRequest = request.ToEntityBatchRequest();
             EntityBatchResult? batchResult;
 
             try
@@ -388,10 +462,10 @@ sealed partial class GrpcDurableTaskWorker
                 else
                 {
                     // we could not find the entity. This is considered an application error,
-                    // so we return a non-retryable error-OperationResult for each operation in the batch.
+                    // so we return a non-retriable error-OperationResult for each operation in the batch.
                     batchResult = new EntityBatchResult()
                     {
-                        Actions = new List<OperationAction>(), // no actions
+                        Actions = [], // no actions
                         EntityState = batchRequest.EntityState, // state is unmodified
                         Results = Enumerable.Repeat(
                             new OperationResult()
@@ -410,20 +484,20 @@ sealed partial class GrpcDurableTaskWorker
             }
             catch (Exception frameworkException)
             {
-                // return a result with no results, same state,
-                // and which contains failure details
+                // return a result with failure details.
+                // this will cause the batch to be abandoned and retried
+                // (possibly after a delay and on a different worker).
                 batchResult = new EntityBatchResult()
                 {
-                    Actions = new List<OperationAction>(),
-                    EntityState = batchRequest.EntityState,
-                    Results = new List<OperationResult>(),
                     FailureDetails = new FailureDetails(frameworkException),
                 };
             }
 
-            // convert the result to protobuf format and send it back
-            P.EntityBatchResult response = batchResult.ToEntityBatchResult();
-            await this.sidecar.CompleteEntityTaskAsync(response);
+            P.EntityBatchResult response = batchResult.ToEntityBatchResult(
+                completionToken,
+                operationInfos?.Take(batchResult.Results?.Count ?? 0));
+
+            await this.client.CompleteEntityTaskAsync(response, cancellationToken: cancellation);
         }
     }
 }

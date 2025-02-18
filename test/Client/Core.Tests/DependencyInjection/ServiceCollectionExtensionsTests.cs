@@ -8,8 +8,22 @@ namespace Microsoft.DurableTask.Client.Tests;
 
 public class ServiceCollectionExtensionsTests
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("MyBuilder")]
+    public void AddDurableTaskClient_SameInstance(string? name)
+    {
+        ServiceCollection services = new();
+        IDurableTaskClientBuilder actual1 = services.AddDurableTaskClient(name);
+        IDurableTaskClientBuilder actual2 = services.AddDurableTaskClient(name);
+
+        actual1.Should().NotBeNull();
+        actual1.Should().BeSameAs(actual2);
+    }
+
     [Fact]
-    public void AddDurableTaskClient_SameInstance()
+    public void AddDurableTaskClient_SameInstance2()
     {
         ServiceCollection services = new();
         IDurableTaskClientBuilder? actual1 = null;
@@ -19,6 +33,72 @@ public class ServiceCollectionExtensionsTests
 
         actual1.Should().NotBeNull();
         actual1.Should().BeSameAs(actual2);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("MyBuilder")]
+    public void AddDurableTaskClient_SameInstance3(string name)
+    {
+        ServiceCollection services = new();
+        IDurableTaskClientBuilder? actual1 = null;
+        IDurableTaskClientBuilder? actual2 = null;
+        services.AddDurableTaskClient(name, builder => actual1 = builder);
+        services.AddDurableTaskClient(name, builder => actual2 = builder);
+
+        actual1.Should().NotBeNull();
+        actual1.Should().BeSameAs(actual2);
+    }
+
+    [Fact]
+    public void AddDurableTaskClient_SameInstance4()
+    {
+        ServiceCollection services = new();
+        IDurableTaskClientBuilder actual1 = services.AddDurableTaskClient();
+        IDurableTaskClientBuilder? actual2 = null;
+        services.AddDurableTaskClient(builder => actual2 = builder);
+
+        actual1.Should().NotBeNull();
+        actual1.Should().BeSameAs(actual2);
+    }
+
+    [Fact]
+    public void AddDurableTaskClient_DifferentNames_NotSame()
+    {
+        ServiceCollection services = new();
+        IDurableTaskClientBuilder actual1 = services.AddDurableTaskClient();
+        IDurableTaskClientBuilder actual2 = services.AddDurableTaskClient("MyBuilder");
+
+        actual1.Should().NotBeNull();
+        actual2.Should().NotBeNull();
+        actual1.Should().NotBeSameAs(actual2);
+    }
+
+    [Fact]
+    public void AddDurableTaskClient_DifferentNames_NotSame2()
+    {
+        ServiceCollection services = new();
+        IDurableTaskClientBuilder? actual1 = null;
+        IDurableTaskClientBuilder? actual2 = null;
+        services.AddDurableTaskClient(builder => actual1 = builder);
+        services.AddDurableTaskClient("MyBuilder", builder => actual2 = builder);
+
+        actual1.Should().NotBeNull();
+        actual2.Should().NotBeNull();
+        actual1.Should().NotBeSameAs(actual2);
+    }
+
+    [Fact]
+    public void AddDurableTaskClient_DifferentNames_NotSame3()
+    {
+        ServiceCollection services = new();
+        IDurableTaskClientBuilder actual1 = services.AddDurableTaskClient();
+        IDurableTaskClientBuilder? actual2 = null;
+        services.AddDurableTaskClient("MyBuilder", builder => actual2 = builder);
+
+        actual1.Should().NotBeNull();
+        actual2.Should().NotBeNull();
+        actual1.Should().NotBeSameAs(actual2);
     }
 
     [Fact]

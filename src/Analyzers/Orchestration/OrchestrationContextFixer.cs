@@ -12,7 +12,7 @@ namespace Microsoft.DurableTask.Analyzers.Orchestration;
 /// </summary>
 /// <param name="semanticModel">The Semantic Model retrieved from the Document.</param>
 /// <param name="knownTypeSymbols">Well-known types that are used by the Durable analyzers.</param>
-/// <param name="oldRoot">The root Syntax Node retrieved from the Document.</param>
+/// <param name="root">The root Syntax Node retrieved from the Document.</param>
 /// <param name="syntaxNodeWithDiagnostic">Syntax Node that contains the diagnostic.</param>
 /// <param name="taskOrchestrationContextSymbol">The 'TaskOrchestrationContext' symbol.</param>
 public readonly struct OrchestrationCodeFixContext(

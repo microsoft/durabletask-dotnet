@@ -28,7 +28,6 @@ variables:
 
 steps:
 - checkout: self
-  submodules: true
 
 - task: UseDotNet@2
   displayName: 'Install .NET 6 SDK (ESRP)' # This is needed for ESRP.

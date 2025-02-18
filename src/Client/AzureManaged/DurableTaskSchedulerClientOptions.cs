@@ -54,6 +54,19 @@ public class DurableTaskSchedulerClientOptions
     }
 
     /// <summary>
+    /// Creates a new instance of <see cref="DurableTaskSchedulerClientOptions"/> from a parsed connection string.
+    /// </summary>
+    /// <param name="connectionString">The connection string to parse.</param>
+    /// <returns>A new instance of <see cref="DurableTaskSchedulerClientOptions"/>.</returns>
+    internal static DurableTaskSchedulerClientOptions FromConnectionString(
+        DurableTaskSchedulerConnectionString connectionString) => new()
+        {
+            EndpointAddress = connectionString.Endpoint,
+            TaskHubName = connectionString.TaskHubName,
+            Credential = GetCredentialFromConnectionString(connectionString),
+        };
+
+    /// <summary>
     /// Creates a gRPC channel for communicating with the Durable Task Scheduler service.
     /// </summary>
     /// <returns>A configured <see cref="GrpcChannel"/> instance that can be used to make gRPC calls.</returns>
@@ -95,19 +108,6 @@ public class DurableTaskSchedulerClientOptions
             UnsafeUseInsecureChannelCallCredentials = this.AllowInsecureCredentials,
         });
     }
-
-    /// <summary>
-    /// Creates a new instance of <see cref="DurableTaskSchedulerClientOptions"/> from a parsed connection string.
-    /// </summary>
-    /// <param name="connectionString">The connection string to parse.</param>
-    /// <returns>A new instance of <see cref="DurableTaskSchedulerClientOptions"/>.</returns>
-    internal static DurableTaskSchedulerClientOptions FromConnectionString(
-        DurableTaskSchedulerConnectionString connectionString) => new()
-        {
-            EndpointAddress = connectionString.Endpoint,
-            TaskHubName = connectionString.TaskHubName,
-            Credential = GetCredentialFromConnectionString(connectionString),
-        };
 
     static TokenCredential? GetCredentialFromConnectionString(DurableTaskSchedulerConnectionString connectionString)
     {

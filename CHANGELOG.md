@@ -1,5 +1,21 @@
 ﻿# Changelog
 
+## vNext
+
+### Microsoft.DurableTask.Client
+
+- Add new `IDurableTaskClientBuilder AddDurableTaskClient(IServiceCollection, string?)` API
+
+### Microsoft.DurableTask.Worker
+
+- Add new `IDurableTaskWorkerBuilder AddDurableTaskWorker(IServiceCollection, string?)` API
+- Add support for work item history streaming
+
+### Microsoft.DurableTask.Grpc
+
+- Replace submodule for proto files with download script for easier maintenance
+- Update to latest proto files
+
 ## v1.5.0
 
 - Implement work item completion tokens for standalone worker scenarios ([#359](https://github.com/microsoft/durabletask-dotnet/pull/359))

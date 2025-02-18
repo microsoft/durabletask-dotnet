@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="$(SrcRoot)Client/Grpc/Client.Grpc.csproj" />
     <ProjectReference Include="$(SrcRoot)Worker/Grpc/Worker.Grpc.csproj" />
@@ -7,7 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="Grpc.AspNetCore.Server" Version="2.52.0" />
-    <PackageReference Include="Microsoft.DurableTask.Sidecar" Version="1.1.0" />
+    <PackageReference Include="Microsoft.DurableTask.Sidecar" Version="1.1.2" />
   </ItemGroup>
 
 </Project>

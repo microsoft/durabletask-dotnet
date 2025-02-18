@@ -3,8 +3,10 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DurableTask.Core;
+using DurableTask.Core.Entities;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
+using Microsoft.DurableTask.Client.Entities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Core = DurableTask.Core;
@@ -15,9 +17,15 @@ namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
 /// <summary>
 /// A shim client for interacting with the backend via <see cref="Core.IOrchestrationServiceClient" />.
 /// </summary>
-class ShimDurableTaskClient : DurableTaskClient
+/// <remarks>
+/// Initializes a new instance of the <see cref="ShimDurableTaskClient"/> class.
+/// </remarks>
+/// <param name="name">The name of the client.</param>
+/// <param name="options">The client options.</param>
+class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) : DurableTaskClient(name)
 {
-    readonly ShimDurableTaskClientOptions options;
+    readonly ShimDurableTaskClientOptions options = Check.NotNull(options);
+    ShimDurableEntityClient? entities;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ShimDurableTaskClient"/> class.
@@ -31,15 +39,29 @@ class ShimDurableTaskClient : DurableTaskClient
     {
     }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ShimDurableTaskClient"/> class.
-    /// </summary>
-    /// <param name="name">The name of the client.</param>
-    /// <param name="options">The client options.</param>
-    public ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options)
-        : base(name)
+    /// <inheritdoc/>
+    public override DurableEntityClient Entities
     {
-        this.options = Check.NotNull(options);
+        get
+        {
+            if (!this.options.EnableEntitySupport)
+            {
+                throw new InvalidOperationException("Entity support is not enabled.");
+            }
+
+            if (this.entities is null)
+            {
+                if (this.options.Entities.Queries is null)
+                {
+                    throw new NotSupportedException(
+                        "The configured IOrchestrationServiceClient does not support entities.");
+                }
+
+                this.entities = new(this.Name, this.options);
+            }
+
+            return this.entities;
+        }
     }
 
     DataConverter DataConverter => this.options.DataConverter;

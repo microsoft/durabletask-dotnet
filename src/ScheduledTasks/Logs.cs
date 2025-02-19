@@ -13,10 +13,10 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 static partial class Logs
 {
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Creating schedule with options: {scheduleConfigurationCreateOptions}")]
-    public static partial void CreatingSchedule(this ILogger logger, ScheduleConfigurationCreateOptions scheduleConfigurationCreateOptions);
+    public static partial void CreatingSchedule(this ILogger logger, ScheduleCreationOptions scheduleConfigurationCreateOptions);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Updating schedule '{scheduleId}' with options: {scheduleConfigurationUpdateOptions}")]
-    public static partial void UpdatingSchedule(this ILogger logger, string scheduleId, ScheduleConfigurationUpdateOptions scheduleConfigurationUpdateOptions);
+    public static partial void UpdatingSchedule(this ILogger logger, string scheduleId, ScheduleUpdateOptions scheduleConfigurationUpdateOptions);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Pausing schedule '{scheduleId}'")]
     public static partial void PausingSchedule(this ILogger logger, string scheduleId);

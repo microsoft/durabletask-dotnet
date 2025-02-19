@@ -4,7 +4,6 @@
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Entities;
-using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
@@ -25,14 +24,14 @@ public class ScheduledTaskClient : IScheduledTaskClient
     }
 
     /// <inheritdoc/>
-    public async Task<string> CreateScheduleAsync(ScheduleConfiguration scheduleConfig)
+    public async Task<string> CreateScheduleAsync(ScheduleCreationOptions scheduleConfigCreateOptions)
     {
-        Check.NotNull(scheduleConfig, nameof(scheduleConfig));
+        Check.NotNull(scheduleConfigCreateOptions, nameof(scheduleConfigCreateOptions));
 
-        var entityId = new EntityInstanceId(nameof(Schedule), scheduleConfig.ScheduleId);
-        await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.CreateSchedule), scheduleConfig);
+        var entityId = new EntityInstanceId(nameof(Schedule), scheduleConfigCreateOptions.ScheduleId);
+        await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.CreateSchedule), scheduleConfigCreateOptions);
 
-        return scheduleConfig.ScheduleId;
+        return scheduleConfigCreateOptions.ScheduleId;
     }
 
     /// <inheritdoc/>
@@ -115,10 +114,10 @@ public class ScheduledTaskClient : IScheduledTaskClient
     }
 
     /// <inheritdoc/>
-    public async Task UpdateScheduleAsync(string scheduleId, ScheduleConfiguration scheduleConfig)
+    public async Task UpdateScheduleAsync(string scheduleId, ScheduleUpdateOptions scheduleConfigurationUpdateOptions)
     {
         Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
-        Check.NotNull(scheduleConfig, nameof(scheduleConfig));
+        Check.NotNull(scheduleConfigurationUpdateOptions, nameof(scheduleConfigurationUpdateOptions));
 
         var entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
         var metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
@@ -128,17 +127,17 @@ public class ScheduledTaskClient : IScheduledTaskClient
         }
 
         // Convert ScheduleConfiguration to ScheduleConfigurationUpdateOptions
-        var updateOptions = new ScheduleConfigurationUpdateOptions
+        var updateOptions = new ScheduleUpdateOptions
         {
-            OrchestrationName = scheduleConfig.OrchestrationName,
-            OrchestrationInput = scheduleConfig.OrchestrationInput,
-            OrchestrationInstanceId = scheduleConfig.OrchestrationInstanceId,
-            StartAt = scheduleConfig.StartAt,
-            EndAt = scheduleConfig.EndAt,
-            Interval = scheduleConfig.Interval,
-            CronExpression = scheduleConfig.CronExpression,
-            MaxOccurrence = scheduleConfig.MaxOccurrence,
-            StartImmediatelyIfLate = scheduleConfig.StartImmediatelyIfLate,
+            OrchestrationName = scheduleConfigurationUpdateOptions.OrchestrationName,
+            OrchestrationInput = scheduleConfigurationUpdateOptions.OrchestrationInput,
+            OrchestrationInstanceId = scheduleConfigurationUpdateOptions.OrchestrationInstanceId,
+            StartAt = scheduleConfigurationUpdateOptions.StartAt,
+            EndAt = scheduleConfigurationUpdateOptions.EndAt,
+            Interval = scheduleConfigurationUpdateOptions.Interval,
+            CronExpression = scheduleConfigurationUpdateOptions.CronExpression,
+            MaxOccurrence = scheduleConfigurationUpdateOptions.MaxOccurrence,
+            StartImmediatelyIfLate = scheduleConfigurationUpdateOptions.StartImmediatelyIfLate,
         };
 
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.UpdateSchedule), updateOptions);

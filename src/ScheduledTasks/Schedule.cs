@@ -28,7 +28,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// <param name="scheduleConfigurationCreateOptions">The configuration options for creating the schedule.</param>
     /// <exception cref="ArgumentNullException">Thrown when scheduleConfigurationCreateOptions is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the schedule is already created.</exception>
-    public void CreateSchedule(TaskEntityContext context, ScheduleConfigurationCreateOptions scheduleConfigurationCreateOptions)
+    public void CreateSchedule(TaskEntityContext context, ScheduleCreationOptions scheduleConfigurationCreateOptions)
     {
         Verify.NotNull(scheduleConfigurationCreateOptions, nameof(scheduleConfigurationCreateOptions));
 
@@ -52,7 +52,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// <param name="scheduleConfigUpdateOptions">The options for updating the schedule configuration.</param>
     /// <exception cref="ArgumentNullException">Thrown when scheduleConfigUpdateOptions is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the schedule is not created.</exception>
-    public void UpdateSchedule(TaskEntityContext context, ScheduleConfigurationUpdateOptions scheduleConfigUpdateOptions)
+    public void UpdateSchedule(TaskEntityContext context, ScheduleUpdateOptions scheduleConfigUpdateOptions)
     {
         Verify.NotNull(scheduleConfigUpdateOptions, nameof(scheduleConfigUpdateOptions));
         Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));

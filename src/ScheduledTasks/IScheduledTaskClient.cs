@@ -20,13 +20,12 @@ public interface IScheduledTaskClient
     /// </summary>
     /// <returns>A list of schedule IDs.</returns>
     Task<IEnumerable<string>> ListSchedulesAsync();
-    
+
     /// <summary>
     /// Creates a new schedule with the specified configuration.
     /// </summary>
-    /// <param name="scheduleConfig">The configuration for the new schedule.</param>
     /// <returns>The ID of the newly created schedule.</returns>
-    Task<string> CreateScheduleAsync(ScheduleConfiguration scheduleConfig);
+    Task<string> CreateScheduleAsync(ScheduleCreationOptions scheduleConfigCreateOptions);
 
     /// <summary>
     /// Deletes an existing schedule.
@@ -53,7 +52,7 @@ public interface IScheduledTaskClient
     /// Updates an existing schedule with new configuration.
     /// </summary>
     /// <param name="scheduleId">The ID of the schedule to update.</param>
-    /// <param name="scheduleConfig">The new configuration to apply to the schedule.</param>
+    /// <param name="scheduleConfigurationUpdateOptions">The options for updating the schedule configuration.</param>
     /// <returns>A task that completes when the schedule is updated.</returns>
-    Task UpdateScheduleAsync(string scheduleId, ScheduleConfiguration scheduleConfig);
+    Task UpdateScheduleAsync(string scheduleId, ScheduleUpdateOptions scheduleConfigurationUpdateOptions);
 }

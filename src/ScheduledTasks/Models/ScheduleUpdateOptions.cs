@@ -3,38 +3,22 @@
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
-/// <summary>
-/// Configuration for a scheduled task.
-/// </summary>
-public class ScheduleConfigurationCreateOptions
+public class ScheduleUpdateOptions
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ScheduleConfigurationCreateOptions"/> class.
-    /// </summary>
-    /// <param name="orchestrationName"></param>
-    /// <param name="scheduleId"></param>
-    public ScheduleConfigurationCreateOptions(string orchestrationName, string scheduleId)
-    {
-        this.orchestrationName = Check.NotNullOrEmpty(orchestrationName, nameof(orchestrationName));
-        this.ScheduleId = scheduleId ?? Guid.NewGuid().ToString("N");
-    }
+    string? orchestrationName;
 
-    string orchestrationName;
-
-    public string OrchestrationName
+    public string? OrchestrationName
     {
         get => this.orchestrationName;
         set
         {
-            this.orchestrationName = Check.NotNullOrEmpty(value, nameof(value));
+            this.orchestrationName = value;
         }
     }
 
-    public string ScheduleId { get; init; }
-
     public string? OrchestrationInput { get; set; }
 
-    public string? OrchestrationInstanceId { get; set; } = Guid.NewGuid().ToString("N");
+    public string? OrchestrationInstanceId { get; set; }
 
     public DateTimeOffset? StartAt { get; set; }
 

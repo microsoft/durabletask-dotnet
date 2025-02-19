@@ -6,7 +6,7 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// <summary>
 /// Configuration for a scheduled task.
 /// </summary>
-public class ScheduleConfiguration
+class ScheduleConfiguration
 {
     public ScheduleConfiguration(string orchestrationName, string scheduleId)
     {
@@ -67,7 +67,7 @@ public class ScheduleConfiguration
 
     public bool? StartImmediatelyIfLate { get; set; }
 
-    public static ScheduleConfiguration FromCreateOptions(ScheduleConfigurationCreateOptions createOptions)
+    public static ScheduleConfiguration FromCreateOptions(ScheduleCreationOptions createOptions)
     {
         return new ScheduleConfiguration(createOptions.OrchestrationName, createOptions.ScheduleId)
         {

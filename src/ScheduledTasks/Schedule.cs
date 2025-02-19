@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 namespace Microsoft.DurableTask.ScheduledTasks;
 
 // TODO: logging
+
 /// <summary>
 /// Entity that manages the state and execution of a scheduled task.
 /// </summary>
@@ -131,19 +132,19 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     // TODO: Verify use built int entity delete operation to delete schedule
 
     // TODO: Support other schedule option properties like cron expression, max occurrence, etc.
+
     /// <summary>
     /// Runs the schedule based on the defined configuration.
     /// </summary>
     /// <param name="context">The task entity context.</param>
     /// <param name="executionToken">The execution token for the schedule.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the schedule configuration is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the schedule is not active.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the schedule is not active or interval is not specified.</exception>
     public void RunSchedule(TaskEntityContext context, string executionToken)
     {
         Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
         if (this.State.ScheduleConfiguration.Interval == null)
         {
-            throw new ArgumentNullException(nameof(this.State.ScheduleConfiguration.Interval));
+            throw new InvalidOperationException("Schedule interval must be specified.");
         }
 
         if (executionToken != this.State.ExecutionToken)
@@ -195,7 +196,8 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
                 nameof(Schedule),
                 this.State.ScheduleConfiguration.ScheduleId),
             nameof(this.RunSchedule),
-            this.State.ExecutionToken, new SignalEntityOptions { SignalTime = this.State.NextRunAt.Value });
+            this.State.ExecutionToken,
+            new SignalEntityOptions { SignalTime = this.State.NextRunAt.Value });
     }
 
     void StartOrchestrationIfNotRunning(TaskEntityContext context)

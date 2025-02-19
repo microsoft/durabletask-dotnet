@@ -9,7 +9,7 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 public record ScheduleCreationOptions
 {
     /// <summary>
-    /// The name of the orchestration function to schedule.
+    /// Gets the name of the orchestration function to schedule.
     /// </summary>
     public string OrchestrationName { get; init; }
 
@@ -25,32 +25,37 @@ public record ScheduleCreationOptions
     }
 
     /// <summary>
-    /// The ID of the schedule, if not provided, default to a new GUID.
+    /// Gets the ID of the schedule, if not provided, default to a new GUID.
     /// </summary>
     public string ScheduleId { get; init; } = Guid.NewGuid().ToString("N");
 
     /// <summary>
-    /// The input to the orchestration function.
+    /// Gets the input to the orchestration function.
     /// </summary>
     public string? OrchestrationInput { get; init; }
 
     /// <summary>
-    /// The instance ID of the orchestration function, if not provided, default to a new GUID.
+    /// Gets the instance ID of the orchestration function, if not provided, default to a new GUID.
     /// </summary>
     public string OrchestrationInstanceId { get; init; } = Guid.NewGuid().ToString("N");
 
     /// <summary>
-    /// The start time of the schedule.
+    /// Gets the start time of the schedule.
     /// </summary>
     public DateTimeOffset? StartAt { get; init; }
 
     /// <summary>
-    /// The end time of the schedule.
+    /// Gets the end time of the schedule.
     /// </summary>
     public DateTimeOffset? EndAt { get; init; }
 
     /// <summary>
     /// The interval of the schedule.
+    /// </summary>
+    TimeSpan? interval;
+
+    /// <summary>
+    /// Gets the interval of the schedule.
     /// </summary>
     public TimeSpan? Interval
     {
@@ -74,9 +79,9 @@ public record ScheduleCreationOptions
         }
     }
 
-    // public string? CronExpression { get; init; }
+    public string? CronExpression { get; init; }
 
-    // public int MaxOccurrence { get; init; }
+    public int MaxOccurrence { get; init; }
 
-    // public bool? StartImmediatelyIfLate { get; init; }
+    public bool? StartImmediatelyIfLate { get; init; }
 }

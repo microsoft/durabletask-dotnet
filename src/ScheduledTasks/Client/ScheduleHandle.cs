@@ -2,17 +2,20 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.Client.Entities;
+using Microsoft.DurableTask.Entities;
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
 // TODO: Validaiton
+// TODO: GET if config is null what to return
 
 /// <summary>
 /// Represents a handle to a scheduled task, providing operations for managing the schedule.
 /// </summary>
 public class ScheduleHandle : IScheduleHandle
 {
-    readonly DurableTaskClient client;
+    readonly DurableTaskClient durableTaskClient;
 
     /// <summary>
     /// Gets the ID of the schedule.
@@ -32,21 +35,46 @@ public class ScheduleHandle : IScheduleHandle
     }
 
     /// <inheritdoc/>
-    public Task<ScheduleDescription> GetAsync()
+    public async Task<ScheduleDescription> GetAsync()
     {
-        // 1.
+        Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
+
+        EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
+        EntityMetadata<ScheduleState>? metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
+        if (metadata == null)
+        {
+            throw new InvalidOperationException($"Schedule with ID {this.ScheduleId} does not exist.");
+        }
+
+        ScheduleState state = metadata.State;
+        ScheduleConfiguration? config = state.ScheduleConfiguration;
+        return new ScheduleDescription(
+            this.ScheduleId,
+            config.OrchestrationName,
+            config.OrchestrationInput,
+            config.OrchestrationInstanceId,
+            config.StartAt,
+            config.EndAt,
+            config.Interval,
+            config.CronExpression,
+            config.MaxOccurrence,
+            config.StartImmediatelyIfLate,
+            state.Status,
+            state.ExecutionToken,
+            state.LastRunAt,
+            state.NextRunAt);
     }
 
     /// <inheritdoc/>
     public async Task PauseAsync()
     {
-        Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
+        Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
-        var entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
+        var entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
         var metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
         if (metadata == null)
         {
-            throw new InvalidOperationException($"Schedule with ID {scheduleId} does not exist.");
+            throw new InvalidOperationException($"Schedule with ID {this.ScheduleId} does not exist.");
         }
 
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.PauseSchedule));
@@ -55,13 +83,13 @@ public class ScheduleHandle : IScheduleHandle
     /// <inheritdoc/>
     public async Task ResumeAsync()
     {
-        Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
+        Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
-        var entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
+        var entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
         var metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
         if (metadata == null)
         {
-            throw new InvalidOperationException($"Schedule with ID {scheduleId} does not exist.");
+            throw new InvalidOperationException($"Schedule with ID {this.ScheduleId} does not exist.");
         }
 
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.ResumeSchedule));
@@ -72,26 +100,12 @@ public class ScheduleHandle : IScheduleHandle
     {
         Check.NotNull(updateOptions, nameof(updateOptions));
 
-        var entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
+        var entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
         var metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
         if (metadata == null)
         {
-            throw new InvalidOperationException($"Schedule with ID {scheduleId} does not exist.");
+            throw new InvalidOperationException($"Schedule with ID {this.ScheduleId} does not exist.");
         }
-
-        // Convert ScheduleConfiguration to ScheduleConfigurationUpdateOptions
-        var updateOptions = new ScheduleUpdateOptions
-        {
-            OrchestrationName = updateOptions.OrchestrationName,
-            OrchestrationInput = updateOptions.OrchestrationInput,
-            OrchestrationInstanceId = updateOptions.OrchestrationInstanceId,
-            StartAt = updateOptions.StartAt,
-            EndAt = updateOptions.EndAt,
-            Interval = updateOptions.Interval,
-            CronExpression = updateOptions.CronExpression,
-            MaxOccurrence = updateOptions.MaxOccurrence,
-            StartImmediatelyIfLate = updateOptions.StartImmediatelyIfLate,
-        };
 
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.UpdateSchedule), updateOptions);
     }
@@ -99,13 +113,13 @@ public class ScheduleHandle : IScheduleHandle
     /// <inheritdoc/>
     public async Task DeleteAsync()
     {
-        Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
+        Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
-        var entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
+        var entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
         var metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
         if (metadata == null)
         {
-            throw new InvalidOperationException($"Schedule with ID {scheduleId} does not exist.");
+            throw new InvalidOperationException($"Schedule with ID {this.ScheduleId} does not exist.");
         }
 
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, "delete");

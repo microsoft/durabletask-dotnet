@@ -49,17 +49,17 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// Updates an existing schedule.
     /// </summary>
     /// <param name="context">The task entity context.</param>
-    /// <param name="scheduleConfigUpdateOptions">The options for updating the schedule configuration.</param>
+    /// <param name="scheduleUpdateOptions">The options for updating the schedule configuration.</param>
     /// <exception cref="ArgumentNullException">Thrown when scheduleConfigUpdateOptions is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the schedule is not created.</exception>
-    public void UpdateSchedule(TaskEntityContext context, ScheduleUpdateOptions scheduleConfigUpdateOptions)
+    public void UpdateSchedule(TaskEntityContext context, ScheduleUpdateOptions scheduleUpdateOptions)
     {
-        Verify.NotNull(scheduleConfigUpdateOptions, nameof(scheduleConfigUpdateOptions));
+        Verify.NotNull(scheduleUpdateOptions, nameof(scheduleUpdateOptions));
         Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
 
-        this.logger.UpdatingSchedule(this.State.ScheduleConfiguration.ScheduleId, scheduleConfigUpdateOptions);
+        this.logger.UpdatingSchedule(this.State.ScheduleConfiguration.ScheduleId, scheduleUpdateOptions);
 
-        HashSet<string> updatedScheduleConfigFields = this.State.UpdateConfig(scheduleConfigUpdateOptions);
+        HashSet<string> updatedScheduleConfigFields = this.State.UpdateConfig(scheduleUpdateOptions);
         if (updatedScheduleConfigFields.Count == 0)
         {
             // no need to interrupt and update current schedule run as there is no change in the schedule config

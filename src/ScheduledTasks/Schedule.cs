@@ -1,13 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask;
-using Microsoft.DurableTask.Entities;
-using Microsoft.Extensions.Logging;
-
 namespace DurableTask.Abstractions.Entities.Schedule;
 
-public class ScheduleState
+class ScheduleState
 {
     internal ScheduleStatus Status { get; set; } = ScheduleStatus.Uninitialized;
 
@@ -19,67 +15,59 @@ public class ScheduleState
 
     internal ScheduleConfiguration? ScheduleConfiguration { get; set; }
 
-    public HashSet<string> UpdateConfig(ScheduleConfiguration scheduleUpdateConfig)
+    public HashSet<string> UpdateConfig(ScheduleConfigurationUpdateOptions scheduleConfigUpdateOptions)
     {
         Check.NotNull(this.ScheduleConfiguration, nameof(this.ScheduleConfiguration));
-        Check.NotNull(scheduleUpdateConfig, nameof(scheduleUpdateConfig));
+        Check.NotNull(scheduleConfigUpdateOptions, nameof(scheduleConfigUpdateOptions));
 
         HashSet<string> updatedFields = new HashSet<string>();
 
-        this.ScheduleConfiguration.Version++;
-
-        if (!string.IsNullOrEmpty(scheduleUpdateConfig.OrchestrationName))
+        if (!string.IsNullOrEmpty(scheduleConfigUpdateOptions.OrchestrationName))
         {
-            this.ScheduleConfiguration.OrchestrationName = scheduleUpdateConfig.OrchestrationName;
+            this.ScheduleConfiguration.OrchestrationName = scheduleConfigUpdateOptions.OrchestrationName;
             updatedFields.Add(nameof(this.ScheduleConfiguration.OrchestrationName));
         }
 
-        if (!string.IsNullOrEmpty(scheduleUpdateConfig.ScheduleId))
+        if (scheduleConfigUpdateOptions.OrchestrationInput == null)
         {
-            this.ScheduleConfiguration.ScheduleId = scheduleUpdateConfig.ScheduleId;
-            updatedFields.Add(nameof(this.ScheduleConfiguration.ScheduleId));
-        }
-
-        if (scheduleUpdateConfig.OrchestrationInput == null)
-        {
-            this.ScheduleConfiguration.OrchestrationInput = scheduleUpdateConfig.OrchestrationInput;
+            this.ScheduleConfiguration.OrchestrationInput = scheduleConfigUpdateOptions.OrchestrationInput;
             updatedFields.Add(nameof(this.ScheduleConfiguration.OrchestrationInput));
         }
 
-        if (scheduleUpdateConfig.StartAt.HasValue)
+        if (scheduleConfigUpdateOptions.StartAt.HasValue)
         {
-            this.ScheduleConfiguration.StartAt = scheduleUpdateConfig.StartAt;
+            this.ScheduleConfiguration.StartAt = scheduleConfigUpdateOptions.StartAt;
             updatedFields.Add(nameof(this.ScheduleConfiguration.StartAt));
         }
 
-        if (scheduleUpdateConfig.EndAt.HasValue)
+        if (scheduleConfigUpdateOptions.EndAt.HasValue)
         {
-            this.ScheduleConfiguration.EndAt = scheduleUpdateConfig.EndAt;
+            this.ScheduleConfiguration.EndAt = scheduleConfigUpdateOptions.EndAt;
             updatedFields.Add(nameof(this.ScheduleConfiguration.EndAt));
         }
 
-        if (scheduleUpdateConfig.Interval.HasValue)
+        if (scheduleConfigUpdateOptions.Interval.HasValue)
         {
-            this.ScheduleConfiguration.Interval = scheduleUpdateConfig.Interval;
+            this.ScheduleConfiguration.Interval = scheduleConfigUpdateOptions.Interval;
             updatedFields.Add(nameof(this.ScheduleConfiguration.Interval));
         }
 
-        if (!string.IsNullOrEmpty(scheduleUpdateConfig.CronExpression))
+        if (!string.IsNullOrEmpty(scheduleConfigUpdateOptions.CronExpression))
         {
-            this.ScheduleConfiguration.CronExpression = scheduleUpdateConfig.CronExpression;
+            this.ScheduleConfiguration.CronExpression = scheduleConfigUpdateOptions.CronExpression;
             updatedFields.Add(nameof(this.ScheduleConfiguration.CronExpression));
         }
 
-        if (scheduleUpdateConfig.MaxOccurrence != 0)
+        if (scheduleConfigUpdateOptions.MaxOccurrence != 0)
         {
-            this.ScheduleConfiguration.MaxOccurrence = scheduleUpdateConfig.MaxOccurrence;
+            this.ScheduleConfiguration.MaxOccurrence = scheduleConfigUpdateOptions.MaxOccurrence;
             updatedFields.Add(nameof(this.ScheduleConfiguration.MaxOccurrence));
         }
 
         // Only update if the customer explicitly set a value
-        if (scheduleUpdateConfig.StartImmediatelyIfLate.HasValue)
+        if (scheduleConfigUpdateOptions.StartImmediatelyIfLate.HasValue)
         {
-            this.ScheduleConfiguration.StartImmediatelyIfLate = scheduleUpdateConfig.StartImmediatelyIfLate.Value;
+            this.ScheduleConfiguration.StartImmediatelyIfLate = scheduleConfigUpdateOptions.StartImmediatelyIfLate.Value;
             updatedFields.Add(nameof(this.ScheduleConfiguration.StartImmediatelyIfLate));
         }
 
@@ -95,13 +83,14 @@ public class ScheduleState
     }
 }
 
-public class ScheduleConfiguration
+// TODO: Create a updatescheduleconfig schema for customer to contain the fields they can update only, and add validations in client side
+// TODO: NJsonSchema
+class ScheduleConfiguration
 {
     public ScheduleConfiguration(string orchestrationName, string scheduleId)
     {
         this.orchestrationName = Check.NotNullOrEmpty(orchestrationName, nameof(orchestrationName));
         this.ScheduleId = scheduleId ?? Guid.NewGuid().ToString("N");
-        this.Version++;
     }
 
     string orchestrationName;
@@ -115,16 +104,7 @@ public class ScheduleConfiguration
         }
     }
 
-    string scheduleId;
-
-    public string ScheduleId
-    {
-        get => this.scheduleId;
-        set
-        {
-            this.scheduleId = Check.NotNullOrEmpty(value, nameof(value));
-        }
-    }
+    public string ScheduleId { get; init; }
 
     public string? OrchestrationInput { get; set; }
 
@@ -165,8 +145,60 @@ public class ScheduleConfiguration
     public int MaxOccurrence { get; set; }
 
     public bool? StartImmediatelyIfLate { get; set; }
+}
 
-    internal int Version { get; set; } // Tracking schedule config version
+public class ScheduleConfigurationUpdateOptions
+{
+    string? orchestrationName;
+
+    public string? OrchestrationName
+    {
+        get => this.orchestrationName;
+        set
+        {
+            this.orchestrationName = value;
+        }
+    }
+
+    public string? OrchestrationInput { get; set; }
+
+    public string? OrchestrationInstanceId { get; set; }
+
+    public DateTimeOffset? StartAt { get; set; }
+
+    public DateTimeOffset? EndAt { get; set; }
+
+    TimeSpan? interval;
+
+    public TimeSpan? Interval
+    {
+        get => this.interval;
+        set
+        {
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            if (value.Value <= TimeSpan.Zero)
+            {
+                throw new ArgumentException("Interval must be positive", nameof(value));
+            }
+
+            if (value.Value.TotalSeconds < 1)
+            {
+                throw new ArgumentException("Interval must be at least 1 second", nameof(value));
+            }
+
+            this.interval = value;
+        }
+    }
+
+    public string? CronExpression { get; set; }
+
+    public int MaxOccurrence { get; set; }
+
+    public bool? StartImmediatelyIfLate { get; set; }
 }
 
 enum ScheduleStatus
@@ -176,31 +208,27 @@ enum ScheduleStatus
     Paused,       // Schedule is paused
 }
 
-public class Schedule : TaskEntity<ScheduleState>
+// Valid schedule status transitions
+static class ScheduleTransitions
 {
-    readonly ILogger<Schedule> logger;
+    static readonly Dictionary<ScheduleStatus, HashSet<ScheduleStatus>> ValidTransitions =
+        new Dictionary<ScheduleStatus, HashSet<ScheduleStatus>>
+        {
+            { ScheduleStatus.Uninitialized, new HashSet<ScheduleStatus> { ScheduleStatus.Active } },
+            { ScheduleStatus.Active, new HashSet<ScheduleStatus> { ScheduleStatus.Paused } },
+            { ScheduleStatus.Paused, new HashSet<ScheduleStatus> { ScheduleStatus.Active } },
+        };
 
-    // Valid schedule status transitions
-    readonly Dictionary<ScheduleStatus, HashSet<ScheduleStatus>> validTransitions = new Dictionary<ScheduleStatus, HashSet<ScheduleStatus>>
+    public static bool TryGetValidTransitions(ScheduleStatus from, out HashSet<ScheduleStatus> validTargetStates)
     {
-        {
-            ScheduleStatus.Uninitialized,
-            new HashSet<ScheduleStatus> { ScheduleStatus.Active }
-        },
-        {
-            ScheduleStatus.Active,
-            new HashSet<ScheduleStatus> { ScheduleStatus.Paused }
-        },
-        {
-            ScheduleStatus.Paused,
-            new HashSet<ScheduleStatus> { ScheduleStatus.Active }
-        },
-    };
-
-    public Schedule(ILogger<Schedule> logger)
-    {
-        this.logger = logger;
+        return ValidTransitions.TryGetValue(from, out validTargetStates);
     }
+}
+
+// TODO: Separate client request objects from entity state objects
+class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
+{
+    readonly ILogger<Schedule> logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     public void CreateSchedule(TaskEntityContext context, ScheduleConfiguration scheduleCreationConfig)
     {
@@ -224,14 +252,14 @@ public class Schedule : TaskEntity<ScheduleState>
     /// <summary>
     /// Updates an existing schedule.
     /// </summary>
-    public void UpdateSchedule(TaskEntityContext context, ScheduleConfiguration scheduleUpdateConfig)
+    public void UpdateSchedule(TaskEntityContext context, ScheduleConfigurationUpdateOptions scheduleConfigUpdateOptions)
     {
-        Verify.NotNull(scheduleUpdateConfig, nameof(scheduleUpdateConfig));
+        Verify.NotNull(scheduleConfigUpdateOptions, nameof(scheduleConfigUpdateOptions));
         Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
 
-        this.logger.LogInformation($"Updating schedule with details: {scheduleUpdateConfig}");
+        this.logger.LogInformation($"Updating schedule with details: {scheduleConfigUpdateOptions}");
 
-        HashSet<string> updatedScheduleConfigFields = this.State.UpdateConfig(scheduleUpdateConfig);
+        HashSet<string> updatedScheduleConfigFields = this.State.UpdateConfig(scheduleConfigUpdateOptions);
         if (updatedScheduleConfigFields.Count == 0)
         {
             // no need to interrupt and update current schedule run as there is no change in the schedule config
@@ -299,11 +327,7 @@ public class Schedule : TaskEntity<ScheduleState>
         context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), nameof(this.RunSchedule), this.State.ExecutionToken);
     }
 
-    // TODO: Only implement this there is any cleanup shall be performed within entity before purging the instance.
-    public void DeleteSchedule()
-    {
-        throw new NotImplementedException();
-    }
+    // TODO: Verify use built int entity delete operation to delete schedule
 
     // TODO: Support other schedule option properties like cron expression, max occurrence, etc.
     public void RunSchedule(TaskEntityContext context, string executionToken)
@@ -378,7 +402,7 @@ public class Schedule : TaskEntity<ScheduleState>
         HashSet<ScheduleStatus> validTargetStates;
         ScheduleStatus from = this.State.Status;
 
-        if (!this.validTransitions.TryGetValue(from, out validTargetStates) || !validTargetStates.Contains(to))
+        if (!ScheduleTransitions.TryGetValidTransitions(from, out validTargetStates) || !validTargetStates.Contains(to))
         {
             throw new InvalidOperationException($"Invalid state transition: Cannot transition from {from} to {to}");
         }

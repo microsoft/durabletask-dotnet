@@ -3,7 +3,10 @@
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
-class ScheduleConfiguration
+/// <summary>
+/// Configuration for a scheduled task.
+/// </summary>
+public class ScheduleConfiguration
 {
     public ScheduleConfiguration(string orchestrationName, string scheduleId)
     {

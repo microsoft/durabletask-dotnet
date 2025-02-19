@@ -3,7 +3,10 @@
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
-class ScheduleState
+/// <summary>
+/// Represents the current state of a schedule.
+/// </summary>
+public class ScheduleState
 {
     internal ScheduleStatus Status { get; set; } = ScheduleStatus.Uninitialized;
 

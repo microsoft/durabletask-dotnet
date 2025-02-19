@@ -3,7 +3,7 @@
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
-enum ScheduleStatus
+public enum ScheduleStatus
 {
     Uninitialized, // Schedule has not been created
     Active,       // Schedule is active and running

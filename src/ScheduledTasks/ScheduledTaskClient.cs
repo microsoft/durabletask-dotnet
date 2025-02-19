@@ -50,19 +50,9 @@ public class ScheduledTaskClient : IScheduledTaskClient
     }
 
     /// <inheritdoc/>
-    public async Task<ScheduleState> GetScheduleAsync(string scheduleId)
+    public async Task<ScheduleDescription> GetScheduleAsync(string scheduleId)
     {
-        Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
-
-        var entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
-        var metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
-
-        if (metadata == null || !metadata.IncludesState)
-        {
-            throw new InvalidOperationException($"Schedule with ID {scheduleId} does not exist.");
-        }
-
-        return metadata.State;
+        throw new NotImplementedException();
     }
 
     /// <inheritdoc/>

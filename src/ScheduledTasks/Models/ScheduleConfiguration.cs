@@ -78,7 +78,7 @@ class ScheduleConfiguration
             Interval = createOptions.Interval,
             CronExpression = createOptions.CronExpression,
             MaxOccurrence = createOptions.MaxOccurrence,
-            StartImmediatelyIfLate = createOptions.StartImmediatelyIfLate
+            StartImmediatelyIfLate = createOptions.StartImmediatelyIfLate,
         };
     }
 }

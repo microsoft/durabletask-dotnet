@@ -13,7 +13,7 @@ public interface IScheduledTaskClient
     /// </summary>
     /// <param name="scheduleId">The ID of the schedule to retrieve.</param>
     /// <returns>The current state of the schedule.</returns>
-    Task<ScheduleState> GetScheduleAsync(string scheduleId);
+    Task<ScheduleDescription> GetScheduleAsync(string scheduleId);
 
     /// <summary>
     /// Gets a list of all schedule IDs.

@@ -4,7 +4,7 @@
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask;
+namespace Microsoft.DurableTask.ScheduledTasks;
 
 // TODO: Separate client request objects from entity state objects
 class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>

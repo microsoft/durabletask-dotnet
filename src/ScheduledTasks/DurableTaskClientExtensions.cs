@@ -17,6 +17,8 @@ public static class DurableTaskClientExtensions
     /// <returns>A client for managing scheduled tasks.</returns>
     public static ScheduledTaskClient ScheduledTasks(this DurableTaskClient client)
     {
+        // ScheduledTaskClient is not a resource-intensive object, we shall create a new instance to avoid
+        // any potential thread safety issues.
         return new ScheduledTaskClient(client);
     }
 }

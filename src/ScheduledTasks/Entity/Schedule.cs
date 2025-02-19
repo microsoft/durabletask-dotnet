@@ -34,11 +34,16 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 
         if (this.State.Status != ScheduleStatus.Uninitialized)
         {
-            throw new InvalidOperationException("Schedule is already created.");
+            string errorMessage = "Schedule is already created.";
+            Exception exception = new InvalidOperationException(errorMessage);
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration.ScheduleId, nameof(this.CreateSchedule), errorMessage, exception);
+            throw exception;
         }
 
         this.State.ScheduleConfiguration = ScheduleConfiguration.FromCreateOptions(scheduleCreationOptions);
         this.TryStatusTransition(ScheduleStatus.Active);
+
+        this.logger.CreatedSchedule(this.State.ScheduleConfiguration.ScheduleId);
 
         // Signal to run schedule immediately after creation and let runSchedule determine if it should run immediately
         // or later to separate response from schedule creation and schedule responsibilities
@@ -57,13 +62,11 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         Verify.NotNull(scheduleUpdateOptions, nameof(scheduleUpdateOptions));
         Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
 
-        this.logger.UpdatingSchedule(this.State.ScheduleConfiguration.ScheduleId, scheduleUpdateOptions);
-
         HashSet<string> updatedScheduleConfigFields = this.State.UpdateConfig(scheduleUpdateOptions);
         if (updatedScheduleConfigFields.Count == 0)
         {
             // no need to interrupt and update current schedule run as there is no change in the schedule config
-            this.logger.LogInformation("Schedule configuration is up to date.");
+            this.logger.ScheduleOperationWarning(this.State.ScheduleConfiguration.ScheduleId, nameof(this.UpdateSchedule), "Schedule configuration is up to date.");
             return;
         }
 
@@ -85,6 +88,8 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 
         this.State.RefreshScheduleRunExecutionToken();
 
+        this.logger.UpdatedSchedule(this.State.ScheduleConfiguration.ScheduleId);
+
         // Signal to run schedule immediately after update and let runSchedule determine if it should run immediately
         // or later to separate response from schedule creation and schedule responsibilities
         context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), nameof(this.RunSchedule), this.State.ExecutionToken);
@@ -105,7 +110,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         this.State.NextRunAt = null;
         this.State.RefreshScheduleRunExecutionToken();
 
-        this.logger.LogInformation("Schedule paused.");
+        this.logger.PausedSchedule(this.State.ScheduleConfiguration.ScheduleId);
     }
 
     /// <summary>
@@ -118,12 +123,15 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
         if (this.State.Status != ScheduleStatus.Paused)
         {
-            throw new InvalidOperationException("Schedule must be in Paused state to resume.");
+            string errorMessage = "Schedule must be in Paused state to resume.";
+            Exception exception = new InvalidOperationException(errorMessage);
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration.ScheduleId, nameof(this.ResumeSchedule), errorMessage, exception);
+            throw exception;
         }
 
         this.TryStatusTransition(ScheduleStatus.Active);
         this.State.NextRunAt = null;
-        this.logger.LogInformation("Schedule resumed.");
+        this.logger.ResumedSchedule(this.State.ScheduleConfiguration.ScheduleId);
 
         // compute next run based on startat and interval
         context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), nameof(this.RunSchedule), this.State.ExecutionToken);
@@ -141,21 +149,28 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// <exception cref="InvalidOperationException">Thrown when the schedule is not active or interval is not specified.</exception>
     public void RunSchedule(TaskEntityContext context, string executionToken)
     {
+        this.logger.RunningSchedule(this.State.ScheduleConfiguration.ScheduleId);
         Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
         if (this.State.ScheduleConfiguration.Interval == null)
         {
-            throw new InvalidOperationException("Schedule interval must be specified.");
+            string errorMessage = "Schedule interval must be specified.";
+            Exception exception = new InvalidOperationException(errorMessage);
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration.ScheduleId, nameof(this.RunSchedule), errorMessage, exception);
+            throw exception;
         }
 
         if (executionToken != this.State.ExecutionToken)
         {
-            this.logger.LogInformation("Cancel schedule run - execution token {token} has expired", executionToken);
+            this.logger.ScheduleRunCancelled(this.State.ScheduleConfiguration.ScheduleId, executionToken);
             return;
         }
 
         if (this.State.Status != ScheduleStatus.Active)
         {
-            throw new InvalidOperationException("Schedule must be in Active status to run.");
+            string errorMessage = "Schedule must be in Active status to run.";
+            Exception exception = new InvalidOperationException(errorMessage);
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration.ScheduleId, nameof(this.RunSchedule), errorMessage, exception);
+            throw exception;
         }
 
         // run schedule based on next run at
@@ -191,6 +206,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             this.State.NextRunAt = this.State.LastRunAt.Value + this.State.ScheduleConfiguration.Interval.Value;
         }
 
+        this.logger.CompletedScheduleRun(this.State.ScheduleConfiguration.ScheduleId);
         context.SignalEntity(
             new EntityInstanceId(
                 nameof(Schedule),

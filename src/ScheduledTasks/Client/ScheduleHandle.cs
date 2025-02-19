@@ -37,6 +37,7 @@ public class ScheduleHandle : IScheduleHandle
     /// <inheritdoc/>
     public async Task<ScheduleDescription> DescribeAsync()
     {
+        this.logger.HandleDescribingSchedule(this.ScheduleId);
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
         EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
@@ -81,6 +82,7 @@ public class ScheduleHandle : IScheduleHandle
     /// <inheritdoc/>
     public async Task PauseAsync()
     {
+        this.logger.HandlePausingSchedule(this.ScheduleId);
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
         var entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
@@ -96,6 +98,7 @@ public class ScheduleHandle : IScheduleHandle
     /// <inheritdoc/>
     public async Task ResumeAsync()
     {
+        this.logger.HandleResumingSchedule(this.ScheduleId);
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
         var entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
@@ -111,6 +114,7 @@ public class ScheduleHandle : IScheduleHandle
     /// <inheritdoc/>
     public async Task UpdateAsync(ScheduleUpdateOptions updateOptions)
     {
+        this.logger.HandleUpdatingSchedule(this.ScheduleId);
         Check.NotNull(updateOptions, nameof(updateOptions));
 
         var entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
@@ -126,6 +130,7 @@ public class ScheduleHandle : IScheduleHandle
     /// <inheritdoc/>
     public async Task DeleteAsync()
     {
+        this.logger.HandleDeletingSchedule(this.ScheduleId);
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
         var entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);

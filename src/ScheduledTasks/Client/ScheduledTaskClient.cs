@@ -28,12 +28,14 @@ public class ScheduledTaskClient : IScheduledTaskClient
     /// <inheritdoc/>
     public IScheduleHandle GetScheduleHandle(string scheduleId)
     {
+        this.logger.ClientGettingScheduleHandle(scheduleId);
         return new ScheduleHandle(this.durableTaskClient, scheduleId);
     }
 
     /// <inheritdoc/>
     public async Task<IScheduleHandle> CreateScheduleAsync(ScheduleCreationOptions scheduleConfigCreateOptions)
     {
+        this.logger.ClientCreatingSchedule(scheduleConfigCreateOptions);
         Check.NotNull(scheduleConfigCreateOptions, nameof(scheduleConfigCreateOptions));
 
         EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), scheduleConfigCreateOptions.ScheduleId);
@@ -53,6 +55,7 @@ public class ScheduledTaskClient : IScheduledTaskClient
     /// <inheritdoc/>
     public async Task<IEnumerable<ScheduleDescription>> ListInitializedSchedulesAsync()
     {
+        this.logger.ClientListingSchedules();
         EntityQuery query = new EntityQuery
         {
             InstanceIdStartsWith = nameof(Schedule), // Automatically ensures correct formatting

@@ -11,6 +11,7 @@
     <!-- <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="6.0.1" /> -->
     <ProjectReference Include="../Abstractions/Abstractions.csproj" />
     <ProjectReference Include="../Client/Core/Client.csproj" />
+    <ProjectReference Include="..\Worker\Core\Worker.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using System.Text;
-using DurableTask.Abstractions.Entities.Schedule;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.Extensions.DependencyInjection;

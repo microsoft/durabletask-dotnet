@@ -7,7 +7,6 @@ using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
-using DurableTask.Abstractions.Entities.Schedule;
 
 namespace Microsoft.DurableTask.Worker.AzureManaged;
 
@@ -82,9 +81,6 @@ public static class DurableTaskSchedulerWorkerExtensions
         Action<DurableTaskSchedulerWorkerOptions> initialConfig,
         Action<DurableTaskSchedulerWorkerOptions>? additionalConfig)
     {
-        // Add the Schedule entity by default
-        builder.AddTasks(r => r.AddEntity(nameof(Schedule), sp => ActivatorUtilities.CreateInstance<Schedule>(sp)));
-
         builder.Services.AddOptions<DurableTaskSchedulerWorkerOptions>(builder.Name)
             .Configure(initialConfig)
             .Configure(additionalConfig ?? (_ => { }))

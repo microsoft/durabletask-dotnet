@@ -409,35 +409,4 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// </summary>
     /// <returns>A <see cref="ValueTask"/> that completes when the disposal completes.</returns>
     public abstract ValueTask DisposeAsync();
-
-    public virtual Task<ScheduleState> GetScheduleAsync(string scheduleId)
-    {
-        throw new NotSupportedException($"{this.GetType()} does not support schedules.");
-    }
-
-    public virtual Task<string> CreateScheduleAsync(ScheduleConfiguration scheduleConfig)
-    {
-        throw new NotSupportedException($"{this.GetType()} does not support schedules.");
-    }
-
-    public virtual Task DeleteScheduleAsync(string scheduleId)
-    {
-        throw new NotSupportedException($"{this.GetType()} does not support schedules.");
-    }
-
-    public virtual Task PauseScheduleAsync(string scheduleId)
-    {
-        throw new NotSupportedException($"{this.GetType()} does not support schedules.");
-    }
-
-    public virtual Task ResumeScheduleAsync(string scheduleId)
-    {
-        throw new NotSupportedException($"{this.GetType()} does not support schedules.");
-    }
-
-    // update schedule
-    public virtual Task UpdateScheduleAsync(string scheduleId, ScheduleConfiguration scheduleConfig)
-    {
-        throw new NotSupportedException($"{this.GetType()} does not support schedules.");
-    }
 }

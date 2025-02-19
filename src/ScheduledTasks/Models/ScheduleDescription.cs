@@ -20,5 +20,4 @@ public record ScheduleDescription(
     ScheduleStatus Status,
     string ExecutionToken,
     DateTimeOffset? LastRunAt,
-    DateTimeOffset? NextRunAt
-);
+    DateTimeOffset? NextRunAt);

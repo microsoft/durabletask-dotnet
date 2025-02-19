@@ -35,19 +35,32 @@ public class ScheduleHandle : IScheduleHandle
     }
 
     /// <inheritdoc/>
-    public async Task<ScheduleDescription> GetAsync()
+    public async Task<ScheduleDescription> DescribeAsync()
     {
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
         EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
-        EntityMetadata<ScheduleState>? metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
+        EntityMetadata<ScheduleState>? metadata = 
+            await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
         if (metadata == null)
         {
-            throw new InvalidOperationException($"Schedule with ID {this.ScheduleId} does not exist.");
+            throw new ScheduleNotFoundException(this.ScheduleId);
         }
 
         ScheduleState state = metadata.State;
+        if (state.Status == ScheduleStatus.Uninitialized)
+        {
+            throw new ScheduleStillBeingProvisionedException(this.ScheduleId);
+        }
+
+        // this should never happen
         ScheduleConfiguration? config = state.ScheduleConfiguration;
+        if (config == null)
+        {
+            throw new ScheduleInternalException(this.ScheduleId, 
+            $"Schedule configuration is not available even though the schedule status is {state.Status}.");
+        }
+
         return new ScheduleDescription(
             this.ScheduleId,
             config.OrchestrationName,
@@ -74,7 +87,7 @@ public class ScheduleHandle : IScheduleHandle
         var metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
         if (metadata == null)
         {
-            throw new InvalidOperationException($"Schedule with ID {this.ScheduleId} does not exist.");
+            throw new ScheduleNotFoundException(this.ScheduleId);
         }
 
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.PauseSchedule));
@@ -89,7 +102,7 @@ public class ScheduleHandle : IScheduleHandle
         var metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
         if (metadata == null)
         {
-            throw new InvalidOperationException($"Schedule with ID {this.ScheduleId} does not exist.");
+            throw new ScheduleNotFoundException(this.ScheduleId);
         }
 
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.ResumeSchedule));
@@ -104,7 +117,7 @@ public class ScheduleHandle : IScheduleHandle
         var metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
         if (metadata == null)
         {
-            throw new InvalidOperationException($"Schedule with ID {this.ScheduleId} does not exist.");
+            throw new ScheduleNotFoundException(this.ScheduleId);
         }
 
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.UpdateSchedule), updateOptions);
@@ -119,7 +132,7 @@ public class ScheduleHandle : IScheduleHandle
         var metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
         if (metadata == null)
         {
-            throw new InvalidOperationException($"Schedule with ID {this.ScheduleId} does not exist.");
+            throw new ScheduleNotFoundException(this.ScheduleId);
         }
 
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, "delete");

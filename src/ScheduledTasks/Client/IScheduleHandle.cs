@@ -14,7 +14,7 @@ public interface IScheduleHandle
     /// Retrieves the current details of this schedule.
     /// </summary>
     /// <returns>The schedule details.</returns>
-    Task<ScheduleDescription> GetAsync();
+    Task<ScheduleDescription> DescribeAsync();
 
     /// <summary>
     /// Deletes this schedule.

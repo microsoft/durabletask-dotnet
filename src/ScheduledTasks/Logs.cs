@@ -24,7 +24,6 @@ static partial class Logs
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Resuming schedule '{scheduleId}'")]
     public static partial void ResumingSchedule(this ILogger logger, string scheduleId);
 
-    // run schedule logging
     [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Running schedule '{scheduleId}'")]
     public static partial void RunningSchedule(this ILogger logger, string scheduleId);
     

@@ -25,19 +25,19 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// Creates a new schedule with the specified configuration.
     /// </summary>
     /// <param name="context">The task entity context.</param>
-    /// <param name="scheduleConfigurationCreateOptions">The configuration options for creating the schedule.</param>
+    /// <param name="scheduleCreationOptions">The configuration options for creating the schedule.</param>
     /// <exception cref="ArgumentNullException">Thrown when scheduleConfigurationCreateOptions is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the schedule is already created.</exception>
-    public void CreateSchedule(TaskEntityContext context, ScheduleCreationOptions scheduleConfigurationCreateOptions)
+    public void CreateSchedule(TaskEntityContext context, ScheduleCreationOptions scheduleCreationOptions)
     {
-        Verify.NotNull(scheduleConfigurationCreateOptions, nameof(scheduleConfigurationCreateOptions));
+        Verify.NotNull(scheduleCreationOptions, nameof(scheduleCreationOptions));
 
         if (this.State.Status != ScheduleStatus.Uninitialized)
         {
             throw new InvalidOperationException("Schedule is already created.");
         }
 
-        this.State.ScheduleConfiguration = ScheduleConfiguration.FromCreateOptions(scheduleConfigurationCreateOptions);
+        this.State.ScheduleConfiguration = ScheduleConfiguration.FromCreateOptions(scheduleCreationOptions);
         this.TryStatusTransition(ScheduleStatus.Active);
 
         // Signal to run schedule immediately after creation and let runSchedule determine if it should run immediately

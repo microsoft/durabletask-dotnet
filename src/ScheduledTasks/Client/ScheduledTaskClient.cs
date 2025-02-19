@@ -22,7 +22,7 @@ public class ScheduledTaskClient : IScheduledTaskClient
     /// Initializes a new instance of the <see cref="ScheduledTaskClient"/> class.
     /// </summary>
     /// <param name="durableTaskClient">The Durable Task client to use for orchestration operations.</param>
-    /// <param name="logger"></param>
+    /// <param name="logger">logger.</param>
     public ScheduledTaskClient(DurableTaskClient durableTaskClient, ILogger logger)
     {
         this.durableTaskClient = Check.NotNull(durableTaskClient, nameof(durableTaskClient));

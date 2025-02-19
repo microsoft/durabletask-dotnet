@@ -29,7 +29,7 @@ public class ScheduleHandle : IScheduleHandle
     /// </summary>
     /// <param name="client">The durable task client.</param>
     /// <param name="scheduleId">The ID of the schedule.</param>
-    /// <param name="logger"></param>
+    /// <param name="logger">The logger.</param>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="client"/> or <paramref name="scheduleId"/> is null.</exception>
     public ScheduleHandle(DurableTaskClient client, string scheduleId, ILogger logger)
     {

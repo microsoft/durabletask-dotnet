@@ -1,4 +1,4 @@
-﻿<!-- <Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -19,4 +19,8 @@
     <Compile Include="..\..\src\Client\Core\DurableTaskClient.cs" Link="DurableTaskClient.cs" />
     <Compile Include="..\..\src\Client\Grpc\GrpcDurableTaskClient.cs" Link="GrpcDurableTaskClient.cs" />
   </ItemGroup>
-</Project> -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ScheduledTasks\ScheduledTasks.csproj" />
+  </ItemGroup>
+</Project>

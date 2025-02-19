@@ -82,7 +82,8 @@ public class ScheduledTaskClient : IScheduledTaskClient
 
         var query = new EntityQuery
         {
-            EntityName = nameof(Schedule),
+            InstanceIdStartsWith = $"@{nameof(Schedule)}@",
+            IncludeState = false
         };
 
         var scheduleIds = new List<string>();

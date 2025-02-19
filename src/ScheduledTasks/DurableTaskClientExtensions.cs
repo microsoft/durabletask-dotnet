@@ -13,8 +13,8 @@ public static class DurableTaskClientExtensions
     /// </summary>
     /// <param name="client">The DurableTaskClient instance.</param>
     /// <returns>A client for managing scheduled tasks.</returns>
-    public static ScheduledTasksClient ScheduledTasks(this DurableTaskClient client)
+    public static ScheduledTaskClient ScheduledTasks(this DurableTaskClient client)
     {
-        return new ScheduledTasksClient(client);
+        return new ScheduledTaskClient(client);
     }
 }

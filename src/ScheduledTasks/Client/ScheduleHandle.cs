@@ -5,6 +5,8 @@ using Microsoft.DurableTask.Client;
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
+// TODO: Validaiton
+
 /// <summary>
 /// Represents a handle to a scheduled task, providing operations for managing the schedule.
 /// </summary>
@@ -34,7 +36,6 @@ public class ScheduleHandle : IScheduleHandle
     {
         // 1.
     }
-
 
     /// <inheritdoc/>
     public async Task PauseAsync()
@@ -67,9 +68,9 @@ public class ScheduleHandle : IScheduleHandle
     }
 
     /// <inheritdoc/>
-    public async Task UpdateAsync(ScheduleUpdateOptions scheduleConfigurationUpdateOptions)
+    public async Task UpdateAsync(ScheduleUpdateOptions updateOptions)
     {
-        Check.NotNull(scheduleConfigurationUpdateOptions, nameof(scheduleConfigurationUpdateOptions));
+        Check.NotNull(updateOptions, nameof(updateOptions));
 
         var entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
         var metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
@@ -81,15 +82,15 @@ public class ScheduleHandle : IScheduleHandle
         // Convert ScheduleConfiguration to ScheduleConfigurationUpdateOptions
         var updateOptions = new ScheduleUpdateOptions
         {
-            OrchestrationName = scheduleConfigurationUpdateOptions.OrchestrationName,
-            OrchestrationInput = scheduleConfigurationUpdateOptions.OrchestrationInput,
-            OrchestrationInstanceId = scheduleConfigurationUpdateOptions.OrchestrationInstanceId,
-            StartAt = scheduleConfigurationUpdateOptions.StartAt,
-            EndAt = scheduleConfigurationUpdateOptions.EndAt,
-            Interval = scheduleConfigurationUpdateOptions.Interval,
-            CronExpression = scheduleConfigurationUpdateOptions.CronExpression,
-            MaxOccurrence = scheduleConfigurationUpdateOptions.MaxOccurrence,
-            StartImmediatelyIfLate = scheduleConfigurationUpdateOptions.StartImmediatelyIfLate,
+            OrchestrationName = updateOptions.OrchestrationName,
+            OrchestrationInput = updateOptions.OrchestrationInput,
+            OrchestrationInstanceId = updateOptions.OrchestrationInstanceId,
+            StartAt = updateOptions.StartAt,
+            EndAt = updateOptions.EndAt,
+            Interval = updateOptions.Interval,
+            CronExpression = updateOptions.CronExpression,
+            MaxOccurrence = updateOptions.MaxOccurrence,
+            StartImmediatelyIfLate = updateOptions.StartImmediatelyIfLate,
         };
 
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.UpdateSchedule), updateOptions);

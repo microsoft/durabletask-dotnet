@@ -7,10 +7,26 @@ using Microsoft.Extensions.Logging;
 namespace Microsoft.DurableTask.ScheduledTasks;
 
 // TODO: logging
+/// <summary>
+/// Entity that manages the state and execution of a scheduled task.
+/// </summary>
+/// <remarks>
+/// The Schedule entity maintains the configuration and state of a scheduled task,
+/// handling operations like creation, updates, pausing/resuming, and executing the task
+/// according to the defined schedule.
+/// </remarks>
+/// <param name="logger">Logger for recording schedule operations and events.</param>
 class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 {
     readonly ILogger<Schedule> logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
+    /// <summary>
+    /// Creates a new schedule with the specified configuration.
+    /// </summary>
+    /// <param name="context">The task entity context.</param>
+    /// <param name="scheduleConfigurationCreateOptions">The configuration options for creating the schedule.</param>
+    /// <exception cref="ArgumentNullException">Thrown when scheduleConfigurationCreateOptions is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the schedule is already created.</exception>
     public void CreateSchedule(TaskEntityContext context, ScheduleConfigurationCreateOptions scheduleConfigurationCreateOptions)
     {
         Verify.NotNull(scheduleConfigurationCreateOptions, nameof(scheduleConfigurationCreateOptions));
@@ -31,6 +47,10 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// <summary>
     /// Updates an existing schedule.
     /// </summary>
+    /// <param name="context">The task entity context.</param>
+    /// <param name="scheduleConfigUpdateOptions">The options for updating the schedule configuration.</param>
+    /// <exception cref="ArgumentNullException">Thrown when scheduleConfigUpdateOptions is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the schedule is not created.</exception>
     public void UpdateSchedule(TaskEntityContext context, ScheduleConfigurationUpdateOptions scheduleConfigUpdateOptions)
     {
         Verify.NotNull(scheduleConfigUpdateOptions, nameof(scheduleConfigUpdateOptions));
@@ -90,6 +110,8 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// <summary>
     /// Resumes the schedule.
     /// </summary>
+    /// <param name="context">The task entity context.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the schedule is not paused.</exception>
     public void ResumeSchedule(TaskEntityContext context)
     {
         Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
@@ -109,6 +131,13 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     // TODO: Verify use built int entity delete operation to delete schedule
 
     // TODO: Support other schedule option properties like cron expression, max occurrence, etc.
+    /// <summary>
+    /// Runs the schedule based on the defined configuration.
+    /// </summary>
+    /// <param name="context">The task entity context.</param>
+    /// <param name="executionToken">The execution token for the schedule.</param>
+    /// <exception cref="ArgumentNullException">Thrown when the schedule configuration is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the schedule is not active.</exception>
     public void RunSchedule(TaskEntityContext context, string executionToken)
     {
         Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));

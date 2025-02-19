@@ -4,6 +4,7 @@
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Entities;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
@@ -16,6 +17,7 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 public class ScheduleHandle : IScheduleHandle
 {
     readonly DurableTaskClient durableTaskClient;
+    readonly ILogger logger;
 
     /// <summary>
     /// Gets the ID of the schedule.
@@ -27,21 +29,23 @@ public class ScheduleHandle : IScheduleHandle
     /// </summary>
     /// <param name="client">The durable task client.</param>
     /// <param name="scheduleId">The ID of the schedule.</param>
+    /// <param name="logger"></param>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="client"/> or <paramref name="scheduleId"/> is null.</exception>
-    public ScheduleHandle(DurableTaskClient client, string scheduleId)
+    public ScheduleHandle(DurableTaskClient client, string scheduleId, ILogger logger)
     {
         client = client ?? throw new ArgumentNullException(nameof(client));
         this.ScheduleId = scheduleId ?? throw new ArgumentNullException(nameof(scheduleId));
+        this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <inheritdoc/>
     public async Task<ScheduleDescription> DescribeAsync()
     {
-        this.logger.HandleDescribingSchedule(this.ScheduleId);
+        this.logger.ClientDescribingSchedule(this.ScheduleId);
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
         EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
-        EntityMetadata<ScheduleState>? metadata = 
+        EntityMetadata<ScheduleState>? metadata =
             await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
         if (metadata == null)
         {
@@ -58,8 +62,9 @@ public class ScheduleHandle : IScheduleHandle
         ScheduleConfiguration? config = state.ScheduleConfiguration;
         if (config == null)
         {
-            throw new ScheduleInternalException(this.ScheduleId, 
-            $"Schedule configuration is not available even though the schedule status is {state.Status}.");
+            throw new ScheduleInternalException(
+                this.ScheduleId,
+                $"Schedule configuration is not available even though the schedule status is {state.Status}.");
         }
 
         return new ScheduleDescription(
@@ -82,7 +87,7 @@ public class ScheduleHandle : IScheduleHandle
     /// <inheritdoc/>
     public async Task PauseAsync()
     {
-        this.logger.HandlePausingSchedule(this.ScheduleId);
+        this.logger.ClientPausingSchedule(this.ScheduleId);
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
         var entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
@@ -98,7 +103,7 @@ public class ScheduleHandle : IScheduleHandle
     /// <inheritdoc/>
     public async Task ResumeAsync()
     {
-        this.logger.HandleResumingSchedule(this.ScheduleId);
+        this.logger.ClientResumingSchedule(this.ScheduleId);
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
         var entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
@@ -114,7 +119,7 @@ public class ScheduleHandle : IScheduleHandle
     /// <inheritdoc/>
     public async Task UpdateAsync(ScheduleUpdateOptions updateOptions)
     {
-        this.logger.HandleUpdatingSchedule(this.ScheduleId);
+        this.logger.ClientUpdatingSchedule(this.ScheduleId);
         Check.NotNull(updateOptions, nameof(updateOptions));
 
         var entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
@@ -130,7 +135,7 @@ public class ScheduleHandle : IScheduleHandle
     /// <inheritdoc/>
     public async Task DeleteAsync()
     {
-        this.logger.HandleDeletingSchedule(this.ScheduleId);
+        this.logger.ClientDeletingSchedule(this.ScheduleId);
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
         var entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);

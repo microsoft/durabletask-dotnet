@@ -15,26 +15,26 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 static partial class Logs
 {
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Client: Creating schedule with options: {scheduleConfigCreateOptions}")]
-    static partial void ClientCreatingSchedule(this ILogger logger, ScheduleCreationOptions scheduleConfigCreateOptions);
+    public static partial void ClientCreatingSchedule(this ILogger logger, ScheduleCreationOptions scheduleConfigCreateOptions);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Client: Getting schedule handle for schedule '{scheduleId}'")]
-    static partial void ClientGettingScheduleHandle(this ILogger logger, string scheduleId);
+    public static partial void ClientGettingScheduleHandle(this ILogger logger, string scheduleId);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Client: Listing initialized schedules")]
-    static partial void ClientListingSchedules(this ILogger logger);
+    public static partial void ClientListingSchedules(this ILogger logger);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Client: Describing schedule '{scheduleId}'")]
-    static partial void ClientDescribingSchedule(this ILogger logger, string scheduleId);
+    public static partial void ClientDescribingSchedule(this ILogger logger, string scheduleId);
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Client: Pausing schedule '{scheduleId}'")]
-    static partial void ClientPausingSchedule(this ILogger logger, string scheduleId);
+    public static partial void ClientPausingSchedule(this ILogger logger, string scheduleId);
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Client: Resuming schedule '{scheduleId}'")]
-    static partial void ClientResumingSchedule(this ILogger logger, string scheduleId);
+    public static partial void ClientResumingSchedule(this ILogger logger, string scheduleId);
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Client: Updating schedule '{scheduleId}'")]
-    static partial void ClientUpdatingSchedule(this ILogger logger, string scheduleId);
+    public static partial void ClientUpdatingSchedule(this ILogger logger, string scheduleId);
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Client: Deleting schedule '{scheduleId}'")]
-    static partial void ClientDeletingSchedule(this ILogger logger, string scheduleId);
+    public static partial void ClientDeletingSchedule(this ILogger logger, string scheduleId);
 }

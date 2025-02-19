@@ -4,6 +4,7 @@
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Entities;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
@@ -15,21 +16,24 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 public class ScheduledTaskClient : IScheduledTaskClient
 {
     readonly DurableTaskClient durableTaskClient;
+    readonly ILogger logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ScheduledTaskClient"/> class.
     /// </summary>
     /// <param name="durableTaskClient">The Durable Task client to use for orchestration operations.</param>
-    public ScheduledTaskClient(DurableTaskClient durableTaskClient)
+    /// <param name="logger"></param>
+    public ScheduledTaskClient(DurableTaskClient durableTaskClient, ILogger logger)
     {
         this.durableTaskClient = Check.NotNull(durableTaskClient, nameof(durableTaskClient));
+        this.logger = Check.NotNull(logger, nameof(logger));
     }
 
     /// <inheritdoc/>
     public IScheduleHandle GetScheduleHandle(string scheduleId)
     {
         this.logger.ClientGettingScheduleHandle(scheduleId);
-        return new ScheduleHandle(this.durableTaskClient, scheduleId);
+        return new ScheduleHandle(this.durableTaskClient, scheduleId, this.logger);
     }
 
     /// <inheritdoc/>
@@ -49,7 +53,7 @@ public class ScheduledTaskClient : IScheduledTaskClient
 
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.CreateSchedule), scheduleConfigCreateOptions);
 
-        return new ScheduleHandle(this.durableTaskClient, scheduleConfigCreateOptions.ScheduleId);
+        return new ScheduleHandle(this.durableTaskClient, scheduleConfigCreateOptions.ScheduleId, this.logger);
     }
 
     /// <inheritdoc/>

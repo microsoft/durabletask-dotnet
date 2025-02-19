@@ -84,7 +84,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             Version = orchestratorName.Version,
             InstanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N"),
             Input = this.DataConverter.Serialize(input),
-            ParentTraceContext = new P.TraceContext() { TraceParent = Activity.Current?.Id },
+            ParentTraceContext = new P.TraceContext() { TraceParent = Activity.Current?.Id, TraceState = Activity.Current?.TraceStateString },
         };
 
         DateTimeOffset? startAt = options?.StartAt;

@@ -6,9 +6,14 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// <summary>
 /// Configuration for a scheduled task.
 /// </summary>
-public class ScheduleConfiguration
+public class ScheduleConfigurationCreateOptions
 {
-    public ScheduleConfiguration(string orchestrationName, string scheduleId)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ScheduleConfigurationCreateOptions"/> class.
+    /// </summary>
+    /// <param name="orchestrationName"></param>
+    /// <param name="scheduleId"></param>
+    public ScheduleConfigurationCreateOptions(string orchestrationName, string scheduleId)
     {
         this.orchestrationName = Check.NotNullOrEmpty(orchestrationName, nameof(orchestrationName));
         this.ScheduleId = scheduleId ?? Guid.NewGuid().ToString("N");

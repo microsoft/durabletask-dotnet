@@ -6,23 +6,21 @@ using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
-// TODO: Separate client request objects from entity state objects
+// TODO: logging
 class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 {
     readonly ILogger<Schedule> logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-    public void CreateSchedule(TaskEntityContext context, ScheduleConfiguration scheduleCreationConfig)
+    public void CreateSchedule(TaskEntityContext context, ScheduleConfigurationCreateOptions scheduleConfigurationCreateOptions)
     {
-        Verify.NotNull(scheduleCreationConfig, nameof(scheduleCreationConfig));
+        Verify.NotNull(scheduleConfigurationCreateOptions, nameof(scheduleConfigurationCreateOptions));
 
         if (this.State.Status != ScheduleStatus.Uninitialized)
         {
             throw new InvalidOperationException("Schedule is already created.");
         }
 
-        this.logger.LogInformation($"Creating schedule with options: {scheduleCreationConfig}");
-
-        this.State.ScheduleConfiguration = scheduleCreationConfig;
+        this.State.ScheduleConfiguration = ScheduleConfiguration.FromCreateOptions(scheduleConfigurationCreateOptions);
         this.TryStatusTransition(ScheduleStatus.Active);
 
         // Signal to run schedule immediately after creation and let runSchedule determine if it should run immediately
@@ -38,7 +36,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         Verify.NotNull(scheduleConfigUpdateOptions, nameof(scheduleConfigUpdateOptions));
         Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
 
-        this.logger.LogInformation($"Updating schedule with details: {scheduleConfigUpdateOptions}");
+        this.logger.UpdatingSchedule(this.State.ScheduleConfiguration.ScheduleId, scheduleConfigUpdateOptions);
 
         HashSet<string> updatedScheduleConfigFields = this.State.UpdateConfig(scheduleConfigUpdateOptions);
         if (updatedScheduleConfigFields.Count == 0)

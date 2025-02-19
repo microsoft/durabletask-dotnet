@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using System.ComponentModel;
-using DurableTask.Abstractions.Entities.Schedule;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Internal;
 

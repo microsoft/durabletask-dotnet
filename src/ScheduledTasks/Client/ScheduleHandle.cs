@@ -33,7 +33,7 @@ public class ScheduleHandle : IScheduleHandle
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="client"/> or <paramref name="scheduleId"/> is null.</exception>
     public ScheduleHandle(DurableTaskClient client, string scheduleId, ILogger logger)
     {
-        client = client ?? throw new ArgumentNullException(nameof(client));
+        this.durableTaskClient = client ?? throw new ArgumentNullException(nameof(client));
         this.ScheduleId = scheduleId ?? throw new ArgumentNullException(nameof(scheduleId));
         this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }

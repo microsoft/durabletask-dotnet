@@ -10,12 +10,15 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="6.0.0" />
     <PackageReference Include="Azure.Identity" Version="1.13.1" />
     <PackageReference Include="Grpc.Net.Client" Version="2.67.0" />
-    <PackageReference Include="Microsoft.DurableTask.Client.AzureManaged" Version="1.5.0-preview.1" />
-    <PackageReference Include="Microsoft.DurableTask.Worker.AzureManaged" Version="1.5.0-preview.1" />
+    <!-- <PackageReference Include="Microsoft.DurableTask.Client.AzureManaged" Version="1.5.0-preview.1" />
+    <PackageReference Include="Microsoft.DurableTask.Worker.AzureManaged" Version="1.5.0-preview.1" /> -->
+
     <PackageReference Include="Microsoft.DurableTask.Generators" Version="1.0.0-preview.1" OutputItemType="Analyzer" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Client\AzureManaged\Client.AzureManaged.csproj" />
+    <ProjectReference Include="..\..\src\Worker\AzureManaged\Worker.AzureManaged.csproj" />
     <ProjectReference Include="..\..\src\ScheduledTasks\ScheduledTasks.csproj" />
   </ItemGroup>
 </Project>

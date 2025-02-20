@@ -34,8 +34,8 @@ IHost host = Host.CreateDefaultBuilder(args)
             });
 
             // Enable scheduled tasks support
-            builder.EnableScheduledTasksSupport();
             builder.UseDurableTaskScheduler(connectionString);
+            builder.EnableScheduledTasksSupport();
         });
 
         // Configure the client

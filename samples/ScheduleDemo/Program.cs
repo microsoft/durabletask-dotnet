@@ -87,7 +87,7 @@ try
     // Create schedule options that runs every 30 seconds
     ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions("DemoOrchestration")
     {
-        ScheduleId = "demo-schedule1",
+        ScheduleId = "demo-schedule2",
         Interval = TimeSpan.FromSeconds(4),
         StartAt = DateTimeOffset.UtcNow,
         OrchestrationInput = "This is a scheduled message!"
@@ -95,7 +95,6 @@ try
 
     // Create the schedule
     IScheduleHandle scheduleHandle = await scheduledTaskClient.CreateScheduleAsync(scheduleOptions);
-    await Task.Delay(TimeSpan.FromSeconds(120));
     // Monitor the schedule for a while
     //Console.WriteLine("\nMonitoring schedule for 2 minutes...");
     //for (int i = 0; i < 4; i++)
@@ -129,17 +128,7 @@ try
     // await scheduleHandle.ResumeAsync();
     // await scheduleHandle.ResumeAsync();
 
-    // // Get schedule instance details
-    // var scheduleInstanceDetails = await scheduleHandle.GetScheduleInstanceDetailsAsync(true);
-    // Console.WriteLine($"\nSchedule instance details:");
-    // Console.WriteLine($"{scheduleInstanceDetails}");
-    // Console.WriteLine($"Instance ID: {scheduleInstanceDetails!.InstanceId}");
-    // Console.WriteLine($"Created time: {scheduleInstanceDetails.CreatedAt}");
-    // Console.WriteLine($"Name: {scheduleInstanceDetails.Name}");
-    // Console.WriteLine($"RuntimeStatus: {scheduleInstanceDetails.RuntimeStatus}");
-    // Console.WriteLine($"LastUpdatedAt: {scheduleInstanceDetails.LastUpdatedAt}");
-    // Console.WriteLine($"FailureDetails: {scheduleInstanceDetails.FailureDetails}");
-    // Console.WriteLine(); // Add blank line between instances
+    await Task.Delay(TimeSpan.FromSeconds(120));
     // // Delete the schedule
     // await scheduleHandle.DeleteAsync();
     // Console.WriteLine("Schedule deleted.");

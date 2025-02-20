@@ -45,14 +45,4 @@ public interface IScheduleHandle
     /// <param name="updateOptions">The options for updating the schedule configuration.</param>
     /// <returns>A task that completes when the schedule is updated.</returns>
     Task UpdateAsync(ScheduleUpdateOptions updateOptions);
-
-    /// <summary>
-    /// Gets the details of the schedule's underlying orchestration instance.
-    /// </summary>
-    /// <param name="getInputsAndOutputs">If true, includes the serialized inputs and outputs in the returned metadata.</param>
-    /// <param name="cancellation">Optional cancellation token.</param>
-    /// <returns>The orchestration metadata for the schedule instance, or null if not found.</returns>
-    Task<OrchestrationMetadata?> GetScheduleInstanceDetailsAsync(
-        bool getInputsAndOutputs = false,
-        CancellationToken cancellation = default);
 }

@@ -32,12 +32,13 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 
         if (this.State.Status != ScheduleStatus.Uninitialized)
         {
-            return;
+            // this.logger.ScheduleOperationWarning(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.CreateSchedule), "Schedule is already created.");
+            // return;
 
-            // string errorMessage = "Schedule is already created.";
-            // Exception exception = new InvalidOperationException(errorMessage);
-            // this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.CreateSchedule), errorMessage, exception);
-            // throw exception;
+            string errorMessage = "Schedule is already created.";
+            Exception exception = new InvalidOperationException(errorMessage);
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.CreateSchedule), errorMessage, exception);
+            throw exception;
         }
 
         this.State.ScheduleConfiguration = ScheduleConfiguration.FromCreateOptions(scheduleCreationOptions);
@@ -150,7 +151,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     public void RunSchedule(TaskEntityContext context, string executionToken)
     {
         Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
-        this.logger.RunningSchedule(this.State.ScheduleConfiguration!.ScheduleId);
+        // this.logger.RunningSchedule(this.State.ScheduleConfiguration!.ScheduleId);
         if (this.State.ScheduleConfiguration.Interval == null)
         {
             string errorMessage = "Schedule interval must be specified.";
@@ -206,7 +207,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             this.State.NextRunAt = this.State.LastRunAt.Value + this.State.ScheduleConfiguration.Interval.Value;
         }
 
-        this.logger.CompletedScheduleRun(this.State.ScheduleConfiguration.ScheduleId);
+        // this.logger.CompletedScheduleRun(this.State.ScheduleConfiguration.ScheduleId);
         context.SignalEntity(
             new EntityInstanceId(
                 nameof(Schedule),
@@ -218,8 +219,15 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 
     void StartOrchestrationIfNotRunning(TaskEntityContext context)
     {
-        ScheduleConfiguration? config = this.State.ScheduleConfiguration;
-        context.ScheduleNewOrchestration(new TaskName(config!.OrchestrationName), config!.OrchestrationInput, new StartOrchestrationOptions(config!.OrchestrationInstanceId));
+        try
+        {
+            ScheduleConfiguration? config = this.State.ScheduleConfiguration;
+            context.ScheduleNewOrchestration(new TaskName(config!.OrchestrationName), config!.OrchestrationInput, new StartOrchestrationOptions(config!.OrchestrationInstanceId));
+        }
+        catch (Exception ex)
+        {
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.StartOrchestrationIfNotRunning), "Failed to start orchestration", ex);
+        }
     }
 
     void TryStatusTransition(ScheduleStatus to)

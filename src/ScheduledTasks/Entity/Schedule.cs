@@ -62,7 +62,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         Verify.NotNull(scheduleUpdateOptions, nameof(scheduleUpdateOptions));
         Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
 
-        HashSet<string> updatedScheduleConfigFields = this.State.UpdateConfig(scheduleUpdateOptions);
+        HashSet<string> updatedScheduleConfigFields = this.State.ScheduleConfiguration.Update(scheduleUpdateOptions);
         if (updatedScheduleConfigFields.Count == 0)
         {
             // no need to interrupt and update current schedule run as there is no change in the schedule config

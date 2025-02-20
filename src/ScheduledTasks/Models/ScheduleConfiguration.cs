@@ -120,4 +120,71 @@ class ScheduleConfiguration
             StartImmediatelyIfLate = createOptions.StartImmediatelyIfLate,
         };
     }
+
+    /// <summary>
+    /// Updates this configuration with the provided update options.
+    /// </summary>
+    /// <param name="updateOptions">The options to update the configuration with.</param>
+    /// <returns>A set of field names that were updated.</returns>
+    public HashSet<string> Update(ScheduleUpdateOptions updateOptions)
+    {
+        Check.NotNull(updateOptions, nameof(updateOptions));
+        HashSet<string> updatedFields = new HashSet<string>();
+
+        if (!string.IsNullOrEmpty(updateOptions.OrchestrationName))
+        {
+            this.OrchestrationName = updateOptions.OrchestrationName;
+            updatedFields.Add(nameof(this.OrchestrationName));
+        }
+
+        if (updateOptions.OrchestrationInput == null)
+        {
+            this.OrchestrationInput = updateOptions.OrchestrationInput;
+            updatedFields.Add(nameof(this.OrchestrationInput));
+        }
+
+        if (!string.IsNullOrEmpty(updateOptions.OrchestrationInstanceId))
+        {
+            this.OrchestrationInstanceId = updateOptions.OrchestrationInstanceId;
+            updatedFields.Add(nameof(this.OrchestrationInstanceId));
+        }
+
+        if (updateOptions.StartAt.HasValue)
+        {
+            this.StartAt = updateOptions.StartAt;
+            updatedFields.Add(nameof(this.StartAt));
+        }
+
+        if (updateOptions.EndAt.HasValue)
+        {
+            this.EndAt = updateOptions.EndAt;
+            updatedFields.Add(nameof(this.EndAt));
+        }
+
+        if (updateOptions.Interval.HasValue)
+        {
+            this.Interval = updateOptions.Interval;
+            updatedFields.Add(nameof(this.Interval));
+        }
+
+        if (!string.IsNullOrEmpty(updateOptions.CronExpression))
+        {
+            this.CronExpression = updateOptions.CronExpression;
+            updatedFields.Add(nameof(this.CronExpression));
+        }
+
+        if (updateOptions.MaxOccurrence != 0)
+        {
+            this.MaxOccurrence = updateOptions.MaxOccurrence;
+            updatedFields.Add(nameof(this.MaxOccurrence));
+        }
+
+        if (updateOptions.StartImmediatelyIfLate.HasValue)
+        {
+            this.StartImmediatelyIfLate = updateOptions.StartImmediatelyIfLate.Value;
+            updatedFields.Add(nameof(this.StartImmediatelyIfLate));
+        }
+
+        return updatedFields;
+    }
 }

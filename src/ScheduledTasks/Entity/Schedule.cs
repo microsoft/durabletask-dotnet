@@ -110,7 +110,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         this.State.NextRunAt = null;
         this.State.RefreshScheduleRunExecutionToken();
 
-        this.logger.PausedSchedule(this.State.ScheduleConfiguration.ScheduleId);
+        this.logger.PausedSchedule(this.State.ScheduleConfiguration!.ScheduleId);
     }
 
     /// <summary>
@@ -149,7 +149,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// <exception cref="InvalidOperationException">Thrown when the schedule is not active or interval is not specified.</exception>
     public void RunSchedule(TaskEntityContext context, string executionToken)
     {
-        this.logger.RunningSchedule(this.State.ScheduleConfiguration.ScheduleId);
+        this.logger.RunningSchedule(this.State.ScheduleConfiguration!.ScheduleId);
         Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
         if (this.State.ScheduleConfiguration.Interval == null)
         {

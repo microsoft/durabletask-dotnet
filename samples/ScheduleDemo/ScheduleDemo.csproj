@@ -16,11 +16,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\src\Client\Core\DurableTaskClient.cs" Link="DurableTaskClient.cs" />
-    <Compile Include="..\..\src\Client\Grpc\GrpcDurableTaskClient.cs" Link="GrpcDurableTaskClient.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\src\ScheduledTasks\ScheduledTasks.csproj" />
   </ItemGroup>
 </Project>

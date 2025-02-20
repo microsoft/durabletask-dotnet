@@ -6,8 +6,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
-// TODO: logging
-
 /// <summary>
 /// Entity that manages the state and execution of a scheduled task.
 /// </summary>

@@ -8,16 +8,36 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// </summary>
 class ScheduleState
 {
+    /// <summary>
+    /// Gets or sets the current status of the schedule.
+    /// </summary>
     internal ScheduleStatus Status { get; set; } = ScheduleStatus.Uninitialized;
 
+    /// <summary>
+    /// Gets or sets the execution token used to validate schedule operations.
+    /// </summary>
     internal string ExecutionToken { get; set; } = Guid.NewGuid().ToString("N");
 
+    /// <summary>
+    /// Gets or sets the last time the schedule was run.
+    /// </summary>
     internal DateTimeOffset? LastRunAt { get; set; }
 
+    /// <summary>
+    /// Gets or sets the next scheduled run time.
+    /// </summary>
     internal DateTimeOffset? NextRunAt { get; set; }
 
+    /// <summary>
+    /// Gets or sets the schedule configuration.
+    /// </summary>
     internal ScheduleConfiguration? ScheduleConfiguration { get; set; }
 
+    /// <summary>
+    /// Updates the schedule configuration with the provided options.
+    /// </summary>
+    /// <param name="scheduleConfigUpdateOptions">The update options to apply.</param>
+    /// <returns>A set of field names that were updated.</returns>
     public HashSet<string> UpdateConfig(ScheduleUpdateOptions scheduleConfigUpdateOptions)
     {
         Check.NotNull(this.ScheduleConfiguration, nameof(this.ScheduleConfiguration));
@@ -77,9 +97,9 @@ class ScheduleState
         return updatedFields;
     }
 
-    // To stop potential runSchedule operation scheduled after the schedule update/pause, invalidate the execution token and let it exit gracefully
-    // This could incur little overhead as ideally the runSchedule with old token should be killed immediately
-    // but there is no support to cancel pending entity operations currently, can be a todo item
+    /// <summary>
+    /// Refreshes the execution token to invalidate pending schedule operations.
+    /// </summary>
     public void RefreshScheduleRunExecutionToken()
     {
         this.ExecutionToken = Guid.NewGuid().ToString("N");

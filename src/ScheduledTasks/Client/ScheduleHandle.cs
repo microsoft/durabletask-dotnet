@@ -9,7 +9,6 @@ using Microsoft.Extensions.Logging;
 namespace Microsoft.DurableTask.ScheduledTasks;
 
 // TODO: Validaiton
-// TODO: GET if config is null what to return
 
 /// <summary>
 /// Represents a handle to a scheduled task, providing operations for managing the schedule.

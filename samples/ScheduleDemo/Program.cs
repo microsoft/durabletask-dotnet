@@ -11,60 +11,61 @@ using Microsoft.Extensions.Logging;
 
 // Create the host builder
 IHost host = Host.CreateDefaultBuilder(args)
-            .ConfigureServices(services =>
+    .ConfigureServices(services =>
+    {
+        string connectionString = Environment.GetEnvironmentVariable("DURABLE_TASK_SCHEDULER_CONNECTION_STRING")
+            ?? throw new InvalidOperationException("Missing required environment variable 'DURABLE_TASK_SCHEDULER_CONNECTION_STRING'");
+
+        // Configure the worker
+        _ = services.AddDurableTaskWorker(builder =>
+        {
+            // Add the Schedule entity and demo orchestration
+            builder.AddTasks(r =>
             {
-                string connectionString = Environment.GetEnvironmentVariable("DURABLE_TASK_SCHEDULER_CONNECTION_STRING")
-                    ?? throw new InvalidOperationException("Missing required environment variable 'DURABLE_TASK_SCHEDULER_CONNECTION_STRING'");
-
-                // Configure the worker
-                services.AddDurableTaskWorker(builder =>
+                // Add a demo orchestration that will be triggered by the schedule
+                r.AddOrchestratorFunc("DemoOrchestration", async context =>
                 {
-                    // Add the Schedule entity and demo orchestration
-                    builder.AddTasks(r =>
-                    {
-                        // Add a demo orchestration that will be triggered by the schedule
-                        r.AddOrchestratorFunc("DemoOrchestration", async context =>
-                        {
-                            string input = context.GetInput<string>();
-                            await context.CallActivityAsync("ProcessMessage", input);
-                            return $"Completed processing at {DateTime.UtcNow}";
-                        });
-                        // Add a demo activity
-                        r.AddActivityFunc<string, string>("ProcessMessage", (context, message) => $"Processing message: {message}");
-                    });
-
-                    // Enable scheduled tasks support
-                    builder.EnableScheduledTasksSupport();
-                    builder.UseDurableTaskScheduler(connectionString);
+                    string? input = context.GetInput<string>();
+                    await context.CallActivityAsync("ProcessMessage", input);
+                    return $"Completed processing at {DateTime.UtcNow}";
                 });
+                // Add a demo activity
+                r.AddActivityFunc<string, string>("ProcessMessage", (context, message) => $"Processing message: {message}");
+            });
 
-                // Configure the client
-                services.AddDurableTaskClient(builder =>
-                {
-                    builder.EnableScheduledTasksSupport();
-                    builder.UseDurableTaskScheduler(connectionString);
-                });
+            // Enable scheduled tasks support
+            builder.EnableScheduledTasksSupport();
+            builder.UseDurableTaskScheduler(connectionString);
+        });
 
-                // Configure console logging
-                services.AddLogging(logging =>
-                {
-                    logging.AddSimpleConsole(options =>
-                    {
-                        options.SingleLine = true;
-                        options.UseUtcTimestamp = true;
-                        options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ ";
-                    });
-                });
-            })
-            .Build();
+        // Configure the client
+        services.AddDurableTaskClient(builder =>
+        {
+            builder.UseDurableTaskScheduler(connectionString);
+            builder.EnableScheduledTasksSupport();
+        });
+
+        // Configure console logging
+        services.AddLogging(logging =>
+        {
+            logging.AddSimpleConsole(options =>
+            {
+                options.SingleLine = true;
+                options.UseUtcTimestamp = true;
+                options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ ";
+            });
+        });
+    })
+    .Build();
 
 await host.StartAsync();
+
 IScheduledTaskClient scheduledTaskClient = host.Services.GetRequiredService<IScheduledTaskClient>();
 
 try
 {
     // Create schedule options that runs every 30 seconds
-    var scheduleOptions = new ScheduleCreationOptions("DemoOrchestration")
+    ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions("DemoOrchestration")
     {
         ScheduleId = "demo-schedule",
         Interval = TimeSpan.FromSeconds(30),
@@ -106,6 +107,21 @@ try
     Console.WriteLine("\nPress any key to delete the schedule and exit...");
     Console.ReadKey();
 
+    // intentionally call schedule to trigger exceptions
+    await scheduleHandle.ResumeAsync();
+    await scheduleHandle.ResumeAsync();
+
+    // Get schedule instance details
+    var scheduleInstanceDetails = await scheduleHandle.GetScheduleInstanceDetailsAsync(true);
+    Console.WriteLine($"\nSchedule instance details:");
+    Console.WriteLine($"{scheduleInstanceDetails}");
+    Console.WriteLine($"Instance ID: {scheduleInstanceDetails!.InstanceId}");
+    Console.WriteLine($"Created time: {scheduleInstanceDetails.CreatedAt}");
+    Console.WriteLine($"Name: {scheduleInstanceDetails.Name}");
+    Console.WriteLine($"RuntimeStatus: {scheduleInstanceDetails.RuntimeStatus}");
+    Console.WriteLine($"LastUpdatedAt: {scheduleInstanceDetails.LastUpdatedAt}");
+    Console.WriteLine($"FailureDetails: {scheduleInstanceDetails.FailureDetails}");
+    Console.WriteLine(); // Add blank line between instances
     // Delete the schedule
     await scheduleHandle.DeleteAsync();
     Console.WriteLine("Schedule deleted.");

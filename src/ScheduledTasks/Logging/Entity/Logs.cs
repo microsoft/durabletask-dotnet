@@ -4,6 +4,7 @@
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.ScheduledTasks;
+
 /// <summary>
 /// Log messages.
 /// </summary>
@@ -41,7 +42,7 @@ static partial class Logs
 
     [LoggerMessage(EventId = 10, Level = LogLevel.Information, Message = "Schedule '{scheduleId}' is executed")]
     public static partial void CompletedScheduleRun(this ILogger logger, string scheduleId);
-    
+
     [LoggerMessage(EventId = 11, Level = LogLevel.Information, Message = "Schedule '{scheduleId}' is being deleted")]
     public static partial void DeletingSchedule(this ILogger logger, string scheduleId);
 

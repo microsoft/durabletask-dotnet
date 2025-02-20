@@ -41,8 +41,8 @@ public class ScheduleHandle : IScheduleHandle
     /// <inheritdoc/>
     public async Task<ScheduleDescription> DescribeAsync()
     {
-        this.logger.ClientDescribingSchedule(this.ScheduleId);
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
+        this.logger.ClientDescribingSchedule(this.ScheduleId);
 
         EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
         EntityMetadata<ScheduleState>? metadata =

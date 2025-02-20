@@ -11,27 +11,27 @@ class ScheduleState
     /// <summary>
     /// Gets or sets the current status of the schedule.
     /// </summary>
-    internal ScheduleStatus Status { get; set; } = ScheduleStatus.Uninitialized;
+    public ScheduleStatus Status { get; set; } = ScheduleStatus.Uninitialized;
 
     /// <summary>
     /// Gets or sets the execution token used to validate schedule operations.
     /// </summary>
-    internal string ExecutionToken { get; set; } = Guid.NewGuid().ToString("N");
+    public string ExecutionToken { get; set; } = Guid.NewGuid().ToString("N");
 
     /// <summary>
     /// Gets or sets the last time the schedule was run.
     /// </summary>
-    internal DateTimeOffset? LastRunAt { get; set; }
+    public DateTimeOffset? LastRunAt { get; set; }
 
     /// <summary>
     /// Gets or sets the next scheduled run time.
     /// </summary>
-    internal DateTimeOffset? NextRunAt { get; set; }
+    public DateTimeOffset? NextRunAt { get; set; }
 
     /// <summary>
     /// Gets or sets the schedule configuration.
     /// </summary>
-    internal ScheduleConfiguration? ScheduleConfiguration { get; set; }
+    public ScheduleConfiguration? ScheduleConfiguration { get; set; }
 
     /// <summary>
     /// Refreshes the execution token to invalidate pending schedule operations.

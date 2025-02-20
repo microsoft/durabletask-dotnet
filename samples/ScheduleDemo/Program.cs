@@ -25,12 +25,32 @@ IHost host = Host.CreateDefaultBuilder(args)
                 // Add a demo orchestration that will be triggered by the schedule
                 r.AddOrchestratorFunc("DemoOrchestration", async context =>
                 {
-                    string? input = context.GetInput<string>();
-                    await context.CallActivityAsync("ProcessMessage", input);
-                    return $"Completed processing at {DateTime.UtcNow}";
+                    const string stockSymbol = "MSFT"; // Hardcoded to Microsoft stock
+                    var logger = context.CreateReplaySafeLogger("DemoOrchestration");
+                    logger.LogInformation("Getting stock price for: {symbol}", stockSymbol);
+
+                    try
+                    {
+                        // Get current stock price
+                        decimal currentPrice = await context.CallActivityAsync<decimal>("GetStockPrice", stockSymbol);
+
+                        logger.LogInformation("Current price for {symbol} is ${price:F2}", stockSymbol, currentPrice);
+
+                        return $"Stock {stockSymbol} price: ${currentPrice:F2} at {DateTime.UtcNow}";
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Error processing stock price for {symbol}", stockSymbol);
+                        throw;
+                    }
                 });
-                // Add a demo activity
-                r.AddActivityFunc<string, string>("ProcessMessage", (context, message) => $"Processing message: {message}");
+
+                // Add required activities
+                r.AddActivityFunc<string, decimal>("GetStockPrice", (context, symbol) =>
+                {
+                    // Mock implementation - would normally call stock API
+                    return 100.00m;
+                });
             });
 
             // Enable scheduled tasks support
@@ -67,64 +87,62 @@ try
     // Create schedule options that runs every 30 seconds
     ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions("DemoOrchestration")
     {
-        ScheduleId = "demo-schedule",
-        Interval = TimeSpan.FromSeconds(30),
+        ScheduleId = "demo-schedule1",
+        Interval = TimeSpan.FromSeconds(4),
         StartAt = DateTimeOffset.UtcNow,
         OrchestrationInput = "This is a scheduled message!"
     };
 
     // Create the schedule
-    Console.WriteLine("Creating schedule...");
     IScheduleHandle scheduleHandle = await scheduledTaskClient.CreateScheduleAsync(scheduleOptions);
-    Console.WriteLine($"Created schedule with ID: {scheduleHandle.ScheduleId}");
-
+    await Task.Delay(TimeSpan.FromSeconds(120));
     // Monitor the schedule for a while
-    Console.WriteLine("\nMonitoring schedule for 2 minutes...");
-    for (int i = 0; i < 4; i++)
-    {
-        await Task.Delay(TimeSpan.FromSeconds(30));
-        var scheduleDescription = await scheduleHandle.DescribeAsync();
-        Console.WriteLine($"\nSchedule status: {scheduleDescription.Status}");
-        Console.WriteLine($"Last run at: {scheduleDescription.LastRunAt}");
-        Console.WriteLine($"Next run at: {scheduleDescription.NextRunAt}");
-    }
+    //Console.WriteLine("\nMonitoring schedule for 2 minutes...");
+    //for (int i = 0; i < 4; i++)
+    //{
+    //    await Task.Delay(TimeSpan.FromSeconds(30));
+    //    var scheduleDescription = await scheduleHandle.DescribeAsync();
+    //    Console.WriteLine($"\nSchedule status: {scheduleDescription.Status}");
+    //    Console.WriteLine($"Last run at: {scheduleDescription.LastRunAt}");
+    //    Console.WriteLine($"Next run at: {scheduleDescription.NextRunAt}");
+    //}
 
-    // Pause the schedule
-    Console.WriteLine("\nPausing schedule...");
-    await scheduleHandle.PauseAsync();
+    // // Pause the schedule
+    // Console.WriteLine("\nPausing schedule...");
+    // await scheduleHandle.PauseAsync();
 
-    var pausedSchedule = await scheduleHandle.DescribeAsync();
-    Console.WriteLine($"Schedule status after pause: {pausedSchedule.Status}");
+    // var pausedSchedule = await scheduleHandle.DescribeAsync();
+    // Console.WriteLine($"Schedule status after pause: {pausedSchedule.Status}");
 
-    // Resume the schedule
-    Console.WriteLine("\nResuming schedule...");
-    await scheduleHandle.ResumeAsync();
+    // // Resume the schedule
+    // Console.WriteLine("\nResuming schedule...");
+    // await scheduleHandle.ResumeAsync();
 
-    var resumedSchedule = await scheduleHandle.DescribeAsync();
-    Console.WriteLine($"Schedule status after resume: {resumedSchedule.Status}");
-    Console.WriteLine($"Next run at: {resumedSchedule.NextRunAt}");
+    // var resumedSchedule = await scheduleHandle.DescribeAsync();
+    // Console.WriteLine($"Schedule status after resume: {resumedSchedule.Status}");
+    // Console.WriteLine($"Next run at: {resumedSchedule.NextRunAt}");
 
-    Console.WriteLine("\nPress any key to delete the schedule and exit...");
-    Console.ReadKey();
+    // Console.WriteLine("\nPress any key to delete the schedule and exit...");
+    // Console.ReadKey();
 
-    // intentionally call schedule to trigger exceptions
-    await scheduleHandle.ResumeAsync();
-    await scheduleHandle.ResumeAsync();
+    // // intentionally call schedule to trigger exceptions
+    // await scheduleHandle.ResumeAsync();
+    // await scheduleHandle.ResumeAsync();
 
-    // Get schedule instance details
-    var scheduleInstanceDetails = await scheduleHandle.GetScheduleInstanceDetailsAsync(true);
-    Console.WriteLine($"\nSchedule instance details:");
-    Console.WriteLine($"{scheduleInstanceDetails}");
-    Console.WriteLine($"Instance ID: {scheduleInstanceDetails!.InstanceId}");
-    Console.WriteLine($"Created time: {scheduleInstanceDetails.CreatedAt}");
-    Console.WriteLine($"Name: {scheduleInstanceDetails.Name}");
-    Console.WriteLine($"RuntimeStatus: {scheduleInstanceDetails.RuntimeStatus}");
-    Console.WriteLine($"LastUpdatedAt: {scheduleInstanceDetails.LastUpdatedAt}");
-    Console.WriteLine($"FailureDetails: {scheduleInstanceDetails.FailureDetails}");
-    Console.WriteLine(); // Add blank line between instances
-    // Delete the schedule
-    await scheduleHandle.DeleteAsync();
-    Console.WriteLine("Schedule deleted.");
+    // // Get schedule instance details
+    // var scheduleInstanceDetails = await scheduleHandle.GetScheduleInstanceDetailsAsync(true);
+    // Console.WriteLine($"\nSchedule instance details:");
+    // Console.WriteLine($"{scheduleInstanceDetails}");
+    // Console.WriteLine($"Instance ID: {scheduleInstanceDetails!.InstanceId}");
+    // Console.WriteLine($"Created time: {scheduleInstanceDetails.CreatedAt}");
+    // Console.WriteLine($"Name: {scheduleInstanceDetails.Name}");
+    // Console.WriteLine($"RuntimeStatus: {scheduleInstanceDetails.RuntimeStatus}");
+    // Console.WriteLine($"LastUpdatedAt: {scheduleInstanceDetails.LastUpdatedAt}");
+    // Console.WriteLine($"FailureDetails: {scheduleInstanceDetails.FailureDetails}");
+    // Console.WriteLine(); // Add blank line between instances
+    // // Delete the schedule
+    // await scheduleHandle.DeleteAsync();
+    // Console.WriteLine("Schedule deleted.");
 }
 catch (Exception ex)
 {

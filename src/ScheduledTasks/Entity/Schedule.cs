@@ -32,10 +32,12 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 
         if (this.State.Status != ScheduleStatus.Uninitialized)
         {
-            string errorMessage = "Schedule is already created.";
-            Exception exception = new InvalidOperationException(errorMessage);
-            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.CreateSchedule), errorMessage, exception);
-            throw exception;
+            return;
+
+            // string errorMessage = "Schedule is already created.";
+            // Exception exception = new InvalidOperationException(errorMessage);
+            // this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.CreateSchedule), errorMessage, exception);
+            // throw exception;
         }
 
         this.State.ScheduleConfiguration = ScheduleConfiguration.FromCreateOptions(scheduleCreationOptions);
@@ -147,8 +149,8 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// <exception cref="InvalidOperationException">Thrown when the schedule is not active or interval is not specified.</exception>
     public void RunSchedule(TaskEntityContext context, string executionToken)
     {
-        this.logger.RunningSchedule(this.State.ScheduleConfiguration!.ScheduleId);
         Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
+        this.logger.RunningSchedule(this.State.ScheduleConfiguration!.ScheduleId);
         if (this.State.ScheduleConfiguration.Interval == null)
         {
             string errorMessage = "Schedule interval must be specified.";

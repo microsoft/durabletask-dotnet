@@ -14,11 +14,6 @@ public record ScheduleCreationOptions
     TimeSpan? interval;
 
     /// <summary>
-    /// Gets the name of the orchestration function to schedule.
-    /// </summary>
-    public string OrchestrationName { get; init; }
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="ScheduleCreationOptions"/> class.
     /// </summary>
     /// <param name="orchestrationName">The name of the orchestration function to schedule.</param>
@@ -28,6 +23,11 @@ public record ScheduleCreationOptions
         Check.NotNullOrEmpty(orchestrationName, nameof(orchestrationName));
         this.OrchestrationName = orchestrationName;
     }
+
+    /// <summary>
+    /// Gets the name of the orchestration function to schedule.
+    /// </summary>
+    public string OrchestrationName { get; init; }
 
     /// <summary>
     /// Gets the ID of the schedule, if not provided, default to a new GUID.

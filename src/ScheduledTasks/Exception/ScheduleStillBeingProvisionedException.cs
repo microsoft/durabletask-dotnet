@@ -9,11 +9,6 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 public class ScheduleStillBeingProvisionedException : Exception
 {
     /// <summary>
-    /// Gets the ID of the schedule that is still being provisioned.
-    /// </summary>
-    public string ScheduleId { get; }
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="ScheduleStillBeingProvisionedException"/> class.
     /// </summary>
     /// <param name="scheduleId">The ID of the schedule that is still being provisioned.</param>
@@ -33,4 +28,9 @@ public class ScheduleStillBeingProvisionedException : Exception
     {
         this.ScheduleId = scheduleId;
     }
+
+    /// <summary>
+    /// Gets the ID of the schedule that is still being provisioned.
+    /// </summary>
+    public string ScheduleId { get; }
 }

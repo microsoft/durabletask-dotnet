@@ -9,11 +9,6 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 public class ScheduleInternalException : Exception
 {
     /// <summary>
-    /// Gets the ID of the schedule that encountered the internal error.
-    /// </summary>
-    public string ScheduleId { get; }
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="ScheduleInternalException"/> class.
     /// </summary>
     /// <param name="scheduleId">The ID of the schedule that encountered the error.</param>
@@ -35,4 +30,9 @@ public class ScheduleInternalException : Exception
     {
         this.ScheduleId = scheduleId;
     }
+
+    /// <summary>
+    /// Gets the ID of the schedule that encountered the internal error.
+    /// </summary>
+    public string ScheduleId { get; }
 }

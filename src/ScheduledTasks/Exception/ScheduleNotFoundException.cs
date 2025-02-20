@@ -9,11 +9,6 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 public class ScheduleNotFoundException : Exception
 {
     /// <summary>
-    /// Gets the ID of the schedule that was not found.
-    /// </summary>
-    public string ScheduleId { get; }
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="ScheduleNotFoundException"/> class.
     /// </summary>
     /// <param name="scheduleId">The ID of the schedule that was not found.</param>
@@ -33,4 +28,9 @@ public class ScheduleNotFoundException : Exception
     {
         this.ScheduleId = scheduleId;
     }
+
+    /// <summary>
+    /// Gets the ID of the schedule that was not found.
+    /// </summary>
+    public string ScheduleId { get; }
 }

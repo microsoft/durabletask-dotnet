@@ -9,11 +9,6 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 public class ScheduleAlreadyExistException : Exception
 {
     /// <summary>
-    /// Gets the ID of the schedule that already exists.
-    /// </summary>
-    public string ScheduleId { get; }
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="ScheduleAlreadyExistException"/> class.
     /// </summary>
     /// <param name="scheduleId">The ID of the schedule that already exists.</param>
@@ -33,4 +28,9 @@ public class ScheduleAlreadyExistException : Exception
     {
         this.ScheduleId = scheduleId;
     }
+
+    /// <summary>
+    /// Gets the ID of the schedule that already exists.
+    /// </summary>
+    public string ScheduleId { get; }
 }

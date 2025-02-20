@@ -3,9 +3,23 @@
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
+/// <summary>
+/// Represents the current status of a schedule.
+/// </summary>
 public enum ScheduleStatus
 {
-    Uninitialized, // Schedule has not been created
-    Active,       // Schedule is active and running
-    Paused,       // Schedule is paused
+    /// <summary>
+    /// Schedule has not been created.
+    /// </summary>
+    Uninitialized,
+
+    /// <summary>
+    /// Schedule is active and running.
+    /// </summary>
+    Active,
+
+    /// <summary>
+    /// Schedule is paused.
+    /// </summary>
+    Paused,
 }

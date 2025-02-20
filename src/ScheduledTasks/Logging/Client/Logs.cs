@@ -38,6 +38,12 @@ static partial class Logs
     [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Client: Deleting schedule '{scheduleId}'")]
     public static partial void ClientDeletingSchedule(this ILogger logger, string scheduleId);
 
-    [LoggerMessage(EventId = 9, Level = LogLevel.Information, Message = "Client: Getting instance details for schedule '{scheduleId}'")]
-    public static partial void ClientGettingScheduleInstanceDetails(this ILogger logger, string scheduleId);
+    [LoggerMessage(EventId = 9, Level = LogLevel.Information, Message = "Client: {message} (ScheduleId: {scheduleId})")]
+    public static partial void ClientInfo(this ILogger logger, string message, string scheduleId);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "Client Warning: {message} (ScheduleId: {scheduleId})")]
+    public static partial void ClientWarning(this ILogger logger, string message, string scheduleId);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Error, Message = "Client Error: {message} (ScheduleId: {scheduleId})")]
+    public static partial void ClientError(this ILogger logger, string message, string scheduleId);
 }

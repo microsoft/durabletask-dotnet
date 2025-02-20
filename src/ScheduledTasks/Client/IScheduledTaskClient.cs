@@ -19,7 +19,7 @@ public interface IScheduledTaskClient
     /// Gets a list of all initialized schedules.
     /// </summary>
     /// <returns>A list of schedule descriptions.</returns>
-    Task<IEnumerable<ScheduleDescription>> ListInitializedSchedulesAsync();
+    Task<IEnumerable<ScheduleDescription>> ListSchedulesAsync();
 
     /// <summary>
     /// Creates a new schedule with the specified configuration.
@@ -27,6 +27,4 @@ public interface IScheduledTaskClient
     /// <param name="scheduleConfigCreateOptions">The configuration options for creating the schedule.</param>
     /// <returns>The ID of the newly created schedule.</returns>
     Task<IScheduleHandle> CreateScheduleAsync(ScheduleCreationOptions scheduleConfigCreateOptions);
-
-    // TODO: list uninitialized schedules?
 }

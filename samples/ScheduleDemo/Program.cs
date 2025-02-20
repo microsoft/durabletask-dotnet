@@ -95,20 +95,12 @@ try
 
     // Create the schedule
     IScheduleHandle scheduleHandle = await scheduledTaskClient.CreateScheduleAsync(scheduleOptions);
-    // Monitor the schedule for a while
-    //Console.WriteLine("\nMonitoring schedule for 2 minutes...");
-    //for (int i = 0; i < 4; i++)
-    //{
-    //    await Task.Delay(TimeSpan.FromSeconds(30));
-    //    var scheduleDescription = await scheduleHandle.DescribeAsync();
-    //    Console.WriteLine($"\nSchedule status: {scheduleDescription.Status}");
-    //    Console.WriteLine($"Last run at: {scheduleDescription.LastRunAt}");
-    //    Console.WriteLine($"Next run at: {scheduleDescription.NextRunAt}");
-    //}
+
 
     // // Pause the schedule
     // Console.WriteLine("\nPausing schedule...");
-    // await scheduleHandle.PauseAsync();
+    IScheduleWaiter waiter = await scheduleHandle.PauseAsync();
+    await waiter.WaitUntilPausedAsync();
 
     // var pausedSchedule = await scheduleHandle.DescribeAsync();
     // Console.WriteLine($"Schedule status after pause: {pausedSchedule.Status}");
@@ -128,7 +120,7 @@ try
     // await scheduleHandle.ResumeAsync();
     // await scheduleHandle.ResumeAsync();
 
-    await Task.Delay(TimeSpan.FromSeconds(120));
+    //await Task.Delay(TimeSpan.FromSeconds(120));
     // // Delete the schedule
     // await scheduleHandle.DeleteAsync();
     // Console.WriteLine("Schedule deleted.");

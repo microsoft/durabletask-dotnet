@@ -45,18 +45,20 @@ public class ScheduledTaskClient : IScheduledTaskClient
         EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), scheduleConfigCreateOptions.ScheduleId);
 
         // Check if schedule already exists
-        // EntityMetadata<ScheduleState>? metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
-        // if (metadata != null)
-        // {
-        //     throw new ScheduleAlreadyExistException(scheduleConfigCreateOptions.ScheduleId);
-        // }
+        EntityMetadata<ScheduleState>? metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
+        if (metadata != null)
+        {
+            this.logger.ClientWarning("Schedule with ID {ScheduleId} already exists. Returning existing handle.", scheduleConfigCreateOptions.ScheduleId);
+            return new ScheduleHandle(this.durableTaskClient, scheduleConfigCreateOptions.ScheduleId, this.logger);
+        }
+
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.CreateSchedule), scheduleConfigCreateOptions);
 
         return new ScheduleHandle(this.durableTaskClient, scheduleConfigCreateOptions.ScheduleId, this.logger);
     }
 
     /// <inheritdoc/>
-    public async Task<IEnumerable<ScheduleDescription>> ListInitializedSchedulesAsync()
+    public async Task<IEnumerable<ScheduleDescription>> ListSchedulesAsync()
     {
         this.logger.ClientListingSchedules();
         EntityQuery query = new EntityQuery

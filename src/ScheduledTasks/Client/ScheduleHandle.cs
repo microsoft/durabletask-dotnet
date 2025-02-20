@@ -30,12 +30,18 @@ public class ScheduleHandle : IScheduleHandle
         this.durableTaskClient = client ?? throw new ArgumentNullException(nameof(client));
         this.ScheduleId = scheduleId ?? throw new ArgumentNullException(nameof(scheduleId));
         this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        this.EntityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
     }
 
     /// <summary>
     /// Gets the ID of the schedule.
     /// </summary>
     public string ScheduleId { get; }
+
+    /// <summary>
+    /// Gets the entity ID of the schedule.
+    /// </summary>
+    public EntityInstanceId EntityId { get; }
 
     /// <inheritdoc/>
     public async Task<ScheduleDescription> DescribeAsync()
@@ -87,16 +93,8 @@ public class ScheduleHandle : IScheduleHandle
     public async Task<IScheduleWaiter> PauseAsync()
     {
         this.logger.ClientPausingSchedule(this.ScheduleId);
-        Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
-        EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
-        EntityMetadata<ScheduleState>? metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
-        if (metadata == null)
-        {
-            throw new ScheduleNotFoundException(this.ScheduleId);
-        }
-
-        await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.PauseSchedule));
+        await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, nameof(Schedule.PauseSchedule));
         return new ScheduleWaiter(this);
     }
 
@@ -104,16 +102,9 @@ public class ScheduleHandle : IScheduleHandle
     public async Task<IScheduleWaiter> ResumeAsync()
     {
         this.logger.ClientResumingSchedule(this.ScheduleId);
-        Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
-        EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
-        EntityMetadata<ScheduleState>? metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
-        if (metadata == null)
-        {
-            throw new ScheduleNotFoundException(this.ScheduleId);
-        }
+        await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, nameof(Schedule.ResumeSchedule));
 
-        await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.ResumeSchedule));
         return new ScheduleWaiter(this);
     }
 
@@ -121,16 +112,8 @@ public class ScheduleHandle : IScheduleHandle
     public async Task<IScheduleWaiter> UpdateAsync(ScheduleUpdateOptions updateOptions)
     {
         this.logger.ClientUpdatingSchedule(this.ScheduleId);
-        Check.NotNull(updateOptions, nameof(updateOptions));
 
-        EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
-        EntityMetadata<ScheduleState>? metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
-        if (metadata == null)
-        {
-            throw new ScheduleNotFoundException(this.ScheduleId);
-        }
-
-        await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.UpdateSchedule), updateOptions);
+        await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, nameof(Schedule.UpdateSchedule), updateOptions);
         return new ScheduleWaiter(this);
     }
 
@@ -138,16 +121,8 @@ public class ScheduleHandle : IScheduleHandle
     public async Task<IScheduleWaiter> DeleteAsync()
     {
         this.logger.ClientDeletingSchedule(this.ScheduleId);
-        Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
-        EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
-        EntityMetadata<ScheduleState>? metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
-        if (metadata == null)
-        {
-            throw new ScheduleNotFoundException(this.ScheduleId);
-        }
-
-        await this.durableTaskClient.Entities.SignalEntityAsync(entityId, "delete");
+        await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, "delete");
         return new ScheduleWaiter(this);
     }
 }

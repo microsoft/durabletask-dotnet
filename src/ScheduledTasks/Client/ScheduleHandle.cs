@@ -90,8 +90,8 @@ public class ScheduleHandle : IScheduleHandle
         this.logger.ClientPausingSchedule(this.ScheduleId);
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
-        var entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
-        var metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
+        EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
+        EntityMetadata<ScheduleState>? metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
         if (metadata == null)
         {
             throw new ScheduleNotFoundException(this.ScheduleId);
@@ -106,8 +106,8 @@ public class ScheduleHandle : IScheduleHandle
         this.logger.ClientResumingSchedule(this.ScheduleId);
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
-        var entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
-        var metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
+        EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
+        EntityMetadata<ScheduleState>? metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
         if (metadata == null)
         {
             throw new ScheduleNotFoundException(this.ScheduleId);
@@ -122,8 +122,8 @@ public class ScheduleHandle : IScheduleHandle
         this.logger.ClientUpdatingSchedule(this.ScheduleId);
         Check.NotNull(updateOptions, nameof(updateOptions));
 
-        var entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
-        var metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
+        EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
+        EntityMetadata<ScheduleState>? metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
         if (metadata == null)
         {
             throw new ScheduleNotFoundException(this.ScheduleId);
@@ -138,8 +138,8 @@ public class ScheduleHandle : IScheduleHandle
         this.logger.ClientDeletingSchedule(this.ScheduleId);
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
-        var entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
-        var metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
+        EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
+        EntityMetadata<ScheduleState>? metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
         if (metadata == null)
         {
             throw new ScheduleNotFoundException(this.ScheduleId);
@@ -148,5 +148,23 @@ public class ScheduleHandle : IScheduleHandle
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, "delete");
     }
 
-    
+    /// <summary>
+    /// Gets the details of the schedule's underlying orchestration instance.
+    /// </summary>
+    /// <param name="getInputsAndOutputs">If true, includes the serialized inputs and outputs in the returned metadata.</param>
+    /// <param name="cancellation">Optional cancellation token.</param>
+    /// <returns>The orchestration metadata for the schedule instance, or null if not found.</returns>
+    public async Task<OrchestrationMetadata?> GetScheduleInstanceDetailsAsync(
+        bool getInputsAndOutputs = false,
+        CancellationToken cancellation = default)
+    {
+        this.logger.ClientGettingScheduleInstanceDetails(this.ScheduleId);
+        Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
+
+        string instanceId = new EntityInstanceId(nameof(Schedule), this.ScheduleId).ToString();
+        return await this.durableTaskClient.GetInstanceAsync(
+            instanceId,
+            getInputsAndOutputs,
+            cancellation);
+    }
 }

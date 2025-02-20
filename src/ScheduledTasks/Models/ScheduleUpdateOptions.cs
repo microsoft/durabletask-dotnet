@@ -8,6 +8,8 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// </summary>
 public record ScheduleUpdateOptions
 {
+    TimeSpan? interval;
+
     /// <summary>
     /// Gets or initializes the name of the orchestration function to schedule.
     /// </summary>
@@ -32,11 +34,6 @@ public record ScheduleUpdateOptions
     /// Gets or initializes the end time of the schedule.
     /// </summary>
     public DateTimeOffset? EndAt { get; init; }
-
-    /// <summary>
-    /// The interval of the schedule.
-    /// </summary>
-    TimeSpan? interval;
 
     /// <summary>
     /// Gets or initializes the interval of the schedule.

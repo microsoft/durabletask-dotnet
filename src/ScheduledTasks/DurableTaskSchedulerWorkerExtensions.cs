@@ -14,7 +14,7 @@ public static class DurableTaskSchedulerWorkerExtensions
     /// Adds scheduled task support to the worker builder.
     /// </summary>
     /// <param name="builder">The worker builder to add scheduled task support to.</param>
-    public static void EnableScheduleSupport(this IDurableTaskWorkerBuilder builder)
+    public static void EnableScheduledTasksSupport(this IDurableTaskWorkerBuilder builder)
     {
         builder.AddTasks(r => r.AddEntity(nameof(Schedule), sp => ActivatorUtilities.CreateInstance<Schedule>(sp)));
     }

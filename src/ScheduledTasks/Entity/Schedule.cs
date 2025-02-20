@@ -36,7 +36,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         {
             string errorMessage = "Schedule is already created.";
             Exception exception = new InvalidOperationException(errorMessage);
-            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration.ScheduleId, nameof(this.CreateSchedule), errorMessage, exception);
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.CreateSchedule), errorMessage, exception);
             throw exception;
         }
 

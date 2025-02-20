@@ -84,7 +84,7 @@ public class ScheduleHandle : IScheduleHandle
     }
 
     /// <inheritdoc/>
-    public async Task PauseAsync()
+    public async Task<IScheduleWaiter> PauseAsync()
     {
         this.logger.ClientPausingSchedule(this.ScheduleId);
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
@@ -97,10 +97,11 @@ public class ScheduleHandle : IScheduleHandle
         }
 
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.PauseSchedule));
+        return new ScheduleWaiter(this);
     }
 
     /// <inheritdoc/>
-    public async Task ResumeAsync()
+    public async Task<IScheduleWaiter> ResumeAsync()
     {
         this.logger.ClientResumingSchedule(this.ScheduleId);
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
@@ -113,10 +114,11 @@ public class ScheduleHandle : IScheduleHandle
         }
 
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.ResumeSchedule));
+        return new ScheduleWaiter(this);
     }
 
     /// <inheritdoc/>
-    public async Task UpdateAsync(ScheduleUpdateOptions updateOptions)
+    public async Task<IScheduleWaiter> UpdateAsync(ScheduleUpdateOptions updateOptions)
     {
         this.logger.ClientUpdatingSchedule(this.ScheduleId);
         Check.NotNull(updateOptions, nameof(updateOptions));
@@ -129,10 +131,11 @@ public class ScheduleHandle : IScheduleHandle
         }
 
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.UpdateSchedule), updateOptions);
+        return new ScheduleWaiter(this);
     }
 
     /// <inheritdoc/>
-    public async Task DeleteAsync()
+    public async Task<IScheduleWaiter> DeleteAsync()
     {
         this.logger.ClientDeletingSchedule(this.ScheduleId);
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
@@ -145,5 +148,6 @@ public class ScheduleHandle : IScheduleHandle
         }
 
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, "delete");
+        return new ScheduleWaiter(this);
     }
 }

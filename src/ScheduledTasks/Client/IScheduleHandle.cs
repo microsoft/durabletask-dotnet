@@ -23,24 +23,24 @@ public interface IScheduleHandle
     /// Deletes this schedule.
     /// </summary>
     /// <returns>A task that completes when the schedule is deleted.</returns>
-    Task<ScheduleWaiter> DeleteAsync();
+    Task<IScheduleWaiter> DeleteAsync();
 
     /// <summary>
     /// Pauses this schedule.
     /// </summary>
     /// <returns>A task that completes when the schedule is paused.</returns>
-    Task<ScheduleWaiter> PauseAsync();
+    Task<IScheduleWaiter> PauseAsync();
 
     /// <summary>
     /// Resumes this schedule.
     /// </summary>
     /// <returns>A task that completes when the schedule is resumed.</returns>
-    Task<ScheduleWaiter> ResumeAsync();
+    Task<IScheduleWaiter> ResumeAsync();
 
     /// <summary>
     /// Updates this schedule with new configuration.
     /// </summary>
     /// <param name="updateOptions">The options for updating the schedule configuration.</param>
     /// <returns>A task that completes when the schedule is updated.</returns>
-    Task<ScheduleWaiter> UpdateAsync(ScheduleUpdateOptions updateOptions);
+    Task<IScheduleWaiter> UpdateAsync(ScheduleUpdateOptions updateOptions);
 }

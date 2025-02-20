@@ -9,6 +9,11 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 public interface IScheduleHandle
 {
     /// <summary>
+    /// Gets the ID of this schedule.
+    /// </summary>
+    string ScheduleId { get; }
+
+    /// <summary>
     /// Retrieves the current details of this schedule.
     /// </summary>
     /// <returns>The schedule details.</returns>

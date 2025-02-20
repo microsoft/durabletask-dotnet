@@ -1,21 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.DurableTask.Client;
-
 namespace Microsoft.DurableTask.ScheduledTasks;
 
 /// <summary>
 /// Provides waiter functionality for schedule state transitions.
 /// </summary>
-public class ScheduleWaiter
+public class ScheduleWaiter : IScheduleWaiter
 {
-    private readonly IScheduleHandle scheduleHandle;
-    private readonly TimeSpan defaultPollingInterval = TimeSpan.FromSeconds(5);
-    private readonly TimeSpan defaultTimeout = TimeSpan.FromMinutes(5);
+    readonly IScheduleHandle scheduleHandle;
+    readonly TimeSpan defaultPollingInterval = TimeSpan.FromSeconds(5);
+    readonly TimeSpan defaultTimeout = TimeSpan.FromMinutes(5);
+    readonly TimeSpan defaultMaxPollingInterval = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ScheduleWaiter"/> class.
@@ -26,53 +22,37 @@ public class ScheduleWaiter
         this.scheduleHandle = scheduleHandle ?? throw new ArgumentNullException(nameof(scheduleHandle));
     }
 
-    /// <summary>
-    /// Waits until the schedule is paused.
-    /// </summary>
-    /// <param name="timeout">Optional timeout duration. Defaults to 5 minutes.</param>
-    /// <param name="pollingInterval">Optional polling interval. Defaults to 5 seconds.</param>
-    /// <param name="cancellationToken">Optional cancellation token.</param>
-    /// <returns>The schedule description once paused.</returns>
+    /// <inheritdoc/>
     public Task<ScheduleDescription> WaitUntilPausedAsync(
-        TimeSpan? timeout = null,
-        TimeSpan? pollingInterval = null,
+        WaitOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        return WaitForStatusAsync(ScheduleStatus.Paused, timeout, pollingInterval, cancellationToken);
+        return this.WaitForStatusAsync(ScheduleStatus.Paused, options, cancellationToken);
     }
 
-    /// <summary>
-    /// Waits until the schedule is running.
-    /// </summary>
-    /// <param name="timeout">Optional timeout duration. Defaults to 5 minutes.</param>
-    /// <param name="pollingInterval">Optional polling interval. Defaults to 5 seconds.</param>
-    /// <param name="cancellationToken">Optional cancellation token.</param>
-    /// <returns>The schedule description once running.</returns>
-    public Task<ScheduleDescription> WaitUntilRunningAsync(
-        TimeSpan? timeout = null,
-        TimeSpan? pollingInterval = null,
+    /// <inheritdoc/>
+    public Task<ScheduleDescription> WaitUntilActiveAsync(
+        WaitOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        return WaitForStatusAsync(ScheduleStatus.Running, timeout, pollingInterval, cancellationToken);
+        return this.WaitForStatusAsync(ScheduleStatus.Active, options, cancellationToken);
     }
 
-    /// <summary>
-    /// Waits until the schedule is deleted.
-    /// </summary>
-    /// <param name="timeout">Optional timeout duration. Defaults to 5 minutes.</param>
-    /// <param name="pollingInterval">Optional polling interval. Defaults to 5 seconds.</param>
-    /// <param name="cancellationToken">Optional cancellation token.</param>
-    /// <returns>The schedule description once deleted.</returns>
+    /// <inheritdoc/>
     public async Task<bool> WaitUntilDeletedAsync(
-        TimeSpan? timeout = null,
-        TimeSpan? pollingInterval = null,
+        WaitOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        timeout ??= defaultTimeout;
-        pollingInterval ??= defaultPollingInterval;
+        TimeSpan timeout = options?.Timeout ?? this.defaultTimeout;
+        TimeSpan pollingInterval = options?.PollingInterval ?? this.defaultPollingInterval;
+        TimeSpan maxPollingInterval = options?.MaxPollingInterval ?? this.defaultMaxPollingInterval;
+        bool useExponentialBackoff = options?.UseExponentialBackoff ?? false;
+        double backoffMultiplier = options?.BackoffMultiplier ?? 2.0;
 
-        using var timeoutCts = new CancellationTokenSource(timeout.Value);
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, cancellationToken);
+        using CancellationTokenSource timeoutCts = new CancellationTokenSource(timeout);
+        using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, cancellationToken);
+
+        TimeSpan currentPollingInterval = pollingInterval;
 
         try
         {
@@ -80,8 +60,17 @@ public class ScheduleWaiter
             {
                 try
                 {
-                    await this.scheduleHandle.Describe();
-                    await Task.Delay(pollingInterval.Value, linkedCts.Token);
+                    await this.scheduleHandle.DescribeAsync();
+
+                    // Calculate next polling interval with exponential backoff if enabled
+                    if (useExponentialBackoff)
+                    {
+                        currentPollingInterval = TimeSpan.FromTicks(Math.Min(
+                            currentPollingInterval.Ticks * (long)backoffMultiplier,
+                            maxPollingInterval.Ticks));
+                    }
+
+                    await Task.Delay(currentPollingInterval, linkedCts.Token);
                 }
                 catch (ScheduleNotFoundException)
                 {
@@ -90,53 +79,57 @@ public class ScheduleWaiter
             }
 
             linkedCts.Token.ThrowIfCancellationRequested();
-            throw new TimeoutException($"Timed out waiting for schedule {scheduleHandle.ScheduleId} to be deleted");
+            throw new TimeoutException($"Timed out waiting for schedule {this.scheduleHandle.ScheduleId} to be deleted");
         }
         catch (OperationCanceledException) when (timeoutCts.Token.IsCancellationRequested)
         {
-            throw new TimeoutException($"Timed out waiting for schedule {scheduleHandle.ScheduleId} to be deleted");
+            throw new TimeoutException($"Timed out waiting for schedule {this.scheduleHandle.ScheduleId} to be deleted");
         }
     }
 
-    /// <summary>
-    /// Waits until the schedule reaches the specified status.
-    /// </summary>
-    /// <param name="desiredStatus">The status to wait for.</param>
-    /// <param name="timeout">Optional timeout duration. Defaults to 5 minutes.</param>
-    /// <param name="pollingInterval">Optional polling interval. Defaults to 5 seconds.</param>
-    /// <param name="cancellationToken">Optional cancellation token.</param>
-    /// <returns>The schedule description once the desired status is reached.</returns>
-    public async Task<ScheduleDescription> WaitForStatusAsync(
+    async Task<ScheduleDescription> WaitForStatusAsync(
         ScheduleStatus desiredStatus,
-        TimeSpan? timeout = null,
-        TimeSpan? pollingInterval = null,
+        WaitOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        timeout ??= defaultTimeout;
-        pollingInterval ??= defaultPollingInterval;
+        TimeSpan timeout = options?.Timeout ?? this.defaultTimeout;
+        TimeSpan pollingInterval = options?.PollingInterval ?? this.defaultPollingInterval;
+        TimeSpan maxPollingInterval = options?.MaxPollingInterval ?? this.defaultMaxPollingInterval;
+        bool useExponentialBackoff = options?.UseExponentialBackoff ?? false;
+        double backoffMultiplier = options?.BackoffMultiplier ?? 2.0;
 
-        using var timeoutCts = new CancellationTokenSource(timeout.Value);
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, cancellationToken);
+        using CancellationTokenSource timeoutCts = new CancellationTokenSource(timeout);
+        using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, cancellationToken);
+
+        TimeSpan currentPollingInterval = pollingInterval;
 
         try
         {
             while (!linkedCts.Token.IsCancellationRequested)
             {
-                var description = await this.scheduleHandle.Describe();
+                ScheduleDescription description = await this.scheduleHandle.DescribeAsync();
                 if (description.Status == desiredStatus)
                 {
                     return description;
                 }
 
-                await Task.Delay(pollingInterval.Value, linkedCts.Token);
+                // Calculate next polling interval with exponential backoff if enabled
+                if (useExponentialBackoff)
+                {
+                    currentPollingInterval = TimeSpan.FromTicks(Math.Min(
+                        currentPollingInterval.Ticks * (long)backoffMultiplier,
+                        maxPollingInterval.Ticks));
+                }
+
+                await Task.Delay(currentPollingInterval, linkedCts.Token);
             }
 
             linkedCts.Token.ThrowIfCancellationRequested();
-            throw new TimeoutException($"Timed out waiting for schedule {scheduleHandle.ScheduleId} to reach status {desiredStatus}");
+            throw new TimeoutException($"Timed out waiting for schedule {this.scheduleHandle.ScheduleId} to reach status {desiredStatus}");
         }
         catch (OperationCanceledException) when (timeoutCts.Token.IsCancellationRequested)
         {
-            throw new TimeoutException($"Timed out waiting for schedule {scheduleHandle.ScheduleId} to reach status {desiredStatus}");
+            throw new TimeoutException($"Timed out waiting for schedule {this.scheduleHandle.ScheduleId} to reach status {desiredStatus}");
         }
     }
-} 
+}

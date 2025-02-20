@@ -72,7 +72,7 @@ public class ScheduledTaskClient : IScheduledTaskClient
         {
             if (metadata.State.Status != ScheduleStatus.Uninitialized)
             {
-                ScheduleConfiguration config = metadata.State.ScheduleConfiguration;
+                ScheduleConfiguration config = metadata.State.ScheduleConfiguration!;
                 schedules.Add(new ScheduleDescription(
                     metadata.Id.Key,
                     config.OrchestrationName,

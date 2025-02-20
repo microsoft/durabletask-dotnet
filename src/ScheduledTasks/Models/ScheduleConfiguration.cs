@@ -8,14 +8,23 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// </summary>
 class ScheduleConfiguration
 {
+    string orchestrationName;
+    TimeSpan? interval;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ScheduleConfiguration"/> class.
+    /// </summary>
+    /// <param name="orchestrationName">The name of the orchestration to schedule.</param>
+    /// <param name="scheduleId">The ID of the schedule, or null to generate one.</param>
     public ScheduleConfiguration(string orchestrationName, string scheduleId)
     {
         this.orchestrationName = Check.NotNullOrEmpty(orchestrationName, nameof(orchestrationName));
         this.ScheduleId = scheduleId ?? Guid.NewGuid().ToString("N");
     }
 
-    string orchestrationName;
-
+    /// <summary>
+    /// Gets or sets the name of the orchestration function to schedule.
+    /// </summary>
     public string OrchestrationName
     {
         get => this.orchestrationName;
@@ -25,18 +34,34 @@ class ScheduleConfiguration
         }
     }
 
+    /// <summary>
+    /// Gets the ID of the schedule.
+    /// </summary>
     public string ScheduleId { get; init; }
 
+    /// <summary>
+    /// Gets or sets the input to the orchestration function.
+    /// </summary>
     public string? OrchestrationInput { get; set; }
 
+    /// <summary>
+    /// Gets or sets the instance ID of the orchestration function.
+    /// </summary>
     public string? OrchestrationInstanceId { get; set; } = Guid.NewGuid().ToString("N");
 
+    /// <summary>
+    /// Gets or sets the start time of the schedule.
+    /// </summary>
     public DateTimeOffset? StartAt { get; set; }
 
+    /// <summary>
+    /// Gets or sets the end time of the schedule.
+    /// </summary>
     public DateTimeOffset? EndAt { get; set; }
 
-    TimeSpan? interval;
-
+    /// <summary>
+    /// Gets or sets the interval between schedule executions.
+    /// </summary>
     public TimeSpan? Interval
     {
         get => this.interval;
@@ -61,12 +86,26 @@ class ScheduleConfiguration
         }
     }
 
+    /// <summary>
+    /// Gets or sets the cron expression for the schedule.
+    /// </summary>
     public string? CronExpression { get; set; }
 
+    /// <summary>
+    /// Gets or sets the maximum number of times the schedule should run.
+    /// </summary>
     public int MaxOccurrence { get; set; }
 
+    /// <summary>
+    /// Gets or sets whether the schedule should start immediately if it's late.
+    /// </summary>
     public bool? StartImmediatelyIfLate { get; set; }
 
+    /// <summary>
+    /// Creates a new configuration from the provided creation options.
+    /// </summary>
+    /// <param name="createOptions">The options to create the configuration from.</param>
+    /// <returns>A new schedule configuration.</returns>
     public static ScheduleConfiguration FromCreateOptions(ScheduleCreationOptions createOptions)
     {
         return new ScheduleConfiguration(createOptions.OrchestrationName, createOptions.ScheduleId)

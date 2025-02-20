@@ -36,61 +36,61 @@ class ScheduleState
     /// <summary>
     /// Updates the schedule configuration with the provided options.
     /// </summary>
-    /// <param name="scheduleConfigUpdateOptions">The update options to apply.</param>
+    /// <param name="scheduleUpdateOptions">The update options to apply.</param>
     /// <returns>A set of field names that were updated.</returns>
-    public HashSet<string> UpdateConfig(ScheduleUpdateOptions scheduleConfigUpdateOptions)
+    public HashSet<string> UpdateConfig(ScheduleUpdateOptions scheduleUpdateOptions)
     {
         Check.NotNull(this.ScheduleConfiguration, nameof(this.ScheduleConfiguration));
-        Check.NotNull(scheduleConfigUpdateOptions, nameof(scheduleConfigUpdateOptions));
+        Check.NotNull(scheduleUpdateOptions, nameof(scheduleUpdateOptions));
 
         HashSet<string> updatedFields = new HashSet<string>();
 
-        if (!string.IsNullOrEmpty(scheduleConfigUpdateOptions.OrchestrationName))
+        if (!string.IsNullOrEmpty(scheduleUpdateOptions.OrchestrationName))
         {
-            this.ScheduleConfiguration.OrchestrationName = scheduleConfigUpdateOptions.OrchestrationName;
+            this.ScheduleConfiguration.OrchestrationName = scheduleUpdateOptions.OrchestrationName;
             updatedFields.Add(nameof(this.ScheduleConfiguration.OrchestrationName));
         }
 
-        if (scheduleConfigUpdateOptions.OrchestrationInput == null)
+        if (scheduleUpdateOptions.OrchestrationInput == null)
         {
-            this.ScheduleConfiguration.OrchestrationInput = scheduleConfigUpdateOptions.OrchestrationInput;
+            this.ScheduleConfiguration.OrchestrationInput = scheduleUpdateOptions.OrchestrationInput;
             updatedFields.Add(nameof(this.ScheduleConfiguration.OrchestrationInput));
         }
 
-        if (scheduleConfigUpdateOptions.StartAt.HasValue)
+        if (scheduleUpdateOptions.StartAt.HasValue)
         {
-            this.ScheduleConfiguration.StartAt = scheduleConfigUpdateOptions.StartAt;
+            this.ScheduleConfiguration.StartAt = scheduleUpdateOptions.StartAt;
             updatedFields.Add(nameof(this.ScheduleConfiguration.StartAt));
         }
 
-        if (scheduleConfigUpdateOptions.EndAt.HasValue)
+        if (scheduleUpdateOptions.EndAt.HasValue)
         {
-            this.ScheduleConfiguration.EndAt = scheduleConfigUpdateOptions.EndAt;
+            this.ScheduleConfiguration.EndAt = scheduleUpdateOptions.EndAt;
             updatedFields.Add(nameof(this.ScheduleConfiguration.EndAt));
         }
 
-        if (scheduleConfigUpdateOptions.Interval.HasValue)
+        if (scheduleUpdateOptions.Interval.HasValue)
         {
-            this.ScheduleConfiguration.Interval = scheduleConfigUpdateOptions.Interval;
+            this.ScheduleConfiguration.Interval = scheduleUpdateOptions.Interval;
             updatedFields.Add(nameof(this.ScheduleConfiguration.Interval));
         }
 
-        if (!string.IsNullOrEmpty(scheduleConfigUpdateOptions.CronExpression))
+        if (!string.IsNullOrEmpty(scheduleUpdateOptions.CronExpression))
         {
-            this.ScheduleConfiguration.CronExpression = scheduleConfigUpdateOptions.CronExpression;
+            this.ScheduleConfiguration.CronExpression = scheduleUpdateOptions.CronExpression;
             updatedFields.Add(nameof(this.ScheduleConfiguration.CronExpression));
         }
 
-        if (scheduleConfigUpdateOptions.MaxOccurrence != 0)
+        if (scheduleUpdateOptions.MaxOccurrence != 0)
         {
-            this.ScheduleConfiguration.MaxOccurrence = scheduleConfigUpdateOptions.MaxOccurrence;
+            this.ScheduleConfiguration.MaxOccurrence = scheduleUpdateOptions.MaxOccurrence;
             updatedFields.Add(nameof(this.ScheduleConfiguration.MaxOccurrence));
         }
 
         // Only update if the customer explicitly set a value
-        if (scheduleConfigUpdateOptions.StartImmediatelyIfLate.HasValue)
+        if (scheduleUpdateOptions.StartImmediatelyIfLate.HasValue)
         {
-            this.ScheduleConfiguration.StartImmediatelyIfLate = scheduleConfigUpdateOptions.StartImmediatelyIfLate.Value;
+            this.ScheduleConfiguration.StartImmediatelyIfLate = scheduleUpdateOptions.StartImmediatelyIfLate.Value;
             updatedFields.Add(nameof(this.ScheduleConfiguration.StartImmediatelyIfLate));
         }
 

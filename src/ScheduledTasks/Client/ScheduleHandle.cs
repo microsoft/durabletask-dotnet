@@ -20,11 +20,6 @@ public class ScheduleHandle : IScheduleHandle
     readonly ILogger logger;
 
     /// <summary>
-    /// Gets the ID of the schedule.
-    /// </summary>
-    public string ScheduleId { get; }
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="ScheduleHandle"/> class.
     /// </summary>
     /// <param name="client">The durable task client.</param>
@@ -37,6 +32,11 @@ public class ScheduleHandle : IScheduleHandle
         this.ScheduleId = scheduleId ?? throw new ArgumentNullException(nameof(scheduleId));
         this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
+
+    /// <summary>
+    /// Gets the ID of the schedule.
+    /// </summary>
+    public string ScheduleId { get; }
 
     /// <inheritdoc/>
     public async Task<ScheduleDescription> DescribeAsync()
@@ -147,4 +147,6 @@ public class ScheduleHandle : IScheduleHandle
 
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, "delete");
     }
+
+    
 }

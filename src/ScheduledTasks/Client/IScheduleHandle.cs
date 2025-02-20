@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Client;
-
 namespace Microsoft.DurableTask.ScheduledTasks;
 
 /// <summary>
@@ -10,11 +8,6 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// </summary>
 public interface IScheduleHandle
 {
-    /// <summary>
-    /// Gets the ID of the schedule.
-    /// </summary>
-    string ScheduleId { get; }
-
     /// <summary>
     /// Retrieves the current details of this schedule.
     /// </summary>

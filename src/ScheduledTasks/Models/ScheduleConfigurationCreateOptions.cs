@@ -8,6 +8,9 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// </summary>
 public class ScheduleConfigurationCreateOptions
 {
+    string orchestrationName;
+    TimeSpan? interval;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ScheduleConfigurationCreateOptions"/> class.
     /// </summary>
@@ -84,8 +87,4 @@ public class ScheduleConfigurationCreateOptions
     /// Gets or sets whether to start immediately if the schedule is already late.
     /// </summary>
     public bool? StartImmediatelyIfLate { get; set; }
-
-    string orchestrationName;
-
-    TimeSpan? interval;
 }

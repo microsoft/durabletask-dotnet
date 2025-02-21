@@ -9,6 +9,7 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 public class ScheduleConfigurationUpdateOptions
 {
     string? orchestrationName;
+    TimeSpan? interval;
 
     /// <summary>
     /// Gets or sets the name of the orchestration to schedule.
@@ -41,8 +42,6 @@ public class ScheduleConfigurationUpdateOptions
     /// Gets or sets when the schedule should end.
     /// </summary>
     public DateTimeOffset? EndAt { get; set; }
-
-    TimeSpan? interval;
 
     /// <summary>
     /// Gets or sets the time interval between schedule executions. Must be at least 1 second.

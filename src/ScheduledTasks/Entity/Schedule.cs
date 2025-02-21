@@ -37,7 +37,6 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
                 throw new ScheduleInvalidTransitionException(scheduleCreationOptions?.ScheduleId ?? string.Empty, this.State.Status, ScheduleStatus.Active, nameof(this.CreateSchedule));
             }
 
-            // CreateSchedule is allowed, we shall throw exception if any following step failed to inform caller
             if (scheduleCreationOptions == null)
             {
                 throw new ScheduleClientValidationException(string.Empty, "Schedule creation options cannot be null");
@@ -55,7 +54,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (ScheduleInvalidTransitionException scheduleInvalidTransitionEx)
         {
-            // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.CreateSchedule), ex.Message, ex);
+            this.logger.ScheduleOperationError(scheduleCreationOptions?.ScheduleId ?? string.Empty, nameof(this.CreateSchedule), scheduleInvalidTransitionEx.Message, scheduleInvalidTransitionEx);
             this.State.AddActivityLog(nameof(this.CreateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = scheduleInvalidTransitionEx.Message,
@@ -66,7 +65,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (ScheduleClientValidationException scheduleClientValidationEx)
         {
-            // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.CreateSchedule), ex.Message, ex);
+            this.logger.ScheduleOperationError(scheduleCreationOptions?.ScheduleId ?? string.Empty, nameof(this.CreateSchedule), scheduleClientValidationEx.Message, scheduleClientValidationEx);
             this.State.AddActivityLog(nameof(this.CreateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = scheduleClientValidationEx.Message,
@@ -147,7 +146,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (ScheduleInvalidTransitionException scheduleInvalidTransitionEx)
         {
-            // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.UpdateSchedule), ex.Message, ex);
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.UpdateSchedule), scheduleInvalidTransitionEx.Message, scheduleInvalidTransitionEx);
             this.State.AddActivityLog(nameof(this.UpdateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = scheduleInvalidTransitionEx.Message,
@@ -158,7 +157,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (ScheduleClientValidationException scheduleClientValidationEx)
         {
-            // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.UpdateSchedule), ex.Message, ex);
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.UpdateSchedule), scheduleClientValidationEx.Message, scheduleClientValidationEx);
             this.State.AddActivityLog(nameof(this.UpdateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = scheduleClientValidationEx.Message,
@@ -205,7 +204,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (ScheduleInvalidTransitionException scheduleInvalidTransitionEx)
         {
-            // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.PauseSchedule), ex.Message, ex);
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.PauseSchedule), scheduleInvalidTransitionEx.Message, scheduleInvalidTransitionEx);
             this.State.AddActivityLog(nameof(this.PauseSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = scheduleInvalidTransitionEx.Message,
@@ -216,7 +215,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (ScheduleClientValidationException scheduleClientValidationEx)
         {
-            // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.PauseSchedule), ex.Message, ex);
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.PauseSchedule), scheduleClientValidationEx.Message, scheduleClientValidationEx);
             this.State.AddActivityLog(nameof(this.PauseSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = scheduleClientValidationEx.Message,
@@ -264,7 +263,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (ScheduleInvalidTransitionException scheduleInvalidTransitionEx)
         {
-            // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.ResumeSchedule), ex.Message, ex);
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.ResumeSchedule), scheduleInvalidTransitionEx.Message, scheduleInvalidTransitionEx);
             this.State.AddActivityLog(nameof(this.ResumeSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = scheduleInvalidTransitionEx.Message,
@@ -275,7 +274,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (ScheduleClientValidationException scheduleClientValidationEx)
         {
-            // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.ResumeSchedule), ex.Message, ex);
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.ResumeSchedule), scheduleClientValidationEx.Message, scheduleClientValidationEx);
             this.State.AddActivityLog(nameof(this.ResumeSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = scheduleClientValidationEx.Message,

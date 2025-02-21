@@ -27,7 +27,6 @@ IHost host = Host.CreateDefaultBuilder(args)
                 {
                     var logger = context.CreateReplaySafeLogger("DemoOrchestration");
                     logger.LogInformation("Getting stock price for: {symbol}", symbol);
-
                     try
                     {
                         // Get current stock price

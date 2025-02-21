@@ -34,7 +34,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         {
             if (!this.CanTransitionTo(nameof(this.CreateSchedule), ScheduleStatus.Active))
             {
-                throw new ScheduleInvalidTransitionException(scheduleCreationOptions?.ScheduleId, this.State.Status, ScheduleStatus.Active);
+                throw new ScheduleInvalidTransitionException(scheduleCreationOptions?.ScheduleId ?? string.Empty, this.State.Status, ScheduleStatus.Active);
             }
 
             // CreateSchedule is allowed, we shall throw exception if any following step failed to inform caller
@@ -183,6 +183,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// <summary>
     /// Pauses the schedule.
     /// </summary>
+    /// <param name="context">The task entity context.</param>
     public void PauseSchedule(TaskEntityContext context)
     {
         try

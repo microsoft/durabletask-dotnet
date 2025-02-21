@@ -57,11 +57,11 @@ public class ScheduleHandle : IScheduleHandle
         }
 
         ScheduleState state = metadata.State;
+
         // if (state.Status == ScheduleStatus.Uninitialized)
         // {
         //     throw new ScheduleStillBeingProvisionedException(this.ScheduleId);
         // }
-
         ScheduleConfiguration? config = state.ScheduleConfiguration;
 
         IReadOnlyCollection<ScheduleActivityLog> activityLogs =
@@ -134,6 +134,6 @@ public class ScheduleHandle : IScheduleHandle
         this.logger.ClientDeletingSchedule(this.ScheduleId);
 
         await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, "delete");
-        return new ScheduleWaiter(this, nameof(Schedule.DeleteSchedule));
+        return new ScheduleWaiter(this, "delete");
     }
 }

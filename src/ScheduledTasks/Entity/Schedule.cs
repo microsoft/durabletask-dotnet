@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -32,12 +33,15 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 
         if (this.State.Status != ScheduleStatus.Uninitialized)
         {
-            // this.logger.ScheduleOperationWarning(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.CreateSchedule), "Schedule is already created.");
-            // return;
-
             string errorMessage = "Schedule is already created.";
             Exception exception = new InvalidOperationException(errorMessage);
             this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.CreateSchedule), errorMessage, exception);
+            this.State.AddActivityLog("Create", "Failed", new FailureDetails
+            {
+                Reason = errorMessage,
+                Type = "InvalidOperation",
+                OccurredAt = DateTimeOffset.UtcNow
+            });
             throw exception;
         }
 
@@ -45,6 +49,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         this.TryStatusTransition(ScheduleStatus.Active);
 
         this.logger.CreatedSchedule(this.State.ScheduleConfiguration.ScheduleId);
+        this.State.AddActivityLog("Create", "Success");
 
         // Signal to run schedule immediately after creation and let runSchedule determine if it should run immediately
         // or later to separate response from schedule creation and schedule responsibilities
@@ -99,11 +104,21 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// <summary>
     /// Pauses the schedule.
     /// </summary>
-    public void PauseSchedule()
+    public void PauseSchedule(TaskEntityContext context)
     {
+        Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
         if (this.State.Status != ScheduleStatus.Active)
         {
-            throw new InvalidOperationException("Schedule must be in Active status to pause.");
+            string errorMessage = "Schedule must be in Active state to pause.";
+            Exception exception = new InvalidOperationException(errorMessage);
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration.ScheduleId, nameof(this.PauseSchedule), errorMessage, exception);
+            this.State.AddActivityLog("Pause", "Failed", new FailureDetails
+            {
+                Reason = errorMessage,
+                Type = "InvalidOperation",
+                OccurredAt = DateTimeOffset.UtcNow
+            });
+            throw exception;
         }
 
         // Transition to Paused state
@@ -111,7 +126,8 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         this.State.NextRunAt = null;
         this.State.RefreshScheduleRunExecutionToken();
 
-        this.logger.PausedSchedule(this.State.ScheduleConfiguration!.ScheduleId);
+        this.logger.PausedSchedule(this.State.ScheduleConfiguration.ScheduleId);
+        this.State.AddActivityLog("Pause", "Success");
     }
 
     /// <summary>
@@ -127,12 +143,19 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             string errorMessage = "Schedule must be in Paused state to resume.";
             Exception exception = new InvalidOperationException(errorMessage);
             this.logger.ScheduleOperationError(this.State.ScheduleConfiguration.ScheduleId, nameof(this.ResumeSchedule), errorMessage, exception);
+            this.State.AddActivityLog("Resume", "Failed", new FailureDetails
+            {
+                Reason = errorMessage,
+                Type = "InvalidOperation",
+                OccurredAt = DateTimeOffset.UtcNow
+            });
             throw exception;
         }
 
         this.TryStatusTransition(ScheduleStatus.Active);
         this.State.NextRunAt = null;
         this.logger.ResumedSchedule(this.State.ScheduleConfiguration.ScheduleId);
+        this.State.AddActivityLog("Resume", "Success");
 
         // compute next run based on startat and interval
         context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), nameof(this.RunSchedule), this.State.ExecutionToken);
@@ -151,18 +174,29 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     public void RunSchedule(TaskEntityContext context, string executionToken)
     {
         Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
-        // this.logger.RunningSchedule(this.State.ScheduleConfiguration!.ScheduleId);
         if (this.State.ScheduleConfiguration.Interval == null)
         {
             string errorMessage = "Schedule interval must be specified.";
             Exception exception = new InvalidOperationException(errorMessage);
             this.logger.ScheduleOperationError(this.State.ScheduleConfiguration.ScheduleId, nameof(this.RunSchedule), errorMessage, exception);
+            this.State.AddActivityLog("Run", "Failed", new FailureDetails
+            {
+                Reason = errorMessage,
+                Type = "InvalidConfiguration",
+                OccurredAt = DateTimeOffset.UtcNow
+            });
             throw exception;
         }
 
         if (executionToken != this.State.ExecutionToken)
         {
             this.logger.ScheduleRunCancelled(this.State.ScheduleConfiguration.ScheduleId, executionToken);
+            this.State.AddActivityLog("Run", "Cancelled", new FailureDetails
+            {
+                Reason = "Execution token mismatch",
+                Type = "TokenExpired",
+                OccurredAt = DateTimeOffset.UtcNow
+            });
             return;
         }
 
@@ -171,6 +205,12 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             string errorMessage = "Schedule must be in Active status to run.";
             Exception exception = new InvalidOperationException(errorMessage);
             this.logger.ScheduleOperationError(this.State.ScheduleConfiguration.ScheduleId, nameof(this.RunSchedule), errorMessage, exception);
+            this.State.AddActivityLog("Run", "Failed", new FailureDetails
+            {
+                Reason = errorMessage,
+                Type = "InvalidOperation",
+                OccurredAt = DateTimeOffset.UtcNow
+            });
             throw exception;
         }
 

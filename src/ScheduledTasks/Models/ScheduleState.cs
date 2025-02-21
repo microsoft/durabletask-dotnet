@@ -1,6 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
 namespace Microsoft.DurableTask.ScheduledTasks;
 
 /// <summary>
@@ -8,6 +12,9 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// </summary>
 class ScheduleState
 {
+    private const int MaxActivityLogItems = 100;
+    private readonly Queue<ScheduleActivityLog> activityLogs = new();
+
     /// <summary>
     /// Gets or sets the current status of the schedule.
     /// </summary>
@@ -34,10 +41,40 @@ class ScheduleState
     public ScheduleConfiguration? ScheduleConfiguration { get; set; }
 
     /// <summary>
+    /// Gets the activity logs for this schedule.
+    /// </summary>
+    public IReadOnlyCollection<ScheduleActivityLog> ActivityLogs => this.activityLogs.ToList().AsReadOnly();
+
+    /// <summary>
     /// Refreshes the execution token to invalidate pending schedule operations.
     /// </summary>
     public void RefreshScheduleRunExecutionToken()
     {
         this.ExecutionToken = Guid.NewGuid().ToString("N");
+    }
+
+    /// <summary>
+    /// Adds an activity log entry to the schedule's history.
+    /// </summary>
+    /// <param name="operation">The operation being performed.</param>
+    /// <param name="status">The status of the operation.</param>
+    /// <param name="failureDetails">Optional failure details if the operation failed.</param>
+    public void AddActivityLog(string operation, string status, FailureDetails? failureDetails = null)
+    {
+        var log = new ScheduleActivityLog
+        {
+            Operation = operation,
+            Status = status,
+            Timestamp = DateTimeOffset.UtcNow,
+            FailureDetails = failureDetails
+        };
+
+        this.activityLogs.Enqueue(log);
+
+        // Keep only the most recent MaxActivityLogItems
+        while (this.activityLogs.Count > MaxActivityLogItems)
+        {
+            this.activityLogs.Dequeue();
+        }
     }
 }

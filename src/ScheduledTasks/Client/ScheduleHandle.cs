@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System;
+using System.Threading.Tasks;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Entities;
@@ -44,7 +46,7 @@ public class ScheduleHandle : IScheduleHandle
     public EntityInstanceId EntityId { get; }
 
     /// <inheritdoc/>
-    public async Task<ScheduleDescription> DescribeAsync()
+    public async Task<ScheduleDescription> DescribeAsync(bool includeFullActivityLogs = false)
     {
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
         this.logger.ClientDescribingSchedule(this.ScheduleId);
@@ -72,6 +74,12 @@ public class ScheduleHandle : IScheduleHandle
                 $"Schedule configuration is not available even though the schedule status is {state.Status}.");
         }
 
+        IReadOnlyCollection<ScheduleActivityLog> activityLogs = state.ActivityLogs;
+        if (!includeFullActivityLogs && activityLogs.Any())
+        {
+            activityLogs = new ScheduleActivityLog[] { activityLogs.Last() };
+        }
+
         return new ScheduleDescription(
             this.ScheduleId,
             config.OrchestrationName,
@@ -86,7 +94,8 @@ public class ScheduleHandle : IScheduleHandle
             state.Status,
             state.ExecutionToken,
             state.LastRunAt,
-            state.NextRunAt);
+            state.NextRunAt,
+            activityLogs);
     }
 
     /// <inheritdoc/>

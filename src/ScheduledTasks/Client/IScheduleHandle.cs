@@ -16,8 +16,9 @@ public interface IScheduleHandle
     /// <summary>
     /// Retrieves the current details of this schedule.
     /// </summary>
+    /// <param name="includeFullActivityLogs">Whether to include full activity logs in the returned schedule details.</param>
     /// <returns>The schedule details.</returns>
-    Task<ScheduleDescription> DescribeAsync();
+    Task<ScheduleDescription> DescribeAsync(bool includeFullActivityLogs);
 
     /// <summary>
     /// Deletes this schedule.

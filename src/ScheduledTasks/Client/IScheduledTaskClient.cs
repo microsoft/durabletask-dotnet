@@ -18,8 +18,9 @@ public interface IScheduledTaskClient
     /// <summary>
     /// Gets a list of all initialized schedules.
     /// </summary>
+    /// <param name="includeFullActivityLogs">Whether to include full activity logs in the returned schedules.</param>
     /// <returns>A list of schedule descriptions.</returns>
-    Task<IEnumerable<ScheduleDescription>> ListSchedulesAsync();
+    Task<IEnumerable<ScheduleDescription>> ListSchedulesAsync(bool includeFullActivityLogs);
 
     /// <summary>
     /// Creates a new schedule with the specified configuration.

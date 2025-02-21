@@ -50,7 +50,7 @@ public class ScheduledTaskClient : IScheduledTaskClient
     }
 
     /// <inheritdoc/>
-    public async Task<IEnumerable<ScheduleDescription>> ListSchedulesAsync()
+    public async Task<IEnumerable<ScheduleDescription>> ListSchedulesAsync(bool includeFullActivityLogs = false)
     {
         this.logger.ClientListingSchedules();
         EntityQuery query = new EntityQuery
@@ -61,11 +61,16 @@ public class ScheduledTaskClient : IScheduledTaskClient
 
         List<ScheduleDescription> schedules = new List<ScheduleDescription>();
 
-        await foreach (var metadata in this.durableTaskClient.Entities.GetAllEntitiesAsync<ScheduleState>(query))
+        await foreach (EntityMetadata<ScheduleState> metadata in this.durableTaskClient.Entities.GetAllEntitiesAsync<ScheduleState>(query))
         {
             if (metadata.State.Status != ScheduleStatus.Uninitialized)
             {
                 ScheduleConfiguration config = metadata.State.ScheduleConfiguration!;
+                IReadOnlyCollection<ScheduleActivityLog> activityLogs = metadata.State.ActivityLogs;
+                if (!includeFullActivityLogs && activityLogs.Any())
+                {
+                    activityLogs = new[] { activityLogs.Last() };
+                }
                 schedules.Add(new ScheduleDescription(
                     metadata.Id.Key,
                     config.OrchestrationName,
@@ -80,7 +85,8 @@ public class ScheduledTaskClient : IScheduledTaskClient
                     metadata.State.Status,
                     metadata.State.ExecutionToken,
                     metadata.State.LastRunAt,
-                    metadata.State.NextRunAt));
+                    metadata.State.NextRunAt,
+                    activityLogs));
             }
         }
 

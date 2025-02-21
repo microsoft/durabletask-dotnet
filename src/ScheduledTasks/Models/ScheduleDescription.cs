@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Generic;
+
 namespace Microsoft.DurableTask.ScheduledTasks;
 
 /// <summary>
@@ -20,4 +22,5 @@ public record ScheduleDescription(
     ScheduleStatus Status,
     string ExecutionToken,
     DateTimeOffset? LastRunAt,
-    DateTimeOffset? NextRunAt);
+    DateTimeOffset? NextRunAt,
+    IReadOnlyCollection<ScheduleActivityLog> ActivityLogs);

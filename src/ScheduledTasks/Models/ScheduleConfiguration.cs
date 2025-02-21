@@ -47,7 +47,7 @@ class ScheduleConfiguration
     /// <summary>
     /// Gets or sets the instance ID of the orchestration function.
     /// </summary>
-    public string? OrchestrationInstanceId { get; set; } = Guid.NewGuid().ToString("N");
+    public string? OrchestrationInstanceId { get; set; }
 
     /// <summary>
     /// Gets or sets the start time of the schedule.

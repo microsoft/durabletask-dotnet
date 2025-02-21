@@ -368,12 +368,21 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     {
         try
         {
-            ScheduleConfiguration? config = this.State.ScheduleConfiguration;
-            context.ScheduleNewOrchestration(new TaskName(config!.OrchestrationName), config!.OrchestrationInput, new StartOrchestrationOptions(config!.OrchestrationInstanceId));
+            StartOrchestrationOptions? startOrchestrationOptions = string.IsNullOrEmpty(this.State.ScheduleConfiguration?.OrchestrationInstanceId)
+                ? null
+                : new StartOrchestrationOptions(this.State.ScheduleConfiguration.OrchestrationInstanceId);
+            context.ScheduleNewOrchestration(
+                new TaskName(this.State.ScheduleConfiguration!.OrchestrationName),
+                this.State.ScheduleConfiguration.OrchestrationInput,
+                startOrchestrationOptions);
         }
         catch (Exception ex)
         {
-            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.StartOrchestrationIfNotRunning), "Failed to start orchestration", ex);
+            this.logger.ScheduleOperationError(
+                this.State.ScheduleConfiguration!.ScheduleId,
+                nameof(this.StartOrchestrationIfNotRunning),
+                "Failed to start orchestration",
+                ex);
         }
     }
 

@@ -22,4 +22,9 @@ public enum ScheduleStatus
     /// Schedule is paused.
     /// </summary>
     Paused,
+
+    /// <summary>
+    /// Schedule is being deleted.
+    /// </summary>
+    Failed,
 }

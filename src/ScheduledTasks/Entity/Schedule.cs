@@ -21,6 +21,33 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 {
     readonly ILogger<Schedule> logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
+    static DateTimeOffset? ComputeInitialRunTime(ScheduleConfiguration scheduleConfig)
+    {
+        if (scheduleConfig.StartImmediatelyIfLate == true &&
+            scheduleConfig.StartAt.HasValue &&
+            DateTimeOffset.UtcNow > scheduleConfig.StartAt.Value)
+        {
+            return DateTimeOffset.UtcNow;
+        }
+
+        return scheduleConfig.StartAt ?? DateTimeOffset.UtcNow; // Default to now if StartAt not defined
+    }
+
+    static DateTimeOffset ComputeNextRunTime(ScheduleConfiguration scheduleConfig, DateTimeOffset lastRunAt)
+    {
+        if (!scheduleConfig.Interval.HasValue)
+        {
+            throw new InvalidOperationException("Interval must be set to compute next run time.");
+        }
+
+        // Calculate number of intervals between last run and now
+        TimeSpan timeSinceLastRun = DateTimeOffset.UtcNow - lastRunAt;
+        int intervalsElapsed = (int)(timeSinceLastRun.Ticks / scheduleConfig.Interval.Value.Ticks);
+
+        // Compute and return the next run time
+        return lastRunAt + TimeSpan.FromTicks(scheduleConfig.Interval.Value.Ticks * (intervalsElapsed + 1));
+    }
+
     /// <summary>
     /// Creates a new schedule with the specified configuration.
     /// </summary>
@@ -330,39 +357,11 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             return;
         }
 
-        // run schedule based on next run at
-        // need to enforce the constraint here NextRunAt truly represents the next run at
-        // if next run at is null, this means schedule is changed, we compute the next run at based on startat and update
-        // else if next run at is set, then we run at next run at
-        if (!this.State.NextRunAt.HasValue)
-        {
-            // check whats last run at time, if not set, meaning it has not run once, we run at startat
-            // else, it has run before, we cant run at startat, need to compute next run at based on last run at + num of intervals between last runtime and now plus 1
-            if (!this.State.LastRunAt.HasValue)
-            {
-                if (scheduleConfig.StartImmediatelyIfLate == true && scheduleConfig.StartAt.HasValue && DateTimeOffset.UtcNow > scheduleConfig.StartAt.Value)
-                {
-                    this.State.NextRunAt = DateTimeOffset.UtcNow;
-                }
-                else
-                {
-                    this.State.NextRunAt = scheduleConfig.StartAt;
-                }
-            }
-            else
-            {
-                // Calculate number of intervals between last run and now
-                TimeSpan timeSinceLastRun = DateTimeOffset.UtcNow - this.State.LastRunAt.Value;
-                int intervalsElapsed = (int)(timeSinceLastRun.Ticks / scheduleConfig.Interval.Value.Ticks);
-
-                // Compute the next run time
-                this.State.NextRunAt = this.State.LastRunAt.Value + TimeSpan.FromTicks(scheduleConfig.Interval.Value.Ticks * (intervalsElapsed + 1));
-            }
-        }
+        this.DetermineNextRunTime(scheduleConfig);
 
         DateTimeOffset currentTime = DateTimeOffset.UtcNow;
 
-        if (!this.State.NextRunAt.HasValue || this.State.NextRunAt!.Value <= currentTime)
+        if (this.State.NextRunAt!.Value <= currentTime)
         {
             this.State.NextRunAt = currentTime;
             this.StartOrchestrationIfNotRunning(context);
@@ -419,5 +418,23 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
 
         this.State.Status = to;
+    }
+
+    void DetermineNextRunTime(ScheduleConfiguration scheduleConfig)
+    {
+        if (this.State.NextRunAt.HasValue)
+        {
+            return; // NextRunAt already set, no need to compute
+        }
+
+        // If LastRunAt is not set, determine if we should start immediately or at StartAt
+        if (!this.State.LastRunAt.HasValue)
+        {
+            this.State.NextRunAt = ComputeInitialRunTime(scheduleConfig);
+        }
+        else
+        {
+            this.State.NextRunAt = ComputeNextRunTime(scheduleConfig, this.State.LastRunAt.Value);
+        }
     }
 }

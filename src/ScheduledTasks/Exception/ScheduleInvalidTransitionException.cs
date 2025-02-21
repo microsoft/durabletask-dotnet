@@ -14,12 +14,14 @@ public class ScheduleInvalidTransitionException : Exception
     /// <param name="scheduleId">The ID of the schedule on which the invalid transition was attempted.</param>
     /// <param name="fromStatus">The current status of the schedule.</param>
     /// <param name="toStatus">The target status that was invalid.</param>
-    public ScheduleInvalidTransitionException(string scheduleId, ScheduleStatus fromStatus, ScheduleStatus toStatus)
-        : base($"Invalid state transition attempted for schedule '{scheduleId}': Cannot transition from {fromStatus} to {toStatus}.")
+    /// <param name="operationName">The name of the operation that was attempted.</param>
+    public ScheduleInvalidTransitionException(string scheduleId, ScheduleStatus fromStatus, ScheduleStatus toStatus, string operationName)
+        : base($"Invalid state transition attempted for schedule '{scheduleId}': Cannot transition from {fromStatus} to {toStatus} during {operationName} operation.")
     {
         this.ScheduleId = scheduleId;
         this.FromStatus = fromStatus;
         this.ToStatus = toStatus;
+        this.OperationName = operationName;
     }
 
     /// <summary>
@@ -36,4 +38,9 @@ public class ScheduleInvalidTransitionException : Exception
     /// Gets the invalid target status that was attempted.
     /// </summary>
     public ScheduleStatus ToStatus { get; }
+
+    /// <summary>
+    /// Gets the name of the operation that was attempted.
+    /// </summary>
+    public string OperationName { get; }
 }

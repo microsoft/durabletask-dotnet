@@ -25,7 +25,7 @@ IHost host = Host.CreateDefaultBuilder(args)
                 // Add a demo orchestration that will be triggered by the schedule
                 r.AddOrchestratorFunc("DemoOrchestration", async context =>
                 {
-                    string stockSymbol = context.GetInput<string>() ?? "APPL"; // Default to MSFT if no input provided
+                    string stockSymbol = "MSFT"; // Default to MSFT if no input provided
                     var logger = context.CreateReplaySafeLogger("DemoOrchestration");
                     logger.LogInformation("Getting stock price for: {symbol}", stockSymbol);
 
@@ -87,7 +87,7 @@ try
     // Create schedule options that runs every 30 seconds
     ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions("DemoOrchestration")
     {
-        ScheduleId = "demo-schedule4",
+        ScheduleId = "demo-schedule8",
         Interval = TimeSpan.FromSeconds(4),
         StartAt = DateTimeOffset.UtcNow,
         OrchestrationInput = "MSFT"
@@ -102,17 +102,17 @@ try
     IScheduleWaiter waiter = await scheduleHandle.CreateAsync(scheduleOptions);
     ScheduleDescription scheduleDescription = await waiter.WaitUntilActiveAsync();
     // print the schedule description
-    Console.WriteLine(scheduleDescription);
+    Console.WriteLine(scheduleDescription.ToJsonString(true));
 
     Console.WriteLine("");
     Console.WriteLine("");
     Console.WriteLine("");
 
-    // // Pause the schedule
+    // Pause the schedule
     Console.WriteLine("\nPausing schedule...");
     IScheduleWaiter pauseWaiter = await scheduleHandle.PauseAsync();
     scheduleDescription = await pauseWaiter.WaitUntilPausedAsync();
-    Console.WriteLine(scheduleDescription);
+    Console.WriteLine(scheduleDescription.ToJsonString(true));
     Console.WriteLine("");
     Console.WriteLine("");
     Console.WriteLine("");
@@ -123,14 +123,15 @@ try
     IScheduleWaiter resumeWaiter = await scheduleHandle.ResumeAsync();
 
     scheduleDescription = await resumeWaiter.WaitUntilActiveAsync();
-    Console.WriteLine(scheduleDescription);
+    Console.WriteLine(scheduleDescription.ToJsonString(true));
 
     Console.WriteLine("");
     Console.WriteLine("");
     Console.WriteLine("");
 
-    Console.WriteLine("\nPress any key to delete the schedule and exit...");
-    Console.ReadKey();
+    await Task.Delay(200000);
+    //Console.WriteLine("\nPress any key to delete the schedule and exit...");
+    //Console.ReadKey();
 
     // Delete the schedule
     IScheduleWaiter deleteWaiter = await scheduleHandle.DeleteAsync();
@@ -139,7 +140,7 @@ try
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"Error: {ex.Message}");
+    Console.WriteLine($"One of your schedule operations failed, please fix and rerun: {ex.Message}");
 }
 
 await host.StopAsync();

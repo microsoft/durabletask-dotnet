@@ -86,6 +86,13 @@ public record ScheduleDescription
     /// <summary>
     /// Returns a JSON string representation of the schedule description.
     /// </summary>
+    /// <param name="pretty">If true, formats the JSON with indentation for readability.</param>
     /// <returns>A JSON string containing the schedule details.</returns>
-    public string ToJsonString() => System.Text.Json.JsonSerializer.Serialize(this);
+    public string ToJsonString(bool pretty = false)
+    {
+        System.Text.Json.JsonSerializerOptions options = pretty 
+            ? new System.Text.Json.JsonSerializerOptions { WriteIndented = true }
+            : new System.Text.Json.JsonSerializerOptions();
+        return System.Text.Json.JsonSerializer.Serialize<ScheduleDescription>(this, options);
+    }
 }

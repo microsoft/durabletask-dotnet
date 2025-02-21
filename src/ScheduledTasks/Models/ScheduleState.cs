@@ -9,7 +9,8 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 class ScheduleState
 {
     const int MaxActivityLogItems = 10;
-    readonly Queue<ScheduleActivityLog> activityLogs = new();
+
+    public Queue<ScheduleActivityLog>? ActivityLogs { get; set; } = new Queue<ScheduleActivityLog>();
 
     /// <summary>
     /// Gets or sets the current status of the schedule.
@@ -39,7 +40,7 @@ class ScheduleState
     /// <summary>
     /// Gets the activity logs for this schedule.
     /// </summary>
-    public IReadOnlyCollection<ScheduleActivityLog> ActivityLogs => this.activityLogs.ToList().AsReadOnly();
+    // public IReadOnlyCollection<ScheduleActivityLog> ActivityLogs => this.ActivityLogs1.ToList().AsReadOnly();
 
     /// <summary>
     /// Refreshes the execution token to invalidate pending schedule operations.
@@ -65,12 +66,12 @@ class ScheduleState
             FailureDetails = failureDetails,
         };
 
-        this.activityLogs.Enqueue(log);
+        this.ActivityLogs.Enqueue(log);
 
         // Keep only the most recent MaxActivityLogItems
-        while (this.activityLogs.Count > MaxActivityLogItems)
+        while (this.ActivityLogs.Count > MaxActivityLogItems)
         {
-            this.activityLogs.Dequeue();
+            this.ActivityLogs.Dequeue();
         }
     }
 }

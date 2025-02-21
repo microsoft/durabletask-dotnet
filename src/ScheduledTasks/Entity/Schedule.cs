@@ -34,13 +34,13 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         {
             if (!this.CanTransitionTo(nameof(this.CreateSchedule), ScheduleStatus.Active))
             {
-                throw new ScheduleInvalidTransitionException(scheduleCreationOptions?.ScheduleId ?? string.Empty, this.State.Status, ScheduleStatus.Active);
+                throw new ScheduleInvalidTransitionException(scheduleCreationOptions?.ScheduleId ?? string.Empty, this.State.Status, ScheduleStatus.Active, nameof(this.CreateSchedule));
             }
 
             // CreateSchedule is allowed, we shall throw exception if any following step failed to inform caller
             if (scheduleCreationOptions == null)
             {
-                throw new ScheduleClientValidationException(null, "Schedule creation options cannot be null");
+                throw new ScheduleClientValidationException(string.Empty, "Schedule creation options cannot be null");
             }
 
             this.State.ScheduleConfiguration = ScheduleConfiguration.FromCreateOptions(scheduleCreationOptions);
@@ -55,7 +55,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (ScheduleInvalidTransitionException ex)
         {
-            this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.CreateSchedule), ex.Message, ex);
+            // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.CreateSchedule), ex.Message, ex);
             this.State.AddActivityLog(nameof(this.CreateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = ex.Message,
@@ -66,7 +66,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (ScheduleClientValidationException ex)
         {
-            this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.CreateSchedule), ex.Message, ex);
+            // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.CreateSchedule), ex.Message, ex);
             this.State.AddActivityLog(nameof(this.CreateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = ex.Message,
@@ -77,7 +77,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (Exception ex)
         {
-            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.CreateSchedule), "Failed to create schedule", ex);
+            // this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.CreateSchedule), "Failed to create schedule", ex);
             this.State.AddActivityLog(nameof(this.CreateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = "Failed to create schedule",
@@ -101,7 +101,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         {
             if (!this.CanTransitionTo(nameof(this.UpdateSchedule), this.State.Status))
             {
-                throw new ScheduleInvalidTransitionException(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, this.State.Status, this.State.Status);
+                throw new ScheduleInvalidTransitionException(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, this.State.Status, this.State.Status, nameof(this.UpdateSchedule));
             }
 
             if (scheduleUpdateOptions == null)
@@ -147,7 +147,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (ScheduleInvalidTransitionException ex)
         {
-            this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.UpdateSchedule), ex.Message, ex);
+            // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.UpdateSchedule), ex.Message, ex);
             this.State.AddActivityLog(nameof(this.UpdateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = ex.Message,
@@ -158,7 +158,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (ScheduleClientValidationException ex)
         {
-            this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.UpdateSchedule), ex.Message, ex);
+            // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.UpdateSchedule), ex.Message, ex);
             this.State.AddActivityLog(nameof(this.UpdateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = ex.Message,
@@ -169,7 +169,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (Exception ex)
         {
-            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.UpdateSchedule), "Failed to update schedule", ex);
+            // this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.UpdateSchedule), "Failed to update schedule", ex);
             this.State.AddActivityLog(nameof(this.UpdateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = "Failed to update schedule",
@@ -190,7 +190,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         {
             if (!this.CanTransitionTo(nameof(this.PauseSchedule), ScheduleStatus.Paused))
             {
-                throw new ScheduleInvalidTransitionException(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, this.State.Status, ScheduleStatus.Paused);
+                throw new ScheduleInvalidTransitionException(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, this.State.Status, ScheduleStatus.Paused, nameof(this.PauseSchedule));
             }
 
             Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
@@ -205,7 +205,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (ScheduleInvalidTransitionException ex)
         {
-            this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.PauseSchedule), ex.Message, ex);
+            // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.PauseSchedule), ex.Message, ex);
             this.State.AddActivityLog(nameof(this.PauseSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = ex.Message,
@@ -216,7 +216,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (Exception ex)
         {
-            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.PauseSchedule), "Failed to pause schedule", ex);
+            // this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.PauseSchedule), "Failed to pause schedule", ex);
             this.State.AddActivityLog(nameof(this.PauseSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = "Failed to pause schedule",
@@ -238,7 +238,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         {
             if (!this.CanTransitionTo(nameof(this.ResumeSchedule), ScheduleStatus.Active))
             {
-                throw new ScheduleInvalidTransitionException(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, this.State.Status, ScheduleStatus.Active);
+                throw new ScheduleInvalidTransitionException(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, this.State.Status, ScheduleStatus.Active, nameof(this.ResumeSchedule));
             }
 
             Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
@@ -253,7 +253,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (ScheduleInvalidTransitionException ex)
         {
-            this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.ResumeSchedule), ex.Message, ex);
+            // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.ResumeSchedule), ex.Message, ex);
             this.State.AddActivityLog(nameof(this.ResumeSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = ex.Message,
@@ -264,7 +264,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (ScheduleClientValidationException ex)
         {
-            this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.ResumeSchedule), ex.Message, ex);
+            // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.ResumeSchedule), ex.Message, ex);
             this.State.AddActivityLog(nameof(this.ResumeSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = ex.Message,
@@ -275,7 +275,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (Exception ex)
         {
-            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.ResumeSchedule), "Failed to resume schedule", ex);
+            // this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.ResumeSchedule), "Failed to resume schedule", ex);
             this.State.AddActivityLog(nameof(this.ResumeSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = "Failed to resume schedule",
@@ -380,7 +380,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         if (!this.CanTransitionTo(operationName, to))
         {
             this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.TryStatusTransition), $"Invalid state transition from {this.State.Status} to {to}");
-            throw new ScheduleInvalidTransitionException(this.State.ScheduleConfiguration!.ScheduleId, this.State.Status, to);
+            throw new ScheduleInvalidTransitionException(this.State.ScheduleConfiguration!.ScheduleId, this.State.Status, to, operationName);
         }
 
         this.State.Status = to;

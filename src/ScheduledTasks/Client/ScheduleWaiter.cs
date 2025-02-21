@@ -19,7 +19,7 @@ public class ScheduleWaiter : IScheduleWaiter
     /// Initializes a new instance of the <see cref="ScheduleWaiter"/> class.
     /// </summary>
     /// <param name="scheduleHandle">The schedule handle to wait on.</param>
-    /// <param name="operationName"></param>
+    /// <param name="operationName">operation name.</param>
     public ScheduleWaiter(IScheduleHandle scheduleHandle, string operationName)
     {
         this.scheduleHandle = scheduleHandle ?? throw new ArgumentNullException(nameof(scheduleHandle));

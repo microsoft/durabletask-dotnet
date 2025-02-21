@@ -42,11 +42,6 @@ class ScheduleState
     public IReadOnlyCollection<ScheduleActivityLog> ActivityLogs => this.activityLogs.ToList().AsReadOnly();
 
     /// <summary>
-    /// Gets the last activity log for this schedule.
-    /// </summary>
-    public ScheduleActivityLog? LastActivityLog => this.ActivityLogs.LastOrDefault();
-
-    /// <summary>
     /// Refreshes the execution token to invalidate pending schedule operations.
     /// </summary>
     public void RefreshScheduleRunExecutionToken()
@@ -77,7 +72,5 @@ class ScheduleState
         {
             this.activityLogs.Dequeue();
         }
-
-        this.LastActivityLog = log;
     }
 }

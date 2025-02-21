@@ -97,7 +97,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     {
         try
         {
-            if (!this.CanTransitionTo(nameof(this.UpdateSchedule), ScheduleStatus.Active))
+            if (!this.CanTransitionTo(nameof(this.UpdateSchedule), this.State.Status))
             {
                 throw new ScheduleInvalidTransitionException(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, this.State.Status, this.State.Status);
             }
@@ -183,28 +183,22 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// </summary>
     public void PauseSchedule(TaskEntityContext context)
     {
-        Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
-        if (this.State.Status != ScheduleStatus.Active)
-        {
-            string errorMessage = "Schedule must be in Active state to pause.";
-            Exception exception = new InvalidOperationException(errorMessage);
-            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration.ScheduleId, nameof(this.PauseSchedule), errorMessage, exception);
-            this.State.AddActivityLog("Pause", "Failed", new FailureDetails
+        try {
+            if (!this.CanTransitionTo(nameof(this.PauseSchedule), ScheduleStatus.Paused))
             {
-                Reason = errorMessage,
-                Type = "InvalidOperation",
-                OccurredAt = DateTimeOffset.UtcNow,
-            });
-            throw exception;
-        }
+                throw new ScheduleInvalidTransitionException(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, this.State.Status, ScheduleStatus.Paused);
+            }
 
-        // Transition to Paused state
-        this.TryStatusTransition(ScheduleStatus.Paused);
-        this.State.NextRunAt = null;
-        this.State.RefreshScheduleRunExecutionToken();
+            Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
 
-        this.logger.PausedSchedule(this.State.ScheduleConfiguration.ScheduleId);
-        this.State.AddActivityLog("Pause", "Success");
+            // Transition to Paused state
+            this.TryStatusTransition(ScheduleStatus.Paused);
+            this.State.NextRunAt = null;
+            this.State.RefreshScheduleRunExecutionToken();
+
+            this.logger.PausedSchedule(this.State.ScheduleConfiguration.ScheduleId);
+            this.State.AddActivityLog("Pause", "Success");
+        } catch (Exception ex) {}
     }
 
     /// <summary>

@@ -35,8 +35,6 @@ public class JsonDataConverter : DataConverter
     /// <inheritdoc/>
     public override string? Serialize(object? value)
     {
-        // Console.WriteLine("Serializing value: " + value);
-        // Console.WriteLine("After serializaed value: " + JsonSerializer.Serialize(value, this.options));
         return value != null ? JsonSerializer.Serialize(value, this.options) : null;
     }
 

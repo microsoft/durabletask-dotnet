@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-
 namespace Microsoft.DurableTask.ScheduledTasks;
 
 /// <summary>
@@ -23,7 +21,7 @@ public record WaitOptions
     public TimeSpan? PollingInterval { get; init; }
 
     /// <summary>
-    /// Gets whether to use exponential backoff for polling intervals.
+    /// Gets a value indicating whether to use exponential backoff for polling intervals.
     /// When enabled, the polling interval will increase exponentially between retries.
     /// </summary>
     public bool UseExponentialBackoff { get; init; }

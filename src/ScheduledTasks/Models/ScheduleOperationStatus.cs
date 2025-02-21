@@ -16,5 +16,5 @@ public enum ScheduleOperationStatus
     /// <summary>
     /// The operation failed.
     /// </summary>
-    Failed
+    Failed,
 }

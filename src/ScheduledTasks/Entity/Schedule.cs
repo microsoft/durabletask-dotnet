@@ -53,23 +53,23 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             // or later to separate response from schedule creation and schedule responsibilities
             context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), nameof(this.RunSchedule), this.State.ExecutionToken);
         }
-        catch (ScheduleInvalidTransitionException ex)
+        catch (ScheduleInvalidTransitionException scheduleInvalidTransitionEx)
         {
             // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.CreateSchedule), ex.Message, ex);
             this.State.AddActivityLog(nameof(this.CreateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
-                Reason = ex.Message,
+                Reason = scheduleInvalidTransitionEx.Message,
                 Type = ScheduleOperationFailureType.InvalidStateTransition.ToString(),
                 OccurredAt = DateTimeOffset.UtcNow,
                 SuggestedFix = "Ensure the schedule is not already created.",
             });
         }
-        catch (ScheduleClientValidationException ex)
+        catch (ScheduleClientValidationException scheduleClientValidationEx)
         {
             // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.CreateSchedule), ex.Message, ex);
             this.State.AddActivityLog(nameof(this.CreateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
-                Reason = ex.Message,
+                Reason = scheduleClientValidationEx.Message,
                 Type = ScheduleOperationFailureType.ValidationError.ToString(),
                 OccurredAt = DateTimeOffset.UtcNow,
                 SuggestedFix = "Ensure request is valid.",
@@ -77,7 +77,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (Exception ex)
         {
-            // this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.CreateSchedule), "Failed to create schedule", ex);
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.CreateSchedule), "Failed to create schedule", ex);
             this.State.AddActivityLog(nameof(this.CreateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = "Failed to create schedule",
@@ -145,23 +145,23 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 
             this.State.AddActivityLog(nameof(this.UpdateSchedule), ScheduleOperationStatus.Succeeded.ToString());
         }
-        catch (ScheduleInvalidTransitionException ex)
+        catch (ScheduleInvalidTransitionException scheduleInvalidTransitionEx)
         {
             // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.UpdateSchedule), ex.Message, ex);
             this.State.AddActivityLog(nameof(this.UpdateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
-                Reason = ex.Message,
+                Reason = scheduleInvalidTransitionEx.Message,
                 Type = ScheduleOperationFailureType.InvalidStateTransition.ToString(),
                 OccurredAt = DateTimeOffset.UtcNow,
                 SuggestedFix = "Ensure the schedule is in a valid state for update.",
             });
         }
-        catch (ScheduleClientValidationException ex)
+        catch (ScheduleClientValidationException scheduleClientValidationEx)
         {
             // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.UpdateSchedule), ex.Message, ex);
             this.State.AddActivityLog(nameof(this.UpdateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
-                Reason = ex.Message,
+                Reason = scheduleClientValidationEx.Message,
                 Type = ScheduleOperationFailureType.ValidationError.ToString(),
                 OccurredAt = DateTimeOffset.UtcNow,
                 SuggestedFix = "Ensure update request is valid.",
@@ -169,7 +169,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (Exception ex)
         {
-            // this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.UpdateSchedule), "Failed to update schedule", ex);
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.UpdateSchedule), "Failed to update schedule", ex);
             this.State.AddActivityLog(nameof(this.UpdateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = "Failed to update schedule",
@@ -203,20 +203,31 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             this.logger.PausedSchedule(this.State.ScheduleConfiguration.ScheduleId);
             this.State.AddActivityLog(nameof(this.PauseSchedule), ScheduleOperationStatus.Succeeded.ToString());
         }
-        catch (ScheduleInvalidTransitionException ex)
+        catch (ScheduleInvalidTransitionException scheduleInvalidTransitionEx)
         {
             // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.PauseSchedule), ex.Message, ex);
             this.State.AddActivityLog(nameof(this.PauseSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
-                Reason = ex.Message,
+                Reason = scheduleInvalidTransitionEx.Message,
                 Type = ScheduleOperationFailureType.InvalidStateTransition.ToString(),
                 OccurredAt = DateTimeOffset.UtcNow,
                 SuggestedFix = "Ensure the schedule is in a valid state for pause.",
             });
         }
+        catch (ScheduleClientValidationException scheduleClientValidationEx)
+        {
+            // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.PauseSchedule), ex.Message, ex);
+            this.State.AddActivityLog(nameof(this.PauseSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
+            {
+                Reason = scheduleClientValidationEx.Message,
+                Type = ScheduleOperationFailureType.ValidationError.ToString(),
+                OccurredAt = DateTimeOffset.UtcNow,
+                SuggestedFix = "Ensure request is valid.",
+            });
+        }
         catch (Exception ex)
         {
-            // this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.PauseSchedule), "Failed to pause schedule", ex);
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.PauseSchedule), "Failed to pause schedule", ex);
             this.State.AddActivityLog(nameof(this.PauseSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = "Failed to pause schedule",
@@ -251,23 +262,23 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             // compute next run based on startat and interval
             context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), nameof(this.RunSchedule), this.State.ExecutionToken);
         }
-        catch (ScheduleInvalidTransitionException ex)
+        catch (ScheduleInvalidTransitionException scheduleInvalidTransitionEx)
         {
             // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.ResumeSchedule), ex.Message, ex);
             this.State.AddActivityLog(nameof(this.ResumeSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
-                Reason = ex.Message,
+                Reason = scheduleInvalidTransitionEx.Message,
                 Type = ScheduleOperationFailureType.InvalidStateTransition.ToString(),
                 OccurredAt = DateTimeOffset.UtcNow,
                 SuggestedFix = "Ensure the schedule is in a valid state for resume.",
             });
         }
-        catch (ScheduleClientValidationException ex)
+        catch (ScheduleClientValidationException scheduleClientValidationEx)
         {
             // this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.ResumeSchedule), ex.Message, ex);
             this.State.AddActivityLog(nameof(this.ResumeSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
-                Reason = ex.Message,
+                Reason = scheduleClientValidationEx.Message,
                 Type = ScheduleOperationFailureType.ValidationError.ToString(),
                 OccurredAt = DateTimeOffset.UtcNow,
                 SuggestedFix = "Ensure request is valid.",
@@ -275,7 +286,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (Exception ex)
         {
-            // this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.ResumeSchedule), "Failed to resume schedule", ex);
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.ResumeSchedule), "Failed to resume schedule", ex);
             this.State.AddActivityLog(nameof(this.ResumeSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
             {
                 Reason = "Failed to resume schedule",

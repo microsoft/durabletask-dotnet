@@ -84,10 +84,11 @@ IScheduledTaskClient scheduledTaskClient = host.Services.GetRequiredService<ISch
 
 try
 {
+    // TODO: ORCHname 
     // Create schedule options that runs every 30 seconds
     ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions("DemoOrchestration")
     {
-        ScheduleId = "demo-schedule9",
+        ScheduleId = "demo-schedule12",
         Interval = TimeSpan.FromSeconds(4),
         StartAt = DateTimeOffset.UtcNow,
         OrchestrationInput = "MSFT"
@@ -95,7 +96,6 @@ try
 
     // Get schedule handle
     IScheduleHandle scheduleHandle = scheduledTaskClient.GetScheduleHandle(scheduleOptions.ScheduleId);
-
 
     // Create the schedule
     Console.WriteLine("Creating schedule...");
@@ -129,7 +129,7 @@ try
     Console.WriteLine("");
     Console.WriteLine("");
 
-    await Task.Delay(200000);
+    await Task.Delay(2000000);
     //Console.WriteLine("\nPress any key to delete the schedule and exit...");
     //Console.ReadKey();
 

@@ -10,7 +10,10 @@ class ScheduleState
 {
     const int MaxActivityLogItems = 10;
 
-    public Queue<ScheduleActivityLog>? ActivityLogs { get; set; } = new Queue<ScheduleActivityLog>();
+    /// <summary>
+    /// Gets or sets the queue of activity logs for this schedule, maintaining the most recent entries.
+    /// </summary>
+    public Queue<ScheduleActivityLog> ActivityLogs { get; set; } = new Queue<ScheduleActivityLog>();
 
     /// <summary>
     /// Gets or sets the current status of the schedule.
@@ -36,11 +39,6 @@ class ScheduleState
     /// Gets or sets the schedule configuration.
     /// </summary>
     public ScheduleConfiguration? ScheduleConfiguration { get; set; }
-
-    /// <summary>
-    /// Gets the activity logs for this schedule.
-    /// </summary>
-    // public IReadOnlyCollection<ScheduleActivityLog> ActivityLogs => this.ActivityLogs1.ToList().AsReadOnly();
 
     /// <summary>
     /// Refreshes the execution token to invalidate pending schedule operations.

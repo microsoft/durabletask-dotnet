@@ -64,8 +64,6 @@ public class ScheduledTaskClient : IScheduledTaskClient
                     StartAt = config.StartAt,
                     EndAt = config.EndAt,
                     Interval = config.Interval,
-                    CronExpression = config.CronExpression,
-                    MaxOccurrence = config.MaxOccurrence,
                     StartImmediatelyIfLate = config.StartImmediatelyIfLate,
                     Status = metadata.State.Status,
                     ExecutionToken = metadata.State.ExecutionToken,

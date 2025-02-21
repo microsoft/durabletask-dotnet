@@ -61,16 +61,6 @@ public record ScheduleUpdateOptions
     }
 
     /// <summary>
-    /// Gets or initializes the cron expression for the schedule.
-    /// </summary>
-    public string? CronExpression { get; init; }
-
-    /// <summary>
-    /// Gets or initializes the maximum number of times the schedule should run.
-    /// </summary>
-    public int MaxOccurrence { get; init; }
-
-    /// <summary>
     /// Gets or initializes whether the schedule should start immediately if it's late.
     /// </summary>
     public bool? StartImmediatelyIfLate { get; init; }

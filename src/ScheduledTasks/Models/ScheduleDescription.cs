@@ -46,16 +46,6 @@ public record ScheduleDescription
     public TimeSpan? Interval { get; init; }
 
     /// <summary>
-    /// Gets the optional cron expression for the schedule.
-    /// </summary>
-    public string? CronExpression { get; init; }
-
-    /// <summary>
-    /// Gets the maximum number of times the schedule should run.
-    /// </summary>
-    public int MaxOccurrence { get; init; }
-
-    /// <summary>
     /// Gets whether the schedule should run immediately if started late.
     /// </summary>
     public bool? StartImmediatelyIfLate { get; init; }

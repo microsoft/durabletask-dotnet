@@ -76,8 +76,6 @@ public class ScheduleHandle : IScheduleHandle
             StartAt = config?.StartAt,
             EndAt = config?.EndAt,
             Interval = config?.Interval,
-            CronExpression = config?.CronExpression,
-            MaxOccurrence = config?.MaxOccurrence ?? 0,
             StartImmediatelyIfLate = config?.StartImmediatelyIfLate,
             Status = state.Status,
             ExecutionToken = state.ExecutionToken,

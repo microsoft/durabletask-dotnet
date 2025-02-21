@@ -23,24 +23,23 @@ IHost host = Host.CreateDefaultBuilder(args)
             builder.AddTasks(r =>
             {
                 // Add a demo orchestration that will be triggered by the schedule
-                r.AddOrchestratorFunc("DemoOrchestration", async context =>
+                r.AddOrchestratorFunc<string, string>("DemoOrchestration", async (context, symbol) =>
                 {
-                    string stockSymbol = "MSFT"; // Default to MSFT if no input provided
                     var logger = context.CreateReplaySafeLogger("DemoOrchestration");
-                    logger.LogInformation("Getting stock price for: {symbol}", stockSymbol);
+                    logger.LogInformation("Getting stock price for: {symbol}", symbol);
 
                     try
                     {
                         // Get current stock price
-                        decimal currentPrice = await context.CallActivityAsync<decimal>("GetStockPrice", stockSymbol);
+                        decimal currentPrice = await context.CallActivityAsync<decimal>("GetStockPrice", symbol);
 
-                        logger.LogInformation("Current price for {symbol} is ${price:F2}", stockSymbol, currentPrice);
+                        logger.LogInformation("Current price for {symbol} is ${price:F2}", symbol, currentPrice);
 
-                        return $"Stock {stockSymbol} price: ${currentPrice:F2} at {DateTime.UtcNow}";
+                        return $"Stock {symbol} price: ${currentPrice:F2} at {DateTime.UtcNow}";
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "Error processing stock price for {symbol}", stockSymbol);
+                        logger.LogError(ex, "Error processing stock price for {symbol}", symbol);
                         throw;
                     }
                 });
@@ -84,12 +83,20 @@ IScheduledTaskClient scheduledTaskClient = host.Services.GetRequiredService<ISch
 
 try
 {
-    // TODO: ORCHname 
+    // list all schedules
+    var schedules = await scheduledTaskClient.ListSchedulesAsync(false);
+    foreach (var schedule in schedules)
+    {
+        var handle = scheduledTaskClient.GetScheduleHandle(schedule.ScheduleId);
+        await handle.DeleteAsync();
+        Console.WriteLine($"Deleted schedule {schedule.ScheduleId}");
+    }
+
     // Create schedule options that runs every 30 seconds
     ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions
     {
         OrchestrationName = "DemoOrchestration",
-        ScheduleId = "demo-schedule14",
+        ScheduleId = "demo-schedule101",
         Interval = TimeSpan.FromSeconds(4),
         StartAt = DateTimeOffset.UtcNow,
         OrchestrationInput = "MSFT"

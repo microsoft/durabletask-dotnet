@@ -87,16 +87,6 @@ class ScheduleConfiguration
     }
 
     /// <summary>
-    /// Gets or sets the cron expression for the schedule.
-    /// </summary>
-    public string? CronExpression { get; set; }
-
-    /// <summary>
-    /// Gets or sets the maximum number of times the schedule should run.
-    /// </summary>
-    public int MaxOccurrence { get; set; }
-
-    /// <summary>
     /// Gets or sets whether the schedule should start immediately if it's late.
     /// </summary>
     public bool? StartImmediatelyIfLate { get; set; }
@@ -115,8 +105,6 @@ class ScheduleConfiguration
             StartAt = createOptions.StartAt,
             EndAt = createOptions.EndAt,
             Interval = createOptions.Interval,
-            CronExpression = createOptions.CronExpression,
-            MaxOccurrence = createOptions.MaxOccurrence,
             StartImmediatelyIfLate = createOptions.StartImmediatelyIfLate,
         };
     }
@@ -165,18 +153,6 @@ class ScheduleConfiguration
         {
             this.Interval = updateOptions.Interval;
             updatedFields.Add(nameof(this.Interval));
-        }
-
-        if (!string.IsNullOrEmpty(updateOptions.CronExpression))
-        {
-            this.CronExpression = updateOptions.CronExpression;
-            updatedFields.Add(nameof(this.CronExpression));
-        }
-
-        if (updateOptions.MaxOccurrence != 0)
-        {
-            this.MaxOccurrence = updateOptions.MaxOccurrence;
-            updatedFields.Add(nameof(this.MaxOccurrence));
         }
 
         if (updateOptions.StartImmediatelyIfLate.HasValue)

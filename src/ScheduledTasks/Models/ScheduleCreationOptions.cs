@@ -75,16 +75,6 @@ public record ScheduleCreationOptions
     }
 
     /// <summary>
-    /// Gets the cron expression for the schedule.
-    /// </summary>
-    public string? CronExpression { get; init; }
-
-    /// <summary>
-    /// Gets the maximum number of occurrences for the schedule.
-    /// </summary>
-    public int MaxOccurrence { get; init; }
-
-    /// <summary>
     /// Gets a value indicating whether to start the schedule immediately if it is late.
     /// </summary>
     public bool? StartImmediatelyIfLate { get; init; }

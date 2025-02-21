@@ -36,7 +36,7 @@ public class ScheduleOperationFailedException : Exception
     /// <param name="operation">The operation that failed.</param>
     /// <param name="status">The status of the failed operation.</param>
     /// <param name="failureDetails">Details about the failure.</param>
-    public ScheduleOperationFailedException(string scheduleId, string operation, string status, FailureDetails failureDetails)
+    public ScheduleOperationFailedException(string scheduleId, string operation, string status, FailureDetails? failureDetails)
         : base($"Operation '{operation}' failed for schedule '{scheduleId}' with status '{status}'. Details: {failureDetails}")
     {
     }

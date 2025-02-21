@@ -119,7 +119,7 @@ public class ScheduleWaiter : IScheduleWaiter
                     ScheduleActivityLog? latestActivityLog = description.ActivityLogs.LastOrDefault();
                     if (latestActivityLog != null && latestActivityLog.Status == ScheduleOperationStatus.Failed.ToString())
                     {
-                        throw new ScheduleOperationFailedException(description.ScheduleId, latestActivityLog.Operation, latestActivityLog.Status, latestActivityLog.FailureDetails);
+                        throw new ScheduleOperationFailedException(description.ScheduleId, latestActivityLog.Operation, latestActivityLog.Status, latestActivityLog.FailureDetails ?? null);
                     }
                 }
                 catch (ScheduleStillBeingProvisionedException)

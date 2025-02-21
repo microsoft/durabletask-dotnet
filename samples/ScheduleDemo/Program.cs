@@ -89,7 +89,7 @@ try
     ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions
     {
         OrchestrationName = "DemoOrchestration",
-        ScheduleId = "demo-schedule13",
+        ScheduleId = "demo-schedule14",
         Interval = TimeSpan.FromSeconds(4),
         StartAt = DateTimeOffset.UtcNow,
         OrchestrationInput = "MSFT"

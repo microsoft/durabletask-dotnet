@@ -35,9 +35,9 @@ public record ScheduleCreationOptions
     public string? OrchestrationInput { get; init; }
 
     /// <summary>
-    /// Gets the instance ID of the orchestration function, if not provided, default to a new GUID.
+    /// Gets the instance ID of the orchestration function.
     /// </summary>
-    public string OrchestrationInstanceId { get; init; } = Guid.NewGuid().ToString("N");
+    public string? OrchestrationInstanceId { get; init; }
 
     /// <summary>
     /// Gets the start time of the schedule.

@@ -8,8 +8,6 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// </summary>
 public class ScheduleConfigurationCreateOptions
 {
-    string orchestrationName;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="ScheduleConfigurationCreateOptions"/> class.
     /// </summary>
@@ -55,8 +53,6 @@ public class ScheduleConfigurationCreateOptions
     /// </summary>
     public DateTimeOffset? EndAt { get; set; }
 
-    TimeSpan? interval;
-
     /// <summary>
     /// Gets or sets the time interval between schedule executions. Must be at least 1 second.
     /// </summary>
@@ -88,4 +84,8 @@ public class ScheduleConfigurationCreateOptions
     /// Gets or sets whether to start immediately if the schedule is already late.
     /// </summary>
     public bool? StartImmediatelyIfLate { get; set; }
+
+    string orchestrationName;
+
+    TimeSpan? interval;
 }

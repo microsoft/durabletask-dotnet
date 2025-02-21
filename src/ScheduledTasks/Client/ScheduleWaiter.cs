@@ -114,6 +114,11 @@ public class ScheduleWaiter : IScheduleWaiter
                     {
                         return description;
                     }
+
+                    if (description.Status == ScheduleStatus.Failed)
+                    {
+                        throw new ScheduleOperationFailedException(description);
+                    }
                 }
                 catch (ScheduleStillBeingProvisionedException)
                 {

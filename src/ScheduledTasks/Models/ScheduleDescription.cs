@@ -16,7 +16,7 @@ public record ScheduleDescription
     /// <summary>
     /// Gets the name of the orchestration to run.
     /// </summary>
-    public string? OrchestrationName { get; init; };
+    public string? OrchestrationName { get; init; }
 
     /// <summary>
     /// Gets the optional input for the orchestration.
@@ -82,4 +82,10 @@ public record ScheduleDescription
     /// Gets the activity logs for this schedule.
     /// </summary>
     public IReadOnlyCollection<ScheduleActivityLog> ActivityLogs { get; init; } = Array.Empty<ScheduleActivityLog>();
+
+    /// <summary>
+    /// Returns a JSON string representation of the schedule description.
+    /// </summary>
+    /// <returns>A JSON string containing the schedule details.</returns>
+    public string ToJsonString() => System.Text.Json.JsonSerializer.Serialize(this);
 }

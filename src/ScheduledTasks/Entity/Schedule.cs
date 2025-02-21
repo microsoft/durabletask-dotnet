@@ -340,7 +340,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             // else, it has run before, we cant run at startat, need to compute next run at based on last run at + num of intervals between last runtime and now plus 1
             if (!this.State.LastRunAt.HasValue)
             {
-                this.State.NextRunAt = scheduleConfig.StartAt;
+                this.State.NextRunAt = scheduleConfig.StartImmediatelyIfLate == true ? DateTimeOffset.UtcNow : scheduleConfig.StartAt;
             }
             else
             {

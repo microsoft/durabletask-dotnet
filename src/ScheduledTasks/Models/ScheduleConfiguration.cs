@@ -89,7 +89,7 @@ class ScheduleConfiguration
     /// <summary>
     /// Gets or sets whether the schedule should start immediately if it's late.
     /// </summary>
-    public bool? StartImmediatelyIfLate { get; set; }
+    public bool? StartImmediatelyIfLate { get; set; } = false;
 
     /// <summary>
     /// Creates a new configuration from the provided creation options.

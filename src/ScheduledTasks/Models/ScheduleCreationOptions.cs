@@ -75,7 +75,7 @@ public record ScheduleCreationOptions
     }
 
     /// <summary>
-    /// Gets a value indicating whether to start the schedule immediately if it is late.
+    /// Gets a value indicating whether to start the schedule immediately if it is late. Default is false.
     /// </summary>
-    public bool? StartImmediatelyIfLate { get; init; }
+    public bool? StartImmediatelyIfLate { get; init; } = false;
 }

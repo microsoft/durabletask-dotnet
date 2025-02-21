@@ -89,6 +89,19 @@ public class ScheduleHandle : IScheduleHandle
     }
 
     /// <inheritdoc/>
+    public async Task<IScheduleWaiter> CreateAsync(ScheduleCreationOptions creationOptions)
+    {
+        this.logger.ClientCreatingSchedule(creationOptions);
+        Check.NotNull(creationOptions, nameof(creationOptions));
+
+        EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), creationOptions.ScheduleId);
+
+        await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.CreateSchedule), creationOptions);
+
+        return new ScheduleWaiter(this);
+    }
+
+    /// <inheritdoc/>
     public async Task<IScheduleWaiter> PauseAsync()
     {
         this.logger.ClientPausingSchedule(this.ScheduleId);
@@ -111,7 +124,7 @@ public class ScheduleHandle : IScheduleHandle
     public async Task<IScheduleWaiter> UpdateAsync(ScheduleUpdateOptions updateOptions)
     {
         this.logger.ClientUpdatingSchedule(this.ScheduleId);
-
+        Check.NotNull(updateOptions, nameof(updateOptions));
         await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, nameof(Schedule.UpdateSchedule), updateOptions);
         return new ScheduleWaiter(this);
     }

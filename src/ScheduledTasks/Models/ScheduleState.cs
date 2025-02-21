@@ -8,7 +8,7 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// </summary>
 class ScheduleState
 {
-    const int MaxActivityLogItems = 100;
+    const int MaxActivityLogItems = 10;
     readonly Queue<ScheduleActivityLog> activityLogs = new();
 
     /// <summary>

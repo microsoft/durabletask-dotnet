@@ -25,7 +25,7 @@ IHost host = Host.CreateDefaultBuilder(args)
                 // Add a demo orchestration that will be triggered by the schedule
                 r.AddOrchestratorFunc("DemoOrchestration", async context =>
                 {
-                    const string stockSymbol = "MSFT"; // Hardcoded to Microsoft stock
+                    string stockSymbol = context.GetInput<string>() ?? "APPL"; // Default to MSFT if no input provided
                     var logger = context.CreateReplaySafeLogger("DemoOrchestration");
                     logger.LogInformation("Getting stock price for: {symbol}", stockSymbol);
 
@@ -87,43 +87,55 @@ try
     // Create schedule options that runs every 30 seconds
     ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions("DemoOrchestration")
     {
-        ScheduleId = "demo-schedule2",
+        ScheduleId = "demo-schedule4",
         Interval = TimeSpan.FromSeconds(4),
         StartAt = DateTimeOffset.UtcNow,
-        OrchestrationInput = "This is a scheduled message!"
+        OrchestrationInput = "MSFT"
     };
 
-    // Create the schedule
-    IScheduleHandle scheduleHandle = await scheduledTaskClient.CreateScheduleAsync(scheduleOptions);
+    // Get schedule handle
+    IScheduleHandle scheduleHandle = scheduledTaskClient.GetScheduleHandle(scheduleOptions.ScheduleId);
 
+
+    // Create the schedule
+    Console.WriteLine("Creating schedule...");
+    IScheduleWaiter waiter = await scheduleHandle.CreateAsync(scheduleOptions);
+    ScheduleDescription scheduleDescription = await waiter.WaitUntilActiveAsync();
+    // print the schedule description
+    Console.WriteLine(scheduleDescription);
+
+    Console.WriteLine("");
+    Console.WriteLine("");
+    Console.WriteLine("");
 
     // // Pause the schedule
-    // Console.WriteLine("\nPausing schedule...");
-    IScheduleWaiter waiter = await scheduleHandle.PauseAsync();
-    await waiter.WaitUntilPausedAsync();
+    Console.WriteLine("\nPausing schedule...");
+    IScheduleWaiter pauseWaiter = await scheduleHandle.PauseAsync();
+    scheduleDescription = await pauseWaiter.WaitUntilPausedAsync();
+    Console.WriteLine(scheduleDescription);
+    Console.WriteLine("");
+    Console.WriteLine("");
+    Console.WriteLine("");
 
-    // var pausedSchedule = await scheduleHandle.DescribeAsync();
-    // Console.WriteLine($"Schedule status after pause: {pausedSchedule.Status}");
 
-    // // Resume the schedule
-    // Console.WriteLine("\nResuming schedule...");
-    // await scheduleHandle.ResumeAsync();
+    // Resume the schedule
+    Console.WriteLine("\nResuming schedule...");
+    IScheduleWaiter resumeWaiter = await scheduleHandle.ResumeAsync();
 
-    // var resumedSchedule = await scheduleHandle.DescribeAsync();
-    // Console.WriteLine($"Schedule status after resume: {resumedSchedule.Status}");
-    // Console.WriteLine($"Next run at: {resumedSchedule.NextRunAt}");
+    scheduleDescription = await resumeWaiter.WaitUntilActiveAsync();
+    Console.WriteLine(scheduleDescription);
 
-    // Console.WriteLine("\nPress any key to delete the schedule and exit...");
-    // Console.ReadKey();
+    Console.WriteLine("");
+    Console.WriteLine("");
+    Console.WriteLine("");
 
-    // // intentionally call schedule to trigger exceptions
-    // await scheduleHandle.ResumeAsync();
-    // await scheduleHandle.ResumeAsync();
+    Console.WriteLine("\nPress any key to delete the schedule and exit...");
+    Console.ReadKey();
 
-    //await Task.Delay(TimeSpan.FromSeconds(120));
-    // // Delete the schedule
-    // await scheduleHandle.DeleteAsync();
-    // Console.WriteLine("Schedule deleted.");
+    // Delete the schedule
+    IScheduleWaiter deleteWaiter = await scheduleHandle.DeleteAsync();
+    bool deleted = await deleteWaiter.WaitUntilDeletedAsync();
+    Console.WriteLine(deleted ? "Schedule deleted." : "Schedule not deleted.");
 }
 catch (Exception ex)
 {

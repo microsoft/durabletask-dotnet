@@ -122,7 +122,7 @@ public class ScheduleWaiter : IScheduleWaiter
                         throw new ScheduleOperationFailedException(description.ScheduleId, latestActivityLog.Operation, latestActivityLog.Status, latestActivityLog.FailureDetails ?? null);
                     }
                 }
-                catch (ScheduleStillBeingProvisionedException)
+                catch (Exception ex) when (ex is ScheduleStillBeingProvisionedException || ex is ScheduleNotFoundException)
                 {
                     if (desiredStatus != ScheduleStatus.Active)
                     {

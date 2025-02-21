@@ -97,7 +97,7 @@ public class ScheduleHandle : IScheduleHandle
 
         await this.durableTaskClient.Entities.SignalEntityAsync(entityId, nameof(Schedule.CreateSchedule), creationOptions);
 
-        return new ScheduleWaiter(this);
+        return new ScheduleWaiter(this, nameof(Schedule.CreateSchedule));
     }
 
     /// <inheritdoc/>
@@ -106,7 +106,7 @@ public class ScheduleHandle : IScheduleHandle
         this.logger.ClientPausingSchedule(this.ScheduleId);
 
         await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, nameof(Schedule.PauseSchedule));
-        return new ScheduleWaiter(this);
+        return new ScheduleWaiter(this, nameof(Schedule.PauseSchedule));
     }
 
     /// <inheritdoc/>
@@ -116,7 +116,7 @@ public class ScheduleHandle : IScheduleHandle
 
         await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, nameof(Schedule.ResumeSchedule));
 
-        return new ScheduleWaiter(this);
+        return new ScheduleWaiter(this, nameof(Schedule.ResumeSchedule));
     }
 
     /// <inheritdoc/>
@@ -125,7 +125,7 @@ public class ScheduleHandle : IScheduleHandle
         this.logger.ClientUpdatingSchedule(this.ScheduleId);
         Check.NotNull(updateOptions, nameof(updateOptions));
         await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, nameof(Schedule.UpdateSchedule), updateOptions);
-        return new ScheduleWaiter(this);
+        return new ScheduleWaiter(this, nameof(Schedule.UpdateSchedule));
     }
 
     /// <inheritdoc/>
@@ -134,6 +134,6 @@ public class ScheduleHandle : IScheduleHandle
         this.logger.ClientDeletingSchedule(this.ScheduleId);
 
         await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, "delete");
-        return new ScheduleWaiter(this);
+        return new ScheduleWaiter(this, nameof(Schedule.DeleteSchedule));
     }
 }

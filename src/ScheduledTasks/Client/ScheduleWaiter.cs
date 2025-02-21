@@ -13,13 +13,17 @@ public class ScheduleWaiter : IScheduleWaiter
     readonly TimeSpan defaultTimeout = TimeSpan.FromMinutes(2);
     readonly TimeSpan defaultMaxPollingInterval = TimeSpan.FromSeconds(20);
 
+    readonly string operationName;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ScheduleWaiter"/> class.
     /// </summary>
     /// <param name="scheduleHandle">The schedule handle to wait on.</param>
-    public ScheduleWaiter(IScheduleHandle scheduleHandle)
+    /// <param name="operationName"></param>
+    public ScheduleWaiter(IScheduleHandle scheduleHandle, string operationName)
     {
         this.scheduleHandle = scheduleHandle ?? throw new ArgumentNullException(nameof(scheduleHandle));
+        this.operationName = operationName ?? throw new ArgumentNullException(nameof(operationName));
     }
 
     /// <inheritdoc/>
@@ -122,9 +126,9 @@ public class ScheduleWaiter : IScheduleWaiter
                         throw new ScheduleOperationFailedException(description.ScheduleId, latestActivityLog.Operation, latestActivityLog.Status, latestActivityLog.FailureDetails ?? null);
                     }
                 }
-                catch (Exception ex) when (ex is ScheduleStillBeingProvisionedException || ex is ScheduleNotFoundException)
+                catch (Exception ex) when (ex is ScheduleNotFoundException)
                 {
-                    if (desiredStatus != ScheduleStatus.Active)
+                    if (this.operationName == nameof(Schedule.CreateSchedule) && desiredStatus != ScheduleStatus.Active)
                     {
                         throw;
                     }

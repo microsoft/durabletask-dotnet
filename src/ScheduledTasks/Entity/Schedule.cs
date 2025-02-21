@@ -32,11 +32,14 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         {
             if (!this.CanTransitionTo(nameof(this.CreateSchedule), ScheduleStatus.Active))
             {
-                throw new ScheduleInvalidTransitionException(scheduleCreationOptions.ScheduleId, this.State.Status, ScheduleStatus.Active);
+                throw new ScheduleInvalidTransitionException(scheduleCreationOptions?.ScheduleId, this.State.Status, ScheduleStatus.Active);
             }
 
             // CreateSchedule is allowed, we shall throw exception if any following step failed to inform caller
-            Verify.NotNull(scheduleCreationOptions, nameof(scheduleCreationOptions));
+            if (scheduleCreationOptions == null)
+            {
+                throw new ScheduleClientValidationException(null, "Schedule creation options cannot be null");
+            }
 
             this.State.ScheduleConfiguration = ScheduleConfiguration.FromCreateOptions(scheduleCreationOptions);
             this.TryStatusTransition(nameof(this.CreateSchedule), ScheduleStatus.Active);
@@ -92,7 +95,16 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// <exception cref="InvalidOperationException">Thrown when the schedule is not created.</exception>
     public void UpdateSchedule(TaskEntityContext context, ScheduleUpdateOptions scheduleUpdateOptions)
     {
-        Verify.NotNull(scheduleUpdateOptions, nameof(scheduleUpdateOptions));
+        if (!this.CanTransitionTo(nameof(this.UpdateSchedule), ScheduleStatus.Active))
+        {
+            throw new ScheduleInvalidTransitionException(scheduleUpdateOptions?.ScheduleId, this.State.Status, this.State.Status);
+        }
+
+        if (scheduleUpdateOptions == null)
+        {
+            throw new ScheduleClientValidationException(null, "Schedule update options cannot be null");
+        }
+
         Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
 
         HashSet<string> updatedScheduleConfigFields = this.State.ScheduleConfiguration.Update(scheduleUpdateOptions);

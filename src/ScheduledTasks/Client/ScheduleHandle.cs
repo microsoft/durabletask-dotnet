@@ -72,11 +72,8 @@ public class ScheduleHandle : IScheduleHandle
                 $"Schedule configuration is not available even though the schedule status is {state.Status}.");
         }
 
-        IReadOnlyCollection<ScheduleActivityLog> activityLogs = state.ActivityLogs;
-        if (!includeFullActivityLogs && activityLogs.Count != 0)
-        {
-            activityLogs = new ScheduleActivityLog[] { activityLogs.Last() };
-        }
+        IReadOnlyCollection<ScheduleActivityLog> activityLogs =
+            includeFullActivityLogs ? state.ActivityLogs : state.ActivityLogs.TakeLast(1).ToArray();
 
         return new ScheduleDescription(
             this.ScheduleId,

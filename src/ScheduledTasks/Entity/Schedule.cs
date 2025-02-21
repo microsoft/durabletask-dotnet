@@ -8,7 +8,6 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 
 // TODO: Support other schedule option properties like cron expression, max occurrence, etc.
 
-
 /// <summary>
 /// Entity that manages the state and execution of a scheduled task.
 /// </summary>
@@ -186,7 +185,8 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// </summary>
     public void PauseSchedule(TaskEntityContext context)
     {
-        try {
+        try
+        {
             if (!this.CanTransitionTo(nameof(this.PauseSchedule), ScheduleStatus.Paused))
             {
                 throw new ScheduleInvalidTransitionException(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, this.State.Status, ScheduleStatus.Paused);
@@ -195,13 +195,14 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
 
             // Transition to Paused state
-            this.TryStatusTransition(ScheduleStatus.Paused);
+            this.TryStatusTransition(nameof(this.PauseSchedule), ScheduleStatus.Paused);
             this.State.NextRunAt = null;
             this.State.RefreshScheduleRunExecutionToken();
 
             this.logger.PausedSchedule(this.State.ScheduleConfiguration.ScheduleId);
             this.State.AddActivityLog(nameof(this.PauseSchedule), ScheduleOperationStatus.Succeeded.ToString());
-        } catch (ScheduleInvalidTransitionException ex)
+        }
+        catch (ScheduleInvalidTransitionException ex)
         {
             this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.PauseSchedule), ex.Message, ex);
             this.State.AddActivityLog(nameof(this.PauseSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
@@ -232,7 +233,8 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// <exception cref="InvalidOperationException">Thrown when the schedule is not paused.</exception>
     public void ResumeSchedule(TaskEntityContext context)
     {
-        try {
+        try
+        {
             if (!this.CanTransitionTo(nameof(this.ResumeSchedule), ScheduleStatus.Active))
             {
                 throw new ScheduleInvalidTransitionException(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, this.State.Status, ScheduleStatus.Active);
@@ -240,14 +242,14 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 
             Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
 
-            this.TryStatusTransition(ScheduleStatus.Active);
+            this.TryStatusTransition(nameof(this.ResumeSchedule), ScheduleStatus.Active);
             this.State.NextRunAt = null;
             this.logger.ResumedSchedule(this.State.ScheduleConfiguration.ScheduleId);
             this.State.AddActivityLog(nameof(this.ResumeSchedule), ScheduleOperationStatus.Succeeded.ToString());
 
             // compute next run based on startat and interval
             context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), nameof(this.RunSchedule), this.State.ExecutionToken);
-        } 
+        }
         catch (ScheduleInvalidTransitionException ex)
         {
             this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.ResumeSchedule), ex.Message, ex);

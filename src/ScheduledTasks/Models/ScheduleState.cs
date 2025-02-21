@@ -1,10 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 namespace Microsoft.DurableTask.ScheduledTasks;
 
 /// <summary>
@@ -12,8 +8,8 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// </summary>
 class ScheduleState
 {
-    private const int MaxActivityLogItems = 100;
-    private readonly Queue<ScheduleActivityLog> activityLogs = new();
+    const int MaxActivityLogItems = 100;
+    readonly Queue<ScheduleActivityLog> activityLogs = new();
 
     /// <summary>
     /// Gets or sets the current status of the schedule.
@@ -61,12 +57,12 @@ class ScheduleState
     /// <param name="failureDetails">Optional failure details if the operation failed.</param>
     public void AddActivityLog(string operation, string status, FailureDetails? failureDetails = null)
     {
-        var log = new ScheduleActivityLog
+        ScheduleActivityLog log = new ScheduleActivityLog
         {
             Operation = operation,
             Status = status,
             Timestamp = DateTimeOffset.UtcNow,
-            FailureDetails = failureDetails
+            FailureDetails = failureDetails,
         };
 
         this.activityLogs.Enqueue(log);

@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-using System.Threading.Tasks;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Entities;
@@ -75,7 +73,7 @@ public class ScheduleHandle : IScheduleHandle
         }
 
         IReadOnlyCollection<ScheduleActivityLog> activityLogs = state.ActivityLogs;
-        if (!includeFullActivityLogs && activityLogs.Any())
+        if (!includeFullActivityLogs && activityLogs.Count != 0)
         {
             activityLogs = new ScheduleActivityLog[] { activityLogs.Last() };
         }

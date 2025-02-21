@@ -67,10 +67,11 @@ public class ScheduledTaskClient : IScheduledTaskClient
             {
                 ScheduleConfiguration config = metadata.State.ScheduleConfiguration!;
                 IReadOnlyCollection<ScheduleActivityLog> activityLogs = metadata.State.ActivityLogs;
-                if (!includeFullActivityLogs && activityLogs.Any())
+                if (!includeFullActivityLogs && activityLogs.Count != 0)
                 {
                     activityLogs = new[] { activityLogs.Last() };
                 }
+
                 schedules.Add(new ScheduleDescription(
                     metadata.Id.Key,
                     config.OrchestrationName,

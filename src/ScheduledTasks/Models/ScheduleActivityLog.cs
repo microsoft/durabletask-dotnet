@@ -6,51 +6,51 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// <summary>
 /// Represents a log entry for schedule activity.
 /// </summary>
-public class ScheduleActivityLog
+public record ScheduleActivityLog
 {
     /// <summary>
-    /// Gets or sets the operation performed.
+    /// Gets the operation performed.
     /// </summary>
-    public string Operation { get; set; } = string.Empty;
+    public string Operation { get; init; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the status of the operation.
+    /// Gets the status of the operation.
     /// </summary>
-    public string Status { get; set; } = string.Empty;
+    public string Status { get; init; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the timestamp when the operation occurred.
+    /// Gets the timestamp when the operation occurred.
     /// </summary>
-    public DateTimeOffset Timestamp { get; set; }
+    public DateTimeOffset Timestamp { get; init; }
 
     /// <summary>
-    /// Gets or sets the failure details if the operation failed.
+    /// Gets the failure details if the operation failed.
     /// </summary>
-    public FailureDetails? FailureDetails { get; set; }
+    public FailureDetails? FailureDetails { get; init; }
 }
 
 /// <summary>
 /// Represents details about a failure that occurred during schedule execution.
 /// </summary>
-public class FailureDetails
+public record FailureDetails
 {
     /// <summary>
-    /// Gets or sets the reason for the failure.
+    /// Gets the reason for the failure.
     /// </summary>
-    public string Reason { get; set; } = string.Empty;
+    public string Reason { get; init; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the type of failure.
+    /// Gets the type of failure.
     /// </summary>
-    public string Type { get; set; } = string.Empty;
+    public string Type { get; init; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets when the failure occurred.
+    /// Gets when the failure occurred.
     /// </summary>
-    public DateTimeOffset OccurredAt { get; set; }
+    public DateTimeOffset OccurredAt { get; init; }
 
     /// <summary>
-    /// Gets or sets the suggested fix for the failure.
+    /// Gets the suggested fix for the failure.
     /// </summary>
-    public string? SuggestedFix { get; set; }
-} 
+    public string? SuggestedFix { get; init; }
+}

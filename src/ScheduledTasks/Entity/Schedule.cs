@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -40,7 +39,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             {
                 Reason = errorMessage,
                 Type = "InvalidOperation",
-                OccurredAt = DateTimeOffset.UtcNow
+                OccurredAt = DateTimeOffset.UtcNow,
             });
             throw exception;
         }
@@ -116,7 +115,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             {
                 Reason = errorMessage,
                 Type = "InvalidOperation",
-                OccurredAt = DateTimeOffset.UtcNow
+                OccurredAt = DateTimeOffset.UtcNow,
             });
             throw exception;
         }
@@ -147,7 +146,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             {
                 Reason = errorMessage,
                 Type = "InvalidOperation",
-                OccurredAt = DateTimeOffset.UtcNow
+                OccurredAt = DateTimeOffset.UtcNow,
             });
             throw exception;
         }
@@ -183,7 +182,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             {
                 Reason = errorMessage,
                 Type = "InvalidConfiguration",
-                OccurredAt = DateTimeOffset.UtcNow
+                OccurredAt = DateTimeOffset.UtcNow,
             });
             throw exception;
         }
@@ -195,7 +194,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             {
                 Reason = "Execution token mismatch",
                 Type = "TokenExpired",
-                OccurredAt = DateTimeOffset.UtcNow
+                OccurredAt = DateTimeOffset.UtcNow,
             });
             return;
         }
@@ -209,7 +208,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             {
                 Reason = errorMessage,
                 Type = "InvalidOperation",
-                OccurredAt = DateTimeOffset.UtcNow
+                OccurredAt = DateTimeOffset.UtcNow,
             });
             throw exception;
         }

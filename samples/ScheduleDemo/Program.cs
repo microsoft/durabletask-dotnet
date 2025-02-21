@@ -86,9 +86,10 @@ try
 {
     // TODO: ORCHname 
     // Create schedule options that runs every 30 seconds
-    ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions("DemoOrchestration")
+    ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions
     {
-        ScheduleId = "demo-schedule12",
+        OrchestrationName = "DemoOrchestration",
+        ScheduleId = "demo-schedule13",
         Interval = TimeSpan.FromSeconds(4),
         StartAt = DateTimeOffset.UtcNow,
         OrchestrationInput = "MSFT"

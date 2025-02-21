@@ -13,21 +13,16 @@ public record ScheduleCreationOptions
     /// </summary>
     TimeSpan? interval;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ScheduleCreationOptions"/> class.
-    /// </summary>
-    /// <param name="orchestrationName">The name of the orchestration function to schedule.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="orchestrationName"/> is null or empty.</exception>
-    public ScheduleCreationOptions(string orchestrationName)
-    {
-        Check.NotNullOrEmpty(orchestrationName, nameof(orchestrationName));
-        this.OrchestrationName = orchestrationName;
-    }
+    string orchestrationName = string.Empty;
 
     /// <summary>
     /// Gets the name of the orchestration function to schedule.
     /// </summary>
-    public string OrchestrationName { get; init; }
+    public string OrchestrationName
+    {
+        get => this.orchestrationName;
+        init => this.orchestrationName = Check.NotNullOrEmpty(value, nameof(value));
+    }
 
     /// <summary>
     /// Gets the ID of the schedule, if not provided, default to a new GUID.

@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json;
+
 namespace Microsoft.DurableTask.ScheduledTasks;
 
 /// <summary>
@@ -90,9 +92,12 @@ public record ScheduleDescription
     /// <returns>A JSON string containing the schedule details.</returns>
     public string ToJsonString(bool pretty = false)
     {
-        System.Text.Json.JsonSerializerOptions options = pretty
-            ? new System.Text.Json.JsonSerializerOptions { WriteIndented = true }
-            : new System.Text.Json.JsonSerializerOptions();
-        return System.Text.Json.JsonSerializer.Serialize<ScheduleDescription>(this, options);
+#pragma warning disable CA1869 // Cache and reuse 'JsonSerializerOptions' instances
+        JsonSerializerOptions options = new JsonSerializerOptions
+        {
+            WriteIndented = pretty,
+        };
+#pragma warning restore CA1869 // Cache and reuse 'JsonSerializerOptions' instances
+        return System.Text.Json.JsonSerializer.Serialize(this, options);
     }
 }

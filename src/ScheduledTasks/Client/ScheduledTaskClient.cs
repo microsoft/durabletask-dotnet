@@ -38,7 +38,6 @@ public class ScheduledTaskClient : IScheduledTaskClient
     /// <inheritdoc/>
     public async Task<IEnumerable<ScheduleDescription>> ListSchedulesAsync(bool includeFullActivityLogs = false)
     {
-        this.logger.ClientListingSchedules();
         EntityQuery query = new EntityQuery
         {
             InstanceIdStartsWith = nameof(Schedule), // Automatically ensures correct formatting

@@ -47,7 +47,6 @@ public class ScheduleHandle : IScheduleHandle
     public async Task<ScheduleDescription> DescribeAsync(bool includeFullActivityLogs = false)
     {
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
-        this.logger.ClientDescribingSchedule(this.ScheduleId);
 
         EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
         EntityMetadata<ScheduleState>? metadata =
@@ -58,10 +57,10 @@ public class ScheduleHandle : IScheduleHandle
         }
 
         ScheduleState state = metadata.State;
-        if (state.Status == ScheduleStatus.Uninitialized)
-        {
-            throw new ScheduleStillBeingProvisionedException(this.ScheduleId);
-        }
+        // if (state.Status == ScheduleStatus.Uninitialized)
+        // {
+        //     throw new ScheduleStillBeingProvisionedException(this.ScheduleId);
+        // }
 
         ScheduleConfiguration? config = state.ScheduleConfiguration;
 

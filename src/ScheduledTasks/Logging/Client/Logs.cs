@@ -20,12 +20,6 @@ static partial class Logs
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Client: Getting schedule handle for schedule '{scheduleId}'")]
     public static partial void ClientGettingScheduleHandle(this ILogger logger, string scheduleId);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Client: Listing initialized schedules")]
-    public static partial void ClientListingSchedules(this ILogger logger);
-
-    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Client: Describing schedule '{scheduleId}'")]
-    public static partial void ClientDescribingSchedule(this ILogger logger, string scheduleId);
-
     [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Client: Pausing schedule '{scheduleId}'")]
     public static partial void ClientPausingSchedule(this ILogger logger, string scheduleId);
 

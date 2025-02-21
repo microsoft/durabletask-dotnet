@@ -10,8 +10,8 @@ public class ScheduleWaiter : IScheduleWaiter
 {
     readonly IScheduleHandle scheduleHandle;
     readonly TimeSpan defaultPollingInterval = TimeSpan.FromSeconds(5);
-    readonly TimeSpan defaultTimeout = TimeSpan.FromMinutes(5);
-    readonly TimeSpan defaultMaxPollingInterval = TimeSpan.FromSeconds(30);
+    readonly TimeSpan defaultTimeout = TimeSpan.FromMinutes(2);
+    readonly TimeSpan defaultMaxPollingInterval = TimeSpan.FromSeconds(20);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ScheduleWaiter"/> class.

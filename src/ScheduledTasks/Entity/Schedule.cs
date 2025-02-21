@@ -6,6 +6,9 @@ using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
+// TODO: Support other schedule option properties like cron expression, max occurrence, etc.
+
+
 /// <summary>
 /// Entity that manages the state and execution of a scheduled task.
 /// </summary>
@@ -197,8 +200,29 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             this.State.RefreshScheduleRunExecutionToken();
 
             this.logger.PausedSchedule(this.State.ScheduleConfiguration.ScheduleId);
-            this.State.AddActivityLog("Pause", "Success");
-        } catch (Exception ex) {}
+            this.State.AddActivityLog(nameof(this.PauseSchedule), ScheduleOperationStatus.Succeeded.ToString());
+        } catch (ScheduleInvalidTransitionException ex)
+        {
+            this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.PauseSchedule), ex.Message, ex);
+            this.State.AddActivityLog(nameof(this.PauseSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
+            {
+                Reason = ex.Message,
+                Type = ScheduleOperationFailureType.InvalidStateTransition.ToString(),
+                OccurredAt = DateTimeOffset.UtcNow,
+                SuggestedFix = "Ensure the schedule is in a valid state for pause.",
+            });
+        }
+        catch (Exception ex)
+        {
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.PauseSchedule), "Failed to pause schedule", ex);
+            this.State.AddActivityLog(nameof(this.PauseSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
+            {
+                Reason = "Failed to pause schedule",
+                Type = ScheduleOperationFailureType.InternalError.ToString(),
+                OccurredAt = DateTimeOffset.UtcNow,
+                SuggestedFix = "Please contact support.",
+            });
+        }
     }
 
     /// <summary>
@@ -208,33 +232,56 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// <exception cref="InvalidOperationException">Thrown when the schedule is not paused.</exception>
     public void ResumeSchedule(TaskEntityContext context)
     {
-        Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
-        if (this.State.Status != ScheduleStatus.Paused)
-        {
-            string errorMessage = "Schedule must be in Paused state to resume.";
-            Exception exception = new InvalidOperationException(errorMessage);
-            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration.ScheduleId, nameof(this.ResumeSchedule), errorMessage, exception);
-            this.State.AddActivityLog("Resume", "Failed", new FailureDetails
+        try {
+            if (!this.CanTransitionTo(nameof(this.ResumeSchedule), ScheduleStatus.Active))
             {
-                Reason = errorMessage,
-                Type = "InvalidOperation",
+                throw new ScheduleInvalidTransitionException(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, this.State.Status, ScheduleStatus.Active);
+            }
+
+            Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
+
+            this.TryStatusTransition(ScheduleStatus.Active);
+            this.State.NextRunAt = null;
+            this.logger.ResumedSchedule(this.State.ScheduleConfiguration.ScheduleId);
+            this.State.AddActivityLog(nameof(this.ResumeSchedule), ScheduleOperationStatus.Succeeded.ToString());
+
+            // compute next run based on startat and interval
+            context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), nameof(this.RunSchedule), this.State.ExecutionToken);
+        } 
+        catch (ScheduleInvalidTransitionException ex)
+        {
+            this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.ResumeSchedule), ex.Message, ex);
+            this.State.AddActivityLog(nameof(this.ResumeSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
+            {
+                Reason = ex.Message,
+                Type = ScheduleOperationFailureType.InvalidStateTransition.ToString(),
                 OccurredAt = DateTimeOffset.UtcNow,
+                SuggestedFix = "Ensure the schedule is in a valid state for resume.",
             });
-            throw exception;
         }
-
-        this.TryStatusTransition(ScheduleStatus.Active);
-        this.State.NextRunAt = null;
-        this.logger.ResumedSchedule(this.State.ScheduleConfiguration.ScheduleId);
-        this.State.AddActivityLog("Resume", "Success");
-
-        // compute next run based on startat and interval
-        context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), nameof(this.RunSchedule), this.State.ExecutionToken);
+        catch (ScheduleClientValidationException ex)
+        {
+            this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.ResumeSchedule), ex.Message, ex);
+            this.State.AddActivityLog(nameof(this.ResumeSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
+            {
+                Reason = ex.Message,
+                Type = ScheduleOperationFailureType.ValidationError.ToString(),
+                OccurredAt = DateTimeOffset.UtcNow,
+                SuggestedFix = "Ensure request is valid.",
+            });
+        }
+        catch (Exception ex)
+        {
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.ResumeSchedule), "Failed to resume schedule", ex);
+            this.State.AddActivityLog(nameof(this.ResumeSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
+            {
+                Reason = "Failed to resume schedule",
+                Type = ScheduleOperationFailureType.InternalError.ToString(),
+                OccurredAt = DateTimeOffset.UtcNow,
+                SuggestedFix = "Please contact support.",
+            });
+        }
     }
-
-    // TODO: Verify use built int entity delete operation to delete schedule
-
-    // TODO: Support other schedule option properties like cron expression, max occurrence, etc.
 
     /// <summary>
     /// Runs the schedule based on the defined configuration.

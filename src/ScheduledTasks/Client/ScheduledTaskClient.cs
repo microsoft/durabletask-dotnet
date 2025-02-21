@@ -70,22 +70,24 @@ public class ScheduledTaskClient : IScheduledTaskClient
                 IReadOnlyCollection<ScheduleActivityLog> activityLogs =
                     includeFullActivityLogs ? metadata.State.ActivityLogs : metadata.State.ActivityLogs.TakeLast(1).ToArray();
 
-                schedules.Add(new ScheduleDescription(
-                    metadata.Id.Key,
-                    config.OrchestrationName,
-                    config.OrchestrationInput,
-                    config.OrchestrationInstanceId,
-                    config.StartAt,
-                    config.EndAt,
-                    config.Interval,
-                    config.CronExpression,
-                    config.MaxOccurrence,
-                    config.StartImmediatelyIfLate,
-                    metadata.State.Status,
-                    metadata.State.ExecutionToken,
-                    metadata.State.LastRunAt,
-                    metadata.State.NextRunAt,
-                    activityLogs));
+                schedules.Add(new ScheduleDescription
+                {
+                    ScheduleId = metadata.Id.Key,
+                    OrchestrationName = config.OrchestrationName,
+                    OrchestrationInput = config.OrchestrationInput,
+                    OrchestrationInstanceId = config.OrchestrationInstanceId,
+                    StartAt = config.StartAt,
+                    EndAt = config.EndAt,
+                    Interval = config.Interval,
+                    CronExpression = config.CronExpression,
+                    MaxOccurrence = config.MaxOccurrence,
+                    StartImmediatelyIfLate = config.StartImmediatelyIfLate,
+                    Status = metadata.State.Status,
+                    ExecutionToken = metadata.State.ExecutionToken,
+                    LastRunAt = metadata.State.LastRunAt,
+                    NextRunAt = metadata.State.NextRunAt,
+                    ActivityLogs = activityLogs,
+                });
             }
         }
 

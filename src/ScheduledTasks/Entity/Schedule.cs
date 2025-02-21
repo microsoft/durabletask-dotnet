@@ -28,31 +28,59 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// <exception cref="InvalidOperationException">Thrown when the schedule is already created.</exception>
     public void CreateSchedule(TaskEntityContext context, ScheduleCreationOptions scheduleCreationOptions)
     {
-        Verify.NotNull(scheduleCreationOptions, nameof(scheduleCreationOptions));
-
-        if (this.State.Status != ScheduleStatus.Uninitialized)
+        try
         {
-            string errorMessage = "Schedule is already created.";
-            Exception exception = new InvalidOperationException(errorMessage);
-            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.CreateSchedule), errorMessage, exception);
-            this.State.AddActivityLog("Create", "Failed", new FailureDetails
+            if (!this.CanTransitionTo(nameof(this.CreateSchedule), ScheduleStatus.Active))
             {
-                Reason = errorMessage,
-                Type = "InvalidOperation",
-                OccurredAt = DateTimeOffset.UtcNow,
-            });
-            throw exception;
+                throw new ScheduleInvalidTransitionException(scheduleCreationOptions.ScheduleId, this.State.Status, ScheduleStatus.Active);
+            }
+
+            // CreateSchedule is allowed, we shall throw exception if any following step failed to inform caller
+            Verify.NotNull(scheduleCreationOptions, nameof(scheduleCreationOptions));
+
+            this.State.ScheduleConfiguration = ScheduleConfiguration.FromCreateOptions(scheduleCreationOptions);
+            this.TryStatusTransition(nameof(this.CreateSchedule), ScheduleStatus.Active);
+
+            this.logger.CreatedSchedule(this.State.ScheduleConfiguration.ScheduleId);
+            this.State.AddActivityLog(nameof(this.CreateSchedule), ScheduleOperationStatus.Succeeded.ToString());
+
+            // Signal to run schedule immediately after creation and let runSchedule determine if it should run immediately
+            // or later to separate response from schedule creation and schedule responsibilities
+            context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), nameof(this.RunSchedule), this.State.ExecutionToken);
         }
-
-        this.State.ScheduleConfiguration = ScheduleConfiguration.FromCreateOptions(scheduleCreationOptions);
-        this.TryStatusTransition(ScheduleStatus.Active);
-
-        this.logger.CreatedSchedule(this.State.ScheduleConfiguration.ScheduleId);
-        this.State.AddActivityLog("Create", "Success");
-
-        // Signal to run schedule immediately after creation and let runSchedule determine if it should run immediately
-        // or later to separate response from schedule creation and schedule responsibilities
-        context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), nameof(this.RunSchedule), this.State.ExecutionToken);
+        catch (ScheduleInvalidTransitionException ex)
+        {
+            this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.CreateSchedule), ex.Message, ex);
+            this.State.AddActivityLog(nameof(this.CreateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
+            {
+                Reason = ex.Message,
+                Type = ScheduleOperationFailureType.InvalidStateTransition.ToString(),
+                OccurredAt = DateTimeOffset.UtcNow,
+                SuggestedFix = "Ensure the schedule is not already created.",
+            });
+        }
+        catch (ScheduleClientValidationException ex)
+        {
+            this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.CreateSchedule), ex.Message, ex);
+            this.State.AddActivityLog(nameof(this.CreateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
+            {
+                Reason = ex.Message,
+                Type = ScheduleOperationFailureType.ValidationError.ToString(),
+                OccurredAt = DateTimeOffset.UtcNow,
+                SuggestedFix = "Ensure request is valid.",
+            });
+        }
+        catch (Exception ex)
+        {
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.CreateSchedule), "Failed to create schedule", ex);
+            this.State.AddActivityLog(nameof(this.CreateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
+            {
+                Reason = "Failed to create schedule",
+                Type = ScheduleOperationFailureType.InternalError.ToString(),
+                OccurredAt = DateTimeOffset.UtcNow,
+                SuggestedFix = "Please contact support.",
+            });
+        }
     }
 
     /// <summary>
@@ -269,15 +297,21 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
     }
 
-    void TryStatusTransition(ScheduleStatus to)
+    bool CanTransitionTo(string operationName, ScheduleStatus targetStatus)
     {
-        // Check if transition is valid
         HashSet<ScheduleStatus> validTargetStates;
-        ScheduleStatus from = this.State.Status;
+        ScheduleStatus currentStatus = this.State.Status;
 
-        if (!ScheduleTransitions.TryGetValidTransitions(from, out validTargetStates) || !validTargetStates.Contains(to))
+        return ScheduleTransitions.TryGetValidTransitions(operationName, currentStatus, out validTargetStates) &&
+               validTargetStates.Contains(targetStatus);
+    }
+
+    void TryStatusTransition(string operationName, ScheduleStatus to)
+    {
+        if (!this.CanTransitionTo(operationName, to))
         {
-            throw new InvalidOperationException($"Invalid state transition: Cannot transition from {from} to {to}");
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.TryStatusTransition), $"Invalid state transition from {this.State.Status} to {to}");
+            throw new ScheduleInvalidTransitionException(this.State.ScheduleConfiguration!.ScheduleId, this.State.Status, to);
         }
 
         this.State.Status = to;

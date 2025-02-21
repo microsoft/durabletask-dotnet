@@ -322,6 +322,14 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             throw exception;
         }
 
+        // if endat is set and time now is past endat, do not run
+        if (scheduleConfig.EndAt.HasValue && DateTimeOffset.UtcNow > scheduleConfig.EndAt.Value)
+        {
+            this.logger.ScheduleRunCancelled(scheduleConfig.ScheduleId, executionToken);
+            this.State.NextRunAt = null;
+            return;
+        }
+
         // run schedule based on next run at
         // need to enforce the constraint here NextRunAt truly represents the next run at
         // if next run at is null, this means schedule is changed, we compute the next run at based on startat and update

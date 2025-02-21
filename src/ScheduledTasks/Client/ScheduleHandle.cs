@@ -63,34 +63,29 @@ public class ScheduleHandle : IScheduleHandle
             throw new ScheduleStillBeingProvisionedException(this.ScheduleId);
         }
 
-        // this should never happen
         ScheduleConfiguration? config = state.ScheduleConfiguration;
-        if (config == null)
-        {
-            throw new ScheduleInternalException(
-                this.ScheduleId,
-                $"Schedule configuration is not available even though the schedule status is {state.Status}.");
-        }
 
         IReadOnlyCollection<ScheduleActivityLog> activityLogs =
             includeFullActivityLogs ? state.ActivityLogs : state.ActivityLogs.TakeLast(1).ToArray();
 
-        return new ScheduleDescription(
-            this.ScheduleId,
-            config.OrchestrationName,
-            config.OrchestrationInput,
-            config.OrchestrationInstanceId,
-            config.StartAt,
-            config.EndAt,
-            config.Interval,
-            config.CronExpression,
-            config.MaxOccurrence,
-            config.StartImmediatelyIfLate,
-            state.Status,
-            state.ExecutionToken,
-            state.LastRunAt,
-            state.NextRunAt,
-            activityLogs);
+        return new ScheduleDescription
+        {
+            ScheduleId = this.ScheduleId,
+            OrchestrationName = config?.OrchestrationName,
+            OrchestrationInput = config?.OrchestrationInput,
+            OrchestrationInstanceId = config?.OrchestrationInstanceId,
+            StartAt = config?.StartAt,
+            EndAt = config?.EndAt,
+            Interval = config?.Interval,
+            CronExpression = config?.CronExpression,
+            MaxOccurrence = config?.MaxOccurrence ?? 0,
+            StartImmediatelyIfLate = config?.StartImmediatelyIfLate,
+            Status = state.Status,
+            ExecutionToken = state.ExecutionToken,
+            LastRunAt = state.LastRunAt,
+            NextRunAt = state.NextRunAt,
+            ActivityLogs = activityLogs,
+        };
     }
 
     /// <inheritdoc/>

@@ -107,10 +107,20 @@ public class ScheduleWaiter : IScheduleWaiter
         {
             while (!linkedCts.Token.IsCancellationRequested)
             {
-                ScheduleDescription description = await this.scheduleHandle.DescribeAsync();
-                if (description.Status == desiredStatus)
+                try
                 {
-                    return description;
+                    ScheduleDescription description = await this.scheduleHandle.DescribeAsync();
+                    if (description.Status == desiredStatus)
+                    {
+                        return description;
+                    }
+                }
+                catch (ScheduleStillBeingProvisionedException)
+                {
+                    if (desiredStatus != ScheduleStatus.Active)
+                    {
+                        throw;
+                    }
                 }
 
                 // Calculate next polling interval with exponential backoff if enabled

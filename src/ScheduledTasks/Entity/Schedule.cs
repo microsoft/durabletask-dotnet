@@ -95,49 +95,87 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// <exception cref="InvalidOperationException">Thrown when the schedule is not created.</exception>
     public void UpdateSchedule(TaskEntityContext context, ScheduleUpdateOptions scheduleUpdateOptions)
     {
-        if (!this.CanTransitionTo(nameof(this.UpdateSchedule), ScheduleStatus.Active))
+        try
         {
-            throw new ScheduleInvalidTransitionException(scheduleUpdateOptions?.ScheduleId, this.State.Status, this.State.Status);
-        }
-
-        if (scheduleUpdateOptions == null)
-        {
-            throw new ScheduleClientValidationException(null, "Schedule update options cannot be null");
-        }
-
-        Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
-
-        HashSet<string> updatedScheduleConfigFields = this.State.ScheduleConfiguration.Update(scheduleUpdateOptions);
-        if (updatedScheduleConfigFields.Count == 0)
-        {
-            // no need to interrupt and update current schedule run as there is no change in the schedule config
-            this.logger.ScheduleOperationWarning(this.State.ScheduleConfiguration.ScheduleId, nameof(this.UpdateSchedule), "Schedule configuration is up to date.");
-            return;
-        }
-
-        // after schedule config is updated, perform post-config-update logic separately
-        foreach (string updatedScheduleConfigField in updatedScheduleConfigFields)
-        {
-            switch (updatedScheduleConfigField)
+            if (!this.CanTransitionTo(nameof(this.UpdateSchedule), ScheduleStatus.Active))
             {
-                case nameof(this.State.ScheduleConfiguration.StartAt):
-                case nameof(this.State.ScheduleConfiguration.Interval):
-                    this.State.NextRunAt = null;
-                    break;
-
-                // TODO: add other fields's callback logic after config update if any
-                default:
-                    break;
+                throw new ScheduleInvalidTransitionException(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, this.State.Status, this.State.Status);
             }
+
+            if (scheduleUpdateOptions == null)
+            {
+                throw new ScheduleClientValidationException(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, "Schedule update options cannot be null");
+            }
+
+            Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
+
+            HashSet<string> updatedScheduleConfigFields = this.State.ScheduleConfiguration.Update(scheduleUpdateOptions);
+            if (updatedScheduleConfigFields.Count == 0)
+            {
+                // no need to interrupt and update current schedule run as there is no change in the schedule config
+                this.logger.ScheduleOperationWarning(this.State.ScheduleConfiguration.ScheduleId, nameof(this.UpdateSchedule), "Schedule configuration is up to date.");
+                return;
+            }
+
+            // after schedule config is updated, perform post-config-update logic separately
+            foreach (string updatedScheduleConfigField in updatedScheduleConfigFields)
+            {
+                switch (updatedScheduleConfigField)
+                {
+                    case nameof(this.State.ScheduleConfiguration.StartAt):
+                    case nameof(this.State.ScheduleConfiguration.Interval):
+                        this.State.NextRunAt = null;
+                        break;
+
+                    // TODO: add other fields's callback logic after config update if any
+                    default:
+                        break;
+                }
+            }
+
+            this.State.RefreshScheduleRunExecutionToken();
+
+            this.logger.UpdatedSchedule(this.State.ScheduleConfiguration.ScheduleId);
+
+            // Signal to run schedule immediately after update and let runSchedule determine if it should run immediately
+            // or later to separate response from schedule creation and schedule responsibilities
+            context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), nameof(this.RunSchedule), this.State.ExecutionToken);
+
+            this.State.AddActivityLog(nameof(this.UpdateSchedule), ScheduleOperationStatus.Succeeded.ToString());
         }
-
-        this.State.RefreshScheduleRunExecutionToken();
-
-        this.logger.UpdatedSchedule(this.State.ScheduleConfiguration.ScheduleId);
-
-        // Signal to run schedule immediately after update and let runSchedule determine if it should run immediately
-        // or later to separate response from schedule creation and schedule responsibilities
-        context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), nameof(this.RunSchedule), this.State.ExecutionToken);
+        catch (ScheduleInvalidTransitionException ex)
+        {
+            this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.UpdateSchedule), ex.Message, ex);
+            this.State.AddActivityLog(nameof(this.UpdateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
+            {
+                Reason = ex.Message,
+                Type = ScheduleOperationFailureType.InvalidStateTransition.ToString(),
+                OccurredAt = DateTimeOffset.UtcNow,
+                SuggestedFix = "Ensure the schedule is in a valid state for update.",
+            });
+        }
+        catch (ScheduleClientValidationException ex)
+        {
+            this.logger.ScheduleOperationError(ex.ScheduleId, nameof(this.UpdateSchedule), ex.Message, ex);
+            this.State.AddActivityLog(nameof(this.UpdateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
+            {
+                Reason = ex.Message,
+                Type = ScheduleOperationFailureType.ValidationError.ToString(),
+                OccurredAt = DateTimeOffset.UtcNow,
+                SuggestedFix = "Ensure update request is valid.",
+            });
+        }
+        catch (Exception ex)
+        {
+            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.UpdateSchedule), "Failed to update schedule", ex);
+            this.State.AddActivityLog(nameof(this.UpdateSchedule), ScheduleOperationStatus.Failed.ToString(), new FailureDetails
+            {
+                Reason = "Failed to update schedule",
+                Type = ScheduleOperationFailureType.InternalError.ToString(),
+                OccurredAt = DateTimeOffset.UtcNow,
+                SuggestedFix = "Please contact support.",
+            });
+        }
     }
 
     /// <summary>

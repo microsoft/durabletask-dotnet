@@ -21,33 +21,6 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 {
     readonly ILogger<Schedule> logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-    static DateTimeOffset? ComputeInitialRunTime(ScheduleConfiguration scheduleConfig)
-    {
-        if (scheduleConfig.StartImmediatelyIfLate == true &&
-            scheduleConfig.StartAt.HasValue &&
-            DateTimeOffset.UtcNow > scheduleConfig.StartAt.Value)
-        {
-            return DateTimeOffset.UtcNow;
-        }
-
-        return scheduleConfig.StartAt ?? DateTimeOffset.UtcNow; // Default to now if StartAt not defined
-    }
-
-    static DateTimeOffset ComputeNextRunTime(ScheduleConfiguration scheduleConfig, DateTimeOffset lastRunAt)
-    {
-        if (!scheduleConfig.Interval.HasValue)
-        {
-            throw new InvalidOperationException("Interval must be set to compute next run time.");
-        }
-
-        // Calculate number of intervals between last run and now
-        TimeSpan timeSinceLastRun = DateTimeOffset.UtcNow - lastRunAt;
-        int intervalsElapsed = (int)(timeSinceLastRun.Ticks / scheduleConfig.Interval.Value.Ticks);
-
-        // Compute and return the next run time
-        return lastRunAt + TimeSpan.FromTicks(scheduleConfig.Interval.Value.Ticks * (intervalsElapsed + 1));
-    }
-
     /// <summary>
     /// Creates a new schedule with the specified configuration.
     /// </summary>
@@ -376,6 +349,33 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             nameof(this.RunSchedule),
             this.State.ExecutionToken,
             new SignalEntityOptions { SignalTime = this.State.NextRunAt.Value });
+    }
+
+    static DateTimeOffset? ComputeInitialRunTime(ScheduleConfiguration scheduleConfig)
+    {
+        if (scheduleConfig.StartImmediatelyIfLate == true &&
+            scheduleConfig.StartAt.HasValue &&
+            DateTimeOffset.UtcNow > scheduleConfig.StartAt.Value)
+        {
+            return DateTimeOffset.UtcNow;
+        }
+
+        return scheduleConfig.StartAt ?? DateTimeOffset.UtcNow; // Default to now if StartAt not defined
+    }
+
+    static DateTimeOffset ComputeNextRunTime(ScheduleConfiguration scheduleConfig, DateTimeOffset lastRunAt)
+    {
+        if (!scheduleConfig.Interval.HasValue)
+        {
+            throw new InvalidOperationException("Interval must be set to compute next run time.");
+        }
+
+        // Calculate number of intervals between last run and now
+        TimeSpan timeSinceLastRun = DateTimeOffset.UtcNow - lastRunAt;
+        int intervalsElapsed = (int)(timeSinceLastRun.Ticks / scheduleConfig.Interval.Value.Ticks);
+
+        // Compute and return the next run time
+        return lastRunAt + TimeSpan.FromTicks(scheduleConfig.Interval.Value.Ticks * (intervalsElapsed + 1));
     }
 
     void StartOrchestrationIfNotRunning(TaskEntityContext context)

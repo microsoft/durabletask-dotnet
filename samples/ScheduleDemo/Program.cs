@@ -8,6 +8,8 @@ using Microsoft.DurableTask.Worker.AzureManaged;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ScheduleDemo.Activities;
+
 
 // Create the host builder
 IHost host = Host.CreateDefaultBuilder(args)
@@ -22,33 +24,11 @@ IHost host = Host.CreateDefaultBuilder(args)
             // Add the Schedule entity and demo orchestration
             builder.AddTasks(r =>
             {
-                // Add a demo orchestration that will be triggered by the schedule
-                r.AddOrchestratorFunc<string, string>("DemoOrchestration", async (context, symbol) =>
-                {
-                    var logger = context.CreateReplaySafeLogger("DemoOrchestration");
-                    logger.LogInformation("Getting stock price for: {symbol}", symbol);
-                    try
-                    {
-                        // Get current stock price
-                        decimal currentPrice = await context.CallActivityAsync<decimal>("GetStockPrice", symbol);
-
-                        logger.LogInformation("Current price for {symbol} is ${price:F2}", symbol, currentPrice);
-
-                        return $"Stock {symbol} price: ${currentPrice:F2} at {DateTime.UtcNow}";
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Error processing stock price for {symbol}", symbol);
-                        throw;
-                    }
-                });
+                // Add the orchestrator class
+                r.AddOrchestrator<StockPriceOrchestrator>();
 
                 // Add required activities
-                r.AddActivityFunc<string, decimal>("GetStockPrice", (context, symbol) =>
-                {
-                    // Mock implementation - would normally call stock API
-                    return 100.00m;
-                });
+                r.AddActivity<GetStockPrice>();
             });
 
             // Enable scheduled tasks support
@@ -94,7 +74,7 @@ try
     // Create schedule options that runs every 30 seconds
     ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions
     {
-        OrchestrationName = "DemoOrchestration",
+        OrchestrationName = nameof(StockPriceOrchestrator),
         ScheduleId = "demo-schedule101",
         Interval = TimeSpan.FromSeconds(4),
         StartAt = DateTimeOffset.UtcNow,
@@ -136,7 +116,7 @@ try
     Console.WriteLine("");
     Console.WriteLine("");
 
-    await Task.Delay(2000000);
+    await Task.Delay(TimeSpan.FromMinutes(30));
     //Console.WriteLine("\nPress any key to delete the schedule and exit...");
     //Console.ReadKey();
 

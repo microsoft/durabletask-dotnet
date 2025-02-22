@@ -72,11 +72,8 @@ try
     }
 
     // Create schedule options that runs every 4 seconds
-    ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions
+    ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions("demo-schedule101", nameof(StockPriceOrchestrator), TimeSpan.FromSeconds(4))
     {
-        OrchestrationName = nameof(StockPriceOrchestrator),
-        ScheduleId = "demo-schedule101",
-        Interval = TimeSpan.FromSeconds(4),
         StartAt = DateTimeOffset.UtcNow,
         OrchestrationInput = "MSFT"
     };

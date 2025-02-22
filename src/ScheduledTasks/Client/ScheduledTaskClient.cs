@@ -27,14 +27,19 @@ public class ScheduledTaskClient : IScheduledTaskClient
     }
 
     /// <inheritdoc/>
+    public Task<ScheduleHandle> CreateScheduleAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default)
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <inheritdoc/>
     public IScheduleHandle GetScheduleHandle(string scheduleId)
     {
-        this.logger.ClientGettingScheduleHandle(scheduleId);
         return new ScheduleHandle(this.durableTaskClient, scheduleId, this.logger);
     }
 
     /// <inheritdoc/>
-    public async Task<IEnumerable<ScheduleDescription>> ListSchedulesAsync(bool includeFullActivityLogs = false)
+    public async Task<AsyncPageable<ScheduleDescription>> ListSchedulesAsync(ScheduleQuery? filter = null)
     {
         EntityQuery query = new EntityQuery
         {

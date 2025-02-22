@@ -16,9 +16,6 @@ static partial class Logs
     [LoggerMessage(EventId = 80, Level = LogLevel.Information, Message = "Creating schedule with options: {scheduleConfigCreateOptions}")]
     public static partial void ClientCreatingSchedule(this ILogger logger, ScheduleCreationOptions scheduleConfigCreateOptions);
 
-    [LoggerMessage(EventId = 81, Level = LogLevel.Information, Message = "Getting schedule handle for schedule '{scheduleId}'")]
-    public static partial void ClientGettingScheduleHandle(this ILogger logger, string scheduleId);
-
     [LoggerMessage(EventId = 82, Level = LogLevel.Information, Message = "Pausing schedule '{scheduleId}'")]
     public static partial void ClientPausingSchedule(this ILogger logger, string scheduleId);
 

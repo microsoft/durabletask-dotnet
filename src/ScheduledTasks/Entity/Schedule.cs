@@ -305,7 +305,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     public void RunSchedule(TaskEntityContext context, string executionToken)
     {
         ScheduleConfiguration scheduleConfig = Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
-        TimeSpan interval = scheduleConfig.Interval ?? throw new InvalidOperationException("Schedule interval must be specified.");
+        TimeSpan interval = scheduleConfig.Interval;
 
         if (executionToken != this.State.ExecutionToken)
         {
@@ -364,17 +364,12 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 
     static DateTimeOffset ComputeNextRunTime(ScheduleConfiguration scheduleConfig, DateTimeOffset lastRunAt)
     {
-        if (!scheduleConfig.Interval.HasValue)
-        {
-            throw new InvalidOperationException("Interval must be set to compute next run time.");
-        }
-
         // Calculate number of intervals between last run and now
         TimeSpan timeSinceLastRun = DateTimeOffset.UtcNow - lastRunAt;
-        int intervalsElapsed = (int)(timeSinceLastRun.Ticks / scheduleConfig.Interval.Value.Ticks);
+        int intervalsElapsed = (int)(timeSinceLastRun.Ticks / scheduleConfig.Interval.Ticks);
 
         // Compute and return the next run time
-        return lastRunAt + TimeSpan.FromTicks(scheduleConfig.Interval.Value.Ticks * (intervalsElapsed + 1));
+        return lastRunAt + TimeSpan.FromTicks(scheduleConfig.Interval.Ticks * (intervalsElapsed + 1));
     }
 
     void StartOrchestrationIfNotRunning(TaskEntityContext context)

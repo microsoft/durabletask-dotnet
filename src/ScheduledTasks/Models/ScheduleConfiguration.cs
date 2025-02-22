@@ -9,35 +9,46 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 class ScheduleConfiguration
 {
     string orchestrationName;
-    TimeSpan? interval;
+    TimeSpan interval;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ScheduleConfiguration"/> class.
     /// </summary>
+    /// <param name="scheduleId">The ID of the schedule.</param>
     /// <param name="orchestrationName">The name of the orchestration to schedule.</param>
-    /// <param name="scheduleId">The ID of the schedule, or null to generate one.</param>
-    public ScheduleConfiguration(string orchestrationName, string scheduleId)
+    /// <param name="interval">The interval between schedule executions. Must be positive and at least 1 second.</param>
+#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring as nullable.
+    public ScheduleConfiguration(string scheduleId, string orchestrationName, TimeSpan interval)
+#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring as nullable.
     {
-        this.orchestrationName = Check.NotNullOrEmpty(orchestrationName, nameof(orchestrationName));
-        this.ScheduleId = scheduleId ?? Guid.NewGuid().ToString("N");
+        this.ScheduleId = Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
+        this.OrchestrationName = Check.NotNullOrEmpty(orchestrationName, nameof(orchestrationName));
+        if (interval <= TimeSpan.Zero)
+        {
+            throw new ArgumentException("Interval must be positive", nameof(interval));
+        }
+
+        if (interval.TotalSeconds < 1)
+        {
+            throw new ArgumentException("Interval must be at least 1 second", nameof(interval));
+        }
+
+        this.Interval = interval;
     }
 
     /// <summary>
-    /// Gets or sets the name of the orchestration function to schedule.
+    /// Gets or Sets the name of the orchestration function to schedule.
     /// </summary>
     public string OrchestrationName
     {
         get => this.orchestrationName;
-        set
-        {
-            this.orchestrationName = Check.NotNullOrEmpty(value, nameof(value));
-        }
+        set => this.orchestrationName = Check.NotNullOrEmpty(value, nameof(this.OrchestrationName));
     }
 
     /// <summary>
     /// Gets the ID of the schedule.
     /// </summary>
-    public string ScheduleId { get; init; }
+    public string ScheduleId { get; }
 
     /// <summary>
     /// Gets or sets the input to the orchestration function.
@@ -62,22 +73,17 @@ class ScheduleConfiguration
     /// <summary>
     /// Gets or sets the interval between schedule executions.
     /// </summary>
-    public TimeSpan? Interval
+    public TimeSpan Interval
     {
         get => this.interval;
         set
         {
-            if (!value.HasValue)
-            {
-                return;
-            }
-
-            if (value.Value <= TimeSpan.Zero)
+            if (value <= TimeSpan.Zero)
             {
                 throw new ArgumentException("Interval must be positive", nameof(value));
             }
 
-            if (value.Value.TotalSeconds < 1)
+            if (value.TotalSeconds < 1)
             {
                 throw new ArgumentException("Interval must be at least 1 second", nameof(value));
             }
@@ -98,13 +104,14 @@ class ScheduleConfiguration
     /// <returns>A new schedule configuration.</returns>
     public static ScheduleConfiguration FromCreateOptions(ScheduleCreationOptions createOptions)
     {
-        return new ScheduleConfiguration(createOptions.OrchestrationName, createOptions.ScheduleId)
+        Check.NotNull(createOptions, nameof(createOptions));
+
+        return new ScheduleConfiguration(createOptions.ScheduleId, createOptions.OrchestrationName, createOptions.Interval)
         {
             OrchestrationInput = createOptions.OrchestrationInput,
             OrchestrationInstanceId = createOptions.OrchestrationInstanceId,
             StartAt = createOptions.StartAt,
             EndAt = createOptions.EndAt,
-            Interval = createOptions.Interval,
             StartImmediatelyIfLate = createOptions.StartImmediatelyIfLate,
         };
     }
@@ -151,7 +158,7 @@ class ScheduleConfiguration
 
         if (updateOptions.Interval.HasValue)
         {
-            this.Interval = updateOptions.Interval;
+            this.Interval = updateOptions.Interval.Value;
             updatedFields.Add(nameof(this.Interval));
         }
 

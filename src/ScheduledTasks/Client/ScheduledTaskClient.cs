@@ -7,8 +7,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
-// TODO: validation
-
 /// <summary>
 /// Client for managing scheduled tasks in a Durable Task application.
 /// </summary>

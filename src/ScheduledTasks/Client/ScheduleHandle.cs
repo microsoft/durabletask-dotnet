@@ -86,6 +86,7 @@ public class ScheduleHandle : IScheduleHandle
     }
 
     /// <inheritdoc/>
+    /// TODO: Check not already exists once updating to poll free
     public async Task<IScheduleWaiter> CreateAsync(ScheduleCreationOptions creationOptions)
     {
         this.logger.ClientCreatingSchedule(creationOptions);

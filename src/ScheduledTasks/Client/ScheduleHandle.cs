@@ -58,10 +58,6 @@ public class ScheduleHandle : IScheduleHandle
 
         ScheduleState state = metadata.State;
 
-        // if (state.Status == ScheduleStatus.Uninitialized)
-        // {
-        //     throw new ScheduleStillBeingProvisionedException(this.ScheduleId);
-        // }
         ScheduleConfiguration? config = state.ScheduleConfiguration;
 
         IReadOnlyCollection<ScheduleActivityLog> activityLogs =

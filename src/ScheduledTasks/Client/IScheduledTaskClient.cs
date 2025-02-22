@@ -16,9 +16,17 @@ public interface IScheduledTaskClient
     IScheduleHandle GetScheduleHandle(string scheduleId);
 
     /// <summary>
-    /// Gets a list of all initialized schedules.
+    /// Gets a pageable list of schedules matching the specified filter criteria.
     /// </summary>
-    /// <param name="includeFullActivityLogs">Whether to include full activity logs in the returned schedules.</param>
-    /// <returns>A list of schedule descriptions.</returns>
-    Task<IEnumerable<ScheduleDescription>> ListSchedulesAsync(bool includeFullActivityLogs);
+    /// <param name="filter">Optional filter criteria for the schedules. If null, returns all schedules.</param>
+    /// <returns>A pageable list of schedule descriptions.</returns>
+    Task<AsyncPageable<ScheduleDescription>> ListSchedulesAsync(ScheduleQuery? filter = null);
+
+    /// <summary>
+    /// Creates a new schedule with the specified configuration.
+    /// </summary>
+    /// <param name="creationOptions">The options for creating the schedule.</param>
+    /// <param name="cancellation">Optional cancellation token.</param>
+    /// <returns>A handle to the created schedule.</returns>
+    Task<ScheduleHandle> CreateScheduleAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default);
 }

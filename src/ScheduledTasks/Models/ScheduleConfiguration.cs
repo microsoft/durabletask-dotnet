@@ -87,9 +87,9 @@ class ScheduleConfiguration
     }
 
     /// <summary>
-    /// Gets or sets whether the schedule should start immediately if it's late.
+    /// Gets or sets a value indicating whether gets or sets whether the schedule should start immediately if it's late.
     /// </summary>
-    public bool? StartImmediatelyIfLate { get; set; } = false;
+    public bool StartImmediatelyIfLate { get; set; }
 
     /// <summary>
     /// Creates a new configuration from the provided creation options.
@@ -125,7 +125,7 @@ class ScheduleConfiguration
             updatedFields.Add(nameof(this.OrchestrationName));
         }
 
-        if (updateOptions.OrchestrationInput == null)
+        if (!string.IsNullOrEmpty(updateOptions.OrchestrationInput))
         {
             this.OrchestrationInput = updateOptions.OrchestrationInput;
             updatedFields.Add(nameof(this.OrchestrationInput));

@@ -11,7 +11,7 @@ public record ScheduleCreationOptions
     /// <summary>
     /// The interval of the schedule.
     /// </summary>
-    TimeSpan? interval;
+    TimeSpan interval;
 
     string orchestrationName = string.Empty;
 
@@ -27,7 +27,7 @@ public record ScheduleCreationOptions
     /// <summary>
     /// Gets the ID of the schedule, if not provided, default to a new GUID.
     /// </summary>
-    public string ScheduleId { get; init; } = Guid.NewGuid().ToString("N");
+    public string ScheduleId { get; init; };
 
     /// <summary>
     /// Gets the input to the orchestration function.
@@ -52,22 +52,19 @@ public record ScheduleCreationOptions
     /// <summary>
     /// Gets the interval of the schedule.
     /// </summary>
-    public TimeSpan? Interval
+    public TimeSpan Interval
     {
         get => this.interval;
         init
         {
-            if (value.HasValue)
+            if (value <= TimeSpan.Zero)
             {
-                if (value.Value <= TimeSpan.Zero)
-                {
-                    throw new ArgumentException("Interval must be positive", nameof(value));
-                }
+                throw new ArgumentException("Interval must be positive", nameof(value));
+            }
 
-                if (value.Value.TotalSeconds < 1)
-                {
-                    throw new ArgumentException("Interval must be at least 1 second", nameof(value));
-                }
+            if (value.TotalSeconds < 1)
+            {
+                throw new ArgumentException("Interval must be at least 1 second", nameof(value));
             }
 
             this.interval = value;
@@ -77,5 +74,5 @@ public record ScheduleCreationOptions
     /// <summary>
     /// Gets a value indicating whether to start the schedule immediately if it is late. Default is false.
     /// </summary>
-    public bool? StartImmediatelyIfLate { get; init; } = false;
+    public bool StartImmediatelyIfLate { get; init; }
 }

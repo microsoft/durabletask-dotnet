@@ -352,7 +352,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 
     static DateTimeOffset? ComputeInitialRunTime(ScheduleConfiguration scheduleConfig)
     {
-        if (scheduleConfig.StartImmediatelyIfLate == true &&
+        if (scheduleConfig.StartImmediatelyIfLate &&
             scheduleConfig.StartAt.HasValue &&
             DateTimeOffset.UtcNow > scheduleConfig.StartAt.Value)
         {

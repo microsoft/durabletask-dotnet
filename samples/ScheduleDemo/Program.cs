@@ -71,7 +71,7 @@ try
         Console.WriteLine($"Deleted schedule {schedule.ScheduleId}");
     }
 
-    // Create schedule options that runs every 30 seconds
+    // Create schedule options that runs every 4 seconds
     ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions
     {
         OrchestrationName = nameof(StockPriceOrchestrator),

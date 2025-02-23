@@ -36,8 +36,8 @@ public class ScheduledTaskClient : IScheduledTaskClient
         EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
 
         // Check if schedule already exists
-        ScheduleDescription? existingSchedule = await this.GetScheduleAsync(scheduleId, cancellation: cancellation);
-        if (existingSchedule != null)
+        bool scheduleExists = await this.CheckScheduleExists(scheduleId, cancellation);
+        if (scheduleExists)
         {
             throw new ScheduleAlreadyExistException(scheduleId);
         }
@@ -178,5 +178,21 @@ public class ScheduledTaskClient : IScheduledTaskClient
                     $"The {nameof(this.ListSchedulesAsync)} operation was canceled.", e, e.CancellationToken);
             }
         }));
+    }
+
+    /// <summary>
+    /// Checks if a schedule with the specified ID exists.
+    /// </summary>
+    /// <param name="scheduleId">The ID of the schedule to check.</param>
+    /// <param name="cancellation">Optional cancellation token.</param>
+    /// <returns>True if the schedule exists, false otherwise.</returns>
+    async Task<bool> CheckScheduleExists(string scheduleId, CancellationToken cancellation = default)
+    {
+        Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
+
+        EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
+        EntityMetadata? metadata = await this.durableTaskClient.Entities.GetEntityAsync(entityId, false, cancellation);
+
+        return metadata != null;
     }
 }

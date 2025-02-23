@@ -82,7 +82,19 @@ public class ScheduleHandle : IScheduleHandle
     {
         this.logger.ClientPausingSchedule(this.ScheduleId);
 
-        await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, nameof(Schedule.PauseSchedule), cancellation: cancellation);
+        ScheduleOperationRequest request = new ScheduleOperationRequest(this.EntityId, nameof(Schedule.PauseSchedule));
+        string instanceId = await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName(nameof(ExecuteScheduleOperationOrchestrator)),
+            request,
+            cancellation);
+
+        // Wait for the orchestration to complete
+        OrchestrationMetadata state = await this.durableTaskClient.WaitForInstanceCompletionAsync(instanceId, true, cancellation);
+
+        if (state.RuntimeStatus != OrchestrationRuntimeStatus.Completed)
+        {
+            throw new InvalidOperationException($"Failed to pause schedule '{this.ScheduleId}': {state.FailureDetails?.ErrorMessage ?? string.Empty}");
+        }
     }
 
     /// <inheritdoc/>
@@ -90,7 +102,19 @@ public class ScheduleHandle : IScheduleHandle
     {
         this.logger.ClientResumingSchedule(this.ScheduleId);
 
-        await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, nameof(Schedule.ResumeSchedule), cancellation: cancellation);
+        ScheduleOperationRequest request = new ScheduleOperationRequest(this.EntityId, nameof(Schedule.ResumeSchedule));
+        string instanceId = await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName(nameof(ExecuteScheduleOperationOrchestrator)),
+            request,
+            cancellation);
+
+        // Wait for the orchestration to complete
+        OrchestrationMetadata state = await this.durableTaskClient.WaitForInstanceCompletionAsync(instanceId, true, cancellation);
+
+        if (state.RuntimeStatus != OrchestrationRuntimeStatus.Completed)
+        {
+            throw new InvalidOperationException($"Failed to resume schedule '{this.ScheduleId}': {state.FailureDetails?.ErrorMessage ?? string.Empty}");
+        }
     }
 
     /// <inheritdoc/>
@@ -98,7 +122,20 @@ public class ScheduleHandle : IScheduleHandle
     {
         this.logger.ClientUpdatingSchedule(this.ScheduleId);
         Check.NotNull(updateOptions, nameof(updateOptions));
-        await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, nameof(Schedule.UpdateSchedule), updateOptions, cancellation: cancellation);
+
+        ScheduleOperationRequest request = new ScheduleOperationRequest(this.EntityId, nameof(Schedule.UpdateSchedule), updateOptions);
+        string instanceId = await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName(nameof(ExecuteScheduleOperationOrchestrator)),
+            request,
+            cancellation);
+
+        // Wait for the orchestration to complete
+        OrchestrationMetadata state = await this.durableTaskClient.WaitForInstanceCompletionAsync(instanceId, true, cancellation);
+
+        if (state.RuntimeStatus != OrchestrationRuntimeStatus.Completed)
+        {
+            throw new InvalidOperationException($"Failed to update schedule '{this.ScheduleId}': {state.FailureDetails?.ErrorMessage ?? string.Empty}");
+        }
     }
 
     /// <inheritdoc/>
@@ -106,6 +143,18 @@ public class ScheduleHandle : IScheduleHandle
     {
         this.logger.ClientDeletingSchedule(this.ScheduleId);
 
-        await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, "delete", cancellation: cancellation);
+        ScheduleOperationRequest request = new ScheduleOperationRequest(this.EntityId, "delete");
+        string instanceId = await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName(nameof(ExecuteScheduleOperationOrchestrator)),
+            request,
+            cancellation);
+
+        // Wait for the orchestration to complete
+        OrchestrationMetadata state = await this.durableTaskClient.WaitForInstanceCompletionAsync(instanceId, true, cancellation);
+
+        if (state.RuntimeStatus != OrchestrationRuntimeStatus.Completed)
+        {
+            throw new InvalidOperationException($"Failed to delete schedule '{this.ScheduleId}': {state.FailureDetails?.ErrorMessage ?? string.Empty}");
+        }
     }
 }

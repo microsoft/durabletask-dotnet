@@ -181,7 +181,7 @@ public class ScheduledTaskClient : IScheduledTaskClient
     }
 
     /// <inheritdoc/>
-    public Task<AsyncPageable<string>> ListScheduleIdsAsync(ScheduleQuery? filter = null)
+    public Task<AsyncPageable<string>> ListScheduleAsync(ScheduleQuery? filter = null)
     {
         EntityQuery query = new EntityQuery
         {
@@ -209,7 +209,7 @@ public class ScheduledTaskClient : IScheduledTaskClient
             catch (OperationCanceledException e)
             {
                 throw new OperationCanceledException(
-                    $"The {nameof(this.ListScheduleIdsAsync)} operation was canceled.", e, e.CancellationToken);
+                    $"The {nameof(this.ListScheduleAsync)} operation was canceled.", e, e.CancellationToken);
             }
         }));
     }

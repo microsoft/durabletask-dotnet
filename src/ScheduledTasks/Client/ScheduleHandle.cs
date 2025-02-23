@@ -196,6 +196,8 @@ public class ScheduleHandle : IScheduleHandle
         }
     }
 
+    // TODO: verify deleting non existent wont throw exception
+
     /// <inheritdoc/>
     public async Task DeleteAsync(CancellationToken cancellation = default)
     {

@@ -6,8 +6,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
-// TODO: Support other schedule option properties like cron expression, max occurrence, etc.
-
 /// <summary>
 /// Entity that manages the state and execution of a scheduled task.
 /// </summary>
@@ -53,7 +51,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         }
         catch (Exception ex)
         {
-            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.CreateSchedule), "Failed to create schedule", ex);
+            this.logger.ScheduleOperationError(scheduleCreationOptions.ScheduleId, nameof(this.CreateSchedule), "Failed to create schedule", ex);
             throw;
         }
     }

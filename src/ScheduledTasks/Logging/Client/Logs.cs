@@ -35,5 +35,5 @@ static partial class Logs
     public static partial void ClientWarning(this ILogger logger, string message, string scheduleId);
 
     [LoggerMessage(EventId = 88, Level = LogLevel.Error, Message = "{message} (ScheduleId: {scheduleId})")]
-    public static partial void ClientError(this ILogger logger, string message, string scheduleId);
+    public static partial void ClientError(this ILogger logger, string message, string scheduleId, Exception? exception = null);
 }

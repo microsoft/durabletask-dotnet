@@ -31,34 +31,50 @@ public class ScheduledTaskClient : IScheduledTaskClient
     public async Task<ScheduleHandle> CreateScheduleAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default)
     {
         Check.NotNull(creationOptions, nameof(creationOptions));
+        this.logger.ClientCreatingSchedule(creationOptions);
 
-        string scheduleId = creationOptions.ScheduleId;
-        EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
-
-        // Check if schedule already exists
-        bool scheduleExists = await this.CheckScheduleExists(scheduleId, cancellation);
-        if (scheduleExists)
+        try
         {
-            throw new ScheduleAlreadyExistException(scheduleId);
+            string scheduleId = creationOptions.ScheduleId;
+            EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
+
+            // Check if schedule already exists
+            bool scheduleExists = await this.CheckScheduleExists(scheduleId, cancellation);
+            if (scheduleExists)
+            {
+                throw new ScheduleAlreadyExistException(scheduleId);
+            }
+
+            // Call the orchestrator to create the schedule
+            ScheduleOperationRequest request = new ScheduleOperationRequest(entityId, nameof(Schedule.CreateSchedule), creationOptions);
+            string instanceId = await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
+                new TaskName(nameof(ExecuteScheduleOperationOrchestrator)),
+                request,
+                cancellation);
+
+            // Wait for the orchestration to complete
+            OrchestrationMetadata state = await this.durableTaskClient.WaitForInstanceCompletionAsync(instanceId, true, cancellation);
+
+            if (state.RuntimeStatus != OrchestrationRuntimeStatus.Completed)
+            {
+                throw new InvalidOperationException($"Failed to create schedule '{scheduleId}': {state.FailureDetails?.ErrorMessage ?? string.Empty}");
+            }
+
+            // Return a handle to the schedule
+            return new ScheduleHandle(this.durableTaskClient, scheduleId, this.logger);
         }
-
-        // Call the orchestrator to create the schedule
-        ScheduleOperationRequest request = new ScheduleOperationRequest(entityId, nameof(Schedule.CreateSchedule), creationOptions);
-        string instanceId = await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
-            new TaskName(nameof(ExecuteScheduleOperationOrchestrator)),
-            request,
-            cancellation);
-
-        // Wait for the orchestration to complete
-        OrchestrationMetadata state = await this.durableTaskClient.WaitForInstanceCompletionAsync(instanceId, true, cancellation);
-
-        if (state.RuntimeStatus != OrchestrationRuntimeStatus.Completed)
+        catch (OperationCanceledException ex)
         {
-            throw new ScheduleCreationException(scheduleId, state.FailureDetails?.ErrorMessage ?? string.Empty);
-        }
+            this.logger.ClientError(
+                nameof(this.CreateScheduleAsync),
+                creationOptions.ScheduleId,
+                ex);
 
-        // Return a handle to the schedule
-        return new ScheduleHandle(this.durableTaskClient, scheduleId, this.logger);
+            throw new OperationCanceledException(
+                $"The {nameof(this.CreateScheduleAsync)} operation was canceled.",
+                null,
+                cancellation);
+        }
     }
 
     /// <inheritdoc/>
@@ -66,36 +82,55 @@ public class ScheduledTaskClient : IScheduledTaskClient
     {
         Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
 
-        EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
-        EntityMetadata<ScheduleState>? metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId, cancellation);
-
-        if (metadata == null || metadata.State.Status == ScheduleStatus.Uninitialized)
+        try
         {
-            return null;
+            EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
+            EntityMetadata<ScheduleState>? metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId, cancellation);
+
+            if (metadata == null || metadata.State.Status == ScheduleStatus.Uninitialized)
+            {
+                return null;
+            }
+
+            ScheduleState state = metadata.State;
+            ScheduleConfiguration? config = state.ScheduleConfiguration;
+
+            return new ScheduleDescription
+            {
+                ScheduleId = scheduleId,
+                OrchestrationName = config?.OrchestrationName,
+                OrchestrationInput = config?.OrchestrationInput,
+                OrchestrationInstanceId = config?.OrchestrationInstanceId,
+                StartAt = config?.StartAt,
+                EndAt = config?.EndAt,
+                Interval = config?.Interval,
+                StartImmediatelyIfLate = config?.StartImmediatelyIfLate,
+                Status = state.Status,
+                ExecutionToken = state.ExecutionToken,
+                LastRunAt = state.LastRunAt,
+                NextRunAt = state.NextRunAt,
+            };
         }
-
-        ScheduleState state = metadata.State;
-        ScheduleConfiguration? config = state.ScheduleConfiguration;
-
-        return new ScheduleDescription
+        catch (OperationCanceledException ex)
         {
-            ScheduleId = scheduleId,
-            OrchestrationName = config?.OrchestrationName,
-            OrchestrationInput = config?.OrchestrationInput,
-            OrchestrationInstanceId = config?.OrchestrationInstanceId,
-            StartAt = config?.StartAt,
-            EndAt = config?.EndAt,
-            Interval = config?.Interval,
-            StartImmediatelyIfLate = config?.StartImmediatelyIfLate,
-            Status = state.Status,
-            ExecutionToken = state.ExecutionToken,
-            LastRunAt = state.LastRunAt,
-            NextRunAt = state.NextRunAt,
-        };
+            this.logger.ClientError(
+                nameof(this.GetScheduleAsync),
+                scheduleId,
+                ex);
+
+            throw new OperationCanceledException(
+                $"The {nameof(this.GetScheduleAsync)} operation was canceled.",
+                null,
+                cancellation);
+        }
     }
 
     /// <inheritdoc/>
-    public IScheduleHandle GetScheduleHandle(string scheduleId) => new ScheduleHandle(this.durableTaskClient, scheduleId, this.logger);
+    public IScheduleHandle GetScheduleHandle(string scheduleId)
+    {
+        Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
+        return new ScheduleHandle(this.durableTaskClient, scheduleId, this.logger);
+    }
 
     /// <inheritdoc/>
     public Task<AsyncPageable<ScheduleDescription>> ListSchedulesAsync(ScheduleQuery? filter = null)
@@ -210,9 +245,22 @@ public class ScheduledTaskClient : IScheduledTaskClient
     {
         Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
 
-        EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
-        EntityMetadata? metadata = await this.durableTaskClient.Entities.GetEntityAsync(entityId, false, cancellation);
+        try
+        {
+            EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
+            EntityMetadata? metadata = await this.durableTaskClient.Entities.GetEntityAsync(entityId, false, cancellation);
 
-        return metadata != null;
+            return metadata != null;
+        }
+        catch (OperationCanceledException e)
+        {
+            this.logger.ClientError(
+                nameof(this.CheckScheduleExists),
+                scheduleId,
+                e);
+
+            throw new OperationCanceledException(
+                $"The {nameof(this.CheckScheduleExists)} operation was canceled.", e, e.CancellationToken);
+        }
     }
 }

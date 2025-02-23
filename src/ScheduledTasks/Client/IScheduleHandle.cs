@@ -14,13 +14,6 @@ public interface IScheduleHandle
     string ScheduleId { get; }
 
     /// <summary>
-    /// Creates this schedule with the specified configuration.
-    /// </summary>
-    /// <param name="creationOptions">The options for creating the schedule.</param>
-    /// <returns>A task that completes when the schedule is created.</returns>
-    Task<IScheduleWaiter> CreateAsync(ScheduleCreationOptions creationOptions);
-
-    /// <summary>
     /// Retrieves the current details of this schedule.
     /// </summary>
     /// <param name="includeFullActivityLogs">Whether to include full activity logs in the returned schedule details.</param>

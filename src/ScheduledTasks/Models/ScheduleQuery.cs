@@ -39,11 +39,6 @@ public record ScheduleQuery
     public DateTimeOffset? CreatedTo { get; init; }
 
     /// <summary>
-    /// Gets a value indicating whether to return only schedule IDs without additional details.
-    /// </summary>
-    public bool ReturnIdsOnly { get; init; }
-
-    /// <summary>
     /// Gets the maximum number of schedules to return per page.
     /// </summary>
     public int? PageSize { get; init; }
@@ -52,4 +47,4 @@ public record ScheduleQuery
     /// Gets the continuation token for retrieving the next page of results.
     /// </summary>
     public string? ContinuationToken { get; init; }
-} 
+}

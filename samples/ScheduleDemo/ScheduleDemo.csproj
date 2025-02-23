@@ -10,9 +10,6 @@
     <PackageReference Include="Microsoft.Extensions.Hosting"/>
     <PackageReference Include="Azure.Identity" />
     <PackageReference Include="Grpc.Net.Client" />
-    <!-- <PackageReference Include="Microsoft.DurableTask.Client.AzureManaged" Version="1.5.0-preview.1" />
-    <PackageReference Include="Microsoft.DurableTask.Worker.AzureManaged" Version="1.5.0-preview.1" /> -->
-
     <PackageReference Include="Microsoft.DurableTask.Generators" OutputItemType="Analyzer" />
   </ItemGroup>
 

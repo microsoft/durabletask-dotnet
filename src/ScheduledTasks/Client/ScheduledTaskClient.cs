@@ -33,50 +33,84 @@ public class ScheduledTaskClient : IScheduledTaskClient
     }
 
     /// <inheritdoc/>
-    public IScheduleHandle GetScheduleHandle(string scheduleId)
-    {
-        return new ScheduleHandle(this.durableTaskClient, scheduleId, this.logger);
-    }
+    public IScheduleHandle GetScheduleHandle(string scheduleId) => new ScheduleHandle(this.durableTaskClient, scheduleId, this.logger);
 
     /// <inheritdoc/>
-    public async Task<AsyncPageable<ScheduleDescription>> ListSchedulesAsync(ScheduleQuery? filter = null)
+    public Task<AsyncPageable<ScheduleDescription>> ListSchedulesAsync(ScheduleQuery? filter = null)
     {
+        // TODO: map to entity query last modified from/to filters
         EntityQuery query = new EntityQuery
         {
-            InstanceIdStartsWith = nameof(Schedule), // Automatically ensures correct formatting
-            IncludeState = true,
+            InstanceIdStartsWith = filter?.ScheduleIdPrefix ?? nameof(Schedule),
+            IncludeState = filter?.ReturnIdsOnly ?? true,
+            PageSize = filter?.PageSize ?? ScheduleQuery.DefaultPageSize,
+            ContinuationToken = filter?.ContinuationToken,
         };
 
-        List<ScheduleDescription> schedules = new List<ScheduleDescription>();
-
-        await foreach (EntityMetadata<ScheduleState> metadata in this.durableTaskClient.Entities.GetAllEntitiesAsync<ScheduleState>(query))
+        // Create an async pageable using the Pageable.Create helper
+        return Task.FromResult(Pageable.Create(async (continuationToken, pageSize, cancellation) =>
         {
-            if (metadata.State.Status != ScheduleStatus.Uninitialized)
+            try
             {
-                ScheduleConfiguration config = metadata.State.ScheduleConfiguration!;
+                List<ScheduleDescription> schedules = new List<ScheduleDescription>();
 
-                IReadOnlyCollection<ScheduleActivityLog> activityLogs =
-                    includeFullActivityLogs ? metadata.State.ActivityLogs : metadata.State.ActivityLogs.TakeLast(1).ToArray();
-
-                schedules.Add(new ScheduleDescription
+                await foreach (EntityMetadata<ScheduleState> metadata in this.durableTaskClient.Entities.GetAllEntitiesAsync<ScheduleState>(query))
                 {
-                    ScheduleId = metadata.Id.Key,
-                    OrchestrationName = config.OrchestrationName,
-                    OrchestrationInput = config.OrchestrationInput,
-                    OrchestrationInstanceId = config.OrchestrationInstanceId,
-                    StartAt = config.StartAt,
-                    EndAt = config.EndAt,
-                    Interval = config.Interval,
-                    StartImmediatelyIfLate = config.StartImmediatelyIfLate,
-                    Status = metadata.State.Status,
-                    ExecutionToken = metadata.State.ExecutionToken,
-                    LastRunAt = metadata.State.LastRunAt,
-                    NextRunAt = metadata.State.NextRunAt,
-                    ActivityLogs = activityLogs,
-                });
-            }
-        }
+                    ScheduleState state = metadata.State;
+                    if (state.Status == ScheduleStatus.Uninitialized)
+                    {
+                        continue;
+                    }
 
-        return schedules;
+                    // Skip if status filter is specified and doesn't match
+                    if (filter?.Status.HasValue == true && state.Status != filter.Status.Value)
+                    {
+                        continue;
+                    }
+
+                    // Skip if created time filter is specified and doesn't match
+                    if (filter?.CreatedFrom.HasValue == true && state.ScheduleCreatedAt <= filter.CreatedFrom)
+                    {
+                        continue;
+                    }
+
+                    if (filter?.CreatedTo.HasValue == true && state.ScheduleCreatedAt >= filter.CreatedTo)
+                    {
+                        continue;
+                    }
+
+                    ScheduleConfiguration config = state.ScheduleConfiguration!;
+
+                    IReadOnlyCollection<ScheduleActivityLog> activityLogs =
+                        filter?.IncludeFullActivityLogs == true ?
+                            state.ActivityLogs :
+                            state.ActivityLogs.TakeLast(1).ToArray();
+
+                    schedules.Add(new ScheduleDescription
+                    {
+                        ScheduleId = metadata.Id.Key,
+                        OrchestrationName = config.OrchestrationName,
+                        OrchestrationInput = config.OrchestrationInput,
+                        OrchestrationInstanceId = config.OrchestrationInstanceId,
+                        StartAt = config.StartAt,
+                        EndAt = config.EndAt,
+                        Interval = config.Interval,
+                        StartImmediatelyIfLate = config.StartImmediatelyIfLate,
+                        Status = state.Status,
+                        ExecutionToken = state.ExecutionToken,
+                        LastRunAt = state.LastRunAt,
+                        NextRunAt = state.NextRunAt,
+                        ActivityLogs = activityLogs,
+                    });
+                }
+
+                return new Page<ScheduleDescription>(schedules, continuationToken);
+            }
+            catch (OperationCanceledException e)
+            {
+                throw new OperationCanceledException(
+                    $"The {nameof(this.ListSchedulesAsync)} operation was canceled.", e, e.CancellationToken);
+            }
+        }));
     }
 }

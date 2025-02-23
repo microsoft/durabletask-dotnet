@@ -9,32 +9,47 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 public record ScheduleQuery
 {
     /// <summary>
-    /// Gets or sets a value indicating whether to include full activity logs in the returned schedules.
+    /// The default page size when not supplied.
+    /// </summary>
+    public const int DefaultPageSize = 100;
+
+    /// <summary>
+    /// Gets a value indicating whether to include full activity logs in the returned schedules.
     /// </summary>
     public bool IncludeFullActivityLogs { get; init; }
 
     /// <summary>
-    /// Gets or sets a filter for the schedule status.
+    /// Gets the filter for the schedule status.
     /// </summary>
     public ScheduleStatus? Status { get; init; }
 
     /// <summary>
-    /// Gets or sets a prefix to filter schedule IDs.
+    /// Gets the prefix to filter schedule IDs.
     /// </summary>
     public string? ScheduleIdPrefix { get; init; }
 
     /// <summary>
-    /// Gets or sets a filter for schedules created after this time.
+    /// Gets the filter for schedules created after this time.
     /// </summary>
-    public DateTimeOffset? CreatedAfter { get; init; }
+    public DateTimeOffset? CreatedFrom { get; init; }
 
     /// <summary>
-    /// Gets or sets a filter for schedules created before this time.
+    /// Gets the filter for schedules created before this time.
     /// </summary>
-    public DateTimeOffset? CreatedBefore { get; init; }
+    public DateTimeOffset? CreatedTo { get; init; }
 
     /// <summary>
-    /// Gets or sets the maximum number of schedules to return.
+    /// Gets a value indicating whether to return only schedule IDs without additional details.
     /// </summary>
-    public int? MaxItemCount { get; init; }
+    public bool ReturnIdsOnly { get; init; }
+
+    /// <summary>
+    /// Gets the maximum number of schedules to return per page.
+    /// </summary>
+    public int? PageSize { get; init; }
+
+    /// <summary>
+    /// Gets the continuation token for retrieving the next page of results.
+    /// </summary>
+    public string? ContinuationToken { get; init; }
 } 

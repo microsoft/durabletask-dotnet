@@ -36,6 +36,16 @@ class ScheduleState
     public DateTimeOffset? NextRunAt { get; set; }
 
     /// <summary>
+    /// Gets or sets the time when this schedule was created.
+    /// </summary>
+    public DateTimeOffset? ScheduleCreatedAt { get; set; }
+
+    /// <summary>
+    /// Gets or sets the time when this schedule was last modified.
+    /// </summary>
+    public DateTimeOffset? ScheduleLastModifiedAt { get; set; }
+
+    /// <summary>
     /// Gets or sets the schedule configuration.
     /// </summary>
     public ScheduleConfiguration? ScheduleConfiguration { get; set; }

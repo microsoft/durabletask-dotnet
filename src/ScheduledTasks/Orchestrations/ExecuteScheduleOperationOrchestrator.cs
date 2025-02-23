@@ -18,8 +18,7 @@ public class ExecuteScheduleOperationOrchestrator : TaskOrchestrator<ScheduleOpe
     /// <inheritdoc/>
     public override async Task<object> RunAsync(TaskOrchestrationContext context, ScheduleOperationRequest input)
     {
-        var res = await context.Entities.CallEntityAsync<object>(input.EntityId, input.OperationName, input.Input);
-        return res;
+        return await context.Entities.CallEntityAsync<object>(input.EntityId, input.OperationName, input.Input);
     }
 }
 

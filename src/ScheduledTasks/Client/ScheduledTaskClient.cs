@@ -3,6 +3,7 @@
 
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Entities;
+using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.ScheduledTasks;
@@ -27,9 +28,30 @@ public class ScheduledTaskClient : IScheduledTaskClient
     }
 
     /// <inheritdoc/>
-    public Task<ScheduleHandle> CreateScheduleAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default)
+    public async Task<ScheduleHandle> CreateScheduleAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default)
     {
-        throw new NotImplementedException();
+        Check.NotNull(creationOptions, nameof(creationOptions));
+
+        string scheduleId = creationOptions.ScheduleId;
+        EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
+
+        try
+        {
+            // Call the orchestrator to create the schedule
+            ScheduleOperationRequest request = new ScheduleOperationRequest(entityId, nameof(Schedule.CreateSchedule), creationOptions);
+            await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
+                new TaskName(nameof(ExecuteScheduleOperationOrchestrator)),
+                request,
+                cancellation);
+
+            // Return a handle to the schedule
+            return new ScheduleHandle(this.durableTaskClient, scheduleId, this.logger);
+        }
+        catch (Exception ex)
+        {
+            this.logger.ClientError($"Failed to create schedule: {ex.Message}", scheduleId);
+            throw;
+        }
     }
 
     /// <inheritdoc/>

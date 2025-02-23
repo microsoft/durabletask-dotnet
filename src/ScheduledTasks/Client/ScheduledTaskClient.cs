@@ -39,10 +39,18 @@ public class ScheduledTaskClient : IScheduledTaskClient
         {
             // Call the orchestrator to create the schedule
             ScheduleOperationRequest request = new ScheduleOperationRequest(entityId, nameof(Schedule.CreateSchedule), creationOptions);
-            await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
+            string instanceId = await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
                 new TaskName(nameof(ExecuteScheduleOperationOrchestrator)),
                 request,
                 cancellation);
+
+            // Wait for the orchestration to complete
+            OrchestrationMetadata state = await this.durableTaskClient.WaitForInstanceCompletionAsync(instanceId, false, cancellation);
+
+            if (state.RuntimeStatus == OrchestrationRuntimeStatus.Failed && state.FailureDetails != null)
+            {
+                throw new ScheduleCreationException(scheduleId, state.FailureDetails.ErrorMessage);
+            }
 
             // Return a handle to the schedule
             return new ScheduleHandle(this.durableTaskClient, scheduleId, this.logger);

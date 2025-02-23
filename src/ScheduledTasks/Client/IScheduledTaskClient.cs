@@ -16,6 +16,15 @@ public interface IScheduledTaskClient
     IScheduleHandle GetScheduleHandle(string scheduleId);
 
     /// <summary>
+    /// Gets a schedule description by its ID.
+    /// </summary>
+    /// <param name="scheduleId">The ID of the schedule to retrieve.</param>
+    /// <param name="includeFullActivityLogs">Whether to include full activity logs in the returned schedule details.</param>
+    /// <param name="cancellation">Optional cancellation token.</param>
+    /// <returns>The schedule description if found, null otherwise.</returns>
+    Task<ScheduleDescription?> GetScheduleAsync(string scheduleId, bool includeFullActivityLogs = false, CancellationToken cancellation = default);
+
+    /// <summary>
     /// Gets a pageable list of schedules matching the specified filter criteria.
     /// </summary>
     /// <param name="filter">Optional filter criteria for the schedules. If null, returns all schedules.</param>

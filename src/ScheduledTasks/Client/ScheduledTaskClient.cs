@@ -35,31 +35,67 @@ public class ScheduledTaskClient : IScheduledTaskClient
         string scheduleId = creationOptions.ScheduleId;
         EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
 
-        try
+        // Check if schedule already exists
+        ScheduleDescription? existingSchedule = await this.GetScheduleAsync(scheduleId, cancellation: cancellation);
+        if (existingSchedule != null)
         {
-            // Call the orchestrator to create the schedule
-            ScheduleOperationRequest request = new ScheduleOperationRequest(entityId, nameof(Schedule.CreateSchedule), creationOptions);
-            string instanceId = await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
-                new TaskName(nameof(ExecuteScheduleOperationOrchestrator)),
-                request,
-                cancellation);
-
-            // Wait for the orchestration to complete
-            OrchestrationMetadata state = await this.durableTaskClient.WaitForInstanceCompletionAsync(instanceId, false, cancellation);
-
-            if (state.RuntimeStatus == OrchestrationRuntimeStatus.Failed && state.FailureDetails != null)
-            {
-                throw new ScheduleCreationException(scheduleId, state.FailureDetails.ErrorMessage);
-            }
-
-            // Return a handle to the schedule
-            return new ScheduleHandle(this.durableTaskClient, scheduleId, this.logger);
+            throw new ScheduleAlreadyExistException(scheduleId);
         }
-        catch (Exception ex)
+
+        // Call the orchestrator to create the schedule
+        ScheduleOperationRequest request = new ScheduleOperationRequest(entityId, nameof(Schedule.CreateSchedule), creationOptions);
+        string instanceId = await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName(nameof(ExecuteScheduleOperationOrchestrator)),
+            request,
+            cancellation);
+
+        // Wait for the orchestration to complete
+        OrchestrationMetadata state = await this.durableTaskClient.WaitForInstanceCompletionAsync(instanceId, false, cancellation);
+
+        if (state.RuntimeStatus != OrchestrationRuntimeStatus.Completed)
         {
-            this.logger.ClientError($"Failed to create schedule: {ex.Message}", scheduleId);
-            throw;
+            throw new ScheduleCreationException(scheduleId, state.FailureDetails?.ErrorMessage ?? string.Empty);
         }
+
+        // Return a handle to the schedule
+        return new ScheduleHandle(this.durableTaskClient, scheduleId, this.logger);
+    }
+
+    /// <inheritdoc/>
+    public async Task<ScheduleDescription?> GetScheduleAsync(string scheduleId, bool includeFullActivityLogs = false, CancellationToken cancellation = default)
+    {
+        Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
+
+        EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
+        EntityMetadata<ScheduleState>? metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId, cancellation);
+
+        if (metadata == null || metadata.State.Status == ScheduleStatus.Uninitialized)
+        {
+            return null;
+        }
+
+        ScheduleState state = metadata.State;
+        ScheduleConfiguration? config = state.ScheduleConfiguration;
+
+        IReadOnlyCollection<ScheduleActivityLog> activityLogs =
+            includeFullActivityLogs ? state.ActivityLogs : state.ActivityLogs.TakeLast(1).ToArray();
+
+        return new ScheduleDescription
+        {
+            ScheduleId = scheduleId,
+            OrchestrationName = config?.OrchestrationName,
+            OrchestrationInput = config?.OrchestrationInput,
+            OrchestrationInstanceId = config?.OrchestrationInstanceId,
+            StartAt = config?.StartAt,
+            EndAt = config?.EndAt,
+            Interval = config?.Interval,
+            StartImmediatelyIfLate = config?.StartImmediatelyIfLate,
+            Status = state.Status,
+            ExecutionToken = state.ExecutionToken,
+            LastRunAt = state.LastRunAt,
+            NextRunAt = state.NextRunAt,
+            ActivityLogs = activityLogs,
+        };
     }
 
     /// <inheritdoc/>

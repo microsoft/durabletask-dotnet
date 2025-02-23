@@ -50,7 +50,7 @@ public class ScheduledTaskClient : IScheduledTaskClient
             cancellation);
 
         // Wait for the orchestration to complete
-        OrchestrationMetadata state = await this.durableTaskClient.WaitForInstanceCompletionAsync(instanceId, false, cancellation);
+        OrchestrationMetadata state = await this.durableTaskClient.WaitForInstanceCompletionAsync(instanceId, true, cancellation);
 
         if (state.RuntimeStatus != OrchestrationRuntimeStatus.Completed)
         {
@@ -62,7 +62,7 @@ public class ScheduledTaskClient : IScheduledTaskClient
     }
 
     /// <inheritdoc/>
-    public async Task<ScheduleDescription?> GetScheduleAsync(string scheduleId, bool includeFullActivityLogs = false, CancellationToken cancellation = default)
+    public async Task<ScheduleDescription?> GetScheduleAsync(string scheduleId, CancellationToken cancellation = default)
     {
         Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
 
@@ -76,9 +76,6 @@ public class ScheduledTaskClient : IScheduledTaskClient
 
         ScheduleState state = metadata.State;
         ScheduleConfiguration? config = state.ScheduleConfiguration;
-
-        IReadOnlyCollection<ScheduleActivityLog> activityLogs =
-            includeFullActivityLogs ? state.ActivityLogs : state.ActivityLogs.TakeLast(1).ToArray();
 
         return new ScheduleDescription
         {
@@ -94,7 +91,6 @@ public class ScheduledTaskClient : IScheduledTaskClient
             ExecutionToken = state.ExecutionToken,
             LastRunAt = state.LastRunAt,
             NextRunAt = state.NextRunAt,
-            ActivityLogs = activityLogs,
         };
     }
 
@@ -123,10 +119,6 @@ public class ScheduledTaskClient : IScheduledTaskClient
                 await foreach (EntityMetadata<ScheduleState> metadata in this.durableTaskClient.Entities.GetAllEntitiesAsync<ScheduleState>(query))
                 {
                     ScheduleState state = metadata.State;
-                    if (state.Status == ScheduleStatus.Uninitialized)
-                    {
-                        continue;
-                    }
 
                     // Skip if status filter is specified and doesn't match
                     if (filter?.Status.HasValue == true && state.Status != filter.Status.Value)
@@ -147,11 +139,6 @@ public class ScheduledTaskClient : IScheduledTaskClient
 
                     ScheduleConfiguration config = state.ScheduleConfiguration!;
 
-                    IReadOnlyCollection<ScheduleActivityLog> activityLogs =
-                        filter?.IncludeFullActivityLogs == true ?
-                            state.ActivityLogs :
-                            state.ActivityLogs.TakeLast(1).ToArray();
-
                     schedules.Add(new ScheduleDescription
                     {
                         ScheduleId = metadata.Id.Key,
@@ -166,7 +153,6 @@ public class ScheduledTaskClient : IScheduledTaskClient
                         ExecutionToken = state.ExecutionToken,
                         LastRunAt = state.LastRunAt,
                         NextRunAt = state.NextRunAt,
-                        ActivityLogs = activityLogs,
                     });
                 }
 
@@ -181,7 +167,7 @@ public class ScheduledTaskClient : IScheduledTaskClient
     }
 
     /// <inheritdoc/>
-    public Task<AsyncPageable<string>> ListScheduleAsync(ScheduleQuery? filter = null)
+    public Task<AsyncPageable<string>> ListScheduleIdsAsync(ScheduleQuery? filter = null)
     {
         EntityQuery query = new EntityQuery
         {
@@ -209,7 +195,7 @@ public class ScheduledTaskClient : IScheduledTaskClient
             catch (OperationCanceledException e)
             {
                 throw new OperationCanceledException(
-                    $"The {nameof(this.ListScheduleAsync)} operation was canceled.", e, e.CancellationToken);
+                    $"The {nameof(this.ListScheduleIdsAsync)} operation was canceled.", e, e.CancellationToken);
             }
         }));
     }

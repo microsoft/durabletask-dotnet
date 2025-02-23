@@ -1,5 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.AzureManaged;
 using Microsoft.DurableTask.ScheduledTasks;
@@ -63,13 +64,37 @@ IScheduledTaskClient scheduledTaskClient = host.Services.GetRequiredService<ISch
 try
 {
     // list all schedules
-    var schedules = await scheduledTaskClient.ListSchedulesAsync(false);
-    foreach (var schedule in schedules)
+    // Define the initial query with the desired page size
+    ScheduleQuery query = new ScheduleQuery { PageSize = 100 };
+
+    // Retrieve the pageable collection of schedule IDs
+    AsyncPageable<string> schedules = await scheduledTaskClient.ListScheduleIdsAsync(query);
+
+    // Initialize the continuation token
+    string? continuationToken = null;
+    await foreach (Page<string> page in schedules.AsPages(continuationToken))
     {
-        var handle = scheduledTaskClient.GetScheduleHandle(schedule.ScheduleId);
-        await handle.DeleteAsync();
-        Console.WriteLine($"Deleted schedule {schedule.ScheduleId}");
+        foreach (string scheduleId in page.Values)
+        {
+            // Obtain the schedule handle for the current scheduleId
+            IScheduleHandle handle = scheduledTaskClient.GetScheduleHandle(scheduleId);
+
+            // Delete the schedule
+            await handle.DeleteAsync();
+
+            Console.WriteLine($"Deleted schedule {scheduleId}");
+        }
+
+        // Update the continuation token for the next iteration
+        continuationToken = page.ContinuationToken;
+
+        // If there's no continuation token, we've reached the end of the collection
+        if (continuationToken == null)
+        {
+            break;
+        }
     }
+
 
     // Create schedule options that runs every 4 seconds
     ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions("demo-schedule101", nameof(StockPriceOrchestrator), TimeSpan.FromSeconds(4))
@@ -78,13 +103,12 @@ try
         OrchestrationInput = "MSFT"
     };
 
-    // Get schedule handle
-    IScheduleHandle scheduleHandle = scheduledTaskClient.GetScheduleHandle(scheduleOptions.ScheduleId);
+    // Create the schedule and get a handle to it
+    ScheduleHandle scheduleHandle = await scheduledTaskClient.CreateScheduleAsync(scheduleOptions);
 
-    // Create the schedule
-    Console.WriteLine("Creating schedule...");
-    IScheduleWaiter waiter = await scheduleHandle.CreateAsync(scheduleOptions);
-    ScheduleDescription scheduleDescription = await waiter.WaitUntilActiveAsync();
+    // Get the schedule description
+    ScheduleDescription scheduleDescription = await scheduleHandle.DescribeAsync();
+
     // print the schedule description
     Console.WriteLine(scheduleDescription.ToJsonString(true));
 
@@ -94,8 +118,8 @@ try
 
     // Pause the schedule
     Console.WriteLine("\nPausing schedule...");
-    IScheduleWaiter pauseWaiter = await scheduleHandle.PauseAsync();
-    scheduleDescription = await pauseWaiter.WaitUntilPausedAsync();
+    await scheduleHandle.PauseAsync();
+    scheduleDescription = await scheduleHandle.DescribeAsync();
     Console.WriteLine(scheduleDescription.ToJsonString(true));
     Console.WriteLine("");
     Console.WriteLine("");
@@ -104,9 +128,8 @@ try
 
     // Resume the schedule
     Console.WriteLine("\nResuming schedule...");
-    IScheduleWaiter resumeWaiter = await scheduleHandle.ResumeAsync();
-
-    scheduleDescription = await resumeWaiter.WaitUntilActiveAsync();
+    await scheduleHandle.ResumeAsync();
+    scheduleDescription = await scheduleHandle.DescribeAsync();
     Console.WriteLine(scheduleDescription.ToJsonString(true));
 
     Console.WriteLine("");
@@ -116,11 +139,6 @@ try
     await Task.Delay(TimeSpan.FromMinutes(30));
     //Console.WriteLine("\nPress any key to delete the schedule and exit...");
     //Console.ReadKey();
-
-    // Delete the schedule
-    IScheduleWaiter deleteWaiter = await scheduleHandle.DeleteAsync();
-    bool deleted = await deleteWaiter.WaitUntilDeletedAsync();
-    Console.WriteLine(deleted ? "Schedule deleted." : "Schedule not deleted.");
 }
 catch (Exception ex)
 {

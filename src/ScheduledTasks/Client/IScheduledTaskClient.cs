@@ -19,10 +19,9 @@ public interface IScheduledTaskClient
     /// Gets a schedule description by its ID.
     /// </summary>
     /// <param name="scheduleId">The ID of the schedule to retrieve.</param>
-    /// <param name="includeFullActivityLogs">Whether to include full activity logs in the returned schedule details.</param>
     /// <param name="cancellation">Optional cancellation token.</param>
     /// <returns>The schedule description if found, null otherwise.</returns>
-    Task<ScheduleDescription?> GetScheduleAsync(string scheduleId, bool includeFullActivityLogs = false, CancellationToken cancellation = default);
+    Task<ScheduleDescription?> GetScheduleAsync(string scheduleId, CancellationToken cancellation = default);
 
     /// <summary>
     /// Gets a pageable list of schedules matching the specified filter criteria.
@@ -37,7 +36,7 @@ public interface IScheduledTaskClient
     /// </summary>
     /// <param name="filter">Optional filter criteria for the schedules. If null, returns all schedule IDs.</param>
     /// <returns>A pageable list of schedule IDs.</returns>
-    Task<AsyncPageable<string>> ListScheduleAsync(ScheduleQuery? filter = null);
+    Task<AsyncPageable<string>> ListScheduleIdsAsync(ScheduleQuery? filter = null);
 
     /// <summary>
     /// Creates a new schedule with the specified configuration.

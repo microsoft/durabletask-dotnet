@@ -30,18 +30,6 @@ public class ScheduleOperationFailedException : Exception
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ScheduleOperationFailedException"/> class.
-    /// </summary>
-    /// <param name="scheduleId">The ID of the schedule that failed.</param>
-    /// <param name="operation">The operation that failed.</param>
-    /// <param name="status">The status of the failed operation.</param>
-    /// <param name="failureDetails">Details about the failure.</param>
-    public ScheduleOperationFailedException(string scheduleId, string operation, string status, FailureDetails? failureDetails)
-        : base($"Operation '{operation}' failed for schedule '{scheduleId}' with status '{status}'. Details: {failureDetails}")
-    {
-    }
-
-    /// <summary>
     /// Gets the schedule that failed.
     /// </summary>
     public ScheduleDescription? Schedule { get; }

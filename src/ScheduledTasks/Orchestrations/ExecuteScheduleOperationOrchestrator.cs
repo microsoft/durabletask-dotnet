@@ -12,13 +12,14 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// Orchestrator that executes operations on schedule entities.
 /// Calls the specified operation on the target entity and returns the result.
 /// </summary>
-[DurableTask("ExecuteScheduleOperation")]
+[DurableTask]
 public class ExecuteScheduleOperationOrchestrator : TaskOrchestrator<ScheduleOperationRequest, object>
 {
     /// <inheritdoc/>
     public override async Task<object> RunAsync(TaskOrchestrationContext context, ScheduleOperationRequest input)
     {
-        return await context.Entities.CallEntityAsync<object>(input.EntityId, input.OperationName, input.Input);
+        var res = await context.Entities.CallEntityAsync<object>(input.EntityId, input.OperationName, input.Input);
+        return res;
     }
 }
 

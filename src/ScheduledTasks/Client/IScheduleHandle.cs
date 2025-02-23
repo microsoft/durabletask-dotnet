@@ -16,32 +16,36 @@ public interface IScheduleHandle
     /// <summary>
     /// Retrieves the current details of this schedule.
     /// </summary>
-    /// <param name="includeFullActivityLogs">Whether to include full activity logs in the returned schedule details.</param>
+    /// <param name="cancellation">A cancellation token that can be used to cancel the operation.</param>
     /// <returns>The schedule details.</returns>
-    Task<ScheduleDescription> DescribeAsync(bool includeFullActivityLogs = false);
+    Task<ScheduleDescription> DescribeAsync(CancellationToken cancellation = default);
 
     /// <summary>
-    /// Deletes this schedule.
+    /// Deletes this schedule. The schedule will stop executing and be removed from the system.
     /// </summary>
-    /// <returns>A task that completes when the schedule is deleted.</returns>
-    Task<IScheduleWaiter> DeleteAsync();
+    /// <param name="cancellation">A cancellation token that can be used to cancel the operation.</param>
+    /// <returns>A task that completes when the schedule has been deleted.</returns>
+    Task DeleteAsync(CancellationToken cancellation = default);
 
     /// <summary>
-    /// Pauses this schedule.
+    /// Pauses this schedule. The schedule will stop executing but remain in the system.
     /// </summary>
-    /// <returns>A task that completes when the schedule is paused.</returns>
-    Task<IScheduleWaiter> PauseAsync();
+    /// <param name="cancellation">A cancellation token that can be used to cancel the operation.</param>
+    /// <returns>A task that completes when the schedule has been paused.</returns>
+    Task PauseAsync(CancellationToken cancellation = default);
 
     /// <summary>
-    /// Resumes this schedule.
+    /// Resumes this schedule. The schedule will continue executing from where it was paused.
     /// </summary>
-    /// <returns>A task that completes when the schedule is resumed.</returns>
-    Task<IScheduleWaiter> ResumeAsync();
+    /// <param name="cancellation">A cancellation token that can be used to cancel the operation.</param>
+    /// <returns>A task that completes when the schedule has been resumed.</returns>
+    Task ResumeAsync(CancellationToken cancellation = default);
 
     /// <summary>
-    /// Updates this schedule with new configuration.
+    /// Updates this schedule with new configuration. The schedule will continue executing with the new configuration.
     /// </summary>
     /// <param name="updateOptions">The options for updating the schedule configuration.</param>
-    /// <returns>A task that completes when the schedule is updated.</returns>
-    Task<IScheduleWaiter> UpdateAsync(ScheduleUpdateOptions updateOptions);
+    /// <param name="cancellation">A cancellation token that can be used to cancel the operation.</param>
+    /// <returns>A task that completes when the schedule has been updated.</returns>
+    Task UpdateAsync(ScheduleUpdateOptions updateOptions, CancellationToken cancellation = default);
 }

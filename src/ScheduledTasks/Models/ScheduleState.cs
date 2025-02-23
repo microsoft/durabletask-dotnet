@@ -8,13 +8,6 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// </summary>
 class ScheduleState
 {
-    const int MaxActivityLogItems = 10;
-
-    /// <summary>
-    /// Gets or sets the queue of activity logs for this schedule, maintaining the most recent entries.
-    /// </summary>
-    public Queue<ScheduleActivityLog> ActivityLogs { get; set; } = new Queue<ScheduleActivityLog>();
-
     /// <summary>
     /// Gets or sets the current status of the schedule.
     /// </summary>
@@ -56,30 +49,5 @@ class ScheduleState
     public void RefreshScheduleRunExecutionToken()
     {
         this.ExecutionToken = Guid.NewGuid().ToString("N");
-    }
-
-    /// <summary>
-    /// Adds an activity log entry to the schedule's history.
-    /// </summary>
-    /// <param name="operation">The operation being performed.</param>
-    /// <param name="status">The status of the operation.</param>
-    /// <param name="failureDetails">Optional failure details if the operation failed.</param>
-    public void AddActivityLog(string operation, string status, FailureDetails? failureDetails = null)
-    {
-        ScheduleActivityLog log = new ScheduleActivityLog
-        {
-            Operation = operation,
-            Status = status,
-            Timestamp = DateTimeOffset.UtcNow,
-            FailureDetails = failureDetails,
-        };
-
-        this.ActivityLogs.Enqueue(log);
-
-        // Keep only the most recent MaxActivityLogItems
-        while (this.ActivityLogs.Count > MaxActivityLogItems)
-        {
-            this.ActivityLogs.Dequeue();
-        }
     }
 }

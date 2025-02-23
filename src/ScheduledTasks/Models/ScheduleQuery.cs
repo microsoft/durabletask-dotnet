@@ -14,11 +14,6 @@ public record ScheduleQuery
     public const int DefaultPageSize = 100;
 
     /// <summary>
-    /// Gets a value indicating whether to include full activity logs in the returned schedules.
-    /// </summary>
-    public bool IncludeFullActivityLogs { get; init; }
-
-    /// <summary>
     /// Gets the filter for the schedule status.
     /// </summary>
     public ScheduleStatus? Status { get; init; }

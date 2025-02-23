@@ -71,11 +71,6 @@ public record ScheduleDescription
     public DateTimeOffset? NextRunAt { get; init; }
 
     /// <summary>
-    /// Gets the activity logs for this schedule.
-    /// </summary>
-    public IReadOnlyCollection<ScheduleActivityLog> ActivityLogs { get; init; } = Array.Empty<ScheduleActivityLog>();
-
-    /// <summary>
     /// Returns a JSON string representation of the schedule description.
     /// </summary>
     /// <param name="pretty">If true, formats the JSON with indentation for readability.</param>

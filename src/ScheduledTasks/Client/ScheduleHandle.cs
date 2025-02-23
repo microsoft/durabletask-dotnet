@@ -44,13 +44,13 @@ public class ScheduleHandle : IScheduleHandle
     public EntityInstanceId EntityId { get; }
 
     /// <inheritdoc/>
-    public async Task<ScheduleDescription> DescribeAsync(bool includeFullActivityLogs = false)
+    public async Task<ScheduleDescription> DescribeAsync(CancellationToken cancellation = default)
     {
         Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
         EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
         EntityMetadata<ScheduleState>? metadata =
-            await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId);
+            await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId, cancellation: cancellation);
         if (metadata == null)
         {
             throw new ScheduleNotFoundException(this.ScheduleId);
@@ -59,9 +59,6 @@ public class ScheduleHandle : IScheduleHandle
         ScheduleState state = metadata.State;
 
         ScheduleConfiguration? config = state.ScheduleConfiguration;
-
-        IReadOnlyCollection<ScheduleActivityLog> activityLogs =
-            includeFullActivityLogs ? state.ActivityLogs : state.ActivityLogs.TakeLast(1).ToArray();
 
         return new ScheduleDescription
         {
@@ -77,44 +74,38 @@ public class ScheduleHandle : IScheduleHandle
             ExecutionToken = state.ExecutionToken,
             LastRunAt = state.LastRunAt,
             NextRunAt = state.NextRunAt,
-            ActivityLogs = activityLogs,
         };
     }
 
     /// <inheritdoc/>
-    public async Task<IScheduleWaiter> PauseAsync()
+    public async Task PauseAsync(CancellationToken cancellation = default)
     {
         this.logger.ClientPausingSchedule(this.ScheduleId);
 
-        await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, nameof(Schedule.PauseSchedule));
-        return new ScheduleWaiter(this, nameof(Schedule.PauseSchedule));
+        await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, nameof(Schedule.PauseSchedule), cancellation: cancellation);
     }
 
     /// <inheritdoc/>
-    public async Task<IScheduleWaiter> ResumeAsync()
+    public async Task ResumeAsync(CancellationToken cancellation = default)
     {
         this.logger.ClientResumingSchedule(this.ScheduleId);
 
-        await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, nameof(Schedule.ResumeSchedule));
-
-        return new ScheduleWaiter(this, nameof(Schedule.ResumeSchedule));
+        await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, nameof(Schedule.ResumeSchedule), cancellation: cancellation);
     }
 
     /// <inheritdoc/>
-    public async Task<IScheduleWaiter> UpdateAsync(ScheduleUpdateOptions updateOptions)
+    public async Task UpdateAsync(ScheduleUpdateOptions updateOptions, CancellationToken cancellation = default)
     {
         this.logger.ClientUpdatingSchedule(this.ScheduleId);
         Check.NotNull(updateOptions, nameof(updateOptions));
-        await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, nameof(Schedule.UpdateSchedule), updateOptions);
-        return new ScheduleWaiter(this, nameof(Schedule.UpdateSchedule));
+        await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, nameof(Schedule.UpdateSchedule), updateOptions, cancellation: cancellation);
     }
 
     /// <inheritdoc/>
-    public async Task<IScheduleWaiter> DeleteAsync()
+    public async Task DeleteAsync(CancellationToken cancellation = default)
     {
         this.logger.ClientDeletingSchedule(this.ScheduleId);
 
-        await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, "delete");
-        return new ScheduleWaiter(this, "delete");
+        await this.durableTaskClient.Entities.SignalEntityAsync(this.EntityId, "delete", cancellation: cancellation);
     }
 }

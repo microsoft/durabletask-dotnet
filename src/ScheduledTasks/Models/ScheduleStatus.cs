@@ -3,8 +3,6 @@
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
-// TODO: Find whether it is possible to remove uninitialized, have to ensure atomicity of creation if possible
-
 /// <summary>
 /// Represents the current status of a schedule.
 /// </summary>

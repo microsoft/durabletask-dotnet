@@ -9,11 +9,9 @@ Content-Type: application/json
 
 {
     "id": "{{scheduleId}}",
-    "orchestrationName": "CacheClearingOrchestrator",
+    "orchestrationName": "CacheClearingOrchestrator", 
     "input": "{{scheduleId}}",
-    "interval": "PT1H",
-    "startAt": "2024-01-01T00:00:00Z",
-    "endAt": "2024-12-31T23:59:59Z"
+    "interval": "PT10S"
 }
 
 ### Get a specific schedule by ID
@@ -27,16 +25,7 @@ PUT {{baseUrl}}/schedules/{{scheduleId}}
 Content-Type: application/json
 
 {
-    "orchestrationName": "UpdatedTaskName",
-    "interval": "PT30M",
-    "input": {
-        "taskName": "ProcessData",
-        "parameters": {
-            "batchSize": 200
-        }
-    },
-    "startAt": "2024-01-01T00:00:00Z",
-    "endAt": "2024-12-31T23:59:59Z"
+    "interval": "PT20S"
 }
 
 ### Pause a schedule

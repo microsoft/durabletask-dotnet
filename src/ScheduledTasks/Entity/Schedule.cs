@@ -83,7 +83,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             if (updatedScheduleConfigFields.Count == 0)
             {
                 // no need to interrupt and update current schedule run as there is no change in the schedule config
-                this.logger.ScheduleOperationWarning(this.State.ScheduleConfiguration.ScheduleId, nameof(this.UpdateSchedule), "Schedule configuration is up to date.");
+                this.logger.ScheduleOperationDebug(this.State.ScheduleConfiguration.ScheduleId, nameof(this.UpdateSchedule), "Schedule configuration is up to date.");
                 return;
             }
 

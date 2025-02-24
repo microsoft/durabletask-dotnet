@@ -49,15 +49,18 @@ static partial class Logs
     [LoggerMessage(EventId = 111, Level = LogLevel.Information, Message = "Schedule '{scheduleId}' is deleted")]
     public static partial void DeletedSchedule(this ILogger logger, string scheduleId);
 
-    [LoggerMessage(EventId = 112, Level = LogLevel.Information, Message = "Schedule '{scheduleId}' operation '{operationName}' info: {infoMessage}")]
+    [LoggerMessage(EventId = 112, Level = LogLevel.Debug, Message = "Schedule '{scheduleId}' operation '{operationName}' debug: {debugMessage}")]
+    public static partial void ScheduleOperationDebug(this ILogger logger, string scheduleId, string operationName, string debugMessage);
+
+    [LoggerMessage(EventId = 113, Level = LogLevel.Information, Message = "Schedule '{scheduleId}' operation '{operationName}' info: {infoMessage}")]
     public static partial void ScheduleOperationInfo(this ILogger logger, string scheduleId, string operationName, string infoMessage);
 
-    [LoggerMessage(EventId = 113, Level = LogLevel.Warning, Message = "Schedule '{scheduleId}' operation '{operationName}' warning: {warningMessage}")]
+    [LoggerMessage(EventId = 114, Level = LogLevel.Warning, Message = "Schedule '{scheduleId}' operation '{operationName}' warning: {warningMessage}")]
     public static partial void ScheduleOperationWarning(this ILogger logger, string scheduleId, string operationName, string warningMessage);
 
-    [LoggerMessage(EventId = 114, Level = LogLevel.Error, Message = "Operation '{operationName}' failed for schedule '{scheduleId}': {errorMessage}")]
+    [LoggerMessage(EventId = 115, Level = LogLevel.Error, Message = "Operation '{operationName}' failed for schedule '{scheduleId}': {errorMessage}")]
     public static partial void ScheduleOperationError(this ILogger logger, string scheduleId, string operationName, string errorMessage, Exception? exception = null);
 
-    [LoggerMessage(EventId = 115, Level = LogLevel.Information, Message = "Schedule '{scheduleId}' run cancelled with execution token '{executionToken}'")]
+    [LoggerMessage(EventId = 116, Level = LogLevel.Information, Message = "Schedule '{scheduleId}' run cancelled with execution token '{executionToken}'")]
     public static partial void ScheduleRunCancelled(this ILogger logger, string scheduleId, string executionToken);
 }

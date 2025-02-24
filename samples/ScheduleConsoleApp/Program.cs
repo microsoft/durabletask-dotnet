@@ -23,14 +23,7 @@ IHost host = Host.CreateDefaultBuilder(args)
         _ = services.AddDurableTaskWorker(builder =>
         {
             // Add the Schedule entity and demo orchestration
-            builder.AddTasks(r =>
-            {
-                // Add the orchestrator class
-                r.AddOrchestrator<StockPriceOrchestrator>();
-
-                // Add required activities
-                r.AddActivity<GetStockPrice>();
-            });
+            builder.AddTasks(r => r.AddAllGeneratedTasks());
 
             // Enable scheduled tasks support
             builder.UseDurableTaskScheduler(connectionString);

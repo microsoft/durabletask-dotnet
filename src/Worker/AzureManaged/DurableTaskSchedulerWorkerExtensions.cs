@@ -60,6 +60,7 @@ public static class DurableTaskSchedulerWorkerExtensions
                 options.EndpointAddress = connectionOptions.EndpointAddress;
                 options.TaskHubName = connectionOptions.TaskHubName;
                 options.Credential = connectionOptions.Credential;
+                options.AllowInsecureCredentials = connectionOptions.AllowInsecureCredentials;
             },
             configure);
     }

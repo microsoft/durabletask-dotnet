@@ -279,10 +279,9 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 
     bool CanTransitionTo(string operationName, ScheduleStatus targetStatus)
     {
-        HashSet<ScheduleStatus> validTargetStates;
         ScheduleStatus currentStatus = this.State.Status;
 
-        return ScheduleTransitions.TryGetValidTransitions(operationName, currentStatus, out validTargetStates) &&
+        return ScheduleTransitions.TryGetValidTransitions(operationName, currentStatus, out HashSet<ScheduleStatus> validTargetStates) &&
                validTargetStates.Contains(targetStatus);
     }
 

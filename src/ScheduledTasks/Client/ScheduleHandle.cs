@@ -85,7 +85,7 @@ class ScheduleHandle : IScheduleHandle
 
             throw new OperationCanceledException(
                 $"The {nameof(this.DescribeAsync)} operation was canceled.",
-                null,
+                ex,
                 cancellation);
         }
     }

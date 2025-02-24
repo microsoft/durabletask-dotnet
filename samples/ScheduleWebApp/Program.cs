@@ -11,7 +11,7 @@ using ScheduleWebApp.Orchestrations;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
-string connectionString = builder.Configuration["DURABLE_TASK_SCHEDULER_CONNECTION_STRING"]
+string connectionString = builder.Configuration.GetValue<string>("DURABLE_TASK_SCHEDULER_CONNECTION_STRING")
     ?? throw new InvalidOperationException("Missing required configuration 'DURABLE_TASK_SCHEDULER_CONNECTION_STRING'");
 
 // Add all the generated orchestrations and activities automatically

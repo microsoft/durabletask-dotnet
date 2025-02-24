@@ -6,14 +6,16 @@ using Microsoft.DurableTask.Client.AzureManaged;
 using Microsoft.DurableTask.ScheduledTasks;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.AzureManaged;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
-string connectionString = Environment.GetEnvironmentVariable("DURABLE_TASK_SCHEDULER_CONNECTION_STRING")
-    ?? throw new InvalidOperationException("Missing required environment variable 'DURABLE_TASK_SCHEDULER_CONNECTION_STRING'");
+// Get configuration
+string connectionString = builder.Configuration.GetValue<string>("DURABLE_TASK_SCHEDULER_CONNECTION_STRING")
+    ?? throw new InvalidOperationException("Missing required configuration 'DURABLE_TASK_SCHEDULER_CONNECTION_STRING'");
 
 // Configure the worker
 builder.Services.AddDurableTaskWorker(builder =>

@@ -114,6 +114,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         catch (Exception ex)
         {
             this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.UpdateSchedule), "Failed to update schedule", ex);
+            throw;
         }
     }
 
@@ -142,6 +143,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         catch (Exception ex)
         {
             this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.PauseSchedule), "Failed to pause schedule", ex);
+            throw;
         }
     }
 
@@ -171,6 +173,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         catch (Exception ex)
         {
             this.logger.ScheduleOperationError(this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty, nameof(this.ResumeSchedule), "Failed to resume schedule", ex);
+            throw;
         }
     }
 

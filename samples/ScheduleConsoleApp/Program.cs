@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ScheduleConsoleApp;
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
@@ -49,73 +50,9 @@ builder.Services.AddLogging(logging =>
 IHost host = builder.Build();
 await host.StartAsync();
 
+// Run the schedule operations
 IScheduledTaskClient scheduledTaskClient = host.Services.GetRequiredService<IScheduledTaskClient>();
-
-try
-{
-    // list all schedules
-    // Define the initial query with the desired page size
-    ScheduleQuery query = new ScheduleQuery { PageSize = 100 };
-
-    // Retrieve the pageable collection of schedule IDs
-    AsyncPageable<string> schedules = await scheduledTaskClient.ListScheduleIdsAsync(query);
-
-    // Initialize the continuation token
-    await foreach (string scheduleId in schedules)
-    {
-        // Obtain the schedule handle for the current scheduleId
-        IScheduleHandle handle = scheduledTaskClient.GetScheduleHandle(scheduleId);
-
-        // Delete the schedule
-        await handle.DeleteAsync();
-
-        Console.WriteLine($"Deleted schedule {scheduleId}");
-    }
-
-    // Create schedule options that runs every 4 seconds
-    ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions("demo-schedule101", nameof(StockPriceOrchestrator), TimeSpan.FromSeconds(4))
-    {
-        StartAt = DateTimeOffset.UtcNow,
-        OrchestrationInput = "MSFT"
-    };
-
-    // Create the schedule and get a handle to it
-    IScheduleHandle scheduleHandle = await scheduledTaskClient.CreateScheduleAsync(scheduleOptions);
-
-    // Get the schedule description
-    ScheduleDescription scheduleDescription = await scheduleHandle.DescribeAsync();
-
-    // print the schedule description
-    Console.WriteLine(scheduleDescription);
-
-    Console.WriteLine("");
-    Console.WriteLine("");
-    Console.WriteLine("");
-
-    // Pause the schedule
-    Console.WriteLine("\nPausing schedule...");
-    await scheduleHandle.PauseAsync();
-    scheduleDescription = await scheduleHandle.DescribeAsync();
-    Console.WriteLine(scheduleDescription);
-    Console.WriteLine("");
-    Console.WriteLine("");
-    Console.WriteLine("");
-
-    // Resume the schedule
-    Console.WriteLine("\nResuming schedule...");
-    await scheduleHandle.ResumeAsync();
-    scheduleDescription = await scheduleHandle.DescribeAsync();
-    Console.WriteLine(scheduleDescription);
-
-    Console.WriteLine("");
-    Console.WriteLine("");
-    Console.WriteLine("");
-
-    await Task.Delay(TimeSpan.FromMinutes(30));
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"One of your schedule operations failed, please fix and rerun: {ex.Message}");
-}
+ScheduleOperations scheduleOperations = new ScheduleOperations(scheduledTaskClient);
+await scheduleOperations.RunAsync();
 
 await host.StopAsync();

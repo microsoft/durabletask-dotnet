@@ -6,7 +6,7 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// <summary>
 /// Exception thrown when attempting to create a schedule with an ID that already exists.
 /// </summary>
-public class ScheduleAlreadyExistException : Exception
+public class ScheduleAlreadyExistException : InvalidOperationException
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="ScheduleAlreadyExistException"/> class.

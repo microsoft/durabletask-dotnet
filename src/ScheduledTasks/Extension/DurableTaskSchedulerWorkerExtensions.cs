@@ -11,10 +11,10 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 public static class DurableTaskSchedulerWorkerExtensions
 {
     /// <summary>
-    /// Adds scheduled task support to the worker builder.
+    /// Adds scheduled tasks support to the worker builder.
     /// </summary>
     /// <param name="builder">The worker builder to add scheduled task support to.</param>
-    public static void EnableScheduledTasksSupport(this IDurableTaskWorkerBuilder builder)
+    public static void UseScheduledTasks(this IDurableTaskWorkerBuilder builder)
     {
         builder.AddTasks(r =>
         {

@@ -23,14 +23,14 @@ builder.Services.AddDurableTaskWorker(builder =>
         r.AddOrchestrator<CacheClearingOrchestrator>();
     });
     builder.UseDurableTaskScheduler(connectionString);
-    builder.EnableScheduledTasksSupport();
+    builder.UseScheduledTasks();
 });
 
 // Register the client, which can be used to start orchestrations
 builder.Services.AddDurableTaskClient(builder =>
 {
     builder.UseDurableTaskScheduler(connectionString);
-    builder.EnableScheduledTasksSupport();
+    builder.UseScheduledTasks();
 });
 
 // Configure console logging using the simpler, more compact format

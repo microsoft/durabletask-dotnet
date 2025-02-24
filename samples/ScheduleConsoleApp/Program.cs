@@ -25,14 +25,14 @@ IHost host = Host.CreateDefaultBuilder(args)
 
             // Enable scheduled tasks support
             builder.UseDurableTaskScheduler(connectionString);
-            builder.EnableScheduledTasksSupport();
+            builder.UseScheduledTasks();
         });
 
         // Configure the client
         services.AddDurableTaskClient(builder =>
         {
             builder.UseDurableTaskScheduler(connectionString);
-            builder.EnableScheduledTasksSupport();
+            builder.UseScheduledTasks();
         });
 
         // Configure console logging
@@ -62,28 +62,15 @@ try
     AsyncPageable<string> schedules = await scheduledTaskClient.ListScheduleIdsAsync(query);
 
     // Initialize the continuation token
-    string? continuationToken = null;
-    await foreach (Page<string> page in schedules.AsPages(continuationToken))
+    await foreach (string scheduleId in schedules)
     {
-        foreach (string scheduleId in page.Values)
-        {
-            // Obtain the schedule handle for the current scheduleId
-            IScheduleHandle handle = scheduledTaskClient.GetScheduleHandle(scheduleId);
+        // Obtain the schedule handle for the current scheduleId
+        IScheduleHandle handle = scheduledTaskClient.GetScheduleHandle(scheduleId);
 
-            // Delete the schedule
-            await handle.DeleteAsync();
+        // Delete the schedule
+        await handle.DeleteAsync();
 
-            Console.WriteLine($"Deleted schedule {scheduleId}");
-        }
-
-        // Update the continuation token for the next iteration
-        continuationToken = page.ContinuationToken;
-
-        // If there's no continuation token, we've reached the end of the collection
-        if (continuationToken == null)
-        {
-            break;
-        }
+        Console.WriteLine($"Deleted schedule {scheduleId}");
     }
 
 
@@ -101,7 +88,7 @@ try
     ScheduleDescription scheduleDescription = await scheduleHandle.DescribeAsync();
 
     // print the schedule description
-    Console.WriteLine(scheduleDescription.ToJsonString(true));
+    Console.WriteLine(scheduleDescription);
 
     Console.WriteLine("");
     Console.WriteLine("");
@@ -111,7 +98,7 @@ try
     Console.WriteLine("\nPausing schedule...");
     await scheduleHandle.PauseAsync();
     scheduleDescription = await scheduleHandle.DescribeAsync();
-    Console.WriteLine(scheduleDescription.ToJsonString(true));
+    Console.WriteLine(scheduleDescription);
     Console.WriteLine("");
     Console.WriteLine("");
     Console.WriteLine("");
@@ -121,15 +108,13 @@ try
     Console.WriteLine("\nResuming schedule...");
     await scheduleHandle.ResumeAsync();
     scheduleDescription = await scheduleHandle.DescribeAsync();
-    Console.WriteLine(scheduleDescription.ToJsonString(true));
+    Console.WriteLine(scheduleDescription);
 
     Console.WriteLine("");
     Console.WriteLine("");
     Console.WriteLine("");
 
     await Task.Delay(TimeSpan.FromMinutes(30));
-    //Console.WriteLine("\nPress any key to delete the schedule and exit...");
-    //Console.ReadKey();
 }
 catch (Exception ex)
 {

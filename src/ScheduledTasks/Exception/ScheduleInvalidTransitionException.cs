@@ -6,7 +6,7 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// <summary>
 /// Exception thrown when an invalid state transition is attempted on a schedule.
 /// </summary>
-public class ScheduleInvalidTransitionException : Exception
+public class ScheduleInvalidTransitionException : InvalidOperationException
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="ScheduleInvalidTransitionException"/> class.

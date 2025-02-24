@@ -6,7 +6,7 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// <summary>
 /// Exception thrown when client-side validation fails for schedule operations.
 /// </summary>
-public class ScheduleClientValidationException : Exception
+public class ScheduleClientValidationException : InvalidOperationException
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="ScheduleClientValidationException"/> class.

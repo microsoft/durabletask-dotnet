@@ -69,20 +69,4 @@ public record ScheduleDescription
     /// Gets the next scheduled run time.
     /// </summary>
     public DateTimeOffset? NextRunAt { get; init; }
-
-    /// <summary>
-    /// Returns a JSON string representation of the schedule description.
-    /// </summary>
-    /// <param name="pretty">If true, formats the JSON with indentation for readability.</param>
-    /// <returns>A JSON string containing the schedule details.</returns>
-    public string ToJsonString(bool pretty = false)
-    {
-#pragma warning disable CA1869 // Cache and reuse 'JsonSerializerOptions' instances
-        JsonSerializerOptions options = new JsonSerializerOptions
-        {
-            WriteIndented = pretty,
-        };
-#pragma warning restore CA1869 // Cache and reuse 'JsonSerializerOptions' instances
-        return System.Text.Json.JsonSerializer.Serialize(this, options);
-    }
 }

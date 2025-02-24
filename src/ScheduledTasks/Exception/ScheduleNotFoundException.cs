@@ -6,7 +6,7 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// <summary>
 /// Exception thrown when attempting to access a schedule that does not exist.
 /// </summary>
-public class ScheduleNotFoundException : Exception
+public class ScheduleNotFoundException : InvalidOperationException
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="ScheduleNotFoundException"/> class.

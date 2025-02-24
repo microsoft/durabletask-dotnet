@@ -14,7 +14,7 @@ public class StockPriceOrchestrator : TaskOrchestrator<string, string>
         try
         {
             // Get current stock price
-            decimal currentPrice = await context.CallActivityAsync<decimal>("GetStockPrice", symbol);
+            decimal currentPrice = await context.CallGetStockPriceAsync(symbol);
 
             logger.LogInformation("Current price for {symbol} is ${price:F2}", symbol, currentPrice);
 

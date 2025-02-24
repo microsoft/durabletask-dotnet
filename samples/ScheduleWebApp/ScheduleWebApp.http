@@ -9,9 +9,9 @@ Content-Type: application/json
 
 {
     "id": "{{scheduleId}}",
-    "orchestrationName": "CacheClearingOrchestrator", 
+    "orchestrationName": "CacheClearingOrchestrator",
     "input": "{{scheduleId}}",
-    "interval": "PT10S"
+    "interval": "00:00:10"
 }
 
 ### Get a specific schedule by ID
@@ -25,7 +25,7 @@ PUT {{baseUrl}}/schedules/{{scheduleId}}
 Content-Type: application/json
 
 {
-    "interval": "PT20S"
+    "interval": "00:00:20"
 }
 
 ### Pause a schedule
@@ -40,7 +40,12 @@ DELETE {{baseUrl}}/schedules/{{scheduleId}}
 ### Tips:
 # - Replace the baseUrl variable if your application runs on a different port
 # - The scheduleId variable can be changed to test different schedule instances
-# - Time intervals use ISO 8601 format (PT1H = 1 hour, PT30M = 30 minutes)
+# - Time intervals use TimeSpan format (hh:mm:ss)
+#   Examples:
+#   - "00:00:10" = 10 seconds
+#   - "00:30:00" = 30 minutes
+#   - "01:00:00" = 1 hour
+#   - "24:00:00" = 1 day
 # - Dates are in ISO 8601 format (YYYY-MM-DDThh:mm:ssZ)
 # - You can use the REST Client extension in VS Code to execute these requests
 # - The @name directive allows referencing the response in subsequent requests

@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageDescription>A DurableTaskWorker implementation using IOrchestrationService from DurableTask.Core.</PackageDescription>
+    <EnableStyleCop>true</EnableStyleCop>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Core/Worker.csproj" />
+    <ProjectReference Include="../../Abstractions/Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <SharedSection Include="Core" />
+    <SharedSection Include="DependencyInjection" />
+  </ItemGroup>
+
+</Project>

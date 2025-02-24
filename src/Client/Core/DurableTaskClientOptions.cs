@@ -10,8 +10,8 @@ namespace Microsoft.DurableTask.Client;
 /// </summary>
 public class DurableTaskClientOptions
 {
-    DataConverter dataConverter = JsonDataConverter.Default;
-    bool enableEntitySupport;
+    DataConverter? dataConverter;
+    bool? enableEntitySupport;
 
     /// <summary>
     /// Gets or sets the data converter. Default value is <see cref="JsonDataConverter.Default" />.
@@ -31,34 +31,18 @@ public class DurableTaskClientOptions
     /// </remarks>
     public DataConverter DataConverter
     {
-        get => this.dataConverter;
-        set
-        {
-            if (value is null)
-            {
-                this.dataConverter = JsonDataConverter.Default;
-                this.DataConverterExplicitlySet = false;
-            }
-            else
-            {
-                this.dataConverter = value;
-                this.DataConverterExplicitlySet = true;
-            }
-        }
+        get => this.dataConverter ?? JsonDataConverter.Default;
+        set => this.dataConverter = value;
     }
 
     /// <summary>
-    /// Gets or sets a value indicating whether this client should support entities. If true, all instance ids starting with '@' are reserved for entities,
-    /// and validation checks are performed where appropriate.
+    /// Gets or sets a value indicating whether this client should support entities. If true, all instance ids starting
+    /// with '@' are reserved for entities, and validation checks are performed where appropriate.
     /// </summary>
     public bool EnableEntitySupport
     {
-        get => this.enableEntitySupport;
-        set
-        {
-            this.enableEntitySupport = value;
-            this.EntitySupportExplicitlySet = true;
-        }
+        get => this.enableEntitySupport ?? false;
+        set => this.enableEntitySupport = value;
     }
 
     /// <summary>
@@ -70,12 +54,7 @@ public class DurableTaskClientOptions
     /// will <b>not</b> resolve it. If not set, we will attempt to resolve it. This is so the
     /// behavior is consistently irrespective of option configuration ordering.
     /// </remarks>
-    internal bool DataConverterExplicitlySet { get; private set; }
-
-    /// <summary>
-    /// Gets a value indicating whether <see cref="EnableEntitySupport" /> was explicitly set or not.
-    /// </summary>
-    internal bool EntitySupportExplicitlySet { get; private set; }
+    internal bool DataConverterExplicitlySet => this.dataConverter is not null;
 
     /// <summary>
     /// Applies these option values to another.
@@ -86,15 +65,16 @@ public class DurableTaskClientOptions
         if (other is not null)
         {
             // Make sure to keep this up to date as values are added.
-            if (!other.DataConverterExplicitlySet)
-            {
-                other.DataConverter = this.DataConverter;
-            }
+            ApplyIfSet(this.dataConverter, ref other.dataConverter);
+            ApplyIfSet(this.enableEntitySupport, ref other.enableEntitySupport);
+        }
+    }
 
-            if (!other.EntitySupportExplicitlySet)
-            {
-                other.EnableEntitySupport = this.EnableEntitySupport;
-            }
+    static void ApplyIfSet<T>(T? value, ref T? target)
+    {
+        if (value is not null && target is null)
+        {
+            target = value;
         }
     }
 }

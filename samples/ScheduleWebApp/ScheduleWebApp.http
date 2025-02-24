@@ -15,6 +15,8 @@ Content-Type: application/json
 }
 
 ### Get a specific schedule by ID
+# Note: This endpoint can be used to verify the schedule was created
+# The ID in the URL should match the id used in create request
 GET {{baseUrl}}/schedules/{{scheduleId}}
 
 ### List all schedules
@@ -25,6 +27,7 @@ PUT {{baseUrl}}/schedules/{{scheduleId}}
 Content-Type: application/json
 
 {
+    "orchestrationName": "CacheClearingOrchestrator",
     "interval": "00:00:20"
 }
 

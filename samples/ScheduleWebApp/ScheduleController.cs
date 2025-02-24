@@ -61,7 +61,7 @@ public class ScheduleController : ControllerBase
 
             this.logger.LogInformation("Created new schedule with ID: {ScheduleId}", createScheduleRequest.Id);
 
-            return this.CreatedAtAction(nameof(GetScheduleAsync), new { id = createScheduleRequest.Id }, description);
+            return this.CreatedAtAction(nameof(GetSchedule), new { id = createScheduleRequest.Id }, description);
         }
         catch (ScheduleClientValidationException ex)
         {
@@ -81,7 +81,7 @@ public class ScheduleController : ControllerBase
     /// <param name="id">The ID of the schedule to retrieve.</param>
     /// <returns>The schedule description if found.</returns>
     [HttpGet("{id}")]
-    public async Task<ActionResult<ScheduleDescription>> GetScheduleAsync(string id)
+    public async Task<ActionResult<ScheduleDescription>> GetSchedule(string id)
     {
         try
         {

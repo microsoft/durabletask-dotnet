@@ -3,7 +3,7 @@
 
 using Microsoft.DurableTask;
 
-namespace ScheduleDemo.Activities;
+namespace ScheduleConsoleApp.Activities;
 
 [DurableTask]
 public class GetStockPrice : TaskActivity<string, decimal>

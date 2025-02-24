@@ -10,44 +10,41 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-// Create the host builder
-IHost host = Host.CreateDefaultBuilder(args)
-    .ConfigureServices(services =>
+HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
+
+string connectionString = Environment.GetEnvironmentVariable("DURABLE_TASK_SCHEDULER_CONNECTION_STRING")
+    ?? throw new InvalidOperationException("Missing required environment variable 'DURABLE_TASK_SCHEDULER_CONNECTION_STRING'");
+
+// Configure the worker
+builder.Services.AddDurableTaskWorker(builder =>
+{
+    // Add the Schedule entity and demo orchestration
+    builder.AddTasks(r => r.AddAllGeneratedTasks());
+
+    // Enable scheduled tasks support
+    builder.UseDurableTaskScheduler(connectionString);
+    builder.UseScheduledTasks();
+});
+
+// Configure the client
+builder.Services.AddDurableTaskClient(builder =>
+{
+    builder.UseDurableTaskScheduler(connectionString);
+    builder.UseScheduledTasks();
+});
+
+// Configure console logging
+builder.Services.AddLogging(logging =>
+{
+    logging.AddSimpleConsole(options =>
     {
-        string connectionString = Environment.GetEnvironmentVariable("DURABLE_TASK_SCHEDULER_CONNECTION_STRING")
-            ?? throw new InvalidOperationException("Missing required environment variable 'DURABLE_TASK_SCHEDULER_CONNECTION_STRING'");
+        options.SingleLine = true;
+        options.UseUtcTimestamp = true;
+        options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ ";
+    });
+});
 
-        // Configure the worker
-        _ = services.AddDurableTaskWorker(builder =>
-        {
-            // Add the Schedule entity and demo orchestration
-            builder.AddTasks(r => r.AddAllGeneratedTasks());
-
-            // Enable scheduled tasks support
-            builder.UseDurableTaskScheduler(connectionString);
-            builder.UseScheduledTasks();
-        });
-
-        // Configure the client
-        services.AddDurableTaskClient(builder =>
-        {
-            builder.UseDurableTaskScheduler(connectionString);
-            builder.UseScheduledTasks();
-        });
-
-        // Configure console logging
-        services.AddLogging(logging =>
-        {
-            logging.AddSimpleConsole(options =>
-            {
-                options.SingleLine = true;
-                options.UseUtcTimestamp = true;
-                options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ ";
-            });
-        });
-    })
-    .Build();
-
+IHost host = builder.Build();
 await host.StartAsync();
 
 IScheduledTaskClient scheduledTaskClient = host.Services.GetRequiredService<IScheduledTaskClient>();
@@ -72,7 +69,6 @@ try
 
         Console.WriteLine($"Deleted schedule {scheduleId}");
     }
-
 
     // Create schedule options that runs every 4 seconds
     ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions("demo-schedule101", nameof(StockPriceOrchestrator), TimeSpan.FromSeconds(4))
@@ -102,7 +98,6 @@ try
     Console.WriteLine("");
     Console.WriteLine("");
     Console.WriteLine("");
-
 
     // Resume the schedule
     Console.WriteLine("\nResuming schedule...");

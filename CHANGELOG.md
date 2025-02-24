@@ -2,6 +2,8 @@
 
 ## vNext
 
+- Added new preview packages, `Microsoft.DurableTask.Client.AzureManaged` and `Microsoft.DurableTask.Worker.AzureManaged`
+
 ### Microsoft.DurableTask.Client
 
 - Add new `IDurableTaskClientBuilder AddDurableTaskClient(IServiceCollection, string?)` API

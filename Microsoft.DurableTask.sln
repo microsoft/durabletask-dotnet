@@ -89,6 +89,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScheduledTasks", "src\Sched
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScheduleConsoleApp", "samples\ScheduleConsoleApp\ScheduleConsoleApp.csproj", "{A89B766C-987F-4C9F-8937-D0AB9FE640C8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScheduleWebApp", "samples\ScheduleWebApp\ScheduleWebApp.csproj", "{100348B5-4D97-4A3F-B777-AB14F276F8FE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -235,6 +237,10 @@ Global
 		{A89B766C-987F-4C9F-8937-D0AB9FE640C8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A89B766C-987F-4C9F-8937-D0AB9FE640C8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A89B766C-987F-4C9F-8937-D0AB9FE640C8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{100348B5-4D97-4A3F-B777-AB14F276F8FE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{100348B5-4D97-4A3F-B777-AB14F276F8FE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{100348B5-4D97-4A3F-B777-AB14F276F8FE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{100348B5-4D97-4A3F-B777-AB14F276F8FE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -279,6 +285,7 @@ Global
 		{B48FACA9-A328-452A-BFAE-C4F60F9C7024} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
 		{69ED743C-D616-4530-87E2-391D249D7368} = {8AFC9781-F6F1-4696-BB4A-9ED7CA9D612B}
 		{A89B766C-987F-4C9F-8937-D0AB9FE640C8} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
+		{100348B5-4D97-4A3F-B777-AB14F276F8FE} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AB41CB55-35EA-4986-A522-387AB3402E71}

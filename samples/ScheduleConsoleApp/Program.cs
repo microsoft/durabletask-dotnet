@@ -9,8 +9,6 @@ using Microsoft.DurableTask.Worker.AzureManaged;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using ScheduleConsoleApp.Activities;
-
 
 // Create the host builder
 IHost host = Host.CreateDefaultBuilder(args)

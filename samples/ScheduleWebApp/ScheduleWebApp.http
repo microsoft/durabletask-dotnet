@@ -1,0 +1,57 @@
+### Variables
+@baseUrl = http://localhost:5008
+@scheduleId = schedule-123
+
+### Create a new schedule
+# @name createSchedule
+POST {{baseUrl}}/schedules
+Content-Type: application/json
+
+{
+    "id": "{{scheduleId}}",
+    "orchestrationName": "CacheClearingOrchestrator",
+    "input": "{{scheduleId}}",
+    "interval": "PT1H",
+    "startAt": "2024-01-01T00:00:00Z",
+    "endAt": "2024-12-31T23:59:59Z"
+}
+
+### Get a specific schedule by ID
+GET {{baseUrl}}/schedules/{{scheduleId}}
+
+### List all schedules
+GET {{baseUrl}}/schedules/list
+
+### Update an existing schedule
+PUT {{baseUrl}}/schedules/{{scheduleId}}
+Content-Type: application/json
+
+{
+    "orchestrationName": "UpdatedTaskName",
+    "interval": "PT30M",
+    "input": {
+        "taskName": "ProcessData",
+        "parameters": {
+            "batchSize": 200
+        }
+    },
+    "startAt": "2024-01-01T00:00:00Z",
+    "endAt": "2024-12-31T23:59:59Z"
+}
+
+### Pause a schedule
+POST {{baseUrl}}/schedules/{{scheduleId}}/pause
+
+### Resume a schedule
+POST {{baseUrl}}/schedules/{{scheduleId}}/resume
+
+### Delete a schedule
+DELETE {{baseUrl}}/schedules/{{scheduleId}}
+
+### Tips:
+# - Replace the baseUrl variable if your application runs on a different port
+# - The scheduleId variable can be changed to test different schedule instances
+# - Time intervals use ISO 8601 format (PT1H = 1 hour, PT30M = 30 minutes)
+# - Dates are in ISO 8601 format (YYYY-MM-DDThh:mm:ssZ)
+# - You can use the REST Client extension in VS Code to execute these requests
+# - The @name directive allows referencing the response in subsequent requests

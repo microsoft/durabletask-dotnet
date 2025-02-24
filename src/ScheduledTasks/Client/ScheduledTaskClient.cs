@@ -122,7 +122,7 @@ public class ScheduledTaskClient(DurableTaskClient durableTaskClient, ILogger lo
     }
 
     /// <inheritdoc/>
-    public Task<AsyncPageable<ScheduleDescription>> ListSchedulesAsync(ScheduleQuery? filter = null)
+    public AsyncPageable<ScheduleDescription> ListSchedulesAsync(ScheduleQuery? filter = null)
     {
         // TODO: map to entity query last modified from/to filters
         EntityQuery query = new EntityQuery

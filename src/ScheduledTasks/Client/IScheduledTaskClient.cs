@@ -31,14 +31,6 @@ public interface IScheduledTaskClient
     Task<AsyncPageable<ScheduleDescription>> ListSchedulesAsync(ScheduleQuery? filter = null);
 
     /// <summary>
-    /// Gets a pageable list of schedule IDs matching the specified filter criteria.
-    /// This is a more efficient version of ListSchedulesAsync when only the IDs are needed.
-    /// </summary>
-    /// <param name="filter">Optional filter criteria for the schedules. If null, returns all schedule IDs.</param>
-    /// <returns>A pageable list of schedule IDs.</returns>
-    Task<AsyncPageable<string>> ListScheduleIdsAsync(ScheduleQuery? filter = null);
-
-    /// <summary>
     /// Creates a new schedule with the specified configuration.
     /// </summary>
     /// <param name="creationOptions">The options for creating the schedule.</param>

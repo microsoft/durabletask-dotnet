@@ -190,40 +190,6 @@ public class ScheduledTaskClient(DurableTaskClient durableTaskClient, ILogger lo
         }));
     }
 
-    /// <inheritdoc/>
-    public Task<AsyncPageable<string>> ListScheduleIdsAsync(ScheduleQuery? filter = null)
-    {
-        EntityQuery query = new EntityQuery
-        {
-            InstanceIdStartsWith = filter?.ScheduleIdPrefix ?? nameof(Schedule),
-            IncludeState = false, // We don't need the state since we only want IDs
-            PageSize = filter?.PageSize ?? ScheduleQuery.DefaultPageSize,
-            ContinuationToken = filter?.ContinuationToken,
-        };
-
-        // Create an async pageable using the Pageable.Create helper
-        return Task.FromResult(Pageable.Create(async (continuationToken, pageSize, cancellation) =>
-        {
-            try
-            {
-                List<string> scheduleIds = new List<string>();
-
-                await foreach (EntityMetadata metadata in this.durableTaskClient.Entities.GetAllEntitiesAsync(query))
-                {
-                    // Extract just the schedule ID from the entity ID
-                    scheduleIds.Add(metadata.Id.Key);
-                }
-
-                return new Page<string>(scheduleIds, continuationToken);
-            }
-            catch (OperationCanceledException e)
-            {
-                throw new OperationCanceledException(
-                    $"The {nameof(this.ListScheduleIdsAsync)} operation was canceled.", e, e.CancellationToken);
-            }
-        }));
-    }
-
     /// <summary>
     /// Checks if a schedule with the specified ID exists.
     /// </summary>

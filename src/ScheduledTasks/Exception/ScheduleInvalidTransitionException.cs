@@ -25,6 +25,23 @@ public class ScheduleInvalidTransitionException : InvalidOperationException
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="ScheduleInvalidTransitionException"/> class.
+    /// </summary>
+    /// <param name="scheduleId">The ID of the schedule on which the invalid transition was attempted.</param>
+    /// <param name="fromStatus">The current status of the schedule.</param>
+    /// <param name="toStatus">The target status that was invalid.</param>
+    /// <param name="operationName">The name of the operation that was attempted.</param>
+    /// <param name="innerException">The exception that is the cause of the current exception.</param>
+    public ScheduleInvalidTransitionException(string scheduleId, ScheduleStatus fromStatus, ScheduleStatus toStatus, string operationName, Exception innerException)
+        : base($"Invalid state transition attempted for schedule '{scheduleId}': Cannot transition from {fromStatus} to {toStatus} during {operationName} operation.", innerException)
+    {
+        this.ScheduleId = scheduleId;
+        this.FromStatus = fromStatus;
+        this.ToStatus = toStatus;
+        this.OperationName = operationName;
+    }
+
+    /// <summary>
     /// Gets the ID of the schedule that encountered the invalid transition.
     /// </summary>
     public string ScheduleId { get; }

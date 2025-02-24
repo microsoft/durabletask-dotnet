@@ -44,5 +44,5 @@ public interface IScheduledTaskClient
     /// <param name="creationOptions">The options for creating the schedule.</param>
     /// <param name="cancellation">Optional cancellation token.</param>
     /// <returns>A handle to the created schedule.</returns>
-    Task<ScheduleHandle> CreateScheduleAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default);
+    Task<IScheduleHandle> CreateScheduleAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default);
 }

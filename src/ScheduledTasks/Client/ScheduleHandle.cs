@@ -11,7 +11,7 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// <summary>
 /// Represents a handle to a scheduled task, providing operations for managing the schedule.
 /// </summary>
-public class ScheduleHandle : IScheduleHandle
+class ScheduleHandle : IScheduleHandle
 {
     readonly DurableTaskClient durableTaskClient;
     readonly ILogger logger;
@@ -39,7 +39,7 @@ public class ScheduleHandle : IScheduleHandle
     /// <summary>
     /// Gets the entity ID of the schedule.
     /// </summary>
-    public EntityInstanceId EntityId { get; }
+    EntityInstanceId EntityId { get; }
 
     /// <inheritdoc/>
     public async Task<ScheduleDescription> DescribeAsync(CancellationToken cancellation = default)
@@ -165,8 +165,8 @@ public class ScheduleHandle : IScheduleHandle
     {
         try
         {
-            this.logger.ClientUpdatingSchedule(this.ScheduleId);
             Check.NotNull(updateOptions, nameof(updateOptions));
+            this.logger.ClientUpdatingSchedule(this.ScheduleId);
 
             ScheduleOperationRequest request = new ScheduleOperationRequest(this.EntityId, nameof(Schedule.UpdateSchedule), updateOptions);
             string instanceId = await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(

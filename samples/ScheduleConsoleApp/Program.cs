@@ -82,7 +82,7 @@ try
     };
 
     // Create the schedule and get a handle to it
-    ScheduleHandle scheduleHandle = await scheduledTaskClient.CreateScheduleAsync(scheduleOptions);
+    IScheduleHandle scheduleHandle = await scheduledTaskClient.CreateScheduleAsync(scheduleOptions);
 
     // Get the schedule description
     ScheduleDescription scheduleDescription = await scheduleHandle.DescribeAsync();

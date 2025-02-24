@@ -17,7 +17,7 @@ public class ScheduledTaskClient(DurableTaskClient durableTaskClient, ILogger lo
     readonly ILogger logger = Check.NotNull(logger, nameof(logger));
 
     /// <inheritdoc/>
-    public async Task<ScheduleHandle> CreateScheduleAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default)
+    public async Task<IScheduleHandle> CreateScheduleAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default)
     {
         Check.NotNull(creationOptions, nameof(creationOptions));
         this.logger.ClientCreatingSchedule(creationOptions);

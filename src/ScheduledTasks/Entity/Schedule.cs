@@ -185,7 +185,9 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// <exception cref="InvalidOperationException">Thrown when the schedule is not active or interval is not specified.</exception>
     public void RunSchedule(TaskEntityContext context, string executionToken)
     {
-        ScheduleConfiguration scheduleConfig = Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
+        ScheduleConfiguration scheduleConfig =
+            this.State.ScheduleConfiguration ??
+            throw new InvalidOperationException("Schedule configuration is missing.");
         TimeSpan interval = scheduleConfig.Interval;
 
         if (executionToken != this.State.ExecutionToken)
@@ -198,7 +200,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         {
             string errorMessage = "Schedule must be in Active status to run.";
             Exception exception = new InvalidOperationException(errorMessage);
-            this.logger.ScheduleOperationError(scheduleConfig.ScheduleId, nameof(this.RunSchedule), errorMessage, exception);
+            this.logger.ScheduleOperationError(scheduleConfig.ScheduleId, nameof(this.RunSchedule), errorMessage);
             throw exception;
         }
 

@@ -113,21 +113,10 @@ public class ScheduleController : ControllerBase
             // add schedule result list 
             List<ScheduleDescription> scheduleList = new List<ScheduleDescription>();
             // Initialize the continuation token
-            string? continuationToken = null;
-            await foreach (Page<ScheduleDescription> page in schedules.AsPages(continuationToken))
+            await foreach (ScheduleDescription schedule in schedules)
             {
-                scheduleList.AddRange(page.Values.ToArray());
-
-                // Update the continuation token for the next iteration
-                continuationToken = page.ContinuationToken;
-
-                // If there's no continuation token, we've reached the end of the collection
-                if (continuationToken == null)
-                {
-                    break;
-                }
+                scheduleList.Add(schedule);
             }
-
 
             return this.Ok(scheduleList);
         }

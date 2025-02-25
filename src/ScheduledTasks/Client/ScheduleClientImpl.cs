@@ -11,19 +11,19 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// <summary>
 /// Represents a handle to a scheduled task, providing operations for managing the schedule.
 /// </summary>
-class DefaultScheduleClient : ScheduleClient
+class ScheduleClientImpl : ScheduleClient
 {
     readonly DurableTaskClient durableTaskClient;
     readonly ILogger logger;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="DefaultScheduleClient"/> class.
+    /// Initializes a new instance of the <see cref="ScheduleClientImpl"/> class.
     /// </summary>
     /// <param name="client">The durable task client.</param>
     /// <param name="scheduleId">The ID of the schedule.</param>
     /// <param name="logger">The logger.</param>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="client"/> or <paramref name="scheduleId"/> is null.</exception>
-    public DefaultScheduleClient(DurableTaskClient client, string scheduleId, ILogger logger)
+    public ScheduleClientImpl(DurableTaskClient client, string scheduleId, ILogger logger)
         : base(scheduleId)
     {
         this.durableTaskClient = client ?? throw new ArgumentNullException(nameof(client));
@@ -190,8 +190,6 @@ class DefaultScheduleClient : ScheduleClient
                 cancellation);
         }
     }
-
-    // TODO: verify deleting non existent wont throw exception
 
     /// <inheritdoc/>
     public override async Task DeleteAsync(CancellationToken cancellation = default)

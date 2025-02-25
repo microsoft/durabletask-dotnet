@@ -43,7 +43,7 @@ public class ScheduledTaskClient(DurableTaskClient durableTaskClient, ILogger lo
             }
 
             // Return a handle to the schedule
-            return new DefaultScheduleClient(this.durableTaskClient, scheduleId, this.logger);
+            return new ScheduleClientImpl(this.durableTaskClient, scheduleId, this.logger);
         }
         catch (OperationCanceledException ex)
         {
@@ -108,10 +108,10 @@ public class ScheduledTaskClient(DurableTaskClient durableTaskClient, ILogger lo
     }
 
     /// <inheritdoc/>
-    public ScheduleClient GetDefaultScheduleClient(string scheduleId)
+    public ScheduleClient GetScheduleClient(string scheduleId)
     {
         Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
-        return new DefaultScheduleClient(this.durableTaskClient, scheduleId, this.logger);
+        return new ScheduleClientImpl(this.durableTaskClient, scheduleId, this.logger);
     }
 
     /// <inheritdoc/>

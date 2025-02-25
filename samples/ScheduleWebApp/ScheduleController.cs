@@ -56,8 +56,8 @@ public class ScheduleController : ControllerBase
                 StartImmediatelyIfLate = true
             };
 
-            ScheduleClient handle = await this.scheduledTaskClient.CreateScheduleAsync(creationOptions);
-            ScheduleDescription description = await handle.DescribeAsync();
+            ScheduleClient scheduleClient = await this.scheduledTaskClient.CreateScheduleAsync(creationOptions);
+            ScheduleDescription description = await scheduleClient.DescribeAsync();
 
             this.logger.LogInformation("Created new schedule with ID: {ScheduleId}", createScheduleRequest.Id);
 
@@ -154,7 +154,7 @@ public class ScheduleController : ControllerBase
 
         try
         {
-            ScheduleClient handle = this.scheduledTaskClient.GetDefaultScheduleClient(id);
+            ScheduleClient scheduleClient = this.scheduledTaskClient.GetScheduleClient(id);
 
             ScheduleUpdateOptions updateOptions = new ScheduleUpdateOptions
             {
@@ -165,8 +165,8 @@ public class ScheduleController : ControllerBase
                 Interval = updateScheduleRequest.Interval
             };
 
-            await handle.UpdateAsync(updateOptions);
-            return this.Ok(await handle.DescribeAsync());
+            await scheduleClient.UpdateAsync(updateOptions);
+            return this.Ok(await scheduleClient.DescribeAsync());
         }
         catch (ScheduleNotFoundException)
         {
@@ -194,8 +194,8 @@ public class ScheduleController : ControllerBase
     {
         try
         {
-            ScheduleClient handle = this.scheduledTaskClient.GetDefaultScheduleClient(id);
-            await handle.DeleteAsync();
+            ScheduleClient scheduleClient = this.scheduledTaskClient.GetScheduleClient(id);
+            await scheduleClient.DeleteAsync();
             return this.NoContent();
         }
         catch (ScheduleNotFoundException)
@@ -219,9 +219,9 @@ public class ScheduleController : ControllerBase
     {
         try
         {
-            ScheduleClient handle = this.scheduledTaskClient.GetDefaultScheduleClient(id);
-            await handle.PauseAsync();
-            return this.Ok(await handle.DescribeAsync());
+            ScheduleClient scheduleClient = this.scheduledTaskClient.GetScheduleClient(id);
+            await scheduleClient.PauseAsync();
+            return this.Ok(await scheduleClient.DescribeAsync());
         }
         catch (ScheduleNotFoundException)
         {
@@ -244,9 +244,9 @@ public class ScheduleController : ControllerBase
     {
         try
         {
-            ScheduleClient handle = this.scheduledTaskClient.GetDefaultScheduleClient(id);
-            await handle.ResumeAsync();
-            return this.Ok(await handle.DescribeAsync());
+            ScheduleClient scheduleClient = this.scheduledTaskClient.GetScheduleClient(id);
+            await scheduleClient.ResumeAsync();
+            return this.Ok(await scheduleClient.DescribeAsync());
         }
         catch (ScheduleNotFoundException)
         {

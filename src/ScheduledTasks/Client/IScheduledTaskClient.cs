@@ -13,7 +13,7 @@ public interface IScheduledTaskClient
     /// </summary>
     /// <param name="scheduleId">The ID of the schedule.</param>
     /// <returns>A handle to manage the schedule.</returns>
-    ScheduleClient GetDefaultScheduleClient(string scheduleId);
+    ScheduleClient GetScheduleClient(string scheduleId);
 
     /// <summary>
     /// Gets a schedule description by its ID.

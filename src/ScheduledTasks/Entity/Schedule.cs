@@ -41,7 +41,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             }
 
             this.State.ScheduleConfiguration = ScheduleConfiguration.FromCreateOptions(scheduleCreationOptions);
-            this.TryStatusTransition(nameof(this.CreateSchedule), ScheduleStatus.Active);
+            this.State.Status = ScheduleStatus.Active;
 
             this.State.RefreshScheduleRunExecutionToken();
             this.State.ScheduleCreatedAt = this.State.ScheduleLastModifiedAt = DateTimeOffset.UtcNow;
@@ -142,7 +142,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
 
             // Transition to Paused state
-            this.TryStatusTransition(nameof(this.PauseSchedule), ScheduleStatus.Paused);
+            this.State.Status = ScheduleStatus.Paused;
             this.State.NextRunAt = null;
             this.State.RefreshScheduleRunExecutionToken();
 
@@ -171,7 +171,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 
             Verify.NotNull(this.State.ScheduleConfiguration, nameof(this.State.ScheduleConfiguration));
 
-            this.TryStatusTransition(nameof(this.ResumeSchedule), ScheduleStatus.Active);
+            this.State.Status = ScheduleStatus.Active;
             this.State.NextRunAt = null;
             this.logger.ResumedSchedule(this.State.ScheduleConfiguration.ScheduleId);
 
@@ -266,17 +266,6 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     bool CanTransitionTo(string operationName, ScheduleStatus targetStatus)
     {
         return ScheduleTransitions.IsValidTransition(operationName, this.State.Status, targetStatus);
-    }
-
-    void TryStatusTransition(string operationName, ScheduleStatus to)
-    {
-        if (!this.CanTransitionTo(operationName, to))
-        {
-            this.logger.ScheduleOperationError(this.State.ScheduleConfiguration!.ScheduleId, nameof(this.TryStatusTransition), $"Invalid state transition from {this.State.Status} to {to}");
-            throw new ScheduleInvalidTransitionException(this.State.ScheduleConfiguration!.ScheduleId, this.State.Status, to, operationName);
-        }
-
-        this.State.Status = to;
     }
 
     DateTimeOffset DetermineNextRunTime(ScheduleConfiguration scheduleConfig)

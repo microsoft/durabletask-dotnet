@@ -8,57 +8,41 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// </summary>
 static class ScheduleTransitions
 {
-    // define valid transitions for create schedule
-    static readonly Dictionary<ScheduleStatus, HashSet<ScheduleStatus>> CreateScheduleStatusTransitions =
-        new Dictionary<ScheduleStatus, HashSet<ScheduleStatus>>
-        {
-            { ScheduleStatus.Uninitialized, new HashSet<ScheduleStatus> { ScheduleStatus.Active } },
-            { ScheduleStatus.Active, new HashSet<ScheduleStatus> { ScheduleStatus.Active } },
-            { ScheduleStatus.Paused, new HashSet<ScheduleStatus> { ScheduleStatus.Active } },
-        };
-
-    // define valid transitions for update schedule
-    static readonly Dictionary<ScheduleStatus, HashSet<ScheduleStatus>> UpdateScheduleStatusTransitions =
-        new Dictionary<ScheduleStatus, HashSet<ScheduleStatus>>
-        {
-            { ScheduleStatus.Active, new HashSet<ScheduleStatus> { ScheduleStatus.Active } },
-            { ScheduleStatus.Paused, new HashSet<ScheduleStatus> { ScheduleStatus.Paused } },
-        };
-
-    // define valid transitions for pause schedule
-    static readonly Dictionary<ScheduleStatus, HashSet<ScheduleStatus>> PauseScheduleStatusTransitions =
-        new Dictionary<ScheduleStatus, HashSet<ScheduleStatus>>
-        {
-            { ScheduleStatus.Active, new HashSet<ScheduleStatus> { ScheduleStatus.Paused } },
-        };
-
-    // define valid transitions for resume schedule
-    static readonly Dictionary<ScheduleStatus, HashSet<ScheduleStatus>> ResumeScheduleStatusTransitions =
-        new Dictionary<ScheduleStatus, HashSet<ScheduleStatus>>
-        {
-            { ScheduleStatus.Paused, new HashSet<ScheduleStatus> { ScheduleStatus.Active } },
-        };
-
     /// <summary>
-    /// Attempts to get the valid target states for a given schedule state and operation.
+    /// Checks if a transition to the target state is valid for a given schedule state and operation.
     /// </summary>
     /// <param name="operationName">The name of the operation being performed.</param>
     /// <param name="from">The current schedule state.</param>
-    /// <param name="validTargetStates">When this method returns, contains the valid target states if found; otherwise, an empty set.</param>
-    /// <returns>True if valid transitions exist for the given state and operation; otherwise, false.</returns>
-    public static bool TryGetValidTransitions(string operationName, ScheduleStatus from, out HashSet<ScheduleStatus> validTargetStates)
+    /// <param name="targetState">The target state to transition to.</param>
+    /// <returns>True if the transition is valid; otherwise, false.</returns>
+    public static bool IsValidTransition(string operationName, ScheduleStatus from, ScheduleStatus targetState)
     {
-        Dictionary<ScheduleStatus, HashSet<ScheduleStatus>> transitionMap = operationName switch
+        return operationName switch
         {
-            nameof(Schedule.CreateSchedule) => CreateScheduleStatusTransitions,
-            nameof(Schedule.UpdateSchedule) => UpdateScheduleStatusTransitions,
-            nameof(Schedule.PauseSchedule) => PauseScheduleStatusTransitions,
-            nameof(Schedule.ResumeSchedule) => ResumeScheduleStatusTransitions,
-            _ => new Dictionary<ScheduleStatus, HashSet<ScheduleStatus>>(),
+            nameof(Schedule.CreateSchedule) => from switch
+            {
+                ScheduleStatus.Uninitialized when targetState == ScheduleStatus.Active => true,
+                ScheduleStatus.Active when targetState == ScheduleStatus.Active => true,
+                ScheduleStatus.Paused when targetState == ScheduleStatus.Active => true,
+                _ => false,
+            },
+            nameof(Schedule.UpdateSchedule) => from switch
+            {
+                ScheduleStatus.Active when targetState == ScheduleStatus.Active => true,
+                ScheduleStatus.Paused when targetState == ScheduleStatus.Paused => true,
+                _ => false,
+            },
+            nameof(Schedule.PauseSchedule) => from switch
+            {
+                ScheduleStatus.Active when targetState == ScheduleStatus.Paused => true,
+                _ => false,
+            },
+            nameof(Schedule.ResumeSchedule) => from switch
+            {
+                ScheduleStatus.Paused when targetState == ScheduleStatus.Active => true,
+                _ => false,
+            },
+            _ => false,
         };
-
-        bool exists = transitionMap.TryGetValue(from, out HashSet<ScheduleStatus>? states);
-        validTargetStates = states ?? new HashSet<ScheduleStatus>();
-        return exists;
     }
 }

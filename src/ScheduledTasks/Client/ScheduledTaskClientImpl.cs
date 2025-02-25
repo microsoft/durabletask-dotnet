@@ -3,7 +3,6 @@
 
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Entities;
-using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.ScheduledTasks;
@@ -57,32 +56,16 @@ public class ScheduledTaskClientImpl(DurableTaskClient durableTaskClient, ILogge
 
         try
         {
-            EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
-            EntityMetadata<ScheduleState>? metadata = await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId, cancellation);
+            // Get schedule client first
+            ScheduleClient scheduleClient = this.GetScheduleClient(scheduleId);
 
-            if (metadata == null || metadata.State.Status == ScheduleStatus.Uninitialized)
-            {
-                return null;
-            }
-
-            ScheduleState state = metadata.State;
-            ScheduleConfiguration? config = state.ScheduleConfiguration;
-
-            return new ScheduleDescription
-            {
-                ScheduleId = scheduleId,
-                OrchestrationName = config?.OrchestrationName,
-                OrchestrationInput = config?.OrchestrationInput,
-                OrchestrationInstanceId = config?.OrchestrationInstanceId,
-                StartAt = config?.StartAt,
-                EndAt = config?.EndAt,
-                Interval = config?.Interval,
-                StartImmediatelyIfLate = config?.StartImmediatelyIfLate,
-                Status = state.Status,
-                ExecutionToken = state.ExecutionToken,
-                LastRunAt = state.LastRunAt,
-                NextRunAt = state.NextRunAt,
-            };
+            // Call DescribeAsync which handles all the entity state mapping
+            return await scheduleClient.DescribeAsync(cancellation);
+        }
+        catch (ScheduleNotFoundException)
+        {
+            // Return null if schedule not found
+            return null;
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {

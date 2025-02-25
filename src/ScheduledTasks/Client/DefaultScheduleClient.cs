@@ -11,30 +11,25 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// <summary>
 /// Represents a handle to a scheduled task, providing operations for managing the schedule.
 /// </summary>
-class ScheduleHandle : IScheduleHandle
+class DefaultScheduleClient : ScheduleClient
 {
     readonly DurableTaskClient durableTaskClient;
     readonly ILogger logger;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ScheduleHandle"/> class.
+    /// Initializes a new instance of the <see cref="DefaultScheduleClient"/> class.
     /// </summary>
     /// <param name="client">The durable task client.</param>
     /// <param name="scheduleId">The ID of the schedule.</param>
     /// <param name="logger">The logger.</param>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="client"/> or <paramref name="scheduleId"/> is null.</exception>
-    public ScheduleHandle(DurableTaskClient client, string scheduleId, ILogger logger)
+    public DefaultScheduleClient(DurableTaskClient client, string scheduleId, ILogger logger)
+        : base(scheduleId)
     {
         this.durableTaskClient = client ?? throw new ArgumentNullException(nameof(client));
-        this.ScheduleId = scheduleId ?? throw new ArgumentNullException(nameof(scheduleId));
         this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
         this.EntityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
     }
-
-    /// <summary>
-    /// Gets the ID of the schedule.
-    /// </summary>
-    public string ScheduleId { get; }
 
     /// <summary>
     /// Gets the entity ID of the schedule.
@@ -42,7 +37,7 @@ class ScheduleHandle : IScheduleHandle
     EntityInstanceId EntityId { get; }
 
     /// <inheritdoc/>
-    public async Task<ScheduleDescription> DescribeAsync(CancellationToken cancellation = default)
+    public override async Task<ScheduleDescription> DescribeAsync(CancellationToken cancellation = default)
     {
         try
         {
@@ -91,7 +86,7 @@ class ScheduleHandle : IScheduleHandle
     }
 
     /// <inheritdoc/>
-    public async Task PauseAsync(CancellationToken cancellation = default)
+    public override async Task PauseAsync(CancellationToken cancellation = default)
     {
         try
         {
@@ -126,7 +121,7 @@ class ScheduleHandle : IScheduleHandle
     }
 
     /// <inheritdoc/>
-    public async Task ResumeAsync(CancellationToken cancellation = default)
+    public override async Task ResumeAsync(CancellationToken cancellation = default)
     {
         try
         {
@@ -161,7 +156,7 @@ class ScheduleHandle : IScheduleHandle
     }
 
     /// <inheritdoc/>
-    public async Task UpdateAsync(ScheduleUpdateOptions updateOptions, CancellationToken cancellation = default)
+    public override async Task UpdateAsync(ScheduleUpdateOptions updateOptions, CancellationToken cancellation = default)
     {
         try
         {
@@ -199,7 +194,7 @@ class ScheduleHandle : IScheduleHandle
     // TODO: verify deleting non existent wont throw exception
 
     /// <inheritdoc/>
-    public async Task DeleteAsync(CancellationToken cancellation = default)
+    public override async Task DeleteAsync(CancellationToken cancellation = default)
     {
         try
         {

@@ -13,7 +13,7 @@ public interface IScheduledTaskClient
     /// </summary>
     /// <param name="scheduleId">The ID of the schedule.</param>
     /// <returns>A handle to manage the schedule.</returns>
-    IScheduleHandle GetScheduleHandle(string scheduleId);
+    ScheduleClient GetDefaultScheduleClient(string scheduleId);
 
     /// <summary>
     /// Gets a schedule description by its ID.
@@ -36,5 +36,5 @@ public interface IScheduledTaskClient
     /// <param name="creationOptions">The options for creating the schedule.</param>
     /// <param name="cancellation">Optional cancellation token.</param>
     /// <returns>A handle to the created schedule.</returns>
-    Task<IScheduleHandle> CreateScheduleAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default);
+    Task<ScheduleClient> CreateScheduleAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default);
 }

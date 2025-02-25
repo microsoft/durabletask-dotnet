@@ -34,7 +34,7 @@ class ScheduleOperations(IScheduledTaskClient scheduledTaskClient)
         // Delete each existing schedule
         await foreach (ScheduleDescription schedule in schedules)
         {
-            IScheduleHandle handle = this.scheduledTaskClient.GetScheduleHandle(schedule.ScheduleId);
+            ScheduleClient handle = this.scheduledTaskClient.GetDefaultScheduleClient(schedule.ScheduleId);
             await handle.DeleteAsync();
             Console.WriteLine($"Deleted schedule {schedule.ScheduleId}");
         }
@@ -53,28 +53,28 @@ class ScheduleOperations(IScheduledTaskClient scheduledTaskClient)
         };
 
         // Create the schedule and get a handle to it
-        IScheduleHandle scheduleHandle = await this.scheduledTaskClient.CreateScheduleAsync(scheduleOptions);
+        ScheduleClient DefaultScheduleClient = await this.scheduledTaskClient.CreateScheduleAsync(scheduleOptions);
 
         // Get and print the initial schedule description
-        await PrintScheduleDescriptionAsync(scheduleHandle);
+        await PrintScheduleDescriptionAsync(DefaultScheduleClient);
 
         // Pause the schedule
         Console.WriteLine("\nPausing schedule...");
-        await scheduleHandle.PauseAsync();
-        await PrintScheduleDescriptionAsync(scheduleHandle);
+        await DefaultScheduleClient.PauseAsync();
+        await PrintScheduleDescriptionAsync(DefaultScheduleClient);
 
         // Resume the schedule
         Console.WriteLine("\nResuming schedule...");
-        await scheduleHandle.ResumeAsync();
-        await PrintScheduleDescriptionAsync(scheduleHandle);
+        await DefaultScheduleClient.ResumeAsync();
+        await PrintScheduleDescriptionAsync(DefaultScheduleClient);
 
         // Wait for a while to let the schedule run
         await Task.Delay(TimeSpan.FromMinutes(30));
     }
 
-    static async Task PrintScheduleDescriptionAsync(IScheduleHandle scheduleHandle)
+    static async Task PrintScheduleDescriptionAsync(ScheduleClient DefaultScheduleClient)
     {
-        ScheduleDescription scheduleDescription = await scheduleHandle.DescribeAsync();
+        ScheduleDescription scheduleDescription = await DefaultScheduleClient.DescribeAsync();
         Console.WriteLine(scheduleDescription);
         Console.WriteLine("\n\n");
     }

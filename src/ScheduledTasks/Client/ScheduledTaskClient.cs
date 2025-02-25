@@ -17,7 +17,7 @@ public class ScheduledTaskClient(DurableTaskClient durableTaskClient, ILogger lo
     readonly ILogger logger = Check.NotNull(logger, nameof(logger));
 
     /// <inheritdoc/>
-    public async Task<IScheduleHandle> CreateScheduleAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default)
+    public async Task<ScheduleClient> CreateScheduleAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default)
     {
         Check.NotNull(creationOptions, nameof(creationOptions));
         this.logger.ClientCreatingSchedule(creationOptions);
@@ -43,7 +43,7 @@ public class ScheduledTaskClient(DurableTaskClient durableTaskClient, ILogger lo
             }
 
             // Return a handle to the schedule
-            return new ScheduleHandle(this.durableTaskClient, scheduleId, this.logger);
+            return new DefaultScheduleClient(this.durableTaskClient, scheduleId, this.logger);
         }
         catch (OperationCanceledException ex)
         {
@@ -108,10 +108,10 @@ public class ScheduledTaskClient(DurableTaskClient durableTaskClient, ILogger lo
     }
 
     /// <inheritdoc/>
-    public IScheduleHandle GetScheduleHandle(string scheduleId)
+    public ScheduleClient GetDefaultScheduleClient(string scheduleId)
     {
         Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
-        return new ScheduleHandle(this.durableTaskClient, scheduleId, this.logger);
+        return new DefaultScheduleClient(this.durableTaskClient, scheduleId, this.logger);
     }
 
     /// <inheritdoc/>

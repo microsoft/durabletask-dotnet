@@ -56,7 +56,7 @@ public class ScheduleController : ControllerBase
                 StartImmediatelyIfLate = true
             };
 
-            IScheduleHandle handle = await this.scheduledTaskClient.CreateScheduleAsync(creationOptions);
+            ScheduleClient handle = await this.scheduledTaskClient.CreateScheduleAsync(creationOptions);
             ScheduleDescription description = await handle.DescribeAsync();
 
             this.logger.LogInformation("Created new schedule with ID: {ScheduleId}", createScheduleRequest.Id);
@@ -154,7 +154,7 @@ public class ScheduleController : ControllerBase
 
         try
         {
-            IScheduleHandle handle = this.scheduledTaskClient.GetScheduleHandle(id);
+            ScheduleClient handle = this.scheduledTaskClient.GetDefaultScheduleClient(id);
 
             ScheduleUpdateOptions updateOptions = new ScheduleUpdateOptions
             {
@@ -194,7 +194,7 @@ public class ScheduleController : ControllerBase
     {
         try
         {
-            IScheduleHandle handle = this.scheduledTaskClient.GetScheduleHandle(id);
+            ScheduleClient handle = this.scheduledTaskClient.GetDefaultScheduleClient(id);
             await handle.DeleteAsync();
             return this.NoContent();
         }
@@ -219,7 +219,7 @@ public class ScheduleController : ControllerBase
     {
         try
         {
-            IScheduleHandle handle = this.scheduledTaskClient.GetScheduleHandle(id);
+            ScheduleClient handle = this.scheduledTaskClient.GetDefaultScheduleClient(id);
             await handle.PauseAsync();
             return this.Ok(await handle.DescribeAsync());
         }
@@ -244,7 +244,7 @@ public class ScheduleController : ControllerBase
     {
         try
         {
-            IScheduleHandle handle = this.scheduledTaskClient.GetScheduleHandle(id);
+            ScheduleClient handle = this.scheduledTaskClient.GetDefaultScheduleClient(id);
             await handle.ResumeAsync();
             return this.Ok(await handle.DescribeAsync());
         }

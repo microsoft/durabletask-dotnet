@@ -11,7 +11,7 @@ public record ScheduleCreationOptions
     /// <summary>
     /// Initializes a new instance of the <see cref="ScheduleCreationOptions"/> class.
     /// </summary>
-    /// <param name="scheduleId">The ID of the schedule, or null to generate one.</param>
+    /// <param name="scheduleId">The ID of the schedule.</param>
     /// <param name="orchestrationName">The name of the orchestration to schedule.</param>
     /// <param name="interval">The time interval between schedule executions. Must be at least 1 second and cannot be negative.</param>
     public ScheduleCreationOptions(string scheduleId, string orchestrationName, TimeSpan interval)

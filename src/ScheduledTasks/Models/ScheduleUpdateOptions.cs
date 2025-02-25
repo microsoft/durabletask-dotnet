@@ -61,7 +61,10 @@ public record ScheduleUpdateOptions
     }
 
     /// <summary>
-    /// Gets or initializes whether the schedule should start immediately if it's late.
+    /// Gets a value indicating whether to start the orchestration immediately when the current time is past the StartAt time.
+    /// By default it is false.
+    /// If false, the first run will be scheduled at the next interval based on the original start time.
+    /// If true, the first run will start immediately and subsequent runs will follow the regular interval.
     /// </summary>
     public bool? StartImmediatelyIfLate { get; init; }
 }

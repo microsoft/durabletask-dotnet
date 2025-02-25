@@ -46,7 +46,10 @@ public record ScheduleDescription
     public TimeSpan? Interval { get; init; }
 
     /// <summary>
-    /// Gets whether the schedule should run immediately if started late.
+    /// Gets a value indicating whether to start the orchestration immediately when the current time is past the StartAt time.
+    /// By default it is false.
+    /// If false, the first run will be scheduled at the next interval based on the original start time.
+    /// If true, the first run will start immediately and subsequent runs will follow the regular interval.
     /// </summary>
     public bool? StartImmediatelyIfLate { get; init; }
 

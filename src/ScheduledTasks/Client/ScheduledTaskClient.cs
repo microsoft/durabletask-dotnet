@@ -27,13 +27,6 @@ public class ScheduledTaskClient(DurableTaskClient durableTaskClient, ILogger lo
             string scheduleId = creationOptions.ScheduleId;
             EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
 
-            // Check if schedule already exists
-            bool scheduleExists = await this.CheckScheduleExists(scheduleId, cancellation);
-            if (scheduleExists)
-            {
-                throw new ScheduleAlreadyExistException(scheduleId);
-            }
-
             // Call the orchestrator to create the schedule
             ScheduleOperationRequest request = new ScheduleOperationRequest(entityId, nameof(Schedule.CreateSchedule), creationOptions);
             string instanceId = await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
@@ -183,34 +176,5 @@ public class ScheduledTaskClient(DurableTaskClient durableTaskClient, ILogger lo
                     $"The {nameof(this.ListSchedulesAsync)} operation was canceled.", e, e.CancellationToken);
             }
         });
-    }
-
-    /// <summary>
-    /// Checks if a schedule with the specified ID exists.
-    /// </summary>
-    /// <param name="scheduleId">The ID of the schedule to check.</param>
-    /// <param name="cancellation">Optional cancellation token.</param>
-    /// <returns>True if the schedule exists, false otherwise.</returns>
-    async Task<bool> CheckScheduleExists(string scheduleId, CancellationToken cancellation = default)
-    {
-        Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
-
-        try
-        {
-            EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
-            EntityMetadata? metadata = await this.durableTaskClient.Entities.GetEntityAsync(entityId, false, cancellation);
-
-            return metadata != null;
-        }
-        catch (OperationCanceledException e)
-        {
-            this.logger.ClientError(
-                nameof(this.CheckScheduleExists),
-                scheduleId,
-                e);
-
-            throw new OperationCanceledException(
-                $"The {nameof(this.CheckScheduleExists)} operation was canceled.", e, e.CancellationToken);
-        }
     }
 }

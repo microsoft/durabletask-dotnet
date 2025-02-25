@@ -110,6 +110,14 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             this.State.RefreshScheduleRunExecutionToken();
 
             this.logger.UpdatedSchedule(this.State.ScheduleConfiguration.ScheduleId);
+
+            if (this.State.Status == ScheduleStatus.Active)
+            {
+                context.SignalEntity(
+                    new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId),
+                    nameof(this.RunSchedule),
+                    this.State.ExecutionToken);
+            }
         }
         catch (Exception ex)
         {

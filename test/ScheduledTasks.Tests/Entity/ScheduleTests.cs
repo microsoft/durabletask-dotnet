@@ -5,21 +5,38 @@ using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Microsoft.DurableTask.ScheduledTasks.Tests.Entity;
 
 public class ScheduleTests
 {
-    readonly Mock<ILogger<Schedule>> mockLogger;
     readonly Mock<TaskEntityContext> mockContext;
     readonly Schedule schedule;
     readonly string scheduleId = "test-schedule";
+    readonly TestLogger logger;
 
-    public ScheduleTests()
+    public ScheduleTests(ITestOutputHelper output)
     {
-        this.mockLogger = new Mock<ILogger<Schedule>>(MockBehavior.Loose);
         this.mockContext = new Mock<TaskEntityContext>(MockBehavior.Strict);
-        this.schedule = new Schedule(this.mockLogger.Object);
+        this.logger = new TestLogger();
+        this.schedule = new Schedule(this.logger);
+    }
+
+    // Simple TestLogger implementation for capturing logs
+    class TestLogger : ILogger<Schedule>
+    {
+        public List<(LogLevel Level, string Message)> Logs { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            string message = formatter(state, exception);
+            this.Logs.Add((logLevel, message));
+        }
     }
 
     [Fact]

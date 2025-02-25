@@ -29,7 +29,7 @@ class ScheduleOperations(IScheduledTaskClient scheduledTaskClient)
         ScheduleQuery query = new ScheduleQuery { PageSize = 100 };
 
         // Retrieve the pageable collection of schedule IDs
-        AsyncPageable<ScheduleDescription> schedules = await this.scheduledTaskClient.ListSchedulesAsync(query);
+        AsyncPageable<ScheduleDescription> schedules = this.scheduledTaskClient.ListSchedulesAsync(query);
 
         // Delete each existing schedule
         await foreach (ScheduleDescription schedule in schedules)

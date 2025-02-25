@@ -108,7 +108,7 @@ public class ScheduleController : ControllerBase
     {
         try
         {
-            AsyncPageable<ScheduleDescription> schedules = await this.scheduledTaskClient.ListSchedulesAsync();
+            AsyncPageable<ScheduleDescription> schedules = this.scheduledTaskClient.ListSchedulesAsync();
 
             // add schedule result list 
             List<ScheduleDescription> scheduleList = new List<ScheduleDescription>();

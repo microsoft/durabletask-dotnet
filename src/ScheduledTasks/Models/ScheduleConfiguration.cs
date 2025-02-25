@@ -127,43 +127,50 @@ class ScheduleConfiguration
         Check.NotNull(updateOptions, nameof(updateOptions));
         HashSet<string> updatedFields = new HashSet<string>();
 
-        if (!string.IsNullOrEmpty(updateOptions.OrchestrationName))
+        if (!string.IsNullOrEmpty(updateOptions.OrchestrationName) 
+            && updateOptions.OrchestrationName != this.OrchestrationName)
         {
             this.OrchestrationName = updateOptions.OrchestrationName;
             updatedFields.Add(nameof(this.OrchestrationName));
         }
 
-        if (!string.IsNullOrEmpty(updateOptions.OrchestrationInput))
+        if (!string.IsNullOrEmpty(updateOptions.OrchestrationInput)
+            && updateOptions.OrchestrationInput != this.OrchestrationInput)
         {
             this.OrchestrationInput = updateOptions.OrchestrationInput;
             updatedFields.Add(nameof(this.OrchestrationInput));
         }
 
-        if (!string.IsNullOrEmpty(updateOptions.OrchestrationInstanceId))
+        if (!string.IsNullOrEmpty(updateOptions.OrchestrationInstanceId)
+            && updateOptions.OrchestrationInstanceId != this.OrchestrationInstanceId)
         {
             this.OrchestrationInstanceId = updateOptions.OrchestrationInstanceId;
             updatedFields.Add(nameof(this.OrchestrationInstanceId));
         }
 
-        if (updateOptions.StartAt.HasValue)
+        if (updateOptions.StartAt.HasValue 
+            && updateOptions.StartAt != this.StartAt)
         {
             this.StartAt = updateOptions.StartAt;
             updatedFields.Add(nameof(this.StartAt));
         }
 
-        if (updateOptions.EndAt.HasValue)
+        if (updateOptions.EndAt.HasValue
+            && updateOptions.EndAt != this.EndAt)
         {
             this.EndAt = updateOptions.EndAt;
             updatedFields.Add(nameof(this.EndAt));
         }
 
-        if (updateOptions.Interval.HasValue)
+        if (updateOptions.Interval.HasValue
+            && updateOptions.Interval != this.Interval)
         {
             this.Interval = updateOptions.Interval.Value;
             updatedFields.Add(nameof(this.Interval));
         }
 
-        if (updateOptions.StartImmediatelyIfLate.HasValue)
+        if (updateOptions.StartImmediatelyIfLate.HasValue
+            && updateOptions.StartImmediatelyIfLate != this.StartImmediatelyIfLate)
         {
             this.StartImmediatelyIfLate = updateOptions.StartImmediatelyIfLate.Value;
             updatedFields.Add(nameof(this.StartImmediatelyIfLate));

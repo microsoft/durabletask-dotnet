@@ -45,6 +45,7 @@ public abstract class ScheduleClient
     /// </summary>
     /// <remarks>
     /// The schedule will stop executing but remain in the system.
+    /// Does not affect orchestrations that have already been started.
     /// </remarks>
     /// <param name="cancellation">The cancellation token that can be used to cancel the operation.</param>
     /// <returns>A task that completes when the schedule has been paused.</returns>

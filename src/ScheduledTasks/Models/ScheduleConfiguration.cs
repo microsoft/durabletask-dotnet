@@ -17,12 +17,10 @@ class ScheduleConfiguration
     /// <param name="scheduleId">The ID of the schedule.</param>
     /// <param name="orchestrationName">The name of the orchestration to schedule.</param>
     /// <param name="interval">The interval between schedule executions. Must be positive and at least 1 second.</param>
-#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring as nullable.
     public ScheduleConfiguration(string scheduleId, string orchestrationName, TimeSpan interval)
-#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring as nullable.
     {
         this.ScheduleId = Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
-        this.OrchestrationName = Check.NotNullOrEmpty(orchestrationName, nameof(orchestrationName));
+        this.orchestrationName = Check.NotNullOrEmpty(orchestrationName, nameof(orchestrationName));
         if (interval <= TimeSpan.Zero)
         {
             throw new ArgumentException("Interval must be positive", nameof(interval));

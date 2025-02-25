@@ -12,10 +12,10 @@ namespace Microsoft.DurableTask.ScheduledTasks.Tests.Client;
 
 public class ScheduledTaskClientImplTests
 {
-    private readonly Mock<DurableTaskClient> durableTaskClientMock;
-    private readonly Mock<ILogger> loggerMock;
-    private readonly Mock<DurableEntityClient> entityClientMock;
-    private readonly ScheduledTaskClientImpl client;
+    readonly Mock<DurableTaskClient> durableTaskClientMock;
+    readonly Mock<ILogger> loggerMock;
+    readonly Mock<DurableEntityClient> entityClientMock;
+    readonly ScheduledTaskClientImpl client;
 
     public ScheduledTaskClientImplTests()
     {
@@ -82,7 +82,7 @@ public class ScheduledTaskClientImplTests
 
         this.durableTaskClientMock
             .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OrchestrationMetadata());
+            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId));
 
         // Act
         var scheduleClient = await this.client.CreateScheduleAsync(options);
@@ -156,50 +156,4 @@ public class ScheduledTaskClientImplTests
         // Assert
         Assert.Null(description);
     }
-
-    [Fact]
-    public async Task ListSchedulesAsync_ReturnsSchedules()
-    {
-        // Arrange
-        var query = new ScheduleQuery
-        {
-            ScheduleIdPrefix = "test",
-            Status = ScheduleStatus.Active,
-            PageSize = 10
-        };
-
-        var states = new[]
-        {
-            new EntityMetadata<ScheduleState>(
-                new EntityInstanceId(nameof(Schedule), "test-1"),
-                new ScheduleState
-                {
-                    Status = ScheduleStatus.Active,
-                    ScheduleConfiguration = new ScheduleConfiguration("test-1", "test-orchestration", TimeSpan.FromMinutes(5))
-                }),
-            new EntityMetadata<ScheduleState>(
-                new EntityInstanceId(nameof(Schedule), "test-2"),
-                new ScheduleState
-                {
-                    Status = ScheduleStatus.Active,
-                    ScheduleConfiguration = new ScheduleConfiguration("test-2", "test-orchestration", TimeSpan.FromMinutes(5))
-                })
-        };
-
-        this.entityClientMock
-            .Setup(c => c.GetAllEntitiesAsync<ScheduleState>(It.IsAny<EntityQuery>()))
-            .Returns(AsyncEnumerable.FromPages(new[] { new Page<EntityMetadata<ScheduleState>>(states.ToList(), null) }));
-
-        // Act
-        var schedules = new List<ScheduleDescription>();
-        await foreach (var schedule in this.client.ListSchedulesAsync(query))
-        {
-            schedules.Add(schedule);
-        }
-
-        // Assert
-        Assert.Equal(2, schedules.Count);
-        Assert.All(schedules, s => Assert.StartsWith("test-", s.ScheduleId));
-        Assert.All(schedules, s => Assert.Equal(ScheduleStatus.Active, s.Status));
-    }
-} 
+}

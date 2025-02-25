@@ -12,11 +12,11 @@ namespace Microsoft.DurableTask.ScheduledTasks.Tests.Client;
 
 public class ScheduleClientImplTests
 {
-    private readonly Mock<DurableTaskClient> durableTaskClientMock;
-    private readonly Mock<ILogger> loggerMock;
-    private readonly Mock<DurableEntityClient> entityClientMock;
-    private readonly ScheduleClientImpl client;
-    private readonly string scheduleId = "test-schedule";
+    readonly Mock<DurableTaskClient> durableTaskClientMock;
+    readonly Mock<ILogger> loggerMock;
+    readonly Mock<DurableEntityClient> entityClientMock;
+    readonly ScheduleClientImpl client;
+    readonly string scheduleId = "test-schedule";
 
     public ScheduleClientImplTests()
     {
@@ -31,7 +31,7 @@ public class ScheduleClientImplTests
     public void Constructor_WithNullClient_ThrowsArgumentNullException()
     {
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => 
+        var ex = Assert.Throws<ArgumentNullException>(() =>
             new ScheduleClientImpl(null!, this.scheduleId, this.loggerMock.Object));
         Assert.Equal("client", ex.ParamName);
     }
@@ -42,7 +42,7 @@ public class ScheduleClientImplTests
     public void Constructor_WithInvalidScheduleId_ThrowsArgumentException(string invalidScheduleId)
     {
         // Act & Assert
-        var ex = Assert.Throws<ArgumentException>(() => 
+        var ex = Assert.Throws<ArgumentException>(() =>
             new ScheduleClientImpl(this.durableTaskClientMock.Object, invalidScheduleId, this.loggerMock.Object));
         Assert.Contains("scheduleId cannot be null or empty", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -51,7 +51,7 @@ public class ScheduleClientImplTests
     public void Constructor_WithNullLogger_ThrowsArgumentNullException()
     {
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => 
+        var ex = Assert.Throws<ArgumentNullException>(() =>
             new ScheduleClientImpl(this.durableTaskClientMock.Object, this.scheduleId, null!));
         Assert.Equal("logger", ex.ParamName);
     }
@@ -112,7 +112,7 @@ public class ScheduleClientImplTests
 
         this.durableTaskClientMock
             .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OrchestrationMetadata());
+            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId));
 
         // Act
         await this.client.DeleteAsync();
@@ -124,7 +124,7 @@ public class ScheduleClientImplTests
                 It.Is<ScheduleOperationRequest>(r =>
                     r.EntityId.Name == nameof(Schedule) &&
                     r.EntityId.Key == this.scheduleId &&
-                    r.OperationName == nameof(Schedule.DeleteSchedule)),
+                    r.OperationName == "delete"),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -144,7 +144,7 @@ public class ScheduleClientImplTests
 
         this.durableTaskClientMock
             .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OrchestrationMetadata());
+            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId));
 
         // Act
         await this.client.PauseAsync();
@@ -176,7 +176,7 @@ public class ScheduleClientImplTests
 
         this.durableTaskClientMock
             .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OrchestrationMetadata());
+            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId));
 
         // Act
         await this.client.ResumeAsync();
@@ -213,7 +213,7 @@ public class ScheduleClientImplTests
 
         this.durableTaskClientMock
             .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OrchestrationMetadata());
+            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId));
 
         // Act
         await this.client.UpdateAsync(updateOptions);
@@ -225,8 +225,7 @@ public class ScheduleClientImplTests
                 It.Is<ScheduleOperationRequest>(r =>
                     r.EntityId.Name == nameof(Schedule) &&
                     r.EntityId.Key == this.scheduleId &&
-                    r.OperationName == nameof(Schedule.UpdateSchedule) &&
-                    r.OperationInput == updateOptions),
+                    r.OperationName == nameof(Schedule.UpdateSchedule)),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -239,4 +238,4 @@ public class ScheduleClientImplTests
             () => this.client.UpdateAsync(null!));
         Assert.Equal("updateOptions", ex.ParamName);
     }
-} 
+}

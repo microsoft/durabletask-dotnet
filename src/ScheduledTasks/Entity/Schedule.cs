@@ -44,6 +44,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             this.TryStatusTransition(nameof(this.CreateSchedule), ScheduleStatus.Active);
 
             this.State.RefreshScheduleRunExecutionToken();
+            this.State.ScheduleCreatedAt = this.State.ScheduleLastModifiedAt = DateTimeOffset.UtcNow;
             this.logger.CreatedSchedule(this.State.ScheduleConfiguration.ScheduleId);
 
             // Signal to run schedule immediately after creation and let runSchedule determine if it should run immediately
@@ -87,6 +88,8 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
                 this.logger.ScheduleOperationDebug(this.State.ScheduleConfiguration.ScheduleId, nameof(this.UpdateSchedule), "Schedule configuration is up to date.");
                 return;
             }
+
+            this.State.ScheduleLastModifiedAt = DateTimeOffset.UtcNow;
 
             // after schedule config is updated, perform post-config-update logic separately
             foreach (string updatedScheduleConfigField in updatedScheduleConfigFields)

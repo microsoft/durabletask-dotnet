@@ -23,6 +23,14 @@ public abstract class ScheduleClient
     public string ScheduleId { get; }
 
     /// <summary>
+    /// Creates or update a schedule with the specified configuration.
+    /// </summary>
+    /// <param name="creationOptions">The options for creating the schedule.</param>
+    /// <param name="cancellation">The cancellation token that can be used to cancel the operation.</param>
+    /// <returns>A task that completes when the schedule has been created.</returns>
+    public abstract Task CreateAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default);
+
+    /// <summary>
     /// Retrieves the current details of this schedule.
     /// </summary>
     /// <param name="cancellation">The cancellation token that can be used to cancel the operation.</param>

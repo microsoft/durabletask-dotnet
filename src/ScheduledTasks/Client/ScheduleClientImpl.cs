@@ -37,6 +37,43 @@ class ScheduleClientImpl : ScheduleClient
     EntityInstanceId EntityId { get; }
 
     /// <inheritdoc/>
+    public override async Task CreateAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default)
+    {
+        try
+        {
+            Check.NotNull(creationOptions, nameof(creationOptions));
+
+            ScheduleOperationRequest request = new ScheduleOperationRequest(this.EntityId, nameof(Schedule.CreateSchedule), creationOptions);
+            string instanceId = await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
+                new TaskName(nameof(ExecuteScheduleOperationOrchestrator)),
+                request,
+                cancellation);
+
+            // Wait for the orchestration to complete
+            OrchestrationMetadata state = await this.durableTaskClient.WaitForInstanceCompletionAsync(instanceId, true, cancellation);
+
+            if (state.RuntimeStatus != OrchestrationRuntimeStatus.Completed)
+            {
+                throw new InvalidOperationException($"Failed to create schedule '{this.ScheduleId}': {state.FailureDetails?.ErrorMessage ?? string.Empty}");
+            }
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            // the operation was cancelled as requested. No need to log this.
+            throw;
+        }
+        catch (Exception ex)
+        {
+            this.logger.ClientError(
+                nameof(this.CreateAsync),
+                this.ScheduleId,
+                ex);
+
+            throw;
+        }
+    }
+
+    /// <inheritdoc/>
     public override async Task<ScheduleDescription> DescribeAsync(CancellationToken cancellation = default)
     {
         try

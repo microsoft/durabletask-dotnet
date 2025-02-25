@@ -71,17 +71,19 @@ class ScheduleClientImpl : ScheduleClient
                 NextRunAt = state.NextRunAt,
             };
         }
-        catch (OperationCanceledException ex)
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            // the operation was cancelled as requested. No need to log this.
+            throw;
+        }
+        catch (Exception ex)
         {
             this.logger.ClientError(
                 nameof(this.DescribeAsync),
                 this.ScheduleId,
                 ex);
 
-            throw new OperationCanceledException(
-                $"The {nameof(this.DescribeAsync)} operation was canceled.",
-                ex,
-                cancellation);
+            throw;
         }
     }
 
@@ -106,17 +108,19 @@ class ScheduleClientImpl : ScheduleClient
                 throw new InvalidOperationException($"Failed to pause schedule '{this.ScheduleId}': {state.FailureDetails?.ErrorMessage ?? string.Empty}");
             }
         }
-        catch (OperationCanceledException ex)
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            // the operation was cancelled as requested. No need to log this.
+            throw;
+        }
+        catch (Exception ex)
         {
             this.logger.ClientError(
                 nameof(this.PauseAsync),
                 this.ScheduleId,
                 ex);
 
-            throw new OperationCanceledException(
-                $"The {nameof(this.PauseAsync)} operation was canceled.",
-                null,
-                cancellation);
+            throw;
         }
     }
 
@@ -141,17 +145,19 @@ class ScheduleClientImpl : ScheduleClient
                 throw new InvalidOperationException($"Failed to resume schedule '{this.ScheduleId}': {state.FailureDetails?.ErrorMessage ?? string.Empty}");
             }
         }
-        catch (OperationCanceledException ex)
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            // the operation was cancelled as requested. No need to log this.
+            throw;
+        }
+        catch (Exception ex)
         {
             this.logger.ClientError(
                 nameof(this.ResumeAsync),
                 this.ScheduleId,
                 ex);
 
-            throw new OperationCanceledException(
-                $"The {nameof(this.ResumeAsync)} operation was canceled.",
-                null,
-                cancellation);
+            throw;
         }
     }
 
@@ -177,17 +183,19 @@ class ScheduleClientImpl : ScheduleClient
                 throw new InvalidOperationException($"Failed to update schedule '{this.ScheduleId}': {state.FailureDetails?.ErrorMessage ?? string.Empty}");
             }
         }
-        catch (OperationCanceledException ex)
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            // the operation was cancelled as requested. No need to log this.
+            throw;
+        }
+        catch (Exception ex)
         {
             this.logger.ClientError(
                 nameof(this.UpdateAsync),
                 this.ScheduleId,
                 ex);
 
-            throw new OperationCanceledException(
-                $"The {nameof(this.UpdateAsync)} operation was canceled.",
-                null,
-                cancellation);
+            throw;
         }
     }
 
@@ -212,17 +220,19 @@ class ScheduleClientImpl : ScheduleClient
                 throw new InvalidOperationException($"Failed to delete schedule '{this.ScheduleId}': {state.FailureDetails?.ErrorMessage ?? string.Empty}");
             }
         }
-        catch (OperationCanceledException ex)
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            // the operation was cancelled as requested. No need to log this.
+            throw;
+        }
+        catch (Exception ex)
         {
             this.logger.ClientError(
                 nameof(this.DeleteAsync),
                 this.ScheduleId,
                 ex);
 
-            throw new OperationCanceledException(
-                $"The {nameof(this.DeleteAsync)} operation was canceled.",
-                null,
-                cancellation);
+            throw;
         }
     }
 }

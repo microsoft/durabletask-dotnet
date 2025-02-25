@@ -47,17 +47,19 @@ public class ScheduledTaskClientImpl(DurableTaskClient durableTaskClient, ILogge
             // Return a handle to the schedule
             return new ScheduleClientImpl(this.durableTaskClient, scheduleId, this.logger);
         }
-        catch (OperationCanceledException ex)
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            // the operation was cancelled as requested. No need to log this.
+            throw;
+        }
+        catch (Exception ex)
         {
             this.logger.ClientError(
                 nameof(this.CreateScheduleAsync),
                 creationOptions.ScheduleId,
                 ex);
 
-            throw new OperationCanceledException(
-                $"The {nameof(this.CreateScheduleAsync)} operation was canceled.",
-                null,
-                cancellation);
+            throw;
         }
     }
 
@@ -95,17 +97,19 @@ public class ScheduledTaskClientImpl(DurableTaskClient durableTaskClient, ILogge
                 NextRunAt = state.NextRunAt,
             };
         }
-        catch (OperationCanceledException ex)
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            // the operation was cancelled as requested. No need to log this.
+            throw;
+        }
+        catch (Exception ex)
         {
             this.logger.ClientError(
                 nameof(this.GetScheduleAsync),
                 scheduleId,
                 ex);
 
-            throw new OperationCanceledException(
-                $"The {nameof(this.GetScheduleAsync)} operation was canceled.",
-                null,
-                cancellation);
+            throw;
         }
     }
 

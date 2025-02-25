@@ -10,15 +10,15 @@ namespace Microsoft.DurableTask.ScheduledTasks.Tests.Entity;
 
 public class ScheduleTests
 {
-    private readonly Mock<ILogger<Schedule>> mockLogger;
-    private readonly Mock<TaskEntityContext> mockContext;
-    private readonly Schedule schedule;
-    private readonly string scheduleId = "test-schedule";
+    readonly Mock<ILogger<Schedule>> mockLogger;
+    readonly Mock<TaskEntityContext> mockContext;
+    readonly Schedule schedule;
+    readonly string scheduleId = "test-schedule";
 
     public ScheduleTests()
     {
-        this.mockLogger = new Mock<ILogger<Schedule>>();
-        this.mockContext = new Mock<TaskEntityContext>();
+        this.mockLogger = new Mock<ILogger<Schedule>>(MockBehavior.Loose);
+        this.mockContext = new Mock<TaskEntityContext>(MockBehavior.Strict);
         this.schedule = new Schedule(this.mockLogger.Object);
     }
 
@@ -203,4 +203,4 @@ public class ScheduleTests
             It.IsAny<object>(),
             It.IsAny<StartOrchestrationOptions>()), Times.Never);
     }
-} 
+}

@@ -30,18 +30,22 @@ public class ScheduleCreationOptionsTests
     }
 
     [Theory]
-    [InlineData(null, "orchestration", "scheduleId cannot be null or empty")]
-    [InlineData("", "orchestration", "scheduleId cannot be null or empty")]
-    [InlineData("schedule", null, "orchestrationName cannot be null or empty")]
-    [InlineData("schedule", "", "orchestrationName cannot be null or empty")]
-    public void Constructor_WithInvalidParameters_ThrowsArgumentException(string scheduleId, string orchestrationName, string expectedMessage)
+    [InlineData(null, "orchestration", typeof(ArgumentNullException), "Value cannot be null")]
+    [InlineData("", "orchestration", typeof(ArgumentException), "Parameter cannot be an empty string or start with the null character")]
+    [InlineData("schedule", null, typeof(ArgumentNullException), "Value cannot be null.")]
+    [InlineData("schedule", "", typeof(ArgumentException), "Parameter cannot be an empty string or start with the null character")]
+    public void Constructor_WithInvalidParameters_ThrowsArgumentException(
+        string scheduleId,
+        string orchestrationName,
+        Type expectedExceptionType,
+        string expectedMessage)
     {
         // Arrange
         TimeSpan interval = TimeSpan.FromMinutes(5);
 
         // Act & Assert
-        var ex = Assert.Throws<ArgumentException>(() => new ScheduleCreationOptions(scheduleId, orchestrationName, interval));
-        Assert.Contains(expectedMessage, ex.Message, StringComparison.OrdinalIgnoreCase);
+        var exception = Assert.Throws(expectedExceptionType, () => new ScheduleCreationOptions(scheduleId, orchestrationName, interval));
+        Assert.Contains(expectedMessage, exception.Message);
     }
 
     [Theory]
@@ -119,4 +123,4 @@ public class ScheduleCreationOptionsTests
         Assert.Equal(now, modified.StartAt);
         Assert.NotSame(original, modified);
     }
-} 
+}

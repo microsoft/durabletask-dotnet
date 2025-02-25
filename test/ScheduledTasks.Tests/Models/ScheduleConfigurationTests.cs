@@ -25,18 +25,18 @@ public class ScheduleConfigurationTests
     }
 
     [Theory]
-    [InlineData(null, "orchestration", "scheduleId cannot be null or empty")]
-    [InlineData("", "orchestration", "scheduleId cannot be null or empty")]
-    [InlineData("schedule", null, "orchestrationName cannot be null or empty")]
-    [InlineData("schedule", "", "orchestrationName cannot be null or empty")]
-    public void Constructor_WithInvalidParameters_ThrowsArgumentException(string scheduleId, string orchestrationName, string expectedMessage)
+    [InlineData(null, "orchestration", typeof(ArgumentNullException), "Value cannot be null")]
+    [InlineData("", "orchestration", typeof(ArgumentException), "Parameter cannot be an empty string or start with the null character")]
+    [InlineData("schedule", null, typeof(ArgumentNullException), "Value cannot be null")]
+    [InlineData("schedule", "", typeof(ArgumentException), "Parameter cannot be an empty string or start with the null character")]
+    public void Constructor_WithInvalidParameters_ThrowsException(string scheduleId, string orchestrationName, Type expectedExceptionType, string expectedMessage)
     {
         // Arrange
         TimeSpan interval = TimeSpan.FromMinutes(5);
 
         // Act & Assert
-        var ex = Assert.Throws<ArgumentException>(() => new ScheduleConfiguration(scheduleId, orchestrationName, interval));
-        Assert.Contains(expectedMessage, ex.Message, StringComparison.OrdinalIgnoreCase);
+        var ex = Assert.Throws(expectedExceptionType, () => new ScheduleConfiguration(scheduleId, orchestrationName, interval));
+        Assert.Contains(expectedMessage, ex.Message);
     }
 
     [Theory]
@@ -74,8 +74,8 @@ public class ScheduleConfigurationTests
         var config = new ScheduleConfiguration("test-schedule", "test-orchestration", TimeSpan.FromMinutes(5));
 
         // Act & Assert
-        var ex = Assert.Throws<ArgumentException>(() => config.OrchestrationName = null!);
-        Assert.Contains("OrchestrationName cannot be null or empty", ex.Message, StringComparison.OrdinalIgnoreCase);
+        var ex = Assert.Throws<ArgumentNullException>(() => config.OrchestrationName = null!);
+        Assert.Contains("Value cannot be null.", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -174,4 +174,4 @@ public class ScheduleConfigurationTests
         var ex = Assert.Throws<ArgumentNullException>(() => config.Update(null!));
         Assert.Equal("updateOptions", ex.ParamName);
     }
-} 
+}

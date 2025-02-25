@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Entities;
@@ -12,25 +13,25 @@ namespace Microsoft.DurableTask.ScheduledTasks.Tests.Client;
 
 public class ScheduledTaskClientImplTests
 {
-    readonly Mock<DurableTaskClient> durableTaskClientMock;
-    readonly Mock<ILogger> loggerMock;
-    readonly Mock<DurableEntityClient> entityClientMock;
+    readonly Mock<DurableTaskClient> durableTaskClient;
+    readonly Mock<DurableEntityClient> entityClient;
+    readonly Mock<ILogger<ScheduledTaskClientImpl>> logger;
     readonly ScheduledTaskClientImpl client;
 
     public ScheduledTaskClientImplTests()
     {
-        this.durableTaskClientMock = new Mock<DurableTaskClient>();
-        this.loggerMock = new Mock<ILogger>();
-        this.entityClientMock = new Mock<DurableEntityClient>();
-        this.durableTaskClientMock.Setup(c => c.Entities).Returns(this.entityClientMock.Object);
-        this.client = new ScheduledTaskClientImpl(this.durableTaskClientMock.Object, this.loggerMock.Object);
+        this.durableTaskClient = new Mock<DurableTaskClient>("test", MockBehavior.Strict);
+        this.entityClient = new Mock<DurableEntityClient>("test", MockBehavior.Strict);
+        this.logger = new Mock<ILogger<ScheduledTaskClientImpl>>(MockBehavior.Loose);
+        this.durableTaskClient.Setup(x => x.Entities).Returns(this.entityClient.Object);
+        this.client = new ScheduledTaskClientImpl(this.durableTaskClient.Object, this.logger.Object);
     }
 
     [Fact]
     public void Constructor_WithNullClient_ThrowsArgumentNullException()
     {
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => new ScheduledTaskClientImpl(null!, this.loggerMock.Object));
+        var ex = Assert.Throws<ArgumentNullException>(() => new ScheduledTaskClientImpl(null!, this.logger.Object));
         Assert.Equal("durableTaskClient", ex.ParamName);
     }
 
@@ -38,7 +39,7 @@ public class ScheduledTaskClientImplTests
     public void Constructor_WithNullLogger_ThrowsArgumentNullException()
     {
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => new ScheduledTaskClientImpl(this.durableTaskClientMock.Object, null!));
+        var ex = Assert.Throws<ArgumentNullException>(() => new ScheduledTaskClientImpl(this.durableTaskClient.Object, null!));
         Assert.Equal("logger", ex.ParamName);
     }
 
@@ -73,15 +74,20 @@ public class ScheduledTaskClientImplTests
         var options = new ScheduleCreationOptions("test-schedule", "test-orchestration", TimeSpan.FromMinutes(5));
         string instanceId = "test-instance";
 
-        this.durableTaskClientMock
-            .Setup(c => c.ScheduleNewOrchestrationInstanceAsync(
+        this.durableTaskClient
+            .Setup(x => x.ScheduleNewOrchestrationInstanceAsync(
                 It.Is<TaskName>(n => n.Name == nameof(ExecuteScheduleOperationOrchestrator)),
-                It.IsAny<ScheduleOperationRequest>(),
-                It.IsAny<CancellationToken>()))
+                It.Is<ScheduleOperationRequest>(r =>
+                    r.EntityId.Name == nameof(Schedule) &&
+                    r.EntityId.Key == options.ScheduleId &&
+                    r.OperationName == nameof(Schedule.CreateSchedule) &&
+                    r.Input == options),
+                null,
+                default))
             .ReturnsAsync(instanceId);
 
-        this.durableTaskClientMock
-            .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
+        this.durableTaskClient
+            .Setup(x => x.WaitForInstanceCompletionAsync(instanceId, true, default))
             .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId));
 
         // Act
@@ -91,14 +97,16 @@ public class ScheduledTaskClientImplTests
         Assert.NotNull(scheduleClient);
         Assert.Equal(options.ScheduleId, scheduleClient.ScheduleId);
 
-        this.durableTaskClientMock.Verify(
-            c => c.ScheduleNewOrchestrationInstanceAsync(
+        this.durableTaskClient.Verify(
+            x => x.ScheduleNewOrchestrationInstanceAsync(
                 It.Is<TaskName>(n => n.Name == nameof(ExecuteScheduleOperationOrchestrator)),
                 It.Is<ScheduleOperationRequest>(r =>
                     r.EntityId.Name == nameof(Schedule) &&
                     r.EntityId.Key == options.ScheduleId &&
-                    r.OperationName == nameof(Schedule.CreateSchedule)),
-                It.IsAny<CancellationToken>()),
+                    r.OperationName == nameof(Schedule.CreateSchedule) &&
+                    r.Input == options),
+                null,
+                default),
             Times.Once);
     }
 
@@ -122,10 +130,11 @@ public class ScheduledTaskClientImplTests
             ScheduleConfiguration = new ScheduleConfiguration(scheduleId, "test-orchestration", TimeSpan.FromMinutes(5))
         };
 
-        this.entityClientMock
-            .Setup(c => c.GetEntityAsync<ScheduleState>(
+        this.entityClient
+            .Setup(x => x.GetEntityAsync<ScheduleState>(
                 It.Is<EntityInstanceId>(id => id.Name == nameof(Schedule) && id.Key == scheduleId),
-                It.IsAny<CancellationToken>()))
+                true,
+                default))
             .ReturnsAsync(new EntityMetadata<ScheduleState>(new EntityInstanceId(nameof(Schedule), scheduleId), state));
 
         // Act
@@ -144,16 +153,64 @@ public class ScheduledTaskClientImplTests
         // Arrange
         string scheduleId = "test-schedule";
 
-        this.entityClientMock
-            .Setup(c => c.GetEntityAsync<ScheduleState>(
+        this.entityClient
+            .Setup(x => x.GetEntityAsync<ScheduleState>(
                 It.Is<EntityInstanceId>(id => id.Name == nameof(Schedule) && id.Key == scheduleId),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync((EntityMetadata<ScheduleState>)null!);
+                true,
+                default))
+            .ReturnsAsync((EntityMetadata<ScheduleState?>)null);
 
         // Act
         var description = await this.client.GetScheduleAsync(scheduleId);
 
         // Assert
         Assert.Null(description);
+    }
+
+    [Fact]
+    public async Task ListSchedulesAsync_ReturnsSchedules()
+    {
+        // Arrange
+        var query = new ScheduleQuery
+        {
+            ScheduleIdPrefix = "test",
+            Status = ScheduleStatus.Active,
+            PageSize = 10
+        };
+
+        var states = new[]
+        {
+            new EntityMetadata<ScheduleState>(
+                new EntityInstanceId(nameof(Schedule), "test-1"),
+                new ScheduleState
+                {
+                    Status = ScheduleStatus.Active,
+                    ScheduleConfiguration = new ScheduleConfiguration("test-1", "test-orchestration", TimeSpan.FromMinutes(5))
+                }),
+            new EntityMetadata<ScheduleState>(
+                new EntityInstanceId(nameof(Schedule), "test-2"),
+                new ScheduleState
+                {
+                    Status = ScheduleStatus.Active,
+                    ScheduleConfiguration = new ScheduleConfiguration("test-2", "test-orchestration", TimeSpan.FromMinutes(5))
+                })
+        };
+
+        this.entityClient
+            .Setup(x => x.GetAllEntitiesAsync<ScheduleState>(It.IsAny<EntityQuery>()))
+            .Returns(Pageable.Create<EntityMetadata<ScheduleState>>((continuation, pageSize, cancellation) =>
+                Task.FromResult(new Page<EntityMetadata<ScheduleState>>(states.ToList(), null))));
+
+        // Act
+        var schedules = new List<ScheduleDescription>();
+        await foreach (var schedule in this.client.ListSchedulesAsync(query))
+        {
+            schedules.Add(schedule);
+        }
+
+        // Assert
+        Assert.Equal(2, schedules.Count);
+        Assert.All(schedules, s => Assert.StartsWith("test-", s.ScheduleId));
+        Assert.All(schedules, s => Assert.Equal(ScheduleStatus.Active, s.Status));
     }
 }

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Entities;
 using Moq;
 using Xunit;
@@ -16,8 +17,8 @@ public class ExecuteScheduleOperationOrchestratorTests
 
     public ExecuteScheduleOperationOrchestratorTests()
     {
-        this.mockContext = new Mock<TaskOrchestrationContext>();
-        this.mockEntityClient = new Mock<TaskOrchestrationEntityFeature>();
+        this.mockContext = new Mock<TaskOrchestrationContext>(MockBehavior.Strict);
+        this.mockEntityClient = new Mock<TaskOrchestrationEntityFeature>(MockBehavior.Loose);
         this.mockContext.Setup(c => c.Entities).Returns(this.mockEntityClient.Object);
         this.orchestrator = new ExecuteScheduleOperationOrchestrator();
     }

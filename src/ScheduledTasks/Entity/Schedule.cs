@@ -110,10 +110,6 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             this.State.RefreshScheduleRunExecutionToken();
 
             this.logger.UpdatedSchedule(this.State.ScheduleConfiguration.ScheduleId);
-
-            // Signal to run schedule immediately after update and let runSchedule determine if it should run immediately
-            // or later to separate response from schedule creation and schedule responsibilities
-            context.SignalEntity(new EntityInstanceId(nameof(Schedule), this.State.ScheduleConfiguration.ScheduleId), nameof(this.RunSchedule), this.State.ExecutionToken);
         }
         catch (Exception ex)
         {

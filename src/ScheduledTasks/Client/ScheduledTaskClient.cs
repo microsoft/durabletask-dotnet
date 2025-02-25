@@ -124,70 +124,65 @@ public class ScheduledTaskClient(DurableTaskClient durableTaskClient, ILogger lo
     /// <inheritdoc/>
     public AsyncPageable<ScheduleDescription> ListSchedulesAsync(ScheduleQuery? filter = null)
     {
-        // TODO: map to entity query last modified from/to filters
-        EntityQuery query = new EntityQuery
-        {
-            InstanceIdStartsWith = filter?.ScheduleIdPrefix ?? nameof(Schedule),
-            IncludeState = true,
-            PageSize = filter?.PageSize ?? ScheduleQuery.DefaultPageSize,
-            ContinuationToken = filter?.ContinuationToken,
-        };
-
         // Create an async pageable using the Pageable.Create helper
-        return Task.FromResult(Pageable.Create(async (continuationToken, pageSize, cancellation) =>
+        return Pageable.Create(async (continuationToken, pageSize, cancellation) =>
         {
             try
             {
-                List<ScheduleDescription> schedules = new List<ScheduleDescription>();
-
-                await foreach (EntityMetadata<ScheduleState> metadata in this.durableTaskClient.Entities.GetAllEntitiesAsync<ScheduleState>(query))
+                // TODO: map to entity query last modified from/to filters
+                EntityQuery query = new EntityQuery
                 {
-                    ScheduleState state = metadata.State;
+                    InstanceIdStartsWith = filter?.ScheduleIdPrefix ?? nameof(Schedule),
+                    IncludeState = true,
+                    PageSize = filter?.PageSize ?? ScheduleQuery.DefaultPageSize,
+                    ContinuationToken = continuationToken,
+                };
 
-                    // Skip if status filter is specified and doesn't match
-                    if (filter?.Status.HasValue == true && state.Status != filter.Status.Value)
-                    {
-                        continue;
-                    }
+                // Get one page of entities
+                IAsyncEnumerable<Page<EntityMetadata<ScheduleState>>> entityPages =
+                    this.durableTaskClient.Entities.GetAllEntitiesAsync<ScheduleState>(query).AsPages();
 
-                    // Skip if created time filter is specified and doesn't match
-                    if (filter?.CreatedFrom.HasValue == true && state.ScheduleCreatedAt <= filter.CreatedFrom)
-                    {
-                        continue;
-                    }
+                await foreach (Page<EntityMetadata<ScheduleState>> entityPage in entityPages)
+                {
+                    List<ScheduleDescription> schedules = entityPage.Values
+                        .Where(metadata =>
+                            (!filter?.Status.HasValue ?? true || metadata.State.Status == filter.Status.Value) &&
+                            (filter?.CreatedFrom.HasValue != true || metadata.State.ScheduleCreatedAt > filter.CreatedFrom) &&
+                            (filter?.CreatedTo.HasValue != true || metadata.State.ScheduleCreatedAt < filter.CreatedTo))
+                        .Select(metadata =>
+                        {
+                            ScheduleState state = metadata.State;
+                            ScheduleConfiguration config = state.ScheduleConfiguration!;
+                            return new ScheduleDescription
+                            {
+                                ScheduleId = metadata.Id.Key,
+                                OrchestrationName = config.OrchestrationName,
+                                OrchestrationInput = config.OrchestrationInput,
+                                OrchestrationInstanceId = config.OrchestrationInstanceId,
+                                StartAt = config.StartAt,
+                                EndAt = config.EndAt,
+                                Interval = config.Interval,
+                                StartImmediatelyIfLate = config.StartImmediatelyIfLate,
+                                Status = state.Status,
+                                ExecutionToken = state.ExecutionToken,
+                                LastRunAt = state.LastRunAt,
+                                NextRunAt = state.NextRunAt,
+                            };
+                        })
+                        .ToList();
 
-                    if (filter?.CreatedTo.HasValue == true && state.ScheduleCreatedAt >= filter.CreatedTo)
-                    {
-                        continue;
-                    }
-
-                    ScheduleConfiguration config = state.ScheduleConfiguration!;
-
-                    schedules.Add(new ScheduleDescription
-                    {
-                        ScheduleId = metadata.Id.Key,
-                        OrchestrationName = config.OrchestrationName,
-                        OrchestrationInput = config.OrchestrationInput,
-                        OrchestrationInstanceId = config.OrchestrationInstanceId,
-                        StartAt = config.StartAt,
-                        EndAt = config.EndAt,
-                        Interval = config.Interval,
-                        StartImmediatelyIfLate = config.StartImmediatelyIfLate,
-                        Status = state.Status,
-                        ExecutionToken = state.ExecutionToken,
-                        LastRunAt = state.LastRunAt,
-                        NextRunAt = state.NextRunAt,
-                    });
+                    return new Page<ScheduleDescription>(schedules, entityPage.ContinuationToken);
                 }
 
-                return new Page<ScheduleDescription>(schedules, continuationToken);
+                // Return empty page if no results
+                return new Page<ScheduleDescription>(new List<ScheduleDescription>(), null);
             }
             catch (OperationCanceledException e)
             {
                 throw new OperationCanceledException(
                     $"The {nameof(this.ListSchedulesAsync)} operation was canceled.", e, e.CancellationToken);
             }
-        }));
+        });
     }
 
     /// <summary>

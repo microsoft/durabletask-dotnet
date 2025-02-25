@@ -28,7 +28,7 @@ public interface IScheduledTaskClient
     /// </summary>
     /// <param name="filter">Optional filter criteria for the schedules. If null, returns all schedules.</param>
     /// <returns>A pageable list of schedule descriptions.</returns>
-    Task<AsyncPageable<ScheduleDescription>> ListSchedulesAsync(ScheduleQuery? filter = null);
+    AsyncPageable<ScheduleDescription> ListSchedulesAsync(ScheduleQuery? filter = null);
 
     /// <summary>
     /// Creates a new schedule with the specified configuration.

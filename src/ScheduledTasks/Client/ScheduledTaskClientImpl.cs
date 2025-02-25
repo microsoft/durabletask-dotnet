@@ -11,13 +11,15 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// <summary>
 /// Client for managing scheduled tasks in a Durable Task application.
 /// </summary>
+#pragma warning disable CA1711 // Identifiers should not have incorrect suffix
 public class ScheduledTaskClientImpl(DurableTaskClient durableTaskClient, ILogger logger) : ScheduledTaskClient
+#pragma warning restore CA1711 // Identifiers should not have incorrect suffix
 {
     readonly DurableTaskClient durableTaskClient = Check.NotNull(durableTaskClient, nameof(durableTaskClient));
     readonly ILogger logger = Check.NotNull(logger, nameof(logger));
 
     /// <inheritdoc/>
-    public async Task<ScheduleClient> CreateScheduleAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default)
+    public override async Task<ScheduleClient> CreateScheduleAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default)
     {
         Check.NotNull(creationOptions, nameof(creationOptions));
         this.logger.ClientCreatingSchedule(creationOptions);
@@ -60,7 +62,7 @@ public class ScheduledTaskClientImpl(DurableTaskClient durableTaskClient, ILogge
     }
 
     /// <inheritdoc/>
-    public async Task<ScheduleDescription?> GetScheduleAsync(string scheduleId, CancellationToken cancellation = default)
+    public override async Task<ScheduleDescription?> GetScheduleAsync(string scheduleId, CancellationToken cancellation = default)
     {
         Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
 
@@ -108,14 +110,14 @@ public class ScheduledTaskClientImpl(DurableTaskClient durableTaskClient, ILogge
     }
 
     /// <inheritdoc/>
-    public ScheduleClient GetScheduleClient(string scheduleId)
+    public override ScheduleClient GetScheduleClient(string scheduleId)
     {
         Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
         return new ScheduleClientImpl(this.durableTaskClient, scheduleId, this.logger);
     }
 
     /// <inheritdoc/>
-    public AsyncPageable<ScheduleDescription> ListSchedulesAsync(ScheduleQuery? filter = null)
+    public override AsyncPageable<ScheduleDescription> ListSchedulesAsync(ScheduleQuery? filter = null)
     {
         // Create an async pageable using the Pageable.Create helper
         return Pageable.Create(async (continuationToken, pageSize, cancellation) =>

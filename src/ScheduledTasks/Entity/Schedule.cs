@@ -213,16 +213,16 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             return;
         }
 
-        this.DetermineNextRunTime(scheduleConfig);
+        this.State.NextRunAt = this.DetermineNextRunTime(scheduleConfig);
 
         DateTimeOffset currentTime = DateTimeOffset.UtcNow;
 
         if (this.State.NextRunAt!.Value <= currentTime)
         {
-            this.State.NextRunAt = currentTime;
             this.StartOrchestrationIfNotRunning(context);
-            this.State.LastRunAt = this.State.NextRunAt;
-            this.State.NextRunAt = this.State.LastRunAt.Value + interval;
+            this.State.LastRunAt = currentTime;
+            this.State.NextRunAt = null;
+            this.State.NextRunAt = this.DetermineNextRunTime(scheduleConfig);
         }
 
         context.SignalEntity(
@@ -232,28 +232,6 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             nameof(this.RunSchedule),
             this.State.ExecutionToken,
             new SignalEntityOptions { SignalTime = this.State.NextRunAt.Value });
-    }
-
-    static DateTimeOffset? ComputeInitialRunTime(ScheduleConfiguration scheduleConfig)
-    {
-        if (scheduleConfig.StartImmediatelyIfLate &&
-            scheduleConfig.StartAt.HasValue &&
-            DateTimeOffset.UtcNow > scheduleConfig.StartAt.Value)
-        {
-            return DateTimeOffset.UtcNow;
-        }
-
-        return scheduleConfig.StartAt ?? DateTimeOffset.UtcNow; // Default to now if StartAt not defined
-    }
-
-    static DateTimeOffset ComputeNextRunTime(ScheduleConfiguration scheduleConfig, DateTimeOffset lastRunAt)
-    {
-        // Calculate number of intervals between last run and now
-        TimeSpan timeSinceLastRun = DateTimeOffset.UtcNow - lastRunAt;
-        int intervalsElapsed = (int)(timeSinceLastRun.Ticks / scheduleConfig.Interval.Ticks);
-
-        // Compute and return the next run time
-        return lastRunAt + TimeSpan.FromTicks(scheduleConfig.Interval.Ticks * (intervalsElapsed + 1));
     }
 
     void StartOrchestrationIfNotRunning(TaskEntityContext context)
@@ -294,21 +272,31 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         this.State.Status = to;
     }
 
-    void DetermineNextRunTime(ScheduleConfiguration scheduleConfig)
+    DateTimeOffset DetermineNextRunTime(ScheduleConfiguration scheduleConfig)
     {
         if (this.State.NextRunAt.HasValue)
         {
-            return; // NextRunAt already set, no need to compute
+            return this.State.NextRunAt.Value; // NextRunAt already set, no need to compute
         }
 
-        // If LastRunAt is not set, determine if we should start immediately or at StartAt
-        if (!this.State.LastRunAt.HasValue)
+        // timenow
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset startTime = scheduleConfig.StartAt ?? this.State.ScheduleCreatedAt ?? now;
+
+        // compute time gap between now and startat if set else with ScheduleCreatedAt
+        TimeSpan timeSinceStart = now - startTime;
+
+        if (timeSinceStart <= TimeSpan.Zero && scheduleConfig.StartImmediatelyIfLate)
         {
-            this.State.NextRunAt = ComputeInitialRunTime(scheduleConfig);
+            return now;
         }
         else
         {
-            this.State.NextRunAt = ComputeNextRunTime(scheduleConfig, this.State.LastRunAt.Value);
+            // Calculate number of intervals between start time and now
+            int intervalsElapsed = (int)(timeSinceStart.Ticks / scheduleConfig.Interval.Ticks);
+
+            // Compute next run time based on intervals elapsed since start
+            return startTime + TimeSpan.FromTicks(scheduleConfig.Interval.Ticks * (intervalsElapsed + 1));
         }
     }
 }

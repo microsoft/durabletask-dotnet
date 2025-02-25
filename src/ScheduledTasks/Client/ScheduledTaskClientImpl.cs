@@ -176,10 +176,19 @@ public class ScheduledTaskClientImpl(DurableTaskClient durableTaskClient, ILogge
                 // Return empty page if no results
                 return new Page<ScheduleDescription>(new List<ScheduleDescription>(), null);
             }
-            catch (OperationCanceledException e)
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
             {
-                throw new OperationCanceledException(
-                    $"The {nameof(this.ListSchedulesAsync)} operation was canceled.", e, e.CancellationToken);
+                // the operation was cancelled as requested. No need to log this.
+                throw;
+            }
+            catch (Exception ex)
+            {
+                this.logger.ClientError(
+                    nameof(this.ListSchedulesAsync),
+                    string.Empty,
+                    ex);
+
+                throw;
             }
         });
     }

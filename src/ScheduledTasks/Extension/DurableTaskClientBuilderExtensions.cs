@@ -19,7 +19,7 @@ public static class DurableTaskClientBuilderExtensions
     /// <returns>The original builder, for call chaining.</returns>
     public static IDurableTaskClientBuilder UseScheduledTasks(this IDurableTaskClientBuilder builder)
     {
-        builder.Services.AddTransient<IScheduledTaskClient>(sp =>
+        builder.Services.AddTransient<ScheduledTaskClient>(sp =>
         {
             DurableTaskClient client = sp.GetRequiredService<DurableTaskClient>();
             ILogger<ScheduledTaskClient> logger = sp.GetRequiredService<ILogger<ScheduledTaskClient>>();

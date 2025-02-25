@@ -51,7 +51,7 @@ IHost host = builder.Build();
 await host.StartAsync();
 
 // Run the schedule operations
-IScheduledTaskClient scheduledTaskClient = host.Services.GetRequiredService<IScheduledTaskClient>();
+ScheduledTaskClient scheduledTaskClient = host.Services.GetRequiredService<ScheduledTaskClient>();
 ScheduleOperations scheduleOperations = new ScheduleOperations(scheduledTaskClient);
 await scheduleOperations.RunAsync();
 

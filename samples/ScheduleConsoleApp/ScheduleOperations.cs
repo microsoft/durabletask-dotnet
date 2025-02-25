@@ -6,9 +6,9 @@ using Microsoft.DurableTask.ScheduledTasks;
 
 namespace ScheduleConsoleApp;
 
-class ScheduleOperations(IScheduledTaskClient scheduledTaskClient)
+class ScheduleOperations(ScheduledTaskClient scheduledTaskClient)
 {
-    readonly IScheduledTaskClient scheduledTaskClient = scheduledTaskClient ?? throw new ArgumentNullException(nameof(scheduledTaskClient));
+    readonly ScheduledTaskClient scheduledTaskClient = scheduledTaskClient ?? throw new ArgumentNullException(nameof(scheduledTaskClient));
 
     public async Task RunAsync()
     {

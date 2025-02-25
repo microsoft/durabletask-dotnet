@@ -17,7 +17,7 @@ namespace ScheduleWebApp.Controllers;
 [Route("schedules")]
 public class ScheduleController : ControllerBase
 {
-    readonly IScheduledTaskClient scheduledTaskClient;
+    readonly ScheduledTaskClient scheduledTaskClient;
     readonly ILogger<ScheduleController> logger;
 
     /// <summary>
@@ -26,7 +26,7 @@ public class ScheduleController : ControllerBase
     /// <param name="scheduledTaskClient">Client for managing scheduled tasks.</param>
     /// <param name="logger">Logger for recording controller operations.</param>
     public ScheduleController(
-        IScheduledTaskClient scheduledTaskClient,
+        ScheduledTaskClient scheduledTaskClient,
         ILogger<ScheduleController> logger)
     {
         this.scheduledTaskClient = scheduledTaskClient ?? throw new ArgumentNullException(nameof(scheduledTaskClient));

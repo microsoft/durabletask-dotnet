@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ScheduledTasks\ScheduledTasks.csproj" />
+    <ProjectReference Include="..\Abstractions.Tests\Abstractions.Tests.csproj" />
   </ItemGroup>
 
 </Project> 

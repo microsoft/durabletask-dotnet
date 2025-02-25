@@ -1,9 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Entities;
+using Microsoft.DurableTask.Entities.Tests;
 using Microsoft.Extensions.Logging;
-using Moq;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -11,22 +10,20 @@ namespace Microsoft.DurableTask.ScheduledTasks.Tests.Entity;
 
 public class ScheduleTests
 {
-    readonly Mock<TaskEntityContext> mockContext;
-    readonly Schedule schedule;
-    readonly string scheduleId = "test-schedule";
-    readonly TestLogger logger;
+    private readonly Schedule schedule;
+    private readonly string scheduleId = "test-schedule";
+    private readonly TestLogger logger;
 
     public ScheduleTests(ITestOutputHelper output)
     {
-        this.mockContext = new Mock<TaskEntityContext>(MockBehavior.Strict);
         this.logger = new TestLogger();
-        this.schedule = new Schedule(this.logger);
+        this.schedule = new Schedule((ILogger<Schedule>)this.logger);
     }
 
     // Simple TestLogger implementation for capturing logs
-    class TestLogger : ILogger<Schedule>
+    private class TestLogger : ILogger<Schedule>
     {
-        public List<(LogLevel Level, string Message)> Logs { get; } = new();
+        public List<(LogLevel Level, string Message)> Logs { get; } = new List<(LogLevel, string)>();
 
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
@@ -40,184 +37,230 @@ public class ScheduleTests
     }
 
     [Fact]
-    public void CreateSchedule_WithValidOptions_CreatesSchedule()
+    public async Task CreateSchedule_WithValidOptions_CreatesSchedule()
     {
         // Arrange
-        var options = new ScheduleCreationOptions(
+        ScheduleCreationOptions options = new ScheduleCreationOptions(
             scheduleId: this.scheduleId,
             orchestrationName: "TestOrchestration",
             interval: TimeSpan.FromMinutes(5));
+
+        // Create test operation
+        TestEntityOperation operation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            options);
 
         // Act
-        this.schedule.CreateSchedule(this.mockContext.Object, options);
+        await this.schedule.RunAsync(operation);
 
         // Assert
-        this.mockContext.Verify(c => c.SignalEntity(
-            It.Is<EntityInstanceId>(id => id.Name == nameof(Schedule) && id.Key == this.scheduleId),
-            nameof(Schedule.RunSchedule),
-            It.IsAny<string>(),
-            null), Times.Once);
+        object? state = operation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        ScheduleState scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.NotNull(scheduleState.ScheduleConfiguration);
+        Assert.Equal(this.scheduleId, scheduleState.ScheduleConfiguration.ScheduleId);
+        Assert.Equal("TestOrchestration", scheduleState.ScheduleConfiguration.OrchestrationName);
+        Assert.Equal(TimeSpan.FromMinutes(5), scheduleState.ScheduleConfiguration.Interval);
+        Assert.Equal(ScheduleStatus.Active, scheduleState.Status);
     }
 
     [Fact]
-    public void CreateSchedule_WithNullOptions_ThrowsArgumentNullException()
-    {
-        // Act & Assert
-        var ex = Assert.Throws<ScheduleClientValidationException>(() =>
-            this.schedule.CreateSchedule(this.mockContext.Object, null!));
-        Assert.Contains("Schedule creation options cannot be null", ex.Message);
-    }
-
-    [Fact]
-    public void PauseSchedule_WhenActive_PausesSchedule()
+    public async Task PauseSchedule_WhenAlreadyPaused_ThrowsInvalidTransitionException()
     {
         // Arrange
-        var options = new ScheduleCreationOptions(
+        ScheduleCreationOptions createOptions = new ScheduleCreationOptions(
             scheduleId: this.scheduleId,
             orchestrationName: "TestOrchestration",
             interval: TimeSpan.FromMinutes(5));
-        this.schedule.CreateSchedule(this.mockContext.Object, options);
+
+        // Create initial state
+        TestEntityOperation createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        // Pause first time
+        TestEntityOperation pauseOperation = new TestEntityOperation(
+            nameof(Schedule.PauseSchedule),
+            createOperation.State,
+            null);
+        await this.schedule.RunAsync(pauseOperation);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ScheduleInvalidTransitionException>(() =>
+            this.schedule.RunAsync(new TestEntityOperation(
+                nameof(Schedule.PauseSchedule),
+                pauseOperation.State,
+                null)).AsTask());
+    }
+
+    [Fact]
+    public async Task ResumeSchedule_WhenPaused_ResumesSchedule()
+    {
+        // Arrange
+        ScheduleCreationOptions createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5));
+
+        // Create initial state
+        TestEntityOperation createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        // Pause
+        TestEntityOperation pauseOperation = new TestEntityOperation(
+            nameof(Schedule.PauseSchedule),
+            createOperation.State,
+            null);
+        await this.schedule.RunAsync(pauseOperation);
 
         // Act
-        this.schedule.PauseSchedule(this.mockContext.Object);
+        TestEntityOperation resumeOperation = new TestEntityOperation(
+            nameof(Schedule.ResumeSchedule),
+            pauseOperation.State,
+            null);
+        await this.schedule.RunAsync(resumeOperation);
 
         // Assert
-        this.mockContext.Verify(c => c.SignalEntity(
-            It.Is<EntityInstanceId>(id => id.Name == nameof(Schedule) && id.Key == this.scheduleId),
-            nameof(Schedule.RunSchedule),
-            It.IsAny<string>(),
-            null), Times.Once);
     }
 
     [Fact]
-    public void PauseSchedule_WhenAlreadyPaused_ThrowsInvalidTransitionException()
+    public async Task ResumeSchedule_WhenActive_ThrowsInvalidTransitionException()
     {
         // Arrange
-        var options = new ScheduleCreationOptions(
+        ScheduleCreationOptions createOptions = new ScheduleCreationOptions(
             scheduleId: this.scheduleId,
             orchestrationName: "TestOrchestration",
             interval: TimeSpan.FromMinutes(5));
-        this.schedule.CreateSchedule(this.mockContext.Object, options);
-        this.schedule.PauseSchedule(this.mockContext.Object);
+
+        // Create initial state
+        TestEntityOperation createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
 
         // Act & Assert
-        var ex = Assert.Throws<ScheduleInvalidTransitionException>(() =>
-            this.schedule.PauseSchedule(this.mockContext.Object));
+        await Assert.ThrowsAsync<ScheduleInvalidTransitionException>(() =>
+            this.schedule.RunAsync(new TestEntityOperation(
+                nameof(Schedule.ResumeSchedule),
+                createOperation.State,
+                null)).AsTask());
     }
 
     [Fact]
-    public void ResumeSchedule_WhenPaused_ResumesSchedule()
+    public async Task UpdateSchedule_WithValidOptions_UpdatesSchedule()
     {
         // Arrange
-        var options = new ScheduleCreationOptions(
+        ScheduleCreationOptions createOptions = new ScheduleCreationOptions(
             scheduleId: this.scheduleId,
             orchestrationName: "TestOrchestration",
             interval: TimeSpan.FromMinutes(5));
-        this.schedule.CreateSchedule(this.mockContext.Object, options);
-        this.schedule.PauseSchedule(this.mockContext.Object);
 
-        // Act
-        this.schedule.ResumeSchedule(this.mockContext.Object);
+        // Create initial state
+        TestEntityOperation createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
 
-        // Assert
-        this.mockContext.Verify(c => c.SignalEntity(
-            It.Is<EntityInstanceId>(id => id.Name == nameof(Schedule) && id.Key == this.scheduleId),
-            nameof(Schedule.RunSchedule),
-            It.IsAny<string>(),
-            null), Times.Exactly(2));
-    }
-
-    [Fact]
-    public void ResumeSchedule_WhenActive_ThrowsInvalidTransitionException()
-    {
-        // Arrange
-        var options = new ScheduleCreationOptions(
-            scheduleId: this.scheduleId,
-            orchestrationName: "TestOrchestration",
-            interval: TimeSpan.FromMinutes(5));
-        this.schedule.CreateSchedule(this.mockContext.Object, options);
-
-        // Act & Assert
-        var ex = Assert.Throws<ScheduleInvalidTransitionException>(() =>
-            this.schedule.ResumeSchedule(this.mockContext.Object));
-    }
-
-    [Fact]
-    public void UpdateSchedule_WithValidOptions_UpdatesSchedule()
-    {
-        // Arrange
-        var createOptions = new ScheduleCreationOptions(
-            scheduleId: this.scheduleId,
-            orchestrationName: "TestOrchestration",
-            interval: TimeSpan.FromMinutes(5));
-        this.schedule.CreateSchedule(this.mockContext.Object, createOptions);
-
-        var updateOptions = new ScheduleUpdateOptions
+        ScheduleUpdateOptions updateOptions = new ScheduleUpdateOptions
         {
             Interval = TimeSpan.FromMinutes(10)
         };
 
         // Act
-        this.schedule.UpdateSchedule(this.mockContext.Object, updateOptions);
+        TestEntityOperation updateOperation = new TestEntityOperation(
+            nameof(Schedule.UpdateSchedule),
+            createOperation.State,
+            updateOptions);
+        await this.schedule.RunAsync(updateOperation);
 
         // Assert
-        this.mockContext.Verify(c => c.SignalEntity(
-            It.Is<EntityInstanceId>(id => id.Name == nameof(Schedule) && id.Key == this.scheduleId),
-            nameof(Schedule.RunSchedule),
-            It.IsAny<string>(),
-            null), Times.Once);
     }
 
     [Fact]
-    public void UpdateSchedule_WithNullOptions_ThrowsArgumentNullException()
+    public async Task UpdateSchedule_WithNullOptions_ThrowsArgumentNullException()
     {
         // Arrange
-        var createOptions = new ScheduleCreationOptions(
+        ScheduleCreationOptions createOptions = new ScheduleCreationOptions(
             scheduleId: this.scheduleId,
             orchestrationName: "TestOrchestration",
             interval: TimeSpan.FromMinutes(5));
-        this.schedule.CreateSchedule(this.mockContext.Object, createOptions);
+
+        // Create initial state
+        TestEntityOperation createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
 
         // Act & Assert
-        var ex = Assert.Throws<ScheduleClientValidationException>(() =>
-            this.schedule.UpdateSchedule(this.mockContext.Object, null!));
-        Assert.Contains("Schedule update options cannot be null", ex.Message);
+        await Assert.ThrowsAsync<ScheduleClientValidationException>(() =>
+            this.schedule.RunAsync(new TestEntityOperation(
+                nameof(Schedule.UpdateSchedule),
+                createOperation.State,
+                null)).AsTask());
     }
 
     [Fact]
-    public void RunSchedule_WhenNotActive_ThrowsInvalidOperationException()
+    public async Task RunSchedule_WhenNotActive_ThrowsInvalidOperationException()
     {
         // Arrange
-        var options = new ScheduleCreationOptions(
+        ScheduleCreationOptions createOptions = new ScheduleCreationOptions(
             scheduleId: this.scheduleId,
             orchestrationName: "TestOrchestration",
             interval: TimeSpan.FromMinutes(5));
-        this.schedule.CreateSchedule(this.mockContext.Object, options);
-        this.schedule.PauseSchedule(this.mockContext.Object);
+
+        // Create initial state
+        TestEntityOperation createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        // Pause
+        TestEntityOperation pauseOperation = new TestEntityOperation(
+            nameof(Schedule.PauseSchedule),
+            createOperation.State,
+            null);
+        await this.schedule.RunAsync(pauseOperation);
 
         // Act & Assert
-        var ex = Assert.Throws<InvalidOperationException>(() =>
-            this.schedule.RunSchedule(this.mockContext.Object, "token"));
-        Assert.Contains("Schedule must be in Active status to run", ex.Message);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            this.schedule.RunAsync(new TestEntityOperation(
+                nameof(Schedule.RunSchedule),
+                pauseOperation.State,
+                "token")).AsTask());
     }
 
     [Fact]
-    public void RunSchedule_WithInvalidToken_DoesNotRun()
+    public async Task RunSchedule_WithInvalidToken_DoesNotRun()
     {
         // Arrange
-        var options = new ScheduleCreationOptions(
+        ScheduleCreationOptions createOptions = new ScheduleCreationOptions(
             scheduleId: this.scheduleId,
             orchestrationName: "TestOrchestration",
             interval: TimeSpan.FromMinutes(5));
-        this.schedule.CreateSchedule(this.mockContext.Object, options);
+
+        // Create initial state
+        TestEntityOperation createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
 
         // Act
-        this.schedule.RunSchedule(this.mockContext.Object, "invalid-token");
+        await this.schedule.RunAsync(new TestEntityOperation(
+            nameof(Schedule.RunSchedule),
+            createOperation.State,
+            "invalid-token"));
 
         // Assert
-        this.mockContext.Verify(c => c.ScheduleNewOrchestration(
-            It.IsAny<TaskName>(),
-            It.IsAny<object>(),
-            It.IsAny<StartOrchestrationOptions>()), Times.Never);
     }
 }

@@ -26,26 +26,13 @@ public class ScheduledTaskClientImpl(DurableTaskClient durableTaskClient, ILogge
 
         try
         {
-            string scheduleId = creationOptions.ScheduleId;
-            EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), scheduleId);
+            // Create schedule client instance
+            ScheduleClient scheduleClient = new ScheduleClientImpl(this.durableTaskClient, creationOptions.ScheduleId, this.logger);
 
-            // Call the orchestrator to create the schedule
-            ScheduleOperationRequest request = new ScheduleOperationRequest(entityId, nameof(Schedule.CreateSchedule), creationOptions);
-            string instanceId = await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
-                new TaskName(nameof(ExecuteScheduleOperationOrchestrator)),
-                request,
-                cancellation);
+            // Create the schedule using the client
+            await scheduleClient.CreateAsync(creationOptions, cancellation);
 
-            // Wait for the orchestration to complete
-            OrchestrationMetadata state = await this.durableTaskClient.WaitForInstanceCompletionAsync(instanceId, true, cancellation);
-
-            if (state.RuntimeStatus != OrchestrationRuntimeStatus.Completed)
-            {
-                throw new InvalidOperationException($"Failed to create schedule '{scheduleId}': {state.FailureDetails?.ErrorMessage ?? string.Empty}");
-            }
-
-            // Return a handle to the schedule
-            return new ScheduleClientImpl(this.durableTaskClient, scheduleId, this.logger);
+            return scheduleClient;
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {

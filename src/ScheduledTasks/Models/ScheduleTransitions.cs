@@ -13,6 +13,8 @@ static class ScheduleTransitions
         new Dictionary<ScheduleStatus, HashSet<ScheduleStatus>>
         {
             { ScheduleStatus.Uninitialized, new HashSet<ScheduleStatus> { ScheduleStatus.Active } },
+            { ScheduleStatus.Active, new HashSet<ScheduleStatus> { ScheduleStatus.Active } },
+            { ScheduleStatus.Paused, new HashSet<ScheduleStatus> { ScheduleStatus.Active } },
         };
 
     // define valid transitions for update schedule

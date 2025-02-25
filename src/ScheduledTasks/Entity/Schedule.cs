@@ -20,7 +20,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     readonly ILogger<Schedule> logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     /// <summary>
-    /// Creates a new schedule with the specified configuration.
+    /// Creates a new schedule with the specified configuration. If already exists, update it in place.
     /// </summary>
     /// <param name="context">The task entity context.</param>
     /// <param name="scheduleCreationOptions">The configuration options for creating the schedule.</param>
@@ -43,6 +43,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             this.State.ScheduleConfiguration = ScheduleConfiguration.FromCreateOptions(scheduleCreationOptions);
             this.TryStatusTransition(nameof(this.CreateSchedule), ScheduleStatus.Active);
 
+            this.State.RefreshScheduleRunExecutionToken();
             this.logger.CreatedSchedule(this.State.ScheduleConfiguration.ScheduleId);
 
             // Signal to run schedule immediately after creation and let runSchedule determine if it should run immediately

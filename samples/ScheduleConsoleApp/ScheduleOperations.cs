@@ -34,8 +34,8 @@ class ScheduleOperations(ScheduledTaskClient scheduledTaskClient)
         // Delete each existing schedule
         await foreach (ScheduleDescription schedule in schedules)
         {
-            ScheduleClient handle = this.scheduledTaskClient.GetScheduleClient(schedule.ScheduleId);
-            await handle.DeleteAsync();
+            ScheduleClient scheduleClient1 = this.scheduledTaskClient.GetScheduleClient(schedule.ScheduleId);
+            await scheduleClient1.DeleteAsync();
             Console.WriteLine($"Deleted schedule {schedule.ScheduleId}");
         }
     }

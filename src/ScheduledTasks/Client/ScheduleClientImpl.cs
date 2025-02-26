@@ -80,9 +80,8 @@ class ScheduleClientImpl : ScheduleClient
         {
             Check.NotNullOrEmpty(this.ScheduleId, nameof(this.ScheduleId));
 
-            EntityInstanceId entityId = new EntityInstanceId(nameof(Schedule), this.ScheduleId);
             EntityMetadata<ScheduleState>? metadata =
-                await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(entityId, cancellation: cancellation);
+                await this.durableTaskClient.Entities.GetEntityAsync<ScheduleState>(this.EntityId, cancellation: cancellation);
             if (metadata == null)
             {
                 throw new ScheduleNotFoundException(this.ScheduleId);

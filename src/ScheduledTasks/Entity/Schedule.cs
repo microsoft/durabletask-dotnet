@@ -109,6 +109,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
                 {
                     case nameof(this.State.ScheduleConfiguration.StartAt):
                     case nameof(this.State.ScheduleConfiguration.Interval):
+                    case nameof(this.State.ScheduleConfiguration.StartImmediatelyIfLate):
                         this.State.NextRunAt = null;
                         break;
 
@@ -204,6 +205,13 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
     /// <exception cref="InvalidOperationException">Thrown when the schedule is not active or interval is not specified.</exception>
     public void RunSchedule(TaskEntityContext context, string executionToken)
     {
+        if (this.State.Status == ScheduleStatus.Uninitialized)
+        {
+            // this signal is no longer useful since the schedule has been deleted.
+            this.State = null!; // delete again, otherwise an uninitialized schedule will stick around
+            return;
+        }
+
         ScheduleConfiguration scheduleConfig =
             this.State.ScheduleConfiguration ??
             throw new InvalidOperationException("Schedule configuration is missing.");
@@ -228,6 +236,12 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         {
             this.logger.ScheduleRunCancelled(scheduleConfig.ScheduleId, executionToken);
             this.State.NextRunAt = null;
+
+            context.SignalEntity(
+                new EntityInstanceId(nameof(Schedule), scheduleConfig.ScheduleId),
+                "delete",
+                this.State.ExecutionToken);
+
             return;
         }
 
@@ -270,6 +284,11 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
                 // Use configured instance ID which will prevent concurrent runs
                 startOrchestrationOptions = new StartOrchestrationOptions(instanceId);
             }
+
+            this.logger.ScheduleOperationInfo(
+                this.State.ScheduleConfiguration!.ScheduleId,
+                nameof(this.StartOrchestration),
+                $"Starting new orchestration with instance ID: {instanceId}");
 
             context.ScheduleNewOrchestration(
                 new TaskName(this.State.ScheduleConfiguration!.OrchestrationName),

@@ -91,6 +91,7 @@ public class ScheduledTaskClientImpl(DurableTaskClient durableTaskClient, ILogge
     }
 
     /// <inheritdoc/>
+    // TODO: This may returned underfilled or empty pages, since you are applying a filter to the pages that are returned by the entity query. We can probably live with that, given that I don't think there is a simple solution.
     public override AsyncPageable<ScheduleDescription> ListSchedulesAsync(ScheduleQuery? filter = null)
     {
         // Create an async pageable using the Pageable.Create helper
@@ -101,7 +102,7 @@ public class ScheduledTaskClientImpl(DurableTaskClient durableTaskClient, ILogge
                 // TODO: map to entity query last modified from/to filters
                 EntityQuery query = new EntityQuery
                 {
-                    InstanceIdStartsWith = filter?.ScheduleIdPrefix ?? nameof(Schedule),
+                    InstanceIdStartsWith = $"@{nameof(Schedule)}@{filter?.ScheduleIdPrefix ?? string.Empty}",
                     IncludeState = true,
                     PageSize = filter?.PageSize ?? ScheduleQuery.DefaultPageSize,
                     ContinuationToken = continuationToken,

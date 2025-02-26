@@ -1,4 +1,6 @@
-using Microsoft.DurableTask;
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.AzureManaged;
 using Microsoft.DurableTask.ScheduledTasks;
@@ -8,86 +10,92 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Threading.Tasks;
+using ScheduleTests.Tasks;
 using Xunit;
 
 namespace ScheduleTests.Infrastructure
 {
     public abstract class ScheduleTestBase : IAsyncLifetime
     {
-        protected IHost Host { get; private set; }
-        protected DurableTaskClient Client { get; private set; }
-        protected ILogger Logger { get; private set; }
+        readonly IHost? host;
+        protected DurableTaskClient Client { get; private set; } = null!;
+        protected ScheduledTaskClient ScheduledTaskClient { get; private set; } = null!;
+        protected ILogger Logger { get; private set; } = null!;
 
         protected ScheduleTestBase()
         {
-            var builder = Host.CreateApplicationBuilder();
-
-            // Get configuration
-            string connectionString = builder.Configuration.GetValue<string>("DURABLE_TASK_SCHEDULER_CONNECTION_STRING")
-                ?? throw new InvalidOperationException("Missing required configuration 'DURABLE_TASK_SCHEDULER_CONNECTION_STRING'");
-
-            // Configure the worker
-            builder.Services.AddDurableTaskWorker(builder =>
-            {
-                builder.AddTasks(r => r.AddAllGeneratedTasks());
-                builder.UseDurableTaskScheduler(connectionString);
-                builder.UseScheduledTasks();
-            });
-
-            // Configure the client
-            builder.Services.AddDurableTaskClient(builder =>
-            {
-                builder.UseDurableTaskScheduler(connectionString);
-                builder.UseScheduledTasks();
-            });
-
-            // Configure logging
-            builder.Services.AddLogging(logging =>
-            {
-                logging.AddSimpleConsole(options =>
+            var builder = new HostBuilder()
+                .ConfigureAppConfiguration((hostingContext, config) =>
                 {
-                    options.SingleLine = true;
-                    options.UseUtcTimestamp = true;
-                    options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ ";
-                });
-            });
+                    config.SetBasePath(AppContext.BaseDirectory)
+                          .AddJsonFile("appsettings.json", optional: false);
+                })
+                .ConfigureServices((hostContext, services) =>
+                {
+                    // Get configuration
+                    string connectionString = hostContext.Configuration.GetValue<string>("DURABLE_TASK_SCHEDULER_CONNECTION_STRING")
+                        ?? throw new InvalidOperationException("Missing required configuration 'DURABLE_TASK_SCHEDULER_CONNECTION_STRING'");
 
-            Host = builder.Build();
+                    // Configure the worker
+                    services.AddDurableTaskWorker(builder =>
+                    {
+                        // Register our test tasks
+                        builder.AddTasks(r =>
+                        {
+                            r.AddOrchestrator(typeof(SimpleOrchestrator));
+                            r.AddOrchestrator(typeof(LongRunningOrchestrator));
+                            r.AddOrchestrator(typeof(RandomRunTimeOrchestrator));
+                            r.AddActivity(typeof(TestActivity));
+                        });
+                        builder.UseDurableTaskScheduler(connectionString);
+                        builder.UseScheduledTasks();
+                    });
+
+                    // Configure the client
+                    services.AddDurableTaskClient(builder =>
+                    {
+                        builder.UseDurableTaskScheduler(connectionString);
+                        builder.UseScheduledTasks();
+                    });
+
+                    // Configure logging
+                    services.AddLogging(logging =>
+                    {
+                        logging.AddSimpleConsole(options =>
+                        {
+                            options.SingleLine = true;
+                            options.UseUtcTimestamp = true;
+                            options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ ";
+                        });
+                    });
+                });
+
+            this.host = builder.Build();
         }
 
         public async Task InitializeAsync()
         {
-            await Host.StartAsync();
-            Client = Host.Services.GetRequiredService<DurableTaskClient>();
-            Logger = Host.Services.GetRequiredService<ILogger<ScheduleTestBase>>();
+            if (this.host == null) throw new InvalidOperationException("Host was not properly initialized");
+            await this.host.StartAsync();
+            this.Client = this.host.Services.GetRequiredService<DurableTaskClient>();
+            this.ScheduledTaskClient = this.host.Services.GetRequiredService<ScheduledTaskClient>();
+            this.Logger = this.host.Services.GetRequiredService<ILogger<ScheduleTestBase>>();
         }
 
         public async Task DisposeAsync()
         {
-            if (Host != null)
+            if (this.host != null)
             {
-                await Host.StopAsync();
-                await Host.DisposeAsync();
-            }
-        }
-
-        protected async Task WaitForOrchestrationCompletion(string instanceId, TimeSpan timeout)
-        {
-            try
-            {
-                await Client.WaitForOrchestrationToReachStatus(
-                    instanceId,
-                    OrchestrationRuntimeStatus.Completed,
-                    timeout);
-            }
-            catch (TimeoutException)
-            {
-                var status = await Client.GetInstanceAsync(instanceId);
-                throw new TimeoutException(
-                    $"Orchestration {instanceId} did not complete within {timeout}. Current status: {status?.RuntimeStatus}");
+                await this.host.StopAsync();
+                if (this.host is IAsyncDisposable asyncDisposable)
+                {
+                    await asyncDisposable.DisposeAsync();
+                }
+                else if (this.host is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
             }
         }
     }
-} 
+}

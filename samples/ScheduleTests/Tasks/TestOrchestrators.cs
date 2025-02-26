@@ -1,44 +1,43 @@
 using Microsoft.DurableTask;
-using Microsoft.DurableTask.ScheduledTasks;
 using System;
 using System.Threading.Tasks;
 
 namespace ScheduleTests.Tasks
 {
     [DurableTask]
-    public class SimpleScheduleOrchestrator
+    public class SimpleOrchestrator
     {
-        public async Task<string> RunAsync(TaskOrchestrationContext context, DateTime scheduleTime)
+        public async Task<string> RunAsync(TaskOrchestrationContext context, string input)
         {
-            await context.ScheduleTask(scheduleTime);
-            return await context.CallActivityAsync<string>(nameof(TestActivity), "SimpleSchedule");
+            return await context.CallActivityAsync<string>(nameof(TestActivity), $"Simple-{input}");
         }
     }
 
     [DurableTask]
-    public class RecurringScheduleOrchestrator
+    public class LongRunningOrchestrator
     {
-        public async Task<string> RunAsync(TaskOrchestrationContext context, DateTime startTime)
+        public async Task<string> RunAsync(TaskOrchestrationContext context, string input)
         {
-            // Schedule task to run every minute for 3 times
-            for (int i = 0; i < 3; i++)
-            {
-                DateTime nextRun = startTime.AddMinutes(i);
-                await context.ScheduleTask(nextRun);
-                await context.CallActivityAsync<string>(nameof(TestActivity), $"RecurringSchedule-{i}");
-            }
-            return "Completed recurring schedule";
+            return await context.CallActivityAsync<string>(nameof(TestActivity), $"LongRunning-{input}");
         }
     }
 
     [DurableTask]
-    public class CronScheduleOrchestrator
+    public class RandomRunTimeOrchestrator
     {
-        public async Task<string> RunAsync(TaskOrchestrationContext context, DateTime startTime)
+        public async Task<string> RunAsync(TaskOrchestrationContext context, string input)
         {
-            // Schedule using CRON expression (every minute)
-            await context.ScheduleWithCron("* * * * *", startTime);
-            return await context.CallActivityAsync<string>(nameof(TestActivity), "CronSchedule");
+            return await context.CallActivityAsync<string>(nameof(TestActivity), $"RandomRunTime-{input}");
+        }
+    }
+
+    // add always throw exception orchestrator
+    [DurableTask]
+    public class AlwaysThrowExceptionOrchestrator
+    {
+        public async Task<string> RunAsync(TaskOrchestrationContext context, string input)
+        {
+            throw new Exception("Always throw exception");
         }
     }
 } 

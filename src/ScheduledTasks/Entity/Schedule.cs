@@ -40,11 +40,22 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
                 throw new ScheduleClientValidationException(string.Empty, "Schedule creation options cannot be null");
             }
 
-            this.State.ScheduleConfiguration = ScheduleConfiguration.FromCreateOptions(scheduleCreationOptions);
-            this.State.Status = ScheduleStatus.Active;
+            bool alreadyExists = this.State.ScheduleCreatedAt != null;
 
-            this.State.RefreshScheduleRunExecutionToken();
-            this.State.ScheduleCreatedAt = this.State.ScheduleLastModifiedAt = DateTimeOffset.UtcNow;
+            this.State.ScheduleConfiguration = ScheduleConfiguration.FromCreateOptions(scheduleCreationOptions);
+
+            if (alreadyExists)
+            {
+                this.State.ScheduleLastModifiedAt = DateTimeOffset.UtcNow;
+                this.State.RefreshScheduleRunExecutionToken();
+                this.State.NextRunAt = null;
+            }
+            else
+            {
+                this.State.Status = ScheduleStatus.Active;
+                this.State.ScheduleCreatedAt = this.State.ScheduleLastModifiedAt = DateTimeOffset.UtcNow;
+            }
+
             this.logger.CreatedSchedule(this.State.ScheduleConfiguration.ScheduleId);
 
             // Signal to run schedule immediately after creation and let runSchedule determine if it should run immediately

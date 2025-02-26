@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace Microsoft.DurableTask.ScheduledTasks;
 
 /// <summary>
@@ -107,7 +109,7 @@ class ScheduleConfiguration
     {
         Check.NotNull(createOptions, nameof(createOptions));
 
-        return new ScheduleConfiguration(createOptions.ScheduleId, createOptions.OrchestrationName, createOptions.Interval)
+        ScheduleConfiguration scheduleConfig = new ScheduleConfiguration(createOptions.ScheduleId, createOptions.OrchestrationName, createOptions.Interval)
         {
             OrchestrationInput = createOptions.OrchestrationInput,
             OrchestrationInstanceId = createOptions.OrchestrationInstanceId,
@@ -115,6 +117,10 @@ class ScheduleConfiguration
             EndAt = createOptions.EndAt,
             StartImmediatelyIfLate = createOptions.StartImmediatelyIfLate,
         };
+
+        scheduleConfig.Validate();
+
+        return scheduleConfig;
     }
 
     /// <summary>
@@ -127,7 +133,7 @@ class ScheduleConfiguration
         Check.NotNull(updateOptions, nameof(updateOptions));
         HashSet<string> updatedFields = new HashSet<string>();
 
-        if (!string.IsNullOrEmpty(updateOptions.OrchestrationName) 
+        if (!string.IsNullOrEmpty(updateOptions.OrchestrationName)
             && updateOptions.OrchestrationName != this.OrchestrationName)
         {
             this.OrchestrationName = updateOptions.OrchestrationName;
@@ -148,7 +154,7 @@ class ScheduleConfiguration
             updatedFields.Add(nameof(this.OrchestrationInstanceId));
         }
 
-        if (updateOptions.StartAt.HasValue 
+        if (updateOptions.StartAt.HasValue
             && updateOptions.StartAt != this.StartAt)
         {
             this.StartAt = updateOptions.StartAt;
@@ -176,6 +182,16 @@ class ScheduleConfiguration
             updatedFields.Add(nameof(this.StartImmediatelyIfLate));
         }
 
+        this.Validate();
         return updatedFields;
+    }
+
+    [MemberNotNull(nameof(StartAt), nameof(EndAt))]
+    void Validate()
+    {
+        if (this.StartAt.HasValue && this.EndAt.HasValue && this.StartAt.Value > this.EndAt.Value)
+        {
+            throw new ArgumentException("StartAt cannot be later than EndAt.", nameof(this.StartAt));
+        }
     }
 }

@@ -50,4 +50,24 @@ class ScheduleState
     {
         this.ExecutionToken = Guid.NewGuid().ToString("N");
     }
+
+    /// <summary>
+    /// Gets or sets the time when this schedule was last paused.
+    /// </summary>
+    public DateTimeOffset? LastPausedAt { get; set; }
+
+    /// <summary>
+    /// Clears all state fields to their default values.
+    /// </summary>
+    public void ClearState()
+    {
+        this.Status = ScheduleStatus.Uninitialized;
+        this.ExecutionToken = Guid.NewGuid().ToString("N");
+        this.LastRunAt = null;
+        this.NextRunAt = null;
+        this.ScheduleCreatedAt = null;
+        this.ScheduleLastModifiedAt = null;
+        this.ScheduleConfiguration = null;
+        this.LastPausedAt = null;
+    }
 }

@@ -746,7 +746,7 @@ public class ScheduleTests
         var runOperation = new TestEntityOperation(
             nameof(Schedule.RunSchedule),
             createOperation.State,
-            createOperation.State.GetState<ScheduleState>().ExecutionToken);
+            createOperation.State.GetState<ScheduleState>()?.ExecutionToken);
         await this.schedule.RunAsync(runOperation);
 
         // Assert
@@ -827,5 +827,487 @@ public class ScheduleTests
         Assert.Null(scheduleState.LastRunAt);
         Assert.NotNull(scheduleState.NextRunAt);
         Assert.True(scheduleState.NextRunAt > DateTimeOffset.UtcNow);
+    }
+
+    [Fact]
+    public async Task CreateSchedule_WithEndAtBeforeStartAt_ThrowsArgumentException()
+    {
+        // Arrange
+        var startAt = DateTimeOffset.UtcNow.AddHours(2);
+        var endAt = DateTimeOffset.UtcNow.AddHours(1); // Before startAt
+        var options = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5))
+        {
+            StartAt = startAt,
+            EndAt = endAt
+        };
+
+        // Create test operation
+        var operation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            options);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            this.schedule.RunAsync(operation).AsTask());
+    }
+
+    [Fact]
+    public async Task RunSchedule_WithExpiredEndAt_DoesNotUpdateLastRunAt()
+    {
+        // Arrange
+        var endAt = DateTimeOffset.UtcNow.AddSeconds(-1);
+        var createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5))
+        {
+            EndAt = endAt
+        };
+
+        var createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        var initialState = createOperation.State.GetState<ScheduleState>();
+
+        // Act
+        var runOperation = new TestEntityOperation(
+            nameof(Schedule.RunSchedule),
+            createOperation.State,
+            initialState?.ExecutionToken);
+        await this.schedule.RunAsync(runOperation);
+
+        // Assert
+        var state = runOperation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Null(scheduleState.LastRunAt);
+    }
+
+    [Fact]
+    public async Task CreateSchedule_WithMaxInterval_CreatesSchedule()
+    {
+        // Arrange
+        var options = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.MaxValue);
+
+        // Create test operation
+        var operation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            options);
+
+        // Act
+        await this.schedule.RunAsync(operation);
+
+        // Assert
+        var state = operation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal(TimeSpan.MaxValue, scheduleState.ScheduleConfiguration?.Interval);
+    }
+
+    [Fact]
+    public async Task UpdateSchedule_WithSameValues_DoesNotUpdateModifiedTime()
+    {
+        // Arrange
+        var createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5));
+
+        var createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        var initialState = createOperation.State.GetState<ScheduleState>();
+        var initialModifiedTime = initialState?.ScheduleLastModifiedAt;
+
+        var updateOptions = new ScheduleUpdateOptions
+        {
+            OrchestrationName = "TestOrchestration", // Same name
+            Interval = TimeSpan.FromMinutes(5) // Same interval
+        };
+
+        // Act
+        var updateOperation = new TestEntityOperation(
+            nameof(Schedule.UpdateSchedule),
+            createOperation.State,
+            updateOptions);
+        await this.schedule.RunAsync(updateOperation);
+
+        // Assert
+        var state = updateOperation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal(initialModifiedTime, scheduleState.ScheduleLastModifiedAt);
+    }
+
+    [Fact]
+    public async Task RunSchedule_WithStartAtInFutureAndStartImmediatelyIfLate_DoesNotRunImmediately()
+    {
+        // Arrange
+        var startAt = DateTimeOffset.UtcNow.AddMinutes(5);
+        var createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5))
+        {
+            StartAt = startAt,
+            StartImmediatelyIfLate = true // Should be ignored since StartAt is in future
+        };
+
+        var createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        // Act
+        var runOperation = new TestEntityOperation(
+            nameof(Schedule.RunSchedule),
+            createOperation.State,
+            createOperation.State.GetState<ScheduleState>()?.ExecutionToken);
+        await this.schedule.RunAsync(runOperation);
+
+        // Assert
+        var state = runOperation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Null(scheduleState.LastRunAt);
+        Assert.Equal(startAt, scheduleState.NextRunAt);
+    }
+
+    [Fact]
+    public async Task CreateSchedule_WithMaxDateTimeOffset_CreatesSchedule()
+    {
+        // Arrange
+        var options = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5))
+        {
+            EndAt = DateTimeOffset.MaxValue
+        };
+
+        // Create test operation
+        var operation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            options);
+
+        // Act
+        await this.schedule.RunAsync(operation);
+
+        // Assert
+        var state = operation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal(DateTimeOffset.MaxValue, scheduleState.ScheduleConfiguration?.EndAt);
+    }
+
+    [Fact]
+    public async Task CreateSchedule_WithNullEndAt_ClearsEndAt()
+    {
+        // Arrange
+        var createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5))
+        {
+            EndAt = DateTimeOffset.UtcNow.AddHours(1)
+        };
+
+        var createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        var createOptions2 = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5))
+        {
+            EndAt = null
+        };
+
+        // Act
+        var updateOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            createOperation.State,
+            createOptions2);
+        await this.schedule.RunAsync(updateOperation);
+
+        // Assert
+        var state = updateOperation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Null(scheduleState.ScheduleConfiguration?.EndAt);
+    }
+
+    [Fact]
+    public async Task RunSchedule_WithMultipleTokens_OnlyExecutesLatestToken()
+    {
+        // Arrange
+        var createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5))
+        {
+            StartImmediatelyIfLate = true
+        };
+
+        var createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        var initialState = createOperation.State.GetState<ScheduleState>();
+        var initialToken = initialState?.ExecutionToken;
+
+        // Update to get new token
+        var updateOperation = new TestEntityOperation(
+            nameof(Schedule.UpdateSchedule),
+            createOperation.State,
+            new ScheduleUpdateOptions { Interval = TimeSpan.FromMinutes(6) });
+        await this.schedule.RunAsync(updateOperation);
+
+        var updatedState = updateOperation.State.GetState<ScheduleState>();
+        var newToken = updatedState?.ExecutionToken;
+
+        // Try to run with old token
+        var oldTokenOperation = new TestEntityOperation(
+            nameof(Schedule.RunSchedule),
+            updateOperation.State,
+            initialToken);
+        await this.schedule.RunAsync(oldTokenOperation);
+
+        // Assert old token operation didn't execute
+        var stateAfterOldToken = oldTokenOperation.State.GetState<ScheduleState>();
+        Assert.Null(stateAfterOldToken?.LastRunAt);
+
+        // Run with new token
+        var newTokenOperation = new TestEntityOperation(
+            nameof(Schedule.RunSchedule),
+            oldTokenOperation.State,
+            newToken);
+        await this.schedule.RunAsync(newTokenOperation);
+
+        // Assert new token operation executed
+        var finalState = newTokenOperation.State.GetState<ScheduleState>();
+        Assert.NotNull(finalState?.LastRunAt);
+    }
+
+    [Fact]
+    public async Task CreateSchedule_WithLongOrchestrationName_CreatesSchedule()
+    {
+        // Arrange
+        string longName = new string('a', 1000); // 1000 character name
+        var options = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: longName,
+            interval: TimeSpan.FromMinutes(5));
+
+        // Create test operation
+        var operation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            options);
+
+        // Act
+        await this.schedule.RunAsync(operation);
+
+        // Assert
+        var state = operation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal(longName, scheduleState.ScheduleConfiguration?.OrchestrationName);
+    }
+
+    [Fact]
+    public async Task UpdateSchedule_WithLargeInput_UpdatesInput()
+    {
+        // Arrange
+        var createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5));
+
+        var createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        string largeInput = new string('x', 10000); // 10KB input
+        var updateOptions = new ScheduleUpdateOptions
+        {
+            OrchestrationInput = largeInput
+        };
+
+        // Act
+        var updateOperation = new TestEntityOperation(
+            nameof(Schedule.UpdateSchedule),
+            createOperation.State,
+            updateOptions);
+        await this.schedule.RunAsync(updateOperation);
+
+        // Assert
+        var state = updateOperation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal(largeInput, scheduleState.ScheduleConfiguration?.OrchestrationInput);
+    }
+
+    [Fact]
+    public async Task RunSchedule_WithPreciseInterval_CalculatesNextRunTimeCorrectly()
+    {
+        // Arrange
+        var startAt = DateTimeOffset.UtcNow;
+        var interval = TimeSpan.FromSeconds(1.5); // 1.5 seconds
+        var createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: interval)
+        {
+            StartAt = startAt
+        };
+
+        var createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        // Act
+        var runOperation = new TestEntityOperation(
+            nameof(Schedule.RunSchedule),
+            createOperation.State,
+            createOperation.State.GetState<ScheduleState>()?.ExecutionToken);
+        await this.schedule.RunAsync(runOperation);
+
+        // Assert
+        var state = runOperation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.NotNull(scheduleState.NextRunAt);
+        var expectedNextRun = startAt.Add(interval);
+        Assert.Equal(expectedNextRun.Ticks, scheduleState.NextRunAt.Value.Ticks);
+    }
+
+    [Fact]
+    public async Task CreateSchedule_WithMinDateTimeOffset_CreatesSchedule()
+    {
+        // Arrange
+        var options = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5))
+        {
+            StartAt = DateTimeOffset.MinValue
+        };
+
+        // Create test operation
+        var operation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            options);
+
+        // Act
+        await this.schedule.RunAsync(operation);
+
+        // Assert
+        var state = operation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal(DateTimeOffset.MinValue, scheduleState.ScheduleConfiguration?.StartAt);
+    }
+
+    [Fact]
+    public async Task UpdateSchedule_WithAllFieldsNull_DoesNotModifyState()
+    {
+        // Arrange
+        var createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5));
+
+        var createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        var initialState = createOperation.State.GetState<ScheduleState>();
+        var updateOptions = new ScheduleUpdateOptions();
+
+        // Act
+        var updateOperation = new TestEntityOperation(
+            nameof(Schedule.UpdateSchedule),
+            createOperation.State,
+            updateOptions);
+        await this.schedule.RunAsync(updateOperation);
+
+        // Assert
+        var state = updateOperation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal(initialState?.ScheduleConfiguration?.OrchestrationName, scheduleState.ScheduleConfiguration?.OrchestrationName);
+        Assert.Equal(initialState?.ScheduleConfiguration?.Interval, scheduleState.ScheduleConfiguration?.Interval);
+        Assert.Equal(initialState?.ScheduleConfiguration?.StartAt, scheduleState.ScheduleConfiguration?.StartAt);
+        Assert.Equal(initialState?.ScheduleConfiguration?.EndAt, scheduleState.ScheduleConfiguration?.EndAt);
+        Assert.Equal(initialState?.ScheduleConfiguration?.StartImmediatelyIfLate, scheduleState.ScheduleConfiguration?.StartImmediatelyIfLate);
+    }
+
+    [Fact]
+    public async Task RunSchedule_WithIntervalSmallerThanTimeSinceStart_CalculatesCorrectNextRunTime()
+    {
+        // Arrange
+        var startAt = DateTimeOffset.UtcNow.AddMinutes(-10); // 10 minutes ago
+        var interval = TimeSpan.FromMinutes(3); // 3 minute interval
+        var createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: interval)
+        {
+            StartAt = startAt
+        };
+
+        var createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        // Act
+        var runOperation = new TestEntityOperation(
+            nameof(Schedule.RunSchedule),
+            createOperation.State,
+            createOperation.State.GetState<ScheduleState>()?.ExecutionToken);
+        await this.schedule.RunAsync(runOperation);
+
+        // Assert
+        var state = runOperation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.NotNull(scheduleState.NextRunAt);
+
+        // Calculate expected next run time
+        // Number of intervals elapsed = 10 minutes / 3 minutes = 3 intervals (rounded down)
+        // Next run should be at start time + (intervals elapsed + 1) * interval
+        var expectedNextRun = startAt.AddTicks((3 + 1) * interval.Ticks);
+        Assert.Equal(expectedNextRun, scheduleState.NextRunAt.Value);
     }
 }

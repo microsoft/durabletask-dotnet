@@ -80,6 +80,14 @@ namespace ScheduleTests.Infrastructure
             this.Client = this.host.Services.GetRequiredService<DurableTaskClient>();
             this.ScheduledTaskClient = this.host.Services.GetRequiredService<ScheduledTaskClient>();
             this.Logger = this.host.Services.GetRequiredService<ILogger<ScheduleTestBase>>();
+
+            // delete all schedules
+            await foreach (var schedule in this.ScheduledTaskClient.ListSchedulesAsync())
+            {
+                // get schedule client
+                var scheduleClient = this.ScheduledTaskClient.GetScheduleClient(schedule.ScheduleId);
+                await scheduleClient.DeleteAsync();
+            }
         }
 
         public async Task DisposeAsync()

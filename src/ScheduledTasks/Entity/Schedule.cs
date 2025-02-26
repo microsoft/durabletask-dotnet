@@ -47,8 +47,11 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             if (alreadyExists)
             {
                 this.State.ScheduleLastModifiedAt = DateTimeOffset.UtcNow;
-                this.State.RefreshScheduleRunExecutionToken();
-                this.State.NextRunAt = null;
+                if (this.State.Status == ScheduleStatus.Active)
+                {
+                    this.State.RefreshScheduleRunExecutionToken();
+                    this.State.NextRunAt = null;
+                }
             }
             else
             {

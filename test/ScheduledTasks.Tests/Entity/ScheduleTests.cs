@@ -550,7 +550,7 @@ public class ScheduleTests
         var runOperation = new TestEntityOperation(
             nameof(Schedule.RunSchedule),
             createOperation.State,
-            createOperation.State.GetState<ScheduleState>().ExecutionToken);
+            createOperation.State.GetState<ScheduleState>()?.ExecutionToken);
         await this.schedule.RunAsync(runOperation);
 
         // Assert
@@ -568,7 +568,10 @@ public class ScheduleTests
         var createOptions = new ScheduleCreationOptions(
             scheduleId: this.scheduleId,
             orchestrationName: "TestOrchestration",
-            interval: TimeSpan.FromMinutes(5));
+            interval: TimeSpan.FromMinutes(5))
+        {
+            StartImmediatelyIfLate = true
+        };
 
         var createOperation = new TestEntityOperation(
             nameof(Schedule.CreateSchedule),

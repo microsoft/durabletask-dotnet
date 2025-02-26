@@ -52,11 +52,6 @@ class ScheduleState
     }
 
     /// <summary>
-    /// Gets or sets the time when this schedule was last paused.
-    /// </summary>
-    public DateTimeOffset? LastPausedAt { get; set; }
-
-    /// <summary>
     /// Clears all state fields to their default values.
     /// </summary>
     public void ClearState()
@@ -68,6 +63,5 @@ class ScheduleState
         this.ScheduleCreatedAt = null;
         this.ScheduleLastModifiedAt = null;
         this.ScheduleConfiguration = null;
-        this.LastPausedAt = null;
     }
 }

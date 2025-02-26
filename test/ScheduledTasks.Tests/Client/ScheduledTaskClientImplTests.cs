@@ -283,7 +283,7 @@ public class ScheduledTaskClientImplTests
         // verify getallentitiesasync is called
         this.entityClient.Verify(x => x.GetAllEntitiesAsync<ScheduleState>(
             It.Is<EntityQuery>(q =>
-                q.InstanceIdStartsWith == "@test" &&
+                q.InstanceIdStartsWith == $"@schedule@test" &&
                 q.IncludeState == true &&
                 q.PageSize == query.PageSize)), Times.Once);
 

@@ -15,7 +15,7 @@ namespace ScheduleTests.Tests
         [Fact]
         public async Task SimpleSchedule_ShouldExecuteOnce()
         {
-            var scheduleId = $"simple-once-{Guid.NewGuid()}";
+            var scheduleId = Guid.NewGuid().ToString().Replace("-", "");
             try
             {
                 var startTime = DateTimeOffset.UtcNow;
@@ -47,8 +47,8 @@ namespace ScheduleTests.Tests
 
                 // get all orchestration scheduled times
                 var instanceIds = await this.GetInstanceIdsFromPageable(instances);
-                var scheduledTimes = this.GetOrchestrationScheduledTimes(instanceIds);
-                Assert.Single(scheduledTimes, "should be only one instance");
+                var scheduledTimes = this.GetOrchestrationScheduledTimes(instanceIds, scheduleId);
+                Assert.Equal(1, scheduledTimes.Count);
                 // assert scheduled time is within 3 seconds of start time
                 Assert.True(scheduledTimes[0] >= startTime && scheduledTimes[0] <= startTime.AddSeconds(3), $"scheduled time should be within 3 seconds of start time, but is {scheduledTimes[0]:yyyy-MM-dd HH:mm:ss.fff} and start time is {startTime:yyyy-MM-dd HH:mm:ss.fff}");
             }
@@ -945,16 +945,20 @@ namespace ScheduleTests.Tests
         }
 
         // get orchestrantion scheduled time from parsing instanceid
-        DateTimeOffset GetOrchestrationScheduledTime(string instanceId)
+        DateTimeOffset GetOrchestrationScheduledTime(string instanceId, string scheduleId)
         {
             var parts = instanceId.Split('-');
-            return DateTimeOffset.Parse(parts[1]);
+            Console.WriteLine($"instanceId: {instanceId}, parts: {string.Join(",", parts)}");
+            // strip prefix scheduleId + '-' and parse the rest as datetimeoffset
+            var scheduledTime = DateTimeOffset.Parse(string.Join("-", parts.Skip(1)));
+            Console.WriteLine($"scheduledTime: {scheduledTime}");
+            return scheduledTime;
         }
 
         // get a list of orchestration scheduled times from a list of instance ids
-        List<DateTimeOffset> GetOrchestrationScheduledTimes(List<string> instanceIds)
+        List<DateTimeOffset> GetOrchestrationScheduledTimes(List<string> instanceIds, string scheduleId)
         {
-            return instanceIds.Select(this.GetOrchestrationScheduledTime).ToList();
+            return instanceIds.Select(instanceId => this.GetOrchestrationScheduledTime(instanceId, scheduleId)).ToList();
         }
 
         // function get instanceids from async pageable

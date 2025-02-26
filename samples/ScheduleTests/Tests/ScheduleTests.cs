@@ -580,6 +580,450 @@ namespace ScheduleTests.Tests
             }
         }
 
+
+        [Fact]
+        public async Task Schedule_ShouldHandleRecoveryAfterSystemFailure()
+        {
+            var scheduleId = $"recovery-{Guid.NewGuid()}";
+            try
+            {
+                var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromSeconds(5))
+                {
+                    StartImmediatelyIfLate = true,
+                    OrchestrationInput = "recovery-test"
+                });
+
+                // Simulate system interruption by pausing and resuming quickly
+                await client.PauseAsync();
+                await Task.Delay(TimeSpan.FromSeconds(1));
+                await client.ResumeAsync();
+
+                await Task.Delay(TimeSpan.FromSeconds(6));
+                var desc = await client.DescribeAsync();
+                Assert.Equal(ScheduleStatus.Active, desc.Status);
+                Assert.NotNull(desc.LastRunAt);
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
+        [Fact]
+        public async Task Schedule_ShouldHandleGracefulShutdown()
+        {
+            var scheduleId = $"shutdown-{Guid.NewGuid()}";
+            try
+            {
+                var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(LongRunningOrchestrator), TimeSpan.FromSeconds(5))
+                {
+                    OrchestrationInput = "shutdown-test"
+                });
+
+                // Let it start
+                await Task.Delay(TimeSpan.FromSeconds(2));
+
+                // Request graceful shutdown
+                await client.PauseAsync();
+                var desc = await client.DescribeAsync();
+                Assert.Equal(ScheduleStatus.Paused, desc.Status);
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
+        [Fact]
+        public async Task Schedule_ShouldHandleBackToBackExecution()
+        {
+            var scheduleId = $"backtoback-{Guid.NewGuid()}";
+            try
+            {
+                var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromSeconds(1))
+                {
+                    StartImmediatelyIfLate = true,
+                    OrchestrationInput = scheduleId
+                });
+
+                await Task.Delay(TimeSpan.FromSeconds(5));
+                var count = await this.GetOrchInstancesCount(scheduleId, nameof(SimpleOrchestrator));
+                Assert.True(count >= 4, "Should have executed at least 4 times");
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
+        [Fact]
+        public async Task Schedule_ShouldHandleUpdateWithValidation()
+        {
+            var scheduleId = $"validation-{Guid.NewGuid()}";
+            try
+            {
+                var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromMinutes(5)));
+
+                // Should throw on invalid interval
+                await Assert.ThrowsAsync<ArgumentException>(async () =>
+                    await client.UpdateAsync(new ScheduleUpdateOptions
+                    {
+                        Interval = TimeSpan.FromSeconds(-1)
+                    }));
+
+                // Should throw on invalid end time
+                await Assert.ThrowsAsync<ArgumentException>(async () =>
+                    await client.UpdateAsync(new ScheduleUpdateOptions
+                    {
+                        EndAt = DateTimeOffset.UtcNow.AddDays(-1)
+                    }));
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
+        [Fact]
+        public async Task Schedule_ShouldHandleConcurrentUpdates()
+        {
+            var scheduleId = $"concurrent-updates-{Guid.NewGuid()}";
+            try
+            {
+                var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromMinutes(5)));
+
+                var updates = new List<Task>();
+                for (int i = 0; i < 5; i++)
+                {
+                    updates.Add(client.UpdateAsync(new ScheduleUpdateOptions
+                    {
+                        OrchestrationInput = $"update-{i}"
+                    }));
+                }
+
+                await Task.WhenAll(updates);
+                var desc = await client.DescribeAsync();
+                Assert.Contains("update-", desc.OrchestrationInput);
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
+        [Fact]
+        public async Task Schedule_ShouldHandleUpdateWithNoChanges()
+        {
+            var scheduleId = $"no-changes-{Guid.NewGuid()}";
+            try
+            {
+                var originalInterval = TimeSpan.FromMinutes(5);
+                var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(SimpleOrchestrator), originalInterval));
+
+                await client.UpdateAsync(new ScheduleUpdateOptions
+                {
+                    Interval = originalInterval
+                });
+
+                var desc = await client.DescribeAsync();
+                Assert.Equal(originalInterval, desc.Interval);
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
+        [Fact]
+        public async Task Schedule_ShouldHandleImmediateEndTime()
+        {
+            var scheduleId = $"immediate-end-{Guid.NewGuid()}";
+            try
+            {
+                var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromMinutes(5))
+                {
+                    EndAt = DateTimeOffset.UtcNow
+                });
+
+                var desc = await client.DescribeAsync();
+                Assert.Equal(ScheduleStatus.Paused, desc.Status);
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
+        [Fact]
+        public async Task Schedule_ShouldHandleMaximumConcurrentExecutions()
+        {
+            var scheduleId = $"max-concurrent-{Guid.NewGuid()}";
+            try
+            {
+                var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(LongRunningOrchestrator), TimeSpan.FromSeconds(2))
+                {
+                    StartImmediatelyIfLate = true,
+                    OrchestrationInput = "concurrent-test"
+                });
+
+                await Task.Delay(TimeSpan.FromSeconds(10));
+                var desc = await client.DescribeAsync();
+                Assert.NotNull(desc.LastRunAt);
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
+        [Fact]
+        public async Task Schedule_ShouldHandleUpdateDuringExecution()
+        {
+            var scheduleId = $"update-during-exec-{Guid.NewGuid()}";
+            try
+            {
+                var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(LongRunningOrchestrator), TimeSpan.FromSeconds(5))
+                {
+                    StartImmediatelyIfLate = true
+                });
+
+                await Task.Delay(TimeSpan.FromSeconds(2));
+                await client.UpdateAsync(new ScheduleUpdateOptions
+                {
+                    Interval = TimeSpan.FromSeconds(10)
+                });
+
+                var desc = await client.DescribeAsync();
+                Assert.Equal(TimeSpan.FromSeconds(10), desc.Interval);
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
+        [Fact]
+        public async Task Schedule_ShouldHandleMultipleStartStopCycles()
+        {
+            var scheduleId = $"multi-cycle-{Guid.NewGuid()}";
+            try
+            {
+                var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromSeconds(2)));
+
+                for (int i = 0; i < 3; i++)
+                {
+                    await client.PauseAsync();
+                    var desc1 = await client.DescribeAsync();
+                    Assert.Equal(ScheduleStatus.Paused, desc1.Status);
+
+                    await client.ResumeAsync();
+                    var desc2 = await client.DescribeAsync();
+                    Assert.Equal(ScheduleStatus.Active, desc2.Status);
+
+                    await Task.Delay(TimeSpan.FromSeconds(3));
+                }
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
+        [Fact]
+        public async Task Schedule_ShouldHandleScheduleWithCustomData()
+        {
+            var scheduleId = $"custom-data-{Guid.NewGuid()}";
+            try
+            {
+                var customData = "{ \"key1\": \"value1\", \"key2\": 42 }";
+                var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromMinutes(5))
+                {
+                    OrchestrationInput = customData
+                });
+
+                var desc = await client.DescribeAsync();
+                Assert.NotNull(desc.OrchestrationInput);
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
+        [Fact]
+        public async Task Schedule_ShouldHandleScheduleRetrieval()
+        {
+            var scheduleId = $"retrieval-{Guid.NewGuid()}";
+            try
+            {
+                await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromMinutes(5)));
+
+                var retrievedClient = await this.ScheduledTaskClient.GetScheduleAsync(scheduleId);
+                var desc = await retrievedClient.DescribeAsync();
+
+                Assert.Equal(scheduleId, desc.ScheduleId);
+                Assert.Equal(TimeSpan.FromMinutes(5), desc.Interval);
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
+        [Fact]
+        public async Task Schedule_ShouldHandleScheduleCleanup()
+        {
+            var scheduleId = $"cleanup-{Guid.NewGuid()}";
+            try
+            {
+                var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromSeconds(1))
+                {
+                    StartImmediatelyIfLate = true
+                });
+
+                await Task.Delay(TimeSpan.FromSeconds(3));
+                await client.DeleteAsync();
+
+                await Assert.ThrowsAsync<ScheduleNotFoundException>(async () =>
+                    await this.ScheduledTaskClient.GetScheduleAsync(scheduleId));
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
+        [Fact]
+        public async Task Schedule_ShouldHandleScheduleHistory()
+        {
+            var scheduleId = $"history-{Guid.NewGuid()}";
+            try
+            {
+                var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromSeconds(2))
+                {
+                    StartImmediatelyIfLate = true
+                });
+
+                await Task.Delay(TimeSpan.FromSeconds(6));
+                var desc = await client.DescribeAsync();
+                Assert.NotNull(desc.LastRunAt);
+                Assert.NotNull(desc.NextRunAt);
+                Assert.True(desc.LastRunAt < desc.NextRunAt);
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
+        [Fact]
+        public async Task Schedule_ShouldHandleScheduleWithDeadline()
+        {
+            var scheduleId = $"deadline-{Guid.NewGuid()}";
+            try
+            {
+                var startTime = DateTimeOffset.UtcNow;
+                var endTime = startTime.AddSeconds(5);
+                var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromSeconds(1))
+                {
+                    StartAt = startTime,
+                    EndAt = endTime,
+                    StartImmediatelyIfLate = true
+                });
+
+                await Task.Delay(TimeSpan.FromSeconds(7));
+                var desc = await client.DescribeAsync();
+                Assert.True(desc.LastRunAt <= endTime);
+                Assert.Equal(ScheduleStatus.Paused, desc.Status);
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
+        [Fact]
+        public async Task Schedule_ShouldHandleScheduleWithValidationRules()
+        {
+            var scheduleId = $"validation-rules-{Guid.NewGuid()}";
+            try
+            {
+                // Should throw on invalid interval
+                await Assert.ThrowsAsync<ArgumentException>(async () =>
+                    await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                        scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromSeconds(0))));
+
+                // Should throw on invalid schedule ID
+                await Assert.ThrowsAsync<ArgumentException>(async () =>
+                    await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                        "", nameof(SimpleOrchestrator), TimeSpan.FromMinutes(5))));
+
+                // Should throw on invalid orchestration name
+                await Assert.ThrowsAsync<ArgumentException>(async () =>
+                    await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                        scheduleId, "", TimeSpan.FromMinutes(5))));
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
+        [Fact]
+        public async Task Schedule_ShouldHandleParallelScheduleOperations()
+        {
+            var baseScheduleId = $"parallel-ops-{Guid.NewGuid()}";
+            var tasks = new List<Task>();
+
+            try
+            {
+                // Create multiple schedules in parallel
+                for (int i = 0; i < 5; i++)
+                {
+                    var scheduleId = $"{baseScheduleId}-{i}";
+                    tasks.Add(this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                        scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromMinutes(5))));
+                }
+
+                await Task.WhenAll(tasks);
+
+                // Verify all schedules were created
+                var schedules = this.ScheduledTaskClient.ListSchedulesAsync();
+                int count = 0;
+                await foreach (var schedule in schedules)
+                {
+                    if (schedule.ScheduleId.StartsWith(baseScheduleId))
+                    {
+                        count++;
+                    }
+                }
+                Assert.True(count >= 5);
+            }
+            finally
+            {
+                // Cleanup all created schedules
+                for (int i = 0; i < 5; i++)
+                {
+                    await this.CleanupSchedule($"{baseScheduleId}-{i}");
+                }
+            }
+        }
+
         async Task CleanupSchedule(string scheduleId)
         {
             try

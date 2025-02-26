@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "ScheduleConsoleApp": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DURABLE_TASK_SCHEDULER_CONNECTION_STRING": "Endpoint=https://wbtestschedule01-g7fvgkfhe4ac.eastus2euap.durabletask.io;TaskHub=wbtestschedule01th01;Authentication=DefaultAzure"
+      }
+    }
+  }
+}

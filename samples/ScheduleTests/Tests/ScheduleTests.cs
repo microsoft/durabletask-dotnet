@@ -4,9 +4,6 @@
 using Microsoft.DurableTask.ScheduledTasks;
 using ScheduleTests.Infrastructure;
 using ScheduleTests.Tasks;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Xunit;
 
 namespace ScheduleTests.Tests
@@ -35,7 +32,7 @@ namespace ScheduleTests.Tests
             }
             finally
             {
-                await CleanupSchedule(scheduleId);
+                await this.CleanupSchedule(scheduleId);
             }
         }
 
@@ -59,7 +56,7 @@ namespace ScheduleTests.Tests
             }
             finally
             {
-                await CleanupSchedule(scheduleId);
+                await this.CleanupSchedule(scheduleId);
             }
         }
 
@@ -85,7 +82,7 @@ namespace ScheduleTests.Tests
             }
             finally
             {
-                await CleanupSchedule(scheduleId);
+                await this.CleanupSchedule(scheduleId);
             }
         }
 
@@ -108,7 +105,7 @@ namespace ScheduleTests.Tests
             }
             finally
             {
-                await CleanupSchedule(scheduleId);
+                await this.CleanupSchedule(scheduleId);
             }
         }
 
@@ -131,7 +128,7 @@ namespace ScheduleTests.Tests
             }
             finally
             {
-                await CleanupSchedule(scheduleId);
+                await this.CleanupSchedule(scheduleId);
             }
         }
 
@@ -153,7 +150,7 @@ namespace ScheduleTests.Tests
             }
             finally
             {
-                await CleanupSchedule(scheduleId);
+                await this.CleanupSchedule(scheduleId);
             }
         }
 
@@ -180,7 +177,7 @@ namespace ScheduleTests.Tests
             }
             finally
             {
-                await CleanupSchedule(scheduleId);
+                await this.CleanupSchedule(scheduleId);
             }
         }
 
@@ -208,7 +205,7 @@ namespace ScheduleTests.Tests
             }
             finally
             {
-                await CleanupSchedule(scheduleId);
+                await this.CleanupSchedule(scheduleId);
             }
         }
 
@@ -236,7 +233,7 @@ namespace ScheduleTests.Tests
             }
             finally
             {
-                await CleanupSchedule(scheduleId);
+                await this.CleanupSchedule(scheduleId);
             }
         }
 
@@ -270,7 +267,7 @@ namespace ScheduleTests.Tests
             {
                 foreach (var id in scheduleIds)
                 {
-                    await CleanupSchedule(id);
+                    await this.CleanupSchedule(id);
                 }
             }
         }
@@ -305,7 +302,7 @@ namespace ScheduleTests.Tests
             {
                 foreach (var id in scheduleIds)
                 {
-                    await CleanupSchedule(id);
+                    await this.CleanupSchedule(id);
                 }
             }
         }
@@ -325,7 +322,7 @@ namespace ScheduleTests.Tests
             }
             finally
             {
-                await CleanupSchedule(scheduleId);
+                await this.CleanupSchedule(scheduleId);
             }
         }
 
@@ -367,7 +364,7 @@ namespace ScheduleTests.Tests
             }
             finally
             {
-                await CleanupSchedule(scheduleId);
+                await this.CleanupSchedule(scheduleId);
             }
         }
 
@@ -389,7 +386,7 @@ namespace ScheduleTests.Tests
             }
             finally
             {
-                await CleanupSchedule(scheduleId);
+                await this.CleanupSchedule(scheduleId);
             }
         }
 
@@ -410,7 +407,7 @@ namespace ScheduleTests.Tests
             }
             finally
             {
-                await CleanupSchedule(scheduleId);
+                await this.CleanupSchedule(scheduleId);
             }
         }
 
@@ -431,7 +428,7 @@ namespace ScheduleTests.Tests
             }
             finally
             {
-                await CleanupSchedule(scheduleId);
+                await this.CleanupSchedule(scheduleId);
             }
         }
 
@@ -460,7 +457,7 @@ namespace ScheduleTests.Tests
             }
             finally
             {
-                await CleanupSchedule(scheduleId);
+                await this.CleanupSchedule(scheduleId);
             }
         }
 
@@ -487,11 +484,11 @@ namespace ScheduleTests.Tests
             }
             finally
             {
-                await CleanupSchedule(scheduleId);
+                await this.CleanupSchedule(scheduleId);
             }
         }
 
-        private async Task CleanupSchedule(string scheduleId)
+        async Task CleanupSchedule(string scheduleId)
         {
             try
             {

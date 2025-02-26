@@ -8,9 +8,6 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// <summary>
 /// Log messages.
 /// </summary>
-/// <remarks>
-/// NOTE: Trying to make logs consistent with https://github.com/Azure/durabletask/blob/main/src/DurableTask.Core/Logging/LogEvents.cs.
-/// </remarks>
 static partial class Logs
 {
     [LoggerMessage(EventId = 100, Level = LogLevel.Information, Message = "Schedule '{scheduleId}' is being created")]

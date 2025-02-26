@@ -48,7 +48,7 @@ namespace ScheduleTests.Tests
                 // get all orchestration scheduled times
                 var instanceIds = await this.GetInstanceIdsFromPageable(instances);
                 var scheduledTimes = this.GetOrchestrationScheduledTimes(instanceIds, scheduleId);
-                Assert.Equal(1, scheduledTimes.Count);
+                Assert.Single(scheduledTimes);
                 // assert scheduled time is within 3 seconds of start time
                 Assert.True(scheduledTimes[0] >= startTime && scheduledTimes[0] <= startTime.AddSeconds(3), $"scheduled time should be within 3 seconds of start time, but is {scheduledTimes[0]:yyyy-MM-dd HH:mm:ss.fff} and start time is {startTime:yyyy-MM-dd HH:mm:ss.fff}");
             }
@@ -89,9 +89,9 @@ namespace ScheduleTests.Tests
             try
             {
                 var startTime = DateTimeOffset.UtcNow;
-                var endTime = startTime.AddSeconds(5);
+                var endTime = startTime.AddSeconds(3);
                 var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
-                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromSeconds(2))
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromSeconds(1))
                 {
                     StartImmediatelyIfLate = true,
                     EndAt = endTime,
@@ -105,8 +105,14 @@ namespace ScheduleTests.Tests
                 var instances = this.GetOrchInstances(scheduleId);
                 var instanceIds = await this.GetInstanceIdsFromPageable(instances);
                 var scheduledTimes = this.GetOrchestrationScheduledTimes(instanceIds, scheduleId);
-                Assert.Equal(2, scheduledTimes.Count);
-                Assert.Equal(endTime, scheduledTimes[0]);
+                Assert.Equal(3, scheduledTimes.Count);
+                for (int i = 0; i < scheduledTimes.Count; i++)
+                {
+                    // less than endtime
+                    Assert.True(scheduledTimes[i] < endTime);
+                    // greater than starttime
+                    Assert.True(scheduledTimes[i] > startTime);
+                }
 
             }
             finally
@@ -130,7 +136,7 @@ namespace ScheduleTests.Tests
                     EndAt = now.AddSeconds(6),
                     OrchestrationInput = scheduleId
                 });
-                
+
                 var desc = await client.DescribeAsync();
                 Assert.Equal(ScheduleStatus.Active, desc.Status);
                 Assert.Equal(now.AddSeconds(1), desc.StartAt);
@@ -154,12 +160,102 @@ namespace ScheduleTests.Tests
             }
         }
 
-        // list all negative tests on createschedule
-        // 1. invalid state transition
-        // 2. if schedule already exists, update it in place with creationoptions, createdat should not change but lastmodifiedat, and status should be same as before update
-        
-        
-        
+        [Fact]
+        public async Task Schedule_ShouldHandleScheduleAlreadyExists()
+        {
+            var scheduleId = $"schedule-already-exists-{Guid.NewGuid()}";
+            try
+            {
+                var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromMinutes(5))
+                {
+                    OrchestrationInput = scheduleId,
+                    StartImmediatelyIfLate = true
+                });
+
+                var desc = await client.DescribeAsync();
+                var now = DateTimeOffset.UtcNow;
+                await client.CreateAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromMinutes(1))
+                {
+                    OrchestrationInput = scheduleId,
+                    StartAt = now.AddMinutes(1),
+                    EndAt = now.AddMinutes(2),
+                    StartImmediatelyIfLate = false
+                });
+
+                var desc2 = await client.DescribeAsync();
+                Assert.Equal(ScheduleStatus.Active, desc2.Status);
+                // assert nextrunat is null and token is changed
+                Assert.Null(desc2.NextRunAt);
+                Assert.NotEqual(desc.ExecutionToken, desc2.ExecutionToken);
+
+                // assert startat is not changed
+                Assert.Equal(now.AddMinutes(1), desc2.StartAt);
+                // assertt endat is not changed
+                Assert.Equal(now.AddMinutes(2), desc2.EndAt);
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
+        [Fact]
+        public async Task Schedule_ShouldHandleScheduleAlreadyExists_UpdateInPlace()
+        {
+            var scheduleId = $"schedule-already-exists-update-{Guid.NewGuid()}";
+            try     
+            {
+                var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromSeconds(1))
+                {
+                    OrchestrationInput = scheduleId,
+                    StartImmediatelyIfLate = true
+                });
+
+                var desc = await client.DescribeAsync();
+                var now = DateTimeOffset.UtcNow;
+                
+                await Task.Delay(TimeSpan.FromSeconds(2));
+                // pause it
+                await client.PauseAsync();
+                var desc2 = await client.DescribeAsync();
+                Assert.Equal(ScheduleStatus.Paused, desc2.Status);
+
+                // find count of orch instances
+                var instances = this.GetOrchInstances(scheduleId);
+                var instanceIds = await this.GetInstanceIdsFromPageable(instances);
+                var count1 = instanceIds.Count;
+
+                // create it again
+                await client.CreateAsync(new ScheduleCreationOptions(
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromMinutes(1))
+                {
+                    OrchestrationInput = scheduleId,
+                    StartAt = now.AddMinutes(1),
+                });
+
+                var desc3 = await client.DescribeAsync();
+                Assert.Equal(ScheduleStatus.Paused, desc3.Status);
+                Assert.Equal(now.AddMinutes(1), desc3.StartAt);
+                // nextrunat should not change
+                Assert.Equal(desc.NextRunAt, desc3.NextRunAt);
+                Assert.Equal(desc.ExecutionToken, desc3.ExecutionToken);
+
+                await Task.Delay(TimeSpan.FromSeconds(2));
+
+                var instances2 = this.GetOrchInstances(scheduleId);
+                var instanceIds2 = await this.GetInstanceIdsFromPageable(instances2);
+                var count2 = instanceIds2.Count;
+                Assert.Equal(count1, count2);
+            }
+            finally
+            {
+                await this.CleanupSchedule(scheduleId);
+            }
+        }
+
         [Fact]
         public async Task Schedule_ShouldHandleImmediateStartToFalse()
         {
@@ -192,45 +288,42 @@ namespace ScheduleTests.Tests
         }
 
         [Fact]
-        public async Task Schedule_ShouldHandleShortIntervals()
+        public async Task Schedule_ShouldHandleShortIntervalsAndScheduleTimeMatching()
         {
             var scheduleId = $"short-interval-{Guid.NewGuid()}";
             try
             {
+                var now = DateTimeOffset.UtcNow;
                 var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
-                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromSeconds(5))
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromSeconds(2))
                 {
+                    StartAt = now.AddSeconds(3),
                     StartImmediatelyIfLate = true,
                     OrchestrationInput = "short"
                 });
 
-                await Task.Delay(TimeSpan.FromSeconds(12));
+                await Task.Delay(TimeSpan.FromSeconds(9));
                 var desc = await client.DescribeAsync();
                 Assert.True(desc.LastRunAt.HasValue);
-            }
-            finally
-            {
-                await this.CleanupSchedule(scheduleId);
-            }
-        }
 
-        [Fact]
-        public async Task Schedule_ShouldHandleLongIntervals()
-        {
-            var scheduleId = $"long-interval-{Guid.NewGuid()}";
-            try
-            {
-                var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
-                    scheduleId, nameof(LongRunningOrchestrator), TimeSpan.FromMinutes(10))
+                // get a list of expected schedule times
+                var expectedScheduleTimes = new List<DateTimeOffset>();
+                var startTime = now.AddSeconds(3);
+                for (int i = 0; i < 4; i++)
                 {
-                    StartImmediatelyIfLate = false,
-                    OrchestrationInput = "long"
-                });
+                    expectedScheduleTimes.Add(startTime);
+                    startTime = startTime.AddSeconds(2);
+                }
 
-                var desc = await client.DescribeAsync();
-                Assert.Equal(TimeSpan.FromMinutes(10), desc.Interval);
-                Assert.Equal(ScheduleStatus.Active, desc.Status);
-                Assert.Null(desc.LastRunAt);
+                // get orch instances
+                var instances = this.GetOrchInstances(scheduleId);
+                var instanceIds = await this.GetInstanceIdsFromPageable(instances);
+                var scheduledTimes = this.GetOrchestrationScheduledTimes(instanceIds, scheduleId);
+                Assert.Equal(expectedScheduleTimes.Count, scheduledTimes.Count);
+                for (int i = 0; i < expectedScheduleTimes.Count; i++)
+                {
+                    Assert.True(scheduledTimes[i] >= expectedScheduleTimes[i] && scheduledTimes[i] <= expectedScheduleTimes[i].AddSeconds(2), $"scheduledTimes[i] should be within 2 seconds of expectedScheduleTimes[i], but is {scheduledTimes[i]:yyyy-MM-dd HH:mm:ss.fff} and expectedScheduleTimes[i] is {expectedScheduleTimes[i]:yyyy-MM-dd HH:mm:ss.fff}");
+                }
             }
             finally
             {
@@ -251,18 +344,23 @@ namespace ScheduleTests.Tests
                     OrchestrationInput = scheduleId
                 });
 
-                await Task.Delay(TimeSpan.FromSeconds(10));
+                await Task.Delay(TimeSpan.FromSeconds(4));
 
                 // count num of orch instances input == scheduleId
-                var count1 = await this.GetOrchInstancesCount(scheduleId);
+                var instances = this.GetOrchInstances(scheduleId);
+                var instanceIds = await this.GetInstanceIdsFromPageable(instances);
+                var count1 = instanceIds.Count;
 
                 await client.PauseAsync();
                 var desc = await client.DescribeAsync();
                 Assert.Equal(ScheduleStatus.Paused, desc.Status);
 
                 // count num of orch instances input == scheduleId
-                var count2 = await this.GetOrchInstancesCount(scheduleId);
+                var instances2 = this.GetOrchInstances(scheduleId);
+                var instanceIds2 = await this.GetInstanceIdsFromPageable(instances2);
+                var count2 = instanceIds2.Count;
                 Assert.Equal(count1, count2);
+
                 await client.ResumeAsync();
                 desc = await client.DescribeAsync();
                 Assert.Equal(ScheduleStatus.Active, desc.Status);
@@ -292,7 +390,9 @@ namespace ScheduleTests.Tests
                 Assert.Equal(TimeSpan.FromSeconds(2), desc.Interval);
 
                 // get orch instances input == original
-                var count1 = await this.GetOrchInstancesCount(scheduleId);
+                var instances = this.GetOrchInstances(scheduleId);
+                var instanceIds = await this.GetInstanceIdsFromPageable(instances);
+                var count1 = instanceIds.Count;
                 Assert.True(count1 > 0, $"count1 should be greater than 0, but is {count1}");
 
                 var newInput = $"updated-{Guid.NewGuid()}";
@@ -309,12 +409,15 @@ namespace ScheduleTests.Tests
 
                 await Task.Delay(TimeSpan.FromSeconds(5));
                 // get orch instances input == updated
-                var count2 = await this.GetOrchInstancesCount(newInput);
+                var instances2 = this.GetOrchInstances(scheduleId);
+                var instanceIds2 = await this.GetInstanceIdsFromPageable(instances2);
+                var count2 = instanceIds2.Count;
                 Assert.True(count2 > 0, $"count2 should be greater than 0, but is {count2}");
 
                 // get orch instances input == newInput
-                var count3 = await this.GetOrchInstancesCount(newInput);
-                // assert descriptively
+                var instances3 = this.GetOrchInstances(newInput);
+                var instanceIds3 = await this.GetInstanceIdsFromPageable(instances3);
+                var count3 = instanceIds3.Count;
                 Assert.True(count3 > 0, $"count3 should be greater than 0, but is {count3}");
             }
             finally
@@ -459,11 +562,19 @@ namespace ScheduleTests.Tests
         {
             var scheduleId = $"delete-test-{Guid.NewGuid()}";
             var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
-                scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromMinutes(1)));
+                scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromSeconds(4)));
 
+            await Task.Delay(TimeSpan.FromSeconds(1));
             await client.DeleteAsync();
+            await Task.Delay(TimeSpan.FromSeconds(5));
             var desc = await this.ScheduledTaskClient.GetScheduleAsync(scheduleId);
             Assert.Null(desc);
+
+            // get instances
+            var instances = this.GetOrchInstances(scheduleId);
+            var instanceIds = await this.GetInstanceIdsFromPageable(instances);
+            var count = instanceIds.Count;
+            Assert.Equal(0, count);
         }
 
         [Fact]
@@ -485,7 +596,9 @@ namespace ScheduleTests.Tests
                 Assert.Equal(ScheduleStatus.Active, desc.Status);
 
                 // get orch instances input == scheduleId
-                var count = await this.GetOrchInstancesCount(scheduleId);
+                var instances = this.GetOrchInstances(scheduleId);
+                var instanceIds = await this.GetInstanceIdsFromPageable(instances);
+                var count = instanceIds.Count;
                 Assert.True(count > 0, $"count should be greater than 0, but is {count}");
             }
             finally
@@ -493,6 +606,7 @@ namespace ScheduleTests.Tests
                 await this.CleanupSchedule(scheduleId);
             }
         }
+
 
         [Fact]
         public async Task Schedule_ShouldHandleRandomExecutionTimes()
@@ -554,7 +668,9 @@ namespace ScheduleTests.Tests
                 Assert.Equal(TimeSpan.FromSeconds(1), desc.Interval);
 
                 // get orch instances input == scheduleId
-                var count = await this.GetOrchInstancesCount(scheduleId);
+                var instances = this.GetOrchInstances(scheduleId);
+                var instanceIds = await this.GetInstanceIdsFromPageable(instances);
+                var count = instanceIds.Count;
                 Assert.True(count > 0, $"count should be greater than 0, but is {count}");
             }
             finally
@@ -623,19 +739,35 @@ namespace ScheduleTests.Tests
             try
             {
                 var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
-                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromMinutes(1)));
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromMinutes(1)) {
+                        StartImmediatelyIfLate = true
+                    });
 
+                await Task.Delay(TimeSpan.FromSeconds(2));
                 await client.PauseAsync();
+                
+                // get instances
+                var instances = this.GetOrchInstances(scheduleId);
+                var instanceIds = await this.GetInstanceIdsFromPageable(instances);
+                var count = instanceIds.Count;
+
                 await client.UpdateAsync(new ScheduleUpdateOptions
                 {
                     OrchestrationInput = "updated-while-paused",
-                    Interval = TimeSpan.FromMinutes(2)
+                    Interval = TimeSpan.FromSeconds(1)
                 });
 
+                await Task.Delay(TimeSpan.FromSeconds(2));
                 var desc = await client.DescribeAsync();
                 Assert.Equal(ScheduleStatus.Paused, desc.Status);
                 Assert.Equal("updated-while-paused", desc.OrchestrationInput);
-                Assert.Equal(TimeSpan.FromMinutes(2), desc.Interval);
+                Assert.Equal(TimeSpan.FromSeconds(1), desc.Interval);
+
+                // get instances
+                var instances2 = this.GetOrchInstances(scheduleId);
+                var instanceIds2 = await this.GetInstanceIdsFromPageable(instances2);
+                var count2 = instanceIds2.Count;
+                Assert.Equal(count, count2);
             }
             finally
             {
@@ -713,7 +845,9 @@ namespace ScheduleTests.Tests
                 });
 
                 await Task.Delay(TimeSpan.FromSeconds(5));
-                var count = await this.GetOrchInstancesCount(scheduleId);
+                var instances = this.GetOrchInstances(scheduleId);
+                var instanceIds = await this.GetInstanceIdsFromPageable(instances);
+                var count = instanceIds.Count;
                 Assert.True(count >= 4, "Should have executed at least 4 times");
             }
             finally
@@ -859,14 +993,21 @@ namespace ScheduleTests.Tests
                     StartImmediatelyIfLate = true
                 });
 
+                var desc = await client.DescribeAsync();
+                var originalExecToken = desc.ExecutionToken;
                 await Task.Delay(TimeSpan.FromSeconds(2));
                 await client.UpdateAsync(new ScheduleUpdateOptions
                 {
                     Interval = TimeSpan.FromSeconds(10)
                 });
 
-                var desc = await client.DescribeAsync();
-                Assert.Equal(TimeSpan.FromSeconds(10), desc.Interval);
+                var desc2 = await client.DescribeAsync();
+                Assert.Equal(TimeSpan.FromSeconds(10), desc2.Interval);
+                Assert.Equal(ScheduleStatus.Active, desc2.Status);
+                // assert nextrunat is null
+                Assert.Null(desc2.NextRunAt);
+                // assert exec token is different
+                Assert.NotEqual(desc2.ExecutionToken, originalExecToken);
             }
             finally
             {
@@ -963,7 +1104,7 @@ namespace ScheduleTests.Tests
                 }
             }
         }
-
+        
         async Task CleanupSchedule(string scheduleId)
         {
             try
@@ -1002,13 +1143,15 @@ namespace ScheduleTests.Tests
         // get orchestrantion scheduled time from parsing instanceid
         DateTimeOffset GetOrchestrationScheduledTime(string instanceId, string scheduleId)
         {
-            var parts = instanceId.Split('-');
-            Console.WriteLine($"instanceId: {instanceId}, parts: {string.Join(",", parts)}");
-            // strip prefix scheduleId + '-' and parse the rest as datetimeoffset
-            var scheduledTime = DateTimeOffset.Parse(string.Join("-", parts.Skip(1)));
+            // Remove scheduleId plus "-" from the instanceId
+            string remainingPart = instanceId.Substring(scheduleId.Length + 1);
+            
+            // Parse the remaining part as DateTimeOffset
+            var scheduledTime = DateTimeOffset.Parse(remainingPart);
             Console.WriteLine($"scheduledTime: {scheduledTime}");
             return scheduledTime;
         }
+
 
         // get a list of orchestration scheduled times from a list of instance ids
         List<DateTimeOffset> GetOrchestrationScheduledTimes(List<string> instanceIds, string scheduleId)
@@ -1022,9 +1165,9 @@ namespace ScheduleTests.Tests
             var instanceIds = new List<string>();
             await foreach (var instance in pageable)
             {
-                instanceIds.Add(instance.InstanceId);       
+                instanceIds.Add(instance.InstanceId);
             }
             return instanceIds;
-        }   
+        }
     }
 }

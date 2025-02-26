@@ -81,18 +81,23 @@ namespace ScheduleTests.Tests
             try
             {
                 var startTime = DateTimeOffset.UtcNow;
-                var endTime = startTime.AddSeconds(10);
+                var endTime = startTime.AddSeconds(5);
                 var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
-                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromSeconds(5))
+                    scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromSeconds(2))
                 {
                     StartAt = startTime,
                     EndAt = endTime,
                     OrchestrationInput = scheduleId
                 });
 
-                await Task.Delay(TimeSpan.FromSeconds(15));
+                await Task.Delay(TimeSpan.FromSeconds(5));
+                var count = await this.GetOrchInstancesCount(scheduleId, nameof(SimpleOrchestrator));
                 var desc = await client.DescribeAsync();
                 Assert.Equal(ScheduleStatus.Active, desc.Status);
+
+                await Task.Delay(TimeSpan.FromSeconds(5));
+                var count2 = await this.GetOrchInstancesCount(scheduleId, nameof(SimpleOrchestrator));
+                Assert.Equal(count, count2);
             }
             finally
             {

@@ -282,17 +282,25 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         // compute time gap between now and startat if set else with ScheduleCreatedAt
         TimeSpan timeSinceStart = now - startTime;
 
-        if (timeSinceStart <= TimeSpan.Zero && scheduleConfig.StartImmediatelyIfLate)
+        // timeSinceStart is negative that means next run time should be in future
+        if (timeSinceStart < TimeSpan.Zero)
+        {
+            return startTime;
+        }
+
+        // timeSinceStart is >= 0, this mean current time already past start time
+        bool isFirstRun = this.State.LastRunAt == null;
+
+        // check edge case: if this is first run and startimmediatelyiflate is true, run immediately
+        if (isFirstRun && scheduleConfig.StartImmediatelyIfLate)
         {
             return now;
         }
-        else
-        {
-            // Calculate number of intervals between start time and now
-            int intervalsElapsed = (int)(timeSinceStart.Ticks / scheduleConfig.Interval.Ticks);
 
-            // Compute next run time based on intervals elapsed since start
-            return startTime + TimeSpan.FromTicks(scheduleConfig.Interval.Ticks * (intervalsElapsed + 1));
-        }
+        // Calculate number of intervals between start time and now
+        int intervalsElapsed = (int)(timeSinceStart.Ticks / scheduleConfig.Interval.Ticks);
+
+        // Compute next run time based on intervals elapsed since start
+        return startTime + TimeSpan.FromTicks(scheduleConfig.Interval.Ticks * (intervalsElapsed + 1));
     }
 }

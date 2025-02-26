@@ -14,7 +14,7 @@ public class ScheduleClientImplTests
 {
     readonly Mock<DurableTaskClient> durableTaskClient;
     readonly Mock<DurableEntityClient> entityClient;
-    readonly Mock<ILogger> logger;
+    readonly ILogger logger;
     readonly ScheduleClientImpl client;
     readonly string scheduleId = "test-schedule";
 
@@ -22,17 +22,17 @@ public class ScheduleClientImplTests
     {
         this.durableTaskClient = new Mock<DurableTaskClient>("test", MockBehavior.Strict);
         this.entityClient = new Mock<DurableEntityClient>("test", MockBehavior.Strict);
-        this.logger = new Mock<ILogger>(MockBehavior.Loose);
+        this.logger = new TestLogger();
         this.durableTaskClient.Setup(x => x.Entities).Returns(this.entityClient.Object);
-        this.client = new ScheduleClientImpl(this.durableTaskClient.Object, this.scheduleId, this.logger.Object);
+        this.client = new ScheduleClientImpl(this.durableTaskClient.Object, this.scheduleId, this.logger);
     }
 
     [Fact]
     public void Constructor_WithNullClient_ThrowsArgumentNullException()
     {
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() =>
-            new ScheduleClientImpl(null!, this.scheduleId, this.logger.Object));
+        ArgumentNullException ex = Assert.Throws<ArgumentNullException>(() =>
+            new ScheduleClientImpl(null!, this.scheduleId, this.logger));
         Assert.Equal("client", ex.ParamName);
     }
 
@@ -43,7 +43,7 @@ public class ScheduleClientImplTests
     {
         // Act & Assert
         var ex = Assert.Throws<ArgumentException>(() =>
-            new ScheduleClientImpl(this.durableTaskClient.Object, invalidScheduleId, this.logger.Object));
+            new ScheduleClientImpl(this.durableTaskClient.Object, invalidScheduleId, this.logger));
         Assert.Contains("scheduleId cannot be null or empty", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 

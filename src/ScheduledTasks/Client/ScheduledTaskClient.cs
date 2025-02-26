@@ -35,6 +35,6 @@ public abstract class ScheduledTaskClient
     /// </summary>
     /// <param name="creationOptions">The options for creating the schedule.</param>
     /// <param name="cancellation">Optional cancellation token.</param>
-    /// <returns>A handle to the created schedule.</returns>
+    /// <returns>A ScheduleClient for the created schedule.</returns>
     public abstract Task<ScheduleClient> CreateScheduleAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default);
 }

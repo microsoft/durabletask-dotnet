@@ -237,7 +237,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 
         if (this.State.NextRunAt!.Value <= currentTime)
         {
-            this.StartOrchestrationIfNotRunning(context);
+            this.StartOrchestration(context, currentTime);
             this.State.LastRunAt = currentTime;
             this.State.NextRunAt = null;
             this.State.NextRunAt = this.DetermineNextRunTime(scheduleConfig);
@@ -252,13 +252,25 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             new SignalEntityOptions { SignalTime = this.State.NextRunAt.Value });
     }
 
-    void StartOrchestrationIfNotRunning(TaskEntityContext context)
+    void StartOrchestration(TaskEntityContext context, DateTimeOffset scheduledRunTime)
     {
         try
         {
-            StartOrchestrationOptions? startOrchestrationOptions = string.IsNullOrEmpty(this.State.ScheduleConfiguration?.OrchestrationInstanceId)
-                ? null
-                : new StartOrchestrationOptions(this.State.ScheduleConfiguration.OrchestrationInstanceId);
+            string? instanceId = this.State.ScheduleConfiguration?.OrchestrationInstanceId;
+            StartOrchestrationOptions startOrchestrationOptions;
+
+            if (string.IsNullOrEmpty(instanceId))
+            {
+                // Generate unique instance ID based on schedule name and current time
+                instanceId = $"{this.State.ScheduleConfiguration!.ScheduleId}-{scheduledRunTime:o}";
+                startOrchestrationOptions = new StartOrchestrationOptions(instanceId);
+            }
+            else
+            {
+                // Use configured instance ID which will prevent concurrent runs
+                startOrchestrationOptions = new StartOrchestrationOptions(instanceId);
+            }
+
             context.ScheduleNewOrchestration(
                 new TaskName(this.State.ScheduleConfiguration!.OrchestrationName),
                 this.State.ScheduleConfiguration.OrchestrationInput,
@@ -268,7 +280,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         {
             this.logger.ScheduleOperationError(
                 this.State.ScheduleConfiguration!.ScheduleId,
-                nameof(this.StartOrchestrationIfNotRunning),
+                nameof(this.StartOrchestration),
                 "Failed to start orchestration",
                 ex);
         }

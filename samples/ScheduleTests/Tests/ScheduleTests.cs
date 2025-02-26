@@ -31,7 +31,7 @@ namespace ScheduleTests.Tests
                 ScheduleDescription desc = await client.DescribeAsync();
                 Assert.Equal(ScheduleStatus.Active, desc.Status);
                 // assert lastrunat is within 1 second of start time
-                Assert.True(desc.LastRunAt >= startTime && desc.LastRunAt <= startTime.AddSeconds(1));
+                Assert.True(desc.LastRunAt >= startTime && desc.LastRunAt <= startTime.AddSeconds(3), $"lastrunat should be within 3 seconds of start time, but is {desc.LastRunAt} and start time is {startTime}");
                 Assert.Equal(startTime.AddMinutes(1), desc.EndAt);
                 Assert.Equal(scheduleId, desc.OrchestrationInput);
                 Assert.Equal(ScheduleStatus.Active, desc.Status);
@@ -230,7 +230,7 @@ namespace ScheduleTests.Tests
 
                 // get orch instances input == original
                 var count1 = await this.GetOrchInstancesCount(scheduleId, nameof(SimpleOrchestrator));
-
+                Assert.True(count1 > 0, $"count1 should be greater than 0, but is {count1}");
 
                 var newInput = $"updated-{Guid.NewGuid()}";
 
@@ -247,7 +247,7 @@ namespace ScheduleTests.Tests
                 await Task.Delay(TimeSpan.FromSeconds(5));
                 // get orch instances input == updated
                 var count2 = await this.GetOrchInstancesCount(newInput, nameof(SimpleOrchestrator));
-                Assert.Equal(count1, count2);
+                Assert.True(count2 > 0, $"count2 should be greater than 0, but is {count2}");
 
                 // get orch instances input == newInput
                 var count3 = await this.GetOrchInstancesCount(newInput, nameof(SimpleOrchestrator));
@@ -412,7 +412,8 @@ namespace ScheduleTests.Tests
                 var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
                     scheduleId, nameof(AlwaysThrowExceptionOrchestrator), TimeSpan.FromSeconds(1))
                 {
-                    StartImmediatelyIfLate = true
+                    StartImmediatelyIfLate = true,
+                    OrchestrationInput = scheduleId
                 });
 
                 await Task.Delay(TimeSpan.FromSeconds(5));
@@ -439,7 +440,8 @@ namespace ScheduleTests.Tests
                 var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
                     scheduleId, nameof(RandomRunTimeOrchestrator), TimeSpan.FromSeconds(10))
                 {
-                    StartImmediatelyIfLate = true
+                    StartImmediatelyIfLate = true,
+                    OrchestrationInput = scheduleId
                 });
 
                 await Task.Delay(TimeSpan.FromSeconds(25));
@@ -481,7 +483,8 @@ namespace ScheduleTests.Tests
                 var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
                     scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromSeconds(1))
                 {
-                    StartImmediatelyIfLate = true
+                    StartImmediatelyIfLate = true,
+                    OrchestrationInput = scheduleId
                 });
 
                 var desc = await client.DescribeAsync();

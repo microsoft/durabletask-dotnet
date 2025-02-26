@@ -4,7 +4,8 @@
 namespace Microsoft.DurableTask.ScheduledTasks;
 
 /// <summary>
-/// Represents a handle to a schedule, allowing operations on a specific schedule instance.
+/// Client for managing a specific schedule instance.
+/// Provides methods to list, create, pause, resume, and manage schedules.
 /// </summary>
 public abstract class ScheduleClient
 {

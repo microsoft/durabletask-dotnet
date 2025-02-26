@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Diagnostics.CodeAnalysis;
-
 namespace Microsoft.DurableTask.ScheduledTasks;
 
 /// <summary>
@@ -186,7 +184,6 @@ class ScheduleConfiguration
         return updatedFields;
     }
 
-    [MemberNotNull(nameof(StartAt), nameof(EndAt))]
     void Validate()
     {
         if (this.StartAt.HasValue && this.EndAt.HasValue && this.StartAt.Value > this.EndAt.Value)

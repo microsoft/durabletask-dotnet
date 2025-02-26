@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Entities;
@@ -15,23 +14,23 @@ public class ScheduledTaskClientImplTests
 {
     readonly Mock<DurableTaskClient> durableTaskClient;
     readonly Mock<DurableEntityClient> entityClient;
-    readonly Mock<ILogger<ScheduledTaskClientImpl>> logger;
+    readonly ILogger logger;
     readonly ScheduledTaskClientImpl client;
 
     public ScheduledTaskClientImplTests()
     {
-        this.durableTaskClient = new Mock<DurableTaskClient>("test", MockBehavior.Strict);
-        this.entityClient = new Mock<DurableEntityClient>("test", MockBehavior.Strict);
-        this.logger = new Mock<ILogger<ScheduledTaskClientImpl>>(MockBehavior.Loose);
+        this.durableTaskClient = new Mock<DurableTaskClient>("test");
+        this.entityClient = new Mock<DurableEntityClient>("test");
+        this.logger = new TestLogger();
         this.durableTaskClient.Setup(x => x.Entities).Returns(this.entityClient.Object);
-        this.client = new ScheduledTaskClientImpl(this.durableTaskClient.Object, this.logger.Object);
+        this.client = new ScheduledTaskClientImpl(this.durableTaskClient.Object, this.logger);
     }
 
     [Fact]
     public void Constructor_WithNullClient_ThrowsArgumentNullException()
     {
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => new ScheduledTaskClientImpl(null!, this.logger.Object));
+        var ex = Assert.Throws<ArgumentNullException>(() => new ScheduledTaskClientImpl(null!, this.logger));
         Assert.Equal("durableTaskClient", ex.ParamName);
     }
 
@@ -58,13 +57,13 @@ public class ScheduledTaskClientImplTests
     }
 
     [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    public void GetScheduleClient_WithInvalidId_ThrowsArgumentException(string scheduleId)
+    [InlineData(null, typeof(ArgumentNullException), "Value cannot be null")]
+    [InlineData("", typeof(ArgumentException), "Parameter cannot be an empty string")]
+    public void GetScheduleClient_WithInvalidId_ThrowsCorrectException(string scheduleId, Type expectedExceptionType, string expectedMessage)
     {
         // Act & Assert
-        var ex = Assert.Throws<ArgumentException>(() => this.client.GetScheduleClient(scheduleId));
-        Assert.Contains("scheduleId cannot be null or empty", ex.Message, StringComparison.OrdinalIgnoreCase);
+        var ex = Assert.Throws(expectedExceptionType, () => this.client.GetScheduleClient(scheduleId));
+        Assert.Contains(expectedMessage, ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -74,21 +73,27 @@ public class ScheduledTaskClientImplTests
         var options = new ScheduleCreationOptions("test-schedule", "test-orchestration", TimeSpan.FromMinutes(5));
         string instanceId = "test-instance";
 
+        // create entity instance id
+        var entityInstanceId = new EntityInstanceId(nameof(Schedule), options.ScheduleId);
+
         this.durableTaskClient
             .Setup(x => x.ScheduleNewOrchestrationInstanceAsync(
                 It.Is<TaskName>(n => n.Name == nameof(ExecuteScheduleOperationOrchestrator)),
                 It.Is<ScheduleOperationRequest>(r =>
-                    r.EntityId.Name == nameof(Schedule) &&
-                    r.EntityId.Key == options.ScheduleId &&
+                    r.EntityId.Name == entityInstanceId.Name &&
+                    r.EntityId.Key == entityInstanceId.Key &&
                     r.OperationName == nameof(Schedule.CreateSchedule) &&
-                    r.Input == options),
+                    r.Input != null && ((ScheduleCreationOptions)r.Input).Equals(options)),
                 null,
                 default))
             .ReturnsAsync(instanceId);
 
         this.durableTaskClient
             .Setup(x => x.WaitForInstanceCompletionAsync(instanceId, true, default))
-            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId));
+            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId)
+            {
+                RuntimeStatus = OrchestrationRuntimeStatus.Completed
+            });
 
         // Act
         var scheduleClient = await this.client.CreateScheduleAsync(options);
@@ -104,7 +109,7 @@ public class ScheduledTaskClientImplTests
                     r.EntityId.Name == nameof(Schedule) &&
                     r.EntityId.Key == options.ScheduleId &&
                     r.OperationName == nameof(Schedule.CreateSchedule) &&
-                    r.Input == options),
+                    r.Input != null && ((ScheduleCreationOptions)r.Input).Equals(options)),
                 null,
                 default),
             Times.Once);

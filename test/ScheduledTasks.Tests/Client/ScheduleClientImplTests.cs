@@ -20,8 +20,8 @@ public class ScheduleClientImplTests
 
     public ScheduleClientImplTests()
     {
-        this.durableTaskClient = new Mock<DurableTaskClient>("test", MockBehavior.Strict);
-        this.entityClient = new Mock<DurableEntityClient>("test", MockBehavior.Strict);
+        this.durableTaskClient = new Mock<DurableTaskClient>("test");
+        this.entityClient = new Mock<DurableEntityClient>("test");
         this.logger = new TestLogger();
         this.durableTaskClient.Setup(x => x.Entities).Returns(this.entityClient.Object);
         this.client = new ScheduleClientImpl(this.durableTaskClient.Object, this.scheduleId, this.logger);
@@ -37,14 +37,15 @@ public class ScheduleClientImplTests
     }
 
     [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    public void Constructor_WithInvalidScheduleId_ThrowsArgumentException(string invalidScheduleId)
+    [InlineData(null, typeof(ArgumentNullException), "Value cannot be null")]
+    [InlineData("", typeof(ArgumentException), "Parameter cannot be an empty string")]
+    public void Constructor_WithInvalidScheduleId_ThrowsCorrectException(string invalidScheduleId, Type expectedExceptionType, string expectedMessage)
     {
         // Act & Assert
-        var ex = Assert.Throws<ArgumentException>(() =>
+        var ex = Assert.Throws(expectedExceptionType, () =>
             new ScheduleClientImpl(this.durableTaskClient.Object, invalidScheduleId, this.logger));
-        Assert.Contains("scheduleId cannot be null or empty", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains(expectedMessage, ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -66,11 +67,17 @@ public class ScheduleClientImplTests
             ScheduleConfiguration = new ScheduleConfiguration(this.scheduleId, "test-orchestration", TimeSpan.FromMinutes(5))
         };
 
+        // create entity instance id
+        var entityInstanceId = new EntityInstanceId(nameof(Schedule), this.scheduleId);
+        // get key and id
+        var key = entityInstanceId.Key;
+        var id = entityInstanceId.Name;
+
         this.entityClient
             .Setup(c => c.GetEntityAsync<ScheduleState>(
-                It.Is<EntityInstanceId>(id => id.Name == nameof(Schedule) && id.Key == this.scheduleId),
+                It.Is<EntityInstanceId>(id => id.Name == entityInstanceId.Name && id.Key == entityInstanceId.Key),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new EntityMetadata<ScheduleState>(new EntityInstanceId(nameof(Schedule), this.scheduleId), state));
+            .ReturnsAsync(new EntityMetadata<ScheduleState>(entityInstanceId, state));
 
         // Act
         var description = await this.client.DescribeAsync();
@@ -112,21 +119,62 @@ public class ScheduleClientImplTests
 
         this.durableTaskClient
             .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId));
+            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId)
+            {
+                RuntimeStatus = OrchestrationRuntimeStatus.Completed
+            });
 
         // Act
         await this.client.DeleteAsync();
 
+        // create entity instance id
+        var entityInstanceId = new EntityInstanceId(nameof(Schedule), this.scheduleId);
         // Assert
         this.durableTaskClient.Verify(
             c => c.ScheduleNewOrchestrationInstanceAsync(
                 It.Is<TaskName>(n => n.Name == nameof(ExecuteScheduleOperationOrchestrator)),
                 It.Is<ScheduleOperationRequest>(r =>
-                    r.EntityId.Name == nameof(Schedule) &&
-                    r.EntityId.Key == this.scheduleId &&
+                    r.EntityId.Name == entityInstanceId.Name &&
+                    r.EntityId.Key == entityInstanceId.Key &&
                     r.OperationName == "delete"),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<CancellationToken>()),  // Ensure all arguments match
             Times.Once);
+
+
+        // Verify that we waited for completion
+        this.durableTaskClient.Verify(
+            c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_WhenOrchestrationFails_ThrowsException()
+    {
+        // Arrange
+        string instanceId = "test-instance";
+        string errorMessage = "Test error message";
+
+        this.durableTaskClient
+            .Setup(c => c.ScheduleNewOrchestrationInstanceAsync(
+                It.Is<TaskName>(n => n.Name == nameof(ExecuteScheduleOperationOrchestrator)),
+                It.IsAny<ScheduleOperationRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(instanceId);
+
+        this.durableTaskClient
+            .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId)
+            {
+                RuntimeStatus = OrchestrationRuntimeStatus.Failed,
+                FailureDetails = new TaskFailureDetails("TestError", errorMessage, null, null)
+            });
+
+        // Act & Assert
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => this.client.DeleteAsync());
+
+        Assert.Contains($"Failed to delete schedule '{this.scheduleId}'", exception.Message);
+        Assert.Contains(errorMessage, exception.Message);
     }
 
     [Fact]
@@ -144,18 +192,22 @@ public class ScheduleClientImplTests
 
         this.durableTaskClient
             .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId));
+            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId) {
+                RuntimeStatus = OrchestrationRuntimeStatus.Completed
+            });
 
         // Act
         await this.client.PauseAsync();
 
+        // create entity instance id
+        var entityInstanceId = new EntityInstanceId(nameof(Schedule), this.scheduleId);
         // Assert
         this.durableTaskClient.Verify(
             c => c.ScheduleNewOrchestrationInstanceAsync(
                 It.Is<TaskName>(n => n.Name == nameof(ExecuteScheduleOperationOrchestrator)),
                 It.Is<ScheduleOperationRequest>(r =>
-                    r.EntityId.Name == nameof(Schedule) &&
-                    r.EntityId.Key == this.scheduleId &&
+                    r.EntityId.Name == entityInstanceId.Name &&
+                    r.EntityId.Key == entityInstanceId.Key &&
                     r.OperationName == nameof(Schedule.PauseSchedule)),
                 It.IsAny<CancellationToken>()),
             Times.Once);
@@ -176,18 +228,22 @@ public class ScheduleClientImplTests
 
         this.durableTaskClient
             .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId));
+            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId) {
+                RuntimeStatus = OrchestrationRuntimeStatus.Completed
+            });
 
         // Act
         await this.client.ResumeAsync();
 
+        // create entity instance id
+        var entityInstanceId = new EntityInstanceId(nameof(Schedule), this.scheduleId);
         // Assert
         this.durableTaskClient.Verify(
             c => c.ScheduleNewOrchestrationInstanceAsync(
                 It.Is<TaskName>(n => n.Name == nameof(ExecuteScheduleOperationOrchestrator)),
                 It.Is<ScheduleOperationRequest>(r =>
-                    r.EntityId.Name == nameof(Schedule) &&
-                    r.EntityId.Key == this.scheduleId &&
+                    r.EntityId.Name == entityInstanceId.Name &&
+                    r.EntityId.Key == entityInstanceId.Key &&
                     r.OperationName == nameof(Schedule.ResumeSchedule)),
                 It.IsAny<CancellationToken>()),
             Times.Once);
@@ -213,18 +269,22 @@ public class ScheduleClientImplTests
 
         this.durableTaskClient
             .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId));
+            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId) {
+                RuntimeStatus = OrchestrationRuntimeStatus.Completed
+            });
 
         // Act
         await this.client.UpdateAsync(updateOptions);
 
+        // create entity instance id
+        var entityInstanceId = new EntityInstanceId(nameof(Schedule), this.scheduleId);
         // Assert
         this.durableTaskClient.Verify(
             c => c.ScheduleNewOrchestrationInstanceAsync(
                 It.Is<TaskName>(n => n.Name == nameof(ExecuteScheduleOperationOrchestrator)),
                 It.Is<ScheduleOperationRequest>(r =>
-                    r.EntityId.Name == nameof(Schedule) &&
-                    r.EntityId.Key == this.scheduleId &&
+                    r.EntityId.Name == entityInstanceId.Name &&
+                    r.EntityId.Key == entityInstanceId.Key &&
                     r.OperationName == nameof(Schedule.UpdateSchedule)),
                 It.IsAny<CancellationToken>()),
             Times.Once);

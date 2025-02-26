@@ -115,9 +115,24 @@ public class ScheduledTaskClientImpl(DurableTaskClient durableTaskClient, ILogge
                 {
                     List<ScheduleDescription> schedules = entityPage.Values
                         .Where(metadata =>
-                            (!filter?.Status.HasValue ?? true || metadata.State.Status == filter.Status.Value) &&
-                            (filter?.CreatedFrom.HasValue != true || metadata.State.ScheduleCreatedAt > filter.CreatedFrom) &&
-                            (filter?.CreatedTo.HasValue != true || metadata.State.ScheduleCreatedAt < filter.CreatedTo))
+                        {
+                            // If there's no filter, return all items
+                            if (filter == null)
+                            {
+                                return true;
+                            }
+
+                            // Check status filter if specified
+                            bool statusMatches = !filter.Status.HasValue || metadata.State.Status == filter.Status.Value;
+
+                            // Check created from date filter if specified
+                            bool createdFromMatches = !filter.CreatedFrom.HasValue || metadata.State.ScheduleCreatedAt > filter.CreatedFrom.Value;
+
+                            // Check created to date filter if specified
+                            bool createdToMatches = !filter.CreatedTo.HasValue || metadata.State.ScheduleCreatedAt < filter.CreatedTo.Value;
+
+                            return statusMatches && createdFromMatches && createdToMatches;
+                        })
                         .Select(metadata =>
                         {
                             ScheduleState state = metadata.State;

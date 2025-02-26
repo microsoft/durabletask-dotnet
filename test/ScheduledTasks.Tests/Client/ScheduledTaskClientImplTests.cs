@@ -79,12 +79,7 @@ public class ScheduledTaskClientImplTests
         this.durableTaskClient
             .Setup(x => x.ScheduleNewOrchestrationInstanceAsync(
                 It.Is<TaskName>(n => n.Name == nameof(ExecuteScheduleOperationOrchestrator)),
-                It.Is<ScheduleOperationRequest>(r =>
-                    r.EntityId.Name == entityInstanceId.Name &&
-                    r.EntityId.Key == entityInstanceId.Key &&
-                    r.OperationName == nameof(Schedule.CreateSchedule) &&
-                    r.Input != null && ((ScheduleCreationOptions)r.Input).Equals(options)),
-                null,
+                It.IsAny<ScheduleOperationRequest>(),
                 default))
             .ReturnsAsync(instanceId);
 
@@ -106,11 +101,12 @@ public class ScheduledTaskClientImplTests
             x => x.ScheduleNewOrchestrationInstanceAsync(
                 It.Is<TaskName>(n => n.Name == nameof(ExecuteScheduleOperationOrchestrator)),
                 It.Is<ScheduleOperationRequest>(r =>
-                    r.EntityId.Name == nameof(Schedule) &&
-                    r.EntityId.Key == options.ScheduleId &&
+                    r.EntityId.Name == entityInstanceId.Name &&
+                    r.EntityId.Key == entityInstanceId.Key &&
                     r.OperationName == nameof(Schedule.CreateSchedule) &&
-                    r.Input != null && ((ScheduleCreationOptions)r.Input).Equals(options)),
-                null,
+                    ((ScheduleCreationOptions)r.Input).ScheduleId == options.ScheduleId &&
+                    ((ScheduleCreationOptions)r.Input).OrchestrationName == options.OrchestrationName &&
+                    ((ScheduleCreationOptions)r.Input).Interval == options.Interval),
                 default),
             Times.Once);
     }
@@ -128,28 +124,65 @@ public class ScheduledTaskClientImplTests
     public async Task GetScheduleAsync_WhenExists_ReturnsDescription()
     {
         // Arrange
+        // create now
+        var now = DateTimeOffset.UtcNow;
         string scheduleId = "test-schedule";
+        var config = new ScheduleConfiguration(scheduleId, "test-orchestration", TimeSpan.FromMinutes(5))
+        {
+            StartAt = now.AddMinutes(-10),
+            EndAt = now.AddDays(1),
+            StartImmediatelyIfLate = true,
+            OrchestrationInput = "test-input",
+            OrchestrationInstanceId = "test-instance"
+        };
+
         var state = new ScheduleState
         {
             Status = ScheduleStatus.Active,
-            ScheduleConfiguration = new ScheduleConfiguration(scheduleId, "test-orchestration", TimeSpan.FromMinutes(5))
+            ScheduleConfiguration = config,
+            ExecutionToken = "test-token",
+            LastRunAt = now.AddMinutes(-5),
+            NextRunAt = now.AddMinutes(5),
+            ScheduleCreatedAt = now.AddDays(-1)
         };
+
+        var metadata = new EntityMetadata<ScheduleState>(
+            new EntityInstanceId(nameof(Schedule), scheduleId),
+            state);
+
+        this.durableTaskClient
+            .Setup(x => x.Entities)
+            .Returns(this.entityClient.Object);
+
+        // create entity instance id
+        var entityInstanceId = new EntityInstanceId(nameof(Schedule), scheduleId);
 
         this.entityClient
             .Setup(x => x.GetEntityAsync<ScheduleState>(
-                It.Is<EntityInstanceId>(id => id.Name == nameof(Schedule) && id.Key == scheduleId),
-                true,
+                It.Is<EntityInstanceId>(id => id.Name == entityInstanceId.Name && id.Key == entityInstanceId.Key),
                 default))
-            .ReturnsAsync(new EntityMetadata<ScheduleState>(new EntityInstanceId(nameof(Schedule), scheduleId), state));
+            .ReturnsAsync(metadata);
 
         // Act
         var description = await this.client.GetScheduleAsync(scheduleId);
 
+        //verify getentityasync is called
+        this.entityClient.Verify(x => x.GetEntityAsync<ScheduleState>(entityInstanceId, default), Times.Once);
+
         // Assert
         Assert.NotNull(description);
         Assert.Equal(scheduleId, description.ScheduleId);
-        Assert.Equal(state.Status, description.Status);
-        Assert.Equal(state.ScheduleConfiguration.OrchestrationName, description.OrchestrationName);
+        Assert.Equal(ScheduleStatus.Active, description.Status);
+        Assert.Equal(config.OrchestrationName, description.OrchestrationName);
+        Assert.Equal(config.OrchestrationInput, description.OrchestrationInput);
+        Assert.Equal(config.OrchestrationInstanceId, description.OrchestrationInstanceId);
+        Assert.Equal(config.StartAt, description.StartAt);
+        Assert.Equal(config.EndAt, description.EndAt);
+        Assert.Equal(config.Interval, description.Interval);
+        Assert.Equal(config.StartImmediatelyIfLate, description.StartImmediatelyIfLate);
+        Assert.Equal("test-token", description.ExecutionToken);
+        Assert.Equal(now.AddMinutes(-5), description.LastRunAt);
+        Assert.Equal(now.AddMinutes(5), description.NextRunAt);
     }
 
     [Fact]
@@ -158,12 +191,15 @@ public class ScheduledTaskClientImplTests
         // Arrange
         string scheduleId = "test-schedule";
 
+        // create entity instance id
+        var entityInstanceId = new EntityInstanceId(nameof(Schedule), scheduleId);
+
         this.entityClient
             .Setup(x => x.GetEntityAsync<ScheduleState>(
-                It.Is<EntityInstanceId>(id => id.Name == nameof(Schedule) && id.Key == scheduleId),
+                It.Is<EntityInstanceId>(id => id.Name == entityInstanceId.Name && id.Key == entityInstanceId.Key),
                 true,
                 default))
-            .ReturnsAsync((EntityMetadata<ScheduleState?>)null);
+            .ReturnsAsync((EntityMetadata<ScheduleState>?)null);
 
         // Act
         var description = await this.client.GetScheduleAsync(scheduleId);
@@ -191,6 +227,17 @@ public class ScheduledTaskClientImplTests
                 {
                     Status = ScheduleStatus.Active,
                     ScheduleConfiguration = new ScheduleConfiguration("test-1", "test-orchestration", TimeSpan.FromMinutes(5))
+                    {
+                        StartAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+                        EndAt = DateTimeOffset.UtcNow.AddDays(1),
+                        StartImmediatelyIfLate = true,
+                        OrchestrationInput = "test-input-1",
+                        OrchestrationInstanceId = "test-instance-1"
+                    },
+                    ExecutionToken = "test-token-1",
+                    LastRunAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+                    NextRunAt = DateTimeOffset.UtcNow.AddMinutes(5),
+                    ScheduleCreatedAt = DateTimeOffset.UtcNow.AddDays(-1)
                 }),
             new EntityMetadata<ScheduleState>(
                 new EntityInstanceId(nameof(Schedule), "test-2"),
@@ -198,13 +245,32 @@ public class ScheduledTaskClientImplTests
                 {
                     Status = ScheduleStatus.Active,
                     ScheduleConfiguration = new ScheduleConfiguration("test-2", "test-orchestration", TimeSpan.FromMinutes(5))
+                    {
+                        StartAt = DateTimeOffset.UtcNow.AddMinutes(-8),
+                        EndAt = DateTimeOffset.UtcNow.AddDays(2),
+                        StartImmediatelyIfLate = true,
+                        OrchestrationInput = "test-input-2",
+                        OrchestrationInstanceId = "test-instance-2"
+                    },
+                    ExecutionToken = "test-token-2",
+                    LastRunAt = DateTimeOffset.UtcNow.AddMinutes(-3),
+                    NextRunAt = DateTimeOffset.UtcNow.AddMinutes(7),
+                    ScheduleCreatedAt = DateTimeOffset.UtcNow.AddDays(-2)
                 })
         };
 
+        this.durableTaskClient
+            .Setup(x => x.Entities)
+            .Returns(this.entityClient.Object);
+
         this.entityClient
-            .Setup(x => x.GetAllEntitiesAsync<ScheduleState>(It.IsAny<EntityQuery>()))
+            .Setup(x => x.GetAllEntitiesAsync<ScheduleState>(
+                It.IsAny<EntityQuery>()))
             .Returns(Pageable.Create<EntityMetadata<ScheduleState>>((continuation, pageSize, cancellation) =>
-                Task.FromResult(new Page<EntityMetadata<ScheduleState>>(states.ToList(), null))));
+            {
+                var page = new Page<EntityMetadata<ScheduleState>>(states, continuation);
+                return Task.FromResult(page);
+            }));
 
         // Act
         var schedules = new List<ScheduleDescription>();
@@ -214,8 +280,18 @@ public class ScheduledTaskClientImplTests
         }
 
         // Assert
+        // verify getallentitiesasync is called
+        this.entityClient.Verify(x => x.GetAllEntitiesAsync<ScheduleState>(
+            It.Is<EntityQuery>(q =>
+                q.InstanceIdStartsWith == "@test" &&
+                q.IncludeState == true &&
+                q.PageSize == query.PageSize)), Times.Once);
+
         Assert.Equal(2, schedules.Count);
         Assert.All(schedules, s => Assert.StartsWith("test-", s.ScheduleId));
         Assert.All(schedules, s => Assert.Equal(ScheduleStatus.Active, s.Status));
+        Assert.All(schedules, s => Assert.NotNull(s.ExecutionToken));
+        Assert.All(schedules, s => Assert.NotNull(s.LastRunAt));
+        Assert.All(schedules, s => Assert.NotNull(s.NextRunAt));
     }
 }

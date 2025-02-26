@@ -31,7 +31,7 @@ namespace ScheduleTests.Tests
                 ScheduleDescription desc = await client.DescribeAsync();
                 Assert.Equal(ScheduleStatus.Active, desc.Status);
                 // assert lastrunat is within 3 second of start time, log both time if failed to millisecond level
-                Assert.True(desc.LastRunAt >= startTime && desc.LastRunAt <= startTime.AddSeconds(3), $"lastrunat should be within 3 seconds of start time, but is {desc.LastRunAt} and start time is {startTime}");
+                Assert.True(desc.LastRunAt >= startTime && desc.LastRunAt <= startTime.AddSeconds(3), $"lastrunat should be within 3 seconds of start time, but is {desc.LastRunAt:yyyy-MM-dd HH:mm:ss.fff} and start time is {startTime:yyyy-MM-dd HH:mm:ss.fff}");
                 Assert.Equal(startTime.AddMinutes(1), desc.EndAt);
                 Assert.Equal(scheduleId, desc.OrchestrationInput);
                 Assert.Equal(ScheduleStatus.Active, desc.Status);

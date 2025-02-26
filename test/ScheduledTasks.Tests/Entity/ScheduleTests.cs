@@ -288,8 +288,10 @@ public class ScheduleTests
                 scheduleStateAfterPause,
                 scheduleStateAfterPause.ExecutionToken);
         // Act & Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             this.schedule.RunAsync(runOp).AsTask());
+        // check exception message Schedule must be in Active status to run.
+        Assert.Contains("Schedule must be in Active status to run.", exception.Message);
     }
 
     [Fact]
@@ -817,7 +819,7 @@ public class ScheduleTests
         var runOperation = new TestEntityOperation(
             nameof(Schedule.RunSchedule),
             createOperation.State,
-            createOperation.State.GetState<ScheduleState>().ExecutionToken);
+            createOperation.State.GetState<ScheduleState>()?.ExecutionToken);
         await this.schedule.RunAsync(runOperation);
 
         // Assert
@@ -1309,5 +1311,484 @@ public class ScheduleTests
         // Next run should be at start time + (intervals elapsed + 1) * interval
         var expectedNextRun = startAt.AddTicks((3 + 1) * interval.Ticks);
         Assert.Equal(expectedNextRun, scheduleState.NextRunAt.Value);
+    }
+
+    [Fact]
+    public async Task UpdateSchedule_WithEmptyOrchestrationName_NothingChange()
+    {
+        // Arrange
+        var createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5));
+
+        var createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        var updateOptions = new ScheduleUpdateOptions
+        {
+            OrchestrationName = ""
+        };
+
+        // Act & Assert
+        var updateOperation = new TestEntityOperation(
+            nameof(Schedule.UpdateSchedule),
+            createOperation.State,
+            updateOptions);
+        await this.schedule.RunAsync(updateOperation);
+
+        // assert nothing changed
+        var state = updateOperation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal("TestOrchestration", scheduleState.ScheduleConfiguration?.OrchestrationName);
+        Assert.Equal(TimeSpan.FromMinutes(5), scheduleState.ScheduleConfiguration?.Interval);
+        Assert.Equal(createOperation.State.GetState<ScheduleState>()?.ScheduleConfiguration?.StartAt, scheduleState.ScheduleConfiguration?.StartAt);
+        Assert.Null(scheduleState.ScheduleConfiguration?.EndAt);
+        Assert.False(scheduleState.ScheduleConfiguration?.StartImmediatelyIfLate);
+        Assert.Equal(createOperation.State.GetState<ScheduleState>()?.ExecutionToken, scheduleState.ExecutionToken);
+        Assert.Equal(ScheduleStatus.Active, scheduleState.Status);
+        Assert.Equal(createOperation.State.GetState<ScheduleState>()?.LastRunAt, scheduleState.LastRunAt);
+        Assert.Equal(createOperation.State.GetState<ScheduleState>()?.NextRunAt, scheduleState.NextRunAt);
+        Assert.Equal(createOperation.State.GetState<ScheduleState>()?.ScheduleConfiguration?.OrchestrationInput, scheduleState.ScheduleConfiguration?.OrchestrationInput);
+        Assert.Equal(createOperation.State.GetState<ScheduleState>()?.ScheduleConfiguration?.OrchestrationInstanceId, scheduleState.ScheduleConfiguration?.OrchestrationInstanceId);
+        Assert.Equal(createOperation.State.GetState<ScheduleState>()?.ScheduleConfiguration?.OrchestrationName, scheduleState.ScheduleConfiguration?.OrchestrationName);
+    }
+
+    [Fact]
+    public async Task RunSchedule_WithEmptyToken_DoesNotRun()
+    {
+        // Arrange
+        var createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5));
+
+        var createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        // Act
+        var runOperation = new TestEntityOperation(
+            nameof(Schedule.RunSchedule),
+            createOperation.State,
+            "");
+        await this.schedule.RunAsync(runOperation);
+
+        // Assert
+        var state = runOperation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Null(scheduleState.LastRunAt);
+
+        Assert.Contains($"Schedule '{this.scheduleId}' run cancelled with execution token ''", this.logger.Logs.Last().Message);
+    }
+
+    [Fact]
+    public async Task CreateSchedule_WithSpecialCharactersInScheduleId_CreatesSchedule()
+    {
+        // Arrange
+        var options = new ScheduleCreationOptions(
+            scheduleId: "test@schedule#123$%^",
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5));
+
+        // Create test operation
+        var operation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            options);
+
+        // Act
+        await this.schedule.RunAsync(operation);
+
+        // Assert
+        var state = operation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal("test@schedule#123$%^", scheduleState.ScheduleConfiguration?.ScheduleId);
+    }
+
+    [Fact]
+    public async Task CreateSchedule_WithUnicodeCharactersInScheduleId_CreatesSchedule()
+    {
+        // Arrange
+        var options = new ScheduleCreationOptions(
+            scheduleId: "测试时间表",
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5));
+
+        // Create test operation
+        var operation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            options);
+
+        // Act
+        await this.schedule.RunAsync(operation);
+
+        // Assert
+        var state = operation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal("测试时间表", scheduleState.ScheduleConfiguration?.ScheduleId);
+    }
+
+    [Fact]
+    public async Task UpdateSchedule_WithVeryLongOrchestrationInstanceId_UpdatesSuccessfully()
+    {
+        // Arrange
+        var createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5));
+
+        var createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        string longInstanceId = new string('x', 1000);
+        var updateOptions = new ScheduleUpdateOptions
+        {
+            OrchestrationInstanceId = longInstanceId
+        };
+
+        // Act
+        var updateOperation = new TestEntityOperation(
+            nameof(Schedule.UpdateSchedule),
+            createOperation.State,
+            updateOptions);
+        await this.schedule.RunAsync(updateOperation);
+
+        // Assert
+        var state = updateOperation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal(longInstanceId, scheduleState.ScheduleConfiguration?.OrchestrationInstanceId);
+    }
+
+    [Fact]
+    public async Task RunSchedule_WithWhitespaceToken_DoesNotRun()
+    {
+        // Arrange
+        var createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5));
+
+        var createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        // Act
+        var runOperation = new TestEntityOperation(
+            nameof(Schedule.RunSchedule),
+            createOperation.State,
+            "   ");
+        await this.schedule.RunAsync(runOperation);
+
+        // Assert
+        var state = runOperation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Null(scheduleState.LastRunAt);
+        Assert.Contains($"Schedule '{this.scheduleId}' run cancelled with execution token '   '", this.logger.Logs.Last().Message);
+    }
+
+    [Fact]
+    public async Task CreateSchedule_WithMaxLengthScheduleId_CreatesSchedule()
+    {
+        // Arrange
+        string maxLengthId = new string('x', 1000);
+        var options = new ScheduleCreationOptions(
+            scheduleId: maxLengthId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5));
+
+        // Create test operation
+        var operation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            options);
+
+        // Act
+        await this.schedule.RunAsync(operation);
+
+        // Assert
+        var state = operation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal(maxLengthId, scheduleState.ScheduleConfiguration?.ScheduleId);
+    }
+
+    [Fact]
+    public async Task CreateSchedule_WithJsonSpecialCharactersInInput_CreatesSchedule()
+    {
+        // Arrange
+        string specialInput = "{\"key\":\"value\",\"array\":[1,2,3],\"nested\":{\"prop\":true}}";
+        var options = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5))
+        {
+            OrchestrationInput = specialInput
+        };
+
+        // Create test operation
+        var operation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            options);
+
+        // Act
+        await this.schedule.RunAsync(operation);
+
+        // Assert
+        var state = operation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal(specialInput, scheduleState.ScheduleConfiguration?.OrchestrationInput);
+    }
+
+    [Fact]
+    public async Task UpdateSchedule_WithJsonSpecialCharactersInInput_UpdatesSuccessfully()
+    {
+        // Arrange
+        var createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5));
+
+        var createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        string specialInput = "{\"key\":\"value\",\"array\":[1,2,3],\"nested\":{\"prop\":true}}";
+        var updateOptions = new ScheduleUpdateOptions
+        {
+            OrchestrationInput = specialInput
+        };
+
+        // Act
+        var updateOperation = new TestEntityOperation(
+            nameof(Schedule.UpdateSchedule),
+            createOperation.State,
+            updateOptions);
+        await this.schedule.RunAsync(updateOperation);
+
+        // Assert
+        var state = updateOperation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal(specialInput, scheduleState.ScheduleConfiguration?.OrchestrationInput);
+    }
+
+    [Fact]
+    public async Task CreateSchedule_WithHtmlSpecialCharactersInInput_CreatesSchedule()
+    {
+        // Arrange
+        string htmlInput = "<div class=\"test\">Hello & World</div>";
+        var options = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5))
+        {
+            OrchestrationInput = htmlInput
+        };
+
+        // Create test operation
+        var operation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            options);
+
+        // Act
+        await this.schedule.RunAsync(operation);
+
+        // Assert
+        var state = operation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal(htmlInput, scheduleState.ScheduleConfiguration?.OrchestrationInput);
+    }
+
+    [Fact]
+    public async Task UpdateSchedule_WithHtmlSpecialCharactersInInput_UpdatesSuccessfully()
+    {
+        // Arrange
+        var createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5));
+
+        var createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        string htmlInput = "<div class=\"test\">Hello & World</div>";
+        var updateOptions = new ScheduleUpdateOptions
+        {
+            OrchestrationInput = htmlInput
+        };
+
+        // Act
+        var updateOperation = new TestEntityOperation(
+            nameof(Schedule.UpdateSchedule),
+            createOperation.State,
+            updateOptions);
+        await this.schedule.RunAsync(updateOperation);
+
+        // Assert
+        var state = updateOperation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal(htmlInput, scheduleState.ScheduleConfiguration?.OrchestrationInput);
+    }
+
+    [Fact]
+    public async Task CreateSchedule_WithMultilineInput_CreatesSchedule()
+    {
+        // Arrange
+        string multilineInput = @"Line 1
+Line 2
+Line 3
+With special chars: !@#$%^&*()";
+        var options = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5))
+        {
+            OrchestrationInput = multilineInput
+        };
+
+        // Create test operation
+        var operation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            options);
+
+        // Act
+        await this.schedule.RunAsync(operation);
+
+        // Assert
+        var state = operation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal(multilineInput, scheduleState.ScheduleConfiguration?.OrchestrationInput);
+    }
+
+    [Fact]
+    public async Task UpdateSchedule_WithMultilineInput_UpdatesSuccessfully()
+    {
+        // Arrange
+        var createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5));
+
+        var createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        string multilineInput = @"Line 1
+Line 2
+Line 3
+With special chars: !@#$%^&*()";
+        var updateOptions = new ScheduleUpdateOptions
+        {
+            OrchestrationInput = multilineInput
+        };
+
+        // Act
+        var updateOperation = new TestEntityOperation(
+            nameof(Schedule.UpdateSchedule),
+            createOperation.State,
+            updateOptions);
+        await this.schedule.RunAsync(updateOperation);
+
+        // Assert
+        var state = updateOperation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal(multilineInput, scheduleState.ScheduleConfiguration?.OrchestrationInput);
+    }
+
+    [Fact]
+    public async Task CreateSchedule_WithBase64EncodedInput_CreatesSchedule()
+    {
+        // Arrange
+        string base64Input = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("Hello World"));
+        var options = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5))
+        {
+            OrchestrationInput = base64Input
+        };
+
+        // Create test operation
+        var operation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            options);
+
+        // Act
+        await this.schedule.RunAsync(operation);
+
+        // Assert
+        var state = operation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal(base64Input, scheduleState.ScheduleConfiguration?.OrchestrationInput);
+    }
+
+    [Fact]
+    public async Task UpdateSchedule_WithBase64EncodedInput_UpdatesSuccessfully()
+    {
+        // Arrange
+        var createOptions = new ScheduleCreationOptions(
+            scheduleId: this.scheduleId,
+            orchestrationName: "TestOrchestration",
+            interval: TimeSpan.FromMinutes(5));
+
+        var createOperation = new TestEntityOperation(
+            nameof(Schedule.CreateSchedule),
+            new TestEntityState(null),
+            createOptions);
+        await this.schedule.RunAsync(createOperation);
+
+        string base64Input = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("Hello World"));
+        var updateOptions = new ScheduleUpdateOptions
+        {
+            OrchestrationInput = base64Input
+        };
+
+        // Act
+        var updateOperation = new TestEntityOperation(
+            nameof(Schedule.UpdateSchedule),
+            createOperation.State,
+            updateOptions);
+        await this.schedule.RunAsync(updateOperation);
+
+        // Assert
+        var state = updateOperation.State.GetState(typeof(ScheduleState));
+        Assert.NotNull(state);
+        var scheduleState = Assert.IsType<ScheduleState>(state);
+        Assert.Equal(base64Input, scheduleState.ScheduleConfiguration?.OrchestrationInput);
     }
 }

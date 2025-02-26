@@ -4,7 +4,9 @@
 namespace Microsoft.DurableTask.ScheduledTasks;
 
 /// <summary>
-/// Base class for managing scheduled tasks in a Durable Task application.
+/// Client for managing scheduled tasks.
+/// Provides methods to retrieve a ScheduleClient, list all schedules, 
+/// and get details of a specific schedule.
 /// </summary>
 public abstract class ScheduledTaskClient
 {

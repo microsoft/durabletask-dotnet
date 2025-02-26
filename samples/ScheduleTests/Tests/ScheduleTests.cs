@@ -191,7 +191,7 @@ namespace ScheduleTests.Tests
                 await client.PauseAsync();
                 var desc = await client.DescribeAsync();
                 Assert.Equal(ScheduleStatus.Paused, desc.Status);
-                
+
                 // count num of orch instances input == scheduleId
                 var count2 = await this.GetOrchInstancesCount(scheduleId, nameof(SimpleOrchestrator));
                 Assert.Equal(count1, count2);
@@ -225,7 +225,7 @@ namespace ScheduleTests.Tests
 
                 // get orch instances input == original
                 var count1 = await this.GetOrchInstancesCount(scheduleId, nameof(SimpleOrchestrator));
-               
+
 
                 var newInput = $"updated-{Guid.NewGuid()}";
 
@@ -235,7 +235,7 @@ namespace ScheduleTests.Tests
                     Interval = TimeSpan.FromSeconds(3)
                 });
 
-                var desc = await client.DescribeAsync();
+                desc = await client.DescribeAsync();
                 Assert.Equal(newInput, desc.OrchestrationInput);
                 Assert.Equal(TimeSpan.FromSeconds(3), desc.Interval);
 
@@ -590,7 +590,7 @@ namespace ScheduleTests.Tests
         {
             var instances = this.Client.GetAllInstancesAsync(new OrchestrationQuery()
             {
-                CreatedFrom = DateTimeOffset.UtcNow.AddMinutes(-1), 
+                CreatedFrom = DateTimeOffset.UtcNow.AddMinutes(-1),
                 FetchInputsAndOutputs = true
             });
             var count = 0;

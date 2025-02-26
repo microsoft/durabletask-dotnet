@@ -16,7 +16,7 @@ namespace ScheduleTests.Tests
             var scheduleId = $"simple-once-{Guid.NewGuid()}";
             try
             {
-                var startTime = DateTimeOffset.UtcNow.AddSeconds(5);
+                var startTime = DateTimeOffset.UtcNow.AddSeconds(1);
                 var client = await this.ScheduledTaskClient.CreateScheduleAsync(new ScheduleCreationOptions(
                     scheduleId, nameof(SimpleOrchestrator), TimeSpan.FromMinutes(5))
                 {
@@ -26,7 +26,7 @@ namespace ScheduleTests.Tests
                     StartImmediatelyIfLate = false
                 });
 
-                await Task.Delay(TimeSpan.FromSeconds(10));
+                await Task.Delay(TimeSpan.FromSeconds(3));
                 var desc = await client.DescribeAsync();
                 Assert.Equal(ScheduleStatus.Active, desc.Status);
             }

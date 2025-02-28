@@ -6,16 +6,19 @@ using Microsoft.DurableTask.ScheduledTasks;
 
 namespace ScheduleConsoleApp;
 
-class ScheduleOperations(ScheduledTaskClient scheduledTaskClient)
+/// <summary>
+/// Demonstrates various schedule operations in a sample application.
+/// </summary>
+static class ScheduleDemo
 {
-    readonly ScheduledTaskClient scheduledTaskClient = scheduledTaskClient ?? throw new ArgumentNullException(nameof(scheduledTaskClient));
-
-    public async Task RunAsync()
+    public static async Task RunDemoAsync(ScheduledTaskClient scheduledTaskClient)
     {
+        ArgumentNullException.ThrowIfNull(scheduledTaskClient);
+
         try
         {
-            await this.DeleteExistingSchedulesAsync();
-            await this.CreateAndManageScheduleAsync();
+            await DeleteExistingSchedulesAsync(scheduledTaskClient);
+            await CreateAndManageScheduleAsync(scheduledTaskClient);
         }
         catch (Exception ex)
         {
@@ -23,24 +26,24 @@ class ScheduleOperations(ScheduledTaskClient scheduledTaskClient)
         }
     }
 
-    async Task DeleteExistingSchedulesAsync()
+    static async Task DeleteExistingSchedulesAsync(ScheduledTaskClient scheduledTaskClient)
     {
         // Define the initial query with the desired page size
         ScheduleQuery query = new ScheduleQuery { PageSize = 100 };
 
         // Retrieve the pageable collection of schedule IDs
-        AsyncPageable<ScheduleDescription> schedules = this.scheduledTaskClient.ListSchedulesAsync(query);
+        AsyncPageable<ScheduleDescription> schedules = scheduledTaskClient.ListSchedulesAsync(query);
 
         // Delete each existing schedule
         await foreach (ScheduleDescription schedule in schedules)
         {
-            ScheduleClient scheduleClient1 = this.scheduledTaskClient.GetScheduleClient(schedule.ScheduleId);
-            await scheduleClient1.DeleteAsync();
+            ScheduleClient scheduleClient = scheduledTaskClient.GetScheduleClient(schedule.ScheduleId);
+            await scheduleClient.DeleteAsync();
             Console.WriteLine($"Deleted schedule {schedule.ScheduleId}");
         }
     }
 
-    async Task CreateAndManageScheduleAsync()
+    static async Task CreateAndManageScheduleAsync(ScheduledTaskClient scheduledTaskClient)
     {
         // Create schedule options that runs every 4 seconds
         ScheduleCreationOptions scheduleOptions = new ScheduleCreationOptions(
@@ -53,7 +56,7 @@ class ScheduleOperations(ScheduledTaskClient scheduledTaskClient)
         };
 
         // Create the schedule and get a handle to it
-        ScheduleClient scheduleClient = await this.scheduledTaskClient.CreateScheduleAsync(scheduleOptions);
+        ScheduleClient scheduleClient = await scheduledTaskClient.CreateScheduleAsync(scheduleOptions);
 
         // Get and print the initial schedule description
         await PrintScheduleDescriptionAsync(scheduleClient);

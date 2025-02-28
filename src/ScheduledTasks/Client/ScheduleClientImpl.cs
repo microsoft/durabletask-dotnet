@@ -65,10 +65,7 @@ class ScheduleClientImpl : ScheduleClient
         }
         catch (Exception ex)
         {
-            this.logger.ClientError(
-                nameof(this.CreateAsync),
-                this.ScheduleId,
-                ex);
+            this.logger.ClientError(nameof(this.CreateAsync), this.ScheduleId, ex);
 
             throw;
         }
@@ -115,10 +112,7 @@ class ScheduleClientImpl : ScheduleClient
         }
         catch (Exception ex)
         {
-            this.logger.ClientError(
-                nameof(this.DescribeAsync),
-                this.ScheduleId,
-                ex);
+            this.logger.ClientError(nameof(this.DescribeAsync), this.ScheduleId, ex);
 
             throw;
         }
@@ -152,10 +146,7 @@ class ScheduleClientImpl : ScheduleClient
         }
         catch (Exception ex)
         {
-            this.logger.ClientError(
-                nameof(this.PauseAsync),
-                this.ScheduleId,
-                ex);
+            this.logger.ClientError(nameof(this.PauseAsync), this.ScheduleId, ex);
 
             throw;
         }
@@ -189,10 +180,7 @@ class ScheduleClientImpl : ScheduleClient
         }
         catch (Exception ex)
         {
-            this.logger.ClientError(
-                nameof(this.ResumeAsync),
-                this.ScheduleId,
-                ex);
+            this.logger.ClientError(nameof(this.ResumeAsync), this.ScheduleId, ex);
 
             throw;
         }
@@ -227,10 +215,7 @@ class ScheduleClientImpl : ScheduleClient
         }
         catch (Exception ex)
         {
-            this.logger.ClientError(
-                nameof(this.UpdateAsync),
-                this.ScheduleId,
-                ex);
+            this.logger.ClientError(nameof(this.UpdateAsync), this.ScheduleId, ex);
 
             throw;
         }
@@ -264,10 +249,7 @@ class ScheduleClientImpl : ScheduleClient
         }
         catch (Exception ex)
         {
-            this.logger.ClientError(
-                nameof(this.DeleteAsync),
-                this.ScheduleId,
-                ex);
+            this.logger.ClientError(nameof(this.DeleteAsync), this.ScheduleId, ex);
 
             throw;
         }

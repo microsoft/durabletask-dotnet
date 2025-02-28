@@ -86,14 +86,22 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             Input = this.DataConverter.Serialize(input),
         };
 
-        if (Activity.Current?.Id != null)
+        if (Activity.Current?.Id != null || Activity.Current?.TraceStateString != null)
         {
-            request.ParentTraceContext.TraceParent = Activity.Current?.Id;
-        }
+            if (request.ParentTraceContext == null)
+            {
+                request.ParentTraceContext = new P.TraceContext();
+            }
 
-        if (Activity.Current?.TraceStateString != null)
-        {
-            request.ParentTraceContext.TraceState = Activity.Current?.TraceStateString;
+            if (Activity.Current?.Id != null)
+            {
+                request.ParentTraceContext.TraceParent = Activity.Current?.Id;
+            }
+
+            if (Activity.Current?.TraceStateString != null)
+            {
+                request.ParentTraceContext.TraceState = Activity.Current?.TraceStateString;
+            }
         }
 
         DateTimeOffset? startAt = options?.StartAt;

@@ -52,7 +52,6 @@ await host.StartAsync();
 
 // Run the schedule operations
 ScheduledTaskClient scheduledTaskClient = host.Services.GetRequiredService<ScheduledTaskClient>();
-ScheduleOperations scheduleOperations = new ScheduleOperations(scheduledTaskClient);
-await scheduleOperations.RunAsync();
+await ScheduleDemo.RunDemoAsync(scheduledTaskClient);
 
 await host.StopAsync();

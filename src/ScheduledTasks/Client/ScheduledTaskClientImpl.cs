@@ -40,10 +40,7 @@ public class ScheduledTaskClientImpl(DurableTaskClient durableTaskClient, ILogge
         }
         catch (Exception ex)
         {
-            this.logger.ClientError(
-                nameof(this.CreateScheduleAsync),
-                creationOptions.ScheduleId,
-                ex);
+            this.logger.ClientError(nameof(this.CreateScheduleAsync), creationOptions.ScheduleId, ex);
 
             throw;
         }
@@ -74,10 +71,7 @@ public class ScheduledTaskClientImpl(DurableTaskClient durableTaskClient, ILogge
         }
         catch (Exception ex)
         {
-            this.logger.ClientError(
-                nameof(this.GetScheduleAsync),
-                scheduleId,
-                ex);
+            this.logger.ClientError(nameof(this.GetScheduleAsync), scheduleId, ex);
 
             throw;
         }
@@ -169,10 +163,7 @@ public class ScheduledTaskClientImpl(DurableTaskClient durableTaskClient, ILogge
             }
             catch (Exception ex)
             {
-                this.logger.ClientError(
-                    nameof(this.ListSchedulesAsync),
-                    string.Empty,
-                    ex);
+                this.logger.ClientError(nameof(this.ListSchedulesAsync), string.Empty, ex);
 
                 throw;
             }

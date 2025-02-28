@@ -251,8 +251,8 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
 
         if (this.State.NextRunAt!.Value <= currentTime)
         {
-            this.StartOrchestration(context, currentTime);
-            this.State.LastRunAt = currentTime;
+            this.StartOrchestration(context, this.State.NextRunAt!.Value);
+            this.State.LastRunAt = this.State.NextRunAt!.Value;
             this.State.NextRunAt = null;
             this.State.NextRunAt = this.DetermineNextRunTime(scheduleConfig);
         }

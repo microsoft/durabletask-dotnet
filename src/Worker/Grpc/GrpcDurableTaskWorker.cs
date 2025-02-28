@@ -46,8 +46,8 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await using AsyncDisposable disposable = this.GetCallInvoker(out CallInvoker callInvoker);
-        this.logger.StartingTaskHubWorker();
+        await using AsyncDisposable disposable = this.GetCallInvoker(out CallInvoker callInvoker, out string address);
+        this.logger.StartingTaskHubWorker(address);
         await new Processor(this, new(callInvoker)).ExecuteAsync(stoppingToken);
     }
 
@@ -75,22 +75,25 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     }
 #endif
 
-    AsyncDisposable GetCallInvoker(out CallInvoker callInvoker)
+    AsyncDisposable GetCallInvoker(out CallInvoker callInvoker, out string address)
     {
         if (this.grpcOptions.Channel is GrpcChannel c)
         {
             callInvoker = c.CreateCallInvoker();
+            address = c.Target;
             return default;
         }
 
         if (this.grpcOptions.CallInvoker is CallInvoker invoker)
         {
             callInvoker = invoker;
+            address = "(unspecified)";
             return default;
         }
 
         c = GetChannel(this.grpcOptions.Address);
         callInvoker = c.CreateCallInvoker();
+        address = c.Target;
         return new AsyncDisposable(() => new(c.ShutdownAsync()));
     }
 }

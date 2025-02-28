@@ -1,6 +1,9 @@
 ﻿# Changelog
 
-## vNext
+## v1.6.0
+
+- Added new preview packages, `Microsoft.DurableTask.Client.AzureManaged` and `Microsoft.DurableTask.Worker.AzureManaged`
+- Move to Central Package Management ([#373](https://github.com/microsoft/durabletask-dotnet/pull/373))
 
 ### Microsoft.DurableTask.Client
 
@@ -10,6 +13,10 @@
 
 - Add new `IDurableTaskWorkerBuilder AddDurableTaskWorker(IServiceCollection, string?)` API
 - Add support for work item history streaming
+
+### Microsoft.DurableTask.Worker.Grpc
+
+- Provide entity support for direct grpc connections to DTS ([#369](https://github.com/microsoft/durabletask-dotnet/pull/369))
 
 ### Microsoft.DurableTask.Grpc
 

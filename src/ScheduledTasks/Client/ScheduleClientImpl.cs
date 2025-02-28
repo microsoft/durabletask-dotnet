@@ -12,6 +12,7 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// Represents a handle to a scheduled task, providing operations for managing the schedule.
 /// </summary>
 // TODO: Isolate system entity from user entities
+// TODO: Rename to DefaultScheduleClient
 class ScheduleClientImpl : ScheduleClient
 {
     readonly DurableTaskClient durableTaskClient;

@@ -12,20 +12,19 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// Represents a handle to a scheduled task, providing operations for managing the schedule.
 /// </summary>
 // TODO: Isolate system entity from user entities
-// TODO: Rename to DefaultScheduleClient
-class ScheduleClientImpl : ScheduleClient
+class DefaultScheduleClient : ScheduleClient
 {
     readonly DurableTaskClient durableTaskClient;
     readonly ILogger logger;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ScheduleClientImpl"/> class.
+    /// Initializes a new instance of the <see cref="DefaultScheduleClient"/> class.
     /// </summary>
     /// <param name="client">The durable task client.</param>
     /// <param name="scheduleId">The ID of the schedule.</param>
     /// <param name="logger">The logger.</param>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="client"/> or <paramref name="scheduleId"/> is null.</exception>
-    public ScheduleClientImpl(DurableTaskClient client, string scheduleId, ILogger logger)
+    public DefaultScheduleClient(DurableTaskClient client, string scheduleId, ILogger logger)
         : base(scheduleId)
     {
         this.durableTaskClient = client ?? throw new ArgumentNullException(nameof(client));

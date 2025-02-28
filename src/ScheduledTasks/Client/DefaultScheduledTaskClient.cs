@@ -11,7 +11,7 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// Client for managing scheduled tasks in a Durable Task application.
 /// </summary>
 #pragma warning disable CA1711 // Identifiers should not have incorrect suffix
-public class ScheduledTaskClientImpl(DurableTaskClient durableTaskClient, ILogger logger) : ScheduledTaskClient
+public class DefaultScheduledTaskClient(DurableTaskClient durableTaskClient, ILogger logger) : ScheduledTaskClient
 #pragma warning restore CA1711 // Identifiers should not have incorrect suffix
 {
     readonly DurableTaskClient durableTaskClient = Check.NotNull(durableTaskClient, nameof(durableTaskClient));
@@ -26,7 +26,7 @@ public class ScheduledTaskClientImpl(DurableTaskClient durableTaskClient, ILogge
         try
         {
             // Create schedule client instance
-            ScheduleClient scheduleClient = new ScheduleClientImpl(this.durableTaskClient, creationOptions.ScheduleId, this.logger);
+            ScheduleClient scheduleClient = new DefaultScheduleClient(this.durableTaskClient, creationOptions.ScheduleId, this.logger);
 
             // Create the schedule using the client
             await scheduleClient.CreateAsync(creationOptions, cancellation);
@@ -81,7 +81,7 @@ public class ScheduledTaskClientImpl(DurableTaskClient durableTaskClient, ILogge
     public override ScheduleClient GetScheduleClient(string scheduleId)
     {
         Check.NotNullOrEmpty(scheduleId, nameof(scheduleId));
-        return new ScheduleClientImpl(this.durableTaskClient, scheduleId, this.logger);
+        return new DefaultScheduleClient(this.durableTaskClient, scheduleId, this.logger);
     }
 
     /// <inheritdoc/>

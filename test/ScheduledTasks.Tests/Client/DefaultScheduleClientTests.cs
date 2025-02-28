@@ -10,21 +10,21 @@ using Xunit;
 
 namespace Microsoft.DurableTask.ScheduledTasks.Tests.Client;
 
-public class ScheduleClientImplTests
+public class DefaultScheduleClientTests
 {
     readonly Mock<DurableTaskClient> durableTaskClient;
     readonly Mock<DurableEntityClient> entityClient;
     readonly ILogger logger;
-    readonly ScheduleClientImpl client;
+    readonly DefaultScheduleClient client;
     readonly string scheduleId = "test-schedule";
 
-    public ScheduleClientImplTests()
+    public DefaultScheduleClientTests()
     {
         this.durableTaskClient = new Mock<DurableTaskClient>("test");
         this.entityClient = new Mock<DurableEntityClient>("test");
         this.logger = new TestLogger();
         this.durableTaskClient.Setup(x => x.Entities).Returns(this.entityClient.Object);
-        this.client = new ScheduleClientImpl(this.durableTaskClient.Object, this.scheduleId, this.logger);
+        this.client = new DefaultScheduleClient(this.durableTaskClient.Object, this.scheduleId, this.logger);
     }
 
     [Fact]
@@ -32,7 +32,7 @@ public class ScheduleClientImplTests
     {
         // Act & Assert
         ArgumentNullException ex = Assert.Throws<ArgumentNullException>(() =>
-            new ScheduleClientImpl(null!, this.scheduleId, this.logger));
+            new DefaultScheduleClient(null!, this.scheduleId, this.logger));
         Assert.Equal("client", ex.ParamName);
     }
 
@@ -43,7 +43,7 @@ public class ScheduleClientImplTests
     {
         // Act & Assert
         var ex = Assert.Throws(expectedExceptionType, () =>
-            new ScheduleClientImpl(this.durableTaskClient.Object, invalidScheduleId, this.logger));
+            new DefaultScheduleClient(this.durableTaskClient.Object, invalidScheduleId, this.logger));
 
         Assert.Contains(expectedMessage, ex.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -53,7 +53,7 @@ public class ScheduleClientImplTests
     {
         // Act & Assert
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            new ScheduleClientImpl(this.durableTaskClient.Object, this.scheduleId, null!));
+            new DefaultScheduleClient(this.durableTaskClient.Object, this.scheduleId, null!));
         Assert.Equal("logger", ex.ParamName);
     }
 

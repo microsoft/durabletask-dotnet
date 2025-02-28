@@ -10,27 +10,27 @@ using Xunit;
 
 namespace Microsoft.DurableTask.ScheduledTasks.Tests.Client;
 
-public class ScheduledTaskClientImplTests
+public class DefaultScheduledTaskClientTests
 {
     readonly Mock<DurableTaskClient> durableTaskClient;
     readonly Mock<DurableEntityClient> entityClient;
     readonly ILogger logger;
-    readonly ScheduledTaskClientImpl client;
+    readonly DefaultScheduledTaskClient client;
 
-    public ScheduledTaskClientImplTests()
+    public DefaultScheduledTaskClientTests()
     {
         this.durableTaskClient = new Mock<DurableTaskClient>("test");
         this.entityClient = new Mock<DurableEntityClient>("test");
         this.logger = new TestLogger();
         this.durableTaskClient.Setup(x => x.Entities).Returns(this.entityClient.Object);
-        this.client = new ScheduledTaskClientImpl(this.durableTaskClient.Object, this.logger);
+        this.client = new DefaultScheduledTaskClient(this.durableTaskClient.Object, this.logger);
     }
 
     [Fact]
     public void Constructor_WithNullClient_ThrowsArgumentNullException()
     {
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => new ScheduledTaskClientImpl(null!, this.logger));
+        var ex = Assert.Throws<ArgumentNullException>(() => new DefaultScheduledTaskClient(null!, this.logger));
         Assert.Equal("durableTaskClient", ex.ParamName);
     }
 
@@ -38,7 +38,7 @@ public class ScheduledTaskClientImplTests
     public void Constructor_WithNullLogger_ThrowsArgumentNullException()
     {
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => new ScheduledTaskClientImpl(this.durableTaskClient.Object, null!));
+        var ex = Assert.Throws<ArgumentNullException>(() => new DefaultScheduledTaskClient(this.durableTaskClient.Object, null!));
         Assert.Equal("logger", ex.ParamName);
     }
 

@@ -22,8 +22,8 @@ public static class DurableTaskClientBuilderExtensions
         builder.Services.AddTransient<ScheduledTaskClient>(sp =>
         {
             DurableTaskClient client = sp.GetRequiredService<DurableTaskClient>();
-            ILogger<ScheduledTaskClientImpl> logger = sp.GetRequiredService<ILogger<ScheduledTaskClientImpl>>();
-            return new ScheduledTaskClientImpl(client, logger);
+            ILogger<DefaultScheduledTaskClient> logger = sp.GetRequiredService<ILogger<DefaultScheduledTaskClient>>();
+            return new DefaultScheduledTaskClient(client, logger);
         });
 
         return builder;

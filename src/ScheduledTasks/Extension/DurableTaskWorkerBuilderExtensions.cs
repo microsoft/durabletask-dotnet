@@ -8,7 +8,7 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// <summary>
 /// Extension methods for configuring Durable Task workers to use the Azure Durable Task Scheduler service.
 /// </summary>
-public static class DurableTaskSchedulerWorkerExtensions
+public static class DurableTaskWorkerBuilderExtensions
 {
     /// <summary>
     /// Adds scheduled tasks support to the worker builder.

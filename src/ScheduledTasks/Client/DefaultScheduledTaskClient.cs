@@ -10,9 +10,7 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 /// <summary>
 /// Client for managing scheduled tasks in a Durable Task application.
 /// </summary>
-#pragma warning disable CA1711 // Identifiers should not have incorrect suffix
-public class DefaultScheduledTaskClient(DurableTaskClient durableTaskClient, ILogger logger) : ScheduledTaskClient
-#pragma warning restore CA1711 // Identifiers should not have incorrect suffix
+class DefaultScheduledTaskClient(DurableTaskClient durableTaskClient, ILogger logger) : ScheduledTaskClient
 {
     readonly DurableTaskClient durableTaskClient = Check.NotNull(durableTaskClient, nameof(durableTaskClient));
     readonly ILogger logger = Check.NotNull(logger, nameof(logger));

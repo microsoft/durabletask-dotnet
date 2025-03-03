@@ -286,9 +286,9 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
             }
 
             this.logger.ScheduleOperationInfo(
-                this.State.ScheduleConfiguration!.ScheduleId,
+                this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty,
                 nameof(this.StartOrchestration),
-                $"Starting new orchestration with instance ID: {instanceId}");
+                $"Starting new orchestration named '{this.State.ScheduleConfiguration?.OrchestrationName ?? string.Empty}' with instance ID: {instanceId}");
 
             context.ScheduleNewOrchestration(
                 new TaskName(this.State.ScheduleConfiguration!.OrchestrationName),
@@ -298,7 +298,7 @@ class Schedule(ILogger<Schedule> logger) : TaskEntity<ScheduleState>
         catch (Exception ex)
         {
             this.logger.ScheduleOperationError(
-                this.State.ScheduleConfiguration!.ScheduleId,
+                this.State.ScheduleConfiguration?.ScheduleId ?? string.Empty,
                 nameof(this.StartOrchestration),
                 "Failed to start orchestration",
                 ex);

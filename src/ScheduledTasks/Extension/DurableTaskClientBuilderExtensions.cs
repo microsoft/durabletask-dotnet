@@ -3,7 +3,6 @@
 
 using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
@@ -19,13 +18,7 @@ public static class DurableTaskClientBuilderExtensions
     /// <returns>The original builder, for call chaining.</returns>
     public static IDurableTaskClientBuilder UseScheduledTasks(this IDurableTaskClientBuilder builder)
     {
-        builder.Services.AddTransient<ScheduledTaskClient>(sp =>
-        {
-            DurableTaskClient client = sp.GetRequiredService<DurableTaskClient>();
-            ILogger<DefaultScheduledTaskClient> logger = sp.GetRequiredService<ILogger<DefaultScheduledTaskClient>>();
-            return new DefaultScheduledTaskClient(client, logger);
-        });
-
+        builder.Services.AddSingleton<ScheduledTaskClient, DefaultScheduledTaskClient>();
         return builder;
     }
 }

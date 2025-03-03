@@ -211,6 +211,28 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
+    public override async Task RewindInstanceAsync(
+        string instanceId, string? reason = null, CancellationToken cancellation = default)
+    {
+        if (string.IsNullOrEmpty(instanceId))
+        {
+            throw new ArgumentNullException(nameof(instanceId));
+        }
+
+        try
+        {
+            await this.sidecarClient.RewindInstanceAsync(
+                new P.RewindInstanceRequest { InstanceId = instanceId, Reason = reason },
+                cancellationToken: cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.RewindInstanceAsync)} operation was canceled.", e, cancellation);
+        }
+    }
+
+    /// <inheritdoc/>
     public override async Task<OrchestrationMetadata?> GetInstancesAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {

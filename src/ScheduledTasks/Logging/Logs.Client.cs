@@ -13,24 +13,24 @@ static partial class Logs
     [LoggerMessage(EventId = 80, Level = LogLevel.Information, Message = "Creating schedule with options: {scheduleConfigCreateOptions}")]
     public static partial void ClientCreatingSchedule(this ILogger logger, ScheduleCreationOptions scheduleConfigCreateOptions);
 
-    [LoggerMessage(EventId = 82, Level = LogLevel.Information, Message = "Pausing schedule '{scheduleId}'")]
+    [LoggerMessage(EventId = 81, Level = LogLevel.Information, Message = "Pausing schedule '{scheduleId}'")]
     public static partial void ClientPausingSchedule(this ILogger logger, string scheduleId);
 
-    [LoggerMessage(EventId = 83, Level = LogLevel.Information, Message = "Resuming schedule '{scheduleId}'")]
+    [LoggerMessage(EventId = 82, Level = LogLevel.Information, Message = "Resuming schedule '{scheduleId}'")]
     public static partial void ClientResumingSchedule(this ILogger logger, string scheduleId);
 
-    [LoggerMessage(EventId = 84, Level = LogLevel.Information, Message = "Updating schedule '{scheduleId}'")]
+    [LoggerMessage(EventId = 83, Level = LogLevel.Information, Message = "Updating schedule '{scheduleId}'")]
     public static partial void ClientUpdatingSchedule(this ILogger logger, string scheduleId);
 
-    [LoggerMessage(EventId = 85, Level = LogLevel.Information, Message = "Deleting schedule '{scheduleId}'")]
+    [LoggerMessage(EventId = 84, Level = LogLevel.Information, Message = "Deleting schedule '{scheduleId}'")]
     public static partial void ClientDeletingSchedule(this ILogger logger, string scheduleId);
 
-    [LoggerMessage(EventId = 86, Level = LogLevel.Information, Message = "{message} (ScheduleId: {scheduleId})")]
+    [LoggerMessage(EventId = 85, Level = LogLevel.Information, Message = "{message} (ScheduleId: {scheduleId})")]
     public static partial void ClientInfo(this ILogger logger, string message, string scheduleId);
 
-    [LoggerMessage(EventId = 87, Level = LogLevel.Warning, Message = "{message} (ScheduleId: {scheduleId})")]
+    [LoggerMessage(EventId = 86, Level = LogLevel.Warning, Message = "{message} (ScheduleId: {scheduleId})")]
     public static partial void ClientWarning(this ILogger logger, string message, string scheduleId);
 
-    [LoggerMessage(EventId = 88, Level = LogLevel.Error, Message = "{message} (ScheduleId: {scheduleId})")]
+    [LoggerMessage(EventId = 87, Level = LogLevel.Error, Message = "{message} (ScheduleId: {scheduleId})")]
     public static partial void ClientError(this ILogger logger, string message, string scheduleId, Exception? exception = null);
 }

@@ -1,5 +1,14 @@
 ﻿# Changelog
 
+## v1.8.0
+
+- Add Schedule Support for Durable Task Framework ([#368](https://github.com/microsoft/durabletask-dotnet/pull/368))
+- Fixes and improvements
+
+## v1.7.0
+
+- Add parent trace context information when scheduling an orchestration ([#358](https://github.com/microsoft/durabletask-dotnet/pull/358))
+
 ## v1.6.0
 
 - Added new preview packages, `Microsoft.DurableTask.Client.AzureManaged` and `Microsoft.DurableTask.Worker.AzureManaged`

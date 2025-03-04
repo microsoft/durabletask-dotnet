@@ -788,7 +788,7 @@ static class ProtoUtils
             FailureDetails = entityBatchResult.FailureDetails.ToProtobuf(),
             Actions = { entityBatchResult.Actions?.Select(a => a.ToOperationAction()) ?? [] },
             Results = { entityBatchResult.Results?.Select(a => a.ToOperationResult()) ?? [] },
-            CompletionToken = completionToken,
+            CompletionToken = completionToken ?? string.Empty,
             OperationInfos = { operationInfos ?? [] },
         };
     }

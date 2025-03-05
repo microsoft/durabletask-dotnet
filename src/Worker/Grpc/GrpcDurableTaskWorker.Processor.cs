@@ -1,13 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
-using Grpc.Core;
 using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.DependencyInjection;
@@ -186,10 +184,16 @@ sealed partial class GrpcDurableTaskWorker
 
         async Task ProcessWorkItemsAsync(AsyncServerStreamingCall<P.WorkItem> stream, CancellationToken cancellation)
         {
+            // Create a new token source for timing out and a final token source that keys off of them both.
+            var timeoutSource = new CancellationTokenSource();
+            timeoutSource.CancelAfter(TimeSpan.FromSeconds(60));
+            var tokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellation, timeoutSource.Token);
+
             while (!cancellation.IsCancellationRequested)
             {
-                await foreach (P.WorkItem workItem in stream.ResponseStream.ReadAllAsync(cancellation))
+                await foreach (P.WorkItem workItem in stream.ResponseStream.ReadAllAsync(tokenSource.Token))
                 {
+                    timeoutSource.CancelAfter(TimeSpan.FromSeconds(60));
                     if (workItem.RequestCase == P.WorkItem.RequestOneofCase.OrchestratorRequest)
                     {
                         this.RunBackgroundTask(
@@ -236,6 +240,14 @@ sealed partial class GrpcDurableTaskWorker
                     {
                         this.Logger.UnexpectedWorkItemType(workItem.RequestCase.ToString());
                     }
+                }
+
+                if (tokenSource.IsCancellationRequested || tokenSource.Token.IsCancellationRequested)
+                {
+                    // The token has cancelled, this means either:
+                    // 1. The broader 'cancellation' was triggered, return here to start a graceful shutdown.
+                    // 2. The timeoutSource was triggered, return here to trigger a reconnect to the backend.
+                    return;
                 }
             }
         }

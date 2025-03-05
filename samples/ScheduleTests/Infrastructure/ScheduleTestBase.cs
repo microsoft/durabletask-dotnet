@@ -68,6 +68,13 @@ namespace ScheduleTests.Infrastructure
                             options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ ";
                         });
                     });
+
+                    // configure ilogger not iloggerfactory to log to console
+                    services.AddSingleton<ILogger>(sp =>
+                    {
+                        var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+                        return loggerFactory.CreateLogger<ScheduleTestBase>();
+                    });
                 });
 
             this.host = builder.Build();

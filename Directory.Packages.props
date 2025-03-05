@@ -79,4 +79,9 @@
     <PackageVersion Include="System.Text.Json" Version="6.0.10" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.DurableTask.Client.AzureManaged" Version="1.8.0-preview.1" />
+    <PackageVersion Include="Microsoft.DurableTask.Worker.AzureManaged" Version="1.8.0-preview.1" />
+    <PackageVersion Include="Microsoft.DurableTask.ScheduledTasks" Version="1.8.0-preview.1" />
+  </ItemGroup>
 </Project>

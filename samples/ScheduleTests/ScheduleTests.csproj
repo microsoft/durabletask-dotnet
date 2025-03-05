@@ -26,9 +26,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Client\AzureManaged\Client.AzureManaged.csproj" />
-    <ProjectReference Include="..\..\src\Worker\AzureManaged\Worker.AzureManaged.csproj" />
-    <ProjectReference Include="..\..\src\ScheduledTasks\ScheduledTasks.csproj" />
+    <PackageReference Include="Microsoft.DurableTask.Client.AzureManaged" />
+    <PackageReference Include="Microsoft.DurableTask.Worker.AzureManaged" />
+    <PackageReference Include="Microsoft.DurableTask.ScheduledTasks" />
   </ItemGroup>
 
   <ItemGroup>

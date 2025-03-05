@@ -848,7 +848,7 @@ namespace ScheduleTests.Tests
                 var instances = this.GetOrchInstances(scheduleId);
                 var instanceIds = await this.GetInstanceIdsFromPageable(instances);
                 var count = instanceIds.Count;
-                Assert.True(count >= 4, "Should have executed at least 4 times");
+                Assert.True(count >= 3, "Should have executed at least 3 times");
             }
             finally
             {

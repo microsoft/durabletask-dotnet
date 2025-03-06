@@ -185,6 +185,8 @@ sealed partial class GrpcDurableTaskWorker
         async Task ProcessWorkItemsAsync(AsyncServerStreamingCall<P.WorkItem> stream, CancellationToken cancellation)
         {
             // Create a new token source for timing out and a final token source that keys off of them both.
+            // The timeout token is used to detect when we are no longer getting any messages, including health checks.
+            // If this is the case, it signifies the connection has been dropped silently and we need to reconnect.
             using var timeoutSource = new CancellationTokenSource();
             timeoutSource.CancelAfter(TimeSpan.FromSeconds(60));
             using var tokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellation, timeoutSource.Token);
@@ -247,6 +249,12 @@ sealed partial class GrpcDurableTaskWorker
                     // The token has cancelled, this means either:
                     // 1. The broader 'cancellation' was triggered, return here to start a graceful shutdown.
                     // 2. The timeoutSource was triggered, return here to trigger a reconnect to the backend.
+                    if (!cancellation.IsCancellationRequested)
+                    {
+                        // Since the cancellation came from the timeout, log a warning.
+                        this.Logger.ConnectionClosed();
+                    }
+
                     return;
                 }
             }

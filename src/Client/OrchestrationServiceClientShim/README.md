@@ -5,3 +5,14 @@ Commonly used types:
 - `ShimDurableTaskClientOptions`
 
 For more information, see https://github.com/microsoft/durabletask-dotnet
+
+## Getting Started
+
+``` CSharp
+HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
+
+// instantiate this using existing Microsoft.Azure.DurableTask packages.
+IOrchestrationServiceClient orchestrationServiceClient = new AzureStorageOrchestrationService(...);
+builder.Services.AddDurableTaskClient()
+    .UseOrchestrationService(orchestrationService);
+```

@@ -59,6 +59,7 @@ public static class DurableTaskSchedulerClientExtensions
                 options.EndpointAddress = connectionOptions.EndpointAddress;
                 options.TaskHubName = connectionOptions.TaskHubName;
                 options.Credential = connectionOptions.Credential;
+                options.AllowInsecureCredentials = connectionOptions.AllowInsecureCredentials;
             },
             configure);
     }
@@ -84,6 +85,11 @@ public static class DurableTaskSchedulerClientExtensions
             .Configure(initialConfig)
             .Configure(additionalConfig ?? (_ => { }))
             .ValidateDataAnnotations();
+
+        builder.Configure(options =>
+        {
+            options.EnableEntitySupport = true;
+        });
 
         builder.Services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IConfigureOptions<GrpcDurableTaskClientOptions>, ConfigureGrpcChannel>());

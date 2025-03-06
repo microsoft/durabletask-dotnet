@@ -65,12 +65,17 @@ public class DurableTaskSchedulerWorkerOptions
     /// <param name="connectionString">The connection string to parse.</param>
     /// <returns>A new instance of <see cref="DurableTaskSchedulerWorkerOptions"/>.</returns>
     internal static DurableTaskSchedulerWorkerOptions FromConnectionString(
-        DurableTaskSchedulerConnectionString connectionString) => new()
+        DurableTaskSchedulerConnectionString connectionString)
+    {
+        TokenCredential? credential = GetCredentialFromConnectionString(connectionString);
+        return new DurableTaskSchedulerWorkerOptions()
         {
             EndpointAddress = connectionString.Endpoint,
             TaskHubName = connectionString.TaskHubName,
-            Credential = GetCredentialFromConnectionString(connectionString),
+            Credential = credential,
+            AllowInsecureCredentials = credential is null,
         };
+    }
 
     /// <summary>
     /// Creates a gRPC channel for communicating with the Durable Task Scheduler service.

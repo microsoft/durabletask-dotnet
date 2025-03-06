@@ -10,7 +10,6 @@
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <WarnOnPackingNonPackableProject>false</WarnOnPackingNonPackableProject>
-    <TargetFramework>net6.0</TargetFramework>
   </PropertyGroup>
 
 </Project>

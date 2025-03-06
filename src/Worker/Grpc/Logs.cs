@@ -13,8 +13,8 @@ namespace Microsoft.DurableTask.Worker.Grpc
     /// </remarks>
     static partial class Logs
     {
-        [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Durable Task gRPC worker starting.")]
-        public static partial void StartingTaskHubWorker(this ILogger logger);
+        [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Durable Task gRPC worker starting and connecting to {endpoint}.")]
+        public static partial void StartingTaskHubWorker(this ILogger logger, string endpoint);
 
         [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Durable Task gRPC worker has disconnected from gRPC server.")]
         public static partial void SidecarDisconnected(this ILogger logger);

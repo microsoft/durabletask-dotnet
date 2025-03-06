@@ -17,5 +17,4 @@
     <SharedSection Include="DependencyInjection" />
     <SharedSection Include="Grpc" />
   </ItemGroup>
-
 </Project>

@@ -1,5 +1,9 @@
 ﻿# Changelog
 
+## v1.8.1
+
+- Add timeout to gRPC workitem streaming ([#390](https://github.com/microsoft/durabletask-dotnet/pull/390))
+
 ## v1.8.0
 
 - Add Schedule Support for Durable Task Framework ([#368](https://github.com/microsoft/durabletask-dotnet/pull/368))

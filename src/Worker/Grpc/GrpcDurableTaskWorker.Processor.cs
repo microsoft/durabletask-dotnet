@@ -185,9 +185,9 @@ sealed partial class GrpcDurableTaskWorker
         async Task ProcessWorkItemsAsync(AsyncServerStreamingCall<P.WorkItem> stream, CancellationToken cancellation)
         {
             // Create a new token source for timing out and a final token source that keys off of them both.
-            var timeoutSource = new CancellationTokenSource();
+            using var timeoutSource = new CancellationTokenSource();
             timeoutSource.CancelAfter(TimeSpan.FromSeconds(60));
-            var tokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellation, timeoutSource.Token);
+            using var tokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellation, timeoutSource.Token);
 
             while (!cancellation.IsCancellationRequested)
             {

@@ -288,6 +288,15 @@ message TerminateOrchestrationAction {
     bool recurse = 3;
 }
 
+message SendEntityMessageAction {
+    oneof EntityMessageType {
+        EntityOperationSignaledEvent entityOperationSignaled = 1;
+        EntityOperationCalledEvent entityOperationCalled = 2;
+        EntityLockRequestedEvent entityLockRequested = 3;
+        EntityUnlockSentEvent entityUnlockSent = 4;
+    }
+}
+
 message OrchestratorAction {
     int32 id = 1;
     oneof orchestratorActionType {
@@ -297,6 +306,7 @@ message OrchestratorAction {
         SendEventAction sendEvent = 5;
         CompleteOrchestrationAction completeOrchestration = 6;
         TerminateOrchestrationAction terminateOrchestration = 7;
+        SendEntityMessageAction sendEntityMessage = 8;
     }
 }
 
@@ -329,6 +339,7 @@ message CreateInstanceRequest {
     OrchestrationIdReusePolicy orchestrationIdReusePolicy = 6;
     google.protobuf.StringValue executionId = 7;
     map<string, string> tags = 8;
+    TraceContext parentTraceContext = 9;
 }
 
 message OrchestrationIdReusePolicy {
@@ -550,6 +561,8 @@ message EntityBatchResult {
     repeated OperationAction actions = 2;
     google.protobuf.StringValue entityState = 3;
     TaskFailureDetails failureDetails = 4;
+    string completionToken = 5;
+    repeated OperationInfo operationInfos = 6; // used only with DTS
 }
 
 message EntityRequest {
@@ -570,6 +583,11 @@ message OperationResult {
         OperationResultSuccess success = 1;
         OperationResultFailure failure = 2;
     }
+}
+
+message OperationInfo {
+    string requestId = 1;
+    OrchestrationInstance responseDestination = 2; // null for signals
 }
 
 message OperationResultSuccess {

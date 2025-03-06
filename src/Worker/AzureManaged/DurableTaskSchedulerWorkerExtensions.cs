@@ -3,6 +3,7 @@
 
 using Azure.Core;
 using Microsoft.DurableTask.Worker.Grpc;
+using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -59,6 +60,7 @@ public static class DurableTaskSchedulerWorkerExtensions
                 options.EndpointAddress = connectionOptions.EndpointAddress;
                 options.TaskHubName = connectionOptions.TaskHubName;
                 options.Credential = connectionOptions.Credential;
+                options.AllowInsecureCredentials = connectionOptions.AllowInsecureCredentials;
             },
             configure);
     }
@@ -84,6 +86,12 @@ public static class DurableTaskSchedulerWorkerExtensions
             .Configure(initialConfig)
             .Configure(additionalConfig ?? (_ => { }))
             .ValidateDataAnnotations();
+
+        builder.Services.AddOptions<DurableTaskWorkerOptions>(builder.Name)
+           .Configure(options =>
+           {
+               options.EnableEntitySupport = true;
+           });
 
         builder.Services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IConfigureOptions<GrpcDurableTaskWorkerOptions>, ConfigureGrpcChannel>());
@@ -113,6 +121,7 @@ public static class DurableTaskSchedulerWorkerExtensions
         {
             DurableTaskSchedulerWorkerOptions source = schedulerOptions.Get(name ?? Options.DefaultName);
             options.Channel = source.CreateChannel();
+            options.ConfigureForAzureManaged();
         }
     }
 }

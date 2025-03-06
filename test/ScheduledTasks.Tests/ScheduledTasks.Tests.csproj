@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <EnableStyleCop>true</EnableStyleCop>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ScheduledTasks\ScheduledTasks.csproj" />
+    <ProjectReference Include="..\Abstractions.Tests\Abstractions.Tests.csproj" />
+  </ItemGroup>
+
+</Project>

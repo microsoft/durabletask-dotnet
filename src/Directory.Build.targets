@@ -4,7 +4,7 @@
     Condition=" '$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory)../, $(_DirectoryBuildTargetsFile)))' != '' " />
 
   <ItemGroup Condition="'$(EnableStyleCop)' == 'true'">
-    <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556" PrivateAssets="All"/>
+    <PackageReference Include="StyleCop.Analyzers" PrivateAssets="All"/>
   </ItemGroup>
 
   <ItemGroup>

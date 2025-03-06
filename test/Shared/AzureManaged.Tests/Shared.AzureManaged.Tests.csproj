@@ -4,11 +4,10 @@
     <TargetFramework>net6.0</TargetFramework>
     <IncludeShared>true</IncludeShared>
   </PropertyGroup>
-
+  
   <ItemGroup>
-    <!-- Needed for shared section dependencies -->
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="6.0.1" />
-    <PackageReference Include="Azure.Identity" Version="1.13.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Azure.Identity" />
   </ItemGroup>
 
   <ItemGroup>

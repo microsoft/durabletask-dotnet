@@ -65,6 +65,32 @@ public class DurableTaskSchedulerClientExtensionsTests
         clientOptions.Credential.Should().BeOfType<DefaultAzureCredential>();
     }
 
+    [Fact]
+    public void UseDurableTaskScheduler_WithLocalhostConnectionString_ShouldConfigureCorrectly()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        Mock<IDurableTaskClientBuilder> mockBuilder = new();
+        mockBuilder.Setup(b => b.Services).Returns(services);
+        string connectionString = $"Endpoint=http://localhost;Authentication=None;TaskHub={ValidTaskHub}";
+
+        // Act
+        mockBuilder.Object.UseDurableTaskScheduler(connectionString);
+
+        // Assert
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptions<GrpcDurableTaskClientOptions>? options = provider.GetService<IOptions<GrpcDurableTaskClientOptions>>();
+        options.Should().NotBeNull();
+
+        // Validate the configured options
+        var workerOptions = provider.GetRequiredService<IOptions<DurableTaskSchedulerClientOptions>>().Value;
+        workerOptions.EndpointAddress.Should().Be("http://localhost");
+        workerOptions.TaskHubName.Should().Be(ValidTaskHub);
+        workerOptions.Credential.Should().BeNull();
+        workerOptions.ResourceId.Should().Be("https://durabletask.io");
+        workerOptions.AllowInsecureCredentials.Should().BeTrue();
+    }
+
     [Theory]
     [InlineData(null, "testhub")]
     [InlineData("myaccount.westus3.durabletask.io", null)]
@@ -124,7 +150,7 @@ public class DurableTaskSchedulerClientExtensionsTests
 
         // Assert
         action.Should().Throw<ArgumentNullException>()
-            .WithMessage("Value cannot be null. (Parameter 'Endpoint')");
+            .WithMessage("Value cannot be null. (Parameter '*')");
     }
 
     [Theory]

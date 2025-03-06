@@ -1,13 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
-using Grpc.Core;
+using Google.Protobuf.Collections;
 using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.DependencyInjection;
@@ -90,7 +89,7 @@ sealed partial class GrpcDurableTaskWorker
             }
         }
 
-        static string GetActionsListForLogging(IReadOnlyList<P.OrchestratorAction> actions)
+        static string GetActionsListForLogging(RepeatedField<P.OrchestratorAction> actions)
         {
             if (actions.Count == 0)
             {

@@ -104,7 +104,7 @@ public class DefaultScheduledTaskClientTests
                     r.EntityId.Name == entityInstanceId.Name &&
                     r.EntityId.Key == entityInstanceId.Key &&
                     r.OperationName == nameof(Schedule.CreateSchedule) &&
-                    ((ScheduleCreationOptions)r.Input).ScheduleId == options.ScheduleId &&
+                    ((ScheduleCreationOptions)r.Input!).ScheduleId == options.ScheduleId &&
                     ((ScheduleCreationOptions)r.Input).OrchestrationName == options.OrchestrationName &&
                     ((ScheduleCreationOptions)r.Input).Interval == options.Interval),
                 default),

@@ -80,7 +80,7 @@ public static class DurableTaskBuilderExtensions
         where TTarget : DurableTaskClient
         where TOptions : DurableTaskClientOptions
     {
-        builder.UseBuildTarget(typeof(TTarget));
+        builder.UseBuildTarget<TTarget>();
         builder.Services.AddOptions<TOptions>(builder.Name)
             .PostConfigure<IOptionsMonitor<DurableTaskClientOptions>>((options, baseOptions) =>
             {

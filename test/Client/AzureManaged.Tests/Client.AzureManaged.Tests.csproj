@@ -5,16 +5,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="../../../src/Shared/AzureManaged/**/*.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../../src/Client/AzureManaged/Client.AzureManaged.csproj" />
-    <ProjectReference Include="../../TestHelpers/TestHelpers.csproj" />
+    <ProjectReference Include="$(SrcRoot)Client/AzureManaged/Client.AzureManaged.csproj" />
   </ItemGroup>
 
 </Project>

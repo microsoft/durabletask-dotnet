@@ -1,13 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.Extensions.Logging;
+namespace Microsoft.Extensions.Logging;
 
 public class TestLogger : ILogger
 {
-    public List<(LogLevel Level, string Message)> Logs { get; } = new();
+    public List<(LogLevel Level, string Message)> Logs { get; } = [];
 
-    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+    public IDisposable BeginScope<TState>(TState state) => null!;
 
     public bool IsEnabled(LogLevel logLevel) => true;
 
@@ -20,9 +20,9 @@ public class TestLogger : ILogger
 
 public class TestLogger<T> : ILogger<T>
 {
-    public List<(LogLevel Level, string Message)> Logs { get; } = new();
+    public List<(LogLevel Level, string Message)> Logs { get; } = [];
 
-    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+    public IDisposable BeginScope<TState>(TState state) => null!;
 
     public bool IsEnabled(LogLevel logLevel) => true;
 

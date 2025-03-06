@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Entities.Tests;
+using Microsoft.Extensions.Logging;
 using Xunit;
 using Xunit.Abstractions;
 

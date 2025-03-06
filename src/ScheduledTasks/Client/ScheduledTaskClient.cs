@@ -5,7 +5,7 @@ namespace Microsoft.DurableTask.ScheduledTasks;
 
 /// <summary>
 /// Client for managing scheduled tasks.
-/// Provides methods to retrieve a ScheduleClient, list all schedules, 
+/// Provides methods to retrieve a ScheduleClient, list all schedules,
 /// and get details of a specific schedule.
 /// </summary>
 public abstract class ScheduledTaskClient
@@ -23,7 +23,8 @@ public abstract class ScheduledTaskClient
     /// <param name="scheduleId">The ID of the schedule to retrieve.</param>
     /// <param name="cancellation">Optional cancellation token.</param>
     /// <returns>The schedule description if found, null otherwise.</returns>
-    public abstract Task<ScheduleDescription?> GetScheduleAsync(string scheduleId, CancellationToken cancellation = default);
+    public abstract Task<ScheduleDescription?> GetScheduleAsync(
+        string scheduleId, CancellationToken cancellation = default);
 
     /// <summary>
     /// Gets a pageable list of schedules matching the specified filter criteria.
@@ -38,5 +39,6 @@ public abstract class ScheduledTaskClient
     /// <param name="creationOptions">The options for creating the schedule.</param>
     /// <param name="cancellation">Optional cancellation token.</param>
     /// <returns>A ScheduleClient for the created schedule.</returns>
-    public abstract Task<ScheduleClient> CreateScheduleAsync(ScheduleCreationOptions creationOptions, CancellationToken cancellation = default);
+    public abstract Task<ScheduleClient> CreateScheduleAsync(
+        ScheduleCreationOptions creationOptions, CancellationToken cancellation = default);
 }

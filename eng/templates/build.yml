@@ -69,7 +69,7 @@ jobs:
           inputs:
             command: custom
             custom: pack
-            arguments: --no-build $(build_args) $(pack_binlog)
+            arguments: --no-build $(build_args) $(pack_binlog) -o $(pkg_dir)
             projects: $(project)
 
         - template: ci/sign-files.yml@eng

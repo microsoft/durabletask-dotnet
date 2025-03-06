@@ -50,6 +50,6 @@ namespace Microsoft.DurableTask.Worker.Grpc
         public static partial void RetryingTask(this ILogger logger, string instanceId, string name, int attempt);
 
         [LoggerMessage(EventId = 56, Level = LogLevel.Warning, Message = "Channel to backend has stopped receiving traffic, will attempt to reconnect.")]
-        public static partial void ConnectionClosed(this ILogger logger);
+        public static partial void ConnectionTimeout(this ILogger logger);
     }
 }

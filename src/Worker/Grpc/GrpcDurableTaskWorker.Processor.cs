@@ -252,7 +252,7 @@ sealed partial class GrpcDurableTaskWorker
                     if (!cancellation.IsCancellationRequested)
                     {
                         // Since the cancellation came from the timeout, log a warning.
-                        this.Logger.ConnectionClosed();
+                        this.Logger.ConnectionTimeout();
                     }
 
                     return;

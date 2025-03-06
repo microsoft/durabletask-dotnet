@@ -48,5 +48,8 @@ namespace Microsoft.DurableTask.Worker.Grpc
 
         [LoggerMessage(EventId = 55, Level = LogLevel.Information, Message = "{instanceId}: Evaluating custom retry handler for failed '{name}' task. Attempt = {attempt}.")]
         public static partial void RetryingTask(this ILogger logger, string instanceId, string name, int attempt);
+
+        [LoggerMessage(EventId = 56, Level = LogLevel.Warning, Message = "Channel to backend has stopped receiving traffic, will attempt to reconnect.")]
+        public static partial void ConnectionTimeout(this ILogger logger);
     }
 }

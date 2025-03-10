@@ -14,6 +14,8 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 string connectionString = builder.Configuration.GetValue<string>("DURABLE_TASK_SCHEDULER_CONNECTION_STRING")
     ?? throw new InvalidOperationException("Missing required configuration 'DURABLE_TASK_SCHEDULER_CONNECTION_STRING'");
 
+builder.Services.AddSingleton<ILogger>(sp => sp.GetRequiredService<ILoggerFactory>().CreateLogger<Program>());
+builder.Services.AddLogging();
 // Add all the generated orchestrations and activities automatically
 builder.Services.AddDurableTaskWorker(builder =>
 {
@@ -31,17 +33,6 @@ builder.Services.AddDurableTaskClient(builder =>
 {
     builder.UseDurableTaskScheduler(connectionString);
     builder.UseScheduledTasks();
-});
-
-// Configure console logging using the simpler, more compact format
-builder.Services.AddLogging(logging =>
-{
-    logging.AddSimpleConsole(options =>
-    {
-        options.SingleLine = true;
-        options.UseUtcTimestamp = true;
-        options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ ";
-    });
 });
 
 // Configure the HTTP request pipeline

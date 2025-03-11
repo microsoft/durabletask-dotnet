@@ -60,6 +60,11 @@ public abstract class TaskOrchestrationContext
     public abstract bool IsReplaying { get; }
 
     /// <summary>
+    /// Gets the version of the current orchestration instance, which was set when the instance was created.
+    /// </summary>
+    public abstract string Version { get; }
+
+    /// <summary>
     /// Gets the entity feature, for interacting with entities.
     /// </summary>
     public virtual TaskOrchestrationEntityFeature Entities =>

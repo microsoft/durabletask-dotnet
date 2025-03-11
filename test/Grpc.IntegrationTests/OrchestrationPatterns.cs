@@ -3,11 +3,11 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Microsoft.DurableTask.Worker;
+using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Tests.Logging;
+using Microsoft.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit.Abstractions;
-using Microsoft.DurableTask.Client;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
@@ -561,8 +561,37 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal("new value", output?["newProperty"]?.ToString());
     }
 
+    // TODO: Additional versioning tests
+    [Fact]
+    public async Task OrchestrationVersionPassedThroughContext()
+    {
+        var version = "0.1";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Orchestration version: {input}";
+                }));
+        }, c =>
+        {
+            c.UseDefaultVersion(version);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        var output = result.ReadOutputAs<string>();
+
+        Assert.NotNull(output);
+        Assert.Equal(output, $"Orchestration version: {version}");
+
+    }
+
     // TODO: Test for multiple external events with the same name
     // TODO: Test for ContinueAsNew with external events that carry over
     // TODO: Test for catching activity exceptions of specific types
-    // TODO: Versioning tests
 }

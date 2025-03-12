@@ -78,10 +78,20 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     {
         Check.NotEntity(this.options.EnableEntitySupport, options?.InstanceId);
 
+        string version = string.Empty;
+        if (!string.IsNullOrEmpty(orchestratorName.Version))
+        {
+            version = orchestratorName.Version;
+        }
+        else if (!string.IsNullOrEmpty(this.options.DefaultVersion))
+        {
+            version = this.options.DefaultVersion;
+        }
+
         var request = new P.CreateInstanceRequest
         {
             Name = orchestratorName.Name,
-            Version = orchestratorName.Version,
+            Version = version,
             InstanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N"),
             Input = this.DataConverter.Serialize(input),
         };

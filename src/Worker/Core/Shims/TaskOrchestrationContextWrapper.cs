@@ -81,6 +81,9 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         }
     }
 
+    /// <inheritdoc/>
+    public override string Version => this.innerContext.Version;
+
     /// <summary>
     /// Gets the DataConverter to use for inputs, outputs, and entity states.
     /// </summary>

@@ -1,5 +1,9 @@
 ﻿# Changelog
 
+## v1.9.0 (unreleased)
+
+- Introduce default version setting to DurableTaskClient and expose to orchestrator ([#393](https://github.com/microsoft/durabletask-dotnet/pull/393))
+
 ## v1.8.1
 
 - Add timeout to gRPC workitem streaming ([#390](https://github.com/microsoft/durabletask-dotnet/pull/390))

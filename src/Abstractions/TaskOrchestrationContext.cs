@@ -403,6 +403,115 @@ public abstract class TaskOrchestrationContext
     public virtual ILogger CreateReplaySafeLogger<T>()
         => new ReplaySafeLogger(this, this.LoggerFactory.CreateLogger<T>());
 
+    /// <summary>
+    /// Checks if the current orchestration version is greater than the specified version.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// If both versions are empty, this is considered false as neither can be greater.
+    /// </para>
+    /// <para>
+    /// An empty context version is less than a defined version in the parameter.
+    /// </para>
+    /// <para>
+    /// An empty parameter version is less than a defined version in the context.
+    /// </para>
+    /// </remarks>
+    /// <param name="version">The version to check against.</param>
+    /// <returns>True if the orchestration's version is greater than the provided version, false otherwise.</returns>
+    public virtual bool IsVersionGreaterThan(string version)
+    {
+        if (string.IsNullOrWhiteSpace(this.Version) && string.IsNullOrWhiteSpace(version))
+        {
+            return false;
+        }
+
+        // An empty version in the context is always less than a defined version in the parameter.
+        if (string.IsNullOrWhiteSpace(this.Version))
+        {
+            return false;
+        }
+
+        // An empty version in the parameter is always less than a defined version in the context.
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            return true;
+        }
+
+        // We check this Version complies with the standard versioning format on set, so this is safe.
+        Version contextVersion = new Version(this.Version);
+        try
+        {
+            Version parameterVersion = new Version(version);
+            return contextVersion > parameterVersion;
+        }
+        catch (Exception) // This can be several different exception types.
+        {
+            // The version string is not in a valid format.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Checks if the current orchestration version is less than the specified version.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// If both versions are empty, this is considered false as neither can be greater.
+    /// </para>
+    /// <para>
+    /// An empty context version is less than a defined version in the parameter.
+    /// </para>
+    /// <para>
+    /// An empty parameter version is less than a defined version in the context.
+    /// </para>
+    /// </remarks>
+    /// <param name="version">The version to check against.</param>
+    /// <returns>True if the orchestration's version is less than the provided version, false otherwise.</returns>
+    public virtual bool IsVersionLessThan(string version)
+    {
+        if (string.IsNullOrWhiteSpace(this.Version) && string.IsNullOrWhiteSpace(version))
+        {
+            return false;
+        }
+
+        // An empty version in the context is always less than a defined version in the parameter.
+        if (string.IsNullOrWhiteSpace(this.Version))
+        {
+            return true;
+        }
+
+        // An empty version in the parameter is always less than a defined version in the context.
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            return false;
+        }
+
+        // We check this Version complies with the standard versioning format on set, so this is safe.
+        Version contextVersion = new Version(this.Version);
+        try
+        {
+            Version parameterVersion = new Version(version);
+            return contextVersion < parameterVersion;
+        }
+        catch (Exception) // This can be several different exception types.
+        {
+            // The version string is not in a valid format.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Checks if the current orchestration version is equal to the specified version.
+    /// </summary>
+    /// <param name="version">The version to check against.</param>
+    /// <returns>True if the versions are equal, false otherwise.</returns>
+    public virtual bool IsVersionEqual(string version)
+    {
+        // A simple string comparison is fine here.
+        return this.Version == version;
+    }
+
     class ReplaySafeLogger : ILogger
     {
         readonly TaskOrchestrationContext context;

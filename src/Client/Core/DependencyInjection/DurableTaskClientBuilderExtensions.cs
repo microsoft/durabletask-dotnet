@@ -98,6 +98,20 @@ public static class DurableTaskBuilderExtensions
     /// <returns>The original builder, for call chaining.</returns>
     public static IDurableTaskClientBuilder UseDefaultVersion(this IDurableTaskClientBuilder builder, string version)
     {
+        // If the version is defined, make sure it conforms to the versioning scheme.
+        if (!string.IsNullOrWhiteSpace(version))
+        {
+            try
+            {
+                // This will throw if the version is not valid.
+                _ = new Version(version);
+            }
+            catch (Exception ex) // There are several exceptions that can be thrown, simplify to an ArgumentException.
+            {
+                throw new ArgumentException($"The provided version '{version}' does not conform to the versioning scheme.", nameof(version), ex);
+            }
+        }
+
         builder.Configure(options => options.DefaultVersion = version);
         return builder;
     }

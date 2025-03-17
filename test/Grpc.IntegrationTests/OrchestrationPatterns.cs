@@ -621,7 +621,150 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         Assert.NotNull(output);
         Assert.Equal(output, $"Orchestration version: {version}");
+    }
 
+    [Fact]
+    public async Task OrchestrationVersioning_MatchTypeNone_NoVersionFailure()
+    {
+        var workerVersion = "0.1";
+        var clientVersion = "0.2";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Orchestration version: {input}";
+                }));
+            b.UseVersioning(new()
+            {
+                Version = workerVersion,
+                MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.None,
+                FailureStrategy = DurableTaskWorkerOptions.VersionFailureStrategy.Fail
+            });
+        }, c =>
+        {
+            c.UseDefaultVersion(clientVersion);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        var output = result.ReadOutputAs<string>();
+
+        Assert.NotNull(output);
+        // The worker doesn't pass it's version through the context, so we check the client version. The fact that it passed indicates versioning was ignored.
+        Assert.Equal(output, $"Orchestration version: {clientVersion}");
+    }
+
+    [Fact]
+    public async Task OrchestrationVersioning_MatchTypeStrict_VersionFailure()
+    {
+        var workerVersion = "0.1";
+        var clientVersion = "0.2";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Orchestration version: {input}";
+                }));
+            b.UseVersioning(new()
+            {
+                Version = workerVersion,
+                MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+                FailureStrategy = DurableTaskWorkerOptions.VersionFailureStrategy.Fail
+            });
+        }, c =>
+        {
+            c.UseDefaultVersion(clientVersion);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(result);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, result.RuntimeStatus);
+        Assert.NotNull(result.FailureDetails);
+        Assert.Equal("VersionMismatch", result.FailureDetails.ErrorType);
+    }
+
+    [Fact]
+    public async Task OrchestrationVersioning_MatchTypeCurrentOrOlder_VersionFailure()
+    {
+        var workerVersion = "0.1";
+        var clientVersion = "0.2";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Orchestration version: {input}";
+                }));
+            b.UseVersioning(new()
+            {
+                Version = workerVersion,
+                MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.CurrentOrOlder,
+                FailureStrategy = DurableTaskWorkerOptions.VersionFailureStrategy.Fail
+            });
+        }, c =>
+        {
+            c.UseDefaultVersion(clientVersion);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(result);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, result.RuntimeStatus);
+        Assert.NotNull(result.FailureDetails);
+        Assert.Equal("VersionMismatch", result.FailureDetails.ErrorType);
+    }
+
+    [Fact]
+    public async Task OrchestrationVersioning_MatchTypeCurrentOrOlder_VersionSuccess()
+    {
+        var workerVersion = "0.3";
+        var clientVersion = "0.2";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Orchestration version: {input}";
+                }));
+            b.UseVersioning(new()
+            {
+                Version = workerVersion,
+                MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.CurrentOrOlder,
+                FailureStrategy = DurableTaskWorkerOptions.VersionFailureStrategy.Fail
+            });
+        }, c =>
+        {
+            c.UseDefaultVersion(clientVersion);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        var output = result.ReadOutputAs<string>();
+
+        Assert.NotNull(output);
+        // The worker doesn't pass it's version through the context, so we check the client version. The fact that it passed indicates versioning was ignored.
+        Assert.Equal(output, $"Orchestration version: {clientVersion}");
     }
 
     // TODO: Test for multiple external events with the same name

@@ -6,6 +6,7 @@ using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
+using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.DependencyInjection;
@@ -305,43 +306,96 @@ sealed partial class GrpcDurableTaskWorker
                     entityConversionState,
                     cancellationToken);
 
-                name = new TaskName(runtimeState.Name);
 
-                this.Logger.ReceivedOrchestratorRequest(
-                    name,
-                    request.InstanceId,
-                    runtimeState.PastEvents.Count,
-                    runtimeState.NewEvents.Count);
-
-                await using AsyncServiceScope scope = this.worker.services.CreateAsyncScope();
-                if (this.worker.Factory.TryCreateOrchestrator(
-                    name, scope.ServiceProvider, out ITaskOrchestrator? orchestrator))
+                // If versioning has been explicitly set, we attempt to follow that pattern. If it is not set, we don't compare versions here.
+                if (this.worker.workerOptions.IsVersioningSet)
                 {
-                    // Both the factory invocation and the ExecuteAsync could involve user code and need to be handled
-                    // as part of try/catch.
-                    ParentOrchestrationInstance? parent = runtimeState.ParentInstance switch
-                    {
-                        ParentInstance p => new(new(p.Name), p.OrchestrationInstance.InstanceId),
-                        _ => null,
-                    };
+                    int versionComparison = TaskOrchestrationVersioningUtils.CompareVersions(runtimeState.Version, this.worker.workerOptions.Versioning.Version);
 
-                    TaskOrchestration shim = this.shimFactory.CreateOrchestration(name, orchestrator, parent);
-                    TaskOrchestrationExecutor executor = new(
-                        runtimeState,
-                        shim,
-                        BehaviorOnContinueAsNew.Carryover,
-                        request.EntityParameters.ToCore(),
-                        ErrorPropagationMode.UseFailureDetails);
-                    result = executor.Execute();
+                    switch (this.worker.workerOptions.Versioning.MatchStrategy)
+                    {
+                        case DurableTaskWorkerOptions.VersionMatchStrategy.None:
+                            // No versioning, breakout.
+                            break;
+                        case DurableTaskWorkerOptions.VersionMatchStrategy.Strict:
+                            // Comparison of 0 indicates equality.
+                            if (versionComparison != 0)
+                            {
+                                failureDetails = new P.TaskFailureDetails
+                                {
+                                    ErrorType = "VersionMismatch",
+                                    ErrorMessage = $"The orchestration version '{runtimeState.Version}' does not match the worker version '{this.worker.grpcOptions.Versioning.Version}'.",
+                                    IsNonRetriable = true,
+                                };
+                            }
+
+                            break;
+                        case DurableTaskWorkerOptions.VersionMatchStrategy.CurrentOrOlder:
+                            // Comparison > 0 indicates the orchestration version is greater than the worker version.
+                            if (versionComparison > 0)
+                            {
+                                failureDetails = new P.TaskFailureDetails
+                                {
+                                    ErrorType = "VersionMismatch",
+                                    ErrorMessage = $"The orchestration version '{runtimeState.Version}' is greater than the worker version '{this.worker.grpcOptions.Versioning.Version}'.",
+                                    IsNonRetriable = true,
+                                };
+                            }
+
+                            break;
+                        default:
+                            // If there is a type of versioning we don't understand, it is better to treat it as a versioning failure.
+                            failureDetails = new P.TaskFailureDetails
+                            {
+                                ErrorType = "VersionError",
+                                ErrorMessage = $"The version match strategy '{this.worker.workerOptions.Versioning.MatchStrategy}' is unknown.",
+                                IsNonRetriable = true,
+                            };
+                            break;
+                    }
                 }
-                else
+
+                // Only continue with the work if the versioning check passed.
+                if (failureDetails == null)
                 {
-                    failureDetails = new P.TaskFailureDetails
+                    name = new TaskName(runtimeState.Name);
+
+                    this.Logger.ReceivedOrchestratorRequest(
+                        name,
+                        request.InstanceId,
+                        runtimeState.PastEvents.Count,
+                        runtimeState.NewEvents.Count);
+
+                    await using AsyncServiceScope scope = this.worker.services.CreateAsyncScope();
+                    if (this.worker.Factory.TryCreateOrchestrator(
+                        name, scope.ServiceProvider, out ITaskOrchestrator? orchestrator))
                     {
-                        ErrorType = "OrchestratorTaskNotFound",
-                        ErrorMessage = $"No orchestrator task named '{name}' was found.",
-                        IsNonRetriable = true,
-                    };
+                        // Both the factory invocation and the ExecuteAsync could involve user code and need to be handled
+                        // as part of try/catch.
+                        ParentOrchestrationInstance? parent = runtimeState.ParentInstance switch
+                        {
+                            ParentInstance p => new(new(p.Name), p.OrchestrationInstance.InstanceId),
+                            _ => null,
+                        };
+
+                        TaskOrchestration shim = this.shimFactory.CreateOrchestration(name, orchestrator, parent);
+                        TaskOrchestrationExecutor executor = new(
+                            runtimeState,
+                            shim,
+                            BehaviorOnContinueAsNew.Carryover,
+                            request.EntityParameters.ToCore(),
+                            ErrorPropagationMode.UseFailureDetails);
+                        result = executor.Execute();
+                    }
+                    else
+                    {
+                        failureDetails = new P.TaskFailureDetails
+                        {
+                            ErrorType = "OrchestratorTaskNotFound",
+                            ErrorMessage = $"No orchestrator task named '{name}' was found.",
+                            IsNonRetriable = true,
+                        };
+                    }
                 }
             }
             catch (Exception unexpected)
@@ -360,6 +414,50 @@ sealed partial class GrpcDurableTaskWorker
                     result.Actions,
                     completionToken,
                     entityConversionState);
+            }
+            else if (failureDetails != null && failureDetails.ErrorType == "VersionMismatch")
+            {
+                if (this.worker.workerOptions.Versioning.FailureStrategy == DurableTaskWorkerOptions.VersionFailureStrategy.Fail)
+                {
+                    response = new P.OrchestratorResponse
+                    {
+                        InstanceId = request.InstanceId,
+                        CompletionToken = completionToken,
+                        Actions =
+                        {
+                            new P.OrchestratorAction
+                            {
+                                CompleteOrchestration = new P.CompleteOrchestrationAction
+                                {
+                                    OrchestrationStatus = P.OrchestrationStatus.Failed,
+                                    FailureDetails = failureDetails,
+                                },
+                            },
+                        },
+                    };
+                }
+                else if (this.worker.workerOptions.Versioning.FailureStrategy == DurableTaskWorkerOptions.VersionFailureStrategy.Suspend)
+                {
+                    await this.client.SuspendInstanceAsync(
+                        new P.SuspendRequest
+                        {
+                            InstanceId = request.InstanceId,
+                            Reason = "Version mismatch",
+                        },
+                        cancellationToken: cancellationToken);
+                    return;
+                }
+                else
+                {
+                    await this.client.AbandonTaskOrchestratorWorkItemAsync(
+                        new P.AbandonOrchestrationTaskRequest
+                        {
+                            CompletionToken = completionToken,
+                        },
+                        cancellationToken: cancellationToken);
+
+                    return;
+                }
             }
             else
             {

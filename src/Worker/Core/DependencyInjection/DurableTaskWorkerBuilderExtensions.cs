@@ -4,6 +4,7 @@
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using static Microsoft.DurableTask.Worker.DurableTaskWorkerOptions;
 
 namespace Microsoft.DurableTask.Worker;
 
@@ -84,6 +85,27 @@ public static class DurableTaskWorkerBuilderExtensions
                 DurableTaskWorkerOptions input = baseOptions.Get(builder.Name);
                 input.ApplyTo(options);
             });
+        return builder;
+    }
+
+    /// <summary>
+    /// Configures the versioning options for this builder.
+    /// </summary>
+    /// <param name="builder">The builder to set the builder target for.</param>
+    /// <param name="versionOptions">The collection of options specified for versioning the worker.</param>
+    /// <returns>The original builder, for call chaining.</returns>
+    public static IDurableTaskWorkerBuilder UseVersioning(this IDurableTaskWorkerBuilder builder, VersioningOptions versionOptions)
+    {
+        Check.NotNull(builder);
+        builder.Configure(options =>
+        {
+            options.Versioning = new VersioningOptions
+            {
+                Version = versionOptions.Version,
+                MatchStrategy = versionOptions.MatchStrategy,
+                FailureStrategy = versionOptions.FailureStrategy,
+            };
+        });
         return builder;
     }
 }

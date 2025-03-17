@@ -10,7 +10,50 @@ namespace Microsoft.DurableTask.Worker;
 /// </summary>
 public class DurableTaskWorkerOptions
 {
+    readonly VersioningOptions versioning = new();
     DataConverter dataConverter = JsonDataConverter.Default;
+
+    /// <summary>
+    /// Defines the version matching strategy for the Durable Task worker.
+    /// </summary>
+    public enum VersionMatchStrategy
+    {
+        /// <summary>
+        /// Ignore Orchestration version, all work received is processed.
+        /// </summary>
+        None = 0,
+
+        /// <summary>
+        /// Worker will only process Tasks from Orchestrations with the same version as the worker.
+        /// </summary>
+        Strict = 1,
+
+        /// <summary>
+        /// Worker will process Tasks from Orchestrations whose version is less than or equal to the worker.
+        /// </summary>
+        CurrentOrOlder = 2,
+    }
+
+    /// <summary>
+    /// Defines the versioning failure strategy for the Durable Task worker.
+    /// </summary>
+    public enum VersionFailureStrategy
+    {
+        /// <summary>
+        /// Do not change the orchestration state if the version does not adhere to the matching strategy.
+        /// </summary>
+        Reject = 0,
+
+        /// <summary>
+        /// Suspend the orchestration if the version does not adhere to the matching strategy.
+        /// </summary>
+        Suspend = 1,
+
+        /// <summary>
+        /// Fail the orchestration if the version does not adhere to the matching strategy.
+        /// </summary>
+        Fail = 2,
+    }
 
     /// <summary>
     /// Gets or sets the data converter. Default value is <see cref="JsonDataConverter.Default" />.
@@ -94,6 +137,38 @@ public class DurableTaskWorkerOptions
     public ConcurrencyOptions Concurrency { get; } = new();
 
     /// <summary>
+    /// Gets or sets the versioning options for the Durable Task worker.
+    /// </summary>
+    /// <remarks>
+    /// Worker versioning controls how a worker will handle orchestrations of different versions. Defining both the
+    /// version of the worker, the versions that can be worked on, and what to do in case a version does not comply
+    /// with the given options.
+    /// </remarks>
+    public VersioningOptions Versioning
+    {
+        get => this.versioning;
+        set
+        {
+            if (value is not null)
+            {
+                this.IsVersioningSet = true;
+                this.Versioning.Version = value.Version;
+                this.Versioning.MatchStrategy = value.MatchStrategy;
+                this.Versioning.FailureStrategy = value.FailureStrategy;
+            }
+            else
+            {
+                this.IsVersioningSet = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether versioning is explicitly set or not.
+    /// </summary>
+    public bool IsVersioningSet { get; internal set; }
+
+    /// <summary>
     /// Gets a value indicating whether <see cref="DataConverter" /> was explicitly set or not.
     /// </summary>
     /// <remarks>
@@ -116,6 +191,7 @@ public class DurableTaskWorkerOptions
             other.DataConverter = this.DataConverter;
             other.MaximumTimerInterval = this.MaximumTimerInterval;
             other.EnableEntitySupport = this.EnableEntitySupport;
+            other.Versioning = this.Versioning;
         }
     }
 
@@ -138,5 +214,29 @@ public class DurableTaskWorkerOptions
         /// Gets or sets the maximum number of concurrent entity work items that can be processed by the worker.
         /// </summary>
         public int MaximumConcurrentEntityWorkItems { get; set; } = 100 * Environment.ProcessorCount;
+    }
+
+    /// <summary>
+    /// Options for the Durable Task worker versioning.
+    /// </summary>
+    public class VersioningOptions
+    {
+        /// <summary>
+        /// Gets or sets the version of orchestrations that the worker can work on.
+        /// </summary>
+        public string Version { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets the versioning strategy for the Durable Task worker.
+        /// </summary>
+        public VersionMatchStrategy MatchStrategy { get; set; } = VersionMatchStrategy.None;
+
+        /// <summary>
+        /// Gets or sets the versioning failure strategy for the Durable Task worker.
+        /// </summary>
+        /// <remarks>
+        /// If the version matching strategy is set to <see cref="VersionMatchStrategy.None"/>, this value has no effect.
+        /// </remarks>
+        public VersionFailureStrategy FailureStrategy { get; set; } = VersionFailureStrategy.Reject;
     }
 }

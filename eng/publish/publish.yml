@@ -279,3 +279,72 @@ extends:
             publishFeedCredentials: 'DurableTask org NuGet API Key'
             packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.Grpc.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
             packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+
+      # NuGet release (Microsoft.DurableTask.Client.AzureManaged)
+      - job: nugetRelease_Microsoft_DurableTask_Client_AzureManaged
+        displayName: NuGet Release (Microsoft.DurableTask.Client.AzureManaged)
+        dependsOn: nugetApproval
+        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        templateContext:
+          type: releaseJob
+          isProduction: true
+          inputs:
+          - input: pipelineArtifact
+            pipeline: officialPipeline  # Pipeline reference as defined in the resources section
+            artifactName: drop
+            targetPath: $(System.DefaultWorkingDirectory)/drop
+        steps:
+        - task: 1ES.PublishNuget@1
+          displayName: 'NuGet push (Microsoft.DurableTask.Client.AzureManaged)'
+          inputs:
+            command: push
+            nuGetFeedType: external
+            publishFeedCredentials: 'DurableTask org NuGet API Key'
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.AzureManaged.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
+            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+
+      # NuGet release (Microsoft.DurableTask.Worker.AzureManaged)
+      - job: nugetRelease_Microsoft_DurableTask_Worker_AzureManaged
+        displayName: NuGet Release (Microsoft.DurableTask.Worker.AzureManaged)
+        dependsOn: nugetApproval
+        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        templateContext:
+          type: releaseJob
+          isProduction: true
+          inputs:
+          - input: pipelineArtifact
+            pipeline: officialPipeline  # Pipeline reference as defined in the resources section
+            artifactName: drop
+            targetPath: $(System.DefaultWorkingDirectory)/drop
+        steps:
+        - task: 1ES.PublishNuget@1
+          displayName: 'NuGet push (Microsoft.DurableTask.Worker.AzureManaged)'
+          inputs:
+            command: push
+            nuGetFeedType: external
+            publishFeedCredentials: 'DurableTask org NuGet API Key'
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.AzureManaged.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
+            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+
+      # NuGet release (Microsoft.DurableTask.ScheduledTasks)
+      - job: nugetRelease_Microsoft_DurableTask_ScheduledTasks
+        displayName: NuGet Release (Microsoft.DurableTask.ScheduledTasks)
+        dependsOn: nugetApproval
+        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        templateContext:
+          type: releaseJob
+          isProduction: true
+          inputs:
+          - input: pipelineArtifact
+            pipeline: officialPipeline  # Pipeline reference as defined in the resources section
+            artifactName: drop
+            targetPath: $(System.DefaultWorkingDirectory)/drop
+        steps:
+        - task: 1ES.PublishNuget@1
+          displayName: 'NuGet push (Microsoft.DurableTask.ScheduledTasks)'
+          inputs:
+            command: push
+            nuGetFeedType: external
+            publishFeedCredentials: 'DurableTask org NuGet API Key'
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.ScheduledTasks.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
+            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling

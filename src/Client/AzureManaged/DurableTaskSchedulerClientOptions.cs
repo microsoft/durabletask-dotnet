@@ -1,5 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+
 using System.ComponentModel.DataAnnotations;
 using Azure.Core;
 using Azure.Identity;
@@ -152,6 +153,12 @@ public class DurableTaskSchedulerClientOptions
                 return new AzureCliCredential();
             case "azurepowershell":
                 return new AzurePowerShellCredential();
+            case "visualstudio":
+                return new VisualStudioCredential();
+            case "visualstudiocode":
+                return new VisualStudioCodeCredential();
+            case "interactivebrowser":
+                return new InteractiveBrowserCredential();
             case "none":
                 return null;
             default:

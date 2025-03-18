@@ -60,14 +60,11 @@ public class DurableTaskSchedulerWorkerOptionsTests
         options.Credential.Should().BeOfType<WorkloadIdentityCredential>();
     }
 
-    [Theory]
-    [InlineData("Environment")]
-    [InlineData("AzureCLI")]
-    [InlineData("AzurePowerShell")]
-    public void FromConnectionString_WithValidAuthTypes_ShouldCreateValidInstance(string authType)
+    [Fact]
+    public void FromConnectionString_WithEnvironmentCredential_ShouldCreateValidInstance()
     {
         // Arrange
-        string connectionString = $"Endpoint={ValidEndpoint};Authentication={authType};TaskHub={ValidTaskHub}";
+        string connectionString = $"Endpoint={ValidEndpoint};Authentication=Environment;TaskHub={ValidTaskHub}";
 
         // Act
         DurableTaskSchedulerWorkerOptions options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
@@ -75,7 +72,82 @@ public class DurableTaskSchedulerWorkerOptionsTests
         // Assert
         options.EndpointAddress.Should().Be(ValidEndpoint);
         options.TaskHubName.Should().Be(ValidTaskHub);
-        options.Credential.Should().NotBeNull();
+        options.Credential.Should().BeOfType<EnvironmentCredential>();
+    }
+
+    [Fact]
+    public void FromConnectionString_WithAzureCliCredential_ShouldCreateValidInstance()
+    {
+        // Arrange
+        string connectionString = $"Endpoint={ValidEndpoint};Authentication=AzureCLI;TaskHub={ValidTaskHub}";
+
+        // Act
+        DurableTaskSchedulerWorkerOptions options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
+
+        // Assert
+        options.EndpointAddress.Should().Be(ValidEndpoint);
+        options.TaskHubName.Should().Be(ValidTaskHub);
+        options.Credential.Should().BeOfType<AzureCliCredential>();
+    }
+
+    [Fact]
+    public void FromConnectionString_WithAzurePowerShellCredential_ShouldCreateValidInstance()
+    {
+        // Arrange
+        string connectionString = $"Endpoint={ValidEndpoint};Authentication=AzurePowerShell;TaskHub={ValidTaskHub}";
+
+        // Act
+        DurableTaskSchedulerWorkerOptions options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
+
+        // Assert
+        options.EndpointAddress.Should().Be(ValidEndpoint);
+        options.TaskHubName.Should().Be(ValidTaskHub);
+        options.Credential.Should().BeOfType<AzurePowerShellCredential>();
+    }
+
+    [Fact]
+    public void FromConnectionString_WithVisualStudioCredential_ShouldCreateValidInstance()
+    {
+        // Arrange
+        string connectionString = $"Endpoint={ValidEndpoint};Authentication=VisualStudio;TaskHub={ValidTaskHub}";
+
+        // Act
+        DurableTaskSchedulerWorkerOptions options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
+
+        // Assert
+        options.EndpointAddress.Should().Be(ValidEndpoint);
+        options.TaskHubName.Should().Be(ValidTaskHub);
+        options.Credential.Should().BeOfType<VisualStudioCredential>();
+    }
+
+    [Fact]
+    public void FromConnectionString_WithVisualStudioCodeCredential_ShouldCreateValidInstance()
+    {
+        // Arrange
+        string connectionString = $"Endpoint={ValidEndpoint};Authentication=VisualStudioCode;TaskHub={ValidTaskHub}";
+
+        // Act
+        DurableTaskSchedulerWorkerOptions options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
+
+        // Assert
+        options.EndpointAddress.Should().Be(ValidEndpoint);
+        options.TaskHubName.Should().Be(ValidTaskHub);
+        options.Credential.Should().BeOfType<VisualStudioCodeCredential>();
+    }
+
+    [Fact]
+    public void FromConnectionString_WithInteractiveCredential_ShouldCreateValidInstance()
+    {
+        // Arrange
+        string connectionString = $"Endpoint={ValidEndpoint};Authentication=InteractiveBrowser;TaskHub={ValidTaskHub}";
+
+        // Act
+        DurableTaskSchedulerWorkerOptions options = DurableTaskSchedulerWorkerOptions.FromConnectionString(connectionString);
+
+        // Assert
+        options.EndpointAddress.Should().Be(ValidEndpoint);
+        options.TaskHubName.Should().Be(ValidTaskHub);
+        options.Credential.Should().BeOfType<InteractiveBrowserCredential>();
     }
 
     [Fact]

@@ -3,7 +3,7 @@
 ## v1.9.0 (unreleased)
 
 - Introduce default version setting to DurableTaskClient and expose to orchestrator ([#393](https://github.com/microsoft/durabletask-dotnet/pull/393))
-- Add support for local credential types in DTS libraries
+- Add support for local credential types in DTS libraries ([#396](https://github.com/microsoft/durabletask-dotnet/pull/396))
 
 ## v1.8.1
 

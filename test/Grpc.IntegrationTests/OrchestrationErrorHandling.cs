@@ -7,6 +7,8 @@ using Microsoft.DurableTask.Worker;
 using Xunit.Abstractions;
 using Xunit.Sdk;
 
+using CoreSubOrchestrationFailedException = DurableTask.Core.Exceptions.SubOrchestrationFailedException;
+
 namespace Microsoft.DurableTask.Grpc.Tests;
 
 /// <summary>
@@ -427,7 +429,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
             }
 
             // This handler only works with CustomException
-            if (!retryContext.LastFailure.IsCausedBy(exceptionType))
+            if (!retryContext.LastFailure.IsCausedBy(typeof(CoreSubOrchestrationFailedException)))
             {
                 return false;
             }
@@ -543,8 +545,8 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
                     {
                         // Outer failure represents the orchestration failure
                         Assert.NotNull(ex.FailureDetails);
-                        Assert.True(ex.FailureDetails.IsCausedBy<TaskFailedException>());
-                        Assert.Contains("ThrowException", ex.FailureDetails.ErrorMessage);
+                        Assert.True(ex.FailureDetails.IsCausedBy<CoreSubOrchestrationFailedException>());
+                        Assert.Contains("Exception of type", ex.FailureDetails.ErrorMessage);
 
                         // Inner failure represents the original exception thrown by the activity
                         ValidateInnermostFailureDetailsChain(ex.FailureDetails.InnerFailure);
@@ -583,8 +585,8 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.True(metadata.FailureDetails!.IsCausedBy<TaskFailedException>());
         Assert.Contains("Sub", metadata.FailureDetails.ErrorMessage);
         Assert.NotNull(metadata.FailureDetails.InnerFailure);
-        Assert.True(metadata.FailureDetails.InnerFailure!.IsCausedBy<TaskFailedException>());
-        Assert.Contains("ThrowException", metadata.FailureDetails.InnerFailure.ErrorMessage);
+        Assert.True(metadata.FailureDetails.InnerFailure!.IsCausedBy<CoreSubOrchestrationFailedException>());
+        Assert.Contains("Exception of type", metadata.FailureDetails.InnerFailure.ErrorMessage);
 
         ValidateInnermostFailureDetailsChain(metadata.FailureDetails.InnerFailure.InnerFailure);
     }

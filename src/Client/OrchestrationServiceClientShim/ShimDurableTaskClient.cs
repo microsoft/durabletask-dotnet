@@ -176,6 +176,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                 Version = orchestratorName.Version,
                 OrchestrationInstance = instance,
                 ScheduledStartTime = options?.StartAt?.UtcDateTime,
+                Tags = options?.Tags,
             },
         };
 

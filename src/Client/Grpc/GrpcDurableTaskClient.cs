@@ -97,7 +97,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         };
 
         // Add tags to the collection
-        if (options?.Tags != null)
+        if (request?.Tags != null && options?.Tags != null)
         {
             foreach (KeyValuePair<string, string> tag in options.Tags)
             {

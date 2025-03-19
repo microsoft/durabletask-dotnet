@@ -100,7 +100,10 @@ public record SubOrchestrationOptions : TaskOptions
 /// The time when the orchestration instance should start executing. If not specified or if a date-time in the past
 /// is specified, the orchestration instance will be scheduled immediately.
 /// </param>
-/// <param name="Tags">
-/// A dictionary of tags to associate with the orchestration instance.
-/// </param>
-public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null, IDictionary<string, string>? Tags = null);
+public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null)
+{
+    /// <summary>
+    /// Gets or sets the tags to associate with the orchestration instance. Tags are key-value pairs that can be used.
+    /// </summary>
+    public IDictionary<string, string>? Tags { get; init; } = new Dictionary<string, string>();
+}

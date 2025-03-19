@@ -310,6 +310,23 @@ public class ShimDurableTaskClientTests
         => this.RunScheduleNewOrchestrationInstanceAsync(
             "test", null, new() { StartAt = DateTimeOffset.UtcNow.AddHours(1) });
 
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_IdProvided_TagsProvided()
+    {
+        StartOrchestrationOptions options = new()
+        {
+            InstanceId = "test-id",
+            Tags = new Dictionary<string, string>()
+            {
+                { "tag1", "value1" },
+                { "tag2", "value2" }
+            }
+        };
+
+        await this.RunScheduleNewOrchestrationInstanceAsync("test", "input", options);
+    }
+
+
     static Core.OrchestrationState CreateState(
         object input, object? output = null, DateTimeOffset start = default)
     {
@@ -363,12 +380,12 @@ public class ShimDurableTaskClientTests
                 return false;
             }
 
-            
+
             if (options?.InstanceId is string str && m.OrchestrationInstance.InstanceId != str)
             {
                 return false;
             }
-            else if (options?.InstanceId  is null && !Guid.TryParse(m.OrchestrationInstance.InstanceId, out _))
+            else if (options?.InstanceId is null && !Guid.TryParse(m.OrchestrationInstance.InstanceId, out _))
             {
                 return false;
             }

@@ -403,6 +403,52 @@ public abstract class TaskOrchestrationContext
     public virtual ILogger CreateReplaySafeLogger<T>()
         => new ReplaySafeLogger(this, this.LoggerFactory.CreateLogger<T>());
 
+    /// <summary>
+    /// Checks if the current orchestration version is greater than the specified version.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// If both versions are empty, this is considered false as neither can be greater.
+    /// </para>
+    /// <para>
+    /// An empty context version is less than a defined version in the parameter.
+    /// </para>
+    /// <para>
+    /// An empty parameter version is less than a defined version in the context.
+    /// </para>
+    /// </remarks>
+    /// <param name="version">The version to check against.</param>
+    /// <returns>True if the orchestration's version is greater than the provided version, false otherwise.</returns>
+    public virtual int CompareVersionTo(string version)
+    {
+        // Both versions are empty, treat as equal.
+        if (string.IsNullOrWhiteSpace(this.Version) && string.IsNullOrWhiteSpace(version))
+        {
+            return 0;
+        }
+
+        // An empty version in the context is always less than a defined version in the parameter.
+        if (string.IsNullOrWhiteSpace(this.Version))
+        {
+            return -1;
+        }
+
+        // An empty version in the parameter is always less than a defined version in the context.
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            return 1;
+        }
+
+        // If both versions use the .NET Version class, return that comparison.
+        if (System.Version.TryParse(this.Version, out Version contextVersion) && System.Version.TryParse(version, out Version otherVersion))
+        {
+            return contextVersion.CompareTo(otherVersion);
+        }
+
+        // If we have gotten to here, we don't know the syntax of the versions we are comparing, use a string comparison as a final check.
+        return string.Compare(this.Version, version, StringComparison.OrdinalIgnoreCase);
+    }
+
     class ReplaySafeLogger : ILogger
     {
         readonly TaskOrchestrationContext context;

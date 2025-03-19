@@ -96,6 +96,15 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             Input = this.DataConverter.Serialize(input),
         };
 
+        // Add tags to the collection
+        if (options?.Tags != null)
+        {
+            foreach (KeyValuePair<string, string> tag in options.Tags)
+            {
+                request.Tags.Add(tag.Key, tag.Value);
+            }
+        }
+
         if (Activity.Current?.Id != null || Activity.Current?.TraceStateString != null)
         {
             if (request.ParentTraceContext == null)

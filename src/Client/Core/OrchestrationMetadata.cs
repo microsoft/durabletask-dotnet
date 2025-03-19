@@ -80,6 +80,11 @@ public sealed class OrchestrationMetadata
     public string? SerializedCustomStatus { get; init; }
 
     /// <summary>
+    /// Gets the tags associated with the orchestration instance.
+    /// </summary>
+    public IDictionary<string, string>? Tags { get; init; }
+
+    /// <summary>
     /// Gets the failure details, if any, for the orchestration instance.
     /// </summary>
     /// <remarks>

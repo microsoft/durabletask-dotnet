@@ -36,6 +36,36 @@ public class OrchestrationPatterns : IntegrationTestBase
     }
 
     [Fact]
+    public async Task ScheduleOrchesrationWithTags()
+    {
+        TaskName orchestratorName = nameof(EmptyOrchestration);
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, ctx => Task.FromResult<object?>(null)));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, new StartOrchestrationOptions
+        {
+            Tags = new Dictionary<string, string>()
+            {
+                { "tag1", "value1" },
+                { "tag2", "value2" }
+            }
+        });
+
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.NotNull(metadata.Tags);
+        Assert.Equal(2, metadata.Tags.Count);
+        Assert.Equal("value1", metadata.Tags["tag1"]);
+        Assert.Equal("value2", metadata.Tags["tag2"]);
+    }
+
+    [Fact]
     public async Task SingleTimer()
     {
         TaskName orchestratorName = nameof(SingleTimer);

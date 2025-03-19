@@ -467,6 +467,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             SerializedCustomStatus = state.CustomStatus,
             FailureDetails = state.FailureDetails.ToTaskFailureDetails(),
             DataConverter = includeInputsAndOutputs ? this.DataConverter : null,
+            Tags = state.Tags.ToDictionary(x => x.Key, x => x.Value),
         };
     }
 }

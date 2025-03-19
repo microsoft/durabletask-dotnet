@@ -155,8 +155,17 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
             return null;
         }
 
-        if (exception is CoreOrchestrationException coreEx && exception is not CoreSubOrchestrationFailedException)
+        if (exception is CoreOrchestrationException coreEx)
         {
+            if (coreEx is CoreSubOrchestrationFailedException)
+            {
+                return new TaskFailureDetails(
+                    coreEx.GetType().ToString(),
+                    coreEx.Message,
+                    coreEx.StackTrace,
+                    FromCoreFailureDetailsRecursive(coreEx.FailureDetails?.InnerFailure) ?? FromExceptionRecursive(coreEx.InnerException));
+            }
+
             return new TaskFailureDetails(
                 coreEx.FailureDetails?.ErrorType ?? "(unknown)",
                 coreEx.FailureDetails?.ErrorMessage ?? "(unknown)",

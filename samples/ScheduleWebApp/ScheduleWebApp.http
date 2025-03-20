@@ -1,6 +1,6 @@
 ### Variables
 @baseUrl = http://localhost:5008
-@scheduleId = schedule-123
+@scheduleId = {{$guid}}
 
 ### Create a new schedule
 # @name createSchedule
@@ -52,3 +52,6 @@ DELETE {{baseUrl}}/schedules/{{scheduleId}}
 # - Dates are in ISO 8601 format (YYYY-MM-DDThh:mm:ssZ)
 # - You can use the REST Client extension in VS Code to execute these requests
 # - The @name directive allows referencing the response in subsequent requests
+
+
+

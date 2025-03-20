@@ -247,4 +247,6 @@ public class ScheduleController : ControllerBase
             return this.StatusCode(500, "An error occurred while resuming the schedule");
         }
     }
+
+    
 }

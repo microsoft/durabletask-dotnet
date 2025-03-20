@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Reflection.Metadata.Ecma335;
 using System.Text.Json.Serialization;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.AzureManaged;
@@ -23,6 +24,9 @@ builder.Services.AddDurableTaskWorker(builder =>
     {
         // Add your orchestrators and activities here
         r.AddOrchestrator<CacheClearingOrchestrator>();
+        
+        // Add a simple orchestrator that logs "Hello World"
+        r.AddOrchestratorFunc("HelloWorldOrchestrator", (Microsoft.DurableTask.TaskOrchestrationContext context, string input) => Task.CompletedTask);
     });
     builder.UseDurableTaskScheduler(connectionString);
     builder.UseScheduledTasks();

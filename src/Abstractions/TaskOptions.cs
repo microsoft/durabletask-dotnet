@@ -111,12 +111,11 @@ public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffse
     /// Returns a new <see cref="StartOrchestrationOptions"/> with the provided tags added to the existing tags.
     /// </summary>
     /// <param name="tags">The tags to add.</param>
-    /// <returns>A new <see cref="StartOrchestrationOptions"/> with the combined tags.</returns>
-    public StartOrchestrationOptions AddTags(IEnumerable<KeyValuePair<string, string>> tags)
+    public void AddTags(IEnumerable<KeyValuePair<string, string>> tags)
     {
         var currentTags = this.Tags as System.Collections.Immutable.ImmutableDictionary<string, string>
             ?? System.Collections.Immutable.ImmutableDictionary.Create<string, string>();
-        return this with { Tags = currentTags.AddRange(tags) };
+        this.Tags = currentTags.AddRange(tags);
     }
 
     /// <summary>
@@ -124,11 +123,21 @@ public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffse
     /// </summary>
     /// <param name="key">The tag key.</param>
     /// <param name="value">The tag value.</param>
-    /// <returns>A new <see cref="StartOrchestrationOptions"/> with the combined tags.</returns>
-    public StartOrchestrationOptions AddTag(string key, string value)
+    public void AddTag(string key, string value)
     {
+        if (string.IsNullOrEmpty(key))
+        {
+            throw new ArgumentException("Tag key cannot be null or empty.", nameof(key));
+        }
+
+        if (string.IsNullOrEmpty(value))
+        {
+            throw new ArgumentException("Tag value cannot be null or empty.", nameof(value));
+        }
+
         var currentTags = this.Tags as System.Collections.Immutable.ImmutableDictionary<string, string>
             ?? System.Collections.Immutable.ImmutableDictionary.Create<string, string>();
-        return this with { Tags = currentTags.Add(key, value) };
+
+        this.Tags = currentTags.Add(key, value);
     }
 }

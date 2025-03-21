@@ -67,6 +67,7 @@ public static class ProtobufUtils
             case EventType.ExecutionStarted:
                 // Start of a new orchestration instance
                 var startedEvent = (ExecutionStartedEvent)e;
+                startedEvent.Tags ??= new Dictionary<string, string>();
                 payload.ExecutionStarted = new Proto.ExecutionStartedEvent
                 {
                     Name = startedEvent.Name,

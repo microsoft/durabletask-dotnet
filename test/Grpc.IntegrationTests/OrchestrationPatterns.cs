@@ -7,6 +7,7 @@ using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Xunit.Abstractions;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
@@ -44,14 +45,11 @@ public class OrchestrationPatterns : IntegrationTestBase
             b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, ctx => Task.FromResult<object?>(null)));
         });
 
-        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, new StartOrchestrationOptions
-        {
-            Tags = new Dictionary<string, string>()
-            {
-                { "tag1", "value1" },
-                { "tag2", "value2" }
-            }
-        });
+        // Schedule a new orchestration instance with tags
+        var options = new StartOrchestrationOptions();
+        options.AddTag("tag1", "value1");
+        options.AddTag("tag2", "value2");
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, options);
 
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, this.TimeoutToken);
@@ -202,14 +200,7 @@ public class OrchestrationPatterns : IntegrationTestBase
                 .AddActivityFunc<string, string>(sayHelloActivityName, (ctx, name) => $"Hello, {name}!"));
         });
 
-        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World", new StartOrchestrationOptions
-        {
-            Tags = new Dictionary<string, string>()
-            {
-                { "tag1", "value1" },
-                { "tag2", "value2" }
-            }
-        });
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         Assert.NotNull(metadata);

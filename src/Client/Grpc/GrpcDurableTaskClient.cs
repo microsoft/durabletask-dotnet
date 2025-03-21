@@ -457,7 +457,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
     OrchestrationMetadata CreateMetadata(P.OrchestrationState state, bool includeInputsAndOutputs)
     {
-        return new(state.Name, state.InstanceId)
+        var metadata = new OrchestrationMetadata(state.Name, state.InstanceId)
         {
             CreatedAt = state.CreatedTimestamp.ToDateTimeOffset(),
             LastUpdatedAt = state.LastUpdatedTimestamp.ToDateTimeOffset(),
@@ -467,7 +467,13 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             SerializedCustomStatus = state.CustomStatus,
             FailureDetails = state.FailureDetails.ToTaskFailureDetails(),
             DataConverter = includeInputsAndOutputs ? this.DataConverter : null,
-            Tags = state.Tags.ToDictionary(x => x.Key, x => x.Value),
         };
+
+        foreach (var tag in state.Tags)
+        {
+            metadata.Tags.Add(tag.Key, tag.Value);
+        }
+
+        return metadata;
     }
 }

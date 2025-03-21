@@ -40,7 +40,6 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
     void IDisposable.Dispose()
     {
         this.testTimeoutSource.Dispose();
-        this.sidecarFixture.Dispose();
         GC.SuppressFinalize(this);
     }
 

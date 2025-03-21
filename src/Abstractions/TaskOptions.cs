@@ -103,7 +103,32 @@ public record SubOrchestrationOptions : TaskOptions
 public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null)
 {
     /// <summary>
-    /// Gets or sets the tags to associate with the orchestration instance. Tags are key-value pairs that can be used.
+    /// Gets the tags to associate with the orchestration instance. Tags are key-value pairs that can be used.
     /// </summary>
-    public IDictionary<string, string>? Tags { get; init; } = new Dictionary<string, string>();
+    public IEnumerable<KeyValuePair<string, string>> Tags { get; private set; } = System.Collections.Immutable.ImmutableDictionary.Create<string, string>();
+
+    /// <summary>
+    /// Returns a new <see cref="StartOrchestrationOptions"/> with the provided tags added to the existing tags.
+    /// </summary>
+    /// <param name="tags">The tags to add.</param>
+    /// <returns>A new <see cref="StartOrchestrationOptions"/> with the combined tags.</returns>
+    public StartOrchestrationOptions AddTags(IEnumerable<KeyValuePair<string, string>> tags)
+    {
+        var currentTags = this.Tags as System.Collections.Immutable.ImmutableDictionary<string, string>
+            ?? System.Collections.Immutable.ImmutableDictionary.Create<string, string>();
+        return this with { Tags = currentTags.AddRange(tags) };
+    }
+
+    /// <summary>
+    /// Returns a new <see cref="StartOrchestrationOptions"/> with the provided tag added to the existing tags.
+    /// </summary>
+    /// <param name="key">The tag key.</param>
+    /// <param name="value">The tag value.</param>
+    /// <returns>A new <see cref="StartOrchestrationOptions"/> with the combined tags.</returns>
+    public StartOrchestrationOptions AddTag(string key, string value)
+    {
+        var currentTags = this.Tags as System.Collections.Immutable.ImmutableDictionary<string, string>
+            ?? System.Collections.Immutable.ImmutableDictionary.Create<string, string>();
+        return this with { Tags = currentTags.Add(key, value) };
+    }
 }

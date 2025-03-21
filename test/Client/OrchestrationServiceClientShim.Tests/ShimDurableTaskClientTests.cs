@@ -316,14 +316,19 @@ public class ShimDurableTaskClientTests
         StartOrchestrationOptions options = new()
         {
             InstanceId = "test-id",
-            Tags = new Dictionary<string, string>()
-            {
-                { "tag1", "value1" },
-                { "tag2", "value2" }
-            }
         };
+        options.AddTag("key", "value");
+        options.AddTag("key2", "value2");
 
         await this.RunScheduleNewOrchestrationInstanceAsync("test", "input", options);
+
+        OrchestrationMetadata metadata = await this.client.WaitForInstanceStartAsync(
+           options.InstanceId, false, default);
+
+        this.orchestrationClient.Verify(
+            m => m.CreateTaskOrchestrationAsync(MatchStartExecutionMessage("test", "input", options)),
+            Times.Once());
+        metadata.Tags.Should().HaveCount(2);
     }
 
 

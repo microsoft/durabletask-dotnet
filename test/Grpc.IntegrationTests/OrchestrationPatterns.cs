@@ -202,7 +202,14 @@ public class OrchestrationPatterns : IntegrationTestBase
                 .AddActivityFunc<string, string>(sayHelloActivityName, (ctx, name) => $"Hello, {name}!"));
         });
 
-        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World");
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: "World", new StartOrchestrationOptions
+        {
+            Tags = new Dictionary<string, string>()
+            {
+                { "tag1", "value1" },
+                { "tag2", "value2" }
+            }
+        });
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         Assert.NotNull(metadata);

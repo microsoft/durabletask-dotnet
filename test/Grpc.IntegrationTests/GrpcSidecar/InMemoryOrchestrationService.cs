@@ -467,10 +467,10 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                 {
                     // Drop the message since we're completed
                     // GOOD: The user-provided the instanceId
-                    logger.LogWarning(
-                        "Dropped {eventType} message for instance '{instanceId}' because the orchestration has already completed.",
-                        message.Event.EventType,
-                        instanceId);
+                    // logger.LogWarning(
+                    //     "Dropped {eventType} message for instance '{instanceId}' because the orchestration has already completed.",
+                    //     message.Event.EventType,
+                    //     instanceId);
                     return;
                 }
 

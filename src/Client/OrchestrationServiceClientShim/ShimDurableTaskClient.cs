@@ -3,7 +3,6 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DurableTask.Core;
-using DurableTask.Core.Entities;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
 using Microsoft.DurableTask.Client.Entities;
@@ -176,6 +175,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                 Version = orchestratorName.Version,
                 OrchestrationInstance = instance,
                 ScheduledStartTime = options?.StartAt?.UtcDateTime,
+                Tags = options?.Tags != null ? options.Tags.ToDictionary(kvp => kvp.Key, kvp => kvp.Value) : null,
             },
         };
 

@@ -316,10 +316,12 @@ public class ShimDurableTaskClientTests
         StartOrchestrationOptions options = new()
         {
             InstanceId = "test-id",
+            Tags = new Dictionary<string, string>
+            {
+                { "tag1", "value1" },
+                { "tag2", "value2" }
+            }
         };
-        options.AddTag("key", "value");
-        options.AddTag("key2", "value2");
-
         await this.RunScheduleNewOrchestrationInstanceAsync("test", "input", options);
     }
 

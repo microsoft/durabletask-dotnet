@@ -46,9 +46,14 @@ public class OrchestrationPatterns : IntegrationTestBase
         });
 
         // Schedule a new orchestration instance with tags
-        var options = new StartOrchestrationOptions();
-        options.AddTag("tag1", "value1");
-        options.AddTag("tag2", "value2");
+        StartOrchestrationOptions options = new()
+        {
+            Tags = new Dictionary<string, string>
+            {
+                { "tag1", "value1" },
+                { "tag2", "value2" }
+            }
+        };
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, options);
 
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(

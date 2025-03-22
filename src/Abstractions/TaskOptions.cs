@@ -1,6 +1,8 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Immutable;
+
 namespace Microsoft.DurableTask;
 
 /// <summary>
@@ -105,39 +107,5 @@ public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffse
     /// <summary>
     /// Gets the tags to associate with the orchestration instance. Tags are key-value pairs that can be used.
     /// </summary>
-    public IEnumerable<KeyValuePair<string, string>> Tags { get; private set; } = System.Collections.Immutable.ImmutableDictionary.Create<string, string>();
-
-    /// <summary>
-    /// Returns a new <see cref="StartOrchestrationOptions"/> with the provided tags added to the existing tags.
-    /// </summary>
-    /// <param name="tags">The tags to add.</param>
-    public void AddTags(IEnumerable<KeyValuePair<string, string>> tags)
-    {
-        var currentTags = this.Tags as System.Collections.Immutable.ImmutableDictionary<string, string>
-            ?? System.Collections.Immutable.ImmutableDictionary.Create<string, string>();
-        this.Tags = currentTags.AddRange(tags);
-    }
-
-    /// <summary>
-    /// Returns a new <see cref="StartOrchestrationOptions"/> with the provided tag added to the existing tags.
-    /// </summary>
-    /// <param name="key">The tag key.</param>
-    /// <param name="value">The tag value.</param>
-    public void AddTag(string key, string value)
-    {
-        if (string.IsNullOrEmpty(key))
-        {
-            throw new ArgumentException("Tag key cannot be null or empty.", nameof(key));
-        }
-
-        if (string.IsNullOrEmpty(value))
-        {
-            throw new ArgumentException("Tag value cannot be null or empty.", nameof(value));
-        }
-
-        var currentTags = this.Tags as System.Collections.Immutable.ImmutableDictionary<string, string>
-            ?? System.Collections.Immutable.ImmutableDictionary.Create<string, string>();
-
-        this.Tags = currentTags.Add(key, value);
-    }
+    public IReadOnlyDictionary<string, string> Tags { get; init; } = ImmutableDictionary.Create<string, string>();
 }

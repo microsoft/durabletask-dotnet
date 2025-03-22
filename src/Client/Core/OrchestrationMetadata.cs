@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
@@ -82,7 +83,7 @@ public sealed class OrchestrationMetadata
     /// <summary>
     /// Gets the tags associated with the orchestration instance.
     /// </summary>
-    public IReadOnlyDictionary<string, string> Tags { get; init; }
+    public IReadOnlyDictionary<string, string> Tags { get; init; } = ImmutableDictionary.Create<string, string>();
 
     /// <summary>
     /// Gets the failure details, if any, for the orchestration instance.

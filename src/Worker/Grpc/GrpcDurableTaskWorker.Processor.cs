@@ -112,7 +112,6 @@ sealed partial class GrpcDurableTaskWorker
             ProtoUtils.EntityConversionState? entityConversionState,
             CancellationToken cancellation)
         {
-
             Func<P.HistoryEvent, HistoryEvent> converter = entityConversionState is null
                 ? ProtoUtils.ConvertHistoryEvent
                 : entityConversionState.ConvertFromProto;

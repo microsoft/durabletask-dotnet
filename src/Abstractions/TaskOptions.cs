@@ -105,7 +105,7 @@ public record SubOrchestrationOptions : TaskOptions
 public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null)
 {
     /// <summary>
-    /// Gets the tags to associate with the orchestration instance. Tags are key-value pairs that can be used.
+    /// Gets the tags to associate with the orchestration instance.
     /// </summary>
     public IReadOnlyDictionary<string, string> Tags { get; init; } = ImmutableDictionary.Create<string, string>();
 }

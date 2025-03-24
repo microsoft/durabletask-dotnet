@@ -467,6 +467,7 @@ message PurgeInstanceFilter {
 
 message PurgeInstancesResponse {
     int32 deletedInstanceCount = 1;
+    bool isComplete = 2;
 }
 
 message CreateTaskHubRequest {

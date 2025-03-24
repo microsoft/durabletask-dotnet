@@ -122,15 +122,29 @@ public class ProfileController : ControllerBase
     {   
         try
         {
-            // get all instances of the orchestration
-            PurgeResult purgeResult = await this.durableTaskClient.PurgeInstancesAsync(
-                null,
-                null);
+            int totalPurgedCount = 0;
+            bool isComplete = false;
             
-            // log the results
-            this.logger.LogInformation("Purged {Count} orchestration instances", purgeResult.PurgedInstanceCount);
+            // Continue purging until all instances are purged
+            while (!isComplete)
+            {
+                // get all instances of the orchestration
+                PurgeResult purgeResult = await this.durableTaskClient.PurgeInstancesAsync(
+                    null,
+                    null);
+                
+                totalPurgedCount += purgeResult.PurgedInstanceCount;
+                isComplete = purgeResult.IsComplete;
+                
+                // Log progress
+                this.logger.LogInformation("Purged {Count} orchestration instances in this batch", 
+                    purgeResult.PurgedInstanceCount);
+            }
+            
+            // log the final results
+            this.logger.LogInformation("Completed purging {Count} total orchestration instances", totalPurgedCount);
 
-            return this.Ok(purgeResult);
+            return this.Ok(new { TotalPurgedCount = totalPurgedCount, IsComplete = true });
         }
         catch (Exception ex)
         {

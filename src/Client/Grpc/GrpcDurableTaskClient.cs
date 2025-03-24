@@ -437,7 +437,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         {
             P.PurgeInstancesResponse response = await this.sidecarClient.PurgeInstancesAsync(
                 request, cancellationToken: cancellation);
-            return new PurgeResult(response.DeletedInstanceCount);
+            return new PurgeResult(response.DeletedInstanceCount, response.IsComplete);
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {

@@ -91,7 +91,7 @@ static class ShimExtensions
             return null;
         }
 
-        return new PurgeResult(result.DeletedInstanceCount);
+        return new PurgeResult(result.DeletedInstanceCount, true);
     }
 
     /// <summary>

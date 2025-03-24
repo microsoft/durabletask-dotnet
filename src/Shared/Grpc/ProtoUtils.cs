@@ -59,6 +59,7 @@ static class ProtoUtils
                     Name = proto.ExecutionStarted.Name,
                     Version = proto.ExecutionStarted.Version,
                     OrchestrationInstance = instance,
+                    Tags = proto.ExecutionStarted.Tags,
                     ParentInstance = proto.ExecutionStarted.ParentInstance == null ? null : new ParentInstance
                     {
                         Name = proto.ExecutionStarted.ParentInstance.Name,
@@ -206,6 +207,7 @@ static class ProtoUtils
                         Input = proto.HistoryState.OrchestrationState.Input,
                         Output = proto.HistoryState.OrchestrationState.Output,
                         Status = proto.HistoryState.OrchestrationState.CustomStatus,
+                        Tags = proto.HistoryState.OrchestrationState.Tags,
                     });
                 break;
             default:

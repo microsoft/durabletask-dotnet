@@ -96,6 +96,15 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             Input = this.DataConverter.Serialize(input),
         };
 
+        // Add tags to the collection
+        if (request?.Tags != null && options?.Tags != null)
+        {
+            foreach (KeyValuePair<string, string> tag in options.Tags)
+            {
+                request.Tags.Add(tag.Key, tag.Value);
+            }
+        }
+
         if (Activity.Current?.Id != null || Activity.Current?.TraceStateString != null)
         {
             if (request.ParentTraceContext == null)
@@ -448,7 +457,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
     OrchestrationMetadata CreateMetadata(P.OrchestrationState state, bool includeInputsAndOutputs)
     {
-        return new(state.Name, state.InstanceId)
+        var metadata = new OrchestrationMetadata(state.Name, state.InstanceId)
         {
             CreatedAt = state.CreatedTimestamp.ToDateTimeOffset(),
             LastUpdatedAt = state.LastUpdatedTimestamp.ToDateTimeOffset(),
@@ -458,6 +467,9 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             SerializedCustomStatus = state.CustomStatus,
             FailureDetails = state.FailureDetails.ToTaskFailureDetails(),
             DataConverter = includeInputsAndOutputs ? this.DataConverter : null,
+            Tags = new Dictionary<string, string>(state.Tags),
         };
+
+        return metadata;
     }
 }

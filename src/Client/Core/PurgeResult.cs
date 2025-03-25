@@ -13,7 +13,7 @@ public class PurgeResult
     /// </summary>
     /// <param name="count">The count of instances purged.</param>
     /// <param name="isComplete">A value indicating whether the purge operation is complete.</param>
-    public PurgeResult(int count, bool isComplete)
+    public PurgeResult(int count, bool? isComplete)
     {
         Check.Argument(count >= 0, nameof(count), "Count must be non-negative");
         this.PurgedInstanceCount = count;
@@ -30,5 +30,5 @@ public class PurgeResult
     /// Gets a value indicating whether the purge operation is complete.
     /// </summary>
     /// <value>A value indicating whether the purge operation is complete.</value>
-    public bool IsComplete { get; }
+    public bool? IsComplete { get; }
 }

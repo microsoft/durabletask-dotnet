@@ -61,7 +61,7 @@ public class ProfileController : ControllerBase
         try
         {
             List<string> instanceIds = new List<string>();
-            const int parallelTasks = 12;
+            const int parallelTasks = 8;
             
             // Calculate items per task
             int itemsPerTask = count / parallelTasks;
@@ -123,10 +123,10 @@ public class ProfileController : ControllerBase
         try
         {
             int totalPurgedCount = 0;
-            bool isComplete = false;
+            bool? isComplete = null;
             
             // Continue purging until all instances are purged
-            while (!isComplete)
+            while (isComplete == false)
             {
                 // get all instances of the orchestration
                 PurgeResult purgeResult = await this.durableTaskClient.PurgeInstancesAsync(
@@ -135,6 +135,8 @@ public class ProfileController : ControllerBase
                 
                 totalPurgedCount += purgeResult.PurgedInstanceCount;
                 isComplete = purgeResult.IsComplete;
+                // log isComplete
+                this.logger.LogInformation("Is complete: {IsComplete}", isComplete);
                 
                 // Log progress
                 this.logger.LogInformation("Purged {Count} orchestration instances in this batch", 

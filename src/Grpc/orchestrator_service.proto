@@ -75,6 +75,7 @@ message ExecutionStartedEvent {
     google.protobuf.Timestamp scheduledStartTimestamp = 6;
     TraceContext parentTraceContext = 7;
     google.protobuf.StringValue orchestrationSpanID = 8;
+    map<string, string> tags = 9;
 }
 
 message ExecutionCompletedEvent {
@@ -343,14 +344,8 @@ message CreateInstanceRequest {
 }
 
 message OrchestrationIdReusePolicy {
-    repeated OrchestrationStatus operationStatus = 1;
-    CreateOrchestrationAction action = 2;
-}
-
-enum CreateOrchestrationAction {
-    ERROR = 0;
-    IGNORE = 1;
-    TERMINATE = 2;
+    repeated OrchestrationStatus replaceableStatus = 1;
+    reserved 2;
 }
 
 message CreateInstanceResponse {
@@ -391,6 +386,7 @@ message OrchestrationState {
     google.protobuf.StringValue executionId = 12;
     google.protobuf.Timestamp completedTimestamp = 13;
     google.protobuf.StringValue parentInstanceId = 14;
+    map<string, string> tags = 15;
 }
 
 message RaiseEventRequest {
@@ -467,7 +463,7 @@ message PurgeInstanceFilter {
 
 message PurgeInstancesResponse {
     int32 deletedInstanceCount = 1;
-    bool isComplete = 2;
+    google.protobuf.BoolValue isComplete = 2;
 }
 
 message CreateTaskHubRequest {
@@ -622,6 +618,30 @@ message StartNewOrchestrationAction {
     google.protobuf.Timestamp scheduledTime = 5;
 }
 
+message AbandonActivityTaskRequest {
+    string completionToken = 1;
+}
+
+message AbandonActivityTaskResponse {
+    // Empty.
+}
+
+message AbandonOrchestrationTaskRequest {
+    string completionToken = 1;
+}
+
+message AbandonOrchestrationTaskResponse {
+    // Empty.
+}
+
+message AbandonEntityTaskRequest {
+    string completionToken = 1;
+}
+
+message AbandonEntityTaskResponse {
+    // Empty.
+}
+
 service TaskHubSidecarService {
     // Sends a hello request to the sidecar service.
     rpc Hello(google.protobuf.Empty) returns (google.protobuf.Empty);
@@ -683,6 +703,15 @@ service TaskHubSidecarService {
 
     // clean entity storage
     rpc CleanEntityStorage(CleanEntityStorageRequest) returns (CleanEntityStorageResponse);
+
+    // Abandons a single work item
+    rpc AbandonTaskActivityWorkItem(AbandonActivityTaskRequest) returns (AbandonActivityTaskResponse);
+
+    // Abandon an orchestration work item
+    rpc AbandonTaskOrchestratorWorkItem(AbandonOrchestrationTaskRequest) returns (AbandonOrchestrationTaskResponse);
+
+    // Abandon an entity work item
+    rpc AbandonTaskEntityWorkItem(AbandonEntityTaskRequest) returns (AbandonEntityTaskResponse);
 }
 
 message GetWorkItemsRequest {

@@ -202,8 +202,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             throw new SubOrchestrationFailedException(
                 orchestratorName,
                 e.ScheduleId,
-                TaskFailureDetails.FromCoreFailureDetails(e.FailureDetails!),
-                e);
+                TaskFailureDetails.FromCoreFailureDetails(e.FailureDetails!));
         }
     }
 

@@ -20,9 +20,8 @@ public sealed class SubOrchestrationFailedException : Exception
     /// <param name="taskName">The failed sub-orchestrationname.</param>
     /// <param name="taskId">The task ID.</param>
     /// <param name="failureDetails">The failure details.</param>
-    /// <param name="innerException">The inner exception.</param>
-    public SubOrchestrationFailedException(string taskName, int taskId, TaskFailureDetails failureDetails, Exception innerException)
-       : base(GetExceptionMessage(taskName, taskId, failureDetails, innerException), FromExceptionRecursive(innerException))
+    public SubOrchestrationFailedException(string taskName, int taskId, TaskFailureDetails failureDetails)
+       : base(GetExceptionMessage(taskName, taskId, failureDetails, null))
     {
         this.TaskName = taskName;
         this.TaskId = taskId;
@@ -72,21 +71,5 @@ public sealed class SubOrchestrationFailedException : Exception
         return subMessage is null
             ? $"Task '{taskName}' (#{taskId}) failed with an unhandled exception."
             : $"Task '{taskName}' (#{taskId}) failed with an unhandled exception: {subMessage}";
-    }
-
-    static Exception? FromExceptionRecursive(Exception? exception)
-    {
-        if (exception is null)
-        {
-            return null;
-        }
-
-        if (exception is CoreOrchestrationException)
-        {
-            // is always null!!!
-            return FromExceptionRecursive(exception.InnerException);
-        }
-
-        return exception;
     }
 }

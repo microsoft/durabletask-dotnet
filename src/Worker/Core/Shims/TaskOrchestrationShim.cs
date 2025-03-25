@@ -64,6 +64,16 @@ partial class TaskOrchestrationShim : TaskOrchestration
                 FailureDetails = new FailureDetails(e, e.FailureDetails.ToCoreFailureDetails()),
             };
         }
+        catch (SubOrchestrationFailedException e)
+        {
+            // Convert back to something the Durable Task Framework natively understands so that
+            // failure details are correctly propagated.
+            // This has to be DurableTask.Core.TaskFailedException instead of DurableTask.Core.SubOrchestratorFailedException because of core logic.
+            throw new CoreTaskFailedException(e.Message, e.InnerException)
+            {
+                FailureDetails = new FailureDetails(e, e.FailureDetails.ToCoreFailureDetails()),
+            };
+        }
         finally
         {
             // if user code crashed inside a critical section, or did not exit it, do that now

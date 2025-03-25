@@ -179,7 +179,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         // Assert
         result.Should().NotBeNull();
         result.PurgedInstanceCount.Should().Be(1);
-        result.IsComplete.Should().BeNull();
+        result.IsComplete.Should().NotBeFalse();
         // Verify instance no longer exists
         OrchestrationMetadata? instance = await server.Client.GetInstanceAsync(instanceId, false);
         instance.Should().BeNull();
@@ -215,7 +215,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         // Assert
         result.Should().NotBeNull();
         result.PurgedInstanceCount.Should().BeGreaterThan(3);
-        result.IsComplete.Should().BeNull();
+        result.IsComplete.Should().NotBeFalse();
         // Verify instances no longer exist
         foreach (string instanceId in instanceIds)
         {

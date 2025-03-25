@@ -150,6 +150,80 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         page.ContinuationToken.Should().NotBeNull();
     }
 
+    [Fact]
+    public async Task PurgeInstance_EndToEnd()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartAsync();
+
+        // Create and complete an orchestration instance
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false);
+
+        // Wait for it to start and raise event to complete it
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+        await server.Client.RaiseEventAsync(instanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(instanceId, default);
+
+        // Verify instance exists before purge
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+        metadata.Should().NotBeNull();
+        metadata!.InstanceId.Should().Be(instanceId);
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+
+        // Act
+        PurgeResult result = await server.Client.PurgeInstanceAsync(
+            instanceId,
+            new PurgeInstanceOptions { Recursive = true });
+
+        // Assert
+        result.Should().NotBeNull();
+        result.PurgedInstanceCount.Should().Be(1);
+        result.IsComplete.Should().BeNull();
+        // Verify instance no longer exists
+        OrchestrationMetadata? instance = await server.Client.GetInstanceAsync(instanceId, false);
+        instance.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PurgeInstances_WithFilter_EndToEnd()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartAsync();
+        List<string> instanceIds = new List<string>();
+
+        // Create multiple instances
+        for (int i = 0; i < 3; i++)
+        {
+            string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+                OrchestrationName, input: false);
+            instanceIds.Add(instanceId);
+
+            // Wait for it to start and raise event to complete it
+            await server.Client.WaitForInstanceStartAsync(instanceId, default);
+            await server.Client.RaiseEventAsync(instanceId, "event", default);
+            await server.Client.WaitForInstanceCompletionAsync(instanceId, default);
+        }
+
+        // Act
+        PurgeResult result = await server.Client.PurgeAllInstancesAsync(
+            new PurgeInstancesFilter(
+                CreatedFrom: DateTime.UtcNow.AddMinutes(-5),
+                CreatedTo: DateTime.UtcNow,
+                Statuses: new[] { OrchestrationRuntimeStatus.Completed }));
+
+        // Assert
+        result.Should().NotBeNull();
+        result.PurgedInstanceCount.Should().BeGreaterThan(3);
+        result.IsComplete.Should().BeNull();
+        // Verify instances no longer exist
+        foreach (string instanceId in instanceIds)
+        {
+            OrchestrationMetadata? instance = await server.Client.GetInstanceAsync(instanceId, false);
+            instance.Should().BeNull();
+        }
+    }
+
     Task<HostTestLifetime> StartAsync()
     {
         static async Task<string> Orchestration(TaskOrchestrationContext context, bool shouldThrow)

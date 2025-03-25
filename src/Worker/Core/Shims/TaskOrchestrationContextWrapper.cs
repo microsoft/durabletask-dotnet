@@ -7,6 +7,7 @@ using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.Serializing.Internal;
+using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -197,8 +198,12 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         }
         catch (global::DurableTask.Core.Exceptions.SubOrchestrationFailedException e)
         {
-            // Hide the core DTFx types and instead use our own
-            throw new TaskFailedException(orchestratorName, e.ScheduleId, e);
+            // Hide the core DTFx types and instead use our own SubOrchestrationFailedException
+            throw new SubOrchestrationFailedException(
+                orchestratorName,
+                e.ScheduleId,
+                TaskFailureDetails.FromCoreFailureDetails(e.FailureDetails!),
+                e);
         }
     }
 

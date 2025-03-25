@@ -5,7 +5,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using CoreFailureDetails = DurableTask.Core.FailureDetails;
 using CoreOrchestrationException = DurableTask.Core.Exceptions.OrchestrationException;
-using CoreSubOrchestrationFailedException = DurableTask.Core.Exceptions.SubOrchestrationFailedException;
 
 namespace Microsoft.DurableTask;
 
@@ -157,15 +156,6 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
 
         if (exception is CoreOrchestrationException coreEx)
         {
-            if (coreEx is CoreSubOrchestrationFailedException)
-            {
-                return new TaskFailureDetails(
-                    coreEx.GetType().ToString(),
-                    coreEx.Message,
-                    coreEx.StackTrace,
-                    FromCoreFailureDetailsRecursive(coreEx.FailureDetails?.InnerFailure) ?? FromExceptionRecursive(coreEx.InnerException));
-            }
-
             return new TaskFailureDetails(
                 coreEx.FailureDetails?.ErrorType ?? "(unknown)",
                 coreEx.FailureDetails?.ErrorMessage ?? "(unknown)",

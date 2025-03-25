@@ -7,7 +7,6 @@ using Microsoft.DurableTask.Worker;
 using Xunit.Abstractions;
 using Xunit.Sdk;
 
-using CoreSubOrchestrationFailedException = DurableTask.Core.Exceptions.SubOrchestrationFailedException;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
@@ -329,8 +328,8 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.NotNull(metadata.FailureDetails);
         Assert.Contains(errorMessage, metadata.FailureDetails!.ErrorMessage);
 
-        // The root orchestration failed due to a failure with the sub-orchestration, resulting in a TaskFailedException
-        Assert.True(metadata.FailureDetails.IsCausedBy<TaskFailedException>());
+        // The root orchestration failed due to a failure with the sub-orchestration, resulting in a Microsoft.DurableTask.SubOrchestrationFailedException
+        Assert.True(metadata.FailureDetails.IsCausedBy<SubOrchestrationFailedException>());
     }
 
     [Theory]
@@ -393,11 +392,11 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         //Assert.Equal(expectedNumberOfAttempts, retryHandlerCalls);
         Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
 
-        // The root orchestration failed due to a failure with the sub-orchestration, resulting in a TaskFailedException
+        // The root orchestration failed due to a failure with the sub-orchestration, resulting in a Microsoft.DurableTask.SubOrchestrationFailedException
         if (expRuntimeStatus == OrchestrationRuntimeStatus.Failed)
         {
             Assert.NotNull(metadata.FailureDetails);
-            Assert.True(metadata.FailureDetails!.IsCausedBy<TaskFailedException>());
+            Assert.True(metadata.FailureDetails!.IsCausedBy<SubOrchestrationFailedException>());
         }
         else
         {
@@ -429,7 +428,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
             }
 
             // This handler only works with CustomException
-            if (!retryContext.LastFailure.IsCausedBy(typeof(CoreSubOrchestrationFailedException)))
+            if (!retryContext.LastFailure.IsCausedBy(exceptionType))
             {
                 return false;
             }
@@ -465,9 +464,9 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.Equal(expectedNumberOfAttempts, retryHandlerCalls);
         Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
 
-        // The root orchestration failed due to a failure with the sub-orchestration, resulting in a TaskFailedException
+        // The root orchestration failed due to a failure with the sub-orchestration, resulting in a SubOrchestrationFailedException
         Assert.NotNull(metadata.FailureDetails);
-        Assert.True(metadata.FailureDetails!.IsCausedBy<TaskFailedException>());
+        Assert.True(metadata.FailureDetails!.IsCausedBy<SubOrchestrationFailedException>());
     }
 
     [Theory]
@@ -541,12 +540,12 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
                     {
                         await ctx.CallSubOrchestratorAsync("Sub");
                     }
-                    catch (TaskFailedException ex)
+                    catch (SubOrchestrationFailedException ex)
                     {
                         // Outer failure represents the orchestration failure
                         Assert.NotNull(ex.FailureDetails);
-                        Assert.True(ex.FailureDetails.IsCausedBy<CoreSubOrchestrationFailedException>());
-                        Assert.Contains("Exception of type", ex.FailureDetails.ErrorMessage);
+                        Assert.True(ex.FailureDetails.IsCausedBy<TaskFailedException>());
+                        Assert.Contains("ThrowException", ex.FailureDetails.ErrorMessage);
 
                         // Inner failure represents the original exception thrown by the activity
                         ValidateInnermostFailureDetailsChain(ex.FailureDetails.InnerFailure);
@@ -582,11 +581,11 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
 
         // Check to make sure that the wrapper failure details exist as expected
         Assert.NotNull(metadata.FailureDetails);
-        Assert.True(metadata.FailureDetails!.IsCausedBy<TaskFailedException>());
+        Assert.True(metadata.FailureDetails!.IsCausedBy<SubOrchestrationFailedException>());
         Assert.Contains("Sub", metadata.FailureDetails.ErrorMessage);
         Assert.NotNull(metadata.FailureDetails.InnerFailure);
-        Assert.True(metadata.FailureDetails.InnerFailure!.IsCausedBy<CoreSubOrchestrationFailedException>());
-        Assert.Contains("Exception of type", metadata.FailureDetails.InnerFailure.ErrorMessage);
+        Assert.True(metadata.FailureDetails.InnerFailure!.IsCausedBy<TaskFailedException>());
+        Assert.Contains("ThrowException", metadata.FailureDetails.InnerFailure.ErrorMessage);
 
         ValidateInnermostFailureDetailsChain(metadata.FailureDetails.InnerFailure.InnerFailure);
     }

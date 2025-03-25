@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -332,9 +333,9 @@ public abstract class TaskOrchestrationContext
     /// <exception cref="InvalidOperationException">
     /// Thrown if the calling thread is anything other than the main orchestrator thread.
     /// </exception>
-    /// <exception cref="TaskFailedException">
+    /// <exception cref="SubOrchestrationFailedException">
     /// The sub-orchestration failed with an unhandled exception. The details of the failure can be found in the
-    /// <see cref="TaskFailedException.FailureDetails"/> property.
+    /// <see cref="SubOrchestrationFailedException.FailureDetails"/> property.
     /// </exception>
     public virtual Task CallSubOrchestratorAsync(
         TaskName orchestratorName, object? input = null, TaskOptions? options = null)

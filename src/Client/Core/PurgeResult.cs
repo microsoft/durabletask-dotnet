@@ -25,7 +25,7 @@ public class PurgeResult
     /// <param name="isComplete">A value indicating whether the purge operation is complete. 
     /// If true, the purge operation is complete. All instances were purged.
     /// If false, not all instances were purged. Please purge again.
-    /// If null, default to legacy purge behavior. All instances were purged.</param>
+    /// If null, whether or not all instances were purged is undefined.</param>
     public PurgeResult(int count, bool? isComplete)
         : this(count)
     {

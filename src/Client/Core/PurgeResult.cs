@@ -22,7 +22,7 @@ public class PurgeResult
     /// Initializes a new instance of the <see cref="PurgeResult" /> class.
     /// </summary>
     /// <param name="count">The number of instances deleted.</param>
-    /// <param name="isComplete">A value indicating whether the purge operation is complete. 
+    /// <param name="isComplete">A value indicating whether the purge operation is complete.
     /// If true, the purge operation is complete. All instances were purged.
     /// If false, not all instances were purged. Please purge again.
     /// If null, whether or not all instances were purged is undefined.</param>

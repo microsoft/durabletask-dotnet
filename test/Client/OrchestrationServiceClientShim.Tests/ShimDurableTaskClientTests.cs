@@ -174,6 +174,7 @@ public class ShimDurableTaskClientTests
         // assert
         this.orchestrationClient.VerifyAll();
         result.PurgedInstanceCount.Should().Be(1);
+        result.IsComplete.Should().BeNull();
     }
 
     [Fact]

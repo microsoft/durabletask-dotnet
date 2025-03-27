@@ -82,8 +82,8 @@ public class ProfileController : ControllerBase
                     for (int i = 0; i < taskItemCount; i++)
                     {
                         string instanceId = await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
-                            "HelloWorldOrchestrator", 
-                            input);
+                            "CacheClearingOrchestrator", 
+                            "kjalkjaskd");
                         
                         taskInstanceIds.Add(instanceId);
                     }
@@ -126,7 +126,7 @@ public class ProfileController : ControllerBase
             bool? isComplete = null;
             
             // Continue purging until all instances are purged
-            while (isComplete == false)
+            while (isComplete is null || isComplete == false)
             {
                 // get all instances of the orchestration
                 PurgeResult purgeResult = await this.durableTaskClient.PurgeInstancesAsync(

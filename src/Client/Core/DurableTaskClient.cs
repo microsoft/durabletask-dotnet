@@ -399,19 +399,6 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         throw new NotSupportedException($"{this.GetType()} does not support purging of orchestration instances.");
     }
 
-    /// <summary>
-    /// Abandons a task orchestration work item to be re-enqueued at a later time.
-    /// </summary>
-    /// <param name="completionToken">The completion token that was given when the WorkItem was fetched.</param>
-    /// <param name="cancellation">
-    /// A <see cref="CancellationToken"/> that can be used to cancel the purge operation.
-    /// </param>
-    /// <returns>A task that completes when the WorkItem has been abandoned.</returns>
-    public virtual Task AbandonOrchestrationTask(string completionToken, CancellationToken cancellation = default)
-    {
-        throw new NotSupportedException($"{this.GetType()} does not support abandoning task orchestration work items.");
-    }
-
     // TODO: Create task hub
 
     // TODO: Delete task hub

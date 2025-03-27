@@ -396,17 +396,6 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         return this.PurgeInstancesCoreAsync(request, cancellation);
     }
 
-    /// <inheritdoc/>
-    public override async Task AbandonOrchestrationTask(string completionToken, CancellationToken cancellation = default)
-    {
-        P.AbandonOrchestrationTaskRequest request = new()
-        {
-            CompletionToken = completionToken,
-        };
-
-        await this.sidecarClient.AbandonTaskOrchestratorWorkItemAsync(request, cancellationToken: cancellation);
-    }
-
     static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, out CallInvoker callInvoker)
     {
         if (options.Channel is GrpcChannel c)

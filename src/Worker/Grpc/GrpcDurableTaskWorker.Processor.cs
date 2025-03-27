@@ -299,6 +299,8 @@ sealed partial class GrpcDurableTaskWorker
                 ? new(this.internalOptions.InsertEntityUnlocksOnCompletion)
                 : null;
 
+            DurableTaskWorkerOptions.VersioningOptions? versioning = this.worker.workerOptions.Versioning;
+            bool versionFailure = false;
             try
             {
                 OrchestrationRuntimeState runtimeState = await this.BuildRuntimeStateAsync(
@@ -308,11 +310,11 @@ sealed partial class GrpcDurableTaskWorker
 
 
                 // If versioning has been explicitly set, we attempt to follow that pattern. If it is not set, we don't compare versions here.
-                if (this.worker.workerOptions.IsVersioningSet)
+                if (versioning != null)
                 {
-                    int versionComparison = TaskOrchestrationVersioningUtils.CompareVersions(runtimeState.Version, this.worker.workerOptions.Versioning.Version);
+                    int versionComparison = TaskOrchestrationVersioningUtils.CompareVersions(runtimeState.Version, versioning.Version);
 
-                    switch (this.worker.workerOptions.Versioning.MatchStrategy)
+                    switch (versioning.MatchStrategy)
                     {
                         case DurableTaskWorkerOptions.VersionMatchStrategy.None:
                             // No versioning, breakout.
@@ -324,7 +326,7 @@ sealed partial class GrpcDurableTaskWorker
                                 failureDetails = new P.TaskFailureDetails
                                 {
                                     ErrorType = "VersionMismatch",
-                                    ErrorMessage = $"The orchestration version '{runtimeState.Version}' does not match the worker version '{this.worker.grpcOptions.Versioning.Version}'.",
+                                    ErrorMessage = $"The orchestration version '{runtimeState.Version}' does not match the worker version '{versioning.Version}'.",
                                     IsNonRetriable = true,
                                 };
                             }
@@ -337,7 +339,7 @@ sealed partial class GrpcDurableTaskWorker
                                 failureDetails = new P.TaskFailureDetails
                                 {
                                     ErrorType = "VersionMismatch",
-                                    ErrorMessage = $"The orchestration version '{runtimeState.Version}' is greater than the worker version '{this.worker.grpcOptions.Versioning.Version}'.",
+                                    ErrorMessage = $"The orchestration version '{runtimeState.Version}' is greater than the worker version '{versioning.Version}'.",
                                     IsNonRetriable = true,
                                 };
                             }
@@ -348,11 +350,13 @@ sealed partial class GrpcDurableTaskWorker
                             failureDetails = new P.TaskFailureDetails
                             {
                                 ErrorType = "VersionError",
-                                ErrorMessage = $"The version match strategy '{this.worker.workerOptions.Versioning.MatchStrategy}' is unknown.",
+                                ErrorMessage = $"The version match strategy '{versioning.MatchStrategy}' is unknown.",
                                 IsNonRetriable = true,
                             };
                             break;
                     }
+
+                    versionFailure = failureDetails != null;
                 }
 
                 // Only continue with the work if the versioning check passed.
@@ -415,9 +419,9 @@ sealed partial class GrpcDurableTaskWorker
                     completionToken,
                     entityConversionState);
             }
-            else if (failureDetails != null && failureDetails.ErrorType == "VersionMismatch")
+            else if (versioning != null && failureDetails != null && versionFailure)
             {
-                if (this.worker.workerOptions.Versioning.FailureStrategy == DurableTaskWorkerOptions.VersionFailureStrategy.Fail)
+                if (versioning.FailureStrategy == DurableTaskWorkerOptions.VersionFailureStrategy.Fail)
                 {
                     response = new P.OrchestratorResponse
                     {
@@ -435,17 +439,6 @@ sealed partial class GrpcDurableTaskWorker
                             },
                         },
                     };
-                }
-                else if (this.worker.workerOptions.Versioning.FailureStrategy == DurableTaskWorkerOptions.VersionFailureStrategy.Suspend)
-                {
-                    await this.client.SuspendInstanceAsync(
-                        new P.SuspendRequest
-                        {
-                            InstanceId = request.InstanceId,
-                            Reason = "Version mismatch",
-                        },
-                        cancellationToken: cancellationToken);
-                    return;
                 }
                 else
                 {

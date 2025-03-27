@@ -10,7 +10,6 @@ namespace Microsoft.DurableTask.Worker;
 /// </summary>
 public class DurableTaskWorkerOptions
 {
-    readonly VersioningOptions versioning = new();
     DataConverter dataConverter = JsonDataConverter.Default;
 
     /// <summary>
@@ -45,14 +44,9 @@ public class DurableTaskWorkerOptions
         Reject = 0,
 
         /// <summary>
-        /// Suspend the orchestration if the version does not adhere to the matching strategy.
-        /// </summary>
-        Suspend = 1,
-
-        /// <summary>
         /// Fail the orchestration if the version does not adhere to the matching strategy.
         /// </summary>
-        Fail = 2,
+        Fail = 1,
     }
 
     /// <summary>
@@ -144,24 +138,7 @@ public class DurableTaskWorkerOptions
     /// version of the worker, the versions that can be worked on, and what to do in case a version does not comply
     /// with the given options.
     /// </remarks>
-    public VersioningOptions Versioning
-    {
-        get => this.versioning;
-        set
-        {
-            if (value is not null)
-            {
-                this.IsVersioningSet = true;
-                this.Versioning.Version = value.Version;
-                this.Versioning.MatchStrategy = value.MatchStrategy;
-                this.Versioning.FailureStrategy = value.FailureStrategy;
-            }
-            else
-            {
-                this.IsVersioningSet = false;
-            }
-        }
-    }
+    public VersioningOptions? Versioning { get; set; }
 
     /// <summary>
     /// Gets a value indicating whether versioning is explicitly set or not.

@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
@@ -56,6 +57,17 @@ class GrpcDurableEntityClient : DurableEntityClient
             Input = this.dataConverter.Serialize(input),
             ScheduledTime = scheduledTime?.ToTimestamp(),
         };
+
+        if (Activity.Current?.Id != null)
+        {
+            if (request.ParentTraceContext == null)
+            {
+                request.ParentTraceContext = new P.TraceContext();
+            }
+
+            request.ParentTraceContext.TraceParent = Activity.Current.Id;
+            request.ParentTraceContext.TraceState = Activity.Current.TraceStateString;
+        }
 
         // TODO this.logger.LogSomething
         try

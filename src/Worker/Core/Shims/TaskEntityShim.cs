@@ -4,6 +4,7 @@
 using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
+using DurableTask.Core.Tracing;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 using DTCore = DurableTask.Core;
@@ -59,12 +60,17 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
         foreach (OperationRequest current in operations.Operations!)
         {
             this.operation.SetNameAndInput(current.Operation!, current.Input);
+            this.context.ParentTraceContext = current.TraceContext;
 
             try
             {
                 object? result = await this.taskEntity.RunAsync(this.operation);
                 string? serializedResult = this.dataConverter.Serialize(result);
-                results.Add(new OperationResult() { Result = serializedResult });
+                results.Add(new OperationResult()
+                {
+                    Result = serializedResult,
+                    EndTime = DateTime.UtcNow,
+                });
 
                 // the user code completed without exception, so we commit the current state and actions.
                 this.state.Commit();
@@ -76,6 +82,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
                 results.Add(new OperationResult()
                 {
                     FailureDetails = new FailureDetails(applicationException),
+                    EndTime = DateTime.UtcNow,
                 });
 
                 // the user code threw an unhandled exception, so we roll back the state and the actions.
@@ -171,6 +178,8 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
         List<OperationAction> operationActions;
         int checkpointPosition;
 
+        DistributedTraceContext? parentTraceContext;
+
         public ContextShim(EntityInstanceId entityInstanceId, DataConverter dataConverter)
         {
             this.entityInstanceId = entityInstanceId;
@@ -183,6 +192,12 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
         public int CurrentPosition => this.operationActions.Count;
 
         public override EntityInstanceId Id => this.entityInstanceId;
+
+        public DistributedTraceContext? ParentTraceContext
+        {
+            get => this.parentTraceContext;
+            set => this.parentTraceContext = value;
+        }
 
         public void Commit()
         {
@@ -210,6 +225,8 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
                 Name = operationName,
                 Input = this.dataConverter.Serialize(input),
                 ScheduledTime = options?.SignalTime?.UtcDateTime,
+                RequestTime = DateTime.UtcNow,
+                ParentTraceContext = this.parentTraceContext,
             });
         }
 
@@ -225,6 +242,8 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
                 InstanceId = instanceId,
                 Input = this.dataConverter.Serialize(input),
                 ScheduledStartTime = options?.StartAt?.UtcDateTime,
+                RequestTime = DateTime.UtcNow,
+                ParentTraceContext = this.parentTraceContext,
             });
             return instanceId;
         }

@@ -75,6 +75,7 @@ message ExecutionStartedEvent {
     google.protobuf.Timestamp scheduledStartTimestamp = 6;
     TraceContext parentTraceContext = 7;
     google.protobuf.StringValue orchestrationSpanID = 8;
+    map<string, string> tags = 9;
 }
 
 message ExecutionCompletedEvent {
@@ -343,14 +344,8 @@ message CreateInstanceRequest {
 }
 
 message OrchestrationIdReusePolicy {
-    repeated OrchestrationStatus operationStatus = 1;
-    CreateOrchestrationAction action = 2;
-}
-
-enum CreateOrchestrationAction {
-    ERROR = 0;
-    IGNORE = 1;
-    TERMINATE = 2;
+    repeated OrchestrationStatus replaceableStatus = 1;
+    reserved 2;
 }
 
 message CreateInstanceResponse {
@@ -391,6 +386,7 @@ message OrchestrationState {
     google.protobuf.StringValue executionId = 12;
     google.protobuf.Timestamp completedTimestamp = 13;
     google.protobuf.StringValue parentInstanceId = 14;
+    map<string, string> tags = 15;
 }
 
 message RaiseEventRequest {
@@ -491,6 +487,7 @@ message SignalEntityRequest {
     google.protobuf.StringValue input = 3;
     string requestId = 4;
     google.protobuf.Timestamp scheduledTime = 5;
+    TraceContext parentTraceContext = 6;
 }
 
 message SignalEntityResponse {
@@ -576,6 +573,7 @@ message OperationRequest {
     string operation = 1;
     string requestId = 2;
     google.protobuf.StringValue input = 3;
+    TraceContext TraceContext = 4;
 }
 
 message OperationResult {
@@ -592,10 +590,12 @@ message OperationInfo {
 
 message OperationResultSuccess {
     google.protobuf.StringValue result = 1;
+    google.protobuf.Timestamp endTime = 2;
 }
 
 message OperationResultFailure {
     TaskFailureDetails failureDetails = 1;
+    google.protobuf.Timestamp endTime = 2;
 }
 
 message OperationAction {
@@ -611,6 +611,8 @@ message SendSignalAction {
     string name = 2;
     google.protobuf.StringValue input = 3;
     google.protobuf.Timestamp scheduledTime = 4;
+    google.protobuf.Timestamp requestTime = 5;
+    TraceContext parentTraceContext = 6;
 }
 
 message StartNewOrchestrationAction {
@@ -619,6 +621,8 @@ message StartNewOrchestrationAction {
     google.protobuf.StringValue version = 3;
     google.protobuf.StringValue input = 4;
     google.protobuf.Timestamp scheduledTime = 5;
+    google.protobuf.Timestamp requestTime = 6;
+    TraceContext parentTraceContext = 7;
 }
 
 service TaskHubSidecarService {

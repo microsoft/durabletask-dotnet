@@ -6,6 +6,7 @@ using Azure.Core;
 using Azure.Identity;
 using Grpc.Core;
 using Grpc.Net.Client;
+using Grpc.Net.Client.Configuration;
 
 namespace Microsoft.DurableTask;
 
@@ -112,6 +113,7 @@ public class DurableTaskSchedulerClientOptions
         {
             Credentials = ChannelCredentials.Create(channelCreds, managedBackendCreds),
             UnsafeUseInsecureChannelCallCredentials = this.AllowInsecureCredentials,
+            ServiceConfig = GrpcRetryPolicyDefaults.DefaultServiceConfig,
         });
     }
 
@@ -127,7 +129,7 @@ public class DurableTaskSchedulerClientOptions
             case "managedidentity":
                 return new ManagedIdentityCredential(connectionString.ClientId);
             case "workloadidentity":
-                var opts = new WorkloadIdentityCredentialOptions();
+                WorkloadIdentityCredentialOptions opts = new WorkloadIdentityCredentialOptions();
                 if (!string.IsNullOrEmpty(connectionString.ClientId))
                 {
                     opts.ClientId = connectionString.ClientId;

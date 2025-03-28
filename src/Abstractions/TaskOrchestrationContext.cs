@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -421,32 +422,7 @@ public abstract class TaskOrchestrationContext
     /// <returns>True if the orchestration's version is greater than the provided version, false otherwise.</returns>
     public virtual int CompareVersionTo(string version)
     {
-        // Both versions are empty, treat as equal.
-        if (string.IsNullOrWhiteSpace(this.Version) && string.IsNullOrWhiteSpace(version))
-        {
-            return 0;
-        }
-
-        // An empty version in the context is always less than a defined version in the parameter.
-        if (string.IsNullOrWhiteSpace(this.Version))
-        {
-            return -1;
-        }
-
-        // An empty version in the parameter is always less than a defined version in the context.
-        if (string.IsNullOrWhiteSpace(version))
-        {
-            return 1;
-        }
-
-        // If both versions use the .NET Version class, return that comparison.
-        if (System.Version.TryParse(this.Version, out Version contextVersion) && System.Version.TryParse(version, out Version otherVersion))
-        {
-            return contextVersion.CompareTo(otherVersion);
-        }
-
-        // If we have gotten to here, we don't know the syntax of the versions we are comparing, use a string comparison as a final check.
-        return string.Compare(this.Version, version, StringComparison.OrdinalIgnoreCase);
+        return TaskOrchestrationVersioningUtils.CompareVersions(this.Version, version);
     }
 
     class ReplaySafeLogger : ILogger

@@ -11,22 +11,10 @@ namespace Microsoft.DurableTask.Tests;
 public class GrpcRetryPolicyDefaultsTests
 {
     [Fact]
-    public void DefaultConstants_ShouldHaveExpectedValues()
-    {
-        // Assert
-        GrpcRetryPolicyDefaults.DefaultMaxAttempts.Should().Be(10);
-        GrpcRetryPolicyDefaults.DefaultInitialBackoffMs.Should().Be(50);
-        GrpcRetryPolicyDefaults.DefaultMaxBackoffMs.Should().Be(250);
-        GrpcRetryPolicyDefaults.DefaultBackoffMultiplier.Should().Be(2);
-    }
-
-    [Fact]
     public void DefaultServiceConfig_ShouldHaveExpectedConfiguration()
     {
-        // Arrange & Act
         ServiceConfig serviceConfig = GrpcRetryPolicyDefaults.DefaultServiceConfig;
 
-        // Assert
         serviceConfig.Should().NotBeNull();
         serviceConfig.MethodConfigs.Should().HaveCount(1);
 

@@ -35,11 +35,6 @@ sealed class GrpcRetryPolicyDefaults
     /// The default retry policy for gRPC operations.
     /// </summary>
     /// <remarks>
-    /// This policy configures:
-    /// - Up to 10 retry attempts
-    /// - Initial backoff of 50ms
-    /// - Maximum backoff of 250ms
-    /// - Exponential backoff with multiplier of 2
     /// - Retries only for Unavailable status codes (typically connection issues).
     /// </remarks>
     static readonly Grpc.Net.Client.Configuration.RetryPolicy Default = new()

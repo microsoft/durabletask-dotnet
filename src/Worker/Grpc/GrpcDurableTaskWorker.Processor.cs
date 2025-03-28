@@ -108,6 +108,62 @@ sealed partial class GrpcDurableTaskWorker
             }
         }
 
+        static P.TaskFailureDetails? EvaluateOrchestrationVersioning(DurableTaskWorkerOptions.VersioningOptions? versioning, string orchestrationVersion, out bool versionCheckFailed)
+        {
+            P.TaskFailureDetails? failureDetails = null;
+            versionCheckFailed = false;
+            if (versioning != null)
+            {
+                int versionComparison = TaskOrchestrationVersioningUtils.CompareVersions(orchestrationVersion, versioning.Version);
+
+                switch (versioning.MatchStrategy)
+                {
+                    case DurableTaskWorkerOptions.VersionMatchStrategy.None:
+                        // No versioning, breakout.
+                        break;
+                    case DurableTaskWorkerOptions.VersionMatchStrategy.Strict:
+                        // Comparison of 0 indicates equality.
+                        if (versionComparison != 0)
+                        {
+                            failureDetails = new P.TaskFailureDetails
+                            {
+                                ErrorType = "VersionMismatch",
+                                ErrorMessage = $"The orchestration version '{orchestrationVersion}' does not match the worker version '{versioning.Version}'.",
+                                IsNonRetriable = true,
+                            };
+                        }
+
+                        break;
+                    case DurableTaskWorkerOptions.VersionMatchStrategy.CurrentOrOlder:
+                        // Comparison > 0 indicates the orchestration version is greater than the worker version.
+                        if (versionComparison > 0)
+                        {
+                            failureDetails = new P.TaskFailureDetails
+                            {
+                                ErrorType = "VersionMismatch",
+                                ErrorMessage = $"The orchestration version '{orchestrationVersion}' is greater than the worker version '{versioning.Version}'.",
+                                IsNonRetriable = true,
+                            };
+                        }
+
+                        break;
+                    default:
+                        // If there is a type of versioning we don't understand, it is better to treat it as a versioning failure.
+                        failureDetails = new P.TaskFailureDetails
+                        {
+                            ErrorType = "VersionError",
+                            ErrorMessage = $"The version match strategy '{orchestrationVersion}' is unknown.",
+                            IsNonRetriable = true,
+                        };
+                        break;
+                }
+
+                versionCheckFailed = failureDetails != null;
+            }
+
+            return failureDetails;
+        }
+
         async ValueTask<OrchestrationRuntimeState> BuildRuntimeStateAsync(
             P.OrchestratorRequest orchestratorRequest,
             ProtoUtils.EntityConversionState? entityConversionState,
@@ -308,56 +364,8 @@ sealed partial class GrpcDurableTaskWorker
                     entityConversionState,
                     cancellationToken);
 
-
                 // If versioning has been explicitly set, we attempt to follow that pattern. If it is not set, we don't compare versions here.
-                if (versioning != null)
-                {
-                    int versionComparison = TaskOrchestrationVersioningUtils.CompareVersions(runtimeState.Version, versioning.Version);
-
-                    switch (versioning.MatchStrategy)
-                    {
-                        case DurableTaskWorkerOptions.VersionMatchStrategy.None:
-                            // No versioning, breakout.
-                            break;
-                        case DurableTaskWorkerOptions.VersionMatchStrategy.Strict:
-                            // Comparison of 0 indicates equality.
-                            if (versionComparison != 0)
-                            {
-                                failureDetails = new P.TaskFailureDetails
-                                {
-                                    ErrorType = "VersionMismatch",
-                                    ErrorMessage = $"The orchestration version '{runtimeState.Version}' does not match the worker version '{versioning.Version}'.",
-                                    IsNonRetriable = true,
-                                };
-                            }
-
-                            break;
-                        case DurableTaskWorkerOptions.VersionMatchStrategy.CurrentOrOlder:
-                            // Comparison > 0 indicates the orchestration version is greater than the worker version.
-                            if (versionComparison > 0)
-                            {
-                                failureDetails = new P.TaskFailureDetails
-                                {
-                                    ErrorType = "VersionMismatch",
-                                    ErrorMessage = $"The orchestration version '{runtimeState.Version}' is greater than the worker version '{versioning.Version}'.",
-                                    IsNonRetriable = true,
-                                };
-                            }
-
-                            break;
-                        default:
-                            // If there is a type of versioning we don't understand, it is better to treat it as a versioning failure.
-                            failureDetails = new P.TaskFailureDetails
-                            {
-                                ErrorType = "VersionError",
-                                ErrorMessage = $"The version match strategy '{versioning.MatchStrategy}' is unknown.",
-                                IsNonRetriable = true,
-                            };
-                            break;
-                    }
-
-                    versionFailure = failureDetails != null;
-                }
+                failureDetails = EvaluateOrchestrationVersioning(versioning, runtimeState.Version, out versionFailure);
 
                 // Only continue with the work if the versioning check passed.
                 if (failureDetails == null)
@@ -421,6 +429,7 @@ sealed partial class GrpcDurableTaskWorker
             }
             else if (versioning != null && failureDetails != null && versionFailure)
             {
+                this.Logger.OrchestrationVersionFailure(versioning.FailureStrategy.ToString(), failureDetails.ErrorMessage);
                 if (versioning.FailureStrategy == DurableTaskWorkerOptions.VersionFailureStrategy.Fail)
                 {
                     response = new P.OrchestratorResponse
@@ -442,6 +451,7 @@ sealed partial class GrpcDurableTaskWorker
                 }
                 else
                 {
+                    this.Logger.AbandoningOrchestrationDueToVersioning(request.InstanceId, completionToken);
                     await this.client.AbandonTaskOrchestratorWorkItemAsync(
                         new P.AbandonOrchestrationTaskRequest
                         {

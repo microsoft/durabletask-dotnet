@@ -7,7 +7,6 @@ using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using Xunit.Abstractions;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
@@ -621,6 +620,41 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         Assert.NotNull(output);
         Assert.Equal(output, $"Orchestration version: {version}");
+    }
+
+    [Fact]
+    public async Task OrchestrationVersioning_MatchTypeNotSpecified_NoVersionFailure()
+    {
+        var workerVersion = "0.1";
+        var clientVersion = "0.2";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Orchestration version: {input}";
+                }));
+            b.UseVersioning(new()
+            {
+                Version = workerVersion,
+                FailureStrategy = DurableTaskWorkerOptions.VersionFailureStrategy.Fail
+            });
+        }, c =>
+        {
+            c.UseDefaultVersion(clientVersion);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        var output = result.ReadOutputAs<string>();
+
+        Assert.NotNull(output);
+        // The worker doesn't pass it's version through the context, so we check the client version. The fact that it passed indicates versioning was ignored.
+        Assert.Equal(output, $"Orchestration version: {clientVersion}");
     }
 
     [Fact]

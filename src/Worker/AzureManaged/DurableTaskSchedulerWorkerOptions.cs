@@ -120,24 +120,7 @@ public class DurableTaskSchedulerWorkerOptions
         {
             Credentials = ChannelCredentials.Create(channelCreds, managedBackendCreds),
             UnsafeUseInsecureChannelCallCredentials = this.AllowInsecureCredentials,
-            ServiceConfig = new ServiceConfig
-            {
-                MethodConfigs =
-                {
-                    new MethodConfig
-                    {
-                        Names = { MethodName.Default },
-                        RetryPolicy = new Grpc.Net.Client.Configuration.RetryPolicy()
-                        {
-                            MaxAttempts = 10,
-                            InitialBackoff = TimeSpan.FromMilliseconds(50),
-                            MaxBackoff = TimeSpan.FromMilliseconds(250),
-                            BackoffMultiplier = 2,
-                            RetryableStatusCodes = { StatusCode.Unavailable },
-                        },
-                    },
-                },
-            },
+            ServiceConfig = GrpcRetryPolicyDefaults.DefaultServiceConfig,
         });
     }
 

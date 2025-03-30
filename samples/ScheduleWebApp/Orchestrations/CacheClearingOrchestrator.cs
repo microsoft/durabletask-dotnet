@@ -15,17 +15,9 @@ public class CacheClearingOrchestrator : TaskOrchestrator<string, string>
         {
             logger.LogInformation("Starting CacheClearingOrchestration for schedule ID: {ScheduleId}", scheduleId);
 
-            // Create a large payload of approximately 10K
-            StringBuilder largePayload = new StringBuilder(10240);
-            for (int i = 0; i < 2; i++)
-            {
-                largePayload.Append($"Data chunk {i}: This is a large payload for testing orchestration with big data. ");
-            }
             
-            string bigData = largePayload.ToString();
-            logger.LogInformation("Created large payload of size: {Size} bytes", bigData.Length);
-
-            return bigData;
+            // 10kb
+            return new string('X', 10240);
         }
         catch (Exception ex)
         {

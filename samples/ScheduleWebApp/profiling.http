@@ -1,6 +1,6 @@
 ### Variables
 @baseUrl = http://localhost:5008
-@instanceCount = 100000
+@instanceCount = 30000
 
 ### Create multiple orchestration instances
 # @name createInstances

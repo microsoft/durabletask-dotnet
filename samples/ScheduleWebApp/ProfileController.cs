@@ -61,7 +61,7 @@ public class ProfileController : ControllerBase
         try
         {
             List<string> instanceIds = new List<string>();
-            const int parallelTasks = 8;
+            const int parallelTasks = 6;
             
             // Calculate items per task
             int itemsPerTask = count / parallelTasks;
@@ -98,14 +98,14 @@ public class ProfileController : ControllerBase
                 instanceIds.AddRange(result);
             }
             
-            // Wait for all orchestration instances to complete
-            await Task.WhenAll(instanceIds.Select(async instanceId =>
-            {
-                await this.durableTaskClient.WaitForInstanceCompletionAsync(instanceId);
-            }));
+            // // Wait for all orchestration instances to complete
+            // await Task.WhenAll(instanceIds.Select(async instanceId =>
+            // {
+            //     await this.durableTaskClient.WaitForInstanceCompletionAsync(instanceId);
+            // }));
 
             // Log completion
-            this.logger.LogInformation("All {Count} orchestration instances completed", instanceIds.Count);
+            // this.logger.LogInformation("All {Count} orchestration instances completed", instanceIds.Count);
 
             return this.Ok(instanceIds);
         }

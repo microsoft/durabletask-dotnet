@@ -15,7 +15,7 @@
       "dotnetRunMessages": true,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "DURABLE_TASK_SCHEDULER_CONNECTION_STRING": "Endpoint=https://wbschedule01uks-aghehyfmfjcu.uksouth.durabletask.io;TaskHub=wbpurgeadaptive;Authentication=DefaultAzure"
+        "DURABLE_TASK_SCHEDULER_CONNECTION_STRING": "Endpoint=https://wbschedule02uks-ghhufbhaamdg.uksouth.durabletask.io;TaskHub=wbth3;Authentication=DefaultAzure"
       }
     }
   }

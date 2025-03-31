@@ -6,6 +6,7 @@ using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
+using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.DependencyInjection;
@@ -105,6 +106,62 @@ sealed partial class GrpcDurableTaskWorker
                     .GroupBy(a => a.OrchestratorActionTypeCase)
                     .Select(group => $"{group.Key} x{group.Count()}"));
             }
+        }
+
+        static P.TaskFailureDetails? EvaluateOrchestrationVersioning(DurableTaskWorkerOptions.VersioningOptions? versioning, string orchestrationVersion, out bool versionCheckFailed)
+        {
+            P.TaskFailureDetails? failureDetails = null;
+            versionCheckFailed = false;
+            if (versioning != null)
+            {
+                int versionComparison = TaskOrchestrationVersioningUtils.CompareVersions(orchestrationVersion, versioning.Version);
+
+                switch (versioning.MatchStrategy)
+                {
+                    case DurableTaskWorkerOptions.VersionMatchStrategy.None:
+                        // No versioning, breakout.
+                        break;
+                    case DurableTaskWorkerOptions.VersionMatchStrategy.Strict:
+                        // Comparison of 0 indicates equality.
+                        if (versionComparison != 0)
+                        {
+                            failureDetails = new P.TaskFailureDetails
+                            {
+                                ErrorType = "VersionMismatch",
+                                ErrorMessage = $"The orchestration version '{orchestrationVersion}' does not match the worker version '{versioning.Version}'.",
+                                IsNonRetriable = true,
+                            };
+                        }
+
+                        break;
+                    case DurableTaskWorkerOptions.VersionMatchStrategy.CurrentOrOlder:
+                        // Comparison > 0 indicates the orchestration version is greater than the worker version.
+                        if (versionComparison > 0)
+                        {
+                            failureDetails = new P.TaskFailureDetails
+                            {
+                                ErrorType = "VersionMismatch",
+                                ErrorMessage = $"The orchestration version '{orchestrationVersion}' is greater than the worker version '{versioning.Version}'.",
+                                IsNonRetriable = true,
+                            };
+                        }
+
+                        break;
+                    default:
+                        // If there is a type of versioning we don't understand, it is better to treat it as a versioning failure.
+                        failureDetails = new P.TaskFailureDetails
+                        {
+                            ErrorType = "VersionError",
+                            ErrorMessage = $"The version match strategy '{orchestrationVersion}' is unknown.",
+                            IsNonRetriable = true,
+                        };
+                        break;
+                }
+
+                versionCheckFailed = failureDetails != null;
+            }
+
+            return failureDetails;
         }
 
         async ValueTask<OrchestrationRuntimeState> BuildRuntimeStateAsync(
@@ -298,6 +355,8 @@ sealed partial class GrpcDurableTaskWorker
                 ? new(this.internalOptions.InsertEntityUnlocksOnCompletion)
                 : null;
 
+            DurableTaskWorkerOptions.VersioningOptions? versioning = this.worker.workerOptions.Versioning;
+            bool versionFailure = false;
             try
             {
                 OrchestrationRuntimeState runtimeState = await this.BuildRuntimeStateAsync(
@@ -305,43 +364,50 @@ sealed partial class GrpcDurableTaskWorker
                     entityConversionState,
                     cancellationToken);
 
-                name = new TaskName(runtimeState.Name);
+                // If versioning has been explicitly set, we attempt to follow that pattern. If it is not set, we don't compare versions here.
+                failureDetails = EvaluateOrchestrationVersioning(versioning, runtimeState.Version, out versionFailure);
 
-                this.Logger.ReceivedOrchestratorRequest(
-                    name,
-                    request.InstanceId,
-                    runtimeState.PastEvents.Count,
-                    runtimeState.NewEvents.Count);
-
-                await using AsyncServiceScope scope = this.worker.services.CreateAsyncScope();
-                if (this.worker.Factory.TryCreateOrchestrator(
-                    name, scope.ServiceProvider, out ITaskOrchestrator? orchestrator))
+                // Only continue with the work if the versioning check passed.
+                if (failureDetails == null)
                 {
-                    // Both the factory invocation and the ExecuteAsync could involve user code and need to be handled
-                    // as part of try/catch.
-                    ParentOrchestrationInstance? parent = runtimeState.ParentInstance switch
-                    {
-                        ParentInstance p => new(new(p.Name), p.OrchestrationInstance.InstanceId),
-                        _ => null,
-                    };
+                    name = new TaskName(runtimeState.Name);
 
-                    TaskOrchestration shim = this.shimFactory.CreateOrchestration(name, orchestrator, parent);
-                    TaskOrchestrationExecutor executor = new(
-                        runtimeState,
-                        shim,
-                        BehaviorOnContinueAsNew.Carryover,
-                        request.EntityParameters.ToCore(),
-                        ErrorPropagationMode.UseFailureDetails);
-                    result = executor.Execute();
-                }
-                else
-                {
-                    failureDetails = new P.TaskFailureDetails
+                    this.Logger.ReceivedOrchestratorRequest(
+                        name,
+                        request.InstanceId,
+                        runtimeState.PastEvents.Count,
+                        runtimeState.NewEvents.Count);
+
+                    await using AsyncServiceScope scope = this.worker.services.CreateAsyncScope();
+                    if (this.worker.Factory.TryCreateOrchestrator(
+                        name, scope.ServiceProvider, out ITaskOrchestrator? orchestrator))
                     {
-                        ErrorType = "OrchestratorTaskNotFound",
-                        ErrorMessage = $"No orchestrator task named '{name}' was found.",
-                        IsNonRetriable = true,
-                    };
+                        // Both the factory invocation and the ExecuteAsync could involve user code and need to be handled
+                        // as part of try/catch.
+                        ParentOrchestrationInstance? parent = runtimeState.ParentInstance switch
+                        {
+                            ParentInstance p => new(new(p.Name), p.OrchestrationInstance.InstanceId),
+                            _ => null,
+                        };
+
+                        TaskOrchestration shim = this.shimFactory.CreateOrchestration(name, orchestrator, parent);
+                        TaskOrchestrationExecutor executor = new(
+                            runtimeState,
+                            shim,
+                            BehaviorOnContinueAsNew.Carryover,
+                            request.EntityParameters.ToCore(),
+                            ErrorPropagationMode.UseFailureDetails);
+                        result = executor.Execute();
+                    }
+                    else
+                    {
+                        failureDetails = new P.TaskFailureDetails
+                        {
+                            ErrorType = "OrchestratorTaskNotFound",
+                            ErrorMessage = $"No orchestrator task named '{name}' was found.",
+                            IsNonRetriable = true,
+                        };
+                    }
                 }
             }
             catch (Exception unexpected)
@@ -360,6 +426,41 @@ sealed partial class GrpcDurableTaskWorker
                     result.Actions,
                     completionToken,
                     entityConversionState);
+            }
+            else if (versioning != null && failureDetails != null && versionFailure)
+            {
+                this.Logger.OrchestrationVersionFailure(versioning.FailureStrategy.ToString(), failureDetails.ErrorMessage);
+                if (versioning.FailureStrategy == DurableTaskWorkerOptions.VersionFailureStrategy.Fail)
+                {
+                    response = new P.OrchestratorResponse
+                    {
+                        InstanceId = request.InstanceId,
+                        CompletionToken = completionToken,
+                        Actions =
+                        {
+                            new P.OrchestratorAction
+                            {
+                                CompleteOrchestration = new P.CompleteOrchestrationAction
+                                {
+                                    OrchestrationStatus = P.OrchestrationStatus.Failed,
+                                    FailureDetails = failureDetails,
+                                },
+                            },
+                        },
+                    };
+                }
+                else
+                {
+                    this.Logger.AbandoningOrchestrationDueToVersioning(request.InstanceId, completionToken);
+                    await this.client.AbandonTaskOrchestratorWorkItemAsync(
+                        new P.AbandonOrchestrationTaskRequest
+                        {
+                            CompletionToken = completionToken,
+                        },
+                        cancellationToken: cancellationToken);
+
+                    return;
+                }
             }
             else
             {

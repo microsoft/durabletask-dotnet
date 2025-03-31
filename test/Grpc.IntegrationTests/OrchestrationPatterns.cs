@@ -211,6 +211,38 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.NotNull(metadata);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.Equal("Hello, World!", metadata.ReadOutputAs<string>());
+
+        IReadOnlyCollection<LogEntry> workerLogs = this.GetLogs("Microsoft.DurableTask.Worker");
+        Assert.NotEmpty(workerLogs);
+            
+        // Validate logs.
+        Assert.Single(workerLogs, log => MatchLog(
+            log,
+            logEventName: "OrchestrationStarted",
+            exception: null,
+            ("InstanceId", instanceId),
+            ("Name", orchestratorName.Name)));
+
+        Assert.Single(workerLogs, log => MatchLog(
+            log,
+            logEventName: "ActivityStarted",
+            exception: null,
+            ("InstanceId", instanceId),
+            ("Name", sayHelloActivityName.Name)));
+
+        Assert.Single(workerLogs, log => MatchLog(
+            log,
+            logEventName: "ActivityCompleted",
+            exception: null,
+            ("InstanceId", instanceId),
+            ("Name", sayHelloActivityName.Name)));
+
+        Assert.Single(workerLogs, log => MatchLog(
+            log,
+            logEventName: "OrchestrationCompleted",
+            exception: null,
+            ("InstanceId", instanceId),
+            ("Name", orchestratorName.Name)));
     }
 
     [Fact]

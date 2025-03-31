@@ -18,6 +18,8 @@ partial class TaskOrchestrationShim : TaskOrchestration
 {
     readonly ITaskOrchestrator implementation;
     readonly OrchestrationInvocationContext invocationContext;
+    readonly ILogger logger;
+
     TaskOrchestrationContextWrapper? wrapperContext;
 
     /// <summary>
@@ -31,6 +33,8 @@ partial class TaskOrchestrationShim : TaskOrchestration
     {
         this.invocationContext = Check.NotNull(invocationContext);
         this.implementation = Check.NotNull(implementation);
+
+        this.logger = this.invocationContext.LoggerFactory.CreateLogger(Logs.WorkerCategoryName);
     }
 
     DataConverter DataConverter => this.invocationContext.Options.DataConverter;
@@ -48,15 +52,31 @@ partial class TaskOrchestrationShim : TaskOrchestration
         object? input = this.DataConverter.Deserialize(rawInput, this.implementation.InputType);
         this.wrapperContext = new(innerContext, this.invocationContext, input);
 
+        string instanceId = innerContext.OrchestrationInstance.InstanceId;
+        if (!innerContext.IsReplaying)
+        {
+            this.logger.OrchestrationStarted(instanceId, this.invocationContext.Name);
+        }
+
         try
         {
             object? output = await this.implementation.RunAsync(this.wrapperContext, input);
+
+            if (!innerContext.IsReplaying)
+            {
+                this.logger.OrchestrationCompleted(instanceId, this.invocationContext.Name);
+            }
 
             // Return the output (if any) as a serialized string.
             return this.DataConverter.Serialize(output);
         }
         catch (TaskFailedException e)
         {
+            if (!innerContext.IsReplaying)
+            {
+                this.logger.OrchestrationFailed(e.InnerException, instanceId, this.invocationContext.Name);
+            }
+
             // Convert back to something the Durable Task Framework natively understands so that
             // failure details are correctly propagated.
             throw new CoreTaskFailedException(e.Message, e.InnerException)

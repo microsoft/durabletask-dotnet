@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using DurableTask.Core;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.Worker.Shims;
 
@@ -11,17 +12,24 @@ namespace Microsoft.DurableTask.Worker.Shims;
 class TaskActivityShim : TaskActivity
 {
     readonly ITaskActivity implementation;
+    readonly ILogger logger;
     readonly DataConverter dataConverter;
     readonly TaskName name;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskActivityShim"/> class.
     /// </summary>
+    /// <param name="loggerFactory">The logger factory.</param>
     /// <param name="dataConverter">The data converter.</param>
     /// <param name="name">The name of the activity.</param>
     /// <param name="implementation">The activity implementation to wrap.</param>
-    public TaskActivityShim(DataConverter dataConverter, TaskName name, ITaskActivity implementation)
+    public TaskActivityShim(
+        ILoggerFactory loggerFactory,
+        DataConverter dataConverter,
+        TaskName name,
+        ITaskActivity implementation)
     {
+        this.logger = Check.NotNull(loggerFactory).CreateLogger(Logs.WorkerCategoryName);
         this.dataConverter = Check.NotNull(dataConverter);
         this.name = Check.NotDefault(name);
         this.implementation = Check.NotNull(implementation);
@@ -34,11 +42,25 @@ class TaskActivityShim : TaskActivity
         string? strippedRawInput = StripArrayCharacters(rawInput);
         object? deserializedInput = this.dataConverter.Deserialize(strippedRawInput, this.implementation.InputType);
         TaskActivityContextWrapper contextWrapper = new(coreContext, this.name);
-        object? output = await this.implementation.RunAsync(contextWrapper, deserializedInput);
 
-        // Return the output (if any) as a serialized string.
-        string? serializedOutput = this.dataConverter.Serialize(output);
-        return serializedOutput;
+        string instanceId = coreContext.OrchestrationInstance.InstanceId;
+        this.logger.ActivityStarted(instanceId, this.name);
+
+        try
+        {
+            object? output = await this.implementation.RunAsync(contextWrapper, deserializedInput);
+
+            this.logger.ActivityCompleted(instanceId, this.name);
+
+            // Return the output (if any) as a serialized string.
+            string? serializedOutput = this.dataConverter.Serialize(output);
+            return serializedOutput;
+        }
+        catch (Exception e)
+        {
+            this.logger.ActivityFailed(e, instanceId, this.name);
+            throw;
+        }
     }
 
     /// <inheritdoc/>

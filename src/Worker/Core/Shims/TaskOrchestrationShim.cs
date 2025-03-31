@@ -74,7 +74,7 @@ partial class TaskOrchestrationShim : TaskOrchestration
         {
             if (!innerContext.IsReplaying)
             {
-                this.logger.OrchestrationFailed(e.InnerException, instanceId, this.invocationContext.Name);
+                this.logger.OrchestrationFailed(e, instanceId, this.invocationContext.Name);
             }
 
             // Convert back to something the Durable Task Framework natively understands so that

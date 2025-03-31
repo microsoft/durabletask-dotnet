@@ -655,11 +655,6 @@ public class OrchestrationPatterns : IntegrationTestBase
 
     }
 
-    // TODO: Test for multiple external events with the same name
-    // TODO: Test for ContinueAsNew with external events that carry over
-    // TODO: Test for catching activity exceptions of specific types
-}
-=======
     [Fact]
     public async Task OrchestrationVersioning_MatchTypeNotSpecified_NoVersionFailure()
     {
@@ -843,4 +838,3 @@ public class OrchestrationPatterns : IntegrationTestBase
     // TODO: Test for ContinueAsNew with external events that carry over
     // TODO: Test for catching activity exceptions of specific types
 }
->>>>>>> 022d567864eab14099a101b9ec9b08ecd6ac4017

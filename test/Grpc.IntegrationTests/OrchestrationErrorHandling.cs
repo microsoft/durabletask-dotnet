@@ -104,7 +104,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.Single(workerLogs, log => MatchLog(
             log,
             logEventName: "OrchestrationFailed",
-            exception: (typeof(TaskFailedException), null),
+            exception: (typeof(TaskFailedException), $"Task '{activityName}' (#0) failed with an unhandled exception: {errorMessage}"),
             ("InstanceId", instanceId),
             ("Name", orchestratorName.Name)));
     }

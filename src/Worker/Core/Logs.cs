@@ -11,17 +11,6 @@ namespace Microsoft.DurableTask
     /// </summary>
     static partial class Logs
     {
-        internal static ILogger CreateWorkerLogger(ILoggerFactory loggerFactory, params string[] subcategories)
-        {
-            string categoryName = "Microsoft.DurableTask.Worker";
-            if (subcategories.Length > 0)
-            {
-                categoryName += "." + string.Join(".", subcategories);
-            }
-
-            return loggerFactory.CreateLogger(categoryName);
-        }
-
         [LoggerMessage(EventId = 15, Level = LogLevel.Error, Message = "Unhandled exception in entity operation {entityInstanceId}/{operationName}.")]
         public static partial void OperationError(this ILogger logger, Exception ex, EntityInstanceId entityInstanceId, string operationName);
 
@@ -45,5 +34,23 @@ namespace Microsoft.DurableTask
 
         [LoggerMessage(EventId = 605, Level = LogLevel.Information, Message = "'{Name}' activity of orchestration ID '{InstanceId}' failed.")]
         public static partial void ActivityFailed(this ILogger logger, Exception ex, string instanceId, string name);
+
+        /// <summary>
+        /// Creates a logger named "Microsoft.DurableTask.Worker" with the specified subcategories.
+        /// </summary>
+        /// <param name="loggerFactory">The logger factory to use to create the logger.</param>
+        /// <param name="subcategories">The subcategory of the logger. For example, "Activities" or "Orchestrations".
+        /// </param>
+        /// <returns>The generated <see cref="ILogger"/>.</returns>
+        internal static ILogger CreateWorkerLogger(ILoggerFactory loggerFactory, string? subcategories = null)
+        {
+            string categoryName = "Microsoft.DurableTask.Worker";
+            if (!string.IsNullOrEmpty(subcategories))
+            {
+                categoryName += "." + subcategories;
+            }
+
+            return loggerFactory.CreateLogger(categoryName);
+        }
     }
 }

@@ -36,18 +36,18 @@ namespace Microsoft.DurableTask
         public static partial void ActivityFailed(this ILogger logger, Exception ex, string instanceId, string name);
 
         /// <summary>
-        /// Creates a logger named "Microsoft.DurableTask.Worker" with the specified subcategories.
+        /// Creates a logger named "Microsoft.DurableTask.Worker" with an optional subcategory.
         /// </summary>
         /// <param name="loggerFactory">The logger factory to use to create the logger.</param>
-        /// <param name="subcategories">The subcategory of the logger. For example, "Activities" or "Orchestrations".
+        /// <param name="subcategory">The subcategory of the logger. For example, "Activities" or "Orchestrations".
         /// </param>
         /// <returns>The generated <see cref="ILogger"/>.</returns>
-        internal static ILogger CreateWorkerLogger(ILoggerFactory loggerFactory, string? subcategories = null)
+        internal static ILogger CreateWorkerLogger(ILoggerFactory loggerFactory, string? subcategory = null)
         {
             string categoryName = "Microsoft.DurableTask.Worker";
-            if (!string.IsNullOrEmpty(subcategories))
+            if (!string.IsNullOrEmpty(subcategory))
             {
-                categoryName += "." + subcategories;
+                categoryName += "." + subcategory;
             }
 
             return loggerFactory.CreateLogger(categoryName);

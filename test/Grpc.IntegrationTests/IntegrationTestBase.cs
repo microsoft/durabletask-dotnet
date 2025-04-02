@@ -90,6 +90,61 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
         return logs;
     }
 
+    protected IReadOnlyCollection<LogEntry> GetLogs(string category)
+    {
+        this.logProvider.TryGetLogs(category, out IReadOnlyCollection<LogEntry> logs);
+        return logs ?? [];
+    }
+
+    protected static bool MatchLog(
+        LogEntry log,
+        string logEventName,
+        (Type exceptionType, string exceptionMessage)? exception,
+        params (string key, string value)[] metadataPairs)
+    {
+        if (log.EventId.Name != logEventName)
+        {
+            return false;
+        }
+
+        if (log.Exception is null != exception is null)
+        {
+            return false;
+        }
+        else if (exception is not null)
+        {
+            if (log.Exception?.GetType() != exception.Value.exceptionType)
+            {
+                return false;
+            }
+            if (log.Exception?.Message != exception.Value.exceptionMessage)
+            {
+                return false;
+            }
+        }
+
+        if (log.State is not IReadOnlyCollection<KeyValuePair<string, object>> metadataList)
+        {
+            return false;
+        }
+
+        Dictionary<string, object> state = new(metadataList);
+        foreach ((string key, string value) in metadataPairs)
+        {
+            if (!state.TryGetValue(key, out object? stateValue))
+            {
+                return false;
+            }
+
+            if (stateValue is not string stateString || stateString != value)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     protected struct HostTestLifetime : IAsyncDisposable
     {
         readonly IHost host;

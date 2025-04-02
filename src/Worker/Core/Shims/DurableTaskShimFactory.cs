@@ -50,7 +50,7 @@ public class DurableTaskShimFactory
     {
         Check.NotDefault(name);
         Check.NotNull(activity);
-        return new TaskActivityShim(this.options.DataConverter, name, activity);
+        return new TaskActivityShim(this.loggerFactory, this.options.DataConverter, name, activity);
     }
 
     /// <summary>

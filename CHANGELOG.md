@@ -1,12 +1,15 @@
 ﻿# Changelog
 
-## v1.9.0 (unreleased)
+## v1.9.0
 
-- Introduce default version setting to DurableTaskClient and expose to orchestrator ([#393](https://github.com/microsoft/durabletask-dotnet/pull/393))
-- Add support for local credential types in DTS libraries ([#396](https://github.com/microsoft/durabletask-dotnet/pull/396))
-- Add utility for easier version comparison in orchestration context ([#394](https://github.com/microsoft/durabletask-dotnet/pull/394))
-- Add tags support for orchestrations ([#397](https://github.com/microsoft/durabletask-dotnet/pull/397))
-- Add support for versioning in the gRPC worker ([#401](https://github.com/microsoft/durabletask-dotnet/pull/401))
+- Fix schedule sample logging setup by @YunchuWang in ([#392](https://github.com/microsoft/durabletask-dotnet/pull/392))
+- Introduce versioning to the DurableTaskClient by @halspang in ([#393](https://github.com/microsoft/durabletask-dotnet/pull/393))
+- Support for local credential types for DTS by @cgillum in ([#396](https://github.com/microsoft/durabletask-dotnet/pull/396))
+- Add utilities for easier versioning usage by @halspang in ([#394](https://github.com/microsoft/durabletask-dotnet/pull/394))
+- Add tags to CreateInstanceRequest by @torosent in ([#397](https://github.com/microsoft/durabletask-dotnet/pull/397))
+- Partial Purge Support by @YunchuWang in ([#400](https://github.com/microsoft/durabletask-dotnet/pull/400))
+- Dts Grpc client retry support by @YunchuWang in ([#403](https://github.com/microsoft/durabletask-dotnet/pull/403))
+- Introduce orchestration versioning into worker by @halspang in ([#401](https://github.com/microsoft/durabletask-dotnet/pull/401))
 
 ## v1.8.1
 

@@ -8,9 +8,6 @@ namespace Microsoft.DurableTask.Worker.Grpc
     /// <summary>
     /// Log messages.
     /// </summary>
-    /// <remarks>
-    /// NOTE: Trying to make logs consistent with https://github.com/Azure/durabletask/blob/main/src/DurableTask.Core/Logging/LogEvents.cs.
-    /// </remarks>
     static partial class Logs
     {
         [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Durable Task gRPC worker starting and connecting to {endpoint}.")]

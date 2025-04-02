@@ -34,12 +34,10 @@ partial class TaskOrchestrationShim : TaskOrchestration
         this.invocationContext = Check.NotNull(invocationContext);
         this.implementation = Check.NotNull(implementation);
 
-        this.logger = this.invocationContext.LoggerFactory.CreateLogger(Logs.WorkerCategoryName);
+        this.logger = Logs.CreateWorkerLogger(this.invocationContext.LoggerFactory, "Orchestrations");
     }
 
     DataConverter DataConverter => this.invocationContext.Options.DataConverter;
-
-    ILoggerFactory LoggerFactory => this.invocationContext.LoggerFactory;
 
     /// <inheritdoc/>
     public override async Task<string?> Execute(OrchestrationContext innerContext, string rawInput)

@@ -29,7 +29,7 @@ class TaskActivityShim : TaskActivity
         TaskName name,
         ITaskActivity implementation)
     {
-        this.logger = Check.NotNull(loggerFactory).CreateLogger(Logs.WorkerCategoryName);
+        this.logger = Logs.CreateWorkerLogger(Check.NotNull(loggerFactory), "Activities");
         this.dataConverter = Check.NotNull(dataConverter);
         this.name = Check.NotDefault(name);
         this.implementation = Check.NotNull(implementation);
@@ -50,10 +50,10 @@ class TaskActivityShim : TaskActivity
         {
             object? output = await this.implementation.RunAsync(contextWrapper, deserializedInput);
 
-            this.logger.ActivityCompleted(instanceId, this.name);
-
             // Return the output (if any) as a serialized string.
             string? serializedOutput = this.dataConverter.Serialize(output);
+            this.logger.ActivityCompleted(instanceId, this.name);
+
             return serializedOutput;
         }
         catch (Exception e)

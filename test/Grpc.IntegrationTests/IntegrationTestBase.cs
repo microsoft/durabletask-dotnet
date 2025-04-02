@@ -90,9 +90,9 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
         return logs;
     }
 
-    protected IReadOnlyCollection<LogEntry> GetLogs(string categoryName)
+    protected IReadOnlyCollection<LogEntry> GetLogs(string category)
     {
-        this.logProvider.TryGetLogs(categoryName, out IReadOnlyCollection<LogEntry> logs);
+        this.logProvider.TryGetLogs(category, out IReadOnlyCollection<LogEntry> logs);
         return logs ?? [];
     }
 

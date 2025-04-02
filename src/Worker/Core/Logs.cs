@@ -11,10 +11,16 @@ namespace Microsoft.DurableTask
     /// </summary>
     static partial class Logs
     {
-        /// <summary>
-        /// The common category name for worker logs.
-        /// </summary>
-        internal const string WorkerCategoryName = "Microsoft.DurableTask.Worker";
+        internal static ILogger CreateWorkerLogger(ILoggerFactory loggerFactory, params string[] subcategories)
+        {
+            string categoryName = "Microsoft.DurableTask.Worker";
+            if (subcategories.Length > 0)
+            {
+                categoryName += "." + string.Join(".", subcategories);
+            }
+
+            return loggerFactory.CreateLogger(categoryName);
+        }
 
         [LoggerMessage(EventId = 15, Level = LogLevel.Error, Message = "Unhandled exception in entity operation {entityInstanceId}/{operationName}.")]
         public static partial void OperationError(this ILogger logger, Exception ex, EntityInstanceId entityInstanceId, string operationName);

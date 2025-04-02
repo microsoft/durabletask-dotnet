@@ -76,7 +76,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.Equal(typeof(CustomException).FullName, failureDetails.InnerFailure.InnerFailure!.ErrorType);
         Assert.Equal("Inner!", failureDetails.InnerFailure.InnerFailure.ErrorMessage);
 
-        IReadOnlyCollection<LogEntry> workerLogs = this.GetLogs("Microsoft.DurableTask.Worker");
+        IReadOnlyCollection<LogEntry> workerLogs = this.GetLogs(category: "Microsoft.DurableTask.Worker");
         Assert.NotEmpty(workerLogs);
 
         // Check that the orchestrator and activity logs are present

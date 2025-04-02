@@ -7,27 +7,21 @@ using Xunit.Abstractions;
 
 namespace Microsoft.DurableTask.Tests.Logging;
 
-public sealed class TestLogProvider : ILoggerProvider
+public sealed class TestLogProvider(ITestOutputHelper output) : ILoggerProvider
 {
-    readonly ITestOutputHelper output;
-    readonly ConcurrentDictionary<string, TestLogger> loggers;
-
-    public TestLogProvider(ITestOutputHelper output)
-    {
-        this.output = output ?? throw new ArgumentNullException(nameof(output));
-        this.loggers = new ConcurrentDictionary<string, TestLogger>(StringComparer.OrdinalIgnoreCase);
-    }
+    readonly ITestOutputHelper output = output ?? throw new ArgumentNullException(nameof(output));
+    readonly ConcurrentDictionary<string, TestLogger> loggers = new(StringComparer.OrdinalIgnoreCase);
 
     public bool TryGetLogs(string category, out IReadOnlyCollection<LogEntry> logs)
     {
-        if (this.loggers.TryGetValue(category, out TestLogger? logger))
-        {
-            logs = logger.GetLogs();
-            return true;
-        }
-
-        logs = Array.Empty<LogEntry>();
-        return false;
+        // Get all logs for loggers that are prefixed with the category name
+        // (e.g. "Microsoft.DurableTask.Worker" will return all logs for "Microsoft.DurableTask.Worker.*")
+        logs = this.loggers
+            .Where(kvp => kvp.Key.StartsWith(category, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(kvp => kvp.Value.GetLogs())
+            .OrderBy(log => log.Timestamp)
+            .ToList();
+        return logs.Count > 0;
     }
 
     public void Clear()

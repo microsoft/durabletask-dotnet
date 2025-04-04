@@ -63,7 +63,7 @@ public abstract class TaskOrchestrationContext
     /// <summary>
     /// Gets the version of the current orchestration instance, which was set when the instance was created.
     /// </summary>
-    public abstract string Version { get; }
+    public virtual string Version => string.Empty;
 
     /// <summary>
     /// Gets the entity feature, for interacting with entities.

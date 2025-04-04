@@ -1,5 +1,8 @@
 ﻿# Changelog
 
+## v1.9.1 (Unreleased)
+- Add default version in `TaskOrchestrationContext` by @halspang in ([#408](https://github.com/microsoft/durabletask-dotnet/pull/408))
+
 ## v1.9.0
 
 - Fix schedule sample logging setup by @YunchuWang in ([#392](https://github.com/microsoft/durabletask-dotnet/pull/392))

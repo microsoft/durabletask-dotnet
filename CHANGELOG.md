@@ -1,6 +1,7 @@
 ﻿# Changelog
 
-## v1.9.1 (Unreleased)
+## v1.9.1
+- Add basic orchestration and activity execution logs by @cgillum in ([#405](https://github.com/microsoft/durabletask-dotnet/pull/405))
 - Add default version in `TaskOrchestrationContext` by @halspang in ([#408](https://github.com/microsoft/durabletask-dotnet/pull/408))
 
 ## v1.9.0

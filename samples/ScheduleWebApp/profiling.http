@@ -1,5 +1,5 @@
 ### Variables
-@baseUrl = http://localhost:5008
+@baseUrl = https://wbret01-fhcvf6h3dbck.eastus2.durabletask.dev:8080
 @instanceCount = 30000
 
 ### Create multiple orchestration instances

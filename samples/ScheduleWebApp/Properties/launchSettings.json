@@ -1,22 +1,35 @@
-﻿{
+{
   "$schema": "https://json.schemastore.org/launchsettings.json",
-  "iisSettings": {
-    "windowsAuthentication": false,
-    "anonymousAuthentication": true,
-    "iisExpress": {
-      "applicationUrl": "http://localhost:47697",
-      "sslPort": 44371
-    }
-  },
   "profiles": {
     "http": {
       "commandName": "Project",
-      "applicationUrl": "http://localhost:5008",
+      "applicationUrl": "http://localhost:5011",
       "dotnetRunMessages": true,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "DURABLE_TASK_SCHEDULER_CONNECTION_STRING": "Endpoint=https://wbret01-fhcvf6h3dbck.eastus2.durabletask.dev;TaskHub=wbret01th01;Authentication=DefaultAzure"
+        "DURABLE_TASK_SCHEDULER_CONNECTION_STRING": "Endpoint=https://wbret01-fhcvf6h3dbck.eastus2.durabletask.dev;TaskHub=thh28;Authentication=DefaultAzure"
       }
     }
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

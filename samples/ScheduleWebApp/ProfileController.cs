@@ -61,7 +61,7 @@ public class ProfileController : ControllerBase
         try
         {
             List<string> instanceIds = new List<string>();
-            const int parallelTasks = 6;
+            const int parallelTasks = 2;
             
             // Calculate items per task
             int itemsPerTask = count / parallelTasks;

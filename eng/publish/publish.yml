@@ -137,6 +137,7 @@ extends:
             # the packages to push pattern explicitly excludes:
             # - 'Microsoft.DurableTask.Client.Grpc'
             # - 'Microsoft.DurableTask.Client.OrchestrationServiceClientShim'
+            # - 'Microsoft.DurableTask.Client.AzureManaged'
             # which are pushed by their respective jobs
             packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.Grpc.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.OrchestrationServiceClientShim.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.AzureManaged.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
             packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
@@ -253,7 +254,7 @@ extends:
             command: push
             nuGetFeedType: external
             publishFeedCredentials: 'DurableTask org NuGet API Key'
-            # the packages to push pattern explicitly excludes 'Microsoft.DurableTask.Worker.Grpc', which is pushed by another job in this file
+            # the packages to push pattern explicitly excludes 'Microsoft.DurableTask.Worker.Grpc' and 'Microsoft.DurableTask.Worker.AzureManaged', which are pushed by another job in this file
             packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.Grpc*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.AzureManaged.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
             packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
 

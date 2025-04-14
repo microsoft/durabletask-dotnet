@@ -84,6 +84,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             Version = orchestratorName.Version,
             InstanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N"),
             Input = this.DataConverter.Serialize(input),
+            RequestTime = DateTimeOffset.UtcNow.ToTimestamp(),
         };
 
         if (Activity.Current?.Id != null || Activity.Current?.TraceStateString != null)

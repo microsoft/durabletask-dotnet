@@ -60,6 +60,10 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
         foreach (OperationRequest current in operations.Operations!)
         {
             this.operation.SetNameAndInput(current.Operation!, current.Input);
+
+            // The trace context of the current operation becomes the parent trace context of the TaskEntityContext.
+            // That way, if processing this operation request leads to the TaskEntityContext signaling another entity or starting an orchestration,
+            // then the parent trace context of these actions will be set to the trace context of whatever operation request triggered them
             this.context.ParentTraceContext = current.TraceContext;
 
             try

@@ -56,6 +56,7 @@ class GrpcDurableEntityClient : DurableEntityClient
             Name = operationName,
             Input = this.dataConverter.Serialize(input),
             ScheduledTime = scheduledTime?.ToTimestamp(),
+            RequestTime = DateTimeOffset.UtcNow.ToTimestamp(),
         };
 
         if (Activity.Current?.Id != null)

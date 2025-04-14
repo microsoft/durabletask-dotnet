@@ -1,7 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.History;
@@ -176,6 +178,8 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                 Version = orchestratorName.Version,
                 OrchestrationInstance = instance,
                 ScheduledStartTime = options?.StartAt?.UtcDateTime,
+                ParentTraceContext = Activity.Current?.Id != null ? new Core.Tracing.DistributedTraceContext(Activity.Current.Id, Activity.Current.TraceStateString) : null,
+                Tags = new Dictionary<string, string> { { OrchestrationTags.CreateTraceForNewOrchestration, "true" }, { OrchestrationTags.RequestTime, DateTimeOffset.UtcNow.ToString(CultureInfo.InvariantCulture) } },
             },
         };
 

@@ -65,6 +65,11 @@ sealed partial class GrpcDurableTaskWorker
                     // Sidecar is down - keep retrying
                     this.Logger.SidecarUnavailable();
                 }
+                catch (RpcException ex) when (ex.StatusCode == StatusCode.NotFound)
+                {
+                    // Task hub is not found or insufficient permissions - retry
+                    this.Logger.TaskHubNotFound();
+                }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
                 {
                     // Shutting down, lets exit gracefully.

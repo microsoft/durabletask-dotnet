@@ -2,7 +2,7 @@
 
 ## (Unreleased)
 
-- Add automatic retry for gateway timeout in `GrpcDurableTaskClient.WaitForInstanceCompletionAsync` in [#412](https://github.com/microsoft/durabletask-dotnet/pull/412))
+- Add automatic retry on gateway timeout in `GrpcDurableTaskClient.WaitForInstanceCompletionAsync` in [#412](https://github.com/microsoft/durabletask-dotnet/pull/412))
 
 ## v1.10.0
 

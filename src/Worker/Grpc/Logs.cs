@@ -22,6 +22,9 @@ namespace Microsoft.DurableTask.Worker.Grpc
         [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Sidecar work-item streaming connection established.")]
         public static partial void EstablishedWorkItemConnection(this ILogger logger);
 
+        [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Task hub NotFound. Will continue retrying.")]
+        public static partial void TaskHubNotFound(this ILogger logger);
+
         [LoggerMessage(EventId = 10, Level = LogLevel.Debug, Message = "{instanceId}: Received request to run orchestrator '{name}' with {oldEventCount} replay and {newEventCount} new history events.")]
         public static partial void ReceivedOrchestratorRequest(this ILogger logger, string name, string instanceId, int oldEventCount, int newEventCount);
 

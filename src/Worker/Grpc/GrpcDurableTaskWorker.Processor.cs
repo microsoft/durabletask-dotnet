@@ -65,6 +65,16 @@ sealed partial class GrpcDurableTaskWorker
                     // Sidecar is down - keep retrying
                     this.Logger.SidecarUnavailable();
                 }
+                catch (RpcException ex) when (ex.StatusCode == StatusCode.NotFound)
+                {
+                    // We retry on a NotFound for several reasons:
+                    // 1. It was the existing behavior through the UnexpectedError path.
+                    // 2. A 404 can be returned for a missing task hub or authentication failure. Authentication takes
+                    //    time to propagate so we should retry instead of making the user restart the application.
+                    // 3. In some cases, a task hub can be created separately from the scheduler. If a worker is deployed
+                    //    between the scheduler and task hub, it would need to be restarted to function.
+                    this.Logger.TaskHubNotFound();
+                }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
                 {
                     // Shutting down, lets exit gracefully.

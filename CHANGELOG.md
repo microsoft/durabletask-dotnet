@@ -1,9 +1,15 @@
 ﻿# Changelog
 
+## (Unreleased)
+
+- Add automatic retry on gateway timeout in `GrpcDurableTaskClient.WaitForInstanceCompletionAsync` in [#412](https://github.com/microsoft/durabletask-dotnet/pull/412))
+
 ## v1.10.0
-- Update DurableTask.Core to v3.1.0 and Bump version to v1.10.0 by @nytian in([#411](https://github.com/microsoft/durabletask-dotnet/pull/411))
+
+- Update DurableTask.Core to v3.1.0 and Bump version to v1.10.0 by @nytian in ([#411](https://github.com/microsoft/durabletask-dotnet/pull/411))
 
 ## v1.9.1
+
 - Add basic orchestration and activity execution logs by @cgillum in ([#405](https://github.com/microsoft/durabletask-dotnet/pull/405))
 - Add default version in `TaskOrchestrationContext` by @halspang in ([#408](https://github.com/microsoft/durabletask-dotnet/pull/408))
 

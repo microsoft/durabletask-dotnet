@@ -348,17 +348,27 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             GetInputsAndOutputs = getInputsAndOutputs,
         };
 
-        try
+        while (!cancellation.IsCancellationRequested)
         {
-            P.GetInstanceResponse response = await this.sidecarClient.WaitForInstanceCompletionAsync(
-                request, cancellationToken: cancellation);
-            return this.CreateMetadata(response.OrchestrationState, getInputsAndOutputs);
+            try
+            {
+                P.GetInstanceResponse response = await this.sidecarClient.WaitForInstanceCompletionAsync(
+                    request, cancellationToken: cancellation);
+                return this.CreateMetadata(response.OrchestrationState, getInputsAndOutputs);
+            }
+            catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+            {
+                throw new OperationCanceledException(
+                    $"The {nameof(this.WaitForInstanceCompletionAsync)} operation was canceled.", e, cancellation);
+            }
+            catch (RpcException e) when (e.StatusCode == StatusCode.DeadlineExceeded)
+            {
+                // Gateway timeout/deadline exceeded can happen before the request is completed. Do nothing and retry.
+            }
         }
-        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
-        {
-            throw new OperationCanceledException(
-                $"The {nameof(this.WaitForInstanceCompletionAsync)} operation was canceled.", e, cancellation);
-        }
+
+        // If the operation was cancelled in between requests, we should still throw instead of returning a null value.
+        throw new OperationCanceledException($"The {nameof(this.WaitForInstanceCompletionAsync)} operation was canceled.");
     }
 
     /// <inheritdoc/>

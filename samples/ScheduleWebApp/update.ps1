@@ -10,7 +10,7 @@ $portMatch = [regex]::Match($content, '"applicationUrl":\s*"http://localhost:(\d
 $CURRENT_PORT = [int]$portMatch.Groups[1].Value
 
 # Extract current taskhub number
-$taskhubMatch = [regex]::Match($content, 'TaskHub=thh(\d+)')
+$taskhubMatch = [regex]::Match($content, 'TaskHub=th(\d+)')
 $CURRENT_TASKHUB_NUM = [int]$taskhubMatch.Groups[1].Value
 
 # Calculate next port (5010-5014)
@@ -21,11 +21,11 @@ if ($CURRENT_PORT -eq 5014) {
 }
 
 # Increment taskhub number
-$NEXT_TASKHUB = "thh" + ($CURRENT_TASKHUB_NUM + 1)
+$NEXT_TASKHUB = "th" + ($CURRENT_TASKHUB_NUM + 1)
 
 # Update the content with new port and taskhub
 $content = $content -replace '"applicationUrl":\s*"http://localhost:\d+"', "`"applicationUrl`": `"http://localhost:$NEXT_PORT`""
-$content = $content -replace "TaskHub=thh\d+", "TaskHub=$NEXT_TASKHUB"
+$content = $content -replace "TaskHub=th\d+", "TaskHub=$NEXT_TASKHUB"
 
 # Write the changes back to the file
 $content | Set-Content $LAUNCH_SETTINGS

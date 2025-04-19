@@ -1,7 +1,7 @@
 # Configuration
-$basePort = 5010
-$endPort = 5014
-$instanceCount = 1000  # 2000 instances divided by 5 ports
+$basePort = 5012
+$endPort = 5012
+$instanceCount = 100000  # 2000 instances divided by 5 ports
 $baseUrlTemplate = "http://localhost:{0}"
 $requestBody = @{
     message = "Test input for orchestration"

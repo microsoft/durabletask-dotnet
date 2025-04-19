@@ -1,0 +1,24 @@
+### Variables
+@baseUrl = http://localhost:6001
+@instanceCount = 20000
+
+### Create multiple orchestration instances
+# @name createInstances
+POST {{baseUrl}}/instances?count={{instanceCount}}
+Content-Type: application/json
+
+{
+  "message": "Test input for orchestration"
+}
+
+### Purge all orchestration instances
+# @name purgeInstances
+POST {{baseUrl}}/instances/purge
+Content-Type: application/json
+
+### Tips:
+# - Replace the baseUrl variable if your application runs on a different port
+# - Adjust instanceCount to control how many orchestration instances are created
+# - The createInstances endpoint creates multiple HelloWorldOrchestrator instances
+# - The purgeInstances endpoint removes all completed orchestration instances
+# - You can use the REST Client extension in VS Code to execute these requests

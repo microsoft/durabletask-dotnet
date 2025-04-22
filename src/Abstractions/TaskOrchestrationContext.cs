@@ -61,9 +61,9 @@ public abstract class TaskOrchestrationContext
     public abstract bool IsReplaying { get; }
 
     /// <summary>
-    /// Gets the version of the current orchestration instance, which was set when the instance was created.
+    /// Gets or sets the version of the current orchestration instance, which was set when the instance was created.
     /// </summary>
-    public virtual string Version => string.Empty;
+    public virtual string Version { get; protected internal set; } = string.Empty;
 
     /// <summary>
     /// Gets the configuration settings for the orchestration context.

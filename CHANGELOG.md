@@ -2,8 +2,9 @@
 
 ## (Unreleased)
 
-- - Add automatic retry on gateway timeout in `GrpcDurableTaskClient.WaitForInstanceCompletionAsync` in [#412](https://github.com/microsoft/durabletask-dotnet/pull/412))
+- Add automatic retry on gateway timeout in `GrpcDurableTaskClient.WaitForInstanceCompletionAsync` in [#412](https://github.com/microsoft/durabletask-dotnet/pull/412))
 - Add specific logging for NotFound error on worker connection by @halspang in ([#413](https://github.com/microsoft/durabletask-dotnet/pull/413))
+- Add ability to set version in the TaskName by @halspang in ([#416](https://github.com/microsoft/durabletask-dotnet/pull/416))
 
 
 ## v1.10.0

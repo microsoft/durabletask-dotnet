@@ -58,6 +58,8 @@ public class TaskOrchestrationContextVersionTests
 
         protected override ILoggerFactory LoggerFactory => throw new NotImplementedException();
 
+        public override Dictionary<string, object?> Properties => throw new NotImplementedException();
+
         public override Task<TResult> CallActivityAsync<TResult>(TaskName name, object? input = null, TaskOptions? options = null)
         {
             throw new NotImplementedException();

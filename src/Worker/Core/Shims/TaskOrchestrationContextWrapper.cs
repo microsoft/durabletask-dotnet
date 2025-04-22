@@ -23,6 +23,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     readonly OrchestrationInvocationContext invocationContext;
     readonly ILogger logger;
     readonly object? deserializedInput;
+    readonly IDictionary<string, object?> properties = new Dictionary<string, object?>();
 
     int newGuidCounter;
     object? customStatus;
@@ -45,6 +46,26 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         this.deserializedInput = deserializedInput;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TaskOrchestrationContextWrapper"/> class.
+    /// </summary>
+    /// <param name="innerContext">The inner orchestration context.</param>
+    /// <param name="invocationContext">The invocation context.</param>
+    /// <param name="deserializedInput">The deserialized input.</param>
+    /// <param name="properties">The configuration for context.</param>
+    public TaskOrchestrationContextWrapper(
+        OrchestrationContext innerContext,
+        OrchestrationInvocationContext invocationContext,
+        object? deserializedInput,
+        Dictionary<string, object?> properties)
+    {
+        this.innerContext = Check.NotNull(innerContext);
+        this.invocationContext = Check.NotNull(invocationContext);
+        this.logger = this.CreateReplaySafeLogger("Microsoft.DurableTask");
+        this.deserializedInput = deserializedInput;
+        this.properties = properties;
+    }
+
     /// <inheritdoc/>
     public override TaskName Name => this.invocationContext.Name;
 
@@ -59,6 +80,11 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
     /// <inheritdoc/>
     public override DateTime CurrentUtcDateTime => this.innerContext.CurrentUtcDateTime;
+
+    /// <summary>
+    /// Gets the configuration settings for the orchestration.
+    /// </summary>
+    public override IDictionary<string, object?> Properties => this.properties;
 
     /// <inheritdoc/>
     public override TaskOrchestrationEntityFeature Entities

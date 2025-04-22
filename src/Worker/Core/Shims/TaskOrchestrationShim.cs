@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Castle.Core.Configuration;
 using DurableTask.Core;
 using Microsoft.Extensions.Logging;
 using CoreTaskFailedException = DurableTask.Core.Exceptions.TaskFailedException;
@@ -19,6 +20,7 @@ partial class TaskOrchestrationShim : TaskOrchestration
     readonly ITaskOrchestrator implementation;
     readonly OrchestrationInvocationContext invocationContext;
     readonly ILogger logger;
+    readonly Dictionary<string, object?> properties = new();
 
     TaskOrchestrationContextWrapper? wrapperContext;
 
@@ -37,6 +39,24 @@ partial class TaskOrchestrationShim : TaskOrchestration
         this.logger = Logs.CreateWorkerLogger(this.invocationContext.LoggerFactory, "Orchestrations");
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TaskOrchestrationShim"/> class.
+    /// </summary>
+    /// <param name="invocationContext">The invocation context for this orchestration.</param>
+    /// <param name="implementation">The orchestration's implementation.</param>
+    /// <param name="properties">Configuration for the orchestration</param>
+    public TaskOrchestrationShim(
+        OrchestrationInvocationContext invocationContext,
+        ITaskOrchestrator implementation,
+        Dictionary<string, object?> properties)
+    {
+        this.invocationContext = Check.NotNull(invocationContext);
+        this.implementation = Check.NotNull(implementation);
+
+        this.logger = Logs.CreateWorkerLogger(this.invocationContext.LoggerFactory, "Orchestrations");
+        this.properties = properties;
+    }
+
     DataConverter DataConverter => this.invocationContext.Options.DataConverter;
 
     /// <inheritdoc/>
@@ -48,7 +68,7 @@ partial class TaskOrchestrationShim : TaskOrchestration
         innerContext.ErrorDataConverter = converterShim;
 
         object? input = this.DataConverter.Deserialize(rawInput, this.implementation.InputType);
-        this.wrapperContext = new(innerContext, this.invocationContext, input);
+        this.wrapperContext = new(innerContext, this.invocationContext, input, this.properties);
 
         string instanceId = innerContext.OrchestrationInstance.InstanceId;
         if (!innerContext.IsReplaying)

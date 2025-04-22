@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using DurableTask.Core.Common;
 using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
@@ -66,7 +67,13 @@ public abstract class TaskOrchestrationContext
     public virtual string Version => string.Empty;
 
     /// <summary>
-    /// Gets the entity feature, for interacting with entities.
+    /// Gets the configuration settings for the orchestration context.
+    /// </summary>
+    public abstract IDictionary<string, object?> Properties { get; }
+
+    /// <summary>
+    /// Gets the feature for interacting with entities from an orchestration.
+    /// Currently not implemented.
     /// </summary>
     public virtual TaskOrchestrationEntityFeature Entities =>
         throw new NotSupportedException($"Durable entities are not supported by {this.GetType()}.");

@@ -905,6 +905,37 @@ static class ProtoUtils
     }
 
     /// <summary>
+    /// Converts a <see cref="Google.Protobuf.WellKnownTypes.Value"/> instance to a corresponding C# object.
+    /// </summary>
+    /// <param name="value">The Protobuf Value to convert.</param>
+    /// <returns>The corresponding C# object.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when the Protobuf Value.KindCase is not one of the supported types.
+    /// </exception>
+    internal static object? ConvertValueToObject(Google.Protobuf.WellKnownTypes.Value value)
+    {
+        switch (value.KindCase)
+        {
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.NullValue:
+                return null;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.NumberValue:
+                return value.NumberValue;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.StringValue:
+                return value.StringValue;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.BoolValue:
+                return value.BoolValue;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.StructValue:
+                return value.StructValue.Fields.ToDictionary(
+                    pair => pair.Key,
+                    pair => ConvertValueToObject(pair.Value));
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.ListValue:
+                return value.ListValue.Values.Select(ConvertValueToObject).ToList();
+            default:
+                throw new NotSupportedException($"Unsupported Value kind: {value.KindCase}");
+        }
+    }
+
+    /// <summary>
     /// Converts a <see cref="FailureDetails" /> to a grpc <see cref="P.TaskFailureDetails" />.
     /// </summary>
     /// <param name="failureDetails">The failure details to convert.</param>

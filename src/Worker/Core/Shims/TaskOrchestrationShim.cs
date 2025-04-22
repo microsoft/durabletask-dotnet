@@ -1,7 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Castle.Core.Configuration;
 using DurableTask.Core;
 using Microsoft.Extensions.Logging;
 using CoreTaskFailedException = DurableTask.Core.Exceptions.TaskFailedException;

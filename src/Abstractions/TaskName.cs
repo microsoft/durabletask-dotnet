@@ -1,6 +1,8 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System;
+
 namespace Microsoft.DurableTask;
 
 /// <summary>
@@ -25,7 +27,31 @@ public readonly struct TaskName : IEquatable<TaskName>
         else
         {
             this.Name = name;
-            this.Version = string.Empty; // expose setting Version only when we actually consume it.
+            this.Version = string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TaskName"/> struct.
+    /// </summary>
+    /// <remarks>
+    /// This <c>TaskName</c> is explicitly versioned, as compared to the default value.
+    /// </remarks>
+    /// <param name="name">The name of the task. Providing <c>null</c> will yield the default struct, ignoring the version.</param>
+    /// <param name="version">Optional. The version of the task. Providing <c>null</c> will yield the default value.</param>
+    public TaskName(string name, string version)
+    {
+        if (name is null)
+        {
+            // Force the default struct when null is passed in.
+            this.Name = null!;
+            this.Version = null!;
+        }
+        else
+        {
+            this.IsVersioned = true;
+            this.Name = name;
+            this.Version = version == null ? null! : version;
         }
     }
 
@@ -45,6 +71,14 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// identification. This is being left here as we intend to support it soon.
     /// </remarks>
     public string Version { get; }
+
+    /// <summary>
+    /// Gets the flag denoting if this TaskName is versioned.
+    /// </summary>
+    /// <remarks>
+    /// This flag is used to distinguish between the default (empty version) and a Task with an explicit empty version.
+    /// </remarks>
+    public bool IsVersioned { get; } = false;
 
     /// <summary>
     /// Implicitly converts a <see cref="TaskName"/> into a <see cref="string"/> of the <see cref="Name"/> property value.

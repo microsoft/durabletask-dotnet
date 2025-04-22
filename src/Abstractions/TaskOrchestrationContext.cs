@@ -71,8 +71,7 @@ public abstract class TaskOrchestrationContext
     public abstract IDictionary<string, object?> Properties { get; }
 
     /// <summary>
-    /// Gets the feature for interacting with entities from an orchestration.
-    /// Currently not implemented.
+    /// Gets the entity feature, for interacting with entities.
     /// </summary>
     public virtual TaskOrchestrationEntityFeature Entities =>
         throw new NotSupportedException($"Durable entities are not supported by {this.GetType()}.");

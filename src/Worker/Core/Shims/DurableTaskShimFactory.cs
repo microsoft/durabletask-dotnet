@@ -107,6 +107,7 @@ public class DurableTaskShimFactory
     {
         Check.NotDefault(name);
         Check.NotNull(orchestrator);
+        Check.NotNull(properties);
         OrchestrationInvocationContext context = new(name, this.options, this.loggerFactory, parent);
         return new TaskOrchestrationShim(context, orchestrator, properties);
     }

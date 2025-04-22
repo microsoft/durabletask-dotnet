@@ -23,7 +23,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     readonly OrchestrationInvocationContext invocationContext;
     readonly ILogger logger;
     readonly object? deserializedInput;
-    readonly IDictionary<string, object?> properties = new Dictionary<string, object?>();
+    readonly Dictionary<string, object?> properties = new Dictionary<string, object?>();
 
     int newGuidCounter;
     object? customStatus;
@@ -61,9 +61,9 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     {
         this.innerContext = Check.NotNull(innerContext);
         this.invocationContext = Check.NotNull(invocationContext);
+        this.properties = Check.NotNull(properties);
         this.logger = this.CreateReplaySafeLogger("Microsoft.DurableTask");
         this.deserializedInput = deserializedInput;
-        this.properties = properties;
     }
 
     /// <inheritdoc/>

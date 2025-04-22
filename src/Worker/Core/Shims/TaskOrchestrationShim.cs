@@ -43,7 +43,7 @@ partial class TaskOrchestrationShim : TaskOrchestration
     /// </summary>
     /// <param name="invocationContext">The invocation context for this orchestration.</param>
     /// <param name="implementation">The orchestration's implementation.</param>
-    /// <param name="properties">Configuration for the orchestration</param>
+    /// <param name="properties">Configuration for the orchestration.</param>
     public TaskOrchestrationShim(
         OrchestrationInvocationContext invocationContext,
         ITaskOrchestrator implementation,
@@ -51,9 +51,9 @@ partial class TaskOrchestrationShim : TaskOrchestration
     {
         this.invocationContext = Check.NotNull(invocationContext);
         this.implementation = Check.NotNull(implementation);
+        this.properties = Check.NotNull(properties);
 
         this.logger = Logs.CreateWorkerLogger(this.invocationContext.LoggerFactory, "Orchestrations");
-        this.properties = properties;
     }
 
     DataConverter DataConverter => this.invocationContext.Options.DataConverter;

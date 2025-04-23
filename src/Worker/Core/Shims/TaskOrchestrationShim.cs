@@ -31,11 +31,8 @@ partial class TaskOrchestrationShim : TaskOrchestration
     public TaskOrchestrationShim(
         OrchestrationInvocationContext invocationContext,
         ITaskOrchestrator implementation)
+        : this(invocationContext, implementation, new Dictionary<string, object?>())
     {
-        this.invocationContext = Check.NotNull(invocationContext);
-        this.implementation = Check.NotNull(implementation);
-
-        this.logger = Logs.CreateWorkerLogger(this.invocationContext.LoggerFactory, "Orchestrations");
     }
 
     /// <summary>

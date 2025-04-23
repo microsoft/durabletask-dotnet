@@ -23,7 +23,6 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     readonly OrchestrationInvocationContext invocationContext;
     readonly ILogger logger;
     readonly object? deserializedInput;
-    readonly Dictionary<string, object?> properties = new Dictionary<string, object?>();
 
     int newGuidCounter;
     object? customStatus;
@@ -39,11 +38,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         OrchestrationContext innerContext,
         OrchestrationInvocationContext invocationContext,
         object? deserializedInput)
+        : this(innerContext, invocationContext, deserializedInput, new Dictionary<string, object?>())
     {
-        this.innerContext = Check.NotNull(innerContext);
-        this.invocationContext = Check.NotNull(invocationContext);
-        this.logger = this.CreateReplaySafeLogger("Microsoft.DurableTask");
-        this.deserializedInput = deserializedInput;
     }
 
     /// <summary>
@@ -57,11 +53,16 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         OrchestrationContext innerContext,
         OrchestrationInvocationContext invocationContext,
         object? deserializedInput,
-        Dictionary<string, object?> properties)
+        IEnumerable<KeyValuePair<string, object?>> properties)
     {
         this.innerContext = Check.NotNull(innerContext);
         this.invocationContext = Check.NotNull(invocationContext);
-        this.properties = Check.NotNull(properties);
+        if (properties is null)
+        {
+            throw new ArgumentNullException(nameof(properties));
+        }
+
+        this.Properties = properties.ToDictionary(pair => pair.Key, pair => pair.Value);
         this.logger = this.CreateReplaySafeLogger("Microsoft.DurableTask");
         this.deserializedInput = deserializedInput;
     }
@@ -84,7 +85,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <summary>
     /// Gets the configuration settings for the orchestration.
     /// </summary>
-    public override IDictionary<string, object?> Properties => this.properties;
+    public override IDictionary<string, object?> Properties { get; } = new Dictionary<string, object?>();
 
     /// <inheritdoc/>
     public override TaskOrchestrationEntityFeature Entities

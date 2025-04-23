@@ -204,7 +204,7 @@ sealed partial class TaskOrchestrationContextWrapper
                     guid,
                     EntityMessageEvent.GetCappedScheduledTime(this.wrapper.innerContext.CurrentUtcDateTime, this.wrapper.invocationContext.Options.MaximumTimerInterval, scheduledTime?.UtcDateTime),
                     serializedInput,
-                    createTrace: oneWay,
+                    createTrace: true,
                     requestTime: DateTimeOffset.UtcNow);
 
             if (!this.wrapper.IsReplaying)

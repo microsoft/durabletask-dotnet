@@ -6,7 +6,7 @@ using Azure.Core;
 using Azure.Identity;
 using Grpc.Core;
 using Grpc.Net.Client;
-using Grpc.Net.Client.Configuration;
+using Microsoft.DurableTask;
 
 namespace Microsoft.DurableTask;
 
@@ -102,6 +102,8 @@ public class DurableTaskSchedulerWorkerOptions
             async (context, metadata) =>
             {
                 metadata.Add("taskhub", taskHubName);
+                // Add user agent header with durabletask-dotnet and DLL version from util
+                metadata.Add("user-agent", $"{DurableTaskUserAgentUtil.GetUserAgent()}");
                 metadata.Add("workerid", this.WorkerId);
                 if (cache == null)
                 {

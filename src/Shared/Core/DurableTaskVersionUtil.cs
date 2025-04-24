@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Reflection;
+using System.Diagnostics;
 
 namespace Microsoft.DurableTask;
 
@@ -13,15 +13,19 @@ public static class DurableTaskUserAgentUtil
     /// <summary>
     /// The name of the SDK used in the user agent string.
     /// </summary>
-    static string SdkName => "durabletask-dotnet";
+    const string SdkName = "durabletask-dotnet";
+
+    /// <summary>
+    /// The version of the SDK used in the user agent string.
+    /// </summary>
+    static readonly string PackageVersion = FileVersionInfo.GetVersionInfo(typeof(DurableTaskUserAgentUtil).Assembly.Location).FileVersion;
 
     /// <summary>
     /// Generates the user agent string for the Durable Task SDK based on a fixed name and the package version.
     /// </summary>
-    /// <returns></returns>
+    /// <returns>The user agent string.</returns>
     public static string GetUserAgent()
     {
-        var version = typeof(DurableTaskUserAgentUtil).Assembly.GetName().Version;
-        return $"{SdkName}/{version?.ToString() ?? "unknown"}";
+        return $"{SdkName}/{PackageVersion?.ToString() ?? "unknown"}";
     }
 }

@@ -53,16 +53,12 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         OrchestrationContext innerContext,
         OrchestrationInvocationContext invocationContext,
         object? deserializedInput,
-        IEnumerable<KeyValuePair<string, object?>> properties)
+        Dictionary<string, object?> properties)
     {
         this.innerContext = Check.NotNull(innerContext);
         this.invocationContext = Check.NotNull(invocationContext);
-        if (properties is null)
-        {
-            throw new ArgumentNullException(nameof(properties));
-        }
+        this.Properties = Check.NotNull(properties);
 
-        this.Properties = properties.ToDictionary(pair => pair.Key, pair => pair.Value);
         this.logger = this.CreateReplaySafeLogger("Microsoft.DurableTask");
         this.deserializedInput = deserializedInput;
     }
@@ -85,7 +81,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <summary>
     /// Gets the configuration settings for the orchestration.
     /// </summary>
-    public override IDictionary<string, object?> Properties { get; } = new Dictionary<string, object?>();
+    public override IReadOnlyDictionary<string, object?> Properties { get; } = new Dictionary<string, object?>();
 
     /// <inheritdoc/>
     public override TaskOrchestrationEntityFeature Entities

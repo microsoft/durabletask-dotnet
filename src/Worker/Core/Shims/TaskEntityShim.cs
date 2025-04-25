@@ -59,6 +59,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
 
         foreach (OperationRequest current in operations.Operations!)
         {
+            var startTime = DateTime.UtcNow;
             this.operation.SetNameAndInput(current.Operation!, current.Input);
 
             // The trace context of the current operation becomes the parent trace context of the TaskEntityContext.
@@ -73,6 +74,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
                 results.Add(new OperationResult()
                 {
                     Result = serializedResult,
+                    StartTime = startTime,
                     EndTime = DateTime.UtcNow,
                 });
 
@@ -86,6 +88,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
                 results.Add(new OperationResult()
                 {
                     FailureDetails = new FailureDetails(applicationException),
+                    StartTime = startTime,
                     EndTime = DateTime.UtcNow,
                 });
 

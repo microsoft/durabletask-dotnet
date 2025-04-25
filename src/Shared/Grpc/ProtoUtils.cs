@@ -615,6 +615,7 @@ static class ProtoUtils
                 return new OperationResult()
                 {
                     Result = operationResult.Success.Result,
+                    StartTime = operationResult.Success.StartTime?.ToDateTime(),
                     EndTime = operationResult.Success.EndTime?.ToDateTime(),
                 };
 
@@ -622,6 +623,7 @@ static class ProtoUtils
                 return new OperationResult()
                 {
                     FailureDetails = operationResult.Failure.FailureDetails.ToCore(),
+                    StartTime = operationResult.Failure.StartTime?.ToDateTime(),
                     EndTime = operationResult.Failure.EndTime?.ToDateTime(),
                 };
 
@@ -650,6 +652,7 @@ static class ProtoUtils
                 Success = new P.OperationResultSuccess()
                 {
                     Result = operationResult.Result,
+                    StartTime = operationResult.StartTime?.ToTimestamp(),
                     EndTime = operationResult.EndTime?.ToTimestamp(),
                 },
             };
@@ -661,6 +664,7 @@ static class ProtoUtils
                 Failure = new P.OperationResultFailure()
                 {
                     FailureDetails = ToProtobuf(operationResult.FailureDetails),
+                    StartTime = operationResult.StartTime?.ToTimestamp(),
                     EndTime = operationResult.EndTime?.ToTimestamp(),
                 },
             };

@@ -260,7 +260,7 @@ sealed partial class GrpcDurableTaskWorker
 
             while (!cancellation.IsCancellationRequested)
             {
-                await foreach (P.WorkItem workItem in stream.ResponseStream.ReadAllAsync(timeoutSource.Token))
+                await foreach (P.WorkItem workItem in stream.ResponseStream.ReadAllAsync(tokenSource.Token))
                 {
                     timeoutSource.CancelAfter(TimeSpan.FromSeconds(60));
                     var timeoutSourceToken = timeoutSource.Token;

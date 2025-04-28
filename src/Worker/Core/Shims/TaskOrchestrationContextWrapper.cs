@@ -81,7 +81,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <summary>
     /// Gets the configuration settings for the orchestration.
     /// </summary>
-    public override IReadOnlyDictionary<string, object?> Properties { get; } = new Dictionary<string, object?>();
+    public override IReadOnlyDictionary<string, object?> Properties { get; }
 
     /// <inheritdoc/>
     public override TaskOrchestrationEntityFeature Entities

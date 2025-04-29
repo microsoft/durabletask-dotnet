@@ -8,6 +8,7 @@ using Microsoft.DurableTask.Client.AzureManaged;
 using Microsoft.DurableTask.ScheduledTasks;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.AzureManaged;
+using ScheduleWebApp.Activities;
 using ScheduleWebApp.Orchestrations;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -24,7 +25,8 @@ builder.Services.AddDurableTaskWorker(builder =>
     {
         // Add your orchestrators and activities here
         r.AddOrchestrator<CacheClearingOrchestrator>();
-        
+        r.AddActivity<GetStockPrice>();
+
         // Add a simple orchestrator that logs "Hello World"
         r.AddOrchestratorFunc("HelloWorldOrchestrator", (Microsoft.DurableTask.TaskOrchestrationContext context, string input) => Task.CompletedTask);
     });

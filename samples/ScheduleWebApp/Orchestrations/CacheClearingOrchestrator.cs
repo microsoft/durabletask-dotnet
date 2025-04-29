@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask;
+using ScheduleWebApp.Activities;
 using System.Text;
 
 namespace ScheduleWebApp.Orchestrations;
@@ -23,6 +24,9 @@ public class CacheClearingOrchestrator : TaskOrchestrator<string, string>
             //     throw new Exception("Random failure in CacheClearingOrchestration");
             // }
             
+            // Get current stock price
+            decimal currentPrice = await context.CallGetStockPriceAsync("MSFT");
+
             // 10kb
             return new string('X', 102400);
         }

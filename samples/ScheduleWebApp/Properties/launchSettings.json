@@ -3,22 +3,15 @@
   "profiles": {
     "http": {
       "commandName": "Project",
-      "applicationUrl": "http://localhost:5012",
+      "applicationUrl": "http://localhost:8089",
       "dotnetRunMessages": true,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "DURABLE_TASK_SCHEDULER_CONNECTION_STRING": "Endpoint=https://wbret01-fhcvf6h3dbck.eastus2.durabletask.dev;TaskHub=thh28;Authentication=DefaultAzure"
+        "DURABLE_TASK_SCHEDULER_CONNECTION_STRING": "Endpoint=https://wbtestmetric3-aggbcpbsgtfd.swedencentral.durabletask.io;TaskHub=klajksd;Authentication=DefaultAzure"
       }
     }
   }
 }
-
-
-
-
-
-
-
 
 
 

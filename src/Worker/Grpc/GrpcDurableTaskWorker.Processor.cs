@@ -6,6 +6,7 @@ using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
+using Grpc.Core.Utils;
 using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Worker.Shims;
@@ -257,73 +258,74 @@ sealed partial class GrpcDurableTaskWorker
             using var timeoutSource = new CancellationTokenSource();
             timeoutSource.CancelAfter(TimeSpan.FromSeconds(60));
             using var tokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellation, timeoutSource.Token);
+            var tokenSourceToken = tokenSource.Token;
 
-            while (!cancellation.IsCancellationRequested)
+            await foreach (P.WorkItem workItem in stream.ResponseStream.ReadAllAsync(cancellationToken: cancellation))
             {
-                await foreach (P.WorkItem workItem in stream.ResponseStream.ReadAllAsync(tokenSource.Token))
+                if (tokenSourceToken.IsCancellationRequested)
                 {
-                    timeoutSource.CancelAfter(TimeSpan.FromSeconds(60));
-                    var timeoutSourceToken = timeoutSource.Token;
-                    if (workItem.RequestCase == P.WorkItem.RequestOneofCase.OrchestratorRequest)
-                    {
-                        this.RunBackgroundTask(
-                            workItem,
-                            () => this.OnRunOrchestratorAsync(
-                                workItem.OrchestratorRequest,
-                                workItem.CompletionToken,
-                                timeoutSourceToken));
-                    }
-                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
-                    {
-                        this.RunBackgroundTask(
-                            workItem,
-                            () => this.OnRunActivityAsync(
-                                workItem.ActivityRequest,
-                                workItem.CompletionToken,
-                                timeoutSourceToken));
-                    }
-                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
-                    {
-                        this.RunBackgroundTask(
-                            workItem,
-                            () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), timeoutSourceToken));
-                    }
-                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequestV2)
-                    {
-                        workItem.EntityRequestV2.ToEntityBatchRequest(
-                            out EntityBatchRequest batchRequest,
-                            out List<P.OperationInfo> operationInfos);
-
-                        this.RunBackgroundTask(
-                             workItem,
-                             () => this.OnRunEntityBatchAsync(
-                                batchRequest,
-                                timeoutSourceToken,
-                                workItem.CompletionToken,
-                                operationInfos));
-                    }
-                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
-                    {
-                        // No-op
-                    }
-                    else
-                    {
-                        this.Logger.UnexpectedWorkItemType(workItem.RequestCase.ToString());
-                    }
+                    break;
                 }
 
-                if (tokenSource.IsCancellationRequested || tokenSource.Token.IsCancellationRequested)
+                // Reset the timeoutSource cancellation token
+                timeoutSource.CancelAfter(TimeSpan.FromSeconds(60));
+                if (workItem.RequestCase == P.WorkItem.RequestOneofCase.OrchestratorRequest)
                 {
-                    // The token has cancelled, this means either:
-                    // 1. The broader 'cancellation' was triggered, return here to start a graceful shutdown.
-                    // 2. The timeoutSource was triggered, return here to trigger a reconnect to the backend.
-                    if (!cancellation.IsCancellationRequested)
-                    {
-                        // Since the cancellation came from the timeout, log a warning.
-                        this.Logger.ConnectionTimeout();
-                    }
+                    this.RunBackgroundTask(
+                        workItem,
+                        () => this.OnRunOrchestratorAsync(
+                            workItem.OrchestratorRequest,
+                            workItem.CompletionToken,
+                            tokenSourceToken));
+                }
+                else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
+                {
+                    this.RunBackgroundTask(
+                        workItem,
+                        () => this.OnRunActivityAsync(
+                            workItem.ActivityRequest,
+                            workItem.CompletionToken,
+                            tokenSourceToken));
+                }
+                else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
+                {
+                    this.RunBackgroundTask(
+                        workItem,
+                        () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), tokenSourceToken));
+                }
+                else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequestV2)
+                {
+                    workItem.EntityRequestV2.ToEntityBatchRequest(
+                        out EntityBatchRequest batchRequest,
+                        out List<P.OperationInfo> operationInfos);
 
-                    return;
+                    this.RunBackgroundTask(
+                         workItem,
+                         () => this.OnRunEntityBatchAsync(
+                            batchRequest,
+                            tokenSourceToken,
+                            workItem.CompletionToken,
+                            operationInfos));
+                }
+                else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
+                {
+                    // No-op
+                }
+                else
+                {
+                    this.Logger.UnexpectedWorkItemType(workItem.RequestCase.ToString());
+                }
+            }
+
+            if (tokenSource.IsCancellationRequested || tokenSource.Token.IsCancellationRequested)
+            {
+                // The token has cancelled, this means either:
+                // 1. The broader 'cancellation' was triggered, return here to start a graceful shutdown.
+                // 2. The timeoutSource was triggered, return here to trigger a reconnect to the backend.
+                if (!cancellation.IsCancellationRequested)
+                {
+                    // Since the cancellation came from the timeout, log a warning.
+                    this.Logger.ConnectionTimeout();
                 }
             }
         }

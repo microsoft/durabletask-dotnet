@@ -1,4 +1,4 @@
-{
+﻿{
   "$schema": "https://json.schemastore.org/launchsettings.json",
   "profiles": {
     "http": {
@@ -7,7 +7,7 @@
       "dotnetRunMessages": true,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "DURABLE_TASK_SCHEDULER_CONNECTION_STRING": "Endpoint=https://wbtestmetric3-aggbcpbsgtfd.swedencentral.durabletask.io;TaskHub=klajksd;Authentication=DefaultAzure"
+        "DURABLE_TASK_SCHEDULER_CONNECTION_STRING": "Endpoint=https://wbtestmetric3-aggbcpbsgtfd.swedencentral.durabletask.io;TaskHub=tt1;Authentication=DefaultAzure"
       }
     }
   }

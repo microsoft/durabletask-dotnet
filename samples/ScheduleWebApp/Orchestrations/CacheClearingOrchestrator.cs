@@ -26,6 +26,16 @@ public class CacheClearingOrchestrator : TaskOrchestrator<string, string>
             
             // Get current stock price
             decimal currentPrice = await context.CallGetStockPriceAsync("MSFT");
+            decimal currentPrice2 = await context.CallGetStockPriceAsync("MSFT");
+            decimal currentPrice3 = await context.CallGetStockPriceAsync("MSFT");
+            decimal currentPrice4 = await context.CallGetStockPriceAsync("MSFT");
+            decimal currentPrice5 = await context.CallGetStockPriceAsync("MSFT");
+            decimal currentPrice6 = await context.CallGetStockPriceAsync("MSFT");
+            decimal currentPrice7 = await context.CallGetStockPriceAsync("MSFT");
+            decimal currentPrice8 = await context.CallGetStockPriceAsync("MSFT");
+            decimal currentPrice9 = await context.CallGetStockPriceAsync("MSFT");
+            decimal currentPrice10 = await context.CallGetStockPriceAsync("MSFT");
+    
 
             // 10kb
             return new string('X', 102400);

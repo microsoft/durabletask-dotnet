@@ -66,6 +66,11 @@ public abstract class TaskOrchestrationContext
     public virtual string Version => string.Empty;
 
     /// <summary>
+    /// Gets the configuration settings for the orchestration context.
+    /// </summary>
+    public virtual IReadOnlyDictionary<string, object?> Properties { get; } = new Dictionary<string, object?>();
+
+    /// <summary>
     /// Gets the entity feature, for interacting with entities.
     /// </summary>
     public virtual TaskOrchestrationEntityFeature Entities =>

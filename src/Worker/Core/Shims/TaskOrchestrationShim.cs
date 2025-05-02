@@ -19,6 +19,7 @@ partial class TaskOrchestrationShim : TaskOrchestration
     readonly ITaskOrchestrator implementation;
     readonly OrchestrationInvocationContext invocationContext;
     readonly ILogger logger;
+    readonly IReadOnlyDictionary<string, object?> properties;
 
     TaskOrchestrationContextWrapper? wrapperContext;
 
@@ -30,9 +31,24 @@ partial class TaskOrchestrationShim : TaskOrchestration
     public TaskOrchestrationShim(
         OrchestrationInvocationContext invocationContext,
         ITaskOrchestrator implementation)
+        : this(invocationContext, implementation, new Dictionary<string, object?>())
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TaskOrchestrationShim"/> class.
+    /// </summary>
+    /// <param name="invocationContext">The invocation context for this orchestration.</param>
+    /// <param name="implementation">The orchestration's implementation.</param>
+    /// <param name="properties">Configuration for the orchestration.</param>
+    public TaskOrchestrationShim(
+        OrchestrationInvocationContext invocationContext,
+        ITaskOrchestrator implementation,
+        IReadOnlyDictionary<string, object?> properties)
     {
         this.invocationContext = Check.NotNull(invocationContext);
         this.implementation = Check.NotNull(implementation);
+        this.properties = Check.NotNull(properties);
 
         this.logger = Logs.CreateWorkerLogger(this.invocationContext.LoggerFactory, "Orchestrations");
     }
@@ -48,7 +64,7 @@ partial class TaskOrchestrationShim : TaskOrchestration
         innerContext.ErrorDataConverter = converterShim;
 
         object? input = this.DataConverter.Deserialize(rawInput, this.implementation.InputType);
-        this.wrapperContext = new(innerContext, this.invocationContext, input);
+        this.wrapperContext = new(innerContext, this.invocationContext, input, this.properties);
 
         string instanceId = innerContext.OrchestrationInstance.InstanceId;
         if (!innerContext.IsReplaying)

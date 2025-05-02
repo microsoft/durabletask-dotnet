@@ -39,7 +39,6 @@ sealed class GrpcRetryPolicyDefaults
     /// </remarks>
     public static readonly ServiceConfig DefaultServiceConfig;
 
-
     /// <summary>
     /// The default retry policy for gRPC operations.
     /// </summary>

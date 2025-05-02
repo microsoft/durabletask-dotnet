@@ -38,9 +38,27 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         OrchestrationContext innerContext,
         OrchestrationInvocationContext invocationContext,
         object? deserializedInput)
+        : this(innerContext, invocationContext, deserializedInput, new Dictionary<string, object?>())
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TaskOrchestrationContextWrapper"/> class.
+    /// </summary>
+    /// <param name="innerContext">The inner orchestration context.</param>
+    /// <param name="invocationContext">The invocation context.</param>
+    /// <param name="deserializedInput">The deserialized input.</param>
+    /// <param name="properties">The configuration for context.</param>
+    public TaskOrchestrationContextWrapper(
+        OrchestrationContext innerContext,
+        OrchestrationInvocationContext invocationContext,
+        object? deserializedInput,
+        IReadOnlyDictionary<string, object?> properties)
     {
         this.innerContext = Check.NotNull(innerContext);
         this.invocationContext = Check.NotNull(invocationContext);
+        this.Properties = Check.NotNull(properties);
+
         this.logger = this.CreateReplaySafeLogger("Microsoft.DurableTask");
         this.deserializedInput = deserializedInput;
     }
@@ -59,6 +77,11 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
     /// <inheritdoc/>
     public override DateTime CurrentUtcDateTime => this.innerContext.CurrentUtcDateTime;
+
+    /// <summary>
+    /// Gets the configuration settings for the orchestration.
+    /// </summary>
+    public override IReadOnlyDictionary<string, object?> Properties { get; }
 
     /// <inheritdoc/>
     public override TaskOrchestrationEntityFeature Entities

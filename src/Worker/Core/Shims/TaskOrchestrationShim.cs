@@ -19,7 +19,7 @@ partial class TaskOrchestrationShim : TaskOrchestration
     readonly ITaskOrchestrator implementation;
     readonly OrchestrationInvocationContext invocationContext;
     readonly ILogger logger;
-    readonly Dictionary<string, object?> properties = new();
+    readonly IReadOnlyDictionary<string, object?> properties;
 
     TaskOrchestrationContextWrapper? wrapperContext;
 
@@ -44,7 +44,7 @@ partial class TaskOrchestrationShim : TaskOrchestration
     public TaskOrchestrationShim(
         OrchestrationInvocationContext invocationContext,
         ITaskOrchestrator implementation,
-        Dictionary<string, object?> properties)
+        IReadOnlyDictionary<string, object?> properties)
     {
         this.invocationContext = Check.NotNull(invocationContext);
         this.implementation = Check.NotNull(implementation);

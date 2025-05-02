@@ -102,7 +102,7 @@ public class DurableTaskShimFactory
     public TaskOrchestration CreateOrchestration(
         TaskName name,
         ITaskOrchestrator orchestrator,
-        Dictionary<string, object?> properties,
+        IReadOnlyDictionary<string, object?> properties,
         ParentOrchestrationInstance? parent = null)
     {
         Check.NotDefault(name);

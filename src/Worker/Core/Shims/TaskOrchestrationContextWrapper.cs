@@ -53,7 +53,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         OrchestrationContext innerContext,
         OrchestrationInvocationContext invocationContext,
         object? deserializedInput,
-        Dictionary<string, object?> properties)
+        IReadOnlyDictionary<string, object?> properties)
     {
         this.innerContext = Check.NotNull(innerContext);
         this.invocationContext = Check.NotNull(invocationContext);

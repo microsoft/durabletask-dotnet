@@ -2,11 +2,13 @@
 
 ## (Unreleased)
 
-- Add New Property Properties to TaskOrchestrationContext by @nytian in [#415](https://github.com/microsoft/durabletask-dotnet/pull/415)
-- Add automatic retry on gateway timeout in `GrpcDurableTaskClient.WaitForInstanceCompletionAsync` in [#412](https://github.com/microsoft/durabletask-dotnet/pull/412))
+- Change user-agent header to x-user-agent ([#422](https://github.com/microsoft/durabletask-dotnet/pull/422))
+- Add New Property Properties to TaskOrchestrationContext by @nytian in ([#415](https://github.com/microsoft/durabletask-dotnet/pull/415))
+- Add automatic retry on gateway timeout in `GrpcDurableTaskClient.WaitForInstanceCompletionAsync` in ([#412](https://github.com/microsoft/durabletask-dotnet/pull/412))
 - Add specific logging for NotFound error on worker connection by @halspang in ([#413](https://github.com/microsoft/durabletask-dotnet/pull/413))
 - Add user agent header to gRPC called in ([#417](https://github.com/microsoft/durabletask-dotnet/pull/417))
 - Enrich User-Agent Header in gRPC Metadata to indicate Client or Worker as caller ([#421](https://github.com/microsoft/durabletask-dotnet/pull/421))
+
 ## v1.10.0
 
 - Update DurableTask.Core to v3.1.0 and Bump version to v1.10.0 by @nytian in ([#411](https://github.com/microsoft/durabletask-dotnet/pull/411))
@@ -88,7 +90,7 @@
 
 ### Microsoft.DurableTask.Client
 
-- Fix filter not being passed along in `PurgeAllInstancesAsync` (https://github.com/microsoft/durabletask-dotnet/pull/289)
+- Fix filter not being passed along in `PurgeAllInstancesAsync` (<https://github.com/microsoft/durabletask-dotnet/pull/289>)
 
 ### Microsoft.DurableTask.Abstractions
 
@@ -104,11 +106,11 @@
 
 ### Microsoft.DurableTask.Client
 
-- Fix typo in `PurgeInstanceAsync`  in `DurableTaskClient` (https://github.com/microsoft/durabletask-dotnet/pull/264)
+- Fix typo in `PurgeInstanceAsync`  in `DurableTaskClient` (<https://github.com/microsoft/durabletask-dotnet/pull/264>)
 
 ## v1.2.0
 
-- Adds support to recursively terminate/purge sub-orchestrations in `GrpcDurableTaskClient` (https://github.com/microsoft/durabletask-dotnet/pull/262)
+- Adds support to recursively terminate/purge sub-orchestrations in `GrpcDurableTaskClient` (<https://github.com/microsoft/durabletask-dotnet/pull/262>)
 
 ## v1.1.1
 
@@ -134,23 +136,23 @@ Adds support for durable entities. Learn more [here](https://learn.microsoft.com
 
 ### Microsoft.DurableTask.Abstractions
 
-- Microsoft.Azure.DurableTask.Core dependency increased to `2.15.0` (https://github.com/microsoft/durabletask-dotnet/pull/212)
+- Microsoft.Azure.DurableTask.Core dependency increased to `2.15.0` (<https://github.com/microsoft/durabletask-dotnet/pull/212>)
 
 ### Microsoft.DurableTask.Worker
 
-- Fix re-encoding of events when using `TaskOrchestrationContext.ContinueAsNew(preserveUnprocessedEvents: true)` (https://github.com/microsoft/durabletask-dotnet/pull/212)
+- Fix re-encoding of events when using `TaskOrchestrationContext.ContinueAsNew(preserveUnprocessedEvents: true)` (<https://github.com/microsoft/durabletask-dotnet/pull/212>)
 
 ## v1.0.4
 
 ### Microsoft.DurableTask.Worker
 
-- Fix handling of concurrent external events with the same name (https://github.com/microsoft/durabletask-dotnet/pull/194)
+- Fix handling of concurrent external events with the same name (<https://github.com/microsoft/durabletask-dotnet/pull/194>)
 
 ## v1.0.3
 
 ### Microsoft.DurableTask.Worker
 
-- Fix instance ID not being passed in when using retry policy (https://github.com/microsoft/durabletask-dotnet/issues/174)
+- Fix instance ID not being passed in when using retry policy (<https://github.com/microsoft/durabletask-dotnet/issues/174>)
 
 ### Microsoft.DurableTask.Worker.Grpc
 
@@ -172,18 +174,18 @@ Adds support for durable entities. Learn more [here](https://learn.microsoft.com
 
 - Fix incorrect bounds check on `PurgeResult`
 - Address typo for `DurableTaskClient.GetInstancesAsync` (incorrectly pluralized)
-    - Added `GetInstanceAsync`
-    - Hide `GetInstancesAsync` from editor
+  - Added `GetInstanceAsync`
+  - Hide `GetInstancesAsync` from editor
 
 ## v1.0.0
 
 - Added `SuspendInstanceAsync` and `ResumeInstanceAsync` to `DurableTaskClient`.
 - Rename `DurableTaskClient` methods
-    - `TerminateAsync` -> `TerminateInstanceAsync`
-    - `PurgeInstanceMetadataAsync` -> `PurgeInstanceAsync`
-    - `PurgeInstances` -> `PurgeAllInstancesAsync`
-    - `GetInstanceMetadataAsync` -> `GetInstanceAsync`
-    - `GetInstances` -> `GetAllInstancesAsync`
+  - `TerminateAsync` -> `TerminateInstanceAsync`
+  - `PurgeInstanceMetadataAsync` -> `PurgeInstanceAsync`
+  - `PurgeInstances` -> `PurgeAllInstancesAsync`
+  - `GetInstanceMetadataAsync` -> `GetInstanceAsync`
+  - `GetInstances` -> `GetAllInstancesAsync`
 - `TaskOrchestrationContext.CreateReplaySafeLogger` now creates `ILogger` directly (as opposed to wrapping an existing `ILogger`).
 - Durable Functions class-based syntax now resolves `ITaskActivity` instances from `IServiceProvider`, if available there.
 - `DurableTaskClient` methods have been touched up to ensure `CancellationToken` is included, as well as is the last parameter.
@@ -203,7 +205,7 @@ Microsoft.DurableTask.Client.Grpc \
 Microsoft.DurableTask.Worker \
 Microsoft.DurableTask.Worker.Grpc \
 
-_see v1.0.0-preview.1 for `Microsoft.DurableTask.Generators`_
+*see v1.0.0-preview.1 for `Microsoft.DurableTask.Generators`*
 
 ### Updates
 

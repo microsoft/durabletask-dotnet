@@ -154,4 +154,20 @@ public class ProfileController : ControllerBase
             return this.StatusCode(500, "An error occurred while purging orchestration instances");
         }
     }
+
+    // add a endpoint to terminate an instance
+    [HttpPost("{instanceId}/terminate")]
+    public async Task<ActionResult<string>> TerminateInstance(string instanceId)
+    {
+        await this.durableTaskClient.TerminateInstanceAsync(instanceId);
+        return this.Ok();
+    }
+
+    // add endpoint to purge an instance
+    [HttpPost("{instanceId}/purge")]
+    public async Task<ActionResult<string>> PurgeInstance(string instanceId)
+    {
+        await this.durableTaskClient.PurgeInstanceAsync(instanceId);
+        return this.Ok();
+    }
 }

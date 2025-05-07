@@ -36,6 +36,11 @@ public class CacheClearingOrchestrator : TaskOrchestrator<string, string>
             decimal currentPrice9 = await context.CallGetStockPriceAsync("MSFT");
             decimal currentPrice10 = await context.CallGetStockPriceAsync("MSFT");
     
+            // add a while loop to spin for 10 minutes
+            while (DateTime.UtcNow < context.CurrentUtcDateTime.AddMinutes(3))
+            {
+                await context.CreateTimer(context.CurrentUtcDateTime.AddSeconds(1), CancellationToken.None);
+            }
 
             // 10kb
             return new string('X', 102400);

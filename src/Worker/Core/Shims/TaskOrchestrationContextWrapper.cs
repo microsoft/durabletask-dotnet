@@ -138,6 +138,15 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
         try
         {
+            IDictionary<string, string>? tags = null;
+            if (options is CallActivityOptions callActivityOptions)
+            {
+                if (callActivityOptions.Tags is not null)
+                {
+                    tags = callActivityOptions.Tags;
+                }
+            }
+
             // TODO: Cancellation (https://github.com/microsoft/durabletask-dotnet/issues/7)
             if (options?.Retry?.Policy is RetryPolicy policy)
             {
@@ -145,19 +154,20 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                     name.Name,
                     name.Version,
                     policy.ToDurableTaskCoreRetryOptions(),
-                    input);
+                    tags: tags,
+                    parameters: input);
             }
             else if (options?.Retry?.Handler is AsyncRetryHandler handler)
             {
                 return await this.InvokeWithCustomRetryHandler(
-                    () => this.innerContext.ScheduleTask<T>(name.Name, name.Version, input),
+                    () => this.innerContext.ScheduleTask<T>(name.Name, name.Version, tags: tags, parameters: input),
                     name.Name,
                     handler,
                     default);
             }
             else
             {
-                return await this.innerContext.ScheduleTask<T>(name.Name, name.Version, input);
+                return await this.innerContext.ScheduleTask<T>(name.Name, name.Version, tags: tags, parameters: input);
             }
         }
         catch (global::DurableTask.Core.Exceptions.TaskFailedException e)

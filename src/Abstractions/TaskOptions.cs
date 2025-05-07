@@ -52,6 +52,13 @@ public record TaskOptions
     /// <param name="instanceId">The instance ID to use.</param>
     /// <returns>A new <see cref="SubOrchestrationOptions" />.</returns>
     public SubOrchestrationOptions WithInstanceId(string instanceId) => new(this, instanceId);
+
+    /// <summary>
+    /// Returns a new <see cref="CallActivityOptions" /> with the provided tags.
+    /// </summary>
+    /// <param name="tags">The tags to associate with the activity.</param>
+    /// <returns>A new <see cref="CallActivityOptions" />.</returns>
+    public CallActivityOptions WithTags(IDictionary<string, string> tags) => new(this, tags);
 }
 
 /// <summary>
@@ -108,4 +115,47 @@ public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffse
     /// Gets the tags to associate with the orchestration instance.
     /// </summary>
     public IReadOnlyDictionary<string, string> Tags { get; init; } = ImmutableDictionary.Create<string, string>();
+}
+
+/// <summary>
+/// Options for calling activities from an orchestrator.
+/// </summary>
+public record CallActivityOptions : TaskOptions
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CallActivityOptions"/> class.
+    /// </summary>
+    /// <param name="retry">The task retry options.</param>
+    /// <param name="tags">The tags to associate with the activity.</param>
+    public CallActivityOptions(TaskRetryOptions? retry = null, IDictionary<string, string>? tags = null)
+        : base(retry)
+    {
+        if (tags != null)
+        {
+            this.Tags = tags;
+        }
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CallActivityOptions"/> class.
+    /// </summary>
+    /// <param name="options">The task options to wrap.</param>
+    /// <param name="tags">The tags to associate with the activity.</param>
+    public CallActivityOptions(TaskOptions options, IDictionary<string, string>? tags = null)
+        : base(options)
+    {
+        if (tags != null)
+        {
+            this.Tags = tags;
+        }
+        else if (options is CallActivityOptions derived)
+        {
+            this.Tags = derived.Tags;
+        }
+    }
+
+    /// <summary>
+    /// Gets the tags to associate with the activity instance.
+    /// </summary>
+    public IDictionary<string, string> Tags { get; init; } = ImmutableDictionary.Create<string, string>();
 }

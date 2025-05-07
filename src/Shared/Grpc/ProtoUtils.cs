@@ -90,7 +90,9 @@ static class ProtoUtils
                     proto.EventId,
                     proto.TaskScheduled.Name,
                     proto.TaskScheduled.Version,
-                    proto.TaskScheduled.Input);
+                    proto.TaskScheduled.Input) {
+                        Tags = proto.TaskScheduled.Tags,
+                    };
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
                 historyEvent = new TaskCompletedEvent(

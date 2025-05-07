@@ -15,7 +15,13 @@ public class CacheClearingOrchestrator : TaskOrchestrator<string, string>
             logger.LogInformation("Starting CacheClearingOrchestration for schedule ID: {ScheduleId}", scheduleId);
 
             // Simulate cache clearing
-            await Task.Delay(TimeSpan.FromSeconds(5));
+            var options = new TaskOptions().WithTags(new Dictionary<string, string>
+            {
+                { "scheduleId", scheduleId }
+            });
+
+            await context.CallActivityAsync(nameof(CacheClearingActivity), options);
+            await context.CreateTimer(TimeSpan.FromSeconds(5), CancellationToken.None);
 
             logger.LogInformation("CacheClearingOrchestration completed for schedule ID: {ScheduleId}", scheduleId);
 

@@ -138,30 +138,48 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
         try
         {
+            IDictionary<string, string>? tags = null;
+            if (options is CallActivityOptions callActivityOptions)
+            {
+                if (callActivityOptions.Tags is not null)
+                {
+                    tags = callActivityOptions.Tags;
+                }
+            }
+
             // TODO: Cancellation (https://github.com/microsoft/durabletask-dotnet/issues/7)
             if (options?.Retry?.Policy is RetryPolicy policy)
             {
+                // print 1
+                Console.WriteLine("1");
                 return await this.innerContext.ScheduleWithRetry<T>(
                     name.Name,
                     name.Version,
                     policy.ToDurableTaskCoreRetryOptions(),
-                    input);
+                    tags: tags,
+                    parameters: input);
             }
             else if (options?.Retry?.Handler is AsyncRetryHandler handler)
             {
+                // print 2
+                Console.WriteLine("2");
                 return await this.InvokeWithCustomRetryHandler(
-                    () => this.innerContext.ScheduleTask<T>(name.Name, name.Version, input),
+                    () => this.innerContext.ScheduleTask<T>(name.Name, name.Version, tags: tags, parameters: input),
                     name.Name,
                     handler,
                     default);
             }
             else
             {
-                return await this.innerContext.ScheduleTask<T>(name.Name, name.Version, input);
+                // print 3
+                Console.WriteLine("3");
+                return await this.innerContext.ScheduleTask<T>(name.Name, name.Version, tags: tags, parameters: input);
             }
         }
         catch (global::DurableTask.Core.Exceptions.TaskFailedException e)
         {
+            // print 4
+            Console.WriteLine("4");
             // Hide the core DTFx types and instead use our own
             throw new TaskFailedException(name, e.ScheduleId, e);
         }

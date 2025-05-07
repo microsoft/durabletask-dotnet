@@ -11,11 +11,11 @@
   "profiles": {
     "http": {
       "commandName": "Project",
-      "applicationUrl": "http://localhost:5008",
+      "applicationUrl": "http://localhost:5009",
       "dotnetRunMessages": true,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "DURABLE_TASK_SCHEDULER_CONNECTION_STRING": "<your-connection-string>"
+        "DURABLE_TASK_SCHEDULER_CONNECTION_STRING": "Endpoint=http://localhost:8080;TaskHub=default;Authentication=None"
       }
     }
   }

@@ -19,13 +19,15 @@ builder.Services.AddLogging();
 // Add all the generated orchestrations and activities automatically
 builder.Services.AddDurableTaskWorker(builder =>
 {
+    builder.UseDurableTaskScheduler(connectionString);
+    builder.UseScheduledTasks();
     builder.AddTasks(r =>
     {
         // Add your orchestrators and activities here
+        r.AddActivity<CacheClearingActivity>();
         r.AddOrchestrator<CacheClearingOrchestrator>();
+
     });
-    builder.UseDurableTaskScheduler(connectionString);
-    builder.UseScheduledTasks();
 });
 
 // Register the client, which can be used to start orchestrations

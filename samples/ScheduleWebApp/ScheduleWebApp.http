@@ -1,5 +1,5 @@
 ### Variables
-@baseUrl = http://localhost:5008
+@baseUrl = http://localhost:5009
 @scheduleId = schedule-123
 
 ### Create a new schedule
@@ -52,3 +52,19 @@ DELETE {{baseUrl}}/schedules/{{scheduleId}}
 # - Dates are in ISO 8601 format (YYYY-MM-DDThh:mm:ssZ)
 # - You can use the REST Client extension in VS Code to execute these requests
 # - The @name directive allows referencing the response in subsequent requests
+
+### Create a new orchestration
+POST {{baseUrl}}/instances?count=2
+Content-Type: application/json
+
+{
+    "orchestrationName": "CacheClearingOrchestrator",
+    "input": "{{scheduleId}}"
+}
+
+
+### Get an orchestration instance by ID
+
+@instanceId = 523fa1121b7e42049b4ddaab048ebf5d
+GET {{baseUrl}}/instances/{{instanceId}}
+

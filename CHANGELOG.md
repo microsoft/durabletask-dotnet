@@ -1,5 +1,32 @@
 ﻿# Changelog
 
+## (Unreleased)
+
+- Add New Property Properties to TaskOrchestrationContext by @nytian in [#415](https://github.com/microsoft/durabletask-dotnet/pull/415)
+- Add automatic retry on gateway timeout in `GrpcDurableTaskClient.WaitForInstanceCompletionAsync` in [#412](https://github.com/microsoft/durabletask-dotnet/pull/412))
+- Add specific logging for NotFound error on worker connection by @halspang in ([#413](https://github.com/microsoft/durabletask-dotnet/pull/413))
+- Add user agent header to gRPC called in ([#417](https://github.com/microsoft/durabletask-dotnet/pull/417))
+- Enrich User-Agent Header in gRPC Metadata to indicate Client or Worker as caller ([#421](https://github.com/microsoft/durabletask-dotnet/pull/421))
+## v1.10.0
+
+- Update DurableTask.Core to v3.1.0 and Bump version to v1.10.0 by @nytian in ([#411](https://github.com/microsoft/durabletask-dotnet/pull/411))
+
+## v1.9.1
+
+- Add basic orchestration and activity execution logs by @cgillum in ([#405](https://github.com/microsoft/durabletask-dotnet/pull/405))
+- Add default version in `TaskOrchestrationContext` by @halspang in ([#408](https://github.com/microsoft/durabletask-dotnet/pull/408))
+
+## v1.9.0
+
+- Fix schedule sample logging setup by @YunchuWang in ([#392](https://github.com/microsoft/durabletask-dotnet/pull/392))
+- Introduce versioning to the DurableTaskClient by @halspang in ([#393](https://github.com/microsoft/durabletask-dotnet/pull/393))
+- Support for local credential types for DTS by @cgillum in ([#396](https://github.com/microsoft/durabletask-dotnet/pull/396))
+- Add utilities for easier versioning usage by @halspang in ([#394](https://github.com/microsoft/durabletask-dotnet/pull/394))
+- Add tags to CreateInstanceRequest by @torosent in ([#397](https://github.com/microsoft/durabletask-dotnet/pull/397))
+- Partial Purge Support by @YunchuWang in ([#400](https://github.com/microsoft/durabletask-dotnet/pull/400))
+- Dts Grpc client retry support by @YunchuWang in ([#403](https://github.com/microsoft/durabletask-dotnet/pull/403))
+- Introduce orchestration versioning into worker by @halspang in ([#401](https://github.com/microsoft/durabletask-dotnet/pull/401))
+
 ## v1.8.1
 
 - Add timeout to gRPC workitem streaming ([#390](https://github.com/microsoft/durabletask-dotnet/pull/390))

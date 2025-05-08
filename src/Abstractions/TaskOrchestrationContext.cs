@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -58,6 +59,16 @@ public abstract class TaskOrchestrationContext
     /// <c>true</c> if the orchestrator is currently replaying a previous execution; otherwise <c>false</c>.
     /// </value>
     public abstract bool IsReplaying { get; }
+
+    /// <summary>
+    /// Gets the version of the current orchestration instance, which was set when the instance was created.
+    /// </summary>
+    public virtual string Version => string.Empty;
+
+    /// <summary>
+    /// Gets the configuration settings for the orchestration context.
+    /// </summary>
+    public virtual IReadOnlyDictionary<string, object?> Properties { get; } = new Dictionary<string, object?>();
 
     /// <summary>
     /// Gets the entity feature, for interacting with entities.
@@ -397,6 +408,27 @@ public abstract class TaskOrchestrationContext
     /// <typeparam name="T">The type to derive category name from.</typeparam>
     public virtual ILogger CreateReplaySafeLogger<T>()
         => new ReplaySafeLogger(this, this.LoggerFactory.CreateLogger<T>());
+
+    /// <summary>
+    /// Checks if the current orchestration version is greater than the specified version.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// If both versions are empty, this is considered false as neither can be greater.
+    /// </para>
+    /// <para>
+    /// An empty context version is less than a defined version in the parameter.
+    /// </para>
+    /// <para>
+    /// An empty parameter version is less than a defined version in the context.
+    /// </para>
+    /// </remarks>
+    /// <param name="version">The version to check against.</param>
+    /// <returns>True if the orchestration's version is greater than the provided version, false otherwise.</returns>
+    public virtual int CompareVersionTo(string version)
+    {
+        return TaskOrchestrationVersioningUtils.CompareVersions(this.Version, version);
+    }
 
     class ReplaySafeLogger : ILogger
     {

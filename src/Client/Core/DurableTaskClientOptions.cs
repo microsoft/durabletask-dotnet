@@ -14,6 +14,14 @@ public class DurableTaskClientOptions
     bool enableEntitySupport;
 
     /// <summary>
+    /// Gets or sets the version of orchestrations that will be created.
+    /// </summary>
+    /// <remarks>
+    /// Currently, this is sourced from the AzureManaged client options.
+    /// </remarks>
+    public string DefaultVersion { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets the data converter. Default value is <see cref="JsonDataConverter.Default" />.
     /// </summary>
     /// <remarks>
@@ -94,6 +102,11 @@ public class DurableTaskClientOptions
             if (!other.EntitySupportExplicitlySet)
             {
                 other.EnableEntitySupport = this.EnableEntitySupport;
+            }
+
+            if (!string.IsNullOrWhiteSpace(this.DefaultVersion))
+            {
+                other.DefaultVersion = this.DefaultVersion;
             }
         }
     }

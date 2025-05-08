@@ -5,7 +5,6 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using DurableTask.Core;
-using DurableTask.Core.Entities;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
 using Microsoft.DurableTask.Client.Entities;
@@ -169,6 +168,16 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
         };
 
         string? serializedInput = this.DataConverter.Serialize(input);
+
+        var tags = new Dictionary<string, string>();
+        if (options?.Tags != null)
+        {
+            tags = options.Tags.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+        }
+
+        tags[OrchestrationTags.CreateTraceForNewOrchestration] = "true";
+        tags[OrchestrationTags.RequestTime] = DateTimeOffset.UtcNow.ToString(CultureInfo.InvariantCulture);
+
         TaskMessage message = new()
         {
             OrchestrationInstance = instance,
@@ -179,7 +188,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                 OrchestrationInstance = instance,
                 ScheduledStartTime = options?.StartAt?.UtcDateTime,
                 ParentTraceContext = Activity.Current?.Id != null ? new Core.Tracing.DistributedTraceContext(Activity.Current.Id, Activity.Current.TraceStateString) : null,
-                Tags = new Dictionary<string, string> { { OrchestrationTags.CreateTraceForNewOrchestration, "true" }, { OrchestrationTags.RequestTime, DateTimeOffset.UtcNow.ToString(CultureInfo.InvariantCulture) } },
+                Tags = tags,
             },
         };
 

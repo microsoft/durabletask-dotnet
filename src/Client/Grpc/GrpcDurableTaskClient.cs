@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.Diagnostics;
@@ -78,14 +78,33 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     {
         Check.NotEntity(this.options.EnableEntitySupport, options?.InstanceId);
 
+        string version = string.Empty;
+        if (!string.IsNullOrEmpty(orchestratorName.Version))
+        {
+            version = orchestratorName.Version;
+        }
+        else if (!string.IsNullOrEmpty(this.options.DefaultVersion))
+        {
+            version = this.options.DefaultVersion;
+        }
+
         var request = new P.CreateInstanceRequest
         {
             Name = orchestratorName.Name,
-            Version = orchestratorName.Version,
+            Version = version,
             InstanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N"),
             Input = this.DataConverter.Serialize(input),
             RequestTime = DateTimeOffset.UtcNow.ToTimestamp(),
         };
+
+        // Add tags to the collection
+        if (request?.Tags != null && options?.Tags != null)
+        {
+            foreach (KeyValuePair<string, string> tag in options.Tags)
+            {
+                request.Tags.Add(tag.Key, tag.Value);
+            }
+        }
 
         if (Activity.Current?.Id != null || Activity.Current?.TraceStateString != null)
         {
@@ -330,17 +349,27 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             GetInputsAndOutputs = getInputsAndOutputs,
         };
 
-        try
+        while (!cancellation.IsCancellationRequested)
         {
-            P.GetInstanceResponse response = await this.sidecarClient.WaitForInstanceCompletionAsync(
-                request, cancellationToken: cancellation);
-            return this.CreateMetadata(response.OrchestrationState, getInputsAndOutputs);
+            try
+            {
+                P.GetInstanceResponse response = await this.sidecarClient.WaitForInstanceCompletionAsync(
+                    request, cancellationToken: cancellation);
+                return this.CreateMetadata(response.OrchestrationState, getInputsAndOutputs);
+            }
+            catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+            {
+                throw new OperationCanceledException(
+                    $"The {nameof(this.WaitForInstanceCompletionAsync)} operation was canceled.", e, cancellation);
+            }
+            catch (RpcException e) when (e.StatusCode == StatusCode.DeadlineExceeded)
+            {
+                // Gateway timeout/deadline exceeded can happen before the request is completed. Do nothing and retry.
+            }
         }
-        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
-        {
-            throw new OperationCanceledException(
-                $"The {nameof(this.WaitForInstanceCompletionAsync)} operation was canceled.", e, cancellation);
-        }
+
+        // If the operation was cancelled in between requests, we should still throw instead of returning a null value.
+        throw new OperationCanceledException($"The {nameof(this.WaitForInstanceCompletionAsync)} operation was canceled.");
     }
 
     /// <inheritdoc/>
@@ -428,7 +457,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         {
             P.PurgeInstancesResponse response = await this.sidecarClient.PurgeInstancesAsync(
                 request, cancellationToken: cancellation);
-            return new PurgeResult(response.DeletedInstanceCount);
+            return new PurgeResult(response.DeletedInstanceCount, response.IsComplete);
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
@@ -439,7 +468,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
     OrchestrationMetadata CreateMetadata(P.OrchestrationState state, bool includeInputsAndOutputs)
     {
-        return new(state.Name, state.InstanceId)
+        var metadata = new OrchestrationMetadata(state.Name, state.InstanceId)
         {
             CreatedAt = state.CreatedTimestamp.ToDateTimeOffset(),
             LastUpdatedAt = state.LastUpdatedTimestamp.ToDateTimeOffset(),
@@ -449,6 +478,9 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             SerializedCustomStatus = state.CustomStatus,
             FailureDetails = state.FailureDetails.ToTaskFailureDetails(),
             DataConverter = includeInputsAndOutputs ? this.DataConverter : null,
+            Tags = new Dictionary<string, string>(state.Tags),
         };
+
+        return metadata;
     }
 }

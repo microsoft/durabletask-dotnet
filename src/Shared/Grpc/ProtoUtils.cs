@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.Buffers;
@@ -60,6 +60,7 @@ static class ProtoUtils
                     Name = proto.ExecutionStarted.Name,
                     Version = proto.ExecutionStarted.Version,
                     OrchestrationInstance = instance,
+                    Tags = proto.ExecutionStarted.Tags,
                     ParentInstance = proto.ExecutionStarted.ParentInstance == null ? null : new ParentInstance
                     {
                         Name = proto.ExecutionStarted.ParentInstance.Name,
@@ -207,6 +208,7 @@ static class ProtoUtils
                         Input = proto.HistoryState.OrchestrationState.Input,
                         Output = proto.HistoryState.OrchestrationState.Output,
                         Status = proto.HistoryState.OrchestrationState.CustomStatus,
+                        Tags = proto.HistoryState.OrchestrationState.Tags,
                     });
                 break;
             default:
@@ -766,14 +768,6 @@ static class ProtoUtils
                     Version = startNewOrchestrationAction.Version,
                     InstanceId = startNewOrchestrationAction.InstanceId,
                     ScheduledTime = startNewOrchestrationAction.ScheduledStartTime?.ToTimestamp(),
-                    RequestTime = startNewOrchestrationAction.RequestTime?.ToTimestamp(),
-                    ParentTraceContext = startNewOrchestrationAction.ParentTraceContext != null ?
-                        new P.TraceContext
-                        {
-                            TraceParent = startNewOrchestrationAction.ParentTraceContext.TraceParent,
-                            TraceState = startNewOrchestrationAction.ParentTraceContext.TraceState,
-                        }
-                    : null,
                 };
                 break;
         }
@@ -939,6 +933,37 @@ static class ProtoUtils
             failureDetails.StackTrace,
             failureDetails.InnerFailure.ToCore(),
             failureDetails.IsNonRetriable);
+    }
+
+    /// <summary>
+    /// Converts a <see cref="Google.Protobuf.WellKnownTypes.Value"/> instance to a corresponding C# object.
+    /// </summary>
+    /// <param name="value">The Protobuf Value to convert.</param>
+    /// <returns>The corresponding C# object.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when the Protobuf Value.KindCase is not one of the supported types.
+    /// </exception>
+    internal static object? ConvertValueToObject(Google.Protobuf.WellKnownTypes.Value value)
+    {
+        switch (value.KindCase)
+        {
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.NullValue:
+                return null;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.NumberValue:
+                return value.NumberValue;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.StringValue:
+                return value.StringValue;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.BoolValue:
+                return value.BoolValue;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.StructValue:
+                return value.StructValue.Fields.ToDictionary(
+                    pair => pair.Key,
+                    pair => ConvertValueToObject(pair.Value));
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.ListValue:
+                return value.ListValue.Values.Select(ConvertValueToObject).ToList();
+            default:
+                throw new NotSupportedException($"Unsupported Value kind: {value.KindCase}");
+        }
     }
 
     /// <summary>

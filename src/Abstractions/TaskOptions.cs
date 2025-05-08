@@ -1,6 +1,8 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Immutable;
+
 namespace Microsoft.DurableTask;
 
 /// <summary>
@@ -100,4 +102,10 @@ public record SubOrchestrationOptions : TaskOptions
 /// The time when the orchestration instance should start executing. If not specified or if a date-time in the past
 /// is specified, the orchestration instance will be scheduled immediately.
 /// </param>
-public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null);
+public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null)
+{
+    /// <summary>
+    /// Gets the tags to associate with the orchestration instance.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Tags { get; init; } = ImmutableDictionary.Create<string, string>();
+}

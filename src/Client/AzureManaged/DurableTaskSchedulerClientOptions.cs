@@ -1,10 +1,13 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+
 using System.ComponentModel.DataAnnotations;
 using Azure.Core;
 using Azure.Identity;
 using Grpc.Core;
 using Grpc.Net.Client;
+using Microsoft.DurableTask;
+using Microsoft.DurableTask.Client;
 
 namespace Microsoft.DurableTask;
 
@@ -94,6 +97,9 @@ public class DurableTaskSchedulerClientOptions
             async (context, metadata) =>
             {
                 metadata.Add("taskhub", taskHubName);
+
+                // Add user agent header with durabletask-dotnet and DLL version from util
+                metadata.Add("x-user-agent", $"{DurableTaskUserAgentUtil.GetUserAgent(nameof(DurableTaskClient))}");
                 if (cache == null)
                 {
                     return;
@@ -111,6 +117,7 @@ public class DurableTaskSchedulerClientOptions
         {
             Credentials = ChannelCredentials.Create(channelCreds, managedBackendCreds),
             UnsafeUseInsecureChannelCallCredentials = this.AllowInsecureCredentials,
+            ServiceConfig = GrpcRetryPolicyDefaults.DefaultServiceConfig,
         });
     }
 
@@ -126,7 +133,7 @@ public class DurableTaskSchedulerClientOptions
             case "managedidentity":
                 return new ManagedIdentityCredential(connectionString.ClientId);
             case "workloadidentity":
-                var opts = new WorkloadIdentityCredentialOptions();
+                WorkloadIdentityCredentialOptions opts = new WorkloadIdentityCredentialOptions();
                 if (!string.IsNullOrEmpty(connectionString.ClientId))
                 {
                     opts.ClientId = connectionString.ClientId;
@@ -152,6 +159,12 @@ public class DurableTaskSchedulerClientOptions
                 return new AzureCliCredential();
             case "azurepowershell":
                 return new AzurePowerShellCredential();
+            case "visualstudio":
+                return new VisualStudioCredential();
+            case "visualstudiocode":
+                return new VisualStudioCodeCredential();
+            case "interactivebrowser":
+                return new InteractiveBrowserCredential();
             case "none":
                 return null;
             default:

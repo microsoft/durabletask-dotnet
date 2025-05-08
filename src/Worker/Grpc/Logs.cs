@@ -8,9 +8,6 @@ namespace Microsoft.DurableTask.Worker.Grpc
     /// <summary>
     /// Log messages.
     /// </summary>
-    /// <remarks>
-    /// NOTE: Trying to make logs consistent with https://github.com/Azure/durabletask/blob/main/src/DurableTask.Core/Logging/LogEvents.cs.
-    /// </remarks>
     static partial class Logs
     {
         [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Durable Task gRPC worker starting and connecting to {endpoint}.")]
@@ -24,6 +21,9 @@ namespace Microsoft.DurableTask.Worker.Grpc
 
         [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Sidecar work-item streaming connection established.")]
         public static partial void EstablishedWorkItemConnection(this ILogger logger);
+
+        [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Task hub NotFound. Will continue retrying.")]
+        public static partial void TaskHubNotFound(this ILogger logger);
 
         [LoggerMessage(EventId = 10, Level = LogLevel.Debug, Message = "{instanceId}: Received request to run orchestrator '{name}' with {oldEventCount} replay and {newEventCount} new history events.")]
         public static partial void ReceivedOrchestratorRequest(this ILogger logger, string name, string instanceId, int oldEventCount, int newEventCount);
@@ -51,5 +51,11 @@ namespace Microsoft.DurableTask.Worker.Grpc
 
         [LoggerMessage(EventId = 56, Level = LogLevel.Warning, Message = "Channel to backend has stopped receiving traffic, will attempt to reconnect.")]
         public static partial void ConnectionTimeout(this ILogger logger);
+
+        [LoggerMessage(EventId = 57, Level = LogLevel.Warning, Message = "Orchestration version did not meet worker versioning requirements. Error action = '{errorAction}'. Version error = '{versionError}'")]
+        public static partial void OrchestrationVersionFailure(this ILogger logger, string errorAction, string versionError);
+
+        [LoggerMessage(EventId = 58, Level = LogLevel.Information, Message = "Abandoning orchestration. InstanceId = '{instanceId}'. Completion token = '{completionToken}'")]
+        public static partial void AbandoningOrchestrationDueToVersioning(this ILogger logger, string instanceId, string completionToken);
     }
 }

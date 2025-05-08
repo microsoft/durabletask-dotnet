@@ -768,6 +768,14 @@ static class ProtoUtils
                     Version = startNewOrchestrationAction.Version,
                     InstanceId = startNewOrchestrationAction.InstanceId,
                     ScheduledTime = startNewOrchestrationAction.ScheduledStartTime?.ToTimestamp(),
+                    RequestTime = startNewOrchestrationAction.RequestTime?.ToTimestamp(),
+                    ParentTraceContext = startNewOrchestrationAction.ParentTraceContext != null ?
+                        new P.TraceContext
+                        {
+                            TraceParent = startNewOrchestrationAction.ParentTraceContext.TraceParent,
+                            TraceState = startNewOrchestrationAction.ParentTraceContext.TraceState,
+                        }
+                    : null,
                 };
                 break;
         }

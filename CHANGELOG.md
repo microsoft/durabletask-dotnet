@@ -7,7 +7,7 @@
 - Add specific logging for NotFound error on worker connection by @halspang in ([#413](https://github.com/microsoft/durabletask-dotnet/pull/413))
 - Add user agent header to gRPC called in ([#417](https://github.com/microsoft/durabletask-dotnet/pull/417))
 - Enrich User-Agent Header in gRPC Metadata to indicate Client or Worker as caller ([#421](https://github.com/microsoft/durabletask-dotnet/pull/421))
-- Add extension methods for registering entities by type
+- Add extension methods for registering entities by type ([#427](https://github.com/microsoft/durabletask-dotnet/pull/427))
 
 ## v1.10.0
 

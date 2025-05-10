@@ -59,15 +59,11 @@ class GrpcDurableEntityClient : DurableEntityClient
             RequestTime = DateTimeOffset.UtcNow.ToTimestamp(),
         };
 
-        if (Activity.Current?.Id != null)
+        if (Activity.Current is { } activity)
         {
-            if (request.ParentTraceContext == null)
-            {
-                request.ParentTraceContext = new P.TraceContext();
-            }
-
-            request.ParentTraceContext.TraceParent = Activity.Current.Id;
-            request.ParentTraceContext.TraceState = Activity.Current.TraceStateString;
+            request.ParentTraceContext ??= new P.TraceContext();
+            request.ParentTraceContext.TraceParent = activity.Id;
+            request.ParentTraceContext.TraceState = activity.TraceStateString;
         }
 
         // TODO this.logger.LogSomething

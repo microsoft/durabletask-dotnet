@@ -187,7 +187,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                 Version = orchestratorName.Version,
                 OrchestrationInstance = instance,
                 ScheduledStartTime = options?.StartAt?.UtcDateTime,
-                ParentTraceContext = Activity.Current?.Id != null ? new Core.Tracing.DistributedTraceContext(Activity.Current.Id, Activity.Current.TraceStateString) : null,
+                ParentTraceContext = Activity.Current is { } activity ? new Core.Tracing.DistributedTraceContext(activity.Id!, activity.TraceStateString) : null,
                 Tags = tags,
             },
         };

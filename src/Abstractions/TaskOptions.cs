@@ -20,9 +20,25 @@ public record TaskOptions
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="TaskOptions"/> class.
+    /// </summary>
+    /// <param name="retry">The task retry options.</param>
+    /// <param name="tags">The tags to associate with the task.</param>
+    public TaskOptions(TaskRetryOptions? retry = null, IDictionary<string, string>? tags = null)
+    {
+        this.Retry = retry;
+        this.Tags = tags;
+    }
+
+    /// <summary>
     /// Gets the task retry options.
     /// </summary>
     public TaskRetryOptions? Retry { get; init; }
+
+    /// <summary>
+    /// Gets the tags to associate with the task.
+    /// </summary>
+    public IDictionary<string, string>? Tags { get; init; }
 
     /// <summary>
     /// Returns a new <see cref="TaskOptions" /> from the provided <see cref="RetryPolicy" />.
@@ -52,13 +68,6 @@ public record TaskOptions
     /// <param name="instanceId">The instance ID to use.</param>
     /// <returns>A new <see cref="SubOrchestrationOptions" />.</returns>
     public SubOrchestrationOptions WithInstanceId(string instanceId) => new(this, instanceId);
-
-    /// <summary>
-    /// Returns a new <see cref="CallActivityOptions" /> with the provided tags.
-    /// </summary>
-    /// <param name="tags">The tags to associate with the activity.</param>
-    /// <returns>A new <see cref="CallActivityOptions" />.</returns>
-    public CallActivityOptions WithTags(IDictionary<string, string> tags) => new(this, tags);
 }
 
 /// <summary>
@@ -128,12 +137,8 @@ public record CallActivityOptions : TaskOptions
     /// <param name="retry">The task retry options.</param>
     /// <param name="tags">The tags to associate with the activity.</param>
     public CallActivityOptions(TaskRetryOptions? retry = null, IDictionary<string, string>? tags = null)
-        : base(retry)
+        : base(retry, tags)
     {
-        if (tags != null)
-        {
-            this.Tags = tags;
-        }
     }
 
     /// <summary>
@@ -142,20 +147,7 @@ public record CallActivityOptions : TaskOptions
     /// <param name="options">The task options to wrap.</param>
     /// <param name="tags">The tags to associate with the activity.</param>
     public CallActivityOptions(TaskOptions options, IDictionary<string, string>? tags = null)
-        : base(options)
+        : base(options.Retry, tags ?? options.Tags)
     {
-        if (tags != null)
-        {
-            this.Tags = tags;
-        }
-        else if (options is CallActivityOptions derived)
-        {
-            this.Tags = derived.Tags;
-        }
     }
-
-    /// <summary>
-    /// Gets the tags to associate with the activity instance.
-    /// </summary>
-    public IDictionary<string, string> Tags { get; init; } = ImmutableDictionary.Create<string, string>();
 }

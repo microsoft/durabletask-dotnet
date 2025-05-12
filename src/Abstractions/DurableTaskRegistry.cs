@@ -6,7 +6,8 @@ using Microsoft.DurableTask.Entities;
 namespace Microsoft.DurableTask;
 
 /// <summary>
-/// Container for registered <see cref="ITaskOrchestrator" /> and <see cref="ITaskActivity" /> implementations.
+/// Container for registered <see cref="ITaskOrchestrator" />, <see cref="ITaskActivity" />,
+/// and <see cref="ITaskEntity"/> implementations.
 /// </summary>
 public sealed partial class DurableTaskRegistry
 {

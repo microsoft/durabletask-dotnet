@@ -4,8 +4,6 @@
 using System.Buffers;
 using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Command;
@@ -91,7 +89,8 @@ static class ProtoUtils
                     proto.EventId,
                     proto.TaskScheduled.Name,
                     proto.TaskScheduled.Version,
-                    proto.TaskScheduled.Input) {
+                    proto.TaskScheduled.Input)
+                    {
                         Tags = proto.TaskScheduled.Tags,
                     };
                 break;

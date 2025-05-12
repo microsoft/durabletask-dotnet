@@ -8,8 +8,10 @@ namespace ScheduleWebApp.Activities;
 [DurableTask] // Optional: enables code generation for type-safe calls
 public class CacheClearingActivity : TaskActivity<object, string>
 {
-    public override Task<string> RunAsync(TaskActivityContext context, object input)
+    public override async Task<string> RunAsync(TaskActivityContext context, object input)
     {
-        return Task.FromResult("hello");
+        // Simulate cache clearing
+        await Task.Delay(TimeSpan.FromSeconds(5));
+        return "Cache cleared";
     }
 }

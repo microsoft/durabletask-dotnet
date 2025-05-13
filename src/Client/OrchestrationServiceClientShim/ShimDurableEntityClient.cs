@@ -94,7 +94,7 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
                 this.options.Entities.MaxSignalDelayTimeOrDefault,
                 scheduledTime?.UtcDateTime),
             Activity.Current is { } activity ? new DistributedTraceContext(activity.Id!, activity.TraceStateString) : null,
-            DateTimeOffset.UtcNow,
+            requestTime: DateTimeOffset.UtcNow,
             createTrace: true);
 
         await this.options.Client!.SendTaskOrchestrationMessageAsync(eventToSend.AsTaskMessage());

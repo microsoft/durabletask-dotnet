@@ -150,24 +150,38 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             // TODO: Cancellation (https://github.com/microsoft/durabletask-dotnet/issues/7)
             if (options?.Retry?.Policy is RetryPolicy policy)
             {
-                return await this.innerContext.ScheduleWithRetry<T>(
+                return await this.innerContext.ScheduleTask<T>(
                     name.Name,
                     name.Version,
-                    policy.ToDurableTaskCoreRetryOptions(),
-                    tags: tags,
+                    options: ScheduleTaskOptions.CreateBuilder()
+                        .WithRetryOptions(policy.ToDurableTaskCoreRetryOptions())
+                        .WithTags(tags)
+                        .Build(),
                     parameters: input);
             }
             else if (options?.Retry?.Handler is AsyncRetryHandler handler)
             {
                 return await this.InvokeWithCustomRetryHandler(
-                    () => this.innerContext.ScheduleTask<T>(name.Name, name.Version, tags: tags, parameters: input),
+                    () => this.innerContext.ScheduleTask<T>(
+                        name.Name,
+                        name.Version,
+                        options: ScheduleTaskOptions.CreateBuilder()
+                            .WithTags(tags)
+                            .Build(),
+                        parameters: input),
                     name.Name,
                     handler,
                     default);
             }
             else
             {
-                return await this.innerContext.ScheduleTask<T>(name.Name, name.Version, tags: tags, parameters: input);
+                return await this.innerContext.ScheduleTask<T>(
+                    name.Name,
+                    name.Version,
+                    options: ScheduleTaskOptions.CreateBuilder()
+                        .WithTags(tags)
+                        .Build(),
+                    parameters: input);
             }
         }
         catch (global::DurableTask.Core.Exceptions.TaskFailedException e)

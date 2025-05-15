@@ -1,11 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
+using DurableTask.Core.Tracing;
 using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Worker.Shims;
@@ -356,6 +358,16 @@ sealed partial class GrpcDurableTaskWorker
             string completionToken,
             CancellationToken cancellationToken)
         {
+            var executionStartedEvent =
+                request
+                    .NewEvents
+                    .Concat(request.PastEvents)
+                    .Where(e => e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionStarted)
+                    .Select(e => e.ExecutionStarted)
+                    .FirstOrDefault();
+
+            using Activity? traceActivity = TraceHelper.StartTraceActivityForOrchestrationExecution(executionStartedEvent);
+
             OrchestratorExecutionResult? result = null;
             P.TaskFailureDetails? failureDetails = null;
             TaskName name = new("(unknown)");
@@ -435,7 +447,8 @@ sealed partial class GrpcDurableTaskWorker
                     result.CustomStatus,
                     result.Actions,
                     completionToken,
-                    entityConversionState);
+                    entityConversionState,
+                    traceActivity);
             }
             else if (versioning != null && failureDetails != null && versionFailure)
             {
@@ -502,8 +515,12 @@ sealed partial class GrpcDurableTaskWorker
             await this.client.CompleteOrchestratorTaskAsync(response, cancellationToken: cancellationToken);
         }
 
+        private static readonly ActivitySource ActivitySource = new ActivitySource("Microsoft.DurableTask.Worker");
+
         async Task OnRunActivityAsync(P.ActivityRequest request, string completionToken, CancellationToken cancellation)
         {
+            using Activity? traceActivity = TraceHelper.StartTraceActivityForTaskExecution(request);
+
             OrchestrationInstance instance = request.OrchestrationInstance.ToCore();
             string rawInput = request.Input;
 

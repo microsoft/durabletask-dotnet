@@ -3,6 +3,7 @@
 
 using System.Buffers;
 using System.Buffers.Text;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -279,7 +280,8 @@ static class ProtoUtils
         string? customStatus,
         IEnumerable<OrchestratorAction> actions,
         string completionToken,
-        EntityConversionState? entityConversionState)
+        EntityConversionState? entityConversionState,
+        Activity? parentActivity)
     {
         Check.NotNull(actions);
         var response = new P.OrchestratorResponse
@@ -287,6 +289,9 @@ static class ProtoUtils
             InstanceId = instanceId,
             CustomStatus = customStatus,
             CompletionToken = completionToken,
+            OrchestrationID = parentActivity?.Id,
+            OrchestrationSpanID = parentActivity?.SpanId.ToString(),
+            ActivityStartTime = parentActivity?.StartTimeUtc.ToTimestamp(),
         };
 
         foreach (OrchestratorAction action in actions)
@@ -302,6 +307,13 @@ static class ProtoUtils
                         Name = scheduleTaskAction.Name,
                         Version = scheduleTaskAction.Version,
                         Input = scheduleTaskAction.Input,
+                        ParentTraceContext = parentActivity is not null
+                            ? new P.TraceContext
+                            {
+                                TraceParent = parentActivity.Id,
+                                TraceState = parentActivity.TraceStateString,
+                            }
+                            : null,
                     };
                     break;
                 case OrchestratorActionType.CreateSubOrchestration:

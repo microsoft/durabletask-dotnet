@@ -143,6 +143,11 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                         Version = request.Version,
                         OrchestrationInstance = instance,
                         Tags = request.Tags.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
+                        ParentTraceContext = request.ParentTraceContext is not null
+                            ? new(request.ParentTraceContext.TraceParent, request.ParentTraceContext.TraceState)
+                            { 
+                            }
+                            : null
                     },
                     OrchestrationInstance = instance,
                 });

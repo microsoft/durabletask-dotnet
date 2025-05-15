@@ -14,7 +14,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Azure.DurableTask.Core" />
+    <ProjectReference Include="/Users/phoff/Source/Azure/durabletask/src/DurableTask.Core/DurableTask.Core.csproj" />
+    <!-- <PackageReference Include="Microsoft.Azure.DurableTask.Core" /> -->
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
   </ItemGroup>

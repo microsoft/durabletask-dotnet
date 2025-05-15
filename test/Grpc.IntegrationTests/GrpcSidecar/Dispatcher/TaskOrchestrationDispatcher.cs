@@ -62,7 +62,7 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
 
             // Execute the orchestrator code and get back a set of new actions to take.
             // IMPORTANT: This IEnumerable<OrchestratorAction> may be lazily evaluated and should only be enumerated once!
-            OrchestratorExecutionResult result = await this.taskExecutor.ExecuteOrchestrator(
+            GrpcOrchestratorExecutionResult result = await this.taskExecutor.ExecuteOrchestrator(
                 instance,
                 workItem.OrchestrationRuntimeState.PastEvents,
                 workItem.OrchestrationRuntimeState.NewEvents);
@@ -87,6 +87,15 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                 }
 
                 continue;
+            }
+
+            ExecutionStartedEvent? executionStartedEvent = workItem.OrchestrationRuntimeState.NewEvents.OfType<ExecutionStartedEvent>().FirstOrDefault();
+
+            if (executionStartedEvent?.ParentTraceContext is not null)
+            {
+                executionStartedEvent.ParentTraceContext.ActivityStartTime = result.OrchestrationActivityStartTime;
+                executionStartedEvent.ParentTraceContext.Id = result.OrchestrationActivityId;
+                executionStartedEvent.ParentTraceContext.SpanId = result.OrchestrationActivitySpanId;
             }
 
             // Commit the changes to the durable store

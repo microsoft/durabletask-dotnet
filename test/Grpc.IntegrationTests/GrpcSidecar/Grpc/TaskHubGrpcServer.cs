@@ -20,7 +20,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
 {
     static readonly Task<P.CompleteTaskResponse> EmptyCompleteTaskResponse = Task.FromResult(new P.CompleteTaskResponse());
 
-    readonly ConcurrentDictionary<string, TaskCompletionSource<OrchestratorExecutionResult>> pendingOrchestratorTasks = new(StringComparer.OrdinalIgnoreCase);
+    readonly ConcurrentDictionary<string, TaskCompletionSource<GrpcOrchestratorExecutionResult>> pendingOrchestratorTasks = new(StringComparer.OrdinalIgnoreCase);
     readonly ConcurrentDictionary<string, TaskCompletionSource<ActivityExecutionResult>> pendingActivityTasks = new(StringComparer.OrdinalIgnoreCase);
 
     readonly ILogger log;
@@ -145,8 +145,6 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                         Tags = request.Tags.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
                         ParentTraceContext = request.ParentTraceContext is not null
                             ? new(request.ParentTraceContext.TraceParent, request.ParentTraceContext.TraceState)
-                            { 
-                            }
                             : null
                     },
                     OrchestrationInstance = instance,
@@ -364,16 +362,19 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     {
         if (!this.pendingOrchestratorTasks.TryRemove(
             request.InstanceId,
-            out TaskCompletionSource<OrchestratorExecutionResult>? tcs))
+            out TaskCompletionSource<GrpcOrchestratorExecutionResult>? tcs))
         {
             // TODO: Log?
             throw new RpcException(new Status(StatusCode.NotFound, $"Orchestration not found"));
         }
 
-        OrchestratorExecutionResult result = new()
+        GrpcOrchestratorExecutionResult result = new()
         {
             Actions = request.Actions.Select(ProtobufUtils.ToOrchestratorAction),
             CustomStatus = request.CustomStatus,
+            OrchestrationActivityId = request.OrchestrationID,
+            OrchestrationActivitySpanId = request.OrchestrationSpanID,
+            OrchestrationActivityStartTime = request.ActivityStartTime?.ToDateTimeOffset(),
         };
 
         tcs.TrySetResult(result);
@@ -463,14 +464,14 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     /// Invoked by the <see cref="TaskHubDispatcherHost"/> when a work item is available, proxies the call to execute an orchestrator over a gRPC channel.
     /// </summary>
     /// <inheritdoc />
-    async Task<OrchestratorExecutionResult> ITaskExecutor.ExecuteOrchestrator(
+    async Task<GrpcOrchestratorExecutionResult> ITaskExecutor.ExecuteOrchestrator(
         OrchestrationInstance instance,
         IEnumerable<HistoryEvent> pastEvents,
         IEnumerable<HistoryEvent> newEvents)
     {
         // Create a task completion source that represents the async completion of the orchestrator execution.
         // This must be done before we start the orchestrator execution.
-        TaskCompletionSource<OrchestratorExecutionResult> tcs =
+        TaskCompletionSource<GrpcOrchestratorExecutionResult> tcs =
             this.CreateTaskCompletionSourceForOrchestrator(instance.InstanceId);
 
         try
@@ -563,9 +564,9 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         }
     }
 
-    TaskCompletionSource<OrchestratorExecutionResult> CreateTaskCompletionSourceForOrchestrator(string instanceId)
+    TaskCompletionSource<GrpcOrchestratorExecutionResult> CreateTaskCompletionSourceForOrchestrator(string instanceId)
     {
-        TaskCompletionSource<OrchestratorExecutionResult> tcs = new();
+        TaskCompletionSource<GrpcOrchestratorExecutionResult> tcs = new();
         this.pendingOrchestratorTasks.TryAdd(instanceId, tcs);
         return tcs;
     }

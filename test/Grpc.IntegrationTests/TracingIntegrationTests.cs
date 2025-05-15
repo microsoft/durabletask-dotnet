@@ -18,18 +18,27 @@ public class TracingIntegrationTests : IntegrationTestBase
 
     static readonly ActivitySource TestActivitySource = new ActivitySource(nameof(TracingIntegrationTests));
 
-    [Fact]
-    public async Task Orchestration_Traces()
+    static ActivityListener CreateListener(string source, ICollection<Activity> activities)
     {
-        var activities = new List<Activity>();
+        ActivityListener listener = new();
 
-        using var listener = new ActivityListener();
-
-        listener.ShouldListenTo = s => s.Name == nameof(TracingIntegrationTests) || s.Name == "Microsoft.DurableTask";
+        listener.ShouldListenTo = s => s.Name == source;
         listener.Sample = (ref ActivityCreationOptions<ActivityContext> options) => ActivitySamplingResult.AllData;
         listener.ActivityStopped = a => activities.Add(a);
 
         ActivitySource.AddActivityListener(listener);
+
+        return listener;
+    }
+    
+    [Fact]
+    public async Task Orchestration_Traces()
+    {
+        var testActivities = new List<Activity>();
+        var coreActivities = new List<Activity>();
+
+        using var testListener = CreateListener(nameof(TracingIntegrationTests), testActivities);
+        using var coreListener = CreateListener("Microsoft.DurableTask", coreActivities);
 
         TaskName orchestratorName = nameof(Orchestration_Traces);
 
@@ -42,7 +51,7 @@ public class TracingIntegrationTests : IntegrationTestBase
                     nameof(PageableActivityAsync), (_, input) => PageableActivityAsync(input)));
         });
 
-        using (var testActivity = TestActivitySource.StartActivity("Test", ActivityKind.Client))
+        using (var activity = TestActivitySource.StartActivity("Test", ActivityKind.Client))
         {
             string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
                 orchestratorName, input: string.Empty);
@@ -50,13 +59,15 @@ public class TracingIntegrationTests : IntegrationTestBase
                 instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         }
 
-        var testActivity = activities.Single(a => a.OperationName == "Test");
+        testActivities.Count.Should().Be(1);
 
-        activities.Should()
-            .ContainSingle(a => a.OperationName == "orchestration:Orchestration_Traces")
-            .And.Match(a => a.par.Should().Be(testActivity.Id);
+        var testActivity = testActivities.Single();
+
+        coreActivities.Count.Should().Be(1);
         
-        activities.Should().HaveCountGreaterThan(0);
+        var coreActivity = coreActivities.Single();
+
+        coreActivity.ParentId.Should().Be(testActivity.Id);
     }
 
     static Task<Page<string>?> PageableActivityAsync(PageRequest? input)

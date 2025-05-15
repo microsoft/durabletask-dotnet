@@ -372,9 +372,9 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         {
             Actions = request.Actions.Select(ProtobufUtils.ToOrchestratorAction),
             CustomStatus = request.CustomStatus,
-            OrchestrationActivityId = request.OrchestrationID,
-            OrchestrationActivitySpanId = request.OrchestrationSpanID,
-            OrchestrationActivityStartTime = request.ActivityStartTime?.ToDateTimeOffset(),
+            OrchestrationActivityId = request.OrchestrationActivityID,
+            OrchestrationActivitySpanId = request.OrchestrationActivitySpanID,
+            OrchestrationActivityStartTime = request.OrchestrationActivityStartTime?.ToDateTimeOffset(),
         };
 
         tcs.TrySetResult(result);

@@ -289,9 +289,9 @@ static class ProtoUtils
             InstanceId = instanceId,
             CustomStatus = customStatus,
             CompletionToken = completionToken,
-            OrchestrationID = parentActivity?.Id,
-            OrchestrationSpanID = parentActivity?.SpanId.ToString(),
-            ActivityStartTime = parentActivity?.StartTimeUtc.ToTimestamp(),
+            OrchestrationActivityID = parentActivity?.Id,
+            OrchestrationActivitySpanID = parentActivity?.SpanId.ToString(),
+            OrchestrationActivityStartTime = parentActivity?.StartTimeUtc.ToTimestamp(),
         };
 
         foreach (OrchestratorAction action in actions)

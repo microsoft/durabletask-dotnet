@@ -34,16 +34,16 @@ public class TracingIntegrationTests : IntegrationTestBase
 
     static readonly string[] ActivitySourceNames = [TestActivitySourceName, CoreActivitySourceName];
 
+    static readonly ActivitySource TestActivitySource = new(TestActivitySourceName);
+
     [Fact]
     public async Task Orchestration_Traces()
     {
-        ActivitySource testActivitySource = new ActivitySource(nameof(TracingIntegrationTests));
-
         var activities = new List<Activity>();
 
         using var listener = CreateListener(ActivitySourceNames, activities);
 
-        TaskName orchestratorName = nameof(Orchestration_Traces);
+        string orchestratorName = nameof(Orchestration_Traces);
 
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
@@ -54,20 +54,25 @@ public class TracingIntegrationTests : IntegrationTestBase
                     nameof(PageableActivityAsync), (_, input) => PageableActivityAsync(input)));
         });
 
-        using (var activity = testActivitySource.StartActivity("Test", ActivityKind.Client))
+        string instanceId;
+
+        using (var activity = TestActivitySource.StartActivity("Test", ActivityKind.Client))
         {
-            string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
                 orchestratorName, input: string.Empty);
             OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
                 instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         }
 
-        var testActivity = activities.Single(a => a.Source == testActivitySource && a.OperationName == "Test");
+        var testActivity = activities.Single(a => a.Source == TestActivitySource && a.OperationName == "Test");
         var createActivity = activities.Single(a => a.Source.Name == CoreActivitySourceName && a.OperationName == "create_orchestration:Orchestration_Traces");
 
         // The creation activity should be parented to the test activity.
         createActivity.ParentId.Should().Be(testActivity.Id);
         createActivity.ParentSpanId.Should().Be(testActivity.SpanId);
+        createActivity.TagObjects.Should().ContainKey("durabletask.task.instance_id").WhoseValue.Should().Be(instanceId);
+        createActivity.TagObjects.Should().ContainKey("durabletask.task.name").WhoseValue.Should().Be(orchestratorName);
+        createActivity.TagObjects.Should().ContainKey("durabletask.type").WhoseValue.Should().Be("orchestration");
 
         var orchestrationActivities = activities.Where(a => a.Source.Name == CoreActivitySourceName && a.OperationName == "orchestration:Orchestration_Traces").ToList();
 
@@ -83,6 +88,10 @@ public class TracingIntegrationTests : IntegrationTestBase
             {
                 a.ParentId.Should().Be(createActivity.Id);
                 a.ParentSpanId.Should().Be(createActivity.SpanId);
+                
+                a.TagObjects.Should().ContainKey("durabletask.task.instance_id").WhoseValue.Should().Be(instanceId);
+                a.TagObjects.Should().ContainKey("durabletask.task.name").WhoseValue.Should().Be(orchestratorName);
+                a.TagObjects.Should().ContainKey("durabletask.type").WhoseValue.Should().Be("orchestration");
             });
         
         var orchestrationActivity = orchestrationActivities.First();
@@ -95,11 +104,34 @@ public class TracingIntegrationTests : IntegrationTestBase
             {
                 a.ParentId.Should().Be(orchestrationActivity.Id);
                 a.ParentSpanId.Should().Be(orchestrationActivity.SpanId);
+                
+                a.TagObjects.Should().ContainKey("durabletask.task.instance_id").WhoseValue.Should().Be(instanceId);
+                a.TagObjects.Should().ContainKey("durabletask.task.name").WhoseValue.Should().Be(nameof(PageableActivityAsync));
+                a.TagObjects.Should().ContainKey("durabletask.type").WhoseValue.Should().Be("activity");
+            });
+
+        activityActivities
+            .Zip(Enumerable.Range(0, Int32.MaxValue))
+            .Should().AllSatisfy(indexed =>
+            {
+                indexed.First.TagObjects.Should().ContainKey("durabletask.task.task_id").WhoseValue.Should().Be(indexed.Second);
+            });
+
+        var activityExecutionActivities = activities.Where(a => a.Source.Name == TestActivitySourceName && a.OperationName == nameof(PageableActivityAsync)).ToList();
+
+        activityExecutionActivities
+            .Should().HaveCount(activityActivities.Count)
+            .And.AllSatisfy(a =>
+            {
+                a.ParentId.Should().BeOneOf(activityActivities.Select(aa => aa.Id));
+                a.ParentSpanId.ToString().Should().BeOneOf(activityActivities.Select(aa => aa.SpanId.ToString()));
             });
     }
 
     static Task<Page<string>?> PageableActivityAsync(PageRequest? input)
     {
+        using var activity = TestActivitySource.StartActivity();
+
         int pageSize = input?.PageSize ?? 3;
         Page<string> CreatePage(string? next)
             => new (Enumerable.Range(0, pageSize).Select(x => $"item_{x}").ToList(), next);

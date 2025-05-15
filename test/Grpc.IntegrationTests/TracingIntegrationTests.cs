@@ -65,12 +65,21 @@ public class TracingIntegrationTests : IntegrationTestBase
         var testActivity = activities.Single(a => a.Source == testActivitySource && a.OperationName == "Test");
         var createActivity = activities.Single(a => a.Source.Name == CoreActivitySourceName && a.OperationName == "create_orchestration:Orchestration_Traces");
 
+        // The creation activity should be parented to the test activity.
         createActivity.ParentId.Should().Be(testActivity.Id);
         createActivity.ParentSpanId.Should().Be(testActivity.SpanId);
 
-        activities
-            .Where(a => a.Source.Name == CoreActivitySourceName && a.OperationName == "orchestration:Orchestration_Traces")
-            .Should().AllSatisfy(a =>
+        var orchestrationActivities = activities.Where(a => a.Source.Name == CoreActivitySourceName && a.OperationName == "orchestration:Orchestration_Traces");
+
+        // The orchestration activities should be the same "logical" activity.
+        orchestrationActivities.Select(a => a.StartTimeUtc).Distinct().Should().HaveCount(1);
+        orchestrationActivities.Select(a => a.Id).Distinct().Should().HaveCount(1);
+        orchestrationActivities.Select(a => a.SpanId).Distinct().Should().HaveCount(1);
+
+        // The orchestration activities should be parented to the create activity.
+        orchestrationActivities
+            .Should().HaveCountGreaterThan(0)
+            .And.AllSatisfy(a =>
             {
                 a.ParentId.Should().Be(createActivity.Id);
                 a.ParentSpanId.Should().Be(createActivity.SpanId);

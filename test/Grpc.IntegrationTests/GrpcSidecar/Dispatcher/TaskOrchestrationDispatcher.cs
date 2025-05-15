@@ -206,6 +206,11 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                     scheduleTaskAction.Version,
                     scheduleTaskAction.Input);
 
+                if (action is GrpcScheduleTaskOrchestratorAction { ParentTraceContext: not null } grpcAction)
+                {
+                    scheduledEvent.ParentTraceContext ??= new(grpcAction.ParentTraceContext.TraceParent, grpcAction.ParentTraceContext.TraceState);
+                }
+
                 newActivityMessages ??= new List<TaskMessage>();
                 newActivityMessages.Add(new TaskMessage
                 {

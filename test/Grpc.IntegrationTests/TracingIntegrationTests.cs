@@ -69,7 +69,7 @@ public class TracingIntegrationTests : IntegrationTestBase
         createActivity.ParentId.Should().Be(testActivity.Id);
         createActivity.ParentSpanId.Should().Be(testActivity.SpanId);
 
-        var orchestrationActivities = activities.Where(a => a.Source.Name == CoreActivitySourceName && a.OperationName == "orchestration:Orchestration_Traces");
+        var orchestrationActivities = activities.Where(a => a.Source.Name == CoreActivitySourceName && a.OperationName == "orchestration:Orchestration_Traces").ToList();
 
         // The orchestration activities should be the same "logical" activity.
         orchestrationActivities.Select(a => a.StartTimeUtc).Distinct().Should().HaveCount(1);
@@ -83,6 +83,18 @@ public class TracingIntegrationTests : IntegrationTestBase
             {
                 a.ParentId.Should().Be(createActivity.Id);
                 a.ParentSpanId.Should().Be(createActivity.SpanId);
+            });
+        
+        var orchestrationActivity = orchestrationActivities.First();
+
+        var activityActivities = activities.Where(a => a.Source.Name == CoreActivitySourceName && a.OperationName == "activity:PageableActivityAsync").ToList();
+
+        activityActivities
+            .Should().HaveCountGreaterThan(0)
+            .And.AllSatisfy(a =>
+            {
+                a.ParentId.Should().Be(orchestrationActivity.Id);
+                a.ParentSpanId.Should().Be(orchestrationActivity.SpanId);
             });
     }
 

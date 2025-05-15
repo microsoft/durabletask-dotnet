@@ -6,8 +6,10 @@ using DurableTask.Core;
 using DurableTask.Core.Command;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
+using DurableTask.Core.Tracing;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
+using Microsoft.DurableTask.Sidecar.Dispatcher;
 using Proto = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Sidecar.Grpc;
@@ -240,12 +242,15 @@ public static class ProtobufUtils
         switch (a.OrchestratorActionTypeCase)
         {
             case Proto.OrchestratorAction.OrchestratorActionTypeOneofCase.ScheduleTask:
-                return new ScheduleTaskOrchestratorAction
+                return new GrpcScheduleTaskOrchestratorAction
                 {
                     Id = a.Id,
                     Input = a.ScheduleTask.Input,
                     Name = a.ScheduleTask.Name,
                     Version = a.ScheduleTask.Version,
+                    ParentTraceContext = a.ScheduleTask.ParentTraceContext is not null
+                        ? new DistributedTraceContext(a.ScheduleTask.ParentTraceContext.TraceParent, a.ScheduleTask.ParentTraceContext.TraceState)
+                        : null,
                 };
             case Proto.OrchestratorAction.OrchestratorActionTypeOneofCase.CreateSubOrchestration:
                 return new CreateSubOrchestrationAction

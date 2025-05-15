@@ -523,6 +523,13 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                         InstanceId = instance.InstanceId,
                         ExecutionId = instance.ExecutionId,
                     },
+                    ParentTraceContext = activityEvent.ParentTraceContext is not null
+                        ? new()
+                        {
+                            TraceParent = activityEvent.ParentTraceContext.TraceParent,
+                            TraceState = activityEvent.ParentTraceContext.TraceState,
+                        }
+                        : null,
                 }
             });
         }

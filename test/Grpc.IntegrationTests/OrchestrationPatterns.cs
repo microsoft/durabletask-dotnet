@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.DurableTask.Worker;
@@ -213,7 +214,7 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         IReadOnlyCollection<LogEntry> workerLogs = this.GetLogs("Microsoft.DurableTask.Worker");
         Assert.NotEmpty(workerLogs);
-            
+
         // Validate logs.
         Assert.Single(workerLogs, log => MatchLog(
             log,
@@ -652,7 +653,6 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         Assert.NotNull(output);
         Assert.Equal(output, $"Orchestration version: {version}");
-
     }
 
     [Fact]
@@ -832,6 +832,116 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.NotNull(output);
         // The worker doesn't pass it's version through the context, so we check the client version. The fact that it passed indicates versioning was ignored.
         Assert.Equal(output, $"Orchestration version: {clientVersion}");
+    }
+
+    [Fact]
+    public async Task SubOrchestrationInheritsDefaultVersion()
+    {
+        var version = "0.1";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallSubOrchestratorAsync<string>("Versioned_Sub_Orchestration");
+                })
+                .AddOrchestratorFunc<string, string>("Versioned_Sub_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Sub Orchestration version: {input}";
+                }));
+            b.UseVersioning(new DurableTaskWorkerOptions.VersioningOptions
+            {
+                DefaultVersion = version
+            });
+        }, c =>
+        {
+            c.UseDefaultVersion(version);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        var output = result.ReadOutputAs<string>();
+
+        Assert.NotNull(output);
+        Assert.Equal($"Sub Orchestration version: {version}", output);
+    }
+
+    [Theory]
+    [InlineData("0.2")]
+    [InlineData("")]
+    public async Task OrchestrationTaskVersionOverridesDefaultVersion(string overrideVersion)
+    {
+        var version = "0.1";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Orchestration version: {input}";
+                }));
+        }, c =>
+        {
+            c.UseDefaultVersion(version);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", string.Empty, new StartOrchestrationOptions
+        {
+            Version = overrideVersion
+        });
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        var output = result.ReadOutputAs<string>();
+
+        Assert.NotNull(output);
+        Assert.Equal($"Orchestration version: {overrideVersion}", output);
+    }
+
+    [Theory]
+    [InlineData("0.2")]
+    [InlineData("")]
+    public async Task SubOrchestrationTaskVersionOverridesDefaultVersion(string overrideVersion)
+    {
+        var version = "0.1";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallSubOrchestratorAsync<string>("Versioned_Sub_Orchestration", new SubOrchestrationOptions
+                    {
+                        Version = overrideVersion
+                    });
+                })
+                .AddOrchestratorFunc<string, string>("Versioned_Sub_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Sub Orchestration version: {input}";
+                }));
+            b.UseVersioning(new DurableTaskWorkerOptions.VersioningOptions
+            {
+                DefaultVersion = version,
+            });
+        }, c =>
+        {
+            c.UseDefaultVersion(version);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        var output = result.ReadOutputAs<string>();
+
+        Assert.NotNull(output);
+        Assert.Equal($"Sub Orchestration version: {overrideVersion}", output);
     }
 
     // TODO: Test for multiple external events with the same name

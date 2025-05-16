@@ -1,8 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
+using DurableTask.Core.Tracing;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Entities;
 
@@ -90,7 +92,10 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
             EntityMessageEvent.GetCappedScheduledTime(
                 DateTime.UtcNow,
                 this.options.Entities.MaxSignalDelayTimeOrDefault,
-                scheduledTime?.UtcDateTime));
+                scheduledTime?.UtcDateTime),
+            Activity.Current is { } activity ? new DistributedTraceContext(activity.Id!, activity.TraceStateString) : null,
+            requestTime: DateTimeOffset.UtcNow,
+            createTrace: true);
 
         await this.options.Client!.SendTaskOrchestrationMessageAsync(eventToSend.AsTaskMessage());
     }

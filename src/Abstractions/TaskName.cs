@@ -44,6 +44,7 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// Task versions is currently locked to <see cref="string.Empty" /> as it is not yet integrated into task
     /// identification. This is being left here as we intend to support it soon.
     /// </remarks>
+    [Obsolete("Refer to TaskVersion instead.")]
     public string Version { get; }
 
     /// <summary>

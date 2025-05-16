@@ -204,6 +204,11 @@ public class DurableTaskWorkerOptions
         public string Version { get; set; } = string.Empty;
 
         /// <summary>
+        /// Gets or sets the default version that will be used for starting new orchestrations.
+        /// </summary>
+        public string DefaultVersion { get; set; } = string.Empty;
+
+        /// <summary>
         /// Gets or sets the versioning strategy for the Durable Task worker.
         /// </summary>
         public VersionMatchStrategy MatchStrategy { get; set; } = VersionMatchStrategy.None;

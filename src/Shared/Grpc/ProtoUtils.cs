@@ -617,16 +617,16 @@ static class ProtoUtils
                 return new OperationResult()
                 {
                     Result = operationResult.Success.Result,
-                    StartTime = operationResult.Success.StartTime?.ToDateTime(),
-                    EndTime = operationResult.Success.EndTime?.ToDateTime(),
+                    StartTimeUtc = operationResult.Success.StartTimeUtc?.ToDateTime(),
+                    EndTimeUtc = operationResult.Success.EndTimeUtc?.ToDateTime(),
                 };
 
             case P.OperationResult.ResultTypeOneofCase.Failure:
                 return new OperationResult()
                 {
                     FailureDetails = operationResult.Failure.FailureDetails.ToCore(),
-                    StartTime = operationResult.Failure.StartTime?.ToDateTime(),
-                    EndTime = operationResult.Failure.EndTime?.ToDateTime(),
+                    StartTimeUtc = operationResult.Failure.StartTimeUtc?.ToDateTime(),
+                    EndTimeUtc = operationResult.Failure.EndTimeUtc?.ToDateTime(),
                 };
 
             default:
@@ -654,8 +654,8 @@ static class ProtoUtils
                 Success = new P.OperationResultSuccess()
                 {
                     Result = operationResult.Result,
-                    StartTime = operationResult.StartTime?.ToTimestamp(),
-                    EndTime = operationResult.EndTime?.ToTimestamp(),
+                    StartTimeUtc = operationResult.StartTimeUtc?.ToTimestamp(),
+                    EndTimeUtc = operationResult.EndTimeUtc?.ToTimestamp(),
                 },
             };
         }
@@ -666,8 +666,8 @@ static class ProtoUtils
                 Failure = new P.OperationResultFailure()
                 {
                     FailureDetails = ToProtobuf(operationResult.FailureDetails),
-                    StartTime = operationResult.StartTime?.ToTimestamp(),
-                    EndTime = operationResult.EndTime?.ToTimestamp(),
+                    StartTimeUtc = operationResult.StartTimeUtc?.ToTimestamp(),
+                    EndTimeUtc = operationResult.EndTimeUtc?.ToTimestamp(),
                 },
             };
         }
@@ -696,7 +696,7 @@ static class ProtoUtils
                     Input = operationAction.SendSignal.Input,
                     InstanceId = operationAction.SendSignal.InstanceId,
                     ScheduledTime = operationAction.SendSignal.ScheduledTime?.ToDateTime(),
-                    RequestTime = operationAction.SendSignal.RequestTime?.ToDateTime(),
+                    RequestTime = operationAction.SendSignal.RequestTime?.ToDateTimeOffset(),
                     ParentTraceContext = operationAction.SendSignal.ParentTraceContext != null ?
                         new DistributedTraceContext(
                             operationAction.SendSignal.ParentTraceContext.TraceParent,
@@ -712,7 +712,7 @@ static class ProtoUtils
                     InstanceId = operationAction.StartNewOrchestration.InstanceId,
                     Version = operationAction.StartNewOrchestration.Version,
                     ScheduledStartTime = operationAction.StartNewOrchestration.ScheduledTime?.ToDateTime(),
-                    RequestTime = operationAction.StartNewOrchestration.RequestTime?.ToDateTime(),
+                    RequestTime = operationAction.StartNewOrchestration.RequestTime?.ToDateTimeOffset(),
                     ParentTraceContext = operationAction.StartNewOrchestration.ParentTraceContext != null ?
                         new DistributedTraceContext(
                             operationAction.StartNewOrchestration.ParentTraceContext.TraceParent,

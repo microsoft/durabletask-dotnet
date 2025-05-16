@@ -74,8 +74,8 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
                 results.Add(new OperationResult()
                 {
                     Result = serializedResult,
-                    StartTime = startTime,
-                    EndTime = DateTime.UtcNow,
+                    StartTimeUtc = startTime,
+                    EndTimeUtc = DateTime.UtcNow,
                 });
 
                 // the user code completed without exception, so we commit the current state and actions.
@@ -88,8 +88,8 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
                 results.Add(new OperationResult()
                 {
                     FailureDetails = new FailureDetails(applicationException),
-                    StartTime = startTime,
-                    EndTime = DateTime.UtcNow,
+                    StartTimeUtc = startTime,
+                    EndTimeUtc = DateTime.UtcNow,
                 });
 
                 // the user code threw an unhandled exception, so we roll back the state and the actions.
@@ -232,7 +232,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
                 Name = operationName,
                 Input = this.dataConverter.Serialize(input),
                 ScheduledTime = options?.SignalTime?.UtcDateTime,
-                RequestTime = DateTime.UtcNow,
+                RequestTime = DateTimeOffset.UtcNow,
                 ParentTraceContext = this.parentTraceContext,
             });
         }
@@ -249,7 +249,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
                 InstanceId = instanceId,
                 Input = this.dataConverter.Serialize(input),
                 ScheduledStartTime = options?.StartAt?.UtcDateTime,
-                RequestTime = DateTime.UtcNow,
+                RequestTime = DateTimeOffset.UtcNow,
                 ParentTraceContext = this.parentTraceContext,
             });
             return instanceId;

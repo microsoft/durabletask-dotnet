@@ -157,6 +157,102 @@ public class TraceHelper
         return newActivity;
     }
 
+    /// <summary>
+    /// Starts a new trace activity for (task) activity that represents the time between when the task message
+    /// is enqueued and when the response message is received.
+    /// </summary>
+    /// <param name="instance">The associated <see cref="OrchestrationInstance"/>.</param>
+    /// <param name="taskScheduledEvent">The associated <see cref="TaskScheduledEvent"/>.</param>
+    /// <returns>
+    /// Returns a newly started <see cref="Activity"/> with (task) activity and orchestration-specific metadata.
+    /// </returns>
+    internal static Activity? StartTraceActivityForSchedulingTask(
+        string? instanceId,
+        P.HistoryEvent historyEvent,
+        P.TaskScheduledEvent taskScheduledEvent)
+    {
+        if (taskScheduledEvent == null)
+        {
+            return null;
+        }
+
+        Activity? newActivity = ActivityTraceSource.StartActivity(
+            CreateSpanName(TraceActivityConstants.Activity, taskScheduledEvent.Name, taskScheduledEvent.Version),
+            kind: ActivityKind.Client,
+            startTime: historyEvent.Timestamp?.ToDateTimeOffset() ?? default,
+            parentContext: Activity.Current?.Context ?? default);
+
+        if (newActivity == null)
+        {
+            return null;
+        }
+
+        if (taskScheduledEvent.ParentTraceContext != null)
+        {
+            if (ActivityContext.TryParse(taskScheduledEvent.ParentTraceContext.TraceParent, taskScheduledEvent.ParentTraceContext?.TraceState, out ActivityContext parentContext))
+            {
+                newActivity.SetSpanId(parentContext.SpanId.ToString());
+            }
+        }
+
+        newActivity.AddTag(Schema.Task.Type, TraceActivityConstants.Activity);
+        newActivity.AddTag(Schema.Task.Name, taskScheduledEvent.Name);
+        newActivity.AddTag(Schema.Task.InstanceId, instanceId);
+        newActivity.AddTag(Schema.Task.TaskId, historyEvent.EventId);
+
+        if (!string.IsNullOrEmpty(taskScheduledEvent.Version))
+        {
+            newActivity.AddTag(Schema.Task.Version, taskScheduledEvent.Version);
+        }
+
+        return newActivity;
+    }
+
+    /// <summary>
+    /// Emits a new trace activity for a (task) activity that successfully completes.
+    /// </summary>
+    /// <param name="taskScheduledEvent">The associated <see cref="TaskScheduledEvent"/>.</param>
+    /// <param name="orchestrationInstance">The associated <see cref="OrchestrationInstance"/>.</param>
+    internal static void EmitTraceActivityForTaskCompleted(
+        string? instanceId,
+        P.HistoryEvent historyEvent,
+        P.TaskScheduledEvent taskScheduledEvent)
+    {
+        // The parent of this is the parent orchestration span ID. It should be the client span which started this
+        Activity? activity = StartTraceActivityForSchedulingTask(instanceId, historyEvent, taskScheduledEvent);
+
+        activity?.Dispose();
+    }
+
+    /// <summary>
+    /// Emits a new trace activity for a (task) activity that fails.
+    /// </summary>
+    /// <param name="orchestrationInstance">The associated <see cref="OrchestrationInstance"/>.</param>
+    /// <param name="taskScheduledEvent">The associated <see cref="TaskScheduledEvent"/>.</param>
+    /// <param name="failedEvent">The associated <see cref="TaskFailedEvent"/>.</param>
+    /// <param name="errorPropagationMode">Specifies the method to propagate unhandled exceptions to parent orchestrations.</param>
+    internal static void EmitTraceActivityForTaskFailed(
+        string? instanceId,
+        P.HistoryEvent historyEvent,
+        P.TaskScheduledEvent taskScheduledEvent,
+        P.TaskFailedEvent? failedEvent)
+    {
+        Activity? activity = StartTraceActivityForSchedulingTask(instanceId, historyEvent, taskScheduledEvent);
+
+        if (activity is null)
+        {
+            return;
+        }
+
+        if (failedEvent != null)
+        {
+            string statusDescription = failedEvent.FailureDetails?.ErrorMessage ?? "Unspecified task activity failure";
+            activity?.SetStatus(ActivityStatusCode.Error, statusDescription);
+        }
+
+        activity?.Dispose();
+    }
+
     static string CreateSpanName(string spanDescription, string? taskName, string? taskVersion)
     {
         if (!string.IsNullOrEmpty(taskVersion))

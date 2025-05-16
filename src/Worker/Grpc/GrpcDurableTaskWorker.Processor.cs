@@ -368,6 +368,15 @@ sealed partial class GrpcDurableTaskWorker
 
             using Activity? traceActivity = TraceHelper.StartTraceActivityForOrchestrationExecution(executionStartedEvent);
 
+            foreach (var newEvent in request.NewEvents)
+            {
+                if (newEvent.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.TaskCompleted)
+                {
+                    var taskScheduledEvent = request.PastEvents.Where(x => x.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.TaskScheduled).LastOrDefault(x => x.EventId == newEvent.TaskCompleted.TaskScheduledId);
+                    TraceHelper.EmitTraceActivityForTaskCompleted(request.InstanceId, taskScheduledEvent, taskScheduledEvent.TaskScheduled);
+                }
+            }
+
             OrchestratorExecutionResult? result = null;
             P.TaskFailureDetails? failureDetails = null;
             TaskName name = new("(unknown)");

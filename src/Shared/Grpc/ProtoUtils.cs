@@ -302,16 +302,25 @@ static class ProtoUtils
             {
                 case OrchestratorActionType.ScheduleOrchestrator:
                     var scheduleTaskAction = (ScheduleTaskOrchestratorAction)action;
+
+                    ActivityContext? clientActivityContext = null;
+
+                    if (parentActivity != null)
+                    {
+                        ActivitySpanId clientSpanId = ActivitySpanId.CreateRandom();
+                        clientActivityContext = new(parentActivity.TraceId, clientSpanId, parentActivity.ActivityTraceFlags, parentActivity.TraceStateString);
+                    }
+
                     protoAction.ScheduleTask = new P.ScheduleTaskAction
                     {
                         Name = scheduleTaskAction.Name,
                         Version = scheduleTaskAction.Version,
                         Input = scheduleTaskAction.Input,
-                        ParentTraceContext = parentActivity is not null
+                        ParentTraceContext = clientActivityContext is not null
                             ? new P.TraceContext
                             {
-                                TraceParent = parentActivity.Id,
-                                TraceState = parentActivity.TraceStateString,
+                                TraceParent = $"00-{clientActivityContext.Value.TraceId}-{clientActivityContext.Value.SpanId}-0{clientActivityContext.Value.TraceFlags:d}",
+                                TraceState = clientActivityContext.Value.TraceState,
                             }
                             : null,
                     };

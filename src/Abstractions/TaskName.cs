@@ -16,6 +16,7 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// <param name="name">The name of the task. Providing <c>null</c> will yield the default struct.</param>
     public TaskName(string name)
     {
+#pragma warning disable 0618
         if (name is null)
         {
             // Force the default struct when null is passed in.
@@ -27,6 +28,7 @@ public readonly struct TaskName : IEquatable<TaskName>
             this.Name = name;
             this.Version = string.Empty; // expose setting Version only when we actually consume it.
         }
+#pragma warning restore 0618
     }
 
     /// <summary>
@@ -44,6 +46,7 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// Task versions is currently locked to <see cref="string.Empty" /> as it is not yet integrated into task
     /// identification. This is being left here as we intend to support it soon.
     /// </remarks>
+    [Obsolete("Refer to TaskVersion instead.")]
     public string Version { get; }
 
     /// <summary>
@@ -122,6 +125,7 @@ public readonly struct TaskName : IEquatable<TaskName>
     /// <returns>The name and optional version of the current <see cref="TaskName"/> instance.</returns>
     public override string ToString()
     {
+#pragma warning disable 0618
         if (string.IsNullOrEmpty(this.Version))
         {
             return this.Name;
@@ -130,5 +134,6 @@ public readonly struct TaskName : IEquatable<TaskName>
         {
             return this.Name + ":" + this.Version;
         }
+#pragma warning restore 0618
     }
 }

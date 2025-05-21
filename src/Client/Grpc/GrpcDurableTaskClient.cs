@@ -80,9 +80,9 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
         // We're explicitly OK with an empty version from the options as that had to be explicitly set. It should take precedence over the default.
         string version = string.Empty;
-        if (options != null && options.Version != null)
+        if (options?.Version is { } v)
         {
-            version = options.Version;
+            version = v;
         }
         else if (!string.IsNullOrEmpty(this.options.DefaultVersion))
         {

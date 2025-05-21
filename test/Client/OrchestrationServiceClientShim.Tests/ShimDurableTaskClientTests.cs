@@ -400,7 +400,7 @@ public class ShimDurableTaskClientTests
             }
 
             return Guid.TryParse(m.OrchestrationInstance.ExecutionId, out _)
-                && @event.Name == name.Name && @event.Version == name.Version
+                && @event.Name == name.Name && @event.Version == (options?.Version ?? string.Empty)
                 && @event.OrchestrationInstance == m.OrchestrationInstance
                 && @event.EventId == -1
                 && @event.Input == JsonDataConverter.Default.Serialize(input);

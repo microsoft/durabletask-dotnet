@@ -139,6 +139,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         try
         {
             // TODO: Cancellation (https://github.com/microsoft/durabletask-dotnet/issues/7)
+#pragma warning disable 0618
             if (options?.Retry?.Policy is RetryPolicy policy)
             {
                 return await this.innerContext.ScheduleWithRetry<T>(
@@ -165,6 +166,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             // Hide the core DTFx types and instead use our own
             throw new TaskFailedException(name, e.ScheduleId, e);
         }
+#pragma warning restore 0618
     }
 
     /// <inheritdoc/>
@@ -177,10 +179,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         static string? GetInstanceId(TaskOptions? options)
             => options is SubOrchestrationOptions derived ? derived.InstanceId : null;
         string instanceId = GetInstanceId(options) ?? this.NewGuid().ToString("N");
-        string defaultVersion = this.invocationContext.Options != null && this.invocationContext.Options.Versioning != null
-            ? this.invocationContext.Options.Versioning.DefaultVersion
-            : string.Empty;
-        string version = options != null && options is SubOrchestrationOptions subOptions ? subOptions.Version : defaultVersion;
+        string defaultVersion = this.invocationContext.Options?.Versioning?.DefaultVersion ?? string.Empty;
+        string version = options is SubOrchestrationOptions subOptions ? subOptions.Version : defaultVersion;
 
         Check.NotEntity(this.invocationContext.Options.EnableEntitySupport, instanceId);
 

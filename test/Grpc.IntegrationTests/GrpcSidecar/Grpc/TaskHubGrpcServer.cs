@@ -6,15 +6,15 @@ using System.Diagnostics;
 using DurableTask.Core;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
-using Microsoft.DurableTask.Sidecar.Dispatcher;
+using Dapr.DurableTask.Sidecar.Dispatcher;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using P = Microsoft.DurableTask.Protobuf;
+using P = Dapr.DurableTask.Protobuf;
 
-namespace Microsoft.DurableTask.Sidecar.Grpc;
+namespace Dapr.DurableTask.Sidecar.Grpc;
 
 public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBase, ITaskExecutor
 {
@@ -50,7 +50,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
 
         this.service = service;
         this.client = client;
-        this.log = loggerFactory.CreateLogger("Microsoft.DurableTask.Sidecar");
+        this.log = loggerFactory.CreateLogger("Dapr.DurableTask.Sidecar");
         this.dispatcherHost = new TaskHubDispatcherHost(
             loggerFactory,
             trafficSignal: this.isConnectedSignal,

@@ -4,7 +4,7 @@
 using DurableTask.Core;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Dapr.DurableTask.Sidecar.Dispatcher;
 
 class TaskHubDispatcherHost
 {
@@ -21,7 +21,7 @@ class TaskHubDispatcherHost
         ITaskExecutor taskExecutor)
     {
         this.orchestrationService = orchestrationService ?? throw new ArgumentNullException(nameof(orchestrationService));
-        this.log = loggerFactory.CreateLogger("Microsoft.DurableTask.Sidecar");
+        this.log = loggerFactory.CreateLogger("Dapr.DurableTask.Sidecar");
 
         this.orchestrationDispatcher = new TaskOrchestrationDispatcher(log, trafficSignal, orchestrationService, taskExecutor);
         this.activityDispatcher = new TaskActivityDispatcher(log, trafficSignal, orchestrationService, taskExecutor);

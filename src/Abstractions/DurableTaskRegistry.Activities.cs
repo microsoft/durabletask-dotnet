@@ -3,11 +3,11 @@
 
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Container for registered <see cref="ITaskOrchestrator" />, <see cref="ITaskActivity" />,
-/// and <see cref="Microsoft.DurableTask.Entities.ITaskEntity"/> implementations.
+/// and <see cref="Dapr.DurableTask.Entities.ITaskEntity"/> implementations.
 /// </summary>
 public sealed partial class DurableTaskRegistry
 {

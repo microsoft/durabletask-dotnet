@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.ScheduledTasks;
+namespace Dapr.DurableTask.ScheduledTasks;
 
 /// <summary>
 /// Exception thrown when an invalid state transition is attempted on a schedule.

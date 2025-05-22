@@ -1,10 +1,10 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Entities;
+using Dapr.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask
+namespace Dapr.DurableTask
 {
     /// <summary>
     /// Log messages.
@@ -36,7 +36,7 @@ namespace Microsoft.DurableTask
         public static partial void ActivityFailed(this ILogger logger, Exception ex, string instanceId, string name);
 
         /// <summary>
-        /// Creates a logger named "Microsoft.DurableTask.Worker" with an optional subcategory.
+        /// Creates a logger named "Dapr.DurableTask.Worker" with an optional subcategory.
         /// </summary>
         /// <param name="loggerFactory">The logger factory to use to create the logger.</param>
         /// <param name="subcategory">The subcategory of the logger. For example, "Activities" or "Orchestrations".
@@ -44,7 +44,7 @@ namespace Microsoft.DurableTask
         /// <returns>The generated <see cref="ILogger"/>.</returns>
         internal static ILogger CreateWorkerLogger(ILoggerFactory loggerFactory, string? subcategory = null)
         {
-            string categoryName = "Microsoft.DurableTask.Worker";
+            string categoryName = "Dapr.DurableTask.Worker";
             if (!string.IsNullOrEmpty(subcategory))
             {
                 categoryName += "." + subcategory;

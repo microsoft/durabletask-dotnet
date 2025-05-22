@@ -4,7 +4,7 @@
 using System.Reflection;
 using DotNext;
 
-namespace Microsoft.DurableTask.Entities.Tests;
+namespace Dapr.DurableTask.Entities.Tests;
 
 public class EntityTaskEntityTests
 {
@@ -165,7 +165,7 @@ public class EntityTaskEntityTests
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage(error)
-            .Where(x => x.StackTrace!.StartsWith("   at Microsoft.DurableTask.Entities.Tests.EntityTaskEntityTests.TestEntity.Throws(String message)"));
+            .Where(x => x.StackTrace!.StartsWith("   at Dapr.DurableTask.Entities.Tests.EntityTaskEntityTests.TestEntity.Throws(String message)"));
     }
 
 #pragma warning disable CA1822 // Mark members as static

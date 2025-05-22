@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Exception that gets thrown when a durable task, such as an activity or a sub-orchestration, fails with an

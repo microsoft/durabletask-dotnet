@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics.CodeAnalysis;
-using Microsoft.DurableTask.Entities;
+using Dapr.DurableTask.Entities;
 
-namespace Microsoft.DurableTask.Worker;
+namespace Dapr.DurableTask.Worker;
 
 /// <summary>
 /// A factory for creating orchestrators and activities.

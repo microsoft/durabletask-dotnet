@@ -5,7 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace Microsoft.DurableTask.Worker.Grpc.Internal;
+namespace Dapr.DurableTask.Worker.Grpc.Internal;
 
 /// <summary>
 /// Provides access to configuring internal options for the gRPC worker.

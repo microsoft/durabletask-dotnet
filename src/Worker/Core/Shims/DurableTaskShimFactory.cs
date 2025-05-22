@@ -3,14 +3,14 @@
 
 using DurableTask.Core;
 using DurableTask.Core.Entities;
-using Microsoft.DurableTask.Entities;
+using Dapr.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Microsoft.DurableTask.Worker.Shims;
+namespace Dapr.DurableTask.Worker.Shims;
 
 /// <summary>
-/// A shim factory for bridging between types from DurableTask.Core and those from Microsoft.DurableTask.Abstractions.
+/// A shim factory for bridging between types from DurableTask.Core and those from Dapr.DurableTask.Abstractions.
 /// </summary>
 /// <remarks>
 /// This class is intended for use with alternate .NET-based durable task runtimes. It's not intended for use

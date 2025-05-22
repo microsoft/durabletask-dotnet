@@ -3,7 +3,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-namespace Microsoft.DurableTask.Entities;
+namespace Dapr.DurableTask.Entities;
 
 /// <summary>
 /// Feature for interacting with durable entities from an orchestration.

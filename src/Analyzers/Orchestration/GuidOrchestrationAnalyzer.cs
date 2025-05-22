@@ -5,9 +5,9 @@ using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
-using static Microsoft.DurableTask.Analyzers.Orchestration.GuidOrchestrationAnalyzer;
+using static Dapr.DurableTask.Analyzers.Orchestration.GuidOrchestrationAnalyzer;
 
-namespace Microsoft.DurableTask.Analyzers.Orchestration;
+namespace Dapr.DurableTask.Analyzers.Orchestration;
 
 /// <summary>
 /// Analyzer that reports a warning when Guid.NewGuid() is used in an orchestration method.

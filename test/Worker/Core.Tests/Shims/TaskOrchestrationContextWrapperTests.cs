@@ -4,7 +4,7 @@
 using DurableTask.Core;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Microsoft.DurableTask.Worker.Shims;
+namespace Dapr.DurableTask.Worker.Shims;
 
 public class TaskOrchestrationContextWrapperTests
 {

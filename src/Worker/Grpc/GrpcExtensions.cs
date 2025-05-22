@@ -4,7 +4,7 @@
 using System.Runtime.CompilerServices;
 using Grpc.Core;
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Extensions for gRPC.

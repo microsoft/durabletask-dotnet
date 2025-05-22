@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.Worker.Shims;
+namespace Dapr.DurableTask.Worker.Shims;
 
 /// <summary>
 /// Initializes a new instance of the <see cref="OrchestrationInvocationContext"/> class.

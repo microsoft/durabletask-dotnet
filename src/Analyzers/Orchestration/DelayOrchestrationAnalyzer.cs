@@ -5,9 +5,9 @@ using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
-using static Microsoft.DurableTask.Analyzers.Orchestration.DelayOrchestrationAnalyzer;
+using static Dapr.DurableTask.Analyzers.Orchestration.DelayOrchestrationAnalyzer;
 
-namespace Microsoft.DurableTask.Analyzers.Orchestration;
+namespace Dapr.DurableTask.Analyzers.Orchestration;
 
 /// <summary>
 /// Analyzer that reports a warning when Task.Delay or Thread.Sleep is used in an orchestration method.

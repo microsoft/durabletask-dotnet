@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Microsoft.DurableTask.Client;
+namespace Dapr.DurableTask.Client;
 
 /// <summary>
 /// A builder for configuring and adding a <see cref="DurableTaskClient" /> to the service container.

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Worker.Tests;
+namespace Dapr.DurableTask.Worker.Tests;
 
 public partial class DurableTaskRegistryTests
 {

@@ -3,7 +3,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Common interface for task activity implementations.

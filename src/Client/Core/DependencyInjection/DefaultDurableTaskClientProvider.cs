@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Options;
 
-namespace Microsoft.DurableTask.Client;
+namespace Dapr.DurableTask.Client;
 
 /// <summary>
 /// Default implementation of <see cref="IDurableTaskClientProvider" />.

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask;
-using Microsoft.DurableTask.ScheduledTasks;
+using Dapr.DurableTask.ScheduledTasks;
 
 namespace ScheduleConsoleApp;
 

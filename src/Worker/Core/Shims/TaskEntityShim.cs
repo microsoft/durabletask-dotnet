@@ -4,11 +4,12 @@
 using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
-using Microsoft.DurableTask.Entities;
+using DurableTask.Core.Serializing;
+using Dapr.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 using DTCore = DurableTask.Core;
 
-namespace Microsoft.DurableTask.Worker.Shims;
+namespace Dapr.DurableTask.Worker.Shims;
 
 /// <summary>
 /// Shim that provides the entity context and implements batched execution.

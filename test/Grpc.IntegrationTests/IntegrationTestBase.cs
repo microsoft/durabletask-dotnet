@@ -2,15 +2,15 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics;
-using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Tests.Logging;
-using Microsoft.DurableTask.Worker;
+using Dapr.DurableTask.Client;
+using Dapr.DurableTask.Tests.Logging;
+using Dapr.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Xunit.Abstractions;
 
-namespace Microsoft.DurableTask.Grpc.Tests;
+namespace Dapr.DurableTask.Grpc.Tests;
 
 /// <summary>
 /// Base class for integration tests that use a in-process sidecar for executing orchestrations.

@@ -4,7 +4,7 @@
 using FluentAssertions;
 using Xunit;
 
-namespace Microsoft.DurableTask.Tests;
+namespace Dapr.DurableTask.Tests;
 
 public class PageableTests
 {

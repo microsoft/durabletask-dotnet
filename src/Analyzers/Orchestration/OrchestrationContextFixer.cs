@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
 
-namespace Microsoft.DurableTask.Analyzers.Orchestration;
+namespace Dapr.DurableTask.Analyzers.Orchestration;
 
 /// <summary>
 /// Context information for the <see cref="OrchestrationContextFixer"/>.

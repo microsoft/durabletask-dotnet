@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask;
-using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Converters;
-using Microsoft.DurableTask.Worker;
+using Dapr.DurableTask.Client;
+using Dapr.DurableTask.Converters;
+using Dapr.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 

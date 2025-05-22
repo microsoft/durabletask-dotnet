@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <PackageDescription>The core worker for the Durable Task Framework.
 
 The worker is responsible for processing durable task work items.</PackageDescription>

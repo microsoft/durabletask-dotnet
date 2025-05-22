@@ -4,7 +4,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Microsoft.DurableTask.Entities;
+namespace Dapr.DurableTask.Entities;
 
 /// <summary>
 /// Represents the ID of an entity.

@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 using BenchmarkDotNet.Attributes;
-using Microsoft.DurableTask.Worker;
+using Dapr.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Microsoft.DurableTask.Benchmarks;
+namespace Dapr.DurableTask.Benchmarks;
 
 [MemoryDiagnoser]
 public class DurableTaskRegistryBenchmarks

@@ -3,7 +3,7 @@
 
 using Xunit;
 
-namespace Microsoft.DurableTask.ScheduledTasks.Tests.Models;
+namespace Dapr.DurableTask.ScheduledTasks.Tests.Models;
 
 public class ScheduleConfigurationTests
 {

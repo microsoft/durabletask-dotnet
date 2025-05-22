@@ -4,7 +4,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Common interface for task orchestrator implementations.
@@ -44,7 +44,7 @@ public interface ITaskOrchestrator
 ///  <em>activities</em>, which perform the actual work.
 /// </para>
 /// <para>
-///   Orchestrators can be scheduled using an external client (see Microsoft.DurableTask.Client). Orchestrators can
+///   Orchestrators can be scheduled using an external client (see Dapr.DurableTask.Client). Orchestrators can
 ///   also invoke child orchestrators using the
 ///   <see cref="TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)"/> method.
 ///   Orchestrators that derive from <see cref="TaskOrchestrator{TInput, TOutput}"/> can also be invoked using

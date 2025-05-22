@@ -2,10 +2,11 @@
 // Licensed under the MIT License.
 
 using System.ComponentModel;
-using Microsoft.DurableTask.Client.Entities;
-using Microsoft.DurableTask.Internal;
+using Dapr.DurableTask;
+using Dapr.DurableTask.Client.Entities;
+using Dapr.DurableTask.Internal;
 
-namespace Microsoft.DurableTask.Client;
+namespace Dapr.DurableTask.Client;
 
 /// <summary>
 /// Base class that defines client operations for managing durable task instances.
@@ -51,17 +52,17 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     public virtual DurableEntityClient Entities =>
         throw new NotSupportedException($"{this.GetType()} does not support durable entities.");
 
-    /// <inheritdoc cref="ScheduleNewOrchestrationInstanceAsync(TaskName, object, StartOrchestrationOptions, CancellationToken)"/>
+    /// <inheritdoc cref="ScheduleNewOrchestrationInstanceAsync(Dapr.DurableTask.TaskName, object, StartOrchestrationOptions, CancellationToken)"/>
     public virtual Task<string> ScheduleNewOrchestrationInstanceAsync(
         TaskName orchestratorName, CancellationToken cancellation)
         => this.ScheduleNewOrchestrationInstanceAsync(orchestratorName, null, null, cancellation);
 
-    /// <inheritdoc cref="ScheduleNewOrchestrationInstanceAsync(TaskName, object, StartOrchestrationOptions, CancellationToken)"/>
+    /// <inheritdoc cref="ScheduleNewOrchestrationInstanceAsync(Dapr.DurableTask.TaskName, object, StartOrchestrationOptions, CancellationToken)"/>
     public virtual Task<string> ScheduleNewOrchestrationInstanceAsync(
         TaskName orchestratorName, object? input, CancellationToken cancellation)
         => this.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input, null, cancellation);
 
-    /// <inheritdoc cref="ScheduleNewOrchestrationInstanceAsync(TaskName, object, StartOrchestrationOptions, CancellationToken)"/>
+    /// <inheritdoc cref="ScheduleNewOrchestrationInstanceAsync(Dapr.DurableTask.TaskName, object, StartOrchestrationOptions, CancellationToken)"/>
     public virtual Task<string> ScheduleNewOrchestrationInstanceAsync(
         TaskName orchestratorName, StartOrchestrationOptions options, CancellationToken cancellation = default)
         => this.ScheduleNewOrchestrationInstanceAsync(orchestratorName, null, options, cancellation);

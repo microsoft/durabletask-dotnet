@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 //using Microsoft.Azure.Functions.Worker;
-using Microsoft.DurableTask.Generators.Tests.Utils;
+using Dapr.DurableTask.Generators.Tests.Utils;
 
-namespace Microsoft.DurableTask.Generators.Tests;
+namespace Dapr.DurableTask.Generators.Tests;
 
 public class AzureFunctionsTests
 {

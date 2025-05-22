@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Converters;
+using JsonDataConverter = Dapr.DurableTask.Converters.JsonDataConverter;
 
-namespace Microsoft.DurableTask.Worker;
+namespace Dapr.DurableTask.Worker;
 
 /// <summary>
 /// Options for the Durable Task worker.

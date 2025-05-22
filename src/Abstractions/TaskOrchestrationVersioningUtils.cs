@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Abstractions;
+namespace Dapr.DurableTask.Abstractions;
 
 /// <summary>
 /// Utilities for handling Orchestration/Task versioning operations.

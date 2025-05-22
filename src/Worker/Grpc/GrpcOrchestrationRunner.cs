@@ -1,14 +1,15 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Dapr.DurableTask;
 using DurableTask.Core;
 using DurableTask.Core.History;
 using Google.Protobuf;
-using Microsoft.DurableTask.Worker.Shims;
+using Dapr.DurableTask.Worker.Shims;
 using Microsoft.Extensions.DependencyInjection;
-using P = Microsoft.DurableTask.Protobuf;
+using P = Dapr.DurableTask.Protobuf;
 
-namespace Microsoft.DurableTask.Worker.Grpc;
+namespace Dapr.DurableTask.Worker.Grpc;
 
 /// <summary>
 /// Helper class for invoking orchestrations directly, without building a worker instance.

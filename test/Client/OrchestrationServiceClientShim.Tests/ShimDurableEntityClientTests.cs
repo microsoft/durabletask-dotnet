@@ -7,11 +7,11 @@ using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.History;
 using FluentAssertions.Execution;
-using Microsoft.DurableTask.Client.Entities;
-using Microsoft.DurableTask.Converters;
-using Microsoft.DurableTask.Entities;
+using Dapr.DurableTask.Client.Entities;
+using Dapr.DurableTask.Converters;
+using Dapr.DurableTask.Entities;
 
-namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim.Tests;
+namespace Dapr.DurableTask.Client.OrchestrationServiceClientShim.Tests;
 
 public class ShimDurableEntityClientTests
 {

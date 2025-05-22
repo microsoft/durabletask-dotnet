@@ -3,7 +3,7 @@
 
 using Microsoft.CodeAnalysis;
 
-namespace Microsoft.DurableTask.Analyzers;
+namespace Dapr.DurableTask.Analyzers;
 
 /// <summary>
 /// Provides a set of well-known types that are used by the analyzers.

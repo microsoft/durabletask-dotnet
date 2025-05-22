@@ -6,14 +6,14 @@ using DurableTask.Core.Entities;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
 using FluentAssertions.Specialized;
-using Microsoft.DurableTask.Client.Entities;
-using Microsoft.DurableTask.Converters;
+using Dapr.DurableTask.Client.Entities;
+using Dapr.DurableTask.Converters;
 using Microsoft.Extensions.Options;
 using Core = DurableTask.Core;
 using CoreOrchestrationQuery = DurableTask.Core.Query.OrchestrationQuery;
-using PurgeInstanceFilter = Microsoft.DurableTask.Client.PurgeInstancesFilter;
+using PurgeInstanceFilter = Dapr.DurableTask.Client.PurgeInstancesFilter;
 
-namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim.Tests;
+namespace Dapr.DurableTask.Client.OrchestrationServiceClientShim.Tests;
 
 public class ShimDurableTaskClientTests
 {

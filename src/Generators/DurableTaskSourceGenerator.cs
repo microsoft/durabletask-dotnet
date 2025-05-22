@@ -7,9 +7,9 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
-using Microsoft.DurableTask.Generators.AzureFunctions;
+using Dapr.DurableTask.Generators.AzureFunctions;
 
-namespace Microsoft.DurableTask.Generators
+namespace Dapr.DurableTask.Generators
 {
     /// <summary>
     /// Generator for DurableTask.
@@ -74,7 +74,7 @@ namespace Microsoft.DurableTask.Generators
 
 using System;
 using System.Threading.Tasks;
-using Microsoft.DurableTask.Internal;");
+using Dapr.DurableTask.Internal;");
 
             if (isDurableFunctions)
             {
@@ -302,7 +302,7 @@ namespace Microsoft.DurableTask
                 }
 
                 ITypeSymbol? attributeType = context.SemanticModel.GetTypeInfo(attribute.Name).Type;
-                if (attributeType?.ToString() != "Microsoft.DurableTask.DurableTaskAttribute")
+                if (attributeType?.ToString() != "Dapr.DurableTask.DurableTaskAttribute")
                 {
                     return;
                 }
@@ -334,7 +334,7 @@ namespace Microsoft.DurableTask
                 INamedTypeSymbol? baseType = classType.BaseType;
                 while (baseType != null)
                 {
-                    if (baseType.ContainingAssembly.Name == "Microsoft.DurableTask.Abstractions")
+                    if (baseType.ContainingAssembly.Name == "Dapr.DurableTask.Abstractions")
                     {
                         if (baseType.Name == "TaskActivity")
                         {

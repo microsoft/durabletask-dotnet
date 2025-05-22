@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Entities;
+using Dapr.DurableTask.Entities;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Container for registered <see cref="ITaskOrchestrator" />, <see cref="ITaskActivity" />,

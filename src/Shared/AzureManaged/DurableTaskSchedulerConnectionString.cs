@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 using System.Data.Common;
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Represents the constituent parts of a connection string for a Durable Task Scheduler service.

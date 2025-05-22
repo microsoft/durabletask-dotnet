@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Entities;
+using Dapr.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.ScheduledTasks;
+namespace Dapr.DurableTask.ScheduledTasks;
 
 /// <summary>
 /// Entity that manages the state and execution of a scheduled task.

@@ -2,13 +2,13 @@
 // Licensed under the MIT License.
 
 using System.Runtime.Serialization;
-using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Tests.Logging;
-using Microsoft.DurableTask.Worker;
+using Dapr.DurableTask.Client;
+using Dapr.DurableTask.Tests.Logging;
+using Dapr.DurableTask.Worker;
 using Xunit.Abstractions;
 using Xunit.Sdk;
 
-namespace Microsoft.DurableTask.Grpc.Tests;
+namespace Dapr.DurableTask.Grpc.Tests;
 
 /// <summary>
 /// Integration tests that are designed to exercise the error handling and retry functionality
@@ -76,7 +76,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.Equal(typeof(CustomException).FullName, failureDetails.InnerFailure.InnerFailure!.ErrorType);
         Assert.Equal("Inner!", failureDetails.InnerFailure.InnerFailure.ErrorMessage);
 
-        IReadOnlyCollection<LogEntry> workerLogs = this.GetLogs(category: "Microsoft.DurableTask.Worker");
+        IReadOnlyCollection<LogEntry> workerLogs = this.GetLogs(category: "Dapr.DurableTask.Worker");
         Assert.NotEmpty(workerLogs);
 
         // Check that the orchestrator and activity logs are present

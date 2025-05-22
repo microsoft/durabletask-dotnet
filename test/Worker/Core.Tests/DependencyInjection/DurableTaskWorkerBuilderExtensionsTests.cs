@@ -1,12 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Worker.Hosting;
+using Dapr.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
-namespace Microsoft.DurableTask.Worker.Tests;
+namespace Dapr.DurableTask.Worker.Tests;
 
 public class DurableTaskBuilderWorkerExtensionsTests
 {

@@ -1,7 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Entities;
+using Dapr.DurableTask;
+
+namespace Dapr.DurableTask.Entities;
 
 /// <summary>
 /// Exception that gets thrown when an entity operation fails with an unhandled exception.

@@ -7,7 +7,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Testing;
 using Microsoft.CodeAnalysis.Testing;
 
-namespace Microsoft.DurableTask.Generators.Tests.Utils;
+namespace Dapr.DurableTask.Generators.Tests.Utils;
 
 // Mostly copy/pasted from the Microsoft Source Generators testing documentation
 public static class CSharpSourceGeneratorVerifier<TSourceGenerator> where TSourceGenerator : ISourceGenerator, new()

@@ -3,8 +3,8 @@
 
 syntax = "proto3";
 
-option csharp_namespace = "Microsoft.DurableTask.Protobuf";
-option java_package = "com.microsoft.durabletask.implementation.protobuf";
+option csharp_namespace = "Dapr.DurableTask.Protobuf";
+option java_package = "com.Dapr.DurableTask.implementation.protobuf";
 option go_package = "/internal/protos";
 
 import "google/protobuf/timestamp.proto";

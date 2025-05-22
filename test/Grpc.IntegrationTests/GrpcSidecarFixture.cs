@@ -6,13 +6,13 @@ using Grpc.Net.Client;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
-using Microsoft.DurableTask.Sidecar;
-using Microsoft.DurableTask.Sidecar.Grpc;
-using Microsoft.DurableTask.Worker;
+using Dapr.DurableTask.Sidecar;
+using Dapr.DurableTask.Sidecar.Grpc;
+using Dapr.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.Grpc.Tests;
+namespace Dapr.DurableTask.Grpc.Tests;
 
 public sealed class GrpcSidecarFixture : IDisposable
 {

@@ -1,9 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Generators.Tests.Utils;
+using Dapr.DurableTask.Generators.Tests.Utils;
 
-namespace Microsoft.DurableTask.Generators.Tests;
+namespace Dapr.DurableTask.Generators.Tests;
 
 public class ClassBasedSyntaxTests
 {

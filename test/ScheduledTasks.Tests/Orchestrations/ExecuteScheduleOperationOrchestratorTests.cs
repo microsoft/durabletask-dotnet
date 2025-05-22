@@ -1,13 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Client.Entities;
-using Microsoft.DurableTask.Entities;
+using Dapr.DurableTask.Client;
+using Dapr.DurableTask.Client.Entities;
+using Dapr.DurableTask.Entities;
 using Moq;
 using Xunit;
 
-namespace Microsoft.DurableTask.ScheduledTasks.Tests.Orchestrations;
+namespace Dapr.DurableTask.ScheduledTasks.Tests.Orchestrations;
 
 public class ExecuteScheduleOperationOrchestratorTests
 {

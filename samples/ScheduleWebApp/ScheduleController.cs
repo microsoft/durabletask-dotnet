@@ -3,7 +3,7 @@
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.DurableTask;
-using Microsoft.DurableTask.ScheduledTasks;
+using Dapr.DurableTask.ScheduledTasks;
 using ScheduleWebApp.Models;
 
 namespace ScheduleWebApp.Controllers;

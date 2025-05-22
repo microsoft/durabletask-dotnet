@@ -3,9 +3,9 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Microsoft.DurableTask.Entities;
+using Dapr.DurableTask.Entities;
 
-namespace Microsoft.DurableTask.Client.Entities.Tests;
+namespace Dapr.DurableTask.Client.Entities.Tests;
 
 public class EntityMetadataTests
 {

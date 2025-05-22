@@ -1,10 +1,10 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Client.Grpc;
+using Dapr.DurableTask.Client.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Microsoft.DurableTask.Client;
+namespace Dapr.DurableTask.Client;
 
 /// <summary>
 /// Extension methods for adding Durable Task support to .NET hosted services, such as ASP.NET Core hosts.

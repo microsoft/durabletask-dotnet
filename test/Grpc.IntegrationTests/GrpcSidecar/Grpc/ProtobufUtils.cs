@@ -8,9 +8,9 @@ using DurableTask.Core.History;
 using DurableTask.Core.Query;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
-using Proto = Microsoft.DurableTask.Protobuf;
+using Proto = Dapr.DurableTask.Protobuf;
 
-namespace Microsoft.DurableTask.Sidecar.Grpc;
+namespace Dapr.DurableTask.Sidecar.Grpc;
 
 public static class ProtobufUtils
 {

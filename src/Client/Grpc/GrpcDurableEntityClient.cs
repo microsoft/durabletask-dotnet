@@ -1,14 +1,15 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Client.Entities;
-using Microsoft.DurableTask.Entities;
+using DurableTask.Core.Serializing;
+using Dapr.DurableTask.Client.Entities;
+using Dapr.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
-using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
+using static Dapr.DurableTask.Protobuf.TaskHubSidecarService;
 using DTCore = DurableTask.Core;
-using P = Microsoft.DurableTask.Protobuf;
+using P = Dapr.DurableTask.Protobuf;
 
-namespace Microsoft.DurableTask.Client.Grpc;
+namespace Dapr.DurableTask.Client.Grpc;
 
 /// <summary>
 /// The client for entities.

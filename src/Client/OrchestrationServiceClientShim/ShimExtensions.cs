@@ -2,11 +2,12 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics.CodeAnalysis;
+using Dapr.DurableTask;
 using DurableTask.Core.Entities;
-using Microsoft.DurableTask.Entities;
+using Dapr.DurableTask.Entities;
 using Core = DurableTask.Core;
 
-namespace Microsoft.DurableTask.Client;
+namespace Dapr.DurableTask.Client;
 
 /// <summary>
 /// Extensions for interacting with DurableTask.Core.
@@ -62,7 +63,7 @@ static class ShimExtensions
     }
 
     /// <summary>
-    /// Convert <see cref="Core.FailureDetails" /> to <see cref="TaskFailureDetails" />.
+    /// Convert <see cref="Core.FailureDetails" /> to <see cref="Dapr.DurableTask.TaskFailureDetails" />.
     /// </summary>
     /// <param name="details">The details to convert.</param>
     /// <returns>The task failure details.</returns>

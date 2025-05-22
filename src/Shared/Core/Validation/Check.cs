@@ -7,7 +7,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 
 #nullable enable
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Helpers for <see cref="ArgumentException" /> assertions.

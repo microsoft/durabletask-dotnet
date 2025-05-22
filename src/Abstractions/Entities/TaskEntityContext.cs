@@ -1,7 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Entities;
+using Dapr.DurableTask;
+
+namespace Dapr.DurableTask.Entities;
 
 /// <summary>
 /// The context for a <see cref="ITaskEntity"/>.

@@ -10,9 +10,9 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
-using Microsoft.DurableTask.Analyzers.Orchestration;
+using Dapr.DurableTask.Analyzers.Orchestration;
 
-namespace Microsoft.DurableTask.Benchmarks;
+namespace Dapr.DurableTask.Benchmarks;
 
 /// <summary>
 /// Compares the performance of the <see cref="Analyzers.Orchestration.DateTimeOrchestrationAnalyzer"/> against a compilation with no analyzers.
@@ -73,7 +73,7 @@ public static class DurableFunction{0}
             MetadataReference.CreateFromFile(typeof(FunctionAttribute).Assembly.Location),
             // Microsoft.Azure.Functions.Worker.Extensions.DurableTask
             MetadataReference.CreateFromFile(typeof(OrchestrationTriggerAttribute).Assembly.Location),
-            // Microsoft.DurableTask.Abstractions
+            // Dapr.DurableTask.Abstractions
             MetadataReference.CreateFromFile(typeof(TaskOrchestrationContext).Assembly.Location),
         ];
     }

@@ -1,12 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Worker.Hosting;
+using Dapr.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using static Microsoft.DurableTask.Worker.DurableTaskWorkerOptions;
+using static Dapr.DurableTask.Worker.DurableTaskWorkerOptions;
 
-namespace Microsoft.DurableTask.Worker;
+namespace Dapr.DurableTask.Worker;
 
 /// <summary>
 /// Extensions for <see cref="IDurableTaskWorkerBuilder" />.

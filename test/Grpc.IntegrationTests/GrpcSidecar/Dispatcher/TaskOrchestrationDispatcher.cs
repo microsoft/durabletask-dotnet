@@ -7,7 +7,7 @@ using DurableTask.Core.Command;
 using DurableTask.Core.History;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Dapr.DurableTask.Sidecar.Dispatcher;
 
 class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem>
 {

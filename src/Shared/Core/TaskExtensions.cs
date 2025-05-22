@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Reflection;
-using Microsoft.DurableTask;
+using Dapr.DurableTask;
 
 namespace System;
 

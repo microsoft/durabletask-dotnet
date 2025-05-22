@@ -12,7 +12,7 @@ using DurableTask.Core.Query;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Microsoft.DurableTask.Sidecar;
+namespace Dapr.DurableTask.Sidecar;
 
 public class InMemoryOrchestrationService : IOrchestrationService, IOrchestrationServiceClient, IOrchestrationServiceQueryClient, IOrchestrationServicePurgeClient
 {
@@ -32,7 +32,7 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
 
     public InMemoryOrchestrationService(ILoggerFactory? loggerFactory = null)
     {
-        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger("Microsoft.DurableTask.Sidecar.InMemoryStorageProvider");
+        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger("Dapr.DurableTask.Sidecar.InMemoryStorageProvider");
         this.instanceStore = new InMemoryInstanceStore(this.logger);
     }
 

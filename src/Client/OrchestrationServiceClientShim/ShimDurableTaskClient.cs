@@ -5,13 +5,13 @@ using System.Diagnostics.CodeAnalysis;
 using DurableTask.Core;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
-using Microsoft.DurableTask.Client.Entities;
+using Dapr.DurableTask.Client.Entities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Core = DurableTask.Core;
 using CoreOrchestrationQuery = DurableTask.Core.Query.OrchestrationQuery;
 
-namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
+namespace Dapr.DurableTask.Client.OrchestrationServiceClientShim;
 
 /// <summary>
 /// A shim client for interacting with the backend via <see cref="Core.IOrchestrationServiceClient" />.

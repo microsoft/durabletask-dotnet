@@ -5,9 +5,11 @@ using Microsoft.Extensions.Logging;
 
 public class TestLogger : ILogger
 {
-    public List<(LogLevel Level, string Message)> Logs { get; } = new();
+    public List<(LogLevel Level, string Message)> Logs { get; } = [];
 
+#pragma warning disable CS8633 // Nullability in constraints for type parameter doesn't match the constraints for type parameter in implicitly implemented interface method'.
     public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+#pragma warning restore CS8633 // Nullability in constraints for type parameter doesn't match the constraints for type parameter in implicitly implemented interface method'.
 
     public bool IsEnabled(LogLevel logLevel) => true;
 
@@ -22,7 +24,9 @@ public class TestLogger<T> : ILogger<T>
 {
     public List<(LogLevel Level, string Message)> Logs { get; } = new();
 
+#pragma warning disable CS8633 // Nullability in constraints for type parameter doesn't match the constraints for type parameter in implicitly implemented interface method'.
     public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+#pragma warning restore CS8633 // Nullability in constraints for type parameter doesn't match the constraints for type parameter in implicitly implemented interface method'.
 
     public bool IsEnabled(LogLevel logLevel) => true;
 

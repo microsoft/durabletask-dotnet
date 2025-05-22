@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace Microsoft.DurableTask.Analyzers.Functions.AttributeBinding;
+namespace Dapr.DurableTask.Analyzers.Functions.AttributeBinding;
 
 /// <summary>
 /// Base class for code fixers that fix the type of a parameter to match the expected type.

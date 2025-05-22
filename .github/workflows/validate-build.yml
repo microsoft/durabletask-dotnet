@@ -4,49 +4,181 @@ on:
   push:
     branches:
       - main
-      - 'feature/**'
+      - release-*
+      - dapr
     paths-ignore: [ '**.md' ]
+    tags:
+      - v*
   pull_request:
     branches:
       - main
-      - 'feature/**'
+      - release-*
+      - dapr
     paths-ignore: [ '**.md' ]
-
-env:
-  solution: Microsoft.DurableTask.sln
-  config: release
 
 jobs:
   build:
-    runs-on: windows-latest
-
+    needs: ['test']
+    runs-on: ubuntu-latest
+    env:
+      NUPKG_OUTDIR: bin/Release/nugets
+      BUILD_OUTDIR: out/Release/
+    strategy:
+      matrix:
+        project: [ 'Client', 'Worker' ]
+        dotnet-version: [ '8.0' ]
+        include:
+          - dotnet-version: '8.0'
+            display-name: '.NET 8.0'
+            framework: 'net8.0'
+            prefix: 'net8'
+            install-version: '8.0.x'
+          - project: 'Client'
+            path: './src/Client/Grpc/Client.Grpc.csproj'
+            projectName: 'Client.Grpc.csproj'
+            name: 'client'
+          - project: 'Worker'
+            path: './src/Worker/Grpc/Worker.Grpc.csproj'
+            projectName: 'Worker.Grpc.csproj'
+            name: 'worker'
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Setup .NET 6.0
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: '6.0.x'
+      - name: Parse release version
+        run: python .github/scripts/git_release_version.py
 
-    - name: Setup .NET from global.json
-      uses: actions/setup-dotnet@v3
-      with:
-        global-json-file: global.json
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+          dotnet-quality: 'ga' # Prefer a GA release, but use RC if not available
 
-    - name: Restore dependencies
-      run: dotnet restore $env:solution
+      - name: Restore dependencies
+        run: dotnet restore ${{ matrix.path }}
 
-    - name: Build
-      run: dotnet build $env:solution --configuration $env:config --no-restore -p:FileVersionRevision=$env:GITHUB_RUN_NUMBER
+      - name: Build
+        run: dotnet build ${{ matrix.path }} --framework ${{ matrix.framework }} --configuration Release --no-restore -p:FileVersionRevision=${{ github.run_number }}
 
-    - name: Test
-      run: dotnet test $env:solution --configuration $env:config --no-build --verbosity normal
+      - name: Pack
+        run: dotnet pack ${{ matrix.path }} --configuration Release --no-build --include-symbols
 
-    - name: Pack
-      run: dotnet pack $env:solution --configuration $env:config --no-build
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages_${{ matrix.name }}
+          path: ${{ env.NUPKG_OUTDIR }}
 
-    - name: Upload
-      uses: actions/upload-artifact@v4
-      with:
-        name: pkg
-        path: out/pkg
+  test:
+    name: Test - .NET ${{ matrix.dotnet-version }} - ${{ matrix.projectName }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ['Client', 'Worker', 'GrpcIntegration', 'ClientCore', 'WorkerCore', 'Abstractions' ]
+        dotnet-version: [ '8.0' ]
+        include:
+          - dotnet-version: '8.0'
+            display-name: '.NET 8.0'
+            framework: 'net8.0'
+            prefix: 'net8'
+            install-version: '8.0.x'
+          - project: 'Client'
+            path: './test/Client/Grpc.Tests/Client.Grpc.Tests.csproj'
+            projectName: 'Client.Grpc.Tests.csproj'
+          - project: 'Worker'
+            path: './test/Worker/Grpc.Tests/Worker.Grpc.Tests.csproj'
+            projectName: 'Worker.Grpc.Tests.csproj'
+          - project: 'GrpcIntegration'
+            path: './test/Grpc.IntegrationTests/Grpc.IntegrationTests.csproj'
+            projectName: 'Grpc.IntegrationTests.csproj'
+          - project: 'ClientCore'
+            path: './test/Client/Core.Tests/Client.Tests.csproj'
+            projectName: 'Client.Tests.csproj'
+          - project: 'WorkerCore'
+            path: './test/Worker/Core.Tests/Worker.Tests.csproj'
+            projectName: 'Worker.Tests.csproj'
+          - project: 'Abstractions'
+            path: './test/Abstractions.Tests/Abstractions.Tests.csproj'
+            projectName: 'Abstractions.Tests.csproj'
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+          dotnet-quality: 'ga' # Prefer a GA release, but use RC if not available
+
+      - name: Restore dependencies
+        run: dotnet restore ${{ matrix.path }}
+
+      - name: Build
+        run: dotnet build ${{ matrix.path }} --framework ${{ matrix.framework }} --configuration Release --no-restore -p:FileVersionRevision=$env:GITHUB_RUN_NUMBER
+          
+      - name: Test
+        id: tests
+        continue-on-error: true # proceed if tests fail to allow for the report generation in main or next step failure in PR
+        run: dotnet test ${{ matrix.path }} --framework ${{ matrix.framework }} --no-build --no-restore --configuration Release --logger "trx;LogFilePrefix=${{ matrix.prefix }}" --logger "GitHubActions;report-warnings=false" --results-directory "${{ github.workspace }}/TestResults" --verbosity detailed /p:CollectCoverage=true /p:CoverletOutputFormat=opencover /p:GITHUB_ACTIONS=false
+
+      - name: Check test failure in PR
+        if: github.event_name == 'pull_request' && steps.tests.outcome != 'success'
+        run: exit 1
+
+      - name: Upload test coverage
+        uses: codecov/codecov-action@v1
+        with:
+          flags: ${{ matrix.framework }}
+
+      - name: Parse Trx files
+        uses: NasAmin/trx-parser@v0.2.0
+        id: trx-parser
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository # does not work on PRs from forks
+        with:
+          TRX_PATH: ${{ github.workspace }}/TestResults
+          REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  
+  publish:
+    name: Publish Packages
+    needs: ['build', 'test']
+    runs-on: ubuntu-latest
+    if: startswith(github.ref, 'refs/tags/v') && !(endsWith(github.ref, '-rc') || endsWith(github.ref, '-dev') || endsWith(github.ref, '-prerelease'))
+    strategy:
+      matrix:
+        name:
+          - client
+          - worker
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: packages_${{ matrix.name }}
+          path: packages
+      - name: List packages (for sanity checks)
+        run: ls -R
+        working-directory: packages
+      - name: Publish binaries to GitHub for tags
+        if: startswith(github.ref, 'refs/tags/v')
+        run: |
+          sudo npm install --silent --no-progress -g github-release-cli@1.3.1
+
+          # Parse repository to get owner and repo names
+          OWNER_NAME="${GITHUB_REPOSITORY%%/*}"
+          REPO_NAME="${GITHUB_REPOSITORY#*/}"
+
+          # Get the list of files
+          RELEASE_ARTIFACT=(./packages/*)
+
+          export GITHUB_TOKEN=${{ secrets.DAPR_BOT_TOKEN }}
+          echo "Uploading Nuget packages to GitHub Release"
+          github-release upload \
+            --owner $OWNER_NAME \
+            --repo $REPO_NAME \
+            --body "Release dapr dotnet SDK v${REL_VERSION}" \
+            --tag "v${REL_VERSION}" \
+            --name "Dapr dotnet SDK v${REL_VERSION}" \
+            --prerelease true \
+            ${RELEASE_ARTIFACT[*]}
+      - name: Publish nuget packages to nuget.org
+        if: startswith(github.ref, 'refs/tags/v') && !(endsWith(github.ref, '-rc') || endsWith(github.ref, '-dev') || endsWith(github.ref, '-prerelease'))
+        run: |
+          dotnet nuget push "./packages/Dapr*.nupkg" --skip-duplicate --api-key ${{ secrets.NUGETORG_DAPR_API_KEY }} --source https://api.nuget.org/v3/index.json

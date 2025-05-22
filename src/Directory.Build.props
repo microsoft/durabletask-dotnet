@@ -5,7 +5,6 @@
 
   <!-- Common build settings -->
   <PropertyGroup>
-    <Company>Microsoft Corporation</Company>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -17,6 +16,7 @@
     This is recommended for NuGet packages, as per: https://devblogs.microsoft.com/dotnet/producing-packages-with-source-link/
     The connection to deterministic builds is explored here: https://www.meziantou.net/creating-reproducible-build-in-dotnet.htm -->
     <DebugType>portable</DebugType>
+    <OutputPath>$(RepoRoot)bin\$(Configuration)\prod\$(MSBuildProjectName)\</OutputPath>
   </PropertyGroup>
 
   <Import Project="$(EngRoot)targets/Release.props" />

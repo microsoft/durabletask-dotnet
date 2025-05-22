@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
 
-namespace Microsoft.DurableTask.Analyzers;
+namespace Dapr.DurableTask.Analyzers;
 
 /// <summary>
 /// Extension methods for working with Roslyn types.

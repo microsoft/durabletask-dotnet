@@ -3,8 +3,8 @@
 
 using System.Text.Json.Serialization;
 using Microsoft.DurableTask;
-using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Worker;
+using Dapr.DurableTask.Client;
+using Dapr.DurableTask.Worker;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 

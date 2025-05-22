@@ -3,7 +3,7 @@
 
 using DurableTask.Core.History;
 
-namespace Microsoft.DurableTask.Sidecar;
+namespace Dapr.DurableTask.Sidecar;
 
 internal static class Utils
 {

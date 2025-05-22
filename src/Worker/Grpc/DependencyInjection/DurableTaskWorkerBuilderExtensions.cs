@@ -1,10 +1,10 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Worker.Grpc;
+using Dapr.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Microsoft.DurableTask.Worker;
+namespace Dapr.DurableTask.Worker;
 
 /// <summary>
 /// Extension methods for registering gRPC to <see cref="IDurableTaskWorkerBuilder" />.

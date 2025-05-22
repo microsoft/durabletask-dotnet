@@ -5,7 +5,7 @@ using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Xunit.Abstractions;
 
-namespace Microsoft.DurableTask.Tests.Logging;
+namespace Dapr.DurableTask.Tests.Logging;
 
 public sealed class TestLogProvider(ITestOutputHelper output) : ILoggerProvider
 {
@@ -15,7 +15,7 @@ public sealed class TestLogProvider(ITestOutputHelper output) : ILoggerProvider
     public bool TryGetLogs(string category, out IReadOnlyCollection<LogEntry> logs)
     {
         // Get all logs for loggers that are prefixed with the category name
-        // (e.g. "Microsoft.DurableTask.Worker" will return all logs for "Microsoft.DurableTask.Worker.*")
+        // (e.g. "Dapr.DurableTask.Worker" will return all logs for "Dapr.DurableTask.Worker.*")
         logs = this.loggers
             .Where(kvp => kvp.Key.StartsWith(category, StringComparison.OrdinalIgnoreCase))
             .SelectMany(kvp => kvp.Value.GetLogs())

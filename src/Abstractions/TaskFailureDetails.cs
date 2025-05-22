@@ -6,7 +6,7 @@ using System.Reflection;
 using CoreFailureDetails = DurableTask.Core.FailureDetails;
 using CoreOrchestrationException = DurableTask.Core.Exceptions.OrchestrationException;
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Record that represents the details of a task failure.

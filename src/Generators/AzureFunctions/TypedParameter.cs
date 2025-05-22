@@ -4,7 +4,7 @@
 
 using Microsoft.CodeAnalysis;
 
-namespace Microsoft.DurableTask.Generators.AzureFunctions
+namespace Dapr.DurableTask.Generators.AzureFunctions
 {
     public class TypedParameter
     {

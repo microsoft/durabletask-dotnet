@@ -3,7 +3,7 @@
 
 using System.Runtime.CompilerServices;
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Pageable helpers.

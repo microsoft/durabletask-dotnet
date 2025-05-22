@@ -5,7 +5,7 @@ using DurableTask.Core;
 using DurableTask.Core.Command;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.Sidecar
+namespace Dapr.DurableTask.Sidecar
 {
     static partial class Logs
     {

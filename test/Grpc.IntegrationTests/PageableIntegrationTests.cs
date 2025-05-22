@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 using FluentAssertions;
-using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Worker;
+using Dapr.DurableTask.Client;
+using Dapr.DurableTask.Worker;
 using Xunit.Abstractions;
 
-namespace Microsoft.DurableTask.Grpc.Tests;
+namespace Dapr.DurableTask.Grpc.Tests;
 
 public class PageableIntegrationTests : IntegrationTestBase
 {

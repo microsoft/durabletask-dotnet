@@ -1,9 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using P = Microsoft.DurableTask.Protobuf;
+using P = Dapr.DurableTask.Protobuf;
 
-namespace Microsoft.DurableTask.Client.Grpc;
+namespace Dapr.DurableTask.Client.Grpc;
 
 /// <summary>
 /// Protobuf helpers and utilities.

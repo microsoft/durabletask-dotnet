@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Entities.Tests;
+using Dapr.DurableTask.Entities.Tests;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace Microsoft.DurableTask.ScheduledTasks.Tests.Entity;
+namespace Dapr.DurableTask.ScheduledTasks.Tests.Entity;
 
 public class ScheduleTests
 {

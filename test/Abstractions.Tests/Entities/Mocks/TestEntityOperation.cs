@@ -3,7 +3,7 @@
 
 using DotNext;
 
-namespace Microsoft.DurableTask.Entities.Tests;
+namespace Dapr.DurableTask.Entities.Tests;
 
 public class TestEntityOperation : TaskEntityOperation
 {

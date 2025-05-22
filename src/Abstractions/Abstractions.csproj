@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <PackageDescription>Abstractions for the Durable Task Framework.</PackageDescription>
     <EnableStyleCop>true</EnableStyleCop>
   </PropertyGroup>
@@ -20,8 +20,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Microsoft.DurableTask.Worker" Key="$(StrongNamePublicKey)" />
-    <InternalsVisibleTo Include="Microsoft.DurableTask.Client" Key="$(StrongNamePublicKey)" />
+    <InternalsVisibleTo Include="Dapr.DurableTask.Worker" Key="$(StrongNamePublicKey)" />
+    <InternalsVisibleTo Include="Dapr.DurableTask.Client" Key="$(StrongNamePublicKey)" />
   </ItemGroup>
 
 </Project>

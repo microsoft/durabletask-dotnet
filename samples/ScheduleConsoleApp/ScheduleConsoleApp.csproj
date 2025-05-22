@@ -10,12 +10,10 @@
     <PackageReference Include="Microsoft.Extensions.Hosting"/>
     <PackageReference Include="Azure.Identity" />
     <PackageReference Include="Grpc.Net.Client" />
-    <PackageReference Include="Microsoft.DurableTask.Generators" OutputItemType="Analyzer" />
+    <PackageReference Include="Dapr.DurableTask.Generators" OutputItemType="Analyzer" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Client\AzureManaged\Client.AzureManaged.csproj" />
-    <ProjectReference Include="..\..\src\Worker\AzureManaged\Worker.AzureManaged.csproj" />
     <ProjectReference Include="..\..\src\ScheduledTasks\ScheduledTasks.csproj" />
   </ItemGroup>
 </Project>

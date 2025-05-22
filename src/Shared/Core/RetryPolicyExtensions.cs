@@ -3,7 +3,7 @@
 
 using CoreRetryOptions = DurableTask.Core.RetryOptions;
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Extensions for <see cref="RetryPolicy" />.

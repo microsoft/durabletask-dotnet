@@ -2,9 +2,10 @@
 // Licensed under the MIT License.
 
 using DurableTask.Core;
+using DurableTask.Core.Serializing;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.Worker.Shims;
+namespace Dapr.DurableTask.Worker.Shims;
 
 /// <summary>
 /// Shims a <see cref="ITaskActivity" /> to a <see cref="TaskActivity" />.

@@ -4,7 +4,7 @@
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Testing;
 
-namespace Microsoft.DurableTask.Analyzers.Tests.Verifiers;
+namespace Dapr.DurableTask.Analyzers.Tests.Verifiers;
 
 // Includes Durable Functions NuGet packages to an analyzer test and runs it
 public static partial class CSharpAnalyzerVerifier<TAnalyzer>

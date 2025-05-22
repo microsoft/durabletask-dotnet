@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Tests;
+namespace Dapr.DurableTask.Tests;
 
 public class TaskActivityTests
 {

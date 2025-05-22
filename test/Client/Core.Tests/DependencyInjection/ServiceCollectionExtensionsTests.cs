@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Converters;
+using Dapr.DurableTask.Converters;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Microsoft.DurableTask.Client.Tests;
+namespace Dapr.DurableTask.Client.Tests;
 
 public class ServiceCollectionExtensionsTests
 {

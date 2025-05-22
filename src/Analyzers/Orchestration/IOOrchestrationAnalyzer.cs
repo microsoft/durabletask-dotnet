@@ -6,9 +6,9 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
 
-using static Microsoft.DurableTask.Analyzers.Orchestration.IOOrchestrationAnalyzer;
+using static Dapr.DurableTask.Analyzers.Orchestration.IOOrchestrationAnalyzer;
 
-namespace Microsoft.DurableTask.Analyzers.Orchestration;
+namespace Dapr.DurableTask.Analyzers.Orchestration;
 
 /// <summary>
 /// Analyzer that reports usage of I/O APIs in orchestrations.

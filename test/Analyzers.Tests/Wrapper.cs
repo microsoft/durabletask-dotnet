@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Analyzers.Tests;
+namespace Dapr.DurableTask.Analyzers.Tests;
 
 public static class Wrapper
 {
@@ -59,8 +59,8 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Data.SqlClient;
 using Microsoft.DurableTask;
-using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Worker;
+using Dapr.DurableTask.Client;
+using Dapr.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
 ";
     }

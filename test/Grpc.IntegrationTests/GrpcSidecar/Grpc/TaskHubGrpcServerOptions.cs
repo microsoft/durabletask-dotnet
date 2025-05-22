@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Sidecar.Grpc;
+namespace Dapr.DurableTask.Sidecar.Grpc;
 
 /// <summary>
 /// Options for configuring the task hub gRPC server.

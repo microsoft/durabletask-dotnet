@@ -4,7 +4,7 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask;
-using Microsoft.DurableTask.Client;
+using Dapr.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 
 namespace AzureFunctionsApp;

@@ -4,7 +4,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Dapr.DurableTask.Sidecar.Dispatcher;
 
 abstract class WorkItemDispatcher<T> where T : class
 {

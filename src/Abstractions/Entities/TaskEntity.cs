@@ -3,7 +3,7 @@
 
 using System.Reflection;
 
-namespace Microsoft.DurableTask.Entities;
+namespace Dapr.DurableTask.Entities;
 
 /// <summary>
 /// The task entity contract.

@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.Tests.Logging;
+namespace Dapr.DurableTask.Tests.Logging;
 
 public class LogEntry
 {

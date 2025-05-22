@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Client.Entities;
+namespace Dapr.DurableTask.Client.Entities;
 
 /// <summary>
 /// A query for fetching entities.

@@ -7,7 +7,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Microsoft.DurableTask.Generators.Tests.Utils;
+namespace Dapr.DurableTask.Generators.Tests.Utils;
 
 static class TestHelpers
 {
@@ -60,7 +60,7 @@ static class TestHelpers
         string usings = @"
 using System;
 using System.Threading.Tasks;
-using Microsoft.DurableTask.Internal;";
+using Dapr.DurableTask.Internal;";
 
         if (isDurableFunctions)
         {

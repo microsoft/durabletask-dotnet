@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 using Microsoft.CodeAnalysis.Testing;
-using Microsoft.DurableTask.Analyzers.Activities;
-using VerifyCS = Microsoft.DurableTask.Analyzers.Tests.Verifiers.CSharpAnalyzerVerifier<Microsoft.DurableTask.Analyzers.Activities.MatchingInputOutputTypeActivityAnalyzer>;
+using Dapr.DurableTask.Analyzers.Activities;
+using VerifyCS = Dapr.DurableTask.Analyzers.Tests.Verifiers.CSharpAnalyzerVerifier<Dapr.DurableTask.Analyzers.Activities.MatchingInputOutputTypeActivityAnalyzer>;
 
-namespace Microsoft.DurableTask.Analyzers.Tests.Activities;
+namespace Dapr.DurableTask.Analyzers.Tests.Activities;
 
 public class MatchingInputOutputTypeActivityAnalyzerTests
 {

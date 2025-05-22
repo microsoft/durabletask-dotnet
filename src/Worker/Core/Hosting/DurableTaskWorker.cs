@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Hosting;
 
-namespace Microsoft.DurableTask.Worker.Hosting;
+namespace Dapr.DurableTask.Worker.Hosting;
 
 /// <summary>
 /// Base class for durable workers.

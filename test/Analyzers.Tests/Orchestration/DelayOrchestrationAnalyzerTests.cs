@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 using Microsoft.CodeAnalysis.Testing;
-using Microsoft.DurableTask.Analyzers.Orchestration;
-using VerifyCS = Microsoft.DurableTask.Analyzers.Tests.Verifiers.CSharpCodeFixVerifier<Microsoft.DurableTask.Analyzers.Orchestration.DelayOrchestrationAnalyzer, Microsoft.DurableTask.Analyzers.Orchestration.DelayOrchestrationFixer>;
+using Dapr.DurableTask.Analyzers.Orchestration;
+using VerifyCS = Dapr.DurableTask.Analyzers.Tests.Verifiers.CSharpCodeFixVerifier<Dapr.DurableTask.Analyzers.Orchestration.DelayOrchestrationAnalyzer, Dapr.DurableTask.Analyzers.Orchestration.DelayOrchestrationFixer>;
 
-namespace Microsoft.DurableTask.Analyzers.Tests.Orchestration;
+namespace Dapr.DurableTask.Analyzers.Tests.Orchestration;
 
 public class DelayOrchestrationAnalyzerTests
 {

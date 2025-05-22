@@ -9,7 +9,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
 
-namespace Microsoft.DurableTask.Analyzers.Activities;
+namespace Dapr.DurableTask.Analyzers.Activities;
 
 /// <summary>
 /// Analyzer that checks for mismatches between the input and output types of Activities invocations and their definitions.

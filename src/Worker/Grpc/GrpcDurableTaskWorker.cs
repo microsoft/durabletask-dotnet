@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Worker.Hosting;
+using Dapr.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Microsoft.DurableTask.Worker.Grpc;
+namespace Dapr.DurableTask.Worker.Grpc;
 
 /// <summary>
 /// The gRPC Durable Task worker.

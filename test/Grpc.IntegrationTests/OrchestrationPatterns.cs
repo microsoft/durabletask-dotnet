@@ -3,13 +3,13 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Tests.Logging;
-using Microsoft.DurableTask.Worker;
+using Dapr.DurableTask.Client;
+using Dapr.DurableTask.Tests.Logging;
+using Dapr.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit.Abstractions;
 
-namespace Microsoft.DurableTask.Grpc.Tests;
+namespace Dapr.DurableTask.Grpc.Tests;
 
 public class OrchestrationPatterns : IntegrationTestBase
 {
@@ -211,7 +211,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.Equal("Hello, World!", metadata.ReadOutputAs<string>());
 
-        IReadOnlyCollection<LogEntry> workerLogs = this.GetLogs("Microsoft.DurableTask.Worker");
+        IReadOnlyCollection<LogEntry> workerLogs = this.GetLogs("Dapr.DurableTask.Worker");
         Assert.NotEmpty(workerLogs);
             
         // Validate logs.
@@ -329,7 +329,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
 
         string[] expected = new[] { "9", "8", "7", "6", "5", "4", "3", "2", "1", "0" };
-        Assert.Equal<string>(expected, metadata.ReadOutputAs<string[]>());
+        Assert.Equal<string>(expected as IEnumerable<string>, metadata.ReadOutputAs<string[]>());
     }
 
     [Theory]

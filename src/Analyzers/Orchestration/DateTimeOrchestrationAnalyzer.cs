@@ -5,9 +5,9 @@ using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
-using static Microsoft.DurableTask.Analyzers.Orchestration.DateTimeOrchestrationAnalyzer;
+using static Dapr.DurableTask.Analyzers.Orchestration.DateTimeOrchestrationAnalyzer;
 
-namespace Microsoft.DurableTask.Analyzers.Orchestration;
+namespace Dapr.DurableTask.Analyzers.Orchestration;
 
 /// <summary>
 /// Analyzer that reports a warning when a non-deterministic DateTime property is used in an orchestration method.

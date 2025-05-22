@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Worker.Grpc;
+namespace Dapr.DurableTask.Worker.Grpc;
 
 /// <summary>
 /// The gRPC worker options.

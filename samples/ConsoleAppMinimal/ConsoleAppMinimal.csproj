@@ -11,8 +11,8 @@
 
     <!-- Real projects would use package references -->
     <!--
-    <PackageReference Include="Microsoft.DurableTask.Client.Grpc" Version="1.5.0" />
-    <PackageReference Include="Microsoft.DurableTask.Worker.Grpc" Version="1.5.0" />
+    <PackageReference Include="Dapr.DurableTask.Client.Grpc" Version="1.5.0" />
+    <PackageReference Include="Dapr.DurableTask.Worker.Grpc" Version="1.5.0" />
     -->
   </ItemGroup>
 

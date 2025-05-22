@@ -3,12 +3,12 @@
 
 using DurableTask.Core;
 using DurableTask.Core.Entities;
-using Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
+using Dapr.DurableTask.Client.OrchestrationServiceClientShim;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
-namespace Microsoft.DurableTask.Client;
+namespace Dapr.DurableTask.Client;
 
 /// <summary>
 /// Extension methods for adding Durable Task support to .NET hosted services, such as ASP.NET Core hosts.

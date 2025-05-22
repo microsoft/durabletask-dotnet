@@ -1,6 +1,7 @@
 <Project>
 
   <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
     <IsTestProject Condition="$(MSBuildProjectName.EndsWith('Tests'))">true</IsTestProject>
   </PropertyGroup>
 

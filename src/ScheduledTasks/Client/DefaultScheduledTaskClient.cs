@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Client.Entities;
+using Dapr.DurableTask.Client;
+using Dapr.DurableTask.Client.Entities;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.ScheduledTasks;
+namespace Dapr.DurableTask.ScheduledTasks;
 
 /// <summary>
 /// Client for managing scheduled tasks in a Durable Task application.

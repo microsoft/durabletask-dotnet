@@ -5,7 +5,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Microsoft.DurableTask.Client.Entities;
+namespace Dapr.DurableTask.Client.Entities;
 
 /// <summary>
 /// Json converter factory for <see cref="EntityMetadata{TState}"/> .

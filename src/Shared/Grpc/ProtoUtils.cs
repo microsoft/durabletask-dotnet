@@ -4,7 +4,6 @@
 using System.Buffers;
 using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Command;
@@ -14,9 +13,9 @@ using DurableTask.Core.History;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using DTCore = DurableTask.Core;
-using P = Microsoft.DurableTask.Protobuf;
+using P = Dapr.DurableTask.Protobuf;
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Protobuf utilities and helpers.

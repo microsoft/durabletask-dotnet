@@ -3,7 +3,7 @@
 
 using Azure.Core;
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Caches and manages refresh for Azure access tokens.

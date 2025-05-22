@@ -3,7 +3,7 @@
 
 using System.Text.Json;
 
-namespace Microsoft.DurableTask.Converters;
+namespace Dapr.DurableTask.Converters;
 
 /// <summary>
 /// An implementation of <see cref="DataConverter"/> that uses System.Text.Json APIs for data serialization.

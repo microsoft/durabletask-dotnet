@@ -1,10 +1,10 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Client;
+using Dapr.DurableTask.Client;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Microsoft.DurableTask.ScheduledTasks;
+namespace Dapr.DurableTask.ScheduledTasks;
 
 /// <summary>
 /// Extension methods for configuring Durable Task clients to use scheduled tasks.

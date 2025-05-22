@@ -3,9 +3,9 @@
 
 using DurableTask.Core;
 using DurableTask.Core.Entities;
-using Microsoft.DurableTask.Client.Entities;
+using Dapr.DurableTask.Client.Entities;
 
-namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
+namespace Dapr.DurableTask.Client.OrchestrationServiceClientShim;
 
 /// <summary>
 /// The shim client options.

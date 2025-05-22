@@ -1,15 +1,16 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Dapr.DurableTask;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using Google.Protobuf;
-using Microsoft.DurableTask.Entities;
-using Microsoft.DurableTask.Worker.Shims;
+using Dapr.DurableTask.Entities;
+using Dapr.DurableTask.Worker.Shims;
 using Microsoft.Extensions.DependencyInjection;
-using P = Microsoft.DurableTask.Protobuf;
+using P = Dapr.DurableTask.Protobuf;
 
-namespace Microsoft.DurableTask.Worker.Grpc;
+namespace Dapr.DurableTask.Worker.Grpc;
 
 /// <summary>
 /// Helper class for invoking entities directly, without building a worker instance.

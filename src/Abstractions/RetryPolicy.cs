@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 using System.ComponentModel;
-using Microsoft.DurableTask.Abstractions;
+using Dapr.DurableTask.Abstractions;
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// A declarative retry policy that can be configured for activity or sub-orchestration calls.

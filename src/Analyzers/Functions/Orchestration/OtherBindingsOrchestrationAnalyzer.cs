@@ -5,10 +5,10 @@ using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
-using Microsoft.DurableTask.Analyzers.Orchestration;
-using static Microsoft.DurableTask.Analyzers.Functions.Orchestration.OtherBindingsOrchestrationAnalyzer;
+using Dapr.DurableTask.Analyzers.Orchestration;
+using static Dapr.DurableTask.Analyzers.Functions.Orchestration.OtherBindingsOrchestrationAnalyzer;
 
-namespace Microsoft.DurableTask.Analyzers.Functions.Orchestration;
+namespace Dapr.DurableTask.Analyzers.Functions.Orchestration;
 
 /// <summary>
 /// Analyzer that reports a warning when a Durable Function Orchestration has parameters bindings other than OrchestrationTrigger.

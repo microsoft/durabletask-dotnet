@@ -9,9 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.DurableTask.Client.Grpc" />
-    <PackageReference Include="Microsoft.DurableTask.Worker.Grpc" />
-    <PackageReference Include="Microsoft.DurableTask.Generators" OutputItemType="Analyzer" />
+    <PackageReference Include="Dapr.DurableTask.Client.Grpc" />
+    <PackageReference Include="Dapr.DurableTask.Worker.Grpc" />
+    <PackageReference Include="Dapr.DurableTask.Generators" OutputItemType="Analyzer" />
   </ItemGroup>
 
 </Project>

@@ -4,8 +4,8 @@
 // This app differs from samples/ConsoleApp in that we show the absolute minimum code needed to run a Durable Task application.
 
 using ConsoleAppMinimal;
-using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Worker;
+using Dapr.DurableTask.Client;
+using Dapr.DurableTask.Worker;
 using Microsoft.Extensions.Hosting;
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);

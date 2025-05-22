@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 using Microsoft.CodeAnalysis.Testing;
-using Microsoft.DurableTask.Analyzers.Functions.AttributeBinding;
-using Microsoft.DurableTask.Analyzers.Tests.Verifiers;
+using Dapr.DurableTask.Analyzers.Functions.AttributeBinding;
+using Dapr.DurableTask.Analyzers.Tests.Verifiers;
 
-namespace Microsoft.DurableTask.Analyzers.Tests.Functions.AttributeBinding;
+namespace Dapr.DurableTask.Analyzers.Tests.Functions.AttributeBinding;
 
 public abstract class MatchingAttributeBindingSpecificationTests<TAnalyzer, TCodeFix> 
     where TAnalyzer : MatchingAttributeBindingAnalyzer, new()

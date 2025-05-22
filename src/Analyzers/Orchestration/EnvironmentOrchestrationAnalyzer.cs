@@ -5,9 +5,9 @@ using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
-using static Microsoft.DurableTask.Analyzers.Orchestration.EnvironmentOrchestrationAnalyzer;
+using static Dapr.DurableTask.Analyzers.Orchestration.EnvironmentOrchestrationAnalyzer;
 
-namespace Microsoft.DurableTask.Analyzers.Orchestration;
+namespace Dapr.DurableTask.Analyzers.Orchestration;
 
 #pragma warning disable RS1035 // Environment Variables are not supposed to be used in Analyzers, but here we just reference the API, never using it.
 

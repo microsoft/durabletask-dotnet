@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace Microsoft.DurableTask.Generators.AzureFunctions
+namespace Dapr.DurableTask.Generators.AzureFunctions
 {
     static class SyntaxNodeUtility
     {

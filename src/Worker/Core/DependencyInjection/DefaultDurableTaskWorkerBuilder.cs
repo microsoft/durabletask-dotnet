@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Worker.Hosting;
+using Dapr.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-namespace Microsoft.DurableTask.Worker;
+namespace Dapr.DurableTask.Worker;
 
 /// <summary>
 /// The default builder for durable task.
@@ -21,7 +21,7 @@ public class DefaultDurableTaskWorkerBuilder : IDurableTaskWorkerBuilder
     /// <param name="name">The name for this builder.</param>
     public DefaultDurableTaskWorkerBuilder(string? name, IServiceCollection services)
     {
-        this.Name = name ?? Extensions.Options.Options.DefaultName;
+        this.Name = name ?? Microsoft.Extensions.Options.Options.DefaultName;
         this.Services = Check.NotNull(services);
     }
 

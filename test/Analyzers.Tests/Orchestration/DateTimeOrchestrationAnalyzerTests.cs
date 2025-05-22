@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 using Microsoft.CodeAnalysis.Testing;
-using Microsoft.DurableTask.Analyzers.Orchestration;
+using Dapr.DurableTask.Analyzers.Orchestration;
 
-using VerifyCS = Microsoft.DurableTask.Analyzers.Tests.Verifiers.CSharpCodeFixVerifier<Microsoft.DurableTask.Analyzers.Orchestration.DateTimeOrchestrationAnalyzer, Microsoft.DurableTask.Analyzers.Orchestration.DateTimeOrchestrationFixer>;
+using VerifyCS = Dapr.DurableTask.Analyzers.Tests.Verifiers.CSharpCodeFixVerifier<Dapr.DurableTask.Analyzers.Orchestration.DateTimeOrchestrationAnalyzer, Dapr.DurableTask.Analyzers.Orchestration.DateTimeOrchestrationFixer>;
 
-namespace Microsoft.DurableTask.Analyzers.Tests.Orchestration;
+namespace Dapr.DurableTask.Analyzers.Tests.Orchestration;
 
 public class DateTimeOrchestrationAnalyzerTests
 {
@@ -316,7 +316,7 @@ tasks.AddOrchestratorFunc(""HelloSequence"", context =>
         string code = @"
 using System;
 using Microsoft.DurableTask;
-using Microsoft.DurableTask.Worker;
+using Dapr.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
 
 public class Program
@@ -342,7 +342,7 @@ public class Program
         string fix = @"
 using System;
 using Microsoft.DurableTask;
-using Microsoft.DurableTask.Worker;
+using Dapr.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
 
 public class Program

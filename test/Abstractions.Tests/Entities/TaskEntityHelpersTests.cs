@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Entities.Tests;
+namespace Dapr.DurableTask.Entities.Tests;
 
 public class TaskEntityHelpersTests
 {

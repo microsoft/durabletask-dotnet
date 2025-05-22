@@ -3,7 +3,7 @@
 
 using Microsoft.CodeAnalysis;
 
-namespace Microsoft.DurableTask.Analyzers;
+namespace Dapr.DurableTask.Analyzers;
 
 /// <summary>
 /// Provides a set of well-known types that are used by the analyzers.
@@ -22,25 +22,25 @@ public sealed partial class KnownTypeSymbols
     /// <summary>
     /// Gets an ITaskOrchestrator type symbol.
     /// </summary>
-    public INamedTypeSymbol? TaskOrchestratorInterface => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.ITaskOrchestrator", ref this.taskOrchestratorInterface);
+    public INamedTypeSymbol? TaskOrchestratorInterface => this.GetOrResolveFullyQualifiedType("Dapr.DurableTask.ITaskOrchestrator", ref this.taskOrchestratorInterface);
 
     /// <summary>
     /// Gets a TaskActivity&lt;TInput,TOutput&gt; type symbol.
     /// </summary>
-    public INamedTypeSymbol? TaskActivityBase => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.TaskActivity`2", ref this.taskActivityBase);
+    public INamedTypeSymbol? TaskActivityBase => this.GetOrResolveFullyQualifiedType("Dapr.DurableTask.TaskActivity`2", ref this.taskActivityBase);
 
     /// <summary>
     /// Gets a DurableTaskRegistry type symbol.
     /// </summary>
-    public INamedTypeSymbol? DurableTaskRegistry => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.DurableTaskRegistry", ref this.durableTaskRegistry);
+    public INamedTypeSymbol? DurableTaskRegistry => this.GetOrResolveFullyQualifiedType("Dapr.DurableTask.DurableTaskRegistry", ref this.durableTaskRegistry);
 
     /// <summary>
     /// Gets a TaskOrchestrationContext type symbol.
     /// </summary>
-    public INamedTypeSymbol? TaskOrchestrationContext => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.TaskOrchestrationContext", ref this.taskOrchestrationContext);
+    public INamedTypeSymbol? TaskOrchestrationContext => this.GetOrResolveFullyQualifiedType("Dapr.DurableTask.TaskOrchestrationContext", ref this.taskOrchestrationContext);
 
     /// <summary>
     /// Gets a DurableTaskClient type symbol.
     /// </summary>
-    public INamedTypeSymbol? DurableTaskClient => this.GetOrResolveFullyQualifiedType("Microsoft.DurableTask.Client.DurableTaskClient", ref this.durableTaskClient);
+    public INamedTypeSymbol? DurableTaskClient => this.GetOrResolveFullyQualifiedType("Dapr.DurableTask.Client.DurableTaskClient", ref this.durableTaskClient);
 }

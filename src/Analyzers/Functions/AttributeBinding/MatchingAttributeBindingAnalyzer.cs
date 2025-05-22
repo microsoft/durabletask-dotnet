@@ -4,7 +4,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 
-namespace Microsoft.DurableTask.Analyzers.Functions.AttributeBinding;
+namespace Dapr.DurableTask.Analyzers.Functions.AttributeBinding;
 
 /// <summary>
 /// Expected attribute binding for a given parameter type.

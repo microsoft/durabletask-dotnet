@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.ScheduledTasks;
+namespace Dapr.DurableTask.ScheduledTasks;
 
 /// <summary>
 /// Log messages.

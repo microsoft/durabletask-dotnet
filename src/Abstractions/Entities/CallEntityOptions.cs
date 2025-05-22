@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Entities;
+namespace Dapr.DurableTask.Entities;
 
 /// <summary>
 /// Entity calling options.

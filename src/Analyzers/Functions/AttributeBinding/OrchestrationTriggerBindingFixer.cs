@@ -6,7 +6,7 @@ using System.Composition;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeFixes;
 
-namespace Microsoft.DurableTask.Analyzers.Functions.AttributeBinding;
+namespace Dapr.DurableTask.Analyzers.Functions.AttributeBinding;
 
 /// <summary>
 /// Code fixer for the <see cref="OrchestrationTriggerBindingAnalyzer"/>.

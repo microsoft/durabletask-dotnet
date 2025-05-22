@@ -1,9 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Analyzers.Functions.AttributeBinding;
+using Dapr.DurableTask.Analyzers.Functions.AttributeBinding;
 
-namespace Microsoft.DurableTask.Analyzers.Tests.Functions.AttributeBinding;
+namespace Dapr.DurableTask.Analyzers.Tests.Functions.AttributeBinding;
 
 public class EntityTriggerBindingAnalyzerTests : MatchingAttributeBindingSpecificationTests<EntityTriggerBindingAnalyzer, EntityTriggerBindingFixer>
 {

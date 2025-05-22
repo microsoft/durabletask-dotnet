@@ -4,7 +4,7 @@
 using System.Diagnostics.CodeAnalysis;
 using DurableTask.Core;
 
-namespace Microsoft.DurableTask.Worker.Shims;
+namespace Dapr.DurableTask.Worker.Shims;
 
 /// <summary>
 /// A wrapper to go from <see cref="OrchestrationContext" /> to <see cref="TaskOrchestrationContext "/>.

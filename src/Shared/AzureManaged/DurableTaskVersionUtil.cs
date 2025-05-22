@@ -3,7 +3,7 @@
 
 using System.Diagnostics;
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Utility class for generating the user agent string for the Durable Task SDK.

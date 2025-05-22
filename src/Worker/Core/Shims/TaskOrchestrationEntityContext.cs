@@ -8,11 +8,11 @@ using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
-using Microsoft.DurableTask.Entities;
+using Dapr.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 using DurableTaskCore = DurableTask.Core;
 
-namespace Microsoft.DurableTask.Worker.Shims;
+namespace Dapr.DurableTask.Worker.Shims;
 
 /// <summary>
 /// A wrapper to go from <see cref="OrchestrationContext" /> to <see cref="TaskOrchestrationContext "/>.

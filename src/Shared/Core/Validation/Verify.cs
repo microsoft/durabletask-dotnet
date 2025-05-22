@@ -4,7 +4,7 @@
 #nullable enable
 using System.Diagnostics.CodeAnalysis;
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Helpers for <see cref="InvalidOperationException" /> assertions.

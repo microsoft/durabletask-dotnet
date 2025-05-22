@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-using Microsoft.DurableTask.Worker;
+using Dapr.DurableTask.Worker;
 
-namespace Microsoft.DurableTask.ScheduledTasks;
+namespace Dapr.DurableTask.ScheduledTasks;
 
 /// <summary>
 /// Extension methods for configuring Durable Task workers to use the Azure Durable Task Scheduler service.

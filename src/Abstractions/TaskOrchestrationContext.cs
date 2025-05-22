@@ -1,11 +1,11 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Abstractions;
-using Microsoft.DurableTask.Entities;
+using Dapr.DurableTask.Abstractions;
+using Dapr.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Context object used by orchestrators to perform actions such as scheduling tasks, durable timers, waiting for

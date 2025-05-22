@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Microsoft.DurableTask.Client.Grpc.Tests;
+namespace Dapr.DurableTask.Client.Grpc.Tests;
 
 public class DurableTaskClientBuilderExtensionsTests
 {
@@ -81,11 +81,5 @@ public class DurableTaskClientBuilderExtensionsTests
         options.DefaultVersion.Should().Be("0.1");
     }
 
-#if NET6_0_OR_GREATER
     static GrpcChannel GetChannel() => GrpcChannel.ForAddress("http://localhost:9001");
-#endif
-
-#if NETFRAMEWORK
-    static GrpcChannel GetChannel() => new("http://localhost:9001", ChannelCredentials.Insecure);
-#endif
 }

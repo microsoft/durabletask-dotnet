@@ -4,8 +4,9 @@
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
+using DurableTask.Core.Serializing;
 
-namespace Microsoft.DurableTask.Client;
+namespace Dapr.DurableTask.Client;
 
 /// <summary>
 /// Represents a snapshot of an orchestration instance's current state, including metadata.

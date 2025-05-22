@@ -1,23 +1,15 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using System.Runtime.Serialization;
-using System.Text;
-using System.Threading.Tasks;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
-using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
-using Microsoft.DurableTask;
 using Newtonsoft.Json;
 using DTCore = DurableTask.Core;
-using P = Microsoft.DurableTask.Protobuf;
+using P = Dapr.DurableTask.Protobuf;
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Utilities for converting between representations of entity history events. The older backends represent entity

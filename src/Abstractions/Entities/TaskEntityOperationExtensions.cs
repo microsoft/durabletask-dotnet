@@ -4,7 +4,7 @@
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 
-namespace Microsoft.DurableTask.Entities;
+namespace Dapr.DurableTask.Entities;
 
 /// <summary>
 /// Extensions for <see cref="TaskEntityOperation"/>.

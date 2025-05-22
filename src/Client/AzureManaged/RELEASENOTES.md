@@ -1,1 +1,0 @@
-- Released first version Microsoft.DurableTask.Client.AzureManaged - 1.5.0-preview.1

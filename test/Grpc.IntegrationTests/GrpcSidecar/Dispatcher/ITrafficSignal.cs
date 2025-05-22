@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Dapr.DurableTask.Sidecar.Dispatcher;
 
 /// <summary>
 /// A simple primitive that can be used to block logical threads until some condition occurs.

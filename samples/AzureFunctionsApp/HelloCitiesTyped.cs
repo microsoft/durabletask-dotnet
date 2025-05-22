@@ -5,7 +5,7 @@ using Microsoft.DurableTask;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
-using Microsoft.DurableTask.Client;
+using Dapr.DurableTask.Client;
 
 namespace AzureFunctionsApp.Typed;
 
@@ -30,7 +30,7 @@ public static class HelloCitiesTypedStarter
         // orchestrators that are defined in the current project. The name of the generated extension methods
         // are based on the names of the orchestrator classes. Note that the source generator will *not*
         // generate type-safe extension methods for non-class-based orchestrator functions.
-        // NOTE: This feature is in PREVIEW and requires a package reference to Microsoft.DurableTask.Generators.
+        // NOTE: This feature is in PREVIEW and requires a package reference to Dapr.DurableTask.Generators.
         string instanceId = await client.ScheduleNewHelloCitiesTypedInstanceAsync();
         logger.LogInformation("Created new orchestration with instance ID = {instanceId}", instanceId);
         return client.CreateCheckStatusResponse(req, instanceId);

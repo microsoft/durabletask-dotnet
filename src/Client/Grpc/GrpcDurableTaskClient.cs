@@ -3,15 +3,17 @@
 
 using System.Diagnostics;
 using System.Text;
+using DurableTask.Core.Serializing;
 using Google.Protobuf.WellKnownTypes;
-using Microsoft.DurableTask.Client.Entities;
+using Dapr.DurableTask.Client.Entities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
-using P = Microsoft.DurableTask.Protobuf;
+using static Dapr.DurableTask.Protobuf.TaskHubSidecarService;
+using P = Dapr.DurableTask.Protobuf;
+using TaskName = Dapr.DurableTask.TaskName;
 
-namespace Microsoft.DurableTask.Client.Grpc;
+namespace Dapr.DurableTask.Client.Grpc;
 
 /// <summary>
 /// Durable Task client implementation that uses gRPC to connect to a remote "sidecar" process.

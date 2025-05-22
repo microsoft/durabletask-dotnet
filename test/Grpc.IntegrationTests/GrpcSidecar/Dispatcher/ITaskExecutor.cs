@@ -4,7 +4,7 @@
 using DurableTask.Core;
 using DurableTask.Core.History;
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Dapr.DurableTask.Sidecar.Dispatcher;
 
 interface ITaskExecutor
 {

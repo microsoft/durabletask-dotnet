@@ -4,7 +4,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace Microsoft.DurableTask.Client.Tests;
+namespace Dapr.DurableTask.Client.Tests;
 
 public class DefaultDurableTaskClientBuilderTests
 {

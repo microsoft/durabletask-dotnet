@@ -1,9 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using DurableTask.Core.Serializing;
 using CoreJsonDataConverter = DurableTask.Core.Serializing.JsonDataConverter;
 
-namespace Microsoft.DurableTask.Worker.Shims;
+namespace Dapr.DurableTask.Worker.Shims;
 
 /// <summary>
 /// A shim to go from <see cref="DataConverter" /> to <see cref="CoreJsonDataConverter" />.

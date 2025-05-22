@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.Abstractions.Tests;
+namespace Dapr.DurableTask.Abstractions.Tests;
 public class TaskOrchestrationContextVersionTests
 {
     [Theory]

@@ -5,9 +5,9 @@ using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
-using static Microsoft.DurableTask.Analyzers.Orchestration.ThreadTaskOrchestrationAnalyzer;
+using static Dapr.DurableTask.Analyzers.Orchestration.ThreadTaskOrchestrationAnalyzer;
 
-namespace Microsoft.DurableTask.Analyzers.Orchestration;
+namespace Dapr.DurableTask.Analyzers.Orchestration;
 
 /// <summary>
 /// Analyzer that detects usage of non-deterministic <see cref="Thread"/>/<see cref="Task"/> operations in orchestrations.

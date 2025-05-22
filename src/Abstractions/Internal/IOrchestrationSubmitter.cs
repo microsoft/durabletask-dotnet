@@ -1,7 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Internal;
+using Dapr.DurableTask;
+
+namespace Dapr.DurableTask.Internal;
 
 /// <summary>
 /// This is an internal API that supports the DurableTask infrastructure and not subject to

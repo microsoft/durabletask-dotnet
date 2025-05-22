@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 using Microsoft.CodeAnalysis.Testing;
-using Microsoft.DurableTask.Analyzers.Functions.Orchestration;
-using VerifyCS = Microsoft.DurableTask.Analyzers.Tests.Verifiers.CSharpAnalyzerVerifier<Microsoft.DurableTask.Analyzers.Functions.Orchestration.CancellationTokenOrchestrationAnalyzer>;
+using Dapr.DurableTask.Analyzers.Functions.Orchestration;
+using VerifyCS = Dapr.DurableTask.Analyzers.Tests.Verifiers.CSharpAnalyzerVerifier<Dapr.DurableTask.Analyzers.Functions.Orchestration.CancellationTokenOrchestrationAnalyzer>;
 
-namespace Microsoft.DurableTask.Analyzers.Tests.Functions.Orchestration;
+namespace Dapr.DurableTask.Analyzers.Tests.Functions.Orchestration;
 
 public class CancellationTokenOrchestrationAnalyzerTests
 {

@@ -2,10 +2,11 @@
 // Licensed under the MIT License.
 
 using DurableTask.Core;
+using DurableTask.Core.Serializing;
 using Microsoft.Extensions.Logging;
 using CoreTaskFailedException = DurableTask.Core.Exceptions.TaskFailedException;
 
-namespace Microsoft.DurableTask.Worker.Shims;
+namespace Dapr.DurableTask.Worker.Shims;
 
 /// <summary>
 /// Shim orchestration implementation that wraps the Durable Task Framework execution engine.

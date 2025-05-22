@@ -1,9 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Entities;
+using Dapr.DurableTask.Entities;
 
-namespace Microsoft.DurableTask.Client.Entities;
+namespace Dapr.DurableTask.Client.Entities;
 
 /// <summary>
 /// A client for interacting with entities.

@@ -3,10 +3,10 @@
 
 using DurableTask.Core;
 using DurableTask.Core.Entities;
-using Microsoft.DurableTask.Client.Entities;
-using Microsoft.DurableTask.Entities;
+using Dapr.DurableTask.Client.Entities;
+using Dapr.DurableTask.Entities;
 
-namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
+namespace Dapr.DurableTask.Client.OrchestrationServiceClientShim;
 
 /// <summary>
 /// A shim client for interacting with entities backend via <see cref="IOrchestrationServiceClient"/>.

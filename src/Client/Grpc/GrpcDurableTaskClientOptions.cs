@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Client.Grpc;
+namespace Dapr.DurableTask.Client.Grpc;
 
 /// <summary>
 /// The gRPC client options.

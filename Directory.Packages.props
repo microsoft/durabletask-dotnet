@@ -9,15 +9,14 @@
 
   <!-- Microsoft.Extensions.* Packages -->
   <ItemGroup>
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="6.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="6.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="6.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="6.0.0" Condition="'$(TargetFramework)' == 'netstandard2.0' or '$(TargetFramework)' == 'net48'" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="8.0.1" Condition="'$(TargetFramework)' == 'net8.0'"/>
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="6.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="6.0.2" />
-    <PackageVersion Include="Microsoft.Extensions.Options" Version="6.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="6.0.1" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.5" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="9.0.5" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.5" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="9.0.5" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.5" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.5" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="9.0.5" />
+    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="9.0.5" />
   </ItemGroup>
 
   <!-- Azure.* Packages -->
@@ -34,11 +33,11 @@
 
   <!-- Grpc / Protobuf Packages -->
   <ItemGroup>
-    <PackageVersion Include="Google.Protobuf" Version="3.21.12" />
-    <PackageVersion Include="Grpc.Core" Version="2.46.5" />
-    <PackageVersion Include="Grpc.Net.Client" Version="2.67.0" />
-    <PackageVersion Include="Grpc.Tools" Version="2.51.0" />
-    <PackageVersion Include="Grpc.AspNetCore.Server" Version="2.52.0" />
+    <PackageVersion Include="Google.Protobuf" Version="3.31.0" />
+    <PackageVersion Include="Grpc.Core" Version="2.46.6" />
+    <PackageVersion Include="Grpc.Net.Client" Version="2.71.0" />
+    <PackageVersion Include="Grpc.Tools" Version="2.72.0" />
+    <PackageVersion Include="Grpc.AspNetCore.Server" Version="2.71.0" />
   </ItemGroup>
 
   <!-- Microsoft.CodeAnalysis.* Packages -->
@@ -56,16 +55,18 @@
 
   <!-- Testing Frameworks & Analysis Packages -->
   <ItemGroup>
-    <PackageVersion Include="BenchmarkDotNet" Version="0.13.2" />
+    <PackageVersion Include="BenchmarkDotNet" Version="0.14.0" />
     <PackageVersion Include="FluentAssertions" Version="6.7.0" />
     <PackageVersion Include="FluentAssertions.Analyzers" Version="0.17.2"/>
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
-    <PackageVersion Include="Moq" Version="4.20.70" />
+    <PackageVersion Include="GitHubActionsTestLogger" Version="2.4.1" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.0" />
+    <PackageVersion Include="Moq" Version="4.20.72" />
     <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
-    <PackageVersion Include="coverlet.collector" Version="3.1.2" />
-    <PackageVersion Include="xunit" Version="2.5.3" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.extensibility.core" Version="2.9.3" />
     <PackageVersion Include="xunit.abstractions" Version="2.0.3" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="2.5.3"/>
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.0"/>
     <PackageVersion Include="Xunit.Combinatorial" Version="1.6.24" />
   </ItemGroup>
 
@@ -75,8 +76,8 @@
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="1.1.1" />
     <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="6.0.0" />
     <PackageVersion Include="System.Linq.Async" Version="6.0.1" />
-    <PackageVersion Include="System.Text.Json" Version="6.0.10" />
-    <PackageVersion Include="System.Collections.Immutable" Version="6.0.1" />
+    <PackageVersion Include="System.Text.Json" Version="9.0.5" />
+    <PackageVersion Include="System.Collections.Immutable" Version="9.0.5" />
   </ItemGroup>
 
 </Project>

@@ -10,7 +10,7 @@ that inspect Durable Task and Azure Functions code for quality, maintainability,
 
 ## Building
 
-If you are using Visual Studio, you can just open the main [solution file](../../Microsoft.DurableTask.sln)
+If you are using Visual Studio, you can just open the main [solution file](../../Dapr.DurableTask.sln)
 and be able to build the [project](./Analyzers.csproj). 
 
 In case you are developing from another IDE or want to build using the command line:
@@ -57,7 +57,7 @@ For instance, if you would like to test `MatchingInputOutputTypeActivityAnalyzer
 You can start creating a test class and add the following type alias:
 
 ```cs
-using VerifyCS = Microsoft.DurableTask.Analyzers.Tests.Verifiers.CSharpAnalyzerVerifier<Microsoft.DurableTask.Analyzers.Activities.MatchingInputOutputTypeActivityAnalyzer>;
+using VerifyCS = Dapr.DurableTask.Analyzers.Tests.Verifiers.CSharpAnalyzerVerifier<Dapr.DurableTask.Analyzers.Activities.MatchingInputOutputTypeActivityAnalyzer>;
 ```
 
 Then, you can use the verifier in your test code:

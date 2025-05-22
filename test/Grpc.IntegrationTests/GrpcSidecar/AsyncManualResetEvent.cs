@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Sidecar;
+namespace Dapr.DurableTask.Sidecar;
 
 class AsyncManualResetEvent
 {

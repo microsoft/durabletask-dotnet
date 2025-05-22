@@ -4,7 +4,7 @@
 using Grpc.Core;
 using Grpc.Net.Client.Configuration;
 
-namespace Microsoft.DurableTask;
+namespace Dapr.DurableTask;
 
 /// <summary>
 /// Provides default retry policy configurations for gRPC client connections.

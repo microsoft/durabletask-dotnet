@@ -3,9 +3,9 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
-using Microsoft.DurableTask.Entities;
+using Dapr.DurableTask.Entities;
 
-namespace Microsoft.DurableTask.Client.Entities;
+namespace Dapr.DurableTask.Client.Entities;
 
 /// <summary>
 /// Represents entity metadata.

@@ -12,7 +12,7 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" OutputItemType="Analyzer" />
-    <PackageReference Include="Microsoft.DurableTask.Generators" OutputItemType="Analyzer" />
+    <PackageReference Include="Dapr.DurableTask.Generators" OutputItemType="Analyzer" />
   </ItemGroup>
 
   <ItemGroup>

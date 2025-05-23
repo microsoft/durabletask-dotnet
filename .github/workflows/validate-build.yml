@@ -23,7 +23,7 @@ jobs:
       BUILD_OUTDIR: out/Release/
     strategy:
       matrix:
-        project: [ 'Client', 'Worker', 'Abstractions', 'Client - Core', 'Worker - Core' ]
+        project: [ 'Client', 'Worker', 'Abstractions', 'Client - Core', 'Worker - Core', 'Protos' ]
         dotnet-version: [ '8.0' ]
         include:
           - dotnet-version: '8.0'
@@ -51,6 +51,10 @@ jobs:
             path: './src/Worker/Core/Worker.csproj'
             projectName: 'Worker.csproj'
             name: 'worker-core'
+          - project: 'Protos'
+            path: './src/Grpc/Grpc.csproj'
+            projectName: 'Grpc.csproj'
+            name: 'protos'
     steps:
       - uses: actions/checkout@v3
 

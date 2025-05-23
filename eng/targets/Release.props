@@ -17,6 +17,12 @@
     <PackageTags>Durable Task Workflow Activity Dapr</PackageTags>
     <PackageOutputPath>$(RepoRoot)bin\$(Configuration)\nugets</PackageOutputPath>
   </PropertyGroup>
+
+  <!-- Enable delay signing -->
+  <PropertyGroup>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)cs_sdk.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
   
   <PropertyGroup>
     <PackageIdPrefix>Dapr.DurableTask.</PackageIdPrefix>

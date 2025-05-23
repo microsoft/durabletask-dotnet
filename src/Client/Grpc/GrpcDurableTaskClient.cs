@@ -78,10 +78,11 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     {
         Check.NotEntity(this.options.EnableEntitySupport, options?.InstanceId);
 
+        // We're explicitly OK with an empty version from the options as that had to be explicitly set. It should take precedence over the default.
         string version = string.Empty;
-        if (!string.IsNullOrEmpty(orchestratorName.Version))
+        if (options?.Version is { } v)
         {
-            version = orchestratorName.Version;
+            version = v;
         }
         else if (!string.IsNullOrEmpty(this.options.DefaultVersion))
         {

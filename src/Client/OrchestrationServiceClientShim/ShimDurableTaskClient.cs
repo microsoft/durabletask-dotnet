@@ -172,7 +172,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
             Event = new ExecutionStartedEvent(-1, serializedInput)
             {
                 Name = orchestratorName.Name,
-                Version = orchestratorName.Version,
+                Version = options?.Version ?? string.Empty,
                 OrchestrationInstance = instance,
                 ScheduledStartTime = options?.StartAt?.UtcDateTime,
                 Tags = options?.Tags != null ? options.Tags.ToDictionary(kvp => kvp.Key, kvp => kvp.Value) : null,

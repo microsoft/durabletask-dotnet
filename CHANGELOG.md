@@ -8,6 +8,7 @@
 - Add user agent header to gRPC called in ([#417](https://github.com/microsoft/durabletask-dotnet/pull/417))
 - Enrich User-Agent Header in gRPC Metadata to indicate Client or Worker as caller ([#421](https://github.com/microsoft/durabletask-dotnet/pull/421))
 - Add extension methods for registering entities by type ([#427](https://github.com/microsoft/durabletask-dotnet/pull/427))
+- Add TaskVersion and utilize it for version overrides when starting orchestrations ([#416](https://github.com/microsoft/durabletask-dotnet/pull/416))
 
 ## v1.10.0
 

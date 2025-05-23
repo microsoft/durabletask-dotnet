@@ -221,7 +221,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             this.operationActions.Add(new StartNewOrchestrationOperationAction()
             {
                 Name = name.Name,
-                Version = name.Version,
+                Version = options?.Version ?? string.Empty,
                 InstanceId = instanceId,
                 Input = this.dataConverter.Serialize(input),
                 ScheduledStartTime = options?.StartAt?.UtcDateTime,

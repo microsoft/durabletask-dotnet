@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.Buffers;
@@ -11,6 +11,7 @@ using DurableTask.Core.Command;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
+using DurableTask.Core.Tracing;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using DTCore = DurableTask.Core;
@@ -590,6 +591,10 @@ static class ProtoUtils
             Operation = operationRequest.Operation,
             Input = operationRequest.Input,
             Id = Guid.Parse(operationRequest.RequestId),
+            TraceContext = operationRequest.TraceContext != null ?
+            new DistributedTraceContext(
+                operationRequest.TraceContext.TraceParent,
+                operationRequest.TraceContext.TraceState) : null,
         };
     }
 
@@ -612,12 +617,16 @@ static class ProtoUtils
                 return new OperationResult()
                 {
                     Result = operationResult.Success.Result,
+                    StartTimeUtc = operationResult.Success.StartTimeUtc?.ToDateTime(),
+                    EndTimeUtc = operationResult.Success.EndTimeUtc?.ToDateTime(),
                 };
 
             case P.OperationResult.ResultTypeOneofCase.Failure:
                 return new OperationResult()
                 {
                     FailureDetails = operationResult.Failure.FailureDetails.ToCore(),
+                    StartTimeUtc = operationResult.Failure.StartTimeUtc?.ToDateTime(),
+                    EndTimeUtc = operationResult.Failure.EndTimeUtc?.ToDateTime(),
                 };
 
             default:
@@ -645,6 +654,8 @@ static class ProtoUtils
                 Success = new P.OperationResultSuccess()
                 {
                     Result = operationResult.Result,
+                    StartTimeUtc = operationResult.StartTimeUtc?.ToTimestamp(),
+                    EndTimeUtc = operationResult.EndTimeUtc?.ToTimestamp(),
                 },
             };
         }
@@ -655,6 +666,8 @@ static class ProtoUtils
                 Failure = new P.OperationResultFailure()
                 {
                     FailureDetails = ToProtobuf(operationResult.FailureDetails),
+                    StartTimeUtc = operationResult.StartTimeUtc?.ToTimestamp(),
+                    EndTimeUtc = operationResult.EndTimeUtc?.ToTimestamp(),
                 },
             };
         }
@@ -683,6 +696,11 @@ static class ProtoUtils
                     Input = operationAction.SendSignal.Input,
                     InstanceId = operationAction.SendSignal.InstanceId,
                     ScheduledTime = operationAction.SendSignal.ScheduledTime?.ToDateTime(),
+                    RequestTime = operationAction.SendSignal.RequestTime?.ToDateTimeOffset(),
+                    ParentTraceContext = operationAction.SendSignal.ParentTraceContext != null ?
+                        new DistributedTraceContext(
+                            operationAction.SendSignal.ParentTraceContext.TraceParent,
+                            operationAction.SendSignal.ParentTraceContext.TraceState) : null,
                 };
 
             case P.OperationAction.OperationActionTypeOneofCase.StartNewOrchestration:
@@ -694,6 +712,11 @@ static class ProtoUtils
                     InstanceId = operationAction.StartNewOrchestration.InstanceId,
                     Version = operationAction.StartNewOrchestration.Version,
                     ScheduledStartTime = operationAction.StartNewOrchestration.ScheduledTime?.ToDateTime(),
+                    RequestTime = operationAction.StartNewOrchestration.RequestTime?.ToDateTimeOffset(),
+                    ParentTraceContext = operationAction.StartNewOrchestration.ParentTraceContext != null ?
+                        new DistributedTraceContext(
+                            operationAction.StartNewOrchestration.ParentTraceContext.TraceParent,
+                            operationAction.StartNewOrchestration.ParentTraceContext.TraceState) : null,
                 };
             default:
                 throw new NotSupportedException($"Deserialization of {operationAction.OperationActionTypeCase} is not supported.");
@@ -725,6 +748,14 @@ static class ProtoUtils
                     Input = sendSignalAction.Input,
                     InstanceId = sendSignalAction.InstanceId,
                     ScheduledTime = sendSignalAction.ScheduledTime?.ToTimestamp(),
+                    RequestTime = sendSignalAction.RequestTime?.ToTimestamp(),
+                    ParentTraceContext = sendSignalAction.ParentTraceContext != null ?
+                        new P.TraceContext
+                        {
+                            TraceParent = sendSignalAction.ParentTraceContext.TraceParent,
+                            TraceState = sendSignalAction.ParentTraceContext.TraceState,
+                        }
+                    : null,
                 };
                 break;
 
@@ -737,6 +768,14 @@ static class ProtoUtils
                     Version = startNewOrchestrationAction.Version,
                     InstanceId = startNewOrchestrationAction.InstanceId,
                     ScheduledTime = startNewOrchestrationAction.ScheduledStartTime?.ToTimestamp(),
+                    RequestTime = startNewOrchestrationAction.RequestTime?.ToTimestamp(),
+                    ParentTraceContext = startNewOrchestrationAction.ParentTraceContext != null ?
+                        new P.TraceContext
+                        {
+                            TraceParent = startNewOrchestrationAction.ParentTraceContext.TraceParent,
+                            TraceState = startNewOrchestrationAction.ParentTraceContext.TraceState,
+                        }
+                    : null,
                 };
                 break;
         }

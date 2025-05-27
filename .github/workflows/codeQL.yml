@@ -59,10 +59,12 @@ jobs:
         global-json-file: global.json
 
     - name: Restore dependencies
-      run: dotnet restore $solution
+      run: |
+        Get-ChildItem -Path src, test -Recurse -Filter *.csproj | ForEach-Object { dotnet restore $_.FullName }
 
     - name: Build
-      run: dotnet build $solution #--configuration $config #--no-restore -p:FileVersionRevision=$GITHUB_RUN_NUMBER -p:ContinuousIntegrationBuild=true
+      run: |
+        Get-ChildItem -Path src, test -Recurse -Filter *.csproj | ForEach-Object { dotnet build $_.FullName } 
 
     # Run CodeQL analysis
     - name: Perform CodeQL Analysis

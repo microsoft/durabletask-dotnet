@@ -35,16 +35,20 @@ jobs:
         global-json-file: global.json
 
     - name: Restore dependencies
-      run: dotnet restore $env:solution
+      run: |
+        Get-ChildItem -Path src, test -Recurse -Filter *.csproj | ForEach-Object { dotnet restore $_.FullName }
 
     - name: Build
-      run: dotnet build $env:solution --configuration $env:config --no-restore -p:FileVersionRevision=$env:GITHUB_RUN_NUMBER
+      run: |
+        Get-ChildItem -Path src, test -Recurse -Filter *.csproj | ForEach-Object { dotnet build  --configuration $env:config --no-restore -p:FileVersionRevision=$env:GITHUB_RUN_NUMBER $_.FullName } 
 
     - name: Test
-      run: dotnet test $env:solution --configuration $env:config --no-build --verbosity normal
-
+      run: |
+        Get-ChildItem -Path src, test -Recurse -Filter *.csproj | ForEach-Object { dotnet test  --configuration $env:config --no-build --verbosity normal $_.FullName } 
+        
     - name: Pack
-      run: dotnet pack $env:solution --configuration $env:config --no-build
+      run: |
+        Get-ChildItem -Path src, test -Recurse -Filter *.csproj | ForEach-Object { dotnet pack  --configuration $env:config --no-build $_.FullName } 
 
     - name: Upload
       uses: actions/upload-artifact@v4

@@ -14,7 +14,6 @@ using Microsoft.Extensions.Logging;
 using static Dapr.DurableTask.Protobuf.TaskHubSidecarService;
 using DTCore = DurableTask.Core;
 using P = Dapr.DurableTask.Protobuf;
-using TaskName = Dapr.DurableTask.TaskName;
 
 namespace Dapr.DurableTask.Worker.Grpc;
 
@@ -258,7 +257,6 @@ sealed partial class GrpcDurableTaskWorker
             using var timeoutSource = new CancellationTokenSource();
             timeoutSource.CancelAfter(TimeSpan.FromSeconds(60));
             using var tokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellation, timeoutSource.Token);
-            var tokenSourceToken = tokenSource.Token;
 
             await foreach (P.WorkItem workItem in stream.ResponseStream.ReadAllAsync(cancellationToken: cancellation))
             {
@@ -270,7 +268,7 @@ sealed partial class GrpcDurableTaskWorker
                         () => this.OnRunOrchestratorAsync(
                             workItem.OrchestratorRequest,
                             workItem.CompletionToken,
-                            tokenSourceToken));
+                            cancellation));
                 }
                 else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
                 {
@@ -279,13 +277,13 @@ sealed partial class GrpcDurableTaskWorker
                         () => this.OnRunActivityAsync(
                             workItem.ActivityRequest,
                             workItem.CompletionToken,
-                            tokenSourceToken));
+                            cancellation));
                 }
                 else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
                 {
                     this.RunBackgroundTask(
                         workItem,
-                        () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), tokenSourceToken));
+                        () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation));
                 }
                 else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequestV2)
                 {
@@ -297,7 +295,7 @@ sealed partial class GrpcDurableTaskWorker
                         workItem,
                         () => this.OnRunEntityBatchAsync(
                             batchRequest,
-                            tokenSourceToken,
+                            cancellation,
                             workItem.CompletionToken,
                             operationInfos));
                 }

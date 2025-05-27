@@ -10,6 +10,7 @@ on:
     branches:
       - main
       - 'feature/**'
+      - stevosyan/distributed-tracing-for-entities-isolated
     paths-ignore: [ '**.md' ]
 
 env:

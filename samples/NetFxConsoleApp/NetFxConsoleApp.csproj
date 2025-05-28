@@ -7,8 +7,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" />
-    <ProjectReference Include="..\..\src\Client\Grpc\Client.Grpc.csproj" />
-    <ProjectReference Include="..\..\src\Worker\Grpc\Worker.Grpc.csproj" />
+    <PackageReference Include="Microsoft.DurableTask.Client.Grpc" />
+    <PackageReference Include="Microsoft.DurableTask.Worker.Grpc" />
   </ItemGroup>
 
 </Project>

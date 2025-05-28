@@ -9,9 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Client\Grpc\Client.Grpc.csproj" />
-    <ProjectReference Include="..\..\src\Worker\Grpc\Worker.Grpc.csproj" />
-    <ProjectReference Include="..\..\src\Generators\Generators.csproj" OutputItemType="Analyzer"/>
+    <PackageReference Include="Microsoft.DurableTask.Client.Grpc" />
+    <PackageReference Include="Microsoft.DurableTask.Worker.Grpc" />
+    <PackageReference Include="Microsoft.DurableTask.Generators" OutputItemType="Analyzer" />
   </ItemGroup>
 
 </Project>

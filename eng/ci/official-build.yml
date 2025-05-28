@@ -13,7 +13,7 @@ trigger:
         include:
             - main
             - vabachu/release-testing
-            - stevosyan/distributed-tracing-for-entities-isolated
+            - stevosyan/distributed-tracing-for-entities-isolated-with-dtcore-nuget
 
 # CI only, does not trigger on PRs.
 pr: none

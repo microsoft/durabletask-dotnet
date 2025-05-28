@@ -375,6 +375,11 @@ sealed partial class GrpcDurableTaskWorker
                     var taskScheduledEvent = request.PastEvents.Where(x => x.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.TaskScheduled).LastOrDefault(x => x.EventId == newEvent.TaskCompleted.TaskScheduledId);
                     TraceHelper.EmitTraceActivityForTaskCompleted(request.InstanceId, taskScheduledEvent, taskScheduledEvent.TaskScheduled);
                 }
+                else if (newEvent.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.TaskFailed)
+                {
+                    var taskScheduledEvent = request.PastEvents.Where(x => x.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.TaskScheduled).LastOrDefault(x => x.EventId == newEvent.TaskFailed.TaskScheduledId);
+                    TraceHelper.EmitTraceActivityForTaskFailed(request.InstanceId, taskScheduledEvent, taskScheduledEvent.TaskScheduled, newEvent.TaskFailed);
+                }
             }
 
             OrchestratorExecutionResult? result = null;
@@ -515,6 +520,16 @@ sealed partial class GrpcDurableTaskWorker
                 };
             }
 
+            var failedAction = response.Actions.FirstOrDefault(a => a.CompleteOrchestration?.OrchestrationStatus == P.OrchestrationStatus.Failed);
+
+            if (failedAction is not null)
+            {
+                traceActivity?.SetStatus(ActivityStatusCode.Error, failedAction.CompleteOrchestration.FailureDetails?.ErrorMessage ?? "Orchestrator failed with no error message");
+            }
+
+            // Stop the trace activity here to avoid including the completion time in the latency calculation
+            traceActivity?.Stop();
+
             this.Logger.SendingOrchestratorResponse(
                 name,
                 response.InstanceId,
@@ -568,6 +583,8 @@ sealed partial class GrpcDurableTaskWorker
             int outputSizeInBytes = 0;
             if (failureDetails != null)
             {
+                traceActivity?.SetStatus(ActivityStatusCode.Error, failureDetails.ErrorMessage);
+
                 outputSizeInBytes = failureDetails.GetApproximateByteCount();
             }
             else if (output != null)
@@ -587,6 +604,9 @@ sealed partial class GrpcDurableTaskWorker
                 FailureDetails = failureDetails,
                 CompletionToken = completionToken,
             };
+
+            // Stop the trace activity here to avoid including the completion time in the latency calculation
+            traceActivity?.Stop();
 
             await this.client.CompleteActivityTaskAsync(response, cancellationToken: cancellation);
         }

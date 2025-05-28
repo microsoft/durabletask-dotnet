@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.Diagnostics;
@@ -95,6 +95,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             Version = version,
             InstanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N"),
             Input = this.DataConverter.Serialize(input),
+            RequestTime = DateTimeOffset.UtcNow.ToTimestamp(),
         };
 
         // Add tags to the collection

@@ -1,7 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using DurableTask.Core;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
@@ -166,6 +168,16 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
         };
 
         string? serializedInput = this.DataConverter.Serialize(input);
+
+        var tags = new Dictionary<string, string>();
+        if (options?.Tags != null)
+        {
+            tags = options.Tags.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+        }
+
+        tags[OrchestrationTags.CreateTraceForNewOrchestration] = "true";
+        tags[OrchestrationTags.RequestTime] = DateTimeOffset.UtcNow.ToString(CultureInfo.InvariantCulture);
+
         TaskMessage message = new()
         {
             OrchestrationInstance = instance,
@@ -175,7 +187,8 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                 Version = options?.Version ?? string.Empty,
                 OrchestrationInstance = instance,
                 ScheduledStartTime = options?.StartAt?.UtcDateTime,
-                Tags = options?.Tags != null ? options.Tags.ToDictionary(kvp => kvp.Key, kvp => kvp.Value) : null,
+                ParentTraceContext = Activity.Current is { } activity ? new Core.Tracing.DistributedTraceContext(activity.Id!, activity.TraceStateString) : null,
+                Tags = tags,
             },
         };
 

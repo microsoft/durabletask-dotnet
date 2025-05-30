@@ -45,7 +45,7 @@ jobs:
             verbosityRestore: Minimal
             projects: $(project)
             feedsToUse: config
-            nugetConfigPath: nuget.config
+            nugetConfigPath: ../../nuget.config
 
         # Build source directory
         - task: DotNetCoreCLI@2

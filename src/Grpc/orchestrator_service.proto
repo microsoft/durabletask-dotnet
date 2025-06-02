@@ -4,14 +4,13 @@
 syntax = "proto3";
 
 option csharp_namespace = "Dapr.DurableTask.Protobuf";
-option java_package = "com.Dapr.DurableTask.implementation.protobuf";
-option go_package = "/internal/protos";
+option java_package = "io.dapr.durabletask.implementation.protobuf";
+option go_package = "/api/protos";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/wrappers.proto";
 import "google/protobuf/empty.proto";
-import "google/protobuf/struct.proto";
 
 message OrchestrationInstance {
     string instanceId = 1;
@@ -127,6 +126,7 @@ message SubOrchestrationInstanceFailedEvent {
 
 message TimerCreatedEvent {
     google.protobuf.Timestamp fireAt = 1;
+    optional string name = 2;
 }
 
 message TimerFiredEvent {
@@ -192,7 +192,7 @@ message EntityOperationCalledEvent {
 }
 
 message EntityLockRequestedEvent {
-    string criticalSectionId = 1;  
+    string criticalSectionId = 1;
     repeated string lockSet = 2;
     int32 position = 3;
     google.protobuf.StringValue parentInstanceId = 4; // used only within messages, null in histories 
@@ -217,7 +217,7 @@ message EntityUnlockSentEvent {
 message EntityLockGrantedEvent {
     string criticalSectionId = 1;
 }
- 
+
 message HistoryEvent {
     int32 eventId = 1;
     google.protobuf.Timestamp timestamp = 2;
@@ -244,8 +244,8 @@ message HistoryEvent {
         ExecutionResumedEvent executionResumed = 22;
         EntityOperationSignaledEvent entityOperationSignaled = 23;
         EntityOperationCalledEvent entityOperationCalled = 24;
-        EntityOperationCompletedEvent entityOperationCompleted = 25; 
-        EntityOperationFailedEvent entityOperationFailed = 26; 
+        EntityOperationCompletedEvent entityOperationCompleted = 25;
+        EntityOperationFailedEvent entityOperationFailed = 26;
         EntityLockRequestedEvent entityLockRequested = 27;
         EntityLockGrantedEvent entityLockGranted = 28;
         EntityUnlockSentEvent entityUnlockSent = 29;
@@ -267,6 +267,7 @@ message CreateSubOrchestrationAction {
 
 message CreateTimerAction {
     google.protobuf.Timestamp fireAt = 1;
+    optional string name = 2;
 }
 
 message SendEventAction {
@@ -319,7 +320,6 @@ message OrchestratorRequest {
     repeated HistoryEvent newEvents = 4;
     OrchestratorEntityParameters entityParameters = 5;
     bool requiresHistoryStreaming = 6;
-    map<string, google.protobuf.Value> properties = 7;
 }
 
 message OrchestratorResponse {
@@ -346,8 +346,14 @@ message CreateInstanceRequest {
 }
 
 message OrchestrationIdReusePolicy {
-    repeated OrchestrationStatus replaceableStatus = 1;
-    reserved 2;
+    repeated OrchestrationStatus operationStatus = 1;
+    CreateOrchestrationAction action = 2;
+}
+
+enum CreateOrchestrationAction {
+    ERROR = 0;
+    IGNORE = 1;
+    TERMINATE = 2;
 }
 
 message CreateInstanceResponse {
@@ -493,7 +499,7 @@ message SignalEntityRequest {
 }
 
 message SignalEntityResponse {
-     // no payload
+    // no payload
 }
 
 message GetEntityRequest {
@@ -659,16 +665,16 @@ service TaskHubSidecarService {
 
     // Waits for an orchestration instance to reach a running or completion state.
     rpc WaitForInstanceStart(GetInstanceRequest) returns (GetInstanceResponse);
-    
+
     // Waits for an orchestration instance to reach a completion state (completed, failed, terminated, etc.).
     rpc WaitForInstanceCompletion(GetInstanceRequest) returns (GetInstanceResponse);
 
     // Raises an event to a running orchestration instance.
     rpc RaiseEvent(RaiseEventRequest) returns (RaiseEventResponse);
-    
+
     // Terminates a running orchestration instance.
     rpc TerminateInstance(TerminateRequest) returns (TerminateResponse);
-    
+
     // Suspends a running orchestration instance.
     rpc SuspendInstance(SuspendRequest) returns (SuspendResponse);
 
@@ -714,6 +720,9 @@ service TaskHubSidecarService {
 
     // Abandon an entity work item
     rpc AbandonTaskEntityWorkItem(AbandonEntityTaskRequest) returns (AbandonEntityTaskResponse);
+
+    // Rerun a Workflow from a specific event ID of a workflow instance.
+    rpc RerunWorkflowFromEvent(RerunWorkflowFromEventRequest) returns (RerunWorkflowFromEventResponse);
 }
 
 message GetWorkItemsRequest {
@@ -750,7 +759,7 @@ message CompleteTaskResponse {
 }
 
 message HealthPing {
-	// No payload
+    // No payload
 }
 
 message StreamInstanceHistoryRequest {
@@ -763,4 +772,35 @@ message StreamInstanceHistoryRequest {
 
 message HistoryChunk {
     repeated HistoryEvent events = 1;
+}
+
+// RerunWorkflowFromEventRequest is used to rerun a workflow instance from a
+// specific event ID.
+message RerunWorkflowFromEventRequest {
+    // sourceInstanceID is the orchestration instance ID to rerun. Can be a top
+    // level instance, or sub-orchestration instance.
+    string sourceInstanceID = 1;
+
+    // the event id to start the new workflow instance from.
+    uint32 eventID = 2;
+
+    // newInstanceID is the new instance ID to use for the new workflow instance.
+    // If not given, a random instance ID will be given.
+    optional string newInstanceID = 3;
+
+    // input can optionally given to give the new instance a different input to
+    // the next Activity event.
+    google.protobuf.StringValue input = 4;
+
+    // overwrite_input signals that the input to the rerun activity should be
+    // written with input. This is required because of the incorrect typing of
+    // inputs being `StringValue` which cannot be optional, and therefore no nil
+    // value can be signalled or overwritten.
+    bool overwriteInput = 5;
+}
+
+// RerunWorkflowFromEventResponse is the response to executing
+// RerunWorkflowFromEvent.
+message RerunWorkflowFromEventResponse {
+    string newInstanceID = 1;
 }

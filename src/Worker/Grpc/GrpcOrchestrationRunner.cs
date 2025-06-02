@@ -92,9 +92,6 @@ public static class GrpcOrchestrationRunner
 
         List<HistoryEvent> pastEvents = request.PastEvents.Select(ProtoUtils.ConvertHistoryEvent).ToList();
         IEnumerable<HistoryEvent> newEvents = request.NewEvents.Select(ProtoUtils.ConvertHistoryEvent);
-        Dictionary<string, object?> properties = request.Properties.ToDictionary(
-                pair => pair.Key,
-                pair => ProtoUtils.ConvertValueToObject(pair.Value));
 
         // Re-construct the orchestration state from the history.
         // New events must be added using the AddEvent method.
@@ -112,7 +109,7 @@ public static class GrpcOrchestrationRunner
         DurableTaskShimFactory factory = services is null
             ? DurableTaskShimFactory.Default
             : ActivatorUtilities.GetServiceOrCreateInstance<DurableTaskShimFactory>(services);
-        TaskOrchestration shim = factory.CreateOrchestration(orchestratorName, implementation, properties, parent);
+        TaskOrchestration shim = factory.CreateOrchestration(orchestratorName, implementation, new Dictionary<string, object?>(), parent);
         TaskOrchestrationExecutor executor = new(runtimeState, shim, BehaviorOnContinueAsNew.Carryover, request.EntityParameters.ToCore(), ErrorPropagationMode.UseFailureDetails);
         OrchestratorExecutionResult result = executor.Execute();
 

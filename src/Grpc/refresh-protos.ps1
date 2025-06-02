@@ -13,17 +13,18 @@ if ($PSVersionTable.PSVersion -lt [Version]"7.0") {
 # We need this to download the proto files from the correct commit, avoiding race conditions
 # in rare cases where the proto files are updated between the time we download the commit ID
 # and the time we download the proto files.
-$commitDetails = Invoke-RestMethod -Uri "https://api.github.com/repos/microsoft/durabletask-protobuf/commits/$branch"
+$commitDetails = Invoke-RestMethod -Uri "https://api.github.com/repos/dapr/durabletask-protobuf/commits/$branch"
 $commitId = $commitDetails.sha
 
 # These are the proto files we need to download from the durabletask-protobuf repository.
 $protoFileNames = @(
     "orchestrator_service.proto"
+    "runtime-state.proto"
 )
 
 # Download each proto file to the local directory using the above commit ID
 foreach ($protoFileName in $protoFileNames) {
-    $url = "https://raw.githubusercontent.com/microsoft/durabletask-protobuf/$commitId/protos/$protoFileName"
+    $url = "https://raw.githubusercontent.com/dapr/durabletask-protobuf/$commitId/protos/$protoFileName"
     $outputFile = "$PSScriptRoot\$protoFileName"
 
     try {
@@ -49,7 +50,7 @@ Add-Content `
 foreach ($protoFileName in $protoFileNames) {
     Add-Content `
         -Path $versionsFile `
-        -Value "https://raw.githubusercontent.com/microsoft/durabletask-protobuf/$commitId/protos/$protoFileName"
+        -Value "https://raw.githubusercontent.com/dapr/durabletask-protobuf/$commitId/protos/$protoFileName"
 }
 
 Write-Host "Wrote commit ID $commitId to $versionsFile" -ForegroundColor Green

@@ -366,7 +366,7 @@ sealed partial class GrpcDurableTaskWorker
                     .Select(e => e.ExecutionStarted)
                     .FirstOrDefault();
 
-            using Activity? traceActivity = TraceHelper.StartTraceActivityForOrchestrationExecution(executionStartedEvent);
+            Activity? traceActivity = TraceHelper.StartTraceActivityForOrchestrationExecution(executionStartedEvent);
 
             foreach (var newEvent in request.NewEvents)
             {
@@ -520,15 +520,17 @@ sealed partial class GrpcDurableTaskWorker
                 };
             }
 
-            var failedAction = response.Actions.FirstOrDefault(a => a.CompleteOrchestration?.OrchestrationStatus == P.OrchestrationStatus.Failed);
+            var completeOrchestrationAction = response.Actions.FirstOrDefault(a => a.CompleteOrchestration is not null);
 
-            if (failedAction is not null)
+            if (completeOrchestrationAction is not null)
             {
-                traceActivity?.SetStatus(ActivityStatusCode.Error, failedAction.CompleteOrchestration.FailureDetails?.ErrorMessage ?? "Orchestrator failed with no error message");
-            }
+                if (completeOrchestrationAction.CompleteOrchestration.OrchestrationStatus == P.OrchestrationStatus.Failed)
+                {
+                    traceActivity?.SetStatus(ActivityStatusCode.Error, completeOrchestrationAction.CompleteOrchestration.Result);
+                }
 
-            // Stop the trace activity here to avoid including the completion time in the latency calculation
-            traceActivity?.Stop();
+                traceActivity?.Stop();
+            }
 
             this.Logger.SendingOrchestratorResponse(
                 name,

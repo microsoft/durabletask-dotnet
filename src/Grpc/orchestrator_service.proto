@@ -97,6 +97,7 @@ message TaskScheduledEvent {
     google.protobuf.StringValue version = 2;
     google.protobuf.StringValue input = 3;
     TraceContext parentTraceContext = 4;
+    map<string, string> tags = 5;
 }
 
 message TaskCompletedEvent {
@@ -258,7 +259,8 @@ message ScheduleTaskAction {
     string name = 1;
     google.protobuf.StringValue version = 2;
     google.protobuf.StringValue input = 3;
-    TraceContext parentTraceContext = 4;
+    map<string, string> tags = 4;
+    TraceContext parentTraceContext = 5;
 }
 
 message CreateSubOrchestrationAction {

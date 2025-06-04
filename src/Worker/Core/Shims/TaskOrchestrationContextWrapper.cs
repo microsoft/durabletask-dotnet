@@ -179,9 +179,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         static string? GetInstanceId(TaskOptions? options)
             => options is SubOrchestrationOptions derived ? derived.InstanceId : null;
         string instanceId = GetInstanceId(options) ?? this.NewGuid().ToString("N");
-        string defaultVersion = this.invocationContext.Options?.Versioning?.DefaultVersion ?? string.Empty;
-        string version = options is SubOrchestrationOptions subOptions ? subOptions.Version : defaultVersion;
-
+        string defaultVersion = this.GetDefaultVersion();
+        string version = options is SubOrchestrationOptions { Version: { } v } ? v.Version : defaultVersion;
         Check.NotEntity(this.invocationContext.Options.EnableEntitySupport, instanceId);
 
         // if this orchestration uses entities, first validate that the suborchestration call is allowed in the current context
@@ -481,5 +480,23 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                 }
             }
         }
+    }
+
+    // The default version can come from two different places depending on the context of the invocation.
+    string GetDefaultVersion()
+    {
+        // Preferred choice.
+        if (this.invocationContext.Options.Versioning?.DefaultVersion is { } v)
+        {
+            return v;
+        }
+
+        // Secondary choice.
+        if (this.Properties.TryGetValue("defaultVersion", out var propVersion) && propVersion is string v2)
+        {
+            return v2;
+        }
+
+        return string.Empty;
     }
 }

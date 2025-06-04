@@ -5,6 +5,7 @@ trigger:
     # Keep this set limited as appropriate (don't mirror individual user branches).
     - main
     - vabachu/release-testing
+    - stevosyan/distributed-tracing-for-entities-isolated-with-dtcore-nuget
 
 resources:
   repositories:

@@ -94,7 +94,7 @@ public record SubOrchestrationOptions : TaskOptions
     /// <summary>
     /// Gets the version to associate with the sub-orchestration instance.
     /// </summary>
-    public TaskVersion Version { get; init; } = default!;
+    public TaskVersion? Version { get; init; }
 }
 
 /// <summary>

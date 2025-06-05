@@ -1,0 +1,4 @@
+Instance,ConnectionString
+1,Endpoint=https://wbtestsharedeas-fjg2gbdm.eastus2.durabletask.dev;TaskHub=th1;Authentication=None
+2,Endpoint=https://wbtestsharedeas-fpegc2cn.eastus2.durabletask.dev;TaskHub=th1;Authentication=None
+3,Endpoint=https://wbtestsharedeas-dmf4bhfj.eastus2.durabletask.dev;TaskHub=th1;Authentication=None

@@ -1,17 +1,22 @@
-﻿{
+{
   "$schema": "https://json.schemastore.org/launchsettings.json",
   "profiles": {
     "http": {
       "commandName": "Project",
-      "applicationUrl": "http://localhost:8089",
+      "applicationUrl": "http://localhost:9006",
       "dotnetRunMessages": true,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "DURABLE_TASK_SCHEDULER_CONNECTION_STRING": "Endpoint=https://wbtestsharedeas-bhgkd5f4.eastus2.durabletask.dev;TaskHub=th2;Authentication=None"
+        "DURABLE_TASK_SCHEDULER_CONNECTION_STRING": "Endpoint=https://wbtestsharedeas-fjg2gbdm.eastus2.durabletask.dev;TaskHub=th1;Authentication=None"
       }
     }
   }
 }
+
+
+
+
+
 
 
 

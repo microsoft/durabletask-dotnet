@@ -11,7 +11,7 @@ Content-Type: application/json
     "id": "{{scheduleId}}",
     "orchestrationName": "CacheClearingOrchestrator",
     "input": "{{scheduleId}}",
-    "interval": "00:00:10"
+    "interval": "00:00:01"
 }
 
 ### Get a specific schedule by ID

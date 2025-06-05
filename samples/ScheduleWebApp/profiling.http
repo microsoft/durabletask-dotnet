@@ -1,6 +1,6 @@
 ### Variables
 @baseUrl = http://localhost:8089
-@instanceCount = 1
+@instanceCount = 10
 
 ### Create multiple orchestration instances
 # @name createInstances
@@ -16,7 +16,7 @@ Content-Type: application/json
 POST {{baseUrl}}/instances/purge
 Content-Type: application/json
 
-@instanceId = b464d41af64f458ea90b27906a545e05
+@instanceId = 42098e1896514bda883a8a086e36de91
 ### Terminate an orchestration instance
 # @name terminateInstance
 POST {{baseUrl}}/instances/{{instanceId}}/terminate

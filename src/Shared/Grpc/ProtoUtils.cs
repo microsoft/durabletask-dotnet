@@ -298,18 +298,18 @@ static class ProtoUtils
         {
             var protoAction = new P.OrchestratorAction { Id = action.Id };
 
+            ActivityContext? clientActivityContext = null;
+
+            if (parentActivity != null)
+            {
+                ActivitySpanId clientSpanId = ActivitySpanId.CreateRandom();
+                clientActivityContext = new(parentActivity.TraceId, clientSpanId, parentActivity.ActivityTraceFlags, parentActivity.TraceStateString);
+            }
+
             switch (action.OrchestratorActionType)
             {
                 case OrchestratorActionType.ScheduleOrchestrator:
                     var scheduleTaskAction = (ScheduleTaskOrchestratorAction)action;
-
-                    ActivityContext? clientActivityContext = null;
-
-                    if (parentActivity != null)
-                    {
-                        ActivitySpanId clientSpanId = ActivitySpanId.CreateRandom();
-                        clientActivityContext = new(parentActivity.TraceId, clientSpanId, parentActivity.ActivityTraceFlags, parentActivity.TraceStateString);
-                    }
 
                     protoAction.ScheduleTask = new P.ScheduleTaskAction
                     {
@@ -333,11 +333,11 @@ static class ProtoUtils
                         InstanceId = subOrchestrationAction.InstanceId,
                         Name = subOrchestrationAction.Name,
                         Version = subOrchestrationAction.Version,
-                        ParentTraceContext = parentActivity is not null
+                        ParentTraceContext = clientActivityContext is not null
                             ? new P.TraceContext
                             {
-                                TraceParent = $"00-{parentActivity.Context.TraceId}-{parentActivity.Context.SpanId}-0{parentActivity.Context.TraceFlags:d}",
-                                TraceState = parentActivity.Context.TraceState,
+                                TraceParent = $"00-{clientActivityContext.Value.TraceId}-{clientActivityContext.Value.SpanId}-0{clientActivityContext.Value.TraceFlags:d}",
+                                TraceState = clientActivityContext.Value.TraceState,
                             }
                             : null,
                     };

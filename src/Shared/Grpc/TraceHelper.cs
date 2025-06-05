@@ -253,6 +253,102 @@ public class TraceHelper
         activity?.Dispose();
     }
 
+    /// <summary>
+    /// Starts a new trace activity for sub-orchestrations. Represents the time between enqueuing
+    /// the sub-orchestration message and it completing.
+    /// </summary>
+    /// <param name="orchestrationInstance">The associated <see cref="OrchestrationInstance"/>.</param>
+    /// <param name="createdEvent">The associated <see cref="SubOrchestrationInstanceCreatedEvent"/>.</param>
+    /// <returns>
+    /// Returns a newly started <see cref="Activity"/> with (task) activity and orchestration-specific metadata.
+    /// </returns>
+    internal static Activity? CreateTraceActivityForSchedulingSubOrchestration(
+        string? instanceId,
+        P.HistoryEvent historyEvent,
+        P.SubOrchestrationInstanceCreatedEvent createdEvent)
+    {
+        if (instanceId == null || createdEvent == null)
+        {
+            return null;
+        }
+
+        Activity? activity = ActivityTraceSource.StartActivity(
+            CreateSpanName(TraceActivityConstants.Orchestration, createdEvent.Name, createdEvent.Version),
+            kind: ActivityKind.Client,
+            startTime: historyEvent.Timestamp?.ToDateTimeOffset() ?? default,
+            parentContext: Activity.Current?.Context ?? default);
+
+        if (activity == null)
+        {
+            return null;
+        }
+
+        if (createdEvent.ParentTraceContext != null)
+        {
+            if (ActivityContext.TryParse(createdEvent.ParentTraceContext.TraceParent, createdEvent.ParentTraceContext?.TraceState, out ActivityContext parentContext))
+            {
+                activity.SetSpanId(parentContext.SpanId.ToString());
+            }
+        }
+
+        activity.SetTag(Schema.Task.Type, TraceActivityConstants.Orchestration);
+        activity.SetTag(Schema.Task.Name, createdEvent.Name);
+        activity.SetTag(Schema.Task.InstanceId, instanceId);
+
+        if (!string.IsNullOrEmpty(createdEvent.Version))
+        {
+            activity.SetTag(Schema.Task.Version, createdEvent.Version);
+        }
+
+        return activity;
+    }
+
+    /// <summary>
+    /// Emits a new trace activity for sub-orchestration execution when the sub-orchestration
+    /// completes successfully.
+    /// </summary>
+    /// <param name="instanceId">The associated <see cref="OrchestrationInstance"/>.</param>
+    /// <param name="createdEvent">The associated <see cref="SubOrchestrationInstanceCreatedEvent"/>.</param>
+    internal static void EmitTraceActivityForSubOrchestrationCompleted(
+        string? instanceId,
+        P.HistoryEvent historyEvent,
+        P.SubOrchestrationInstanceCreatedEvent createdEvent)
+    {
+        // The parent of this is the parent orchestration span ID. It should be the client span which started this
+        Activity? activity = CreateTraceActivityForSchedulingSubOrchestration(instanceId, historyEvent, createdEvent);
+
+        activity?.Dispose();
+    }
+
+    /// <summary>
+    /// Emits a new trace activity for sub-orchestration execution when the sub-orchestration fails.
+    /// </summary>
+    /// <param name="orchestrationInstance">The associated <see cref="OrchestrationInstance"/>.</param>
+    /// <param name="createdEvent">The associated <see cref="SubOrchestrationInstanceCreatedEvent"/>.</param>
+    /// <param name="failedEvent">The associated <see cref="SubOrchestrationInstanceCreatedEvent"/>.</param>
+    /// <param name="errorPropagationMode">Specifies the method to propagate unhandled exceptions to parent orchestrations.</param>
+    internal static void EmitTraceActivityForSubOrchestrationFailed(
+        string? orchestrationInstance,
+        P.HistoryEvent historyEvent,
+        P.SubOrchestrationInstanceCreatedEvent createdEvent,
+        P.SubOrchestrationInstanceFailedEvent? failedEvent)
+    {
+        Activity? activity = CreateTraceActivityForSchedulingSubOrchestration(orchestrationInstance, historyEvent, createdEvent);
+
+        if (activity is null)
+        {
+            return;
+        }
+
+        if (failedEvent != null)
+        {
+            string statusDescription = failedEvent.FailureDetails.ErrorMessage ?? "Unspecified sub-orchestration failure";
+            activity?.SetStatus(ActivityStatusCode.Error, statusDescription);
+        }
+
+        activity?.Dispose();
+    }
+
     static string CreateSpanName(string spanDescription, string? taskName, string? taskVersion)
     {
         if (!string.IsNullOrEmpty(taskVersion))

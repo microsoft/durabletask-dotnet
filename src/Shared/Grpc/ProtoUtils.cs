@@ -333,6 +333,13 @@ static class ProtoUtils
                         InstanceId = subOrchestrationAction.InstanceId,
                         Name = subOrchestrationAction.Name,
                         Version = subOrchestrationAction.Version,
+                        ParentTraceContext = parentActivity is not null
+                            ? new P.TraceContext
+                            {
+                                TraceParent = $"00-{parentActivity.Context.TraceId}-{parentActivity.Context.SpanId}-0{parentActivity.Context.TraceFlags:d}",
+                                TraceState = parentActivity.Context.TraceState,
+                            }
+                            : null,
                     };
                     break;
                 case OrchestratorActionType.CreateTimer:

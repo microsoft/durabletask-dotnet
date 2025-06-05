@@ -1,14 +1,20 @@
 ﻿# Changelog
 
-## (Unreleased)
+## v1.11.0
 
-- Add New Property Properties to TaskOrchestrationContext by @nytian in [#415](https://github.com/microsoft/durabletask-dotnet/pull/415)
-- Add automatic retry on gateway timeout in `GrpcDurableTaskClient.WaitForInstanceCompletionAsync` in [#412](https://github.com/microsoft/durabletask-dotnet/pull/412))
+- Add New Property Properties to TaskOrchestrationContext by @nytian in ([#415](https://github.com/microsoft/durabletask-dotnet/pull/415))
+- Add automatic retry on gateway timeout in `GrpcDurableTaskClient.WaitForInstanceCompletionAsync` in ([#412](https://github.com/microsoft/durabletask-dotnet/pull/412))
 - Add specific logging for NotFound error on worker connection by @halspang in ([#413](https://github.com/microsoft/durabletask-dotnet/pull/413))
 - Add user agent header to gRPC called in ([#417](https://github.com/microsoft/durabletask-dotnet/pull/417))
 - Enrich User-Agent Header in gRPC Metadata to indicate Client or Worker as caller ([#421](https://github.com/microsoft/durabletask-dotnet/pull/421))
 - Add extension methods for registering entities by type ([#427](https://github.com/microsoft/durabletask-dotnet/pull/427))
 - Add TaskVersion and utilize it for version overrides when starting orchestrations ([#416](https://github.com/microsoft/durabletask-dotnet/pull/416))
+- Distributed Tracing for Entities (Isolated) by @sophiatev in (https://github.com/microsoft/durabletask-dotnet/pull/404)
+- Change DTS user agent metadata to avoid overlap with gRPC user agent by @berndverst in (https://github.com/microsoft/durabletask-dotnet/pull/423)
+- Update sub-orchestration default versioning by @halspang in (https://github.com/microsoft/durabletask-dotnet/pull/437)
+- Component governance fixes by @cgillum in ([#435](https://github.com/microsoft/durabletask-dotnet/pull/435))
+- Update pipelines for release testing by @vabachu in ([#431](https://github.com/microsoft/durabletask-dotnet/pull/431))
+- Update pipelines for testing entities changes by @sophiatev in ([#433](https://github.com/microsoft/durabletask-dotnet/pull/433)) and ([#434](https://github.com/microsoft/durabletask-dotnet/pull/434))
 
 ## v1.10.0
 

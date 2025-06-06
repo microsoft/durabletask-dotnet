@@ -1,4 +1,14 @@
 Instance,ConnectionString
-1,Endpoint=https://wbtestsharedeas-fjg2gbdm.eastus2.durabletask.dev;TaskHub=th1;Authentication=None
-2,Endpoint=https://wbtestsharedeas-fpegc2cn.eastus2.durabletask.dev;TaskHub=th1;Authentication=None
-3,Endpoint=https://wbtestsharedeas-dmf4bhfj.eastus2.durabletask.dev;TaskHub=th1;Authentication=None
+Endpoint=https://wbtestsharedeas-fjg2gbdm.eastus2.durabletask.dev;TaskHub=th1;Authentication=None
+Endpoint=https://wbtestsharedeas-dmf4bhfj.eastus2.durabletask.dev;TaskHub=th1;Authentication=None
+Endpoint=https://wbtestsharedeas-cthmgqcz.eastus2.durabletask.dev;TaskHub=th1;Authentication=None
+Endpoint=https://wbtestsharedeas-h8b5c0ck.eastus2.durabletask.dev;TaskHub=th1;Authentication=None
+Endpoint=https://wbtestsharedeas-aqg5c4fn.eastus2.durabletask.dev;TaskHub=th1;Authentication=None
+Endpoint=https://wbtestsharedeas-egapbja9.eastus2.durabletask.dev;TaskHub=th1;Authentication=None
+Endpoint=https://wbtestsharedeas-bhgkd5f4.eastus2.durabletask.dev;TaskHub=th1;Authentication=None
+Endpoint=https://wbtestsharedeas-bmghb4bu.eastus2.durabletask.dev;TaskHub=th1;Authentication=None
+
+dedicated
+Endpoint=https://wbdedicated1-fcg3gcaygrf.eastus2.durabletask.dev;TaskHub=th1;Authentication=None
+Endpoint=https://wbdedicated2-dve5cha5a7f.eastus2.durabletask.dev;TaskHub=th1;Authentication=None
+Endpoint=https://wbdedicated3-cha4h9cehza.eastus2.durabletask.dev;TaskHub=th1;Authentication=None

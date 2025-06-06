@@ -84,7 +84,7 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
     protected IReadOnlyCollection<LogEntry> GetLogs()
     {
         // NOTE: Renaming the log category is a breaking change!
-        const string ExpectedCategoryName = "Microsoft.DurableTask";
+        const string ExpectedCategoryName = "Dapr.DurableTask";
         bool foundCategory = this.logProvider.TryGetLogs(ExpectedCategoryName, out IReadOnlyCollection<LogEntry> logs);
         Assert.True(foundCategory);
         return logs;

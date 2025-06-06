@@ -40,7 +40,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         this.workerOptions = Check.NotNull(workerOptions).Get(name);
         this.services = Check.NotNull(services);
         this.loggerFactory = Check.NotNull(loggerFactory);
-        this.logger = loggerFactory.CreateLogger("Microsoft.DurableTask"); // TODO: use better category name.
+        this.logger = loggerFactory.CreateLogger("Dapr.DurableTask");
     }
 
     /// <inheritdoc />

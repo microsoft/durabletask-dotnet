@@ -60,7 +60,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         this.invocationContext = Check.NotNull(invocationContext);
         this.Properties = Check.NotNull(properties);
 
-        this.logger = this.CreateReplaySafeLogger("Microsoft.DurableTask");
+        this.logger = this.CreateReplaySafeLogger("Dapr.DurableTask");
         this.deserializedInput = deserializedInput;
     }
 

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.Diagnostics;
@@ -79,7 +79,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         Check.NotEntity(this.options.EnableEntitySupport, options?.InstanceId);
 
         // We're explicitly OK with an empty version from the options as that had to be explicitly set. It should take precedence over the default.
-        string version = string.Empty;
+        string? version = null;
         if (options?.Version is { } v)
         {
             version = v;
@@ -95,6 +95,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             Version = version,
             InstanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N"),
             Input = this.DataConverter.Serialize(input),
+            RequestTime = DateTimeOffset.UtcNow.ToTimestamp(),
         };
 
         // Add tags to the collection

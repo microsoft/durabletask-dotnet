@@ -378,6 +378,30 @@ public class TraceHelper
         return newActivity;
     }
 
+    /// <summary>
+    /// Creates a new trace activity for events created from the client.
+    /// </summary>
+    /// <param name="eventRaised">The associated <see cref="EventRaisedEvent"/>.</param>
+    /// <param name="instance">The associated <see cref="OrchestrationInstance"/>.</param>
+    /// <returns>
+    /// Returns a newly started <see cref="Activity"/> with (task) activity and orchestration-specific metadata.
+    /// </returns>
+    internal static Activity? StartActivityForNewEventRaisedFromClient(P.RaiseEventRequest eventRaised, string instanceId)
+    {
+        Activity? newActivity = ActivityTraceSource.StartActivity(
+            CreateSpanName(TraceActivityConstants.OrchestrationEvent, eventRaised.Name, null),
+            kind: ActivityKind.Producer,
+            parentContext: Activity.Current?.Context ?? default,
+            tags: new KeyValuePair<string, object?>[]
+            {
+                new(Schema.Task.Type, TraceActivityConstants.Event),
+                new(Schema.Task.Name, eventRaised.Name),
+                new(Schema.Task.EventTargetInstanceId, instanceId),
+            });
+
+        return newActivity;
+    }
+
     static string CreateSpanName(string spanDescription, string? taskName, string? taskVersion)
     {
         if (!string.IsNullOrEmpty(taskVersion))

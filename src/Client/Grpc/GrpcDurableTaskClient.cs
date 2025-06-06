@@ -141,6 +141,8 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             Input = this.DataConverter.Serialize(eventPayload),
         };
 
+        using Activity? traceActivity = TraceHelper.StartActivityForNewEventRaisedFromClient(request, instanceId);
+
         await this.sidecarClient.RaiseEventAsync(request, cancellationToken: cancellation);
     }
 

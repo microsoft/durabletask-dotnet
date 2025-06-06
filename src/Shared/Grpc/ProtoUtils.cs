@@ -277,6 +277,7 @@ static class ProtoUtils
     /// <exception cref="NotSupportedException">When an orchestrator action is unknown.</exception>
     internal static P.OrchestratorResponse ConstructOrchestratorResponse(
         string instanceId,
+        string executionId,
         string? customStatus,
         IEnumerable<OrchestratorAction> actions,
         string completionToken,
@@ -394,6 +395,12 @@ static class ProtoUtils
                             Name = sendEventAction.EventName,
                             Data = sendEventAction.EventData,
                         };
+
+                        // Distributed Tracing: start a new trace activity derived from the orchestration
+                        // for an EventRaisedEvent (external event)
+                        using Activity? traceActivity = TraceHelper.StartTraceActivityForEventRaisedFromWorker(sendEventAction,instanceId, executionId);
+
+                        traceActivity?.Stop();
                     }
 
                     break;

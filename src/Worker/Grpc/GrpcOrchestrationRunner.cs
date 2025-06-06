@@ -117,6 +117,7 @@ public static class GrpcOrchestrationRunner
 
         P.OrchestratorResponse response = ProtoUtils.ConstructOrchestratorResponse(
             request.InstanceId,
+            request.ExecutionId,
             result.CustomStatus,
             result.Actions,
             completionToken: string.Empty, /* doesn't apply */

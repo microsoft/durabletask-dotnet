@@ -491,6 +491,7 @@ sealed partial class GrpcDurableTaskWorker
             {
                 response = ProtoUtils.ConstructOrchestratorResponse(
                     request.InstanceId,
+                    request.ExecutionId,
                     result.CustomStatus,
                     result.Actions,
                     completionToken,

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics;
+using DurableTask.Core.Command;
 using Google.Protobuf.WellKnownTypes;
 using P = Microsoft.DurableTask.Protobuf;
 
@@ -347,6 +348,34 @@ public class TraceHelper
         }
 
         activity?.Dispose();
+    }
+
+    internal static Activity? StartTraceActivityForEventRaisedFromWorker(
+        SendEventOrchestratorAction eventRaisedEvent,
+        string? instanceId,
+        string? executionId)
+    {
+        Activity? newActivity = ActivityTraceSource.StartActivity(
+            CreateSpanName(TraceActivityConstants.OrchestrationEvent, eventRaisedEvent.EventName, null),
+            kind: ActivityKind.Producer,
+            parentContext: Activity.Current?.Context ?? default);
+
+        if (newActivity == null)
+        {
+            return null;
+        }
+
+        newActivity.AddTag(Schema.Task.Type, TraceActivityConstants.Event);
+        newActivity.AddTag(Schema.Task.Name, eventRaisedEvent.EventName);
+        newActivity.AddTag(Schema.Task.InstanceId, instanceId);
+        newActivity.AddTag(Schema.Task.ExecutionId, executionId);
+
+        if (!string.IsNullOrEmpty(eventRaisedEvent.Instance?.InstanceId))
+        {
+            newActivity.AddTag(Schema.Task.EventTargetInstanceId, eventRaisedEvent.Instance!.InstanceId);
+        }
+
+        return newActivity;
     }
 
     static string CreateSpanName(string spanDescription, string? taskName, string? taskVersion)

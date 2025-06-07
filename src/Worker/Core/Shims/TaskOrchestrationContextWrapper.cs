@@ -138,7 +138,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
         try
         {
-            IDictionary<string, string>? tags = null;
+            IDictionary<string, string>? tags = new Dictionary<string, string>();
             if (options is CallActivityOptions callActivityOptions)
             {
                 if (callActivityOptions.Tags is not null)
@@ -516,7 +516,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         }
 
         // Secondary choice.
-        if (this.Properties.TryGetValue("defaultVersion", out var propVersion) && propVersion is string v2)
+        if (this.Properties.TryGetValue("defaultVersion", out object? propVersion) && propVersion is string v2)
         {
             return v2;
         }

@@ -20,9 +20,25 @@ public record TaskOptions
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="TaskOptions"/> class.
+    /// </summary>
+    /// <param name="retry">The task retry options.</param>
+    /// <param name="tags">The tags to associate with the task.</param>
+    public TaskOptions(TaskRetryOptions? retry = null, IDictionary<string, string>? tags = null)
+    {
+        this.Retry = retry;
+        this.Tags = tags;
+    }
+
+    /// <summary>
     /// Gets the task retry options.
     /// </summary>
     public TaskRetryOptions? Retry { get; init; }
+
+    /// <summary>
+    /// Gets the tags to associate with the task.
+    /// </summary>
+    public IDictionary<string, string>? Tags { get; init; }
 
     /// <summary>
     /// Returns a new <see cref="TaskOptions" /> from the provided <see cref="RetryPolicy" />.

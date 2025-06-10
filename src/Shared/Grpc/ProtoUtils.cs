@@ -4,7 +4,6 @@
 using System.Buffers;
 using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Command;
@@ -91,7 +90,10 @@ static class ProtoUtils
                     proto.EventId,
                     proto.TaskScheduled.Name,
                     proto.TaskScheduled.Version,
-                    proto.TaskScheduled.Input);
+                    proto.TaskScheduled.Input)
+                    {
+                        Tags = proto.TaskScheduled.Tags,
+                    };
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
                 historyEvent = new TaskCompletedEvent(
@@ -304,6 +306,15 @@ static class ProtoUtils
                         Version = scheduleTaskAction.Version,
                         Input = scheduleTaskAction.Input,
                     };
+
+                    if (scheduleTaskAction.Tags != null)
+                    {
+                        foreach (KeyValuePair<string, string> tag in scheduleTaskAction.Tags)
+                        {
+                            protoAction.ScheduleTask.Tags[tag.Key] = tag.Value;
+                        }
+                    }
+
                     break;
                 case OrchestratorActionType.CreateSubOrchestration:
                     var subOrchestrationAction = (CreateSubOrchestrationAction)action;

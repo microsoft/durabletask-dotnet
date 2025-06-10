@@ -7,6 +7,7 @@ using Microsoft.DurableTask.Client.AzureManaged;
 using Microsoft.DurableTask.ScheduledTasks;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.AzureManaged;
+using ScheduleWebApp.Activities;
 using ScheduleWebApp.Orchestrations;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -19,13 +20,14 @@ builder.Services.AddLogging();
 // Add all the generated orchestrations and activities automatically
 builder.Services.AddDurableTaskWorker(builder =>
 {
+    builder.UseDurableTaskScheduler(connectionString);
+    builder.UseScheduledTasks();
     builder.AddTasks(r =>
     {
         // Add your orchestrators and activities here
+        r.AddActivity<CacheClearingActivity>();
         r.AddOrchestrator<CacheClearingOrchestrator>();
     });
-    builder.UseDurableTaskScheduler(connectionString);
-    builder.UseScheduledTasks();
 });
 
 // Register the client, which can be used to start orchestrations

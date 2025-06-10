@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask;
+using ScheduleWebApp.Activities;
 
 namespace ScheduleWebApp.Orchestrations;
 
@@ -14,8 +15,12 @@ public class CacheClearingOrchestrator : TaskOrchestrator<string, string>
         {
             logger.LogInformation("Starting CacheClearingOrchestration for schedule ID: {ScheduleId}", scheduleId);
 
-            // Simulate cache clearing
-            await Task.Delay(TimeSpan.FromSeconds(5));
+            TaskOptions options = new TaskOptions(tags: new Dictionary<string, string>
+            {
+                { "scheduleId", scheduleId }
+            });
+
+            await context.CallActivityAsync(nameof(CacheClearingActivity), options);
 
             logger.LogInformation("CacheClearingOrchestration completed for schedule ID: {ScheduleId}", scheduleId);
 

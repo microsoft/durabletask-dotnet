@@ -15,7 +15,7 @@ public class CacheClearingOrchestrator : TaskOrchestrator<string, string>
         {
             logger.LogInformation("Starting CacheClearingOrchestration for schedule ID: {ScheduleId}", scheduleId);
 
-            CallActivityOptions options = new CallActivityOptions(tags: new Dictionary<string, string>
+            TaskOptions options = new TaskOptions(tags: new Dictionary<string, string>
             {
                 { "scheduleId", scheduleId }
             });

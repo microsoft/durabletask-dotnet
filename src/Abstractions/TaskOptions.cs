@@ -135,29 +135,3 @@ public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffse
     /// </summary>
     public TaskVersion? Version { get; init; }
 }
-
-/// <summary>
-/// Options for calling activities from an orchestrator.
-/// </summary>
-public record CallActivityOptions : TaskOptions
-{
-    /// <summary>
-    /// Initializes a new instance of the <see cref="CallActivityOptions"/> class.
-    /// </summary>
-    /// <param name="retry">The task retry options.</param>
-    /// <param name="tags">The tags to associate with the activity.</param>
-    public CallActivityOptions(TaskRetryOptions? retry = null, IDictionary<string, string>? tags = null)
-        : base(retry, tags)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="CallActivityOptions"/> class.
-    /// </summary>
-    /// <param name="options">The task options to wrap.</param>
-    /// <param name="tags">The tags to associate with the activity.</param>
-    public CallActivityOptions(TaskOptions options, IDictionary<string, string>? tags = null)
-        : base(options.Retry, tags ?? options.Tags)
-    {
-    }
-}

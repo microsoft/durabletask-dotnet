@@ -138,8 +138,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
         try
         {
-            IDictionary<string, string>? tags = new Dictionary<string, string>();
-            if (options is CallActivityOptions callActivityOptions)
+            IDictionary<string, string> tags = new Dictionary<string, string>();
+            if (options is TaskOptions callActivityOptions)
             {
                 if (callActivityOptions.Tags is not null)
                 {

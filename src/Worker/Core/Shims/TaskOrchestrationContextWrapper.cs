@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Immutable;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -138,7 +139,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
         try
         {
-            IDictionary<string, string> tags = new Dictionary<string, string>();
+            IDictionary<string, string> tags = ImmutableDictionary<string, string>.Empty;
             if (options is TaskOptions callActivityOptions)
             {
                 if (callActivityOptions.Tags is not null)

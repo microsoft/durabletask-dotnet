@@ -944,6 +944,42 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal($"Sub Orchestration version: {overrideVersion}", output);
     }
 
+    [Fact]
+    public async Task RunActivityWithTags()
+    {
+        TaskName orchestratorName = nameof(RunActivityWithTags);
+        TaskName taggedActivityName = "TaggedActivity";
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>(
+                    orchestratorName, (ctx, input) => ctx.CallActivityAsync<string>(taggedActivityName, input))
+                .AddActivityFunc<string, string>(taggedActivityName, (ctx, name) => $"Hello from tagged activity, {name}!"));
+        });
+
+        // Schedule orchestration with tags
+        StartOrchestrationOptions options = new()
+        {
+            Tags = new Dictionary<string, string>
+            {
+                { "activityTag", "taggedExecution" },
+                { "testType", "activityTagTest" }
+            }
+        };
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            orchestratorName, input: "World", options);
+        
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.Equal("Hello from tagged activity, World!", metadata.ReadOutputAs<string>());
+    }
+
     // TODO: Test for multiple external events with the same name
     // TODO: Test for ContinueAsNew with external events that carry over
     // TODO: Test for catching activity exceptions of specific types

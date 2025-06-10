@@ -412,6 +412,13 @@ sealed partial class GrpcDurableTaskWorker
                             TraceHelper.EmitTraceActivityForTaskFailed(request.InstanceId, taskScheduledEvent, taskScheduledEvent.TaskScheduled, newEvent.TaskFailed);
                             break;
                         }
+
+                    case P.HistoryEvent.EventTypeOneofCase.TimerFired:
+                        {
+                            // We immediately publish the activity span for this timer by creating the activity and immediately calling Dispose() on it.
+                            TraceHelper.EmitTraceActivityForTimer(request.InstanceId, executionStartedEvent?.Name, newEvent.Timestamp.ToDateTime(), newEvent.TimerFired);
+                            break;
+                        }
                 }
             }
 

@@ -402,6 +402,37 @@ public class TraceHelper
         return newActivity;
     }
 
+    /// <summary>
+    /// Emits a new trace activity for timers.
+    /// </summary>
+    /// <param name="instanceId">The associated <see cref="OrchestrationInstance"/>.</param>
+    /// <param name="orchestrationName">The name of the orchestration invoking the timer.</param>
+    /// <param name="startTime">The timer's start time.</param>
+    /// <param name="timerFiredEvent">The associated <see cref="P.TimerFiredEvent"/>.</param>
+    internal static void EmitTraceActivityForTimer(
+        string? instanceId,
+        string orchestrationName,
+        DateTime startTime,
+        P.TimerFiredEvent timerFiredEvent)
+    {
+        Activity? newActivity = ActivityTraceSource.StartActivity(
+            CreateTimerSpanName(orchestrationName),
+            kind: ActivityKind.Internal,
+            startTime: startTime,
+            parentContext: Activity.Current?.Context ?? default);
+
+        if (newActivity is not null)
+        {
+            newActivity.AddTag(Schema.Task.Type, TraceActivityConstants.Timer);
+            newActivity.AddTag(Schema.Task.Name, orchestrationName);
+            newActivity.AddTag(Schema.Task.InstanceId, instanceId);
+            newActivity.AddTag(Schema.Task.FireAt, timerFiredEvent.FireAt.ToDateTime().ToString("o"));
+            newActivity.AddTag(Schema.Task.TaskId, timerFiredEvent.TimerId);
+
+            newActivity.Dispose();
+        }
+    }
+
     static string CreateSpanName(string spanDescription, string? taskName, string? taskVersion)
     {
         if (!string.IsNullOrEmpty(taskVersion))
@@ -412,5 +443,10 @@ public class TraceHelper
         {
             return $"{spanDescription}:{taskName}";
         }
+    }
+
+    static string CreateTimerSpanName(string orchestrationName)
+    {
+        return $"{TraceActivityConstants.Orchestration}:{orchestrationName}:{TraceActivityConstants.Timer}";
     }
 }

@@ -102,6 +102,7 @@ public static class DurableTaskWorkerBuilderExtensions
             options.Versioning = new VersioningOptions
             {
                 Version = versionOptions.Version,
+                DefaultVersion = versionOptions.DefaultVersion,
                 MatchStrategy = versionOptions.MatchStrategy,
                 FailureStrategy = versionOptions.FailureStrategy,
             };

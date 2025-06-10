@@ -90,6 +90,11 @@ public record SubOrchestrationOptions : TaskOptions
     /// Gets the orchestration instance ID.
     /// </summary>
     public string? InstanceId { get; init; }
+
+    /// <summary>
+    /// Gets the version to associate with the sub-orchestration instance.
+    /// </summary>
+    public TaskVersion? Version { get; init; }
 }
 
 /// <summary>
@@ -108,4 +113,9 @@ public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffse
     /// Gets the tags to associate with the orchestration instance.
     /// </summary>
     public IReadOnlyDictionary<string, string> Tags { get; init; } = ImmutableDictionary.Create<string, string>();
+
+    /// <summary>
+    /// Gets the version to associate with the orchestration instance.
+    /// </summary>
+    public TaskVersion? Version { get; init; }
 }

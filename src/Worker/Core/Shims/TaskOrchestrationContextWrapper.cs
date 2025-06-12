@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Immutable;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -138,27 +139,51 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
         try
         {
+            IDictionary<string, string> tags = ImmutableDictionary<string, string>.Empty;
+            if (options is TaskOptions callActivityOptions)
+            {
+                if (callActivityOptions.Tags is not null)
+                {
+                    tags = callActivityOptions.Tags;
+                }
+            }
+
             // TODO: Cancellation (https://github.com/microsoft/durabletask-dotnet/issues/7)
 #pragma warning disable 0618
             if (options?.Retry?.Policy is RetryPolicy policy)
             {
-                return await this.innerContext.ScheduleWithRetry<T>(
+                return await this.innerContext.ScheduleTask<T>(
                     name.Name,
                     name.Version,
-                    policy.ToDurableTaskCoreRetryOptions(),
-                    input);
+                    options: ScheduleTaskOptions.CreateBuilder()
+                        .WithRetryOptions(policy.ToDurableTaskCoreRetryOptions())
+                        .WithTags(tags)
+                        .Build(),
+                    parameters: input);
             }
             else if (options?.Retry?.Handler is AsyncRetryHandler handler)
             {
                 return await this.InvokeWithCustomRetryHandler(
-                    () => this.innerContext.ScheduleTask<T>(name.Name, name.Version, input),
+                    () => this.innerContext.ScheduleTask<T>(
+                        name.Name,
+                        name.Version,
+                        options: ScheduleTaskOptions.CreateBuilder()
+                            .WithTags(tags)
+                            .Build(),
+                        parameters: input),
                     name.Name,
                     handler,
                     default);
             }
             else
             {
-                return await this.innerContext.ScheduleTask<T>(name.Name, name.Version, input);
+                return await this.innerContext.ScheduleTask<T>(
+                    name.Name,
+                    name.Version,
+                    options: ScheduleTaskOptions.CreateBuilder()
+                        .WithTags(tags)
+                        .Build(),
+                    parameters: input);
             }
         }
         catch (global::DurableTask.Core.Exceptions.TaskFailedException e)
@@ -492,7 +517,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         }
 
         // Secondary choice.
-        if (this.Properties.TryGetValue("defaultVersion", out var propVersion) && propVersion is string v2)
+        if (this.Properties.TryGetValue("defaultVersion", out object? propVersion) && propVersion is string v2)
         {
             return v2;
         }

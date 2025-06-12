@@ -149,6 +149,16 @@ public static class ProtobufUtils
                     Name = subOrchestrationCreated.Name,
                     Version = subOrchestrationCreated.Version,
                 };
+
+                if (subOrchestrationCreated is GrpcSubOrchestrationInstanceCreatedEvent { ParentTraceContext: not null } grpcEvent)
+                {
+                    payload.SubOrchestrationInstanceCreated.ParentTraceContext = new Proto.TraceContext
+                    {
+                        TraceParent = grpcEvent.ParentTraceContext.TraceParent,
+                        TraceState = grpcEvent.ParentTraceContext.TraceState,
+                    };
+                }
+                
                 break;
             case EventType.SubOrchestrationInstanceCompleted:
                 var subOrchestrationCompleted = (SubOrchestrationInstanceCompletedEvent)e;
@@ -253,12 +263,15 @@ public static class ProtobufUtils
                         : null,
                 };
             case Proto.OrchestratorAction.OrchestratorActionTypeOneofCase.CreateSubOrchestration:
-                return new CreateSubOrchestrationAction
+                return new GrpcCreateSubOrchestrationAction
                 {
                     Id = a.Id,
                     Input = a.CreateSubOrchestration.Input,
                     Name = a.CreateSubOrchestration.Name,
                     InstanceId = a.CreateSubOrchestration.InstanceId,
+                    ParentTraceContext = a.CreateSubOrchestration.ParentTraceContext is not null
+                        ? new DistributedTraceContext(a.CreateSubOrchestration.ParentTraceContext.TraceParent, a.CreateSubOrchestration.ParentTraceContext.TraceState)
+                        : null,
                     Tags = null, // TODO
                     Version = a.CreateSubOrchestration.Version,
                 };

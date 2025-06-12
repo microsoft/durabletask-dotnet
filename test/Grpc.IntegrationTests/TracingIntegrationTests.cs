@@ -243,6 +243,114 @@ public class TracingIntegrationTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task TaskWithSuborchestration()
+    {
+        var activities = new List<Activity>();
+
+        using var listener = CreateListener(ActivitySourceNames, activities);
+        
+        string orchestratorName = nameof(TaskWithSuborchestration);
+        string subOrchestratorName = "SubOrchestration";
+        string activityName = nameof(TestActivityAsync);
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<bool, bool>(
+                    orchestratorName,
+                    async (ctx, input) =>
+                    {
+                        await ctx.CallSubOrchestratorAsync(subOrchestratorName, input: true);
+
+                        return true;
+                    })
+                .AddOrchestratorFunc<bool, bool>(
+                    subOrchestratorName,
+                    async (ctx, input) =>
+                    {
+                        await ctx.CallActivityAsync(nameof(TestActivityAsync), input);
+
+                        return true;
+                    })
+                .AddActivityFunc<bool, bool>(activityName, (_, input) => TestActivityAsync(input)));
+        });
+
+        string instanceId;
+
+        using (var activity = TestActivitySource.StartActivity("Test"))
+        {
+            instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: true, cancellation: this.TimeoutToken);
+
+            OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        }
+
+        var testActivity = activities.Single(a => a.Source == TestActivitySource && a.OperationName == "Test");
+        var createActivity = activities.Single(a => a.Source.Name == CoreActivitySourceName && a.OperationName == $"create_orchestration:{orchestratorName}");
+
+        // The creation activity should be parented to the test activity.
+        createActivity.ParentId.Should().Be(testActivity.Id);
+        createActivity.ParentSpanId.Should().Be(testActivity.SpanId);
+        createActivity.TagObjects.Should().ContainKey("durabletask.task.instance_id").WhoseValue.Should().Be(instanceId);
+        createActivity.TagObjects.Should().ContainKey("durabletask.task.name").WhoseValue.Should().Be(orchestratorName);
+        createActivity.TagObjects.Should().ContainKey("durabletask.type").WhoseValue.Should().Be("orchestration");
+
+        var orchestrationActivities = activities.Where(a => a.Source.Name == CoreActivitySourceName && a.OperationName == $"orchestration:{orchestratorName}").ToList();
+
+        orchestrationActivities.Should().HaveCountGreaterThan(0);
+
+        // The orchestration activities should be the same "logical" orchestration activity.
+        orchestrationActivities.Select(a => a.StartTimeUtc).Distinct().Should().HaveCount(1);
+        orchestrationActivities.Select(a => a.Id).Distinct().Should().HaveCount(1);
+        orchestrationActivities.Select(a => a.SpanId).Distinct().Should().HaveCount(1);
+
+        // The orchestration activities should be parented to the create activity.
+        orchestrationActivities
+            .Should().AllSatisfy(a =>
+            {
+                a.Kind.Should().Be(ActivityKind.Server);
+                a.ParentId.Should().Be(createActivity.Id);
+                a.ParentSpanId.Should().Be(createActivity.SpanId);
+                
+                a.TagObjects.Should().ContainKey("durabletask.task.instance_id").WhoseValue.Should().Be(instanceId);
+                a.TagObjects.Should().ContainKey("durabletask.task.name").WhoseValue.Should().Be(orchestratorName);
+                a.TagObjects.Should().ContainKey("durabletask.type").WhoseValue.Should().Be("orchestration");
+            });
+        
+        var orchestrationActivity = orchestrationActivities.First();
+
+        var clientSuborchestrationActivities = activities.Where(a => a.Kind == ActivityKind.Client && a.Source.Name == CoreActivitySourceName && a.OperationName == $"orchestration:{subOrchestratorName}").ToList();
+
+        // The client suborchestration activities should be parented to the orchestration activity.
+        clientSuborchestrationActivities
+            .Should().HaveCount(1)
+            .And.AllSatisfy(a =>
+            {
+                a.ParentId.Should().Be(orchestrationActivity.Id);
+                a.ParentSpanId.Should().Be(orchestrationActivity.SpanId);
+                
+                a.TagObjects.Should().ContainKey("durabletask.task.instance_id").WhoseValue.Should().Be(instanceId);
+                a.TagObjects.Should().ContainKey("durabletask.task.name").WhoseValue.Should().Be(subOrchestratorName);
+                a.TagObjects.Should().ContainKey("durabletask.type").WhoseValue.Should().Be("orchestration");
+            });
+        
+        var clientSuborchestrationActivity = clientSuborchestrationActivities.First();
+
+        var serverSuborchestrationActivities = activities.Where(a => a.Kind == ActivityKind.Server && a.Source.Name == CoreActivitySourceName && a.OperationName == $"orchestration:{subOrchestratorName}").ToList();
+
+        // The server suborchestration activities should be parented to the client orchestration activity.
+        serverSuborchestrationActivities
+            .Should().HaveCountGreaterThan(0)
+            .And.AllSatisfy(a =>
+            {
+                a.ParentId.Should().Be(clientSuborchestrationActivity.Id);
+                a.ParentSpanId.Should().Be(clientSuborchestrationActivity.SpanId);
+                
+                a.TagObjects.Should().ContainKey("durabletask.task.name").WhoseValue.Should().Be(subOrchestratorName);
+                a.TagObjects.Should().ContainKey("durabletask.type").WhoseValue.Should().Be("orchestration");
+            });
+    }
+
+    [Fact]
     public async Task TaskOrchestrationWithSentEvent()
     {
         var activities = new List<Activity>();

@@ -238,12 +238,15 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
             }
             else if (action is CreateSubOrchestrationAction subOrchestrationAction)
             {
-                runtimeState.AddEvent(new SubOrchestrationInstanceCreatedEvent(subOrchestrationAction.Id)
+                var grpcAction = action as GrpcCreateSubOrchestrationAction;
+
+                runtimeState.AddEvent(new GrpcSubOrchestrationInstanceCreatedEvent(subOrchestrationAction.Id)
                 {
                     Name = subOrchestrationAction.Name,
                     Version = subOrchestrationAction.Version,
                     InstanceId = subOrchestrationAction.InstanceId,
                     Input = subOrchestrationAction.Input,
+                    ParentTraceContext = grpcAction?.ParentTraceContext
                 });
 
                 ExecutionStartedEvent startedEvent = new(-1, subOrchestrationAction.Input)
@@ -262,6 +265,7 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                         Version = runtimeState.Version,
                         TaskScheduleId = subOrchestrationAction.Id,
                     },
+                    ParentTraceContext = grpcAction?.ParentTraceContext,
                     Tags = subOrchestrationAction.Tags,
                 };
 

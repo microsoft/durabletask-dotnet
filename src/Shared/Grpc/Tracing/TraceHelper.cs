@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// NOTE: Modified from https://github.com/Azure/durabletask/blob/main/src/DurableTask.Core/Tracing/TraceHelper.cs
+
 using System.Diagnostics;
 using DurableTask.Core.Command;
 using Google.Protobuf.WellKnownTypes;

@@ -249,7 +249,7 @@ public class TracingIntegrationTests : IntegrationTestBase
 
         using var listener = CreateListener(ActivitySourceNames, activities);
 
-        string orchestratorName = nameof(TaskOrchestrationWithActivityFailure);
+        string orchestratorName = nameof(TaskOrchestrationWithSentEvent);
         string activityName = nameof(TestActivityAsync);
         string targetInstanceId = "TestInstanceId";
         string eventName = "TestEvent";
@@ -319,6 +319,91 @@ public class TracingIntegrationTests : IntegrationTestBase
                 a.TagObjects.Should().ContainKey("durabletask.task.instance_id").WhoseValue.Should().Be(instanceId);
                 a.TagObjects.Should().ContainKey("durabletask.task.name").WhoseValue.Should().Be(eventName);
                 a.TagObjects.Should().ContainKey("durabletask.type").WhoseValue.Should().Be("event");
+            });
+    }
+
+    [Fact]
+    public async Task TaskOrchestrationWithTimer()
+    {
+        var activities = new List<Activity>();
+
+        using var listener = CreateListener(ActivitySourceNames, activities);
+
+        string orchestratorName = nameof(TaskOrchestrationWithTimer);
+        string activityName = nameof(TestActivityAsync);
+
+        DateTime fireAt = default;
+        
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<bool, bool>(
+                    orchestratorName,
+                    async (ctx, input) =>
+                    {
+                        fireAt = ctx.CurrentUtcDateTime.AddSeconds(1);
+
+                        await ctx.CreateTimer(fireAt, CancellationToken.None);
+
+                        return true;
+                    })
+                .AddActivityFunc<bool, bool>(activityName, (_, input) => TestActivityAsync(input)));
+        });
+
+        string instanceId;
+
+        using (var activity = TestActivitySource.StartActivity("Test"))
+        {
+            instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: true, cancellation: this.TimeoutToken);
+
+            OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        }
+
+        fireAt.Should().NotBe(default);
+
+        var testActivity = activities.Single(a => a.Source == TestActivitySource && a.OperationName == "Test");
+        var createActivity = activities.Single(a => a.Source.Name == CoreActivitySourceName && a.OperationName == $"create_orchestration:{orchestratorName}");
+
+        // The creation activity should be parented to the test activity.
+        createActivity.ParentId.Should().Be(testActivity.Id);
+        createActivity.ParentSpanId.Should().Be(testActivity.SpanId);
+
+        var orchestrationActivities = activities.Where(a => a.Source.Name == CoreActivitySourceName && a.OperationName == $"orchestration:{orchestratorName}").ToList();
+
+        orchestrationActivities.Should().HaveCountGreaterThan(0);
+
+        // The orchestration activities should be the same "logical" orchestration activity.
+        orchestrationActivities.Select(a => a.StartTimeUtc).Distinct().Should().HaveCount(1);
+        orchestrationActivities.Select(a => a.Id).Distinct().Should().HaveCount(1);
+        orchestrationActivities.Select(a => a.SpanId).Distinct().Should().HaveCount(1);
+
+        // The orchestration activities should be parented to the create activity.
+        orchestrationActivities
+            .Should().AllSatisfy(a =>
+            {
+                a.Kind.Should().Be(ActivityKind.Server);
+                a.ParentId.Should().Be(createActivity.Id);
+                a.ParentSpanId.Should().Be(createActivity.SpanId);
+            });
+        
+        var orchestrationActivity = orchestrationActivities.First();
+
+        var timerActivities = activities.Where(a => a.Source.Name == CoreActivitySourceName && a.OperationName == $"orchestration:{orchestratorName}:timer").ToList(); 
+
+        // The "client" (i.e. scheduled) task activities should be parented to the orchestration activity.
+        timerActivities
+            .Should().HaveCount(1)
+            .And.AllSatisfy(a =>
+            {
+                a.Kind.Should().Be(ActivityKind.Internal);
+                a.ParentId.Should().Be(orchestrationActivity.Id);
+                a.ParentSpanId.Should().Be(orchestrationActivity.SpanId);
+
+                a.TagObjects.Should().ContainKey("durabletask.fire_at").WhoseValue.Should().Be(fireAt.ToString("O"));
+                a.TagObjects.Should().ContainKey("durabletask.task.instance_id").WhoseValue.Should().Be(instanceId);
+                a.TagObjects.Should().ContainKey("durabletask.task.name").WhoseValue.Should().Be(orchestratorName);
+                a.TagObjects.Should().ContainKey("durabletask.type").WhoseValue.Should().Be("timer");
+                a.TagObjects.Should().ContainKey("durabletask.task.task_id").WhoseValue.Should().NotBeNull();
             });
     }
 

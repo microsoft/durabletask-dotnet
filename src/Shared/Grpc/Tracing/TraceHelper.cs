@@ -6,7 +6,7 @@ using DurableTask.Core.Command;
 using Google.Protobuf.WellKnownTypes;
 using P = Microsoft.DurableTask.Protobuf;
 
-namespace Microsoft.DurableTask;
+namespace Microsoft.DurableTask.Tracing;
 
 public class TraceHelper
 {

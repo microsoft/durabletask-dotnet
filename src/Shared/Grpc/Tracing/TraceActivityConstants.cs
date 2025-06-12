@@ -1,11 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask;
+namespace Microsoft.DurableTask.Tracing;
 
-internal class TraceActivityConstants
+class TraceActivityConstants
 {
-    public const string Client = "client";
     public const string Orchestration = "orchestration";
     public const string Activity = "activity";
     public const string Event = "event";

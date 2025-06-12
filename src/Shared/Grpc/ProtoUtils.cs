@@ -17,6 +17,7 @@ using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using DTCore = DurableTask.Core;
 using P = Microsoft.DurableTask.Protobuf;
+using TraceHelper = Microsoft.DurableTask.Tracing.TraceHelper;
 
 namespace Microsoft.DurableTask;
 

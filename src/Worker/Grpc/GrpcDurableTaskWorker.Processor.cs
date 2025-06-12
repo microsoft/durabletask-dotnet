@@ -7,13 +7,14 @@ using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
-using DurableTask.Core.Tracing;
 using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Entities;
+using Microsoft.DurableTask.Tracing;
 using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
+using ActivityStatusCode = System.Diagnostics.ActivityStatusCode;
 using DTCore = DurableTask.Core;
 using P = Microsoft.DurableTask.Protobuf;
 

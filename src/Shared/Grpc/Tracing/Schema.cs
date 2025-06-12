@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask;
+namespace Microsoft.DurableTask.Tracing;
 
-internal static class Schema
+static class Schema
 {
     internal static class Task
     {
@@ -12,15 +12,8 @@ internal static class Schema
         internal const string Version = "durabletask.task.version";
         internal const string InstanceId = "durabletask.task.instance_id";
         internal const string ExecutionId = "durabletask.task.execution_id";
-        internal const string Status = "durabletask.task.status";
         internal const string TaskId = "durabletask.task.task_id";
         internal const string EventTargetInstanceId = "durabletask.event.target_instance_id";
         internal const string FireAt = "durabletask.fire_at";
-    }
-
-    internal static class Status
-    {
-        internal const string Code = "otel.status_code";
-        internal const string Description = "otel.status_description";
     }
 }

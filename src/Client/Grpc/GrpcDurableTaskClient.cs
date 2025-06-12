@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Text;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.DurableTask.Client.Entities;
+using Microsoft.DurableTask.Tracing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

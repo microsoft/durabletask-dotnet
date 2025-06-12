@@ -407,6 +407,56 @@ public class TracingIntegrationTests : IntegrationTestBase
             });
     }
 
+    [Fact]
+    public async Task ClientRaiseEvent()
+    {
+        var activities = new List<Activity>();
+
+        using var listener = CreateListener(ActivitySourceNames, activities);
+
+        string orchestratorName = nameof(this.ClientRaiseEvent);
+        string eventName = "TestEvent";
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<bool, bool>(
+                    orchestratorName,
+                    (ctx, input) =>
+                    {
+                        return true;
+                    }));
+        });
+
+        string instanceId;
+
+        using (var activity = TestActivitySource.StartActivity("Test"))
+        {
+            instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: true,
+                cancellation: this.TimeoutToken);
+
+            await server.Client.RaiseEventAsync(instanceId, eventName, "TestData", this.TimeoutToken);
+
+            OrchestrationMetadata metadata =
+                await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true,
+                    this.TimeoutToken);
+        }
+
+        var testActivity = activities.Single(a => a.Source == TestActivitySource && a.OperationName == "Test");
+
+        var raiseEventActivity = activities.Single(a =>
+            a.Source.Name == CoreActivitySourceName && a.OperationName == $"orchestration_event:{eventName}");
+
+        // The raise event activity should be parented to the test activity.
+        raiseEventActivity.Kind.Should().Be(ActivityKind.Producer);
+        raiseEventActivity.ParentId.Should().Be(testActivity.Id);
+        raiseEventActivity.ParentSpanId.Should().Be(testActivity.SpanId);
+
+        raiseEventActivity.TagObjects.Should().ContainKey("durabletask.event.target_instance_id").WhoseValue.Should().Be(instanceId);
+        raiseEventActivity.TagObjects.Should().ContainKey("durabletask.task.name").WhoseValue.Should().Be(eventName);
+        raiseEventActivity.TagObjects.Should().ContainKey("durabletask.type").WhoseValue.Should().Be("event");
+    }
+
     static Task<bool> TestActivityAsync(bool shouldSucceed)
     {
         using var activity = TestActivitySource.StartActivity();

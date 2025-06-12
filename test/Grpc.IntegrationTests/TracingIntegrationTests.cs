@@ -44,6 +44,7 @@ public class TracingIntegrationTests : IntegrationTestBase
         using var listener = CreateListener(ActivitySourceNames, activities);
 
         string orchestratorName = nameof(MultiTaskOrchestration);
+        string activityName = nameof(TestActivityAsync);
 
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
@@ -57,7 +58,7 @@ public class TracingIntegrationTests : IntegrationTestBase
 
                         return true;
                     })
-                .AddActivityFunc<bool, bool>(nameof(TestActivityAsync), (_, input) => TestActivityAsync(input)));
+                .AddActivityFunc<bool, bool>(activityName, (_, input) => TestActivityAsync(input)));
         });
 
         string instanceId;
@@ -70,7 +71,7 @@ public class TracingIntegrationTests : IntegrationTestBase
         }
 
         var testActivity = activities.Single(a => a.Source == TestActivitySource && a.OperationName == "Test");
-        var createActivity = activities.Single(a => a.Source.Name == CoreActivitySourceName && a.OperationName == "create_orchestration:Orchestration_Traces");
+        var createActivity = activities.Single(a => a.Source.Name == CoreActivitySourceName && a.OperationName == $"create_orchestration:{orchestratorName}");
 
         // The creation activity should be parented to the test activity.
         createActivity.ParentId.Should().Be(testActivity.Id);
@@ -79,7 +80,7 @@ public class TracingIntegrationTests : IntegrationTestBase
         createActivity.TagObjects.Should().ContainKey("durabletask.task.name").WhoseValue.Should().Be(orchestratorName);
         createActivity.TagObjects.Should().ContainKey("durabletask.type").WhoseValue.Should().Be("orchestration");
 
-        var orchestrationActivities = activities.Where(a => a.Source.Name == CoreActivitySourceName && a.OperationName == "orchestration:Orchestration_Traces").ToList();
+        var orchestrationActivities = activities.Where(a => a.Source.Name == CoreActivitySourceName && a.OperationName == $"orchestration:{orchestratorName}").ToList();
 
         orchestrationActivities.Should().HaveCountGreaterThan(0);
 
@@ -92,6 +93,7 @@ public class TracingIntegrationTests : IntegrationTestBase
         orchestrationActivities
             .Should().AllSatisfy(a =>
             {
+                a.Kind.Should().Be(ActivityKind.Server);
                 a.ParentId.Should().Be(createActivity.Id);
                 a.ParentSpanId.Should().Be(createActivity.SpanId);
                 
@@ -102,18 +104,19 @@ public class TracingIntegrationTests : IntegrationTestBase
         
         var orchestrationActivity = orchestrationActivities.First();
 
-        var clientActivityActivities = activities.Where(a => a.Kind == ActivityKind.Client && a.Source.Name == CoreActivitySourceName && a.OperationName == "activity:TestActivityAsync").ToList();
+        var clientActivityActivities = activities.Where(a => a.Kind == ActivityKind.Client && a.Source.Name == CoreActivitySourceName && a.OperationName == $"activity:{activityName}").ToList();
 
         // The "client" (i.e. scheduled) task activities should be parented to the orchestration activity.
         clientActivityActivities
             .Should().HaveCount(2)
             .And.AllSatisfy(a =>
             {
+                a.Kind.Should().Be(ActivityKind.Client);
                 a.ParentId.Should().Be(orchestrationActivity.Id);
                 a.ParentSpanId.Should().Be(orchestrationActivity.SpanId);
                 
                 a.TagObjects.Should().ContainKey("durabletask.task.instance_id").WhoseValue.Should().Be(instanceId);
-                a.TagObjects.Should().ContainKey("durabletask.task.name").WhoseValue.Should().Be(nameof(TestActivityAsync));
+                a.TagObjects.Should().ContainKey("durabletask.task.name").WhoseValue.Should().Be(activityName);
                 a.TagObjects.Should().ContainKey("durabletask.type").WhoseValue.Should().Be("activity");
                 a.TagObjects.Should().ContainKey("durabletask.task.task_id").WhoseValue.Should().NotBeNull();
             });
@@ -125,15 +128,21 @@ public class TracingIntegrationTests : IntegrationTestBase
                 indexed.First.TagObjects.Should().ContainKey("durabletask.task.task_id").WhoseValue.Should().Be(indexed.Second);
             });
 
-        var serverActivityActivities = activities.Where(a => a.Kind == ActivityKind.Server && a.Source.Name == CoreActivitySourceName && a.OperationName == "activity:TestActivityAsync").ToList();
+        var serverActivityActivities = activities.Where(a => a.Kind == ActivityKind.Server && a.Source.Name == CoreActivitySourceName && a.OperationName == $"activity:{activityName}").ToList();
 
         // The "server" (i.e. executed) task activities should be parented to the client activity activities.
         serverActivityActivities
             .Should().HaveCount(clientActivityActivities.Count)
             .And.AllSatisfy(a =>
             {
+                a.Kind.Should().Be(ActivityKind.Server);
                 a.ParentId.Should().BeOneOf(clientActivityActivities.Select(aa => aa.Id));
                 a.ParentSpanId.ToString().Should().BeOneOf(clientActivityActivities.Select(aa => aa.SpanId.ToString()));
+
+                a.TagObjects.Should().ContainKey("durabletask.task.instance_id").WhoseValue.Should().Be(instanceId);
+                a.TagObjects.Should().ContainKey("durabletask.task.name").WhoseValue.Should().Be(activityName);
+                a.TagObjects.Should().ContainKey("durabletask.type").WhoseValue.Should().Be("activity");
+                a.TagObjects.Should().ContainKey("durabletask.task.task_id").WhoseValue.Should().NotBeNull();
             });
 
         var activityExecutionActivities = activities.Where(a => a.Source.Name == TestActivitySourceName && a.OperationName == nameof(TestActivityAsync)).ToList();

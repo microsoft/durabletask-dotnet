@@ -81,7 +81,7 @@ public class TraceHelper
 
         string activityName = CreateSpanName(TraceActivityConstants.Orchestration, startEvent.Name, startEvent.Version);
         ActivityKind activityKind = ActivityKind.Server;
-        DateTimeOffset startTime = startEvent.OrchestrationActivityStartTime?.ToDateTimeOffset() ?? default;
+        DateTimeOffset startTime = startEvent.OrchestrationSpanStartTime?.ToDateTimeOffset() ?? default;
 
         Activity? activity = ActivityTraceSource.StartActivity(
             activityName,
@@ -103,20 +103,15 @@ public class TraceHelper
             activity.SetTag(Schema.Task.Version, startEvent.Version);
         }
 
-        if (startEvent.OrchestrationActivityID != null && startEvent.OrchestrationSpanID != null)
+        if (startEvent.OrchestrationSpanID != null)
         {
-            activity.SetId(startEvent.OrchestrationActivityID!);
             activity.SetSpanId(startEvent.OrchestrationSpanID!);
         }
         else
         {
-            startEvent.OrchestrationActivityID = activity.Id;
             startEvent.OrchestrationSpanID = activity.SpanId.ToString();
-            startEvent.OrchestrationActivityStartTime = Timestamp.FromDateTime(activity.StartTimeUtc);
+            startEvent.OrchestrationSpanStartTime = Timestamp.FromDateTime(activity.StartTimeUtc);
         }
-
-        // DistributedTraceActivity.Current = activity;
-        // return DistributedTraceActivity.Current;
 
         return activity;
     }

@@ -94,7 +94,6 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
             if (executionStartedEvent?.ParentTraceContext is not null)
             {
                 executionStartedEvent.ParentTraceContext.ActivityStartTime = result.OrchestrationActivityStartTime;
-                executionStartedEvent.ParentTraceContext.Id = result.OrchestrationActivityId;
                 executionStartedEvent.ParentTraceContext.SpanId = result.OrchestrationActivitySpanId;
             }
 

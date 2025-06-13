@@ -77,8 +77,7 @@ message ExecutionStartedEvent {
     TraceContext parentTraceContext = 7;
     google.protobuf.StringValue orchestrationSpanID = 8;
     map<string, string> tags = 9;
-    google.protobuf.StringValue orchestrationActivityID = 10;
-    google.protobuf.Timestamp orchestrationActivityStartTime = 11;
+    google.protobuf.Timestamp orchestrationSpanStartTime = 10;
 }
 
 message ExecutionCompletedEvent {
@@ -338,9 +337,8 @@ message OrchestratorResponse {
     // This field is optional. If not set, the service should assume that the orchestrator processed all events.
     google.protobuf.Int32Value numEventsProcessed = 5;
 
-    google.protobuf.StringValue orchestrationActivitySpanID = 6;
-    google.protobuf.StringValue orchestrationActivityID = 7;
-    google.protobuf.Timestamp orchestrationActivityStartTime = 8;
+    google.protobuf.StringValue orchestrationSpanID = 6;
+    google.protobuf.Timestamp orchestrationSpanStartTime = 7;
 }
 
 message CreateInstanceRequest {

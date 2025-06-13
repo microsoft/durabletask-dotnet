@@ -117,10 +117,13 @@ public static class GrpcOrchestrationRunner
 
         P.OrchestratorResponse response = ProtoUtils.ConstructOrchestratorResponse(
             request.InstanceId,
+            request.ExecutionId,
             result.CustomStatus,
             result.Actions,
             completionToken: string.Empty, /* doesn't apply */
-            entityConversionState: null);
+            entityConversionState: null,
+            // TODO: Should this activity be created?
+            parentActivity: null);
         byte[] responseBytes = response.ToByteArray();
         return Convert.ToBase64String(responseBytes);
     }

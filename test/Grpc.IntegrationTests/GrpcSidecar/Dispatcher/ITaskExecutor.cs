@@ -18,7 +18,7 @@ interface ITaskExecutor
     /// Returns a task containing the result of the orchestrator execution. These are effectively the side-effects of the
     /// orchestrator code, such as calling activities, scheduling timers, etc.
     /// </returns>
-    Task<OrchestratorExecutionResult> ExecuteOrchestrator(
+    Task<GrpcOrchestratorExecutionResult> ExecuteOrchestrator(
         OrchestrationInstance instance,
         IEnumerable<HistoryEvent> pastEvents,
         IEnumerable<HistoryEvent> newEvents);

@@ -120,7 +120,8 @@ public static class GrpcOrchestrationRunner
             result.CustomStatus,
             result.Actions,
             completionToken: string.Empty, /* doesn't apply */
-            entityConversionState: null);
+            entityConversionState: null,
+            out OrchestrationStatus orchestrationStatus);
         byte[] responseBytes = response.ToByteArray();
         return Convert.ToBase64String(responseBytes);
     }

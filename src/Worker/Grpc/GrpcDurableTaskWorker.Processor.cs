@@ -1,11 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
+using Google.Protobuf.Collections;
 using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Worker.Shims;
@@ -22,7 +24,7 @@ namespace Microsoft.DurableTask.Worker.Grpc;
 /// </summary>
 sealed partial class GrpcDurableTaskWorker
 {
-    class Processor
+    class Processor : IDisposable
     {
         static readonly Google.Protobuf.WellKnownTypes.Empty EmptyMessage = new();
 
@@ -30,6 +32,8 @@ sealed partial class GrpcDurableTaskWorker
         readonly TaskHubSidecarServiceClient client;
         readonly DurableTaskShimFactory shimFactory;
         readonly GrpcDurableTaskWorkerOptions.InternalOptions internalOptions;
+        readonly LRUCache<string, IEnumerable<HistoryEvent>> orchestrationHistories;
+        readonly LRUCache<string, string> entityStates;
 
         public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient client)
         {
@@ -37,6 +41,14 @@ sealed partial class GrpcDurableTaskWorker
             this.client = client;
             this.shimFactory = new DurableTaskShimFactory(this.worker.grpcOptions, this.worker.loggerFactory);
             this.internalOptions = this.worker.grpcOptions.Internal;
+            this.orchestrationHistories = new LRUCache<string, IEnumerable<HistoryEvent>>(
+                worker.workerOptions.OrchestrationHistoryCacheSizeInBytes,
+                worker.workerOptions.OrchestrationHistoryCacheCheckForStaleItemsPeriodInMilliseconds,
+                worker.workerOptions.OrchestrationHistoryCacheStaleEvictionTimeInMilliseconds);
+            this.entityStates = new LRUCache<string, string>(
+                worker.workerOptions.OrchestrationHistoryCacheSizeInBytes,
+                worker.workerOptions.OrchestrationHistoryCacheCheckForStaleItemsPeriodInMilliseconds,
+                worker.workerOptions.OrchestrationHistoryCacheStaleEvictionTimeInMilliseconds);
         }
 
         ILogger Logger => this.worker.logger;
@@ -97,6 +109,14 @@ sealed partial class GrpcDurableTaskWorker
                     break;
                 }
             }
+        }
+
+        public void Dispose()
+        {
+            this.orchestrationHistories.Dispose();
+            this.entityStates.Dispose();
+
+            GC.SuppressFinalize(this);
         }
 
         static string GetActionsListForLogging(IReadOnlyList<P.OrchestratorAction> actions)
@@ -174,6 +194,25 @@ sealed partial class GrpcDurableTaskWorker
             return failureDetails;
         }
 
+        static int CalculateSizeInBytes(RepeatedField<P.HistoryEvent> historyEvents)
+        {
+            int sizeInBytes = 0;
+            foreach (P.HistoryEvent historyEvent in historyEvents)
+            {
+                sizeInBytes += historyEvent.CalculateSize();
+            }
+
+            return sizeInBytes;
+        }
+
+        static bool IsOrchestrationFinished(OrchestrationStatus orchestrationStatus)
+        {
+            return orchestrationStatus is OrchestrationStatus.Completed
+                or OrchestrationStatus.Terminated
+                or OrchestrationStatus.Failed
+                or OrchestrationStatus.Canceled;
+        }
+
         async ValueTask<OrchestrationRuntimeState> BuildRuntimeStateAsync(
             P.OrchestratorRequest orchestratorRequest,
             ProtoUtils.EntityConversionState? entityConversionState,
@@ -183,8 +222,20 @@ sealed partial class GrpcDurableTaskWorker
                 ? ProtoUtils.ConvertHistoryEvent
                 : entityConversionState.ConvertFromProto;
 
-            IEnumerable<HistoryEvent> pastEvents = [];
-            if (orchestratorRequest.RequiresHistoryStreaming)
+            IEnumerable<HistoryEvent>? pastEvents = [];
+
+            if (orchestratorRequest.PastEvents.Count > 0)
+            {
+                // The history was already provided in the work item request
+                pastEvents = orchestratorRequest.PastEvents.Select(converter);
+                int sizeInBytes = CalculateSizeInBytes(orchestratorRequest.PastEvents);
+
+                // If the backend provided a history, even if we already have one cached, we should always store it
+                this.orchestrationHistories.Put(orchestratorRequest.InstanceId, pastEvents, sizeInBytes);
+            }
+
+            // Either the request requires history streaming, or a history exists and none was provided in the request and nothing is cached so we have to stream it
+            else if (orchestratorRequest.RequiresHistoryStreaming || (orchestratorRequest.HistoryExists && !this.orchestrationHistories.TryGetValue(orchestratorRequest.InstanceId, out pastEvents)))
             {
                 // Stream the remaining events from the remote service
                 P.StreamInstanceHistoryRequest streamRequest = new()
@@ -197,21 +248,27 @@ sealed partial class GrpcDurableTaskWorker
                 using AsyncServerStreamingCall<P.HistoryChunk> streamResponse =
                     this.client.StreamInstanceHistory(streamRequest, cancellationToken: cancellation);
 
+                pastEvents = [];
+                int sizeInBytes = 0;
                 await foreach (P.HistoryChunk chunk in streamResponse.ResponseStream.ReadAllAsync(cancellation))
                 {
                     pastEvents = pastEvents.Concat(chunk.Events.Select(converter));
+                    sizeInBytes += CalculateSizeInBytes(chunk.Events);
                 }
+
+                this.orchestrationHistories.Put(orchestratorRequest.InstanceId, pastEvents, sizeInBytes);
             }
             else
             {
-                // The history was already provided in the work item request
-                pastEvents = orchestratorRequest.PastEvents.Select(converter);
+                // Even if there is no history, we still want to add an item to the cache. This is necessary because upon the completion of the work item, the new history 
+                // will only be added if an entry already exists for this instance id in the cache.
+                this.orchestrationHistories.Put(orchestratorRequest.InstanceId, [], 0);
             }
 
             IEnumerable<HistoryEvent> newEvents = orchestratorRequest.NewEvents.Select(converter);
 
             // Reconstruct the orchestration state in a way that correctly distinguishes new events from past events
-            var runtimeState = new OrchestrationRuntimeState(pastEvents.ToList());
+            var runtimeState = new OrchestrationRuntimeState(pastEvents!.ToList());
             foreach (HistoryEvent e in newEvents)
             {
                 // AddEvent() puts events into the NewEvents list.
@@ -283,6 +340,9 @@ sealed partial class GrpcDurableTaskWorker
                     }
                     else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
                     {
+                        // Note that in this case, we call run entity batch without setting whether or not the entity state exists, which is by default false.
+                        // This is the desired behavior since this type of entity request does not have worker state caching implemented, and so if an entity state is not provided
+                        // in the request, that means that no state exists.
                         this.RunBackgroundTask(
                             workItem,
                             () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation));
@@ -299,7 +359,8 @@ sealed partial class GrpcDurableTaskWorker
                                 batchRequest,
                                 cancellation,
                                 workItem.CompletionToken,
-                                operationInfos));
+                                operationInfos,
+                                workItem.EntityRequestV2.EntityStateExists));
                     }
                     else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
                     {
@@ -428,6 +489,7 @@ sealed partial class GrpcDurableTaskWorker
             }
 
             P.OrchestratorResponse response;
+            OrchestrationStatus orchestrationStatus;
             if (result != null)
             {
                 response = ProtoUtils.ConstructOrchestratorResponse(
@@ -435,13 +497,16 @@ sealed partial class GrpcDurableTaskWorker
                     result.CustomStatus,
                     result.Actions,
                     completionToken,
-                    entityConversionState);
+                    entityConversionState,
+                    out orchestrationStatus,
+                    historyCached: this.orchestrationHistories.ContainsKey(request.InstanceId)); // It could be that the history was never cached if it was "too big" (see comment for "Put" method)
             }
             else if (versioning != null && failureDetails != null && versionFailure)
             {
                 this.Logger.OrchestrationVersionFailure(versioning.FailureStrategy.ToString(), failureDetails.ErrorMessage);
                 if (versioning.FailureStrategy == DurableTaskWorkerOptions.VersionFailureStrategy.Fail)
                 {
+                    orchestrationStatus = OrchestrationStatus.Failed;
                     response = new P.OrchestratorResponse
                     {
                         InstanceId = request.InstanceId,
@@ -475,6 +540,7 @@ sealed partial class GrpcDurableTaskWorker
             else
             {
                 // This is the case for failures that happened *outside* the orchestrator executor
+                orchestrationStatus = OrchestrationStatus.Failed;
                 response = new P.OrchestratorResponse
                 {
                     InstanceId = request.InstanceId,
@@ -499,7 +565,36 @@ sealed partial class GrpcDurableTaskWorker
                 response.Actions.Count,
                 GetActionsListForLogging(response.Actions));
 
-            await this.client.CompleteOrchestratorTaskAsync(response, cancellationToken: cancellationToken);
+            Func<P.HistoryEvent, HistoryEvent> converter = entityConversionState is null
+                ? ProtoUtils.ConvertHistoryEvent
+                : entityConversionState.ConvertFromProto;
+
+            try
+            {
+                var completeOrchestratorTaskResponse = await this.client.CompleteOrchestratorTaskAsync(response, cancellationToken: cancellationToken);
+                if (!IsOrchestrationFinished(orchestrationStatus))
+                {
+                    // If the entry has since been evicted from the cache, we do not want to store the new history for it since it will potentially be incomplete if the entry had an existing history attached.
+                    if (this.orchestrationHistories.TryGetValueWithSize(request.InstanceId, out (IEnumerable<HistoryEvent>? Value, int Size) pastEventsWithSize))
+                    {
+                        int sizeInBytes = CalculateSizeInBytes(completeOrchestratorTaskResponse.NewHistory) + pastEventsWithSize.Size;
+                        this.orchestrationHistories.Put(
+                            request.InstanceId,
+                            pastEventsWithSize.Value!.Concat(completeOrchestratorTaskResponse.NewHistory.Select(converter)),
+                            sizeInBytes);
+                    }
+                }
+                else
+                {
+                    this.orchestrationHistories.Remove(request.InstanceId);
+                }
+            }
+            catch (RpcException e) when (e.StatusCode == StatusCode.NotFound)
+            {
+                // The instance was not found - this can happen if another worker completed the item due to a network failure, for example
+                // In this case, we want to remove the orchestration history from the cache since we are no longer responsible for this instance ID
+                this.orchestrationHistories.Remove(request.InstanceId);
+            }
         }
 
         async Task OnRunActivityAsync(P.ActivityRequest request, string completionToken, CancellationToken cancellation)
@@ -546,7 +641,7 @@ sealed partial class GrpcDurableTaskWorker
             }
             else if (output != null)
             {
-                outputSizeInBytes = Encoding.UTF8.GetByteCount(output);
+                outputSizeInBytes = output.Length * sizeof(char);
             }
 
             string successOrFailure = failureDetails != null ? "failure" : "success";
@@ -569,7 +664,8 @@ sealed partial class GrpcDurableTaskWorker
             EntityBatchRequest batchRequest,
             CancellationToken cancellation,
             string? completionToken = null,
-            List<P.OperationInfo>? operationInfos = null)
+            List<P.OperationInfo>? operationInfos = null,
+            bool entityStateExists = false)
         {
             var coreEntityId = DTCore.Entities.EntityId.FromString(batchRequest.InstanceId!);
             EntityId entityId = new(coreEntityId.Name, coreEntityId.Key);
@@ -577,6 +673,7 @@ sealed partial class GrpcDurableTaskWorker
             TaskName name = new(entityId.Name);
 
             EntityBatchResult? batchResult;
+            bool entityStateCached = false;
 
             try
             {
@@ -588,7 +685,47 @@ sealed partial class GrpcDurableTaskWorker
                     // Both the factory invocation and the RunAsync could involve user code and need to be handled as
                     // part of try/catch.
                     TaskEntity shim = this.shimFactory.CreateEntity(name, entity, entityId);
+
+                    string? entityState = null;
+
+                    // If the backend provided an entity state, even if we already have one cached, we should always use it
+                    if (batchRequest.EntityState == null)
+                    {
+                        if (entityStateExists && !this.entityStates.TryGetValue(batchRequest.InstanceId!, out entityState))
+                        {
+                            P.GetEntityResponse getEntityResponse = await this.client.GetEntityAsync(
+                                new P.GetEntityRequest
+                                {
+                                    InstanceId = batchRequest.InstanceId,
+                                    IncludeState = true,
+                                },
+                                cancellationToken: cancellation);
+
+                            // It should never be possible that this is false if entityStateExists is true, but we check it just in case.
+                            if (getEntityResponse.Exists)
+                            {
+                                batchRequest.EntityState = getEntityResponse.Entity.SerializedState;
+                            }
+                        }
+                        else
+                        {
+                            // In this case, either we successfully extracted the state from the cache, or a state does not exist, meaning the field should be null.
+                            batchRequest.EntityState = entityState;
+                        }
+                    }
+
                     batchResult = await shim.ExecuteOperationBatchAsync(batchRequest);
+
+                    // Even if the entity state is the same, we want to issue a put to refresh its position in the cache.
+                    if (batchResult.EntityState != null)
+                    {
+                        entityStateCached = this.entityStates.Put(batchRequest.InstanceId!, batchResult.EntityState, batchResult.EntityState.Length * sizeof(char));
+                    }
+                    else
+                    {
+                        // If the entity state is now null, remove whatever state we had in the cache for it, if any.
+                        this.entityStates.Remove(batchRequest.InstanceId!);
+                    }
                 }
                 else
                 {
@@ -611,6 +748,7 @@ sealed partial class GrpcDurableTaskWorker
                             batchRequest.Operations!.Count).ToList(),
                         FailureDetails = null,
                     };
+                    this.entityStates.Remove(batchRequest.InstanceId!);
                 }
             }
             catch (Exception frameworkException)
@@ -626,7 +764,8 @@ sealed partial class GrpcDurableTaskWorker
 
             P.EntityBatchResult response = batchResult.ToEntityBatchResult(
                 completionToken,
-                operationInfos?.Take(batchResult.Results?.Count ?? 0));
+                operationInfos?.Take(batchResult.Results?.Count ?? 0),
+                entityStateCached);
 
             await this.client.CompleteEntityTaskAsync(response, cancellationToken: cancellation);
         }

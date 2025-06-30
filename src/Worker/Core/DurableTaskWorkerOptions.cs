@@ -146,6 +146,21 @@ public class DurableTaskWorkerOptions
     public bool IsVersioningSet { get; internal set; }
 
     /// <summary>
+    /// Gets or sets the maximum size of the orchestration history cache in bytes.
+    /// </summary>
+    public int OrchestrationHistoryCacheSizeInBytes { get; set; } = 10000;
+
+    /// <summary>
+    /// Gets or sets the amount of time that an orchestration history can remain in the cache before it is considered "stale" and evicted.
+    /// </summary>
+    public int OrchestrationHistoryCacheStaleEvictionTimeInMilliseconds { get; set; } = 30 * 1000; // 30 seconds
+
+    /// <summary>
+    /// Gets or sets how often the cache will check for stale items and evict them.
+    /// </summary>
+    public int OrchestrationHistoryCacheCheckForStaleItemsPeriodInMilliseconds { get; set; } = 5 * 1000; // 5 seconds
+
+    /// <summary>
     /// Gets a value indicating whether <see cref="DataConverter" /> was explicitly set or not.
     /// </summary>
     /// <remarks>

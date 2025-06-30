@@ -48,7 +48,8 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     {
         await using AsyncDisposable disposable = this.GetCallInvoker(out CallInvoker callInvoker, out string address);
         this.logger.StartingTaskHubWorker(address);
-        await new Processor(this, new(callInvoker)).ExecuteAsync(stoppingToken);
+        using var processor = new Processor(this, new(callInvoker));
+        await processor.ExecuteAsync(stoppingToken);
     }
 
 #if NET6_0_OR_GREATER

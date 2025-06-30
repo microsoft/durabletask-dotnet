@@ -275,6 +275,8 @@ static class ProtoUtils
     /// value that was provided by the corresponding <see cref="P.WorkItem"/> that triggered the orchestrator execution.
     /// </param>
     /// <param name="entityConversionState">The entity conversion state, or null if no conversion is required.</param>
+    /// <param name="orchestrationStatus">Upon completion of the method, contains the status of this orchestration.</param>
+    /// <param name="historyCached">Whether or not the worker has cached the orchestration history. False by default.</param>
     /// <returns>The orchestrator response.</returns>
     /// <exception cref="NotSupportedException">When an orchestrator action is unknown.</exception>
     internal static P.OrchestratorResponse ConstructOrchestratorResponse(
@@ -282,7 +284,9 @@ static class ProtoUtils
         string? customStatus,
         IEnumerable<OrchestratorAction> actions,
         string completionToken,
-        EntityConversionState? entityConversionState)
+        EntityConversionState? entityConversionState,
+        out OrchestrationStatus orchestrationStatus,
+        bool historyCached = false)
     {
         Check.NotNull(actions);
         var response = new P.OrchestratorResponse
@@ -290,7 +294,9 @@ static class ProtoUtils
             InstanceId = instanceId,
             CustomStatus = customStatus,
             CompletionToken = completionToken,
+            HistoryCached = historyCached,
         };
+        orchestrationStatus = OrchestrationStatus.Running; // default status
 
         foreach (OrchestratorAction action in actions)
         {
@@ -417,6 +423,7 @@ static class ProtoUtils
                         OrchestrationStatus = completeAction.OrchestrationStatus.ToProtobuf(),
                         Result = completeAction.Result,
                     };
+                    orchestrationStatus = completeAction.OrchestrationStatus;
 
                     if (completeAction.OrchestrationStatus == OrchestrationStatus.Failed)
                     {
@@ -822,12 +829,14 @@ static class ProtoUtils
     /// <param name="entityBatchResult">The operation result to convert.</param>
     /// <param name="completionToken">The completion token, or null for the older protocol.</param>
     /// <param name="operationInfos">Additional information about each operation, required by DTS.</param>
+    /// <param name="entityStateCached">Indicates whether the worker has cached the entity state.</param>
     /// <returns>The converted operation result.</returns>
     [return: NotNullIfNotNull(nameof(entityBatchResult))]
     internal static P.EntityBatchResult? ToEntityBatchResult(
         this EntityBatchResult? entityBatchResult,
         string? completionToken = null,
-        IEnumerable<P.OperationInfo>? operationInfos = null)
+        IEnumerable<P.OperationInfo>? operationInfos = null,
+        bool entityStateCached = false)
     {
         if (entityBatchResult == null)
         {
@@ -842,6 +851,7 @@ static class ProtoUtils
             Results = { entityBatchResult.Results?.Select(a => a.ToOperationResult()) ?? [] },
             CompletionToken = completionToken ?? string.Empty,
             OperationInfos = { operationInfos ?? [] },
+            EntityStateCached = entityStateCached,
         };
     }
 

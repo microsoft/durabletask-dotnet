@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Immutable;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
@@ -12,6 +13,7 @@ using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
+using static Microsoft.DurableTask.Worker.DurableTaskWorkerOptions;
 using DTCore = DurableTask.Core;
 using P = Microsoft.DurableTask.Protobuf;
 
@@ -373,6 +375,25 @@ sealed partial class GrpcDurableTaskWorker
                     request,
                     entityConversionState,
                     cancellationToken);
+
+                bool filterPassed = this.worker.workerOptions.OrchestrationFilter?.Invoke(new OrchestrationInfo
+                {
+                    Name = runtimeState.Name,
+                    Tags = new(runtimeState.Tags ?? ImmutableDictionary<string, string>.Empty),
+                }) ?? true;
+
+                if (!filterPassed)
+                {
+                    this.Logger.AbandoningOrchestrationDueToOrchestrationFilter(request.InstanceId, completionToken);
+                    await this.client.AbandonTaskOrchestratorWorkItemAsync(
+                        new P.AbandonOrchestrationTaskRequest
+                        {
+                            CompletionToken = completionToken,
+                        },
+                        cancellationToken: cancellationToken);
+
+                    return;
+                }
 
                 // If versioning has been explicitly set, we attempt to follow that pattern. If it is not set, we don't compare versions here.
                 failureDetails = EvaluateOrchestrationVersioning(versioning, runtimeState.Version, out versionFailure);

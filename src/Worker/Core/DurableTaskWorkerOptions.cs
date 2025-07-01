@@ -50,6 +50,22 @@ public class DurableTaskWorkerOptions
     }
 
     /// <summary>
+    /// Struct representation of orchestration information.
+    /// </summary>
+    public struct OrchestrationInfo
+    {
+        /// <summary>
+        /// Gets the name of the orchestration.
+        /// </summary>
+        public string Name { get; init; }
+
+        /// <summary>
+        /// Gets the tags associated with the orchestration.
+        /// </summary>
+        public Dictionary<string, string> Tags { get; init; }
+    }
+
+    /// <summary>
     /// Gets or sets the data converter. Default value is <see cref="JsonDataConverter.Default" />.
     /// </summary>
     /// <remarks>
@@ -157,6 +173,11 @@ public class DurableTaskWorkerOptions
     internal bool DataConverterExplicitlySet { get; private set; }
 
     /// <summary>
+    /// Gets or sets a callback function that determines whether an orchestration should be accepted for work.
+    /// </summary>
+    public Func<OrchestrationInfo, bool>? OrchestrationFilter { get; set; }
+
+    /// <summary>
     /// Applies these option values to another.
     /// </summary>
     /// <param name="other">The other options object to apply to.</param>
@@ -169,6 +190,7 @@ public class DurableTaskWorkerOptions
             other.MaximumTimerInterval = this.MaximumTimerInterval;
             other.EnableEntitySupport = this.EnableEntitySupport;
             other.Versioning = this.Versioning;
+            other.OrchestrationFilter = this.OrchestrationFilter;
         }
     }
 

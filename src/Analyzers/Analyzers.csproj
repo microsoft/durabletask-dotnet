@@ -15,9 +15,9 @@
     <VersionSuffix>preview.1</VersionSuffix>
     <PackageDescription>.NET Analyzers for the Durable Task SDK.</PackageDescription>
     <NeutralLanguage>en</NeutralLanguage>
-    <IncludeBuildOutput>false</IncludeBuildOutput> <!-- Do not include the analyzer as a lib dependency -->
+    <IncludeBuildOutput>true</IncludeBuildOutput>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
-    <IsPackable>false</IsPackable> <!-- Do not publish it until it is ready to release -->
+    <IsPackable>true</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>

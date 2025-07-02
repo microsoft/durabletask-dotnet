@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Worker.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -48,7 +49,8 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     {
         await using AsyncDisposable disposable = this.GetCallInvoker(out CallInvoker callInvoker, out string address);
         this.logger.StartingTaskHubWorker(address);
-        await new Processor(this, new(callInvoker)).ExecuteAsync(stoppingToken);
+        IOrchestrationFilter? filter = this.services.GetService<IOrchestrationFilter>();
+        await new Processor(this, new(callInvoker), filter).ExecuteAsync(stoppingToken);
     }
 
 #if NET6_0_OR_GREATER

@@ -114,16 +114,25 @@ public static class DurableTaskWorkerBuilderExtensions
     /// Adds an orchestration filter to the specified <see cref="IDurableTaskWorkerBuilder"/>.
     /// </summary>
     /// <param name="builder">The builder to set the builder target for.</param>
-    /// <param name="orchestrationFilter">The filter function that determines whether an orchestration should be processed.</param>
+    /// <typeparam name="TOrchestrationFilter">The implementation of a <see cref="IOrchestrationFilter"/> that will be bound.</typeparam>
     /// <returns>The same <see cref="IDurableTaskWorkerBuilder"/> instance, allowing for method chaining.</returns>
-    public static IDurableTaskWorkerBuilder UseOrchestrationFilter(this IDurableTaskWorkerBuilder builder, Func<OrchestrationInfo, bool> orchestrationFilter)
+    public static IDurableTaskWorkerBuilder UseOrchestrationFilter<TOrchestrationFilter>(this IDurableTaskWorkerBuilder builder) where TOrchestrationFilter : class, IOrchestrationFilter
     {
         Check.NotNull(builder);
-        Check.NotNull(orchestrationFilter);
-        builder.Services.Configure<DurableTaskWorkerOptions>(builder.Name, options =>
-        {
-            options.OrchestrationFilter = orchestrationFilter;
-        });
+        builder.Services.AddSingleton<IOrchestrationFilter, TOrchestrationFilter>();
+        return builder;
+    }
+
+    /// <summary>
+    /// Adds an orchestration filter to the specified <see cref="IDurableTaskWorkerBuilder"/>.
+    /// </summary>
+    /// <param name="builder">The builder to set the builder target for.</param>
+    /// <param name="filter">The instance of an <see cref="IOrchestrationFilter"/> to use.</param>
+    /// <returns>The same <see cref="IDurableTaskWorkerBuilder"/> instance, allowing for method chaining.</returns>
+    public static IDurableTaskWorkerBuilder UseOrchestrationFilter(this IDurableTaskWorkerBuilder builder, IOrchestrationFilter filter)
+    {
+        Check.NotNull(builder);
+        builder.Services.AddSingleton(filter);
         return builder;
     }
 }

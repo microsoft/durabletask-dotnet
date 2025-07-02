@@ -13,7 +13,6 @@ using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
-using static Microsoft.DurableTask.Worker.DurableTaskWorkerOptions;
 using DTCore = DurableTask.Core;
 using P = Microsoft.DurableTask.Protobuf;
 
@@ -32,13 +31,15 @@ sealed partial class GrpcDurableTaskWorker
         readonly TaskHubSidecarServiceClient client;
         readonly DurableTaskShimFactory shimFactory;
         readonly GrpcDurableTaskWorkerOptions.InternalOptions internalOptions;
+        readonly IOrchestrationFilter? orchestrationFilter = null;
 
-        public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient client)
+        public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient client, IOrchestrationFilter? orchestrationFilter = null)
         {
             this.worker = worker;
             this.client = client;
             this.shimFactory = new DurableTaskShimFactory(this.worker.grpcOptions, this.worker.loggerFactory);
             this.internalOptions = this.worker.grpcOptions.Internal;
+            this.orchestrationFilter = orchestrationFilter;
         }
 
         ILogger Logger => this.worker.logger;
@@ -376,11 +377,17 @@ sealed partial class GrpcDurableTaskWorker
                     entityConversionState,
                     cancellationToken);
 
-                bool filterPassed = this.worker.workerOptions.OrchestrationFilter?.Invoke(new OrchestrationInfo
+                bool filterPassed = true;
+                if (this.orchestrationFilter != null)
                 {
-                    Name = runtimeState.Name,
-                    Tags = new(runtimeState.Tags ?? ImmutableDictionary<string, string>.Empty),
-                }) ?? true;
+                    filterPassed = await this.orchestrationFilter.IsOrchestrationValidAsync(
+                        new OrchestrationInfo
+                        {
+                            Name = runtimeState.Name,
+                            Tags = new Dictionary<string, string>(runtimeState.Tags ?? ImmutableDictionary<string, string>.Empty),
+                        },
+                        cancellationToken);
+                }
 
                 if (!filterPassed)
                 {

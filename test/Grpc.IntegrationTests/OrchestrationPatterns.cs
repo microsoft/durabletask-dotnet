@@ -984,14 +984,11 @@ public class OrchestrationPatterns : IntegrationTestBase
     {
         // Setup a worker with an Orchestration Filter.
         TaskName orchestratorName = nameof(EmptyOrchestration);
-        ISet<string> orchestratorNames = new HashSet<string>();
+        var orchestrationFilter = new OrchestrationFilter();
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, ctx => Task.FromResult<object?>(null)));
-            b.UseOrchestrationFilter((info) =>
-            {
-                return !orchestratorNames.Contains(info.Name);
-            });
+            b.UseOrchestrationFilter(orchestrationFilter);
         });
 
         // Nothing in the filter set, the orchestration should complete.
@@ -1004,7 +1001,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
 
         // Update the filter and re-enqueue. We should see the orchestration denied.
-        orchestratorNames.Add(orchestratorName);
+        orchestrationFilter.NameDenySet.Add(orchestratorName);
 
         // This should throw as the work is denied.
         instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -1020,14 +1017,11 @@ public class OrchestrationPatterns : IntegrationTestBase
         {
             { "test", "true" }
         };
-        IDictionary<string, string> orchestratorTagFilter = new Dictionary<string, string>();
+        var orchestrationFilter = new OrchestrationFilter();
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, ctx => Task.FromResult<object?>(null)));
-            b.UseOrchestrationFilter((info) =>
-            {
-                return !orchestratorTagFilter.Any(kvp => info.Tags.ContainsKey(kvp.Key) && info.Tags[kvp.Key] == kvp.Value);
-            });
+            b.UseOrchestrationFilter(orchestrationFilter);
         });
 
         // Nothing in the filter set, the orchestration should complete.
@@ -1043,7 +1037,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
 
         // Update the filter and re-enqueue. We should see the orchestration denied.
-        orchestratorTagFilter.Add("test", "true");
+        orchestrationFilter.TagDenyDict.Add("test", "true");
 
         // This should throw as the work is denied.
         instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, new StartOrchestrationOptions
@@ -1051,6 +1045,19 @@ public class OrchestrationPatterns : IntegrationTestBase
             Tags = orchestratorTags,
         });
         await Assert.ThrowsAsync<OperationCanceledException>(async () => await server.Client.WaitForInstanceCompletionAsync(instanceId, new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token));
+    }
+
+    class OrchestrationFilter : IOrchestrationFilter
+    {
+        public ISet<string> NameDenySet { get; set; } = new HashSet<string>();
+        public IDictionary<string, string> TagDenyDict = new Dictionary<string, string>();
+
+        public Task<bool> IsOrchestrationValidAsync(OrchestrationInfo info, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(
+                !this.NameDenySet.Contains(info.Name)
+                && !this.TagDenyDict.Any(kvp => info.Tags.ContainsKey(kvp.Key) && info.Tags[kvp.Key] == kvp.Value));
+        }
     }
 
     // TODO: Test for multiple external events with the same name

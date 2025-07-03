@@ -11,8 +11,8 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <VersionPrefix>0.0.1</VersionPrefix>
-    <VersionSuffix>preview</VersionSuffix>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionSuffix></VersionSuffix>
     <PackageDescription>.NET Analyzers for the Durable Task SDK.</PackageDescription>
     <NeutralLanguage>en</NeutralLanguage>
     <IncludeBuildOutput>true</IncludeBuildOutput>

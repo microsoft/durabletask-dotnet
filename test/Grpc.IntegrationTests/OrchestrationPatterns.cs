@@ -979,6 +979,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal("Hello from tagged activity, World!", metadata.ReadOutputAs<string>());
     }
 
+    [Obsolete("Experimental")]
     [Fact]
     public async Task FilterOrchestrationsByName()
     {
@@ -1008,6 +1009,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         await Assert.ThrowsAsync<OperationCanceledException>(async () => await server.Client.WaitForInstanceCompletionAsync(instanceId, new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token));
     }
 
+    [Obsolete("Experimental")]
     [Fact]
     public async Task FilterOrchestrationsByTag()
     {

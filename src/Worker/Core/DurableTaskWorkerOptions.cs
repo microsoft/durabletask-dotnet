@@ -148,6 +148,7 @@ public class DurableTaskWorkerOptions
     /// <summary>
     /// Gets or sets a callback function that determines whether an orchestration should be accepted for work.
     /// </summary>
+    [Obsolete("Experimental")]
     public IOrchestrationFilter? OrchestrationFilter { get; set; }
 
     /// <summary>

@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Collections.Immutable;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
@@ -31,7 +30,8 @@ sealed partial class GrpcDurableTaskWorker
         readonly TaskHubSidecarServiceClient client;
         readonly DurableTaskShimFactory shimFactory;
         readonly GrpcDurableTaskWorkerOptions.InternalOptions internalOptions;
-        readonly IOrchestrationFilter? orchestrationFilter = null;
+        [Obsolete("Experimental")]
+        readonly IOrchestrationFilter? orchestrationFilter;
 
         public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient client, IOrchestrationFilter? orchestrationFilter = null)
         {
@@ -381,10 +381,10 @@ sealed partial class GrpcDurableTaskWorker
                 if (this.orchestrationFilter != null)
                 {
                     filterPassed = await this.orchestrationFilter.IsOrchestrationValidAsync(
-                        new OrchestrationInfo
+                        new OrchestrationFilterParameters
                         {
                             Name = runtimeState.Name,
-                            Tags = new Dictionary<string, string>(runtimeState.Tags ?? ImmutableDictionary<string, string>.Empty),
+                            Tags = runtimeState.Tags != null ? new Dictionary<string, string>(runtimeState.Tags) : null,
                         },
                         cancellationToken);
                 }

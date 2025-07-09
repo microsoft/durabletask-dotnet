@@ -3,7 +3,6 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.DurableTask.Worker;
@@ -970,14 +969,180 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
             orchestratorName, input: "World", options);
-        
+
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-        
+
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.Equal("Hello from tagged activity, World!", metadata.ReadOutputAs<string>());
+    }
+
+    [Obsolete("Experimental")]
+    [Fact]
+    public async Task FilterOrchestrationsByName()
+    {
+        // Setup a worker with an Orchestration Filter.
+        TaskName orchestratorName = nameof(EmptyOrchestration);
+        var orchestrationFilter = new OrchestrationFilter();
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, ctx => Task.FromResult<object?>(null)));
+            b.UseOrchestrationFilter(orchestrationFilter);
+        });
+
+        // Nothing in the filter set, the orchestration should complete.
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+
+        // Update the filter and re-enqueue. We should see the orchestration denied.
+        orchestrationFilter.NameDenySet.Add(orchestratorName);
+
+        // This should throw as the work is denied.
+        instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await Assert.ThrowsAsync<OperationCanceledException>(async () => await server.Client.WaitForInstanceCompletionAsync(instanceId, cts.Token));
+    }
+
+    [Obsolete("Experimental")]
+    [Fact]
+    public async Task FilterOrchestrationsByNamePassesWhenNotMatching()
+    {
+        // Setup a worker with an Orchestration Filter.
+        TaskName orchestratorName = nameof(EmptyOrchestration);
+        var orchestrationFilter = new OrchestrationFilter();
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, ctx => Task.FromResult<object?>(null)));
+            b.UseOrchestrationFilter(orchestrationFilter);
+        });
+
+        // Nothing in the filter set, the orchestration should complete.
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+
+        // Update the filter and re-enqueue. The name doesn't match so the filter should be OK.
+        orchestrationFilter.NameDenySet.Add($"not-{orchestratorName}");
+
+        // This should throw as the work is denied.
+        instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+    }
+
+    [Obsolete("Experimental")]
+    [Fact]
+    public async Task FilterOrchestrationsByTag()
+    {
+        // Setup a worker with an Orchestration Filter.
+        TaskName orchestratorName = nameof(EmptyOrchestration);
+        IReadOnlyDictionary<string, string> orchestratorTags = new Dictionary<string, string>
+        {
+            { "test", "true" }
+        };
+        var orchestrationFilter = new OrchestrationFilter();
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, ctx => Task.FromResult<object?>(null)));
+            b.UseOrchestrationFilter(orchestrationFilter);
+        });
+
+        // Nothing in the filter set, the orchestration should complete.
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, new StartOrchestrationOptions
+        {
+            Tags = orchestratorTags,
+        });
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+
+        // Update the filter and re-enqueue. We should see the orchestration denied.
+        orchestrationFilter.TagDenyDict.Add("test", "true");
+
+        // This should throw as the work is denied.
+        instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, new StartOrchestrationOptions
+        {
+            Tags = orchestratorTags,
+        });
+        using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await Assert.ThrowsAsync<OperationCanceledException>(async () => await server.Client.WaitForInstanceCompletionAsync(instanceId, cts.Token));
+    }
+
+    [Obsolete("Experimental")]
+    [Fact]
+    public async Task FilterOrchestrationsByTagPassesWithNoMatch()
+    {
+        // Setup a worker with an Orchestration Filter.
+        TaskName orchestratorName = nameof(EmptyOrchestration);
+        IReadOnlyDictionary<string, string> orchestratorTags = new Dictionary<string, string>
+        {
+            { "test", "true" }
+        };
+        var orchestrationFilter = new OrchestrationFilter();
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, ctx => Task.FromResult<object?>(null)));
+            b.UseOrchestrationFilter(orchestrationFilter);
+        });
+
+        // Nothing in the filter set, the orchestration should complete.
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, new StartOrchestrationOptions
+        {
+            Tags = orchestratorTags,
+        });
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+
+        // Update the filter and re-enqueue. The tags don't match so the orchestration should be OK.
+        orchestrationFilter.TagDenyDict.Add("test", "false");
+
+        // This should throw as the work is denied.
+        instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, new StartOrchestrationOptions
+        {
+            Tags = orchestratorTags,
+        });
+        metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+    }
+
+    [Obsolete("Experimental")]
+    class OrchestrationFilter : IOrchestrationFilter
+    {
+        public ISet<string> NameDenySet { get; set; } = new HashSet<string>();
+        public IDictionary<string, string> TagDenyDict = new Dictionary<string, string>();
+
+        public ValueTask<bool> IsOrchestrationValidAsync(OrchestrationFilterParameters info, CancellationToken cancellationToken = default)
+        {
+            return ValueTask.FromResult(
+                !this.NameDenySet.Contains(info.Name)
+                && !this.TagDenyDict.Any(kvp => info.Tags != null && info.Tags.ContainsKey(kvp.Key) && info.Tags[kvp.Key] == kvp.Value));
+        }
     }
 
     // TODO: Test for multiple external events with the same name

@@ -2,9 +2,11 @@
 // Licensed under the MIT License.
 
 using DurableTask.Core;
+using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using Google.Protobuf;
 using Microsoft.DurableTask.Worker.Shims;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using P = Microsoft.DurableTask.Protobuf;
 
@@ -24,6 +26,8 @@ namespace Microsoft.DurableTask.Worker.Grpc;
 /// </remarks>
 public static class GrpcOrchestrationRunner
 {
+    const int DefaultExtendedSessionIdleTimeoutInSeconds = 30;
+
     /// <summary>
     /// Loads orchestration history from <paramref name="encodedOrchestratorRequest"/> and uses it to execute the
     /// orchestrator function code pointed to by <paramref name="orchestratorFunc"/>.
@@ -38,6 +42,9 @@ public static class GrpcOrchestrationRunner
     /// The base64-encoded protobuf payload representing an orchestration execution request.
     /// </param>
     /// <param name="orchestratorFunc">A function that implements the orchestrator logic.</param>
+    /// <param name="extendedSessions">
+    /// The cache of extended sessions which can be used to retrieve the <see cref="ExtendedSessionState"/> if this orchestration request is from within an extended session.
+    /// </param>
     /// <param name="services">
     /// Optional <see cref="IServiceProvider"/> from which injected dependencies can be retrieved.
     /// </param>
@@ -50,10 +57,11 @@ public static class GrpcOrchestrationRunner
     public static string LoadAndRun<TInput, TOutput>(
         string encodedOrchestratorRequest,
         Func<TaskOrchestrationContext, TInput?, Task<TOutput?>> orchestratorFunc,
+        IMemoryCache extendedSessions,
         IServiceProvider? services = null)
     {
         Check.NotNull(orchestratorFunc);
-        return LoadAndRun(encodedOrchestratorRequest, FuncTaskOrchestrator.Create(orchestratorFunc), services);
+        return LoadAndRun(encodedOrchestratorRequest, FuncTaskOrchestrator.Create(orchestratorFunc), extendedSessions, services);
     }
 
     /// <summary>
@@ -65,6 +73,9 @@ public static class GrpcOrchestrationRunner
     /// </param>
     /// <param name="implementation">
     /// An <see cref="ITaskOrchestrator"/> implementation that defines the orchestrator logic.
+    /// </param>
+    /// <param name="extendedSessions">
+    /// The cache of extended sessions which can be used to retrieve the <see cref="ExtendedSessionState"/> if this orchestration request is from within an extended session.
     /// </param>
     /// <param name="services">
     /// Optional <see cref="IServiceProvider"/> from which injected dependencies can be retrieved.
@@ -81,6 +92,7 @@ public static class GrpcOrchestrationRunner
     public static string LoadAndRun(
         string encodedOrchestratorRequest,
         ITaskOrchestrator implementation,
+        IMemoryCache extendedSessions,
         IServiceProvider? services = null)
     {
         Check.NotNullOrEmpty(encodedOrchestratorRequest);
@@ -95,25 +107,84 @@ public static class GrpcOrchestrationRunner
                 pair => pair.Key,
                 pair => ProtoUtils.ConvertValueToObject(pair.Value));
 
-        // Re-construct the orchestration state from the history.
-        // New events must be added using the AddEvent method.
-        OrchestrationRuntimeState runtimeState = new(pastEvents);
-        foreach (HistoryEvent newEvent in newEvents)
+        OrchestratorExecutionResult? result = null;
+        bool addToExtendedSessions = false;
+        if (properties.TryGetValue("ExtendedSession", out object? extendedSession)
+            && extendedSession is bool isExtendedSession && isExtendedSession)
         {
-            runtimeState.AddEvent(newEvent);
+            if (extendedSessions.TryGetValue(request.InstanceId, out ExtendedSessionState? extendedSessionState))
+            {
+                OrchestrationRuntimeState runtimeState = extendedSessionState!.RuntimeState;
+                foreach (HistoryEvent newEvent in newEvents)
+                {
+                    runtimeState.AddEvent(newEvent);
+                }
+
+                result = extendedSessionState.OrchestrationExecutor.ExecuteNewEvents();
+                if (extendedSessionState.OrchestrationExecutor.IsCompleted)
+                {
+                    extendedSessions.Remove(request.InstanceId);
+                }
+            }
+            else
+            {
+                addToExtendedSessions = true;
+            }
         }
 
-        TaskName orchestratorName = new(runtimeState.Name);
-        ParentOrchestrationInstance? parent = runtimeState.ParentInstance is ParentInstance p
-            ? new(new(p.Name), p.OrchestrationInstance.InstanceId)
-            : null;
+        if (result == null)
+        {
+            if (!properties.TryGetValue("ExtendedSessionIdleTimeoutInSeconds", out object? extendedSessionIdleTimeout)
+                || extendedSessionIdleTimeout is not int extendedSessionIdleTimeoutInSeconds
+                || extendedSessionIdleTimeoutInSeconds <= 0)
+            {
+                extendedSessionIdleTimeoutInSeconds = DefaultExtendedSessionIdleTimeoutInSeconds;
+            }
 
-        DurableTaskShimFactory factory = services is null
-            ? DurableTaskShimFactory.Default
-            : ActivatorUtilities.GetServiceOrCreateInstance<DurableTaskShimFactory>(services);
-        TaskOrchestration shim = factory.CreateOrchestration(orchestratorName, implementation, properties, parent);
-        TaskOrchestrationExecutor executor = new(runtimeState, shim, BehaviorOnContinueAsNew.Carryover, request.EntityParameters.ToCore(), ErrorPropagationMode.UseFailureDetails);
-        OrchestratorExecutionResult result = executor.Execute();
+            // If this is the first orchestration execution, then the past events count will be 0 but includePastEvents will be true (there are just none to include).
+            // Otherwise, there is an orchestration history but DurableTask.Core did not attach it since the extended session is still active on its end, but we have since evicted the
+            // session and lost the orchestration history so we cannot replay the orchestration.
+            // We will fail the session, in which case the work item will be retried with a history attached.
+            if (pastEvents.Count == 0
+                && (properties.TryGetValue("IncludePastEvents", out object? includePastEvents)
+                && includePastEvents is bool pastEventsIncluded && !pastEventsIncluded))
+            {
+                throw new SessionAbortedException($"The worker has since ended the extended session due to its being idle longer than the maximum of {extendedSessionIdleTimeoutInSeconds} seconds.");
+            }
+
+            // Re-construct the orchestration state from the history.
+            // New events must be added using the AddEvent method.
+            OrchestrationRuntimeState runtimeState = new(pastEvents);
+
+            foreach (HistoryEvent newEvent in newEvents)
+            {
+                runtimeState.AddEvent(newEvent);
+            }
+
+            TaskName orchestratorName = new(runtimeState.Name);
+            ParentOrchestrationInstance? parent = runtimeState.ParentInstance is ParentInstance p
+                ? new(new(p.Name), p.OrchestrationInstance.InstanceId)
+                : null;
+
+            DurableTaskShimFactory factory = services is null
+                ? DurableTaskShimFactory.Default
+                : ActivatorUtilities.GetServiceOrCreateInstance<DurableTaskShimFactory>(services);
+            TaskOrchestration shim = factory.CreateOrchestration(orchestratorName, implementation, properties, parent);
+            TaskOrchestrationExecutor executor = new(runtimeState, shim, BehaviorOnContinueAsNew.Carryover, request.EntityParameters.ToCore(), ErrorPropagationMode.UseFailureDetails);
+            result = executor.Execute();
+
+            if (addToExtendedSessions && !executor.IsCompleted)
+            {
+                extendedSessions.Set<ExtendedSessionState>(
+                    request.InstanceId,
+                    new(runtimeState, shim, executor),
+                    new MemoryCacheEntryOptions { SlidingExpiration = TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds) });
+            }
+            else
+            {
+                extendedSessions.Remove(request.InstanceId);
+            }
+        }
 
         P.OrchestratorResponse response = ProtoUtils.ConstructOrchestratorResponse(
             request.InstanceId,

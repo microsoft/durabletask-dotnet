@@ -3,6 +3,7 @@
 
 using System.Buffers;
 using System.Buffers.Text;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using DurableTask.Core;
@@ -15,6 +16,7 @@ using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using DTCore = DurableTask.Core;
 using P = Microsoft.DurableTask.Protobuf;
+using TraceHelper = Microsoft.DurableTask.Tracing.TraceHelper;
 
 namespace Microsoft.DurableTask;
 
@@ -279,10 +281,12 @@ static class ProtoUtils
     /// <exception cref="NotSupportedException">When an orchestrator action is unknown.</exception>
     internal static P.OrchestratorResponse ConstructOrchestratorResponse(
         string instanceId,
+        string executionId,
         string? customStatus,
         IEnumerable<OrchestratorAction> actions,
         string completionToken,
-        EntityConversionState? entityConversionState)
+        EntityConversionState? entityConversionState,
+        Activity? parentActivity)
     {
         Check.NotNull(actions);
         var response = new P.OrchestratorResponse
@@ -290,21 +294,39 @@ static class ProtoUtils
             InstanceId = instanceId,
             CustomStatus = customStatus,
             CompletionToken = completionToken,
+            OrchestrationSpanID = parentActivity?.SpanId.ToString(),
+            OrchestrationSpanStartTime = parentActivity?.StartTimeUtc.ToTimestamp(),
         };
 
         foreach (OrchestratorAction action in actions)
         {
             var protoAction = new P.OrchestratorAction { Id = action.Id };
 
+            ActivityContext? clientActivityContext = null;
+
+            if (parentActivity != null)
+            {
+                ActivitySpanId clientSpanId = ActivitySpanId.CreateRandom();
+                clientActivityContext = new(parentActivity.TraceId, clientSpanId, parentActivity.ActivityTraceFlags, parentActivity.TraceStateString);
+            }
+
             switch (action.OrchestratorActionType)
             {
                 case OrchestratorActionType.ScheduleOrchestrator:
                     var scheduleTaskAction = (ScheduleTaskOrchestratorAction)action;
+
                     protoAction.ScheduleTask = new P.ScheduleTaskAction
                     {
                         Name = scheduleTaskAction.Name,
                         Version = scheduleTaskAction.Version,
                         Input = scheduleTaskAction.Input,
+                        ParentTraceContext = clientActivityContext is not null
+                            ? new P.TraceContext
+                            {
+                                TraceParent = $"00-{clientActivityContext.Value.TraceId}-{clientActivityContext.Value.SpanId}-0{clientActivityContext.Value.TraceFlags:d}",
+                                TraceState = clientActivityContext.Value.TraceState,
+                            }
+                            : null,
                     };
 
                     if (scheduleTaskAction.Tags != null)
@@ -324,6 +346,13 @@ static class ProtoUtils
                         InstanceId = subOrchestrationAction.InstanceId,
                         Name = subOrchestrationAction.Name,
                         Version = subOrchestrationAction.Version,
+                        ParentTraceContext = clientActivityContext is not null
+                            ? new P.TraceContext
+                            {
+                                TraceParent = $"00-{clientActivityContext.Value.TraceId}-{clientActivityContext.Value.SpanId}-0{clientActivityContext.Value.TraceFlags:d}",
+                                TraceState = clientActivityContext.Value.TraceState,
+                            }
+                            : null,
                     };
                     break;
                 case OrchestratorActionType.CreateTimer:
@@ -378,6 +407,12 @@ static class ProtoUtils
                             Name = sendEventAction.EventName,
                             Data = sendEventAction.EventData,
                         };
+
+                        // Distributed Tracing: start a new trace activity derived from the orchestration
+                        // for an EventRaisedEvent (external event)
+                        using Activity? traceActivity = TraceHelper.StartTraceActivityForEventRaisedFromWorker(sendEventAction,instanceId, executionId);
+
+                        traceActivity?.Stop();
                     }
 
                     break;

@@ -6,8 +6,8 @@ using Azure.Core;
 using Azure.Identity;
 using Grpc.Core;
 using Grpc.Net.Client;
-using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
+using grpcConfig = Grpc.Net.Client.Configuration;
 
 namespace Microsoft.DurableTask;
 
@@ -45,6 +45,11 @@ public class DurableTaskSchedulerClientOptions
     /// This should only be set to true in local development/testing scenarios.
     /// </summary>
     public bool AllowInsecureCredentials { get; set; }
+
+    /// <summary>
+    /// Gets or sets the options that determine how and when calls made to the scheduler will be retried.
+    /// </summary>
+    internal ClientRetryOptions? RetryOptions { get; set; }
 
     /// <summary>
     /// Creates a new instance of <see cref="DurableTaskSchedulerClientOptions"/> from a connection string.
@@ -109,6 +114,48 @@ public class DurableTaskSchedulerClientOptions
                 metadata.Add("Authorization", $"Bearer {token.Token}");
             });
 
+        grpcConfig.ServiceConfig? serviceConfig = null;
+        if (this.RetryOptions != null)
+        {
+            grpcConfig.RetryPolicy retryPolicy = new grpcConfig.RetryPolicy
+            {
+                MaxAttempts = this.RetryOptions.MaxRetries ?? GrpcRetryPolicyDefaults.DefaultMaxAttempts,
+                InitialBackoff = TimeSpan.FromMilliseconds(this.RetryOptions.InitialBackoffMs ?? GrpcRetryPolicyDefaults.DefaultInitialBackoffMs),
+                MaxBackoff = TimeSpan.FromMilliseconds(this.RetryOptions.MaxBackoffMs ?? GrpcRetryPolicyDefaults.DefaultMaxBackoffMs),
+                BackoffMultiplier = this.RetryOptions.BackoffMultiplier ?? GrpcRetryPolicyDefaults.DefaultBackoffMultiplier,
+                RetryableStatusCodes = { StatusCode.Unavailable }, // Always retry on Unavailable.
+            };
+
+            if (this.RetryOptions.RetryableStatusCodes != null)
+            {
+                foreach (StatusCode statusCode in this.RetryOptions.RetryableStatusCodes)
+                {
+                    // Added by default, don't need to have it added twice.
+                    if (statusCode == StatusCode.Unavailable)
+                    {
+                        continue;
+                    }
+
+                    retryPolicy.RetryableStatusCodes.Add(statusCode);
+                }
+            }
+
+            grpcConfig.MethodConfig methodConfig = new grpcConfig.MethodConfig
+            {
+                Names = { grpcConfig.MethodName.Default },
+                RetryPolicy = retryPolicy,
+            };
+
+            serviceConfig = new grpcConfig.ServiceConfig
+            {
+                MethodConfigs = { methodConfig },
+            };
+        }
+        else
+        {
+            serviceConfig = GrpcRetryPolicyDefaults.DefaultServiceConfig;
+        }
+
         // Production will use HTTPS, but local testing will use HTTP
         ChannelCredentials channelCreds = endpoint.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ?
             ChannelCredentials.SecureSsl :
@@ -117,7 +164,7 @@ public class DurableTaskSchedulerClientOptions
         {
             Credentials = ChannelCredentials.Create(channelCreds, managedBackendCreds),
             UnsafeUseInsecureChannelCallCredentials = this.AllowInsecureCredentials,
-            ServiceConfig = GrpcRetryPolicyDefaults.DefaultServiceConfig,
+            ServiceConfig = serviceConfig,
         });
     }
 
@@ -172,5 +219,36 @@ public class DurableTaskSchedulerClientOptions
                     $"The connection string contains an unsupported authentication type '{authType}'.",
                     nameof(connectionString));
         }
+    }
+
+    /// <summary>
+    /// Options used to configure retries used when making calls to the Scheduler.
+    /// </summary>
+    public class ClientRetryOptions
+    {
+        /// <summary>
+        /// Gets or sets the maximum number of times a call should be retried.
+        /// </summary>
+        public int? MaxRetries { get; set; }
+
+        /// <summary>
+        /// Gets or sets the initial backoff in milliseconds.
+        /// </summary>
+        public int? InitialBackoffMs { get; set; }
+
+        /// <summary>
+        /// Gets or sets the maximum backoff in milliseconds.
+        /// </summary>
+        public int? MaxBackoffMs { get; set; }
+
+        /// <summary>
+        /// Gets or sets the backoff multiplier for exponential backoff.
+        /// </summary>
+        public double? BackoffMultiplier { get; set; }
+
+        /// <summary>
+        /// Gets or sets the list of status codes that can be retried.
+        /// </summary>
+        public List<StatusCode>? RetryableStatusCodes { get; set; }
     }
 }

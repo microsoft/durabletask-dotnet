@@ -3,9 +3,11 @@
 
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
+using DurableTask.Core.Exceptions;
 using Google.Protobuf;
 using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Worker.Shims;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using P = Microsoft.DurableTask.Protobuf;
 
@@ -26,6 +28,8 @@ namespace Microsoft.DurableTask.Worker.Grpc;
 /// </remarks>
 public static class GrpcEntityRunner
 {
+    const int DefaultExtendedSessionIdleTimeoutInSeconds = 30;
+
     /// <summary>
     /// Deserializes entity batch request from <paramref name="encodedEntityRequest"/> and uses it to invoke the
     /// requested operations implemented by <paramref name="implementation"/>.
@@ -50,17 +54,46 @@ public static class GrpcEntityRunner
     /// Thrown if <paramref name="encodedEntityRequest"/> contains invalid data.
     /// </exception>
     public static async Task<string> LoadAndRunAsync(
-        string encodedEntityRequest, ITaskEntity implementation, IServiceProvider? services = null)
+        string encodedEntityRequest, ITaskEntity implementation, IMemoryCache entityStates, IServiceProvider? services = null)
     {
         Check.NotNullOrEmpty(encodedEntityRequest);
         Check.NotNull(implementation);
 
         P.EntityBatchRequest request = P.EntityBatchRequest.Parser.Base64Decode<P.EntityBatchRequest>(
             encodedEntityRequest);
+        Dictionary<string, object?> properties = request.Properties.ToDictionary(
+                pair => pair.Key,
+                pair => ProtoUtils.ConvertValueToObject(pair.Value));
 
         EntityBatchRequest batch = request.ToEntityBatchRequest();
         EntityId id = EntityId.FromString(batch.InstanceId!);
         TaskName entityName = new(id.Name);
+
+        string? entityState = null;
+        bool entityStateFound = false;
+        bool addToEntityStates = false;
+
+        if (properties.TryGetValue("ExtendedSession", out object? isExtendedSession) && (bool)isExtendedSession!)
+        {
+            addToEntityStates = true;
+            if (entityStates.TryGetValue(request.InstanceId, out entityState))
+            {
+                entityStateFound = true;
+                batch.EntityState = entityState;
+            }
+        }
+
+        int extendedSessionIdleTimeoutInSeconds = DefaultExtendedSessionIdleTimeoutInSeconds;
+        if (properties.TryGetValue("ExtendedSessionIdleTimeoutInSeconds", out object? extendedSessionIdleTimeout)
+            && (int)extendedSessionIdleTimeout! >= 0)
+        {
+            extendedSessionIdleTimeoutInSeconds = (int)extendedSessionIdleTimeout!;
+        }
+
+        if (!entityStateFound && (properties.TryGetValue("IncludeEntityState", out object? entityStateIncluded) && (bool)entityStateIncluded!))
+        {
+            throw new SessionAbortedException($"The worker has since ended the extended session due to its being idle longer than the maximum of {extendedSessionIdleTimeoutInSeconds} seconds.");
+        }
 
         DurableTaskShimFactory factory = services is null
             ? DurableTaskShimFactory.Default
@@ -68,6 +101,14 @@ public static class GrpcEntityRunner
 
         TaskEntity entity = factory.CreateEntity(entityName, implementation, id);
         EntityBatchResult result = await entity.ExecuteOperationBatchAsync(batch);
+
+        if (addToEntityStates)
+        {
+            entityStates.Set<string?>(
+                request.InstanceId,
+                result.EntityState,
+                new MemoryCacheEntryOptions { SlidingExpiration = TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds) });
+        }
 
         P.EntityBatchResult response = result.ToEntityBatchResult();
         byte[] responseBytes = response.ToByteArray();

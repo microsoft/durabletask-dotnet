@@ -115,6 +115,7 @@ public static class GrpcOrchestrationRunner
             if (extendedSessions.TryGetValue(request.InstanceId, out ExtendedSessionState? extendedSessionState))
             {
                 OrchestrationRuntimeState runtimeState = extendedSessionState!.RuntimeState;
+                runtimeState.NewEvents.Clear();
                 foreach (HistoryEvent newEvent in newEvents)
                 {
                     runtimeState.AddEvent(newEvent);

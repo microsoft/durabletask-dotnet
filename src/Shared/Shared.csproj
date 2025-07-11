@@ -17,8 +17,6 @@
     <PackageReference Include="Microsoft.Azure.DurableTask.Core" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
-    <!-- For some reason, this project resolves this at 6.0.0 instead of the centrally defined 8.0.6. 
-         Since 6.0.0 has known vulnerabilities, we override to 6.0.11 to avoid major version changes here. -->
     <PackageReference Include="System.Text.Json"/>
   </ItemGroup>
 

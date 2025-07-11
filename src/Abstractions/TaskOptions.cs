@@ -15,8 +15,8 @@ public record TaskOptions
     /// </summary>
     /// <param name="retry">The task retry options.</param>
     public TaskOptions(TaskRetryOptions? retry)
+        : this(retry, null)
     {
-        this.Retry = retry;
     }
 
     /// <summary>

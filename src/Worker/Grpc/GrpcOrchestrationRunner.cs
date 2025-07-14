@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using DurableTask.Core;
-using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using Google.Protobuf;
 using Microsoft.DurableTask.Worker.Shims;

@@ -6,9 +6,9 @@ using System.Diagnostics;
 using DurableTask.Core;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
-using Microsoft.DurableTask.Sidecar.Dispatcher;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
+using Microsoft.DurableTask.Sidecar.Dispatcher;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -587,6 +587,16 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     static string GetTaskIdKey(string instanceId, int taskId)
     {
         return string.Concat(instanceId, "__", taskId.ToString());
+    }
+
+    public override Task<P.AbandonActivityTaskResponse> AbandonTaskActivityWorkItem(P.AbandonActivityTaskRequest request, ServerCallContext context)
+    {
+        return Task.FromResult<P.AbandonActivityTaskResponse>(new());
+    }
+
+    public override Task<P.AbandonOrchestrationTaskResponse> AbandonTaskOrchestratorWorkItem(P.AbandonOrchestrationTaskRequest request, ServerCallContext context)
+    {
+        return Task.FromResult<P.AbandonOrchestrationTaskResponse>(new());
     }
 
     /// <summary>

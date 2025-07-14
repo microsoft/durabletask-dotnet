@@ -17,6 +17,7 @@
     <PackageReference Include="Microsoft.Azure.DurableTask.Core" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="System.Text.Json"/>
   </ItemGroup>
 
 </Project>

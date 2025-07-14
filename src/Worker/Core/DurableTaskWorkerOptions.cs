@@ -146,6 +146,12 @@ public class DurableTaskWorkerOptions
     public bool IsVersioningSet { get; internal set; }
 
     /// <summary>
+    /// Gets or sets a callback function that determines whether an orchestration should be accepted for work.
+    /// </summary>
+    [Obsolete("Experimental")]
+    public IOrchestrationFilter? OrchestrationFilter { get; set; }
+
+    /// <summary>
     /// Gets a value indicating whether <see cref="DataConverter" /> was explicitly set or not.
     /// </summary>
     /// <remarks>
@@ -155,6 +161,7 @@ public class DurableTaskWorkerOptions
     /// behavior is consistently irrespective of option configuration ordering.
     /// </remarks>
     internal bool DataConverterExplicitlySet { get; private set; }
+
 
     /// <summary>
     /// Applies these option values to another.
@@ -169,6 +176,7 @@ public class DurableTaskWorkerOptions
             other.MaximumTimerInterval = this.MaximumTimerInterval;
             other.EnableEntitySupport = this.EnableEntitySupport;
             other.Versioning = this.Versioning;
+            other.OrchestrationFilter = this.OrchestrationFilter;
         }
     }
 

@@ -169,7 +169,12 @@ static class Program
         string? appInsightsKey = Environment.GetEnvironmentVariable("APPINSIGHTS_INSTRUMENTATIONKEY");
         if (!string.IsNullOrEmpty(appInsightsKey))
         {
-            builder.AddApplicationInsights(appInsightsKey);
+            builder.AddApplicationInsights(
+                telemetryConfig =>
+                {
+                    telemetryConfig.ConnectionString = $"InstrumentationKey={appInsightsKey}";
+                },
+                loggerOptions => { });
         }
 
         // Support a statically configured logger provider for in-memory testing.
@@ -213,7 +218,7 @@ static class Program
                 var azureStorageSettings = new AzureStorageOrchestrationServiceSettings
                 {
                     TaskHubName = "DurableServerTests",
-                    StorageConnectionString = storageConnectionString,
+                    StorageAccountClientProvider = new StorageAccountClientProvider(storageConnectionString),
                     MaxQueuePollingInterval = TimeSpan.FromSeconds(5),
                     LoggerFactory = loggerFactory,
                 };

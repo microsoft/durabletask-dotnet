@@ -16,6 +16,8 @@
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="8.0.1" Condition="'$(TargetFramework)' == 'net8.0'"/>
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.1" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.ApplicationInsights" Version="2.23.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="8.0.1" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="8.0.2" />
     <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="8.0.0" />
   </ItemGroup>
@@ -28,8 +30,10 @@
 
   <!-- DurableTask Packages -->
   <ItemGroup>
+    <PackageVersion Include="Microsoft.Azure.DurableTask.AzureStorage" Version="2.3.0" />
     <PackageVersion Include="Microsoft.Azure.DurableTask.Core" Version="3.3.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.2.2" />
+    <PackageVersion Include="Microsoft.DurableTask.SqlServer" Version="1.5.1" />
   </ItemGroup>
 
   <!-- Grpc / Protobuf Packages -->
@@ -77,6 +81,11 @@
     <PackageVersion Include="System.Linq.Async" Version="6.0.3" />
     <PackageVersion Include="System.Text.Json" Version="8.0.6" />
     <PackageVersion Include="System.Collections.Immutable" Version="8.0.0" />
+  </ItemGroup>
+
+  <!-- External / Third-party dependencies -->
+  <ItemGroup>
+    <PackageVersion Include="CommandLineParser" Version="2.8.0" />
   </ItemGroup>
 
 </Project>

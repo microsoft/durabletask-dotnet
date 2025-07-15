@@ -41,35 +41,6 @@ public static class DurableTaskSchedulerClientExtensions
     }
 
     /// <summary>
-    /// Configures Durable Task client to use the Azure Durable Task Scheduler service.
-    /// </summary>
-    /// <param name="builder">The Durable Task client builder to configure.</param>
-    /// <param name="endpointAddress">The endpoint address of the Durable Task Scheduler resource. Expected to be in the format "https://{scheduler-name}.{region}.durabletask.io".</param>
-    /// <param name="taskHubName">The name of the task hub resource associated with the Durable Task Scheduler resource.</param>
-    /// <param name="credential">The credential used to authenticate with the Durable Task Scheduler task hub resource.</param>
-    /// <param name="retryOptions">The options that determine how and when a request will be retried.</param>
-    /// <param name="configure">Optional callback to dynamically configure DurableTaskSchedulerClientOptions.</param>
-    public static void UseDurableTaskScheduler(
-        this IDurableTaskClientBuilder builder,
-        string endpointAddress,
-        string taskHubName,
-        TokenCredential credential,
-        DurableTaskSchedulerClientOptions.ClientRetryOptions retryOptions,
-        Action<DurableTaskSchedulerClientOptions>? configure = null)
-    {
-        ConfigureSchedulerOptions(
-            builder,
-            options =>
-            {
-                options.EndpointAddress = endpointAddress;
-                options.TaskHubName = taskHubName;
-                options.Credential = credential;
-                options.RetryOptions = retryOptions;
-            },
-            configure);
-    }
-
-    /// <summary>
     /// Configures Durable Task client to use the Azure Durable Task Scheduler service using a connection string.
     /// </summary>
     /// <param name="builder">The Durable Task client builder to configure.</param>
@@ -89,33 +60,6 @@ public static class DurableTaskSchedulerClientExtensions
                 options.TaskHubName = connectionOptions.TaskHubName;
                 options.Credential = connectionOptions.Credential;
                 options.AllowInsecureCredentials = connectionOptions.AllowInsecureCredentials;
-            },
-            configure);
-    }
-
-    /// <summary>
-    /// Configures Durable Task client to use the Azure Durable Task Scheduler service using a connection string.
-    /// </summary>
-    /// <param name="builder">The Durable Task client builder to configure.</param>
-    /// <param name="connectionString">The connection string used to connect to the Durable Task Scheduler service.</param>
-    /// /// <param name="retryOptions">The options that determine how and when a request will be retried.</param>
-    /// <param name="configure">Optional callback to dynamically configure DurableTaskSchedulerClientOptions.</param>
-    public static void UseDurableTaskScheduler(
-        this IDurableTaskClientBuilder builder,
-        string connectionString,
-        DurableTaskSchedulerClientOptions.ClientRetryOptions retryOptions,
-        Action<DurableTaskSchedulerClientOptions>? configure = null)
-    {
-        var connectionOptions = DurableTaskSchedulerClientOptions.FromConnectionString(connectionString);
-        ConfigureSchedulerOptions(
-            builder,
-            options =>
-            {
-                options.EndpointAddress = connectionOptions.EndpointAddress;
-                options.TaskHubName = connectionOptions.TaskHubName;
-                options.Credential = connectionOptions.Credential;
-                options.AllowInsecureCredentials = connectionOptions.AllowInsecureCredentials;
-                options.RetryOptions = retryOptions;
             },
             configure);
     }

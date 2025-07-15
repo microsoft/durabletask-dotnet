@@ -205,15 +205,16 @@ public class DurableTaskSchedulerClientExtensionsTests
         DefaultAzureCredential credential = new DefaultAzureCredential();
 
         // Act
-        mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential,
-            new DurableTaskSchedulerClientOptions.ClientRetryOptions
-            {
-                MaxRetries = 5,
-                InitialBackoffMs = 100,
-                MaxBackoffMs = 1000,
-                BackoffMultiplier = 2.0,
-                RetryableStatusCodes = new List<StatusCode> { StatusCode.Unknown }
-            });
+        mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options =>
+                options.RetryOptions = new DurableTaskSchedulerClientOptions.ClientRetryOptions
+                {
+                    MaxRetries = 5,
+                    InitialBackoffMs = 100,
+                    MaxBackoffMs = 1000,
+                    BackoffMultiplier = 2.0,
+                    RetryableStatusCodes = new List<StatusCode> { StatusCode.Unknown }
+                }
+            );
 
         // Assert
         ServiceProvider provider = services.BuildServiceProvider();
@@ -247,15 +248,16 @@ public class DurableTaskSchedulerClientExtensionsTests
         string connectionString = $"Endpoint={ValidEndpoint};Authentication=DefaultAzure;TaskHub={ValidTaskHub}";
 
         // Act
-        mockBuilder.Object.UseDurableTaskScheduler(connectionString,
-            new DurableTaskSchedulerClientOptions.ClientRetryOptions
-            {
-                MaxRetries = 5,
-                InitialBackoffMs = 100,
-                MaxBackoffMs = 1000,
-                BackoffMultiplier = 2.0,
-                RetryableStatusCodes = new List<StatusCode> { StatusCode.Unknown }
-            });
+        mockBuilder.Object.UseDurableTaskScheduler(connectionString, options =>
+                options.RetryOptions = new DurableTaskSchedulerClientOptions.ClientRetryOptions
+                {
+                    MaxRetries = 5,
+                    InitialBackoffMs = 100,
+                    MaxBackoffMs = 1000,
+                    BackoffMultiplier = 2.0,
+                    RetryableStatusCodes = new List<StatusCode> { StatusCode.Unknown }
+                }
+            );
 
         // Assert
         ServiceProvider provider = services.BuildServiceProvider();

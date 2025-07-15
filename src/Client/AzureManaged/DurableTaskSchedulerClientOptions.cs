@@ -7,7 +7,7 @@ using Azure.Identity;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Microsoft.DurableTask.Client;
-using grpcConfig = Grpc.Net.Client.Configuration;
+using GrpcConfig = Grpc.Net.Client.Configuration;
 
 namespace Microsoft.DurableTask;
 
@@ -49,7 +49,7 @@ public class DurableTaskSchedulerClientOptions
     /// <summary>
     /// Gets or sets the options that determine how and when calls made to the scheduler will be retried.
     /// </summary>
-    internal ClientRetryOptions? RetryOptions { get; set; }
+    public ClientRetryOptions? RetryOptions { get; set; }
 
     /// <summary>
     /// Creates a new instance of <see cref="DurableTaskSchedulerClientOptions"/> from a connection string.
@@ -114,10 +114,10 @@ public class DurableTaskSchedulerClientOptions
                 metadata.Add("Authorization", $"Bearer {token.Token}");
             });
 
-        grpcConfig.ServiceConfig? serviceConfig = null;
+        GrpcConfig.ServiceConfig? serviceConfig = GrpcRetryPolicyDefaults.DefaultServiceConfig;
         if (this.RetryOptions != null)
         {
-            grpcConfig.RetryPolicy retryPolicy = new grpcConfig.RetryPolicy
+            GrpcConfig.RetryPolicy retryPolicy = new GrpcConfig.RetryPolicy
             {
                 MaxAttempts = this.RetryOptions.MaxRetries ?? GrpcRetryPolicyDefaults.DefaultMaxAttempts,
                 InitialBackoff = TimeSpan.FromMilliseconds(this.RetryOptions.InitialBackoffMs ?? GrpcRetryPolicyDefaults.DefaultInitialBackoffMs),
@@ -140,20 +140,17 @@ public class DurableTaskSchedulerClientOptions
                 }
             }
 
-            grpcConfig.MethodConfig methodConfig = new grpcConfig.MethodConfig
+            GrpcConfig.MethodConfig methodConfig = new GrpcConfig.MethodConfig
             {
-                Names = { grpcConfig.MethodName.Default },
+                // MethodName.Default applies this retry policy configuration to all gRPC methods on the channel.
+                Names = { GrpcConfig.MethodName.Default },
                 RetryPolicy = retryPolicy,
             };
 
-            serviceConfig = new grpcConfig.ServiceConfig
+            serviceConfig = new GrpcConfig.ServiceConfig
             {
                 MethodConfigs = { methodConfig },
             };
-        }
-        else
-        {
-            serviceConfig = GrpcRetryPolicyDefaults.DefaultServiceConfig;
         }
 
         // Production will use HTTPS, but local testing will use HTTP
@@ -249,6 +246,6 @@ public class DurableTaskSchedulerClientOptions
         /// <summary>
         /// Gets or sets the list of status codes that can be retried.
         /// </summary>
-        public List<StatusCode>? RetryableStatusCodes { get; set; }
+        public IList<StatusCode>? RetryableStatusCodes { get; set; }
     }
 }

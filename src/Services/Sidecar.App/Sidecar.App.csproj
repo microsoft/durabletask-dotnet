@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Import common properties for build settings -->
+  <Import Project="../common.props" />
+  
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>dt</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommandLineParser" />
+    <PackageReference Include="Grpc.AspNetCore.Server" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+    <PackageReference Include="Microsoft.Extensions.Logging.ApplicationInsights" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Azure.DurableTask.AzureStorage" />
+    <PackageReference Include="Microsoft.DurableTask.SqlServer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sidecar\Sidecar.csproj" />
+  </ItemGroup>
+
+</Project>

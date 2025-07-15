@@ -1,12 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-  </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="$(SrcRoot)Client/Grpc/Client.Grpc.csproj" />
     <ProjectReference Include="$(SrcRoot)Worker/Grpc/Worker.Grpc.csproj" />
+    <ProjectReference Include="$(SrcRoot)Services/Sidecar/Sidecar.csproj" />
   </ItemGroup>
 
   <ItemGroup>

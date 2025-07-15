@@ -2,13 +2,13 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics;
-using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.DurableTask.Worker;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Xunit.Abstractions;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
@@ -43,9 +43,9 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
         GC.SuppressFinalize(this);
     }
 
-    protected async Task<HostTestLifetime> StartWorkerAsync(Action<IDurableTaskWorkerBuilder> configure)
+    protected async Task<HostTestLifetime> StartWorkerAsync(Action<IDurableTaskWorkerBuilder> workerConfigure, Action<IDurableTaskClientBuilder>? clientConfigure = null)
     {
-        IHost host = this.CreateHostBuilder(configure).Build();
+        IHost host = this.CreateHostBuilder(workerConfigure, clientConfigure).Build();
         await host.StartAsync(this.TimeoutToken);
         return new HostTestLifetime(host, this.TimeoutToken);
     }
@@ -53,8 +53,9 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
     /// <summary>
     /// Creates a <see cref="IHostBuilder"/> configured to output logs to xunit logging infrastructure.
     /// </summary>
-    /// <param name="configure">Configures the durable task builder.</param>
-    protected IHostBuilder CreateHostBuilder(Action<IDurableTaskWorkerBuilder> configure)
+    /// <param name="workerConfigure">Configures the durable task worker builder.</param>
+    /// <param name="clientConfigure">Configures the durable task client builder.</param>
+    protected IHostBuilder CreateHostBuilder(Action<IDurableTaskWorkerBuilder> workerConfigure, Action<IDurableTaskClientBuilder>? clientConfigure)
     {
         return Host.CreateDefaultBuilder()
             .ConfigureLogging(b =>
@@ -68,13 +69,14 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
                 services.AddDurableTaskWorker(b =>
                 {
                     b.UseGrpc(this.sidecarFixture.Channel);
-                    configure(b);
+                    workerConfigure(b);
                 });
 
                 services.AddDurableTaskClient(b =>
                 {
                     b.UseGrpc(this.sidecarFixture.Channel);
                     b.RegisterDirectly();
+                    clientConfigure?.Invoke(b);
                 });
             });
     }
@@ -86,6 +88,61 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
         bool foundCategory = this.logProvider.TryGetLogs(ExpectedCategoryName, out IReadOnlyCollection<LogEntry> logs);
         Assert.True(foundCategory);
         return logs;
+    }
+
+    protected IReadOnlyCollection<LogEntry> GetLogs(string category)
+    {
+        this.logProvider.TryGetLogs(category, out IReadOnlyCollection<LogEntry> logs);
+        return logs ?? [];
+    }
+
+    protected static bool MatchLog(
+        LogEntry log,
+        string logEventName,
+        (Type exceptionType, string exceptionMessage)? exception,
+        params (string key, string value)[] metadataPairs)
+    {
+        if (log.EventId.Name != logEventName)
+        {
+            return false;
+        }
+
+        if (log.Exception is null != exception is null)
+        {
+            return false;
+        }
+        else if (exception is not null)
+        {
+            if (log.Exception?.GetType() != exception.Value.exceptionType)
+            {
+                return false;
+            }
+            if (log.Exception?.Message != exception.Value.exceptionMessage)
+            {
+                return false;
+            }
+        }
+
+        if (log.State is not IReadOnlyCollection<KeyValuePair<string, object>> metadataList)
+        {
+            return false;
+        }
+
+        Dictionary<string, object> state = new(metadataList);
+        foreach ((string key, string value) in metadataPairs)
+        {
+            if (!state.TryGetValue(key, out object? stateValue))
+            {
+                return false;
+            }
+
+            if (stateValue is not string stateString || stateString != value)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     protected struct HostTestLifetime : IAsyncDisposable

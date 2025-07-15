@@ -2,37 +2,29 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <IncludeShared>false</IncludeShared>
     <IsRoslynComponent>true</IsRoslynComponent>
     <EnableStyleCop>true</EnableStyleCop>
-
-    <!-- Do not include the generator as a lib dependency -->
-    <IncludeBuildOutput>false</IncludeBuildOutput>
-    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
-    <IncludeShared>false</IncludeShared>
-    <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <!-- Do not publish it until it is ready to release -->
-    <IsPackable>false</IsPackable>
-  </PropertyGroup>
-
-  <PropertyGroup>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);SA0001;</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup>
-    <PackageDescription>.NET Analyzers for the Durable Task Framework.</PackageDescription>
-  </PropertyGroup>
-
-  <PropertyGroup>
-    <VersionPrefix>0.0.1</VersionPrefix>
-    <VersionSuffix>preview.1</VersionSuffix>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionSuffix></VersionSuffix>
+    <PackageDescription>.NET Analyzers for the Durable Task SDK.</PackageDescription>
     <NeutralLanguage>en</NeutralLanguage>
+    <IncludeBuildOutput>false</IncludeBuildOutput> <!-- Do not include the analyzer as a lib dependency -->
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <IsPackable>true</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.9.2" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.9.2" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.CodeAnalysis.ResxSourceGenerator" Version="3.11.0-beta1.24165.2" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.ResxSourceGenerator" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

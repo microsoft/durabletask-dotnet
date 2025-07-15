@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.Buffers;
@@ -10,8 +10,10 @@ using DurableTask.Core.Command;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
+using DurableTask.Core.Tracing;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
+using DTCore = DurableTask.Core;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask;
@@ -29,6 +31,19 @@ static class ProtoUtils
     /// <exception cref="NotSupportedException">When the provided history event type is not supported.</exception>
     internal static HistoryEvent ConvertHistoryEvent(P.HistoryEvent proto)
     {
+        return ConvertHistoryEvent(proto, conversionState: null);
+    }
+
+    /// <summary>
+    /// Converts a history event from <see cref="P.HistoryEvent" /> to <see cref="HistoryEvent"/>, and performs
+    /// stateful conversions of entity-related events.
+    /// </summary>
+    /// <param name="proto">The proto history event to converter.</param>
+    /// <param name="conversionState">State needed for converting entity-related history entries and actions.</param>
+    /// <returns>The converted history event.</returns>
+    /// <exception cref="NotSupportedException">When the provided history event type is not supported.</exception>
+    internal static HistoryEvent ConvertHistoryEvent(P.HistoryEvent proto, EntityConversionState? conversionState)
+    {
         Check.NotNull(proto);
         HistoryEvent historyEvent;
         switch (proto.EventTypeCase)
@@ -37,11 +52,14 @@ static class ProtoUtils
                 historyEvent = new ContinueAsNewEvent(proto.EventId, proto.ContinueAsNew.Input);
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionStarted:
+                OrchestrationInstance instance = proto.ExecutionStarted.OrchestrationInstance.ToCore();
+                conversionState?.SetOrchestrationInstance(instance);
                 historyEvent = new ExecutionStartedEvent(proto.EventId, proto.ExecutionStarted.Input)
                 {
                     Name = proto.ExecutionStarted.Name,
                     Version = proto.ExecutionStarted.Version,
-                    OrchestrationInstance = proto.ExecutionStarted.OrchestrationInstance.ToCore(),
+                    OrchestrationInstance = instance,
+                    Tags = proto.ExecutionStarted.Tags,
                     ParentInstance = proto.ExecutionStarted.ParentInstance == null ? null : new ParentInstance
                     {
                         Name = proto.ExecutionStarted.ParentInstance.Name,
@@ -72,7 +90,10 @@ static class ProtoUtils
                     proto.EventId,
                     proto.TaskScheduled.Name,
                     proto.TaskScheduled.Version,
-                    proto.TaskScheduled.Input);
+                    proto.TaskScheduled.Input)
+                    {
+                        Tags = proto.TaskScheduled.Tags,
+                    };
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
                 historyEvent = new TaskCompletedEvent(
@@ -144,6 +165,31 @@ static class ProtoUtils
                     Name = proto.EventRaised.Name,
                 };
                 break;
+            case P.HistoryEvent.EventTypeOneofCase.EntityOperationCalled:
+                historyEvent = EntityConversions.EncodeOperationCalled(proto, conversionState!.CurrentInstance);
+                conversionState?.EntityRequestIds.Add(proto.EntityOperationCalled.RequestId);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.EntityOperationSignaled:
+                historyEvent = EntityConversions.EncodeOperationSignaled(proto);
+                conversionState?.EntityRequestIds.Add(proto.EntityOperationSignaled.RequestId);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.EntityLockRequested:
+                historyEvent = EntityConversions.EncodeLockRequested(proto, conversionState!.CurrentInstance);
+                conversionState?.AddUnlockObligations(proto.EntityLockRequested);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.EntityUnlockSent:
+                historyEvent = EntityConversions.EncodeUnlockSent(proto, conversionState!.CurrentInstance);
+                conversionState?.RemoveUnlockObligation(proto.EntityUnlockSent.TargetInstanceId);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.EntityLockGranted:
+                historyEvent = EntityConversions.EncodeLockGranted(proto);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.EntityOperationCompleted:
+                historyEvent = EntityConversions.EncodeOperationCompleted(proto);
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.EntityOperationFailed:
+                historyEvent = EntityConversions.EncodeOperationFailed(proto);
+                break;
             case P.HistoryEvent.EventTypeOneofCase.GenericEvent:
                 historyEvent = new GenericEvent(proto.EventId, proto.GenericEvent.Data);
                 break;
@@ -164,6 +210,7 @@ static class ProtoUtils
                         Input = proto.HistoryState.OrchestrationState.Input,
                         Output = proto.HistoryState.OrchestrationState.Output,
                         Status = proto.HistoryState.OrchestrationState.CustomStatus,
+                        Tags = proto.HistoryState.OrchestrationState.Tags,
                     });
                 break;
             default:
@@ -223,18 +270,26 @@ static class ProtoUtils
     /// <param name="instanceId">The orchestrator instance ID.</param>
     /// <param name="customStatus">The orchestrator customer status or <c>null</c> if no custom status.</param>
     /// <param name="actions">The orchestrator actions.</param>
+    /// <param name="completionToken">
+    /// The completion token for the work item. It must be the exact same <see cref="P.WorkItem.CompletionToken" />
+    /// value that was provided by the corresponding <see cref="P.WorkItem"/> that triggered the orchestrator execution.
+    /// </param>
+    /// <param name="entityConversionState">The entity conversion state, or null if no conversion is required.</param>
     /// <returns>The orchestrator response.</returns>
     /// <exception cref="NotSupportedException">When an orchestrator action is unknown.</exception>
     internal static P.OrchestratorResponse ConstructOrchestratorResponse(
         string instanceId,
         string? customStatus,
-        IEnumerable<OrchestratorAction> actions)
+        IEnumerable<OrchestratorAction> actions,
+        string completionToken,
+        EntityConversionState? entityConversionState)
     {
         Check.NotNull(actions);
         var response = new P.OrchestratorResponse
         {
             InstanceId = instanceId,
             CustomStatus = customStatus,
+            CompletionToken = completionToken,
         };
 
         foreach (OrchestratorAction action in actions)
@@ -251,6 +306,15 @@ static class ProtoUtils
                         Version = scheduleTaskAction.Version,
                         Input = scheduleTaskAction.Input,
                     };
+
+                    if (scheduleTaskAction.Tags != null)
+                    {
+                        foreach (KeyValuePair<string, string> tag in scheduleTaskAction.Tags)
+                        {
+                            protoAction.ScheduleTask.Tags[tag.Key] = tag.Value;
+                        }
+                    }
+
                     break;
                 case OrchestratorActionType.CreateSubOrchestration:
                     var subOrchestrationAction = (CreateSubOrchestrationAction)action;
@@ -277,14 +341,70 @@ static class ProtoUtils
                             $"{nameof(SendEventOrchestratorAction)} cannot have a null Instance property!");
                     }
 
-                    protoAction.SendEvent = new P.SendEventAction
+                    if (entityConversionState is not null
+                        && DTCore.Common.Entities.IsEntityInstance(sendEventAction.Instance.InstanceId)
+                        && sendEventAction.EventName is not null
+                        && sendEventAction.EventData is not null)
                     {
-                        Instance = sendEventAction.Instance.ToProtobuf(),
-                        Name = sendEventAction.EventName,
-                        Data = sendEventAction.EventData,
-                    };
+                        P.SendEntityMessageAction sendAction = new P.SendEntityMessageAction();
+                        protoAction.SendEntityMessage = sendAction;
+
+                        EntityConversions.DecodeEntityMessageAction(
+                            sendEventAction.EventName,
+                            sendEventAction.EventData,
+                            sendEventAction.Instance.InstanceId,
+                            sendAction,
+                            out string requestId);
+
+                        entityConversionState.EntityRequestIds.Add(requestId);
+
+                        switch (sendAction.EntityMessageTypeCase)
+                        {
+                            case P.SendEntityMessageAction.EntityMessageTypeOneofCase.EntityLockRequested:
+                                entityConversionState.AddUnlockObligations(sendAction.EntityLockRequested);
+                                break;
+                            case P.SendEntityMessageAction.EntityMessageTypeOneofCase.EntityUnlockSent:
+                                entityConversionState.RemoveUnlockObligation(sendAction.EntityUnlockSent.TargetInstanceId);
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                    else
+                    {
+                        protoAction.SendEvent = new P.SendEventAction
+                        {
+                            Instance = sendEventAction.Instance.ToProtobuf(),
+                            Name = sendEventAction.EventName,
+                            Data = sendEventAction.EventData,
+                        };
+                    }
+
                     break;
                 case OrchestratorActionType.OrchestrationComplete:
+
+                    if (entityConversionState is not null)
+                    {
+                        // as a precaution, unlock any entities that were not unlocked for some reason, before
+                        // completing the orchestration.
+                        foreach ((string target, string criticalSectionId) in entityConversionState.ResetObligations())
+                        {
+                            response.Actions.Add(new P.OrchestratorAction
+                            {
+                                Id = action.Id,
+                                SendEntityMessage = new P.SendEntityMessageAction
+                                {
+                                    EntityUnlockSent = new P.EntityUnlockSentEvent
+                                    {
+                                        CriticalSectionId = criticalSectionId,
+                                        TargetInstanceId = target,
+                                        ParentInstanceId = entityConversionState.CurrentInstance?.InstanceId,
+                                    },
+                                },
+                            });
+                        }
+                    }
+
                     var completeAction = (OrchestrationCompleteOrchestratorAction)action;
                     protoAction.CompleteOrchestration = new P.CompleteOrchestrationAction
                     {
@@ -408,6 +528,63 @@ static class ProtoUtils
     }
 
     /// <summary>
+    /// Converts a <see cref="P.EntityRequest" /> to a <see cref="EntityBatchRequest" />.
+    /// </summary>
+    /// <param name="entityRequest">The entity request to convert.</param>
+    /// <param name="batchRequest">The converted request.</param>
+    /// <param name="operationInfos">Additional info about each operation, required by DTS.</param>
+    internal static void ToEntityBatchRequest(
+        this P.EntityRequest entityRequest,
+        out EntityBatchRequest batchRequest,
+        out List<P.OperationInfo> operationInfos)
+    {
+        batchRequest = new EntityBatchRequest()
+        {
+            EntityState = entityRequest.EntityState,
+            InstanceId = entityRequest.InstanceId,
+            Operations = [], // operations are added to this collection below
+        };
+
+        operationInfos = new(entityRequest.OperationRequests.Count);
+
+        foreach (P.HistoryEvent? op in entityRequest.OperationRequests)
+        {
+            if (op.EntityOperationSignaled is not null)
+            {
+                batchRequest.Operations.Add(new OperationRequest
+                {
+                    Id = Guid.Parse(op.EntityOperationSignaled.RequestId),
+                    Operation = op.EntityOperationSignaled.Operation,
+                    Input = op.EntityOperationSignaled.Input,
+                });
+                operationInfos.Add(new P.OperationInfo
+                {
+                    RequestId = op.EntityOperationSignaled.RequestId,
+                    ResponseDestination = null, // means we don't send back a response to the caller
+                });
+            }
+            else if (op.EntityOperationCalled is not null)
+            {
+                batchRequest.Operations.Add(new OperationRequest
+                {
+                    Id = Guid.Parse(op.EntityOperationCalled.RequestId),
+                    Operation = op.EntityOperationCalled.Operation,
+                    Input = op.EntityOperationCalled.Input,
+                });
+                operationInfos.Add(new P.OperationInfo
+                {
+                    RequestId = op.EntityOperationCalled.RequestId,
+                    ResponseDestination = new P.OrchestrationInstance
+                    {
+                        InstanceId = op.EntityOperationCalled.ParentInstanceId,
+                        ExecutionId = op.EntityOperationCalled.ParentExecutionId,
+                    },
+                });
+            }
+        }
+    }
+
+    /// <summary>
     /// Converts a <see cref="P.OperationRequest" /> to a <see cref="OperationRequest" />.
     /// </summary>
     /// <param name="operationRequest">The operation request to convert.</param>
@@ -425,6 +602,10 @@ static class ProtoUtils
             Operation = operationRequest.Operation,
             Input = operationRequest.Input,
             Id = Guid.Parse(operationRequest.RequestId),
+            TraceContext = operationRequest.TraceContext != null ?
+            new DistributedTraceContext(
+                operationRequest.TraceContext.TraceParent,
+                operationRequest.TraceContext.TraceState) : null,
         };
     }
 
@@ -447,12 +628,16 @@ static class ProtoUtils
                 return new OperationResult()
                 {
                     Result = operationResult.Success.Result,
+                    StartTimeUtc = operationResult.Success.StartTimeUtc?.ToDateTime(),
+                    EndTimeUtc = operationResult.Success.EndTimeUtc?.ToDateTime(),
                 };
 
             case P.OperationResult.ResultTypeOneofCase.Failure:
                 return new OperationResult()
                 {
                     FailureDetails = operationResult.Failure.FailureDetails.ToCore(),
+                    StartTimeUtc = operationResult.Failure.StartTimeUtc?.ToDateTime(),
+                    EndTimeUtc = operationResult.Failure.EndTimeUtc?.ToDateTime(),
                 };
 
             default:
@@ -480,6 +665,8 @@ static class ProtoUtils
                 Success = new P.OperationResultSuccess()
                 {
                     Result = operationResult.Result,
+                    StartTimeUtc = operationResult.StartTimeUtc?.ToTimestamp(),
+                    EndTimeUtc = operationResult.EndTimeUtc?.ToTimestamp(),
                 },
             };
         }
@@ -490,6 +677,8 @@ static class ProtoUtils
                 Failure = new P.OperationResultFailure()
                 {
                     FailureDetails = ToProtobuf(operationResult.FailureDetails),
+                    StartTimeUtc = operationResult.StartTimeUtc?.ToTimestamp(),
+                    EndTimeUtc = operationResult.EndTimeUtc?.ToTimestamp(),
                 },
             };
         }
@@ -518,6 +707,11 @@ static class ProtoUtils
                     Input = operationAction.SendSignal.Input,
                     InstanceId = operationAction.SendSignal.InstanceId,
                     ScheduledTime = operationAction.SendSignal.ScheduledTime?.ToDateTime(),
+                    RequestTime = operationAction.SendSignal.RequestTime?.ToDateTimeOffset(),
+                    ParentTraceContext = operationAction.SendSignal.ParentTraceContext != null ?
+                        new DistributedTraceContext(
+                            operationAction.SendSignal.ParentTraceContext.TraceParent,
+                            operationAction.SendSignal.ParentTraceContext.TraceState) : null,
                 };
 
             case P.OperationAction.OperationActionTypeOneofCase.StartNewOrchestration:
@@ -529,6 +723,11 @@ static class ProtoUtils
                     InstanceId = operationAction.StartNewOrchestration.InstanceId,
                     Version = operationAction.StartNewOrchestration.Version,
                     ScheduledStartTime = operationAction.StartNewOrchestration.ScheduledTime?.ToDateTime(),
+                    RequestTime = operationAction.StartNewOrchestration.RequestTime?.ToDateTimeOffset(),
+                    ParentTraceContext = operationAction.StartNewOrchestration.ParentTraceContext != null ?
+                        new DistributedTraceContext(
+                            operationAction.StartNewOrchestration.ParentTraceContext.TraceParent,
+                            operationAction.StartNewOrchestration.ParentTraceContext.TraceState) : null,
                 };
             default:
                 throw new NotSupportedException($"Deserialization of {operationAction.OperationActionTypeCase} is not supported.");
@@ -560,6 +759,14 @@ static class ProtoUtils
                     Input = sendSignalAction.Input,
                     InstanceId = sendSignalAction.InstanceId,
                     ScheduledTime = sendSignalAction.ScheduledTime?.ToTimestamp(),
+                    RequestTime = sendSignalAction.RequestTime?.ToTimestamp(),
+                    ParentTraceContext = sendSignalAction.ParentTraceContext != null ?
+                        new P.TraceContext
+                        {
+                            TraceParent = sendSignalAction.ParentTraceContext.TraceParent,
+                            TraceState = sendSignalAction.ParentTraceContext.TraceState,
+                        }
+                    : null,
                 };
                 break;
 
@@ -572,6 +779,14 @@ static class ProtoUtils
                     Version = startNewOrchestrationAction.Version,
                     InstanceId = startNewOrchestrationAction.InstanceId,
                     ScheduledTime = startNewOrchestrationAction.ScheduledStartTime?.ToTimestamp(),
+                    RequestTime = startNewOrchestrationAction.RequestTime?.ToTimestamp(),
+                    ParentTraceContext = startNewOrchestrationAction.ParentTraceContext != null ?
+                        new P.TraceContext
+                        {
+                            TraceParent = startNewOrchestrationAction.ParentTraceContext.TraceParent,
+                            TraceState = startNewOrchestrationAction.ParentTraceContext.TraceState,
+                        }
+                    : null,
                 };
                 break;
         }
@@ -605,32 +820,29 @@ static class ProtoUtils
     /// Converts a <see cref="EntityBatchResult" /> to <see cref="P.EntityBatchResult" />.
     /// </summary>
     /// <param name="entityBatchResult">The operation result to convert.</param>
+    /// <param name="completionToken">The completion token, or null for the older protocol.</param>
+    /// <param name="operationInfos">Additional information about each operation, required by DTS.</param>
     /// <returns>The converted operation result.</returns>
     [return: NotNullIfNotNull(nameof(entityBatchResult))]
-    internal static P.EntityBatchResult? ToEntityBatchResult(this EntityBatchResult? entityBatchResult)
+    internal static P.EntityBatchResult? ToEntityBatchResult(
+        this EntityBatchResult? entityBatchResult,
+        string? completionToken = null,
+        IEnumerable<P.OperationInfo>? operationInfos = null)
     {
         if (entityBatchResult == null)
         {
             return null;
         }
 
-        var batchResult = new P.EntityBatchResult()
+        return new P.EntityBatchResult()
         {
             EntityState = entityBatchResult.EntityState,
             FailureDetails = entityBatchResult.FailureDetails.ToProtobuf(),
+            Actions = { entityBatchResult.Actions?.Select(a => a.ToOperationAction()) ?? [] },
+            Results = { entityBatchResult.Results?.Select(a => a.ToOperationResult()) ?? [] },
+            CompletionToken = completionToken ?? string.Empty,
+            OperationInfos = { operationInfos ?? [] },
         };
-
-        foreach (OperationAction action in entityBatchResult.Actions!)
-        {
-            batchResult.Actions.Add(action.ToOperationAction());
-        }
-
-        foreach (OperationResult result in entityBatchResult.Results!)
-        {
-            batchResult.Results.Add(result.ToOperationResult());
-        }
-
-        return batchResult;
     }
 
     /// <summary>
@@ -722,21 +934,12 @@ static class ProtoUtils
         }
     }
 
-    static P.OrchestrationStatus ToProtobuf(this OrchestrationStatus status)
-    {
-        return (P.OrchestrationStatus)status;
-    }
-
-    static P.OrchestrationInstance ToProtobuf(this OrchestrationInstance instance)
-    {
-        return new P.OrchestrationInstance
-        {
-            InstanceId = instance.InstanceId,
-            ExecutionId = instance.ExecutionId,
-        };
-    }
-
-    static FailureDetails? ToCore(this P.TaskFailureDetails? failureDetails)
+    /// <summary>
+    /// Converts a grpc <see cref="P.TaskFailureDetails" /> to a <see cref="FailureDetails" />.
+    /// </summary>
+    /// <param name="failureDetails">The failure details to convert.</param>
+    /// <returns>The converted failure details.</returns>
+    internal static FailureDetails? ToCore(this P.TaskFailureDetails? failureDetails)
     {
         if (failureDetails == null)
         {
@@ -751,6 +954,42 @@ static class ProtoUtils
             failureDetails.IsNonRetriable);
     }
 
+    /// <summary>
+    /// Converts a <see cref="Google.Protobuf.WellKnownTypes.Value"/> instance to a corresponding C# object.
+    /// </summary>
+    /// <param name="value">The Protobuf Value to convert.</param>
+    /// <returns>The corresponding C# object.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when the Protobuf Value.KindCase is not one of the supported types.
+    /// </exception>
+    internal static object? ConvertValueToObject(Google.Protobuf.WellKnownTypes.Value value)
+    {
+        switch (value.KindCase)
+        {
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.NullValue:
+                return null;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.NumberValue:
+                return value.NumberValue;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.StringValue:
+                return value.StringValue;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.BoolValue:
+                return value.BoolValue;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.StructValue:
+                return value.StructValue.Fields.ToDictionary(
+                    pair => pair.Key,
+                    pair => ConvertValueToObject(pair.Value));
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.ListValue:
+                return value.ListValue.Values.Select(ConvertValueToObject).ToList();
+            default:
+                throw new NotSupportedException($"Unsupported Value kind: {value.KindCase}");
+        }
+    }
+
+    /// <summary>
+    /// Converts a <see cref="FailureDetails" /> to a grpc <see cref="P.TaskFailureDetails" />.
+    /// </summary>
+    /// <param name="failureDetails">The failure details to convert.</param>
+    /// <returns>The converted failure details.</returns>
     static P.TaskFailureDetails? ToProtobuf(this FailureDetails? failureDetails)
     {
         if (failureDetails == null)
@@ -766,5 +1005,121 @@ static class ProtoUtils
             IsNonRetriable = failureDetails.IsNonRetriable,
             InnerFailure = failureDetails.InnerFailure.ToProtobuf(),
         };
+    }
+
+    static P.OrchestrationStatus ToProtobuf(this OrchestrationStatus status)
+    {
+        return (P.OrchestrationStatus)status;
+    }
+
+    static P.OrchestrationInstance ToProtobuf(this OrchestrationInstance instance)
+    {
+        return new P.OrchestrationInstance
+        {
+            InstanceId = instance.InstanceId,
+            ExecutionId = instance.ExecutionId,
+        };
+    }
+
+    /// <summary>
+    /// Tracks state required for converting orchestration histories containing entity-related events.
+    /// </summary>
+    internal class EntityConversionState
+    {
+        readonly bool insertMissingEntityUnlocks;
+
+        OrchestrationInstance? instance;
+        HashSet<string>? entityRequestIds;
+        Dictionary<string, string>? unlockObligations;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="EntityConversionState"/> class.
+        /// </summary>
+        /// <param name="insertMissingEntityUnlocks">Whether to insert missing unlock events in to the history
+        /// when the orchestration completes.</param>
+        public EntityConversionState(bool insertMissingEntityUnlocks)
+        {
+            this.ConvertFromProto = (P.HistoryEvent e) => ProtoUtils.ConvertHistoryEvent(e, this);
+            this.insertMissingEntityUnlocks = insertMissingEntityUnlocks;
+        }
+
+        /// <summary>
+        /// Gets a function that converts a history event in protobuf format to a core history event.
+        /// </summary>
+        public Func<P.HistoryEvent, HistoryEvent> ConvertFromProto { get; }
+
+        /// <summary>
+        /// Gets the orchestration instance of this history.
+        /// </summary>
+        public OrchestrationInstance? CurrentInstance => this.instance;
+
+        /// <summary>
+        /// Gets the set of guids that have been used as entity request ids in this history.
+        /// </summary>
+        public HashSet<string> EntityRequestIds => this.entityRequestIds ??= new();
+
+        /// <summary>
+        /// Records the orchestration instance, which may be needed for some conversions.
+        /// </summary>
+        /// <param name="instance">The orchestration instance.</param>
+        public void SetOrchestrationInstance(OrchestrationInstance instance)
+        {
+            this.instance = instance;
+        }
+
+        /// <summary>
+        /// Adds unlock obligations for all entities that are being locked by this request.
+        /// </summary>
+        /// <param name="request">The lock request.</param>
+        public void AddUnlockObligations(P.EntityLockRequestedEvent request)
+        {
+            if (!this.insertMissingEntityUnlocks)
+            {
+                return;
+            }
+
+            this.unlockObligations ??= new();
+
+            foreach (string target in request.LockSet)
+            {
+                this.unlockObligations[target] = request.CriticalSectionId;
+            }
+        }
+
+        /// <summary>
+        /// Removes an unlock obligation.
+        /// </summary>
+        /// <param name="target">The target entity.</param>
+        public void RemoveUnlockObligation(string target)
+        {
+            if (!this.insertMissingEntityUnlocks)
+            {
+                return;
+            }
+
+            this.unlockObligations?.Remove(target);
+        }
+
+        /// <summary>
+        /// Returns the remaining unlock obligations, and clears the list.
+        /// </summary>
+        /// <returns>The unlock obligations.</returns>
+        public IEnumerable<(string Target, string CriticalSectionId)> ResetObligations()
+        {
+            if (!this.insertMissingEntityUnlocks)
+            {
+                yield break;
+            }
+
+            if (this.unlockObligations is not null)
+            {
+                foreach (var kvp in this.unlockObligations)
+                {
+                    yield return (kvp.Key, kvp.Value);
+                }
+
+                this.unlockObligations = null;
+            }
+        }
     }
 }

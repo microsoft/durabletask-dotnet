@@ -2,8 +2,11 @@
 // Licensed under the MIT License.
 
 using DurableTask.Core;
+using DurableTask.Core.Entities;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
+using FluentAssertions.Specialized;
+using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Converters;
 using Microsoft.Extensions.Options;
 using Core = DurableTask.Core;
@@ -47,6 +50,47 @@ public class ShimDurableTaskClientTests
         act.Should().ThrowExactly<ArgumentNullException>().WithParameterName("options");
     }
 
+    [Fact]
+    public void Ctor_NoEntitySupport_GetClientThrows()
+    {
+        IOrchestrationServiceClient client = Mock.Of<IOrchestrationServiceClient>();
+        ShimDurableTaskClientOptions options = new() { Client = client };
+        ShimDurableTaskClient shimClient = new("test", options);
+
+        Func<DurableEntityClient> act = () => shimClient.Entities;
+        act.Should().ThrowExactly<InvalidOperationException>().WithMessage("Entity support is not enabled.");
+    }
+
+    [Fact]
+    public void Ctor_InvalidEntityOptions_GetClientThrows()
+    {
+        IOrchestrationServiceClient client = Mock.Of<IOrchestrationServiceClient>();
+        ShimDurableTaskClientOptions options = new() { Client = client, EnableEntitySupport = true };
+        ShimDurableTaskClient shimClient = new("test", options);
+
+        Func<DurableEntityClient> act = () => shimClient.Entities;
+        act.Should().ThrowExactly<NotSupportedException>()
+            .WithMessage("The configured IOrchestrationServiceClient does not support entities.");
+    }
+
+    [Fact]
+    public void Ctor_EntitiesConfigured_GetClientSuccess()
+    {
+        IOrchestrationServiceClient client = Mock.Of<IOrchestrationServiceClient>();
+        EntityBackendQueries queries = Mock.Of<EntityBackendQueries>();
+        ShimDurableTaskClientOptions options = new()
+        {
+            Client = client,
+            EnableEntitySupport = true,
+            Entities = { Queries = queries },
+        };
+
+        ShimDurableTaskClient shimClient = new("test", options);
+        DurableEntityClient entityClient = shimClient.Entities;
+
+        entityClient.Should().BeOfType<ShimDurableEntityClient>();
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -88,11 +132,11 @@ public class ShimDurableTaskClientTests
     {
         // arrange
         DateTimeOffset utcNow = DateTimeOffset.UtcNow;
-        List<Core.OrchestrationState> states = new()
-        {
+        List<Core.OrchestrationState> states =
+        [
             CreateState("input", start: utcNow.AddMinutes(-1)),
             CreateState(10, "output", utcNow.AddMinutes(-5)),
-        };
+        ];
 
         OrchestrationQueryResult queryResult = new(states, null);
         string instanceId = states.First().OrchestrationInstance.InstanceId;
@@ -130,6 +174,7 @@ public class ShimDurableTaskClientTests
         // assert
         this.orchestrationClient.VerifyAll();
         result.PurgedInstanceCount.Should().Be(1);
+        result.IsComplete.Should().BeNull();
     }
 
     [Fact]
@@ -240,8 +285,8 @@ public class ShimDurableTaskClientTests
         Core.OrchestrationState state2 = CreateState("input", start: start);
         state1.OrchestrationInstance = instance;
         this.orchestrationClient.SetupSequence(m => m.GetOrchestrationStateAsync(instance.InstanceId, false))
-            .ReturnsAsync(new[] { state1 })
-            .ReturnsAsync(new[] { state2 });
+            .ReturnsAsync([state1])
+            .ReturnsAsync([state2]);
 
         // act
         OrchestrationMetadata metadata = await this.client.WaitForInstanceStartAsync(
@@ -265,6 +310,22 @@ public class ShimDurableTaskClientTests
     public Task ScheduleNewOrchestrationInstance_StartAt()
         => this.RunScheduleNewOrchestrationInstanceAsync(
             "test", null, new() { StartAt = DateTimeOffset.UtcNow.AddHours(1) });
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_IdProvided_TagsProvided()
+    {
+        StartOrchestrationOptions options = new()
+        {
+            InstanceId = "test-id",
+            Tags = new Dictionary<string, string>
+            {
+                { "tag1", "value1" },
+                { "tag2", "value2" }
+            }
+        };
+        await this.RunScheduleNewOrchestrationInstanceAsync("test", "input", options);
+    }
+
 
     static Core.OrchestrationState CreateState(
         object input, object? output = null, DateTimeOffset start = default)
@@ -319,12 +380,12 @@ public class ShimDurableTaskClientTests
                 return false;
             }
 
-            
+
             if (options?.InstanceId is string str && m.OrchestrationInstance.InstanceId != str)
             {
                 return false;
             }
-            else if (options?.InstanceId  is null && !Guid.TryParse(m.OrchestrationInstance.InstanceId, out _))
+            else if (options?.InstanceId is null && !Guid.TryParse(m.OrchestrationInstance.InstanceId, out _))
             {
                 return false;
             }
@@ -339,7 +400,7 @@ public class ShimDurableTaskClientTests
             }
 
             return Guid.TryParse(m.OrchestrationInstance.ExecutionId, out _)
-                && @event.Name == name.Name && @event.Version == name.Version
+                && @event.Name == name.Name && @event.Version == (options?.Version ?? string.Empty)
                 && @event.OrchestrationInstance == m.OrchestrationInstance
                 && @event.EventId == -1
                 && @event.Input == JsonDataConverter.Default.Serialize(input);

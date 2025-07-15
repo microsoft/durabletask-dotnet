@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask;
+namespace Microsoft.DurableTask.Tests;
 
 public class TaskNameTests
 {
@@ -17,7 +17,9 @@ public class TaskNameTests
     {
         TaskName name = new(string.Empty);
         name.Name.Should().Be(string.Empty);
+#pragma warning disable 0618
         name.Version.Should().Be(string.Empty);
+#pragma warning restore 0618
     }
 
     [Theory]

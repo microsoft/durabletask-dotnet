@@ -6,14 +6,13 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Testing;
 using Microsoft.CodeAnalysis.Testing;
-using Microsoft.CodeAnalysis.Testing.Verifiers;
 
 namespace Microsoft.DurableTask.Generators.Tests.Utils;
 
 // Mostly copy/pasted from the Microsoft Source Generators testing documentation
 public static class CSharpSourceGeneratorVerifier<TSourceGenerator> where TSourceGenerator : ISourceGenerator, new()
 {
-    public class Test : CSharpSourceGeneratorTest<TSourceGenerator, XUnitVerifier>
+    public class Test : CSharpSourceGeneratorTest<TSourceGenerator, DefaultVerifier>
     {
         public Test()
         {

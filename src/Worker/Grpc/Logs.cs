@@ -8,13 +8,10 @@ namespace Microsoft.DurableTask.Worker.Grpc
     /// <summary>
     /// Log messages.
     /// </summary>
-    /// <remarks>
-    /// NOTE: Trying to make logs consistent with https://github.com/Azure/durabletask/blob/main/src/DurableTask.Core/Logging/LogEvents.cs.
-    /// </remarks>
     static partial class Logs
     {
-        [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Durable Task gRPC worker starting.")]
-        public static partial void StartingTaskHubWorker(this ILogger logger);
+        [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Durable Task gRPC worker starting and connecting to {endpoint}.")]
+        public static partial void StartingTaskHubWorker(this ILogger logger, string endpoint);
 
         [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Durable Task gRPC worker has disconnected from gRPC server.")]
         public static partial void SidecarDisconnected(this ILogger logger);
@@ -24,6 +21,9 @@ namespace Microsoft.DurableTask.Worker.Grpc
 
         [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Sidecar work-item streaming connection established.")]
         public static partial void EstablishedWorkItemConnection(this ILogger logger);
+
+        [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Task hub NotFound. Will continue retrying.")]
+        public static partial void TaskHubNotFound(this ILogger logger);
 
         [LoggerMessage(EventId = 10, Level = LogLevel.Debug, Message = "{instanceId}: Received request to run orchestrator '{name}' with {oldEventCount} replay and {newEventCount} new history events.")]
         public static partial void ReceivedOrchestratorRequest(this ILogger logger, string name, string instanceId, int oldEventCount, int newEventCount);
@@ -48,5 +48,17 @@ namespace Microsoft.DurableTask.Worker.Grpc
 
         [LoggerMessage(EventId = 55, Level = LogLevel.Information, Message = "{instanceId}: Evaluating custom retry handler for failed '{name}' task. Attempt = {attempt}.")]
         public static partial void RetryingTask(this ILogger logger, string instanceId, string name, int attempt);
+
+        [LoggerMessage(EventId = 56, Level = LogLevel.Warning, Message = "Channel to backend has stopped receiving traffic, will attempt to reconnect.")]
+        public static partial void ConnectionTimeout(this ILogger logger);
+
+        [LoggerMessage(EventId = 57, Level = LogLevel.Warning, Message = "Orchestration version did not meet worker versioning requirements. Error action = '{errorAction}'. Version error = '{versionError}'")]
+        public static partial void OrchestrationVersionFailure(this ILogger logger, string errorAction, string versionError);
+
+        [LoggerMessage(EventId = 58, Level = LogLevel.Information, Message = "Abandoning orchestration. InstanceId = '{instanceId}'. Completion token = '{completionToken}'")]
+        public static partial void AbandoningOrchestrationDueToVersioning(this ILogger logger, string instanceId, string completionToken);
+
+        [LoggerMessage(EventId = 59, Level = LogLevel.Information, Message = "Abandoning orchestration due to filtering. InstanceId = '{instanceId}'. Completion token = '{completionToken}'")]
+        public static partial void AbandoningOrchestrationDueToOrchestrationFilter(this ILogger logger, string instanceId, string completionToken);
     }
 }

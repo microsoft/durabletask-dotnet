@@ -3,6 +3,7 @@
 
 using System.Runtime.Serialization;
 using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.DurableTask.Worker;
 using Xunit.Abstractions;
 using Xunit.Sdk;
@@ -28,8 +29,11 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         TaskName activityName = "FaultyActivity";
 
         // Use local function definitions to simplify the validation of the call stacks
-        async Task MyOrchestrationImpl(TaskOrchestrationContext ctx) => await ctx.CallActivityAsync(activityName);
-        void MyActivityImpl(TaskActivityContext ctx) => throw new Exception(errorMessage, new CustomException("Inner!"));
+        async Task MyOrchestrationImpl(TaskOrchestrationContext ctx) =>
+            await ctx.CallActivityAsync(activityName);
+
+        void MyActivityImpl(TaskActivityContext ctx) =>
+            throw new InvalidOperationException(errorMessage, new CustomException("Inner!"));
 
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
@@ -64,13 +68,45 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
 
         // Check that the inner exception - i.e. the exact exception that failed the orchestration - was populated correctly
         Assert.NotNull(failureDetails.InnerFailure);
-        Assert.Equal(typeof(Exception).FullName, failureDetails.InnerFailure!.ErrorType);
+        Assert.Equal(typeof(InvalidOperationException).FullName, failureDetails.InnerFailure!.ErrorType);
         Assert.Equal(errorMessage, failureDetails.InnerFailure.ErrorMessage);
 
         // Check that the inner-most exception was populated correctly too (the custom exception type)
         Assert.NotNull(failureDetails.InnerFailure.InnerFailure);
         Assert.Equal(typeof(CustomException).FullName, failureDetails.InnerFailure.InnerFailure!.ErrorType);
         Assert.Equal("Inner!", failureDetails.InnerFailure.InnerFailure.ErrorMessage);
+
+        IReadOnlyCollection<LogEntry> workerLogs = this.GetLogs(category: "Microsoft.DurableTask.Worker");
+        Assert.NotEmpty(workerLogs);
+
+        // Check that the orchestrator and activity logs are present
+        Assert.Single(workerLogs, log => MatchLog(
+            log,
+            logEventName: "OrchestrationStarted",
+            exception: null,
+            ("InstanceId", instanceId),
+            ("Name", orchestratorName.Name)));
+
+        Assert.Single(workerLogs, log => MatchLog(
+            log,
+            logEventName: "ActivityStarted",
+            exception: null,
+            ("InstanceId", instanceId),
+            ("Name", activityName.Name)));
+
+        Assert.Single(workerLogs, log => MatchLog(
+            log,
+            logEventName: "ActivityFailed",
+            exception: (typeof(InvalidOperationException), errorMessage),
+            ("InstanceId", instanceId),
+            ("Name", activityName.Name)));
+
+        Assert.Single(workerLogs, log => MatchLog(
+            log,
+            logEventName: "OrchestrationFailed",
+            exception: (typeof(TaskFailedException), $"Task '{activityName}' (#0) failed with an unhandled exception: {errorMessage}"),
+            ("InstanceId", instanceId),
+            ("Name", orchestratorName.Name)));
     }
 
     /// <summary>

@@ -14,36 +14,39 @@ on:
 
 env:
   solution: Microsoft.DurableTask.sln
-  config: Release
+  config: release
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
     - uses: actions/checkout@v3
-      with:
-        submodules: true
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
+    - name: Setup .NET 8.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Setup .NET from global.json
+      uses: actions/setup-dotnet@v4
       with:
         global-json-file: global.json
 
     - name: Restore dependencies
-      run: dotnet restore $solution
+      run: dotnet restore $env:solution
 
     - name: Build
-      run: dotnet build $solution --configuration $config --no-restore -p:FileVersionRevision=$GITHUB_RUN_NUMBER -p:ContinuousIntegrationBuild=true
+      run: dotnet build $env:solution --configuration $env:config --no-restore -p:FileVersionRevision=$env:GITHUB_RUN_NUMBER
 
     - name: Test
-      run: dotnet test $solution --configuration $config --no-build --verbosity normal
+      run: dotnet test $env:solution --configuration $env:config --no-build --verbosity normal
 
     - name: Pack
-      run: dotnet pack $solution --configuration $config --no-build
+      run: dotnet pack $env:solution --configuration $env:config --no-build
 
     - name: Upload
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: pkg
         path: out/pkg

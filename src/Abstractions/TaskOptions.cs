@@ -1,6 +1,8 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Immutable;
+
 namespace Microsoft.DurableTask;
 
 /// <summary>
@@ -12,15 +14,31 @@ public record TaskOptions
     /// Initializes a new instance of the <see cref="TaskOptions"/> class.
     /// </summary>
     /// <param name="retry">The task retry options.</param>
-    public TaskOptions(TaskRetryOptions? retry = null)
+    public TaskOptions(TaskRetryOptions? retry)
+        : this(retry, null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TaskOptions"/> class.
+    /// </summary>
+    /// <param name="retry">The task retry options.</param>
+    /// <param name="tags">The tags to associate with the task.</param>
+    public TaskOptions(TaskRetryOptions? retry = null, IDictionary<string, string>? tags = null)
     {
         this.Retry = retry;
+        this.Tags = tags;
     }
 
     /// <summary>
     /// Gets the task retry options.
     /// </summary>
     public TaskRetryOptions? Retry { get; init; }
+
+    /// <summary>
+    /// Gets the tags to associate with the task.
+    /// </summary>
+    public IDictionary<string, string>? Tags { get; init; }
 
     /// <summary>
     /// Returns a new <see cref="TaskOptions" /> from the provided <see cref="RetryPolicy" />.
@@ -88,6 +106,11 @@ public record SubOrchestrationOptions : TaskOptions
     /// Gets the orchestration instance ID.
     /// </summary>
     public string? InstanceId { get; init; }
+
+    /// <summary>
+    /// Gets the version to associate with the sub-orchestration instance.
+    /// </summary>
+    public TaskVersion? Version { get; init; }
 }
 
 /// <summary>
@@ -100,4 +123,15 @@ public record SubOrchestrationOptions : TaskOptions
 /// The time when the orchestration instance should start executing. If not specified or if a date-time in the past
 /// is specified, the orchestration instance will be scheduled immediately.
 /// </param>
-public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null);
+public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null)
+{
+    /// <summary>
+    /// Gets the tags to associate with the orchestration instance.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Tags { get; init; } = ImmutableDictionary.Create<string, string>();
+
+    /// <summary>
+    /// Gets the version to associate with the orchestration instance.
+    /// </summary>
+    public TaskVersion? Version { get; init; }
+}

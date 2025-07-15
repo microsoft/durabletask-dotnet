@@ -67,6 +67,20 @@ public class DurableTaskClientBuilderExtensionsTests
         options.Address.Should().BeNull();
     }
 
+    [Fact]
+    public void UseDefaultVersion_DefaultVersion_Sets()
+    {
+        ServiceCollection services = new();
+        DefaultDurableTaskClientBuilder builder = new(null, services);
+        builder.UseDefaultVersion("0.1")
+            .UseGrpc();
+
+        IServiceProvider provider = services.BuildServiceProvider();
+        GrpcDurableTaskClientOptions options = provider.GetOptions<GrpcDurableTaskClientOptions>();
+
+        options.DefaultVersion.Should().Be("0.1");
+    }
+
 #if NET6_0_OR_GREATER
     static GrpcChannel GetChannel() => GrpcChannel.ForAddress("http://localhost:9001");
 #endif

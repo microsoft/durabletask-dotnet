@@ -12,39 +12,47 @@ namespace Microsoft.DurableTask.Worker.Grpc;
 /// </summary>
 sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 {
-    readonly GrpcDurableTaskWorkerOptions options;
+    readonly GrpcDurableTaskWorkerOptions grpcOptions;
+    readonly DurableTaskWorkerOptions workerOptions;
     readonly IServiceProvider services;
     readonly ILoggerFactory loggerFactory;
     readonly ILogger logger;
+    readonly IOrchestrationFilter? orchestrationFilter;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GrpcDurableTaskWorker" /> class.
     /// </summary>
     /// <param name="name">The name of the worker.</param>
     /// <param name="factory">The task factory.</param>
-    /// <param name="options">The gRPC worker options.</param>
+    /// <param name="grpcOptions">The gRPC-specific worker options.</param>
+    /// <param name="workerOptions">The generic worker options.</param>
     /// <param name="services">The service provider.</param>
     /// <param name="loggerFactory">The logger.</param>
+    /// <param name="orchestrationFilter">The optional <see cref="IOrchestrationFilter"/> used to filter orchestration execution.</param>
     public GrpcDurableTaskWorker(
         string name,
         IDurableTaskFactory factory,
-        IOptionsMonitor<GrpcDurableTaskWorkerOptions> options,
+        IOptionsMonitor<GrpcDurableTaskWorkerOptions> grpcOptions,
+        IOptionsMonitor<DurableTaskWorkerOptions> workerOptions,
         IServiceProvider services,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IOrchestrationFilter? orchestrationFilter = null)
         : base(name, factory)
     {
-        this.options = Check.NotNull(options).Get(name);
+        this.grpcOptions = Check.NotNull(grpcOptions).Get(name);
+        this.workerOptions = Check.NotNull(workerOptions).Get(name);
         this.services = Check.NotNull(services);
         this.loggerFactory = Check.NotNull(loggerFactory);
         this.logger = loggerFactory.CreateLogger("Microsoft.DurableTask"); // TODO: use better category name.
+        this.orchestrationFilter = orchestrationFilter;
     }
 
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await using AsyncDisposable disposable = this.GetCallInvoker(out CallInvoker callInvoker);
-        this.logger.StartingTaskHubWorker();
-        await new Processor(this, new(callInvoker)).ExecuteAsync(stoppingToken);
+        await using AsyncDisposable disposable = this.GetCallInvoker(out CallInvoker callInvoker, out string address);
+        this.logger.StartingTaskHubWorker(address);
+        await new Processor(this, new(callInvoker), this.orchestrationFilter).ExecuteAsync(stoppingToken);
     }
 
 #if NET6_0_OR_GREATER
@@ -71,22 +79,25 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     }
 #endif
 
-    AsyncDisposable GetCallInvoker(out CallInvoker callInvoker)
+    AsyncDisposable GetCallInvoker(out CallInvoker callInvoker, out string address)
     {
-        if (this.options.Channel is GrpcChannel c)
+        if (this.grpcOptions.Channel is GrpcChannel c)
         {
             callInvoker = c.CreateCallInvoker();
+            address = c.Target;
             return default;
         }
 
-        if (this.options.CallInvoker is CallInvoker invoker)
+        if (this.grpcOptions.CallInvoker is CallInvoker invoker)
         {
             callInvoker = invoker;
+            address = "(unspecified)";
             return default;
         }
 
-        c = GetChannel(this.options.Address);
+        c = GetChannel(this.grpcOptions.Address);
         callInvoker = c.CreateCallInvoker();
+        address = c.Target;
         return new AsyncDisposable(() => new(c.ShutdownAsync()));
     }
 }

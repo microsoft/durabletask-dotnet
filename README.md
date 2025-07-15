@@ -3,11 +3,9 @@
 [![Build status](https://github.com/microsoft/durabletask-dotnet/workflows/Validate%20Build/badge.svg)](https://github.com/microsoft/durabletask-dotnet/actions?workflow=Validate+Build)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-The Durable Task .NET Client SDK is a .NET Standard 2.0 library for implementing Durable Task orchestrations and activities. It's specifically designed to connect to a "sidecar" process, such as the [Azure Functions .NET Isolated host](https://docs.microsoft.com/azure/azure-functions/dotnet-isolated-process-guide), a special purpose sidecar container, or potentially even [Dapr](https://github.com/dapr/dapr/issues/4576).
+The Durable Task .NET SDK is a standalone .NET library for implementing Durable Task orchestrations, activities, and entities. It's specifically designed to connect to a "sidecar" process, such as the [Azure Functions .NET Isolated host](https://docs.microsoft.com/azure/azure-functions/dotnet-isolated-process-guide), or a managed Azure endpoint, such as the [Durable Task Scheduler](https://techcommunity.microsoft.com/blog/appsonazureblog/announcing-limited-early-access-of-the-durable-task-scheduler-for-azure-durable-/4286526) (preview).
 
-If you're looking to run fully self-hosted Durable Task Framework apps, see https://github.com/azure/durabletask.
-
-*Current Release*: [v1.0.0](https://github.com/microsoft/durabletask-dotnet/releases/tag/v1.0.0)
+> This project is different from the [Durable Task Framework](https://github.com/azure/durabletask), which supports running fully self-hosted apps using a storage-based backend like Azure Storage or MSSQL.
 
 ## NuGet packages
 
@@ -19,9 +17,11 @@ The following nuget packages are available for download.
  | Abstractions SDK | [![NuGet version (Microsoft.DurableTask.Abstractions)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Abstractions)](https://www.nuget.org/packages/Microsoft.DurableTask.Abstractions/) | Contains base abstractions for Durable. Useful for writing re-usable libraries independent of the chosen worker or client. |
  | Client SDK | [![NuGet version (Microsoft.DurableTask.Client)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Client)](https://www.nuget.org/packages/Microsoft.DurableTask.Client/) | Contains the core client logic for interacting with a Durable backend. |
  | Client.Grpc SDK | [![NuGet version (Microsoft.DurableTask.Client.Grpc)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Client.Grpc)](https://www.nuget.org/packages/Microsoft.DurableTask.Client.Grpc/) | The gRPC client implementation. |
+ | Client.AzureManaged SDK | [![NuGet version (Microsoft.DurableTask.Worker.AzureManaged)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Worker.AzureManaged)](https://www.nuget.org/packages/Microsoft.DurableTask.Worker.AzureManaged/) | The client implementation for use with the [Durable Task Scheduler](https://techcommunity.microsoft.com/blog/appsonazureblog/announcing-limited-early-access-of-the-durable-task-scheduler-for-azure-durable-/4286526) (preview). |
  | Worker SDK | [![NuGet version (Microsoft.DurableTask.Worker)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Worker)](https://www.nuget.org/packages/Microsoft.DurableTask.Worker/) | Contains the core worker logic for having a `IHostedService` to process durable tasks. |
- | Worker.Grpc SDK | [![NuGet version (Microsoft.DurableTask.Worker.Grpc)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Worker.Grpc)](https://www.nuget.org/packages/Microsoft.DurableTask.Worker.Grpc/) | The gRPC worker implementation.
- | Source Generators | [![NuGet version (Microsoft.DurableTask.Generators)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Generators)](https://www.nuget.org/packages/Microsoft.DurableTask.Generators/) | DurableTask source generators. |
+ | Worker.Grpc SDK | [![NuGet version (Microsoft.DurableTask.Worker.Grpc)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Worker.Grpc)](https://www.nuget.org/packages/Microsoft.DurableTask.Worker.Grpc/) | The gRPC worker implementation. |
+ | Worker.AzureManaged SDK | [![NuGet version (Microsoft.DurableTask.Worker.AzureManaged)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Worker.AzureManaged)](https://www.nuget.org/packages/Microsoft.DurableTask.Worker.AzureManaged/) | The worker implementation for use with the [Durable Task Scheduler](https://techcommunity.microsoft.com/blog/appsonazureblog/announcing-limited-early-access-of-the-durable-task-scheduler-for-azure-durable-/4286526) (preview). |
+ | Source Generators | [![NuGet version (Microsoft.DurableTask.Generators)](https://img.shields.io/nuget/vpre/Microsoft.DurableTask.Generators)](https://www.nuget.org/packages/Microsoft.DurableTask.Generators/) | Source generators for type-safe orchestration and activity invocations. |
 
 ## Usage with Azure Functions
 
@@ -32,7 +32,7 @@ To get started, add the [Microsoft.Azure.Functions.Worker.Extensions.DurableTask
 ```xml
   <ItemGroup>
     <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="1.10.0" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.0.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.2.2" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.0.13" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.7.0" OutputItemType="Analyzer" />
     <PackageReference Include="Microsoft.DurableTask.Generators" Version="1.0.0-preview.1" OutputItemType="Analyzer" />
@@ -159,17 +159,15 @@ You can find the full sample file, including detailed comments, at [samples/Azur
 
 This SDK is *not* compatible with Durable Functions for the .NET *in-process* worker. It only works with the newer out-of-process .NET Isolated worker.
 
-There are also several features that aren't yet available:
+## Usage with the Durable Task Scheduler
 
-* Durable Entities is not yet supported.
-* APIs for calling HTTP endpoints are not yet available.
-* Several instance management APIs are not yet implemented.
+The Durable Task Scheduler for Azure Functions is a managed backend that is currently in preview. Durable Functions apps can use the Durable Task Scheduler as one of its [supported storage providers](https://learn.microsoft.com/azure/azure-functions/durable/durable-functions-storage-providers).
+
+This SDK can also be used with the Durable Task Scheduler directly, without any Durable Functions dependency. To get started, sign up for the [Durable Task Scheduler private preview](https://techcommunity.microsoft.com/blog/appsonazureblog/announcing-limited-early-access-of-the-durable-task-scheduler-for-azure-durable-/4286526) and follow the instructions to create a new Durable Task Scheduler instance. Once granted access to the private preview GitHub repository, you can find samples and documentation for getting started [here](https://github.com/Azure/Azure-Functions-Durable-Task-Scheduler-Private-Preview/tree/main/samples/portable-sdk/dotnet/AspNetWebApp#readme).
 
 ## Obtaining the Protobuf definitions
 
-This project utilizes git submodules to obtain Protobuf definitions from [durabletask-protobuf](https://github.com/microsoft/durabletask-protobuf). You will need to obtain these to build the project.
-
-To get the definitions, run `git submodule update --init --recursive`
+This project utilizes protobuf definitions from [durabletask-protobuf](https://github.com/microsoft/durabletask-protobuf), which are copied (vendored) into this repository under the `src/Grpc` directory. See the corresponding [README.md](./src/Grpc/README.md) for more information about how to update the protobuf definitions.
 
 ## Contributing
 

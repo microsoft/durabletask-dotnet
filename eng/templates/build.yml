@@ -24,7 +24,6 @@ jobs:
 
       steps:
         - checkout: self
-          submodules: true
 
         - task: UseDotNet@2
           displayName: 'Install .NET 6 SDK (ESRP)' # This is needed for ESRP.
@@ -76,6 +75,6 @@ jobs:
         - template: ci/sign-files.yml@eng
           parameters:
             displayName: Sign NugetPackages
-            folderPath: $(build.artifactStagingDirectory)
+            folderPath: $(pkg_dir)
             pattern: '*.nupkg'
             signType: nuget

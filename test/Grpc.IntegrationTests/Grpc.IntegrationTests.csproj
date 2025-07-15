@@ -7,7 +7,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Grpc.AspNetCore.Server" Version="2.52.0" />
+    <PackageReference Include="Grpc.AspNetCore.Server" />
   </ItemGroup>
 
 </Project>

@@ -4,6 +4,7 @@
 using Azure.Core;
 using Azure.Identity;
 using FluentAssertions;
+using Grpc.Core;
 using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -109,7 +110,7 @@ public class DurableTaskSchedulerClientExtensionsTests
         // Assert
         var action = () => provider.GetRequiredService<IOptions<DurableTaskSchedulerClientOptions>>().Value;
         action.Should().Throw<OptionsValidationException>()
-            .WithMessage(endpoint == null 
+            .WithMessage(endpoint == null
                 ? "DataAnnotation validation failed for 'DurableTaskSchedulerClientOptions' members: 'EndpointAddress' with the error: 'Endpoint address is required'."
                 : "DataAnnotation validation failed for 'DurableTaskSchedulerClientOptions' members: 'TaskHubName' with the error: 'Task hub name is required'.");
     }
@@ -192,5 +193,91 @@ public class DurableTaskSchedulerClientExtensionsTests
         options.Credential.Should().BeOfType<DefaultAzureCredential>();
         options.ResourceId.Should().Be("https://durabletask.io");
         options.AllowInsecureCredentials.Should().BeFalse();
+    }
+
+    [Fact]
+    public void UseDurableTaskScheduler_WithEndpointAndCredentialAndRetryOptions_ShouldConfigureCorrectly()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskClientBuilder> mockBuilder = new Mock<IDurableTaskClientBuilder>();
+        mockBuilder.Setup(b => b.Services).Returns(services);
+        DefaultAzureCredential credential = new DefaultAzureCredential();
+
+        // Act
+        mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options =>
+                options.RetryOptions = new DurableTaskSchedulerClientOptions.ClientRetryOptions
+                {
+                    MaxRetries = 5,
+                    InitialBackoffMs = 100,
+                    MaxBackoffMs = 1000,
+                    BackoffMultiplier = 2.0,
+                    RetryableStatusCodes = new List<StatusCode> { StatusCode.Unknown }
+                }
+            );
+
+        // Assert
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptions<GrpcDurableTaskClientOptions>? options = provider.GetService<IOptions<GrpcDurableTaskClientOptions>>();
+        options.Should().NotBeNull();
+
+        // Validate the configured options
+        DurableTaskSchedulerClientOptions clientOptions = provider.GetRequiredService<IOptions<DurableTaskSchedulerClientOptions>>().Value;
+        clientOptions.EndpointAddress.Should().Be(ValidEndpoint);
+        clientOptions.TaskHubName.Should().Be(ValidTaskHub);
+        clientOptions.Credential.Should().BeOfType<DefaultAzureCredential>();
+        clientOptions.RetryOptions.Should().NotBeNull();
+        // The assert not null doesn't clear the syntax warning about null checks.
+        if (clientOptions.RetryOptions != null)
+        {
+            clientOptions.RetryOptions.MaxRetries.Should().Be(5);
+            clientOptions.RetryOptions.InitialBackoffMs.Should().Be(100);
+            clientOptions.RetryOptions.MaxBackoffMs.Should().Be(1000);
+            clientOptions.RetryOptions.BackoffMultiplier.Should().Be(2.0);
+            clientOptions.RetryOptions.RetryableStatusCodes.Should().Contain(StatusCode.Unknown);
+        }
+    }
+
+    [Fact]
+    public void UseDurableTaskScheduler_WithConnectionStringAndRetryOptions_ShouldConfigureCorrectly()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskClientBuilder> mockBuilder = new Mock<IDurableTaskClientBuilder>();
+        mockBuilder.Setup(b => b.Services).Returns(services);
+        string connectionString = $"Endpoint={ValidEndpoint};Authentication=DefaultAzure;TaskHub={ValidTaskHub}";
+
+        // Act
+        mockBuilder.Object.UseDurableTaskScheduler(connectionString, options =>
+                options.RetryOptions = new DurableTaskSchedulerClientOptions.ClientRetryOptions
+                {
+                    MaxRetries = 5,
+                    InitialBackoffMs = 100,
+                    MaxBackoffMs = 1000,
+                    BackoffMultiplier = 2.0,
+                    RetryableStatusCodes = new List<StatusCode> { StatusCode.Unknown }
+                }
+            );
+
+        // Assert
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptions<GrpcDurableTaskClientOptions>? options = provider.GetService<IOptions<GrpcDurableTaskClientOptions>>();
+        options.Should().NotBeNull();
+
+        // Validate the configured options
+        DurableTaskSchedulerClientOptions clientOptions = provider.GetRequiredService<IOptions<DurableTaskSchedulerClientOptions>>().Value;
+        clientOptions.EndpointAddress.Should().Be(ValidEndpoint);
+        clientOptions.TaskHubName.Should().Be(ValidTaskHub);
+        clientOptions.Credential.Should().BeOfType<DefaultAzureCredential>();
+        clientOptions.RetryOptions.Should().NotBeNull();
+        // The assert not null doesn't clear the syntax warning about null checks.
+        if (clientOptions.RetryOptions != null)
+        {
+            clientOptions.RetryOptions.MaxRetries.Should().Be(5);
+            clientOptions.RetryOptions.InitialBackoffMs.Should().Be(100);
+            clientOptions.RetryOptions.MaxBackoffMs.Should().Be(1000);
+            clientOptions.RetryOptions.BackoffMultiplier.Should().Be(2.0);
+            clientOptions.RetryOptions.RetryableStatusCodes.Should().Contain(StatusCode.Unknown);
+        }
     }
 }

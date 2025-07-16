@@ -2,6 +2,8 @@
 
 ## (Unreleased)
 
+- Expose gRPC retry options in Azure Managed extensions ([#447](https://github.com/microsoft/durabletask-dotnet/pull/447))
+
 ## v1.12.0
 
 - Activity tag support ([#426](https://github.com/microsoft/durabletask-dotnet/pull/426))

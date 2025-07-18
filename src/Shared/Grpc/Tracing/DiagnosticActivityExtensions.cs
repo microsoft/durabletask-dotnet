@@ -25,19 +25,14 @@ enum ActivityStatusCode
 static class DiagnosticActivityExtensions
 {
     static readonly Action<Activity, string> s_setSpanId;
-    static readonly Action<Activity, string> s_setId;
     static readonly Action<Activity, ActivityStatusCode, string> s_setStatus;
 
     static DiagnosticActivityExtensions()
     {
         BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Instance;
-        s_setSpanId = typeof(Activity).GetField("_spanId", flags).CreateSetter<Activity, string>();
-        s_setId = typeof(Activity).GetField("_id", flags).CreateSetter<Activity, string>();
+        s_setSpanId = (typeof(Activity).GetField("_spanId", flags) ?? throw new InvalidOperationException("The field Activity._spanId was not found.")).CreateSetter<Activity, string>();
         s_setStatus = CreateSetStatus();
     }
-
-    public static void SetId(this Activity activity, string id)
-        => s_setId(activity, id);
 
     public static void SetSpanId(this Activity activity, string spanId)
         => s_setSpanId(activity, spanId);

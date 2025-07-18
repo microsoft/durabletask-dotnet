@@ -122,8 +122,7 @@ public static class GrpcOrchestrationRunner
             result.Actions,
             completionToken: string.Empty, /* doesn't apply */
             entityConversionState: null,
-            // TODO: Should this activity be created?
-            parentActivity: null);
+            orchestrationActivity: null);
         byte[] responseBytes = response.ToByteArray();
         return Convert.ToBase64String(responseBytes);
     }

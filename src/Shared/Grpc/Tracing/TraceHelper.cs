@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// NOTE: Modified from https://github.com/Azure/durabletask/blob/main/src/DurableTask.Core/Tracing/TraceHelper.cs
-
 using System.Diagnostics;
 using DurableTask.Core.Command;
 using Google.Protobuf.WellKnownTypes;
@@ -10,7 +8,13 @@ using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Tracing;
 
-public class TraceHelper
+/// <summary>
+/// Methods for starting and managing trace activities related to Durable Task operations.
+/// </summary>
+/// <remarks>
+/// Adapted from "https://github.com/Azure/durabletask/blob/main/src/DurableTask.Core/Tracing/TraceHelper.cs".
+/// </remarks>
+class TraceHelper
 {
     const string Source = "Microsoft.DurableTask";
 
@@ -19,11 +23,11 @@ public class TraceHelper
     /// <summary>
     /// Starts a new trace activity for scheduling an orchestration from the client.
     /// </summary>
-    /// <param name="startEvent">The orchestration's execution started event.</param>
+    /// <param name="createInstanceRequest">The orchestration's creation request.</param>
     /// <returns>
     /// Returns a newly started <see cref="Activity"/> with orchestration-specific metadata.
     /// </returns>
-    internal static Activity? StartActivityForNewOrchestration(P.CreateInstanceRequest createInstanceRequest)
+    public static Activity? StartActivityForNewOrchestration(P.CreateInstanceRequest createInstanceRequest)
     {
         Activity? newActivity = ActivityTraceSource.StartActivity(
             name: CreateSpanName(TraceActivityConstants.CreateOrchestration, createInstanceRequest.Name, createInstanceRequest.Version),
@@ -67,7 +71,7 @@ public class TraceHelper
     /// <returns>
     /// Returns a newly started <see cref="Activity"/> with orchestration-specific metadata.
     /// </returns>
-    internal static Activity? StartTraceActivityForOrchestrationExecution(P.ExecutionStartedEvent? startEvent)
+    public static Activity? StartTraceActivityForOrchestrationExecution(P.ExecutionStartedEvent? startEvent)
     {
         if (startEvent == null)
         {
@@ -117,10 +121,9 @@ public class TraceHelper
     }
 
     /// <summary>
-    /// Starts a new trace activity for (task) activity execution. 
+    /// Starts a new trace activity for (task) activity execution.
     /// </summary>
-    /// <param name="scheduledEvent">The associated <see cref="TaskScheduledEvent"/>.</param>
-    /// <param name="instance">The associated orchestration instance metadata.</param>
+    /// <param name="request">The associated request to start a (task) activity.</param>
     /// <returns>
     /// Returns a newly started <see cref="Activity"/> with (task) activity and orchestration-specific metadata.
     /// </returns>
@@ -159,15 +162,16 @@ public class TraceHelper
     /// Starts a new trace activity for (task) activity that represents the time between when the task message
     /// is enqueued and when the response message is received.
     /// </summary>
-    /// <param name="instance">The associated <see cref="OrchestrationInstance"/>.</param>
-    /// <param name="taskScheduledEvent">The associated <see cref="TaskScheduledEvent"/>.</param>
+    /// <param name="instanceId">The ID of the associated instance.</param>
+    /// <param name="historyEvent">The associated <see cref="P.HistoryEvent" />.</param>
+    /// <param name="taskScheduledEvent">The associated <see cref="P.TaskScheduledEvent"/>.</param>
     /// <returns>
     /// Returns a newly started <see cref="Activity"/> with (task) activity and orchestration-specific metadata.
     /// </returns>
-    internal static Activity? StartTraceActivityForSchedulingTask(
+    static Activity? StartTraceActivityForSchedulingTask(
         string? instanceId,
-        P.HistoryEvent historyEvent,
-        P.TaskScheduledEvent taskScheduledEvent)
+        P.HistoryEvent? historyEvent,
+        P.TaskScheduledEvent? taskScheduledEvent)
     {
         if (taskScheduledEvent == null)
         {
@@ -177,7 +181,7 @@ public class TraceHelper
         Activity? newActivity = ActivityTraceSource.StartActivity(
             CreateSpanName(TraceActivityConstants.Activity, taskScheduledEvent.Name, taskScheduledEvent.Version),
             kind: ActivityKind.Client,
-            startTime: historyEvent.Timestamp?.ToDateTimeOffset() ?? default,
+            startTime: historyEvent?.Timestamp?.ToDateTimeOffset() ?? default,
             parentContext: Activity.Current?.Context ?? default);
 
         if (newActivity == null)
@@ -196,7 +200,7 @@ public class TraceHelper
         newActivity.AddTag(Schema.Task.Type, TraceActivityConstants.Activity);
         newActivity.AddTag(Schema.Task.Name, taskScheduledEvent.Name);
         newActivity.AddTag(Schema.Task.InstanceId, instanceId);
-        newActivity.AddTag(Schema.Task.TaskId, historyEvent.EventId);
+        newActivity.AddTag(Schema.Task.TaskId, historyEvent?.EventId);
 
         if (!string.IsNullOrEmpty(taskScheduledEvent.Version))
         {
@@ -209,12 +213,13 @@ public class TraceHelper
     /// <summary>
     /// Emits a new trace activity for a (task) activity that successfully completes.
     /// </summary>
-    /// <param name="taskScheduledEvent">The associated <see cref="TaskScheduledEvent"/>.</param>
-    /// <param name="orchestrationInstance">The associated <see cref="OrchestrationInstance"/>.</param>
-    internal static void EmitTraceActivityForTaskCompleted(
+    /// <param name="instanceId">The ID of the associated orchestration.</param>
+    /// <param name="historyEvent">The associated <see cref="P.HistoryEvent" />.</param>
+    /// <param name="taskScheduledEvent">The associated <see cref="P.TaskScheduledEvent"/>.</param>
+    public static void EmitTraceActivityForTaskCompleted(
         string? instanceId,
-        P.HistoryEvent historyEvent,
-        P.TaskScheduledEvent taskScheduledEvent)
+        P.HistoryEvent? historyEvent,
+        P.TaskScheduledEvent? taskScheduledEvent)
     {
         // The parent of this is the parent orchestration span ID. It should be the client span which started this
         Activity? activity = StartTraceActivityForSchedulingTask(instanceId, historyEvent, taskScheduledEvent);
@@ -225,14 +230,14 @@ public class TraceHelper
     /// <summary>
     /// Emits a new trace activity for a (task) activity that fails.
     /// </summary>
-    /// <param name="orchestrationInstance">The associated <see cref="OrchestrationInstance"/>.</param>
-    /// <param name="taskScheduledEvent">The associated <see cref="TaskScheduledEvent"/>.</param>
-    /// <param name="failedEvent">The associated <see cref="TaskFailedEvent"/>.</param>
-    /// <param name="errorPropagationMode">Specifies the method to propagate unhandled exceptions to parent orchestrations.</param>
-    internal static void EmitTraceActivityForTaskFailed(
+    /// <param name="instanceId">The ID of the associated orchestration.</param>
+    /// <param name="historyEvent">The associated <see cref="P.HistoryEvent" />.</param>
+    /// <param name="taskScheduledEvent">The associated <see cref="P.TaskScheduledEvent"/>.</param>
+    /// <param name="failedEvent">The associated <see cref="P.TaskFailedEvent"/>.</param>
+    public static void EmitTraceActivityForTaskFailed(
         string? instanceId,
-        P.HistoryEvent historyEvent,
-        P.TaskScheduledEvent taskScheduledEvent,
+        P.HistoryEvent? historyEvent,
+        P.TaskScheduledEvent? taskScheduledEvent,
         P.TaskFailedEvent? failedEvent)
     {
         Activity? activity = StartTraceActivityForSchedulingTask(instanceId, historyEvent, taskScheduledEvent);
@@ -255,15 +260,16 @@ public class TraceHelper
     /// Starts a new trace activity for sub-orchestrations. Represents the time between enqueuing
     /// the sub-orchestration message and it completing.
     /// </summary>
-    /// <param name="orchestrationInstance">The associated <see cref="OrchestrationInstance"/>.</param>
-    /// <param name="createdEvent">The associated <see cref="SubOrchestrationInstanceCreatedEvent"/>.</param>
+    /// <param name="instanceId">The ID of the associated orchestration.</param>
+    /// <param name="historyEvent">The associated <see cref="P.HistoryEvent" />.</param>
+    /// <param name="createdEvent">The associated <see cref="P.SubOrchestrationInstanceCreatedEvent"/>.</param>
     /// <returns>
     /// Returns a newly started <see cref="Activity"/> with (task) activity and orchestration-specific metadata.
     /// </returns>
-    internal static Activity? CreateTraceActivityForSchedulingSubOrchestration(
+    static Activity? CreateTraceActivityForSchedulingSubOrchestration(
         string? instanceId,
-        P.HistoryEvent historyEvent,
-        P.SubOrchestrationInstanceCreatedEvent createdEvent)
+        P.HistoryEvent? historyEvent,
+        P.SubOrchestrationInstanceCreatedEvent? createdEvent)
     {
         if (instanceId == null || createdEvent == null)
         {
@@ -273,7 +279,7 @@ public class TraceHelper
         Activity? activity = ActivityTraceSource.StartActivity(
             CreateSpanName(TraceActivityConstants.Orchestration, createdEvent.Name, createdEvent.Version),
             kind: ActivityKind.Client,
-            startTime: historyEvent.Timestamp?.ToDateTimeOffset() ?? default,
+            startTime: historyEvent?.Timestamp?.ToDateTimeOffset() ?? default,
             parentContext: Activity.Current?.Context ?? default);
 
         if (activity == null)
@@ -305,12 +311,13 @@ public class TraceHelper
     /// Emits a new trace activity for sub-orchestration execution when the sub-orchestration
     /// completes successfully.
     /// </summary>
-    /// <param name="instanceId">The associated <see cref="OrchestrationInstance"/>.</param>
-    /// <param name="createdEvent">The associated <see cref="SubOrchestrationInstanceCreatedEvent"/>.</param>
-    internal static void EmitTraceActivityForSubOrchestrationCompleted(
+    /// <param name="instanceId">The ID of the associated orchestration.</param>
+    /// <param name="historyEvent">The associated <see cref="P.HistoryEvent" />.</param>
+    /// <param name="createdEvent">The associated <see cref="P.SubOrchestrationInstanceCreatedEvent"/>.</param>
+    public static void EmitTraceActivityForSubOrchestrationCompleted(
         string? instanceId,
-        P.HistoryEvent historyEvent,
-        P.SubOrchestrationInstanceCreatedEvent createdEvent)
+        P.HistoryEvent? historyEvent,
+        P.SubOrchestrationInstanceCreatedEvent? createdEvent)
     {
         // The parent of this is the parent orchestration span ID. It should be the client span which started this
         Activity? activity = CreateTraceActivityForSchedulingSubOrchestration(instanceId, historyEvent, createdEvent);
@@ -321,17 +328,17 @@ public class TraceHelper
     /// <summary>
     /// Emits a new trace activity for sub-orchestration execution when the sub-orchestration fails.
     /// </summary>
-    /// <param name="orchestrationInstance">The associated <see cref="OrchestrationInstance"/>.</param>
-    /// <param name="createdEvent">The associated <see cref="SubOrchestrationInstanceCreatedEvent"/>.</param>
-    /// <param name="failedEvent">The associated <see cref="SubOrchestrationInstanceCreatedEvent"/>.</param>
-    /// <param name="errorPropagationMode">Specifies the method to propagate unhandled exceptions to parent orchestrations.</param>
-    internal static void EmitTraceActivityForSubOrchestrationFailed(
-        string? orchestrationInstance,
-        P.HistoryEvent historyEvent,
-        P.SubOrchestrationInstanceCreatedEvent createdEvent,
+    /// <param name="instanceId">The ID of the associated orchestration.</param>
+    /// <param name="historyEvent">The associated <see cref="P.HistoryEvent" />.</param>
+    /// <param name="createdEvent">The associated <see cref="P.SubOrchestrationInstanceCreatedEvent"/>.</param>
+    /// <param name="failedEvent">The associated <see cref="P.SubOrchestrationInstanceFailedEvent"/>.</param>
+    public static void EmitTraceActivityForSubOrchestrationFailed(
+        string? instanceId,
+        P.HistoryEvent? historyEvent,
+        P.SubOrchestrationInstanceCreatedEvent? createdEvent,
         P.SubOrchestrationInstanceFailedEvent? failedEvent)
     {
-        Activity? activity = CreateTraceActivityForSchedulingSubOrchestration(orchestrationInstance, historyEvent, createdEvent);
+        Activity? activity = CreateTraceActivityForSchedulingSubOrchestration(instanceId, historyEvent, createdEvent);
 
         if (activity is null)
         {
@@ -347,7 +354,7 @@ public class TraceHelper
         activity?.Dispose();
     }
 
-    internal static Activity? StartTraceActivityForEventRaisedFromWorker(
+    public static Activity? StartTraceActivityForEventRaisedFromWorker(
         SendEventOrchestratorAction eventRaisedEvent,
         string? instanceId,
         string? executionId)
@@ -378,12 +385,12 @@ public class TraceHelper
     /// <summary>
     /// Creates a new trace activity for events created from the client.
     /// </summary>
-    /// <param name="eventRaised">The associated <see cref="EventRaisedEvent"/>.</param>
-    /// <param name="instance">The associated <see cref="OrchestrationInstance"/>.</param>
+    /// <param name="eventRaised">The associated <see cref="P.EventRaisedEvent"/>.</param>
+    /// <param name="instanceId">The ID of the associated orchestration.</param>
     /// <returns>
     /// Returns a newly started <see cref="Activity"/> with (task) activity and orchestration-specific metadata.
     /// </returns>
-    internal static Activity? StartActivityForNewEventRaisedFromClient(P.RaiseEventRequest eventRaised, string instanceId)
+    public static Activity? StartActivityForNewEventRaisedFromClient(P.RaiseEventRequest eventRaised, string instanceId)
     {
         Activity? newActivity = ActivityTraceSource.StartActivity(
             CreateSpanName(TraceActivityConstants.OrchestrationEvent, eventRaised.Name, null),
@@ -402,11 +409,11 @@ public class TraceHelper
     /// <summary>
     /// Emits a new trace activity for timers.
     /// </summary>
-    /// <param name="instanceId">The associated <see cref="OrchestrationInstance"/>.</param>
+    /// <param name="instanceId">The ID of the associated orchestration.</param>
     /// <param name="orchestrationName">The name of the orchestration invoking the timer.</param>
     /// <param name="startTime">The timer's start time.</param>
     /// <param name="timerFiredEvent">The associated <see cref="P.TimerFiredEvent"/>.</param>
-    internal static void EmitTraceActivityForTimer(
+    public static void EmitTraceActivityForTimer(
         string? instanceId,
         string orchestrationName,
         DateTime startTime,

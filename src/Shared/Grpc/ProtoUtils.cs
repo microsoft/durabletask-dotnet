@@ -270,6 +270,7 @@ static class ProtoUtils
     /// Constructs a <see cref="P.OrchestratorResponse" />.
     /// </summary>
     /// <param name="instanceId">The orchestrator instance ID.</param>
+    /// <param name="executionId">The orchestrator execution ID.</param>
     /// <param name="customStatus">The orchestrator customer status or <c>null</c> if no custom status.</param>
     /// <param name="actions">The orchestrator actions.</param>
     /// <param name="completionToken">
@@ -277,6 +278,7 @@ static class ProtoUtils
     /// value that was provided by the corresponding <see cref="P.WorkItem"/> that triggered the orchestrator execution.
     /// </param>
     /// <param name="entityConversionState">The entity conversion state, or null if no conversion is required.</param>
+    /// <param name="orchestrationActivity">The <see cref="Activity" /> that represents orchestration execution.</param>
     /// <returns>The orchestrator response.</returns>
     /// <exception cref="NotSupportedException">When an orchestrator action is unknown.</exception>
     internal static P.OrchestratorResponse ConstructOrchestratorResponse(
@@ -286,7 +288,7 @@ static class ProtoUtils
         IEnumerable<OrchestratorAction> actions,
         string completionToken,
         EntityConversionState? entityConversionState,
-        Activity? parentActivity)
+        Activity? orchestrationActivity)
     {
         Check.NotNull(actions);
         var response = new P.OrchestratorResponse
@@ -294,8 +296,8 @@ static class ProtoUtils
             InstanceId = instanceId,
             CustomStatus = customStatus,
             CompletionToken = completionToken,
-            OrchestrationSpanID = parentActivity?.SpanId.ToString(),
-            OrchestrationSpanStartTime = parentActivity?.StartTimeUtc.ToTimestamp(),
+            OrchestrationSpanID = orchestrationActivity?.SpanId.ToString(),
+            OrchestrationSpanStartTime = orchestrationActivity?.StartTimeUtc.ToTimestamp(),
         };
 
         foreach (OrchestratorAction action in actions)
@@ -304,10 +306,10 @@ static class ProtoUtils
 
             ActivityContext? clientActivityContext = null;
 
-            if (parentActivity != null)
+            if (orchestrationActivity != null)
             {
                 ActivitySpanId clientSpanId = ActivitySpanId.CreateRandom();
-                clientActivityContext = new(parentActivity.TraceId, clientSpanId, parentActivity.ActivityTraceFlags, parentActivity.TraceStateString);
+                clientActivityContext = new(orchestrationActivity.TraceId, clientSpanId, orchestrationActivity.ActivityTraceFlags, orchestrationActivity.TraceStateString);
             }
 
             switch (action.OrchestratorActionType)
@@ -410,7 +412,7 @@ static class ProtoUtils
 
                         // Distributed Tracing: start a new trace activity derived from the orchestration
                         // for an EventRaisedEvent (external event)
-                        using Activity? traceActivity = TraceHelper.StartTraceActivityForEventRaisedFromWorker(sendEventAction,instanceId, executionId);
+                        using Activity? traceActivity = TraceHelper.StartTraceActivityForEventRaisedFromWorker(sendEventAction, instanceId, executionId);
 
                         traceActivity?.Stop();
                     }

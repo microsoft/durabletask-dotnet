@@ -46,19 +46,11 @@ class TraceHelper
             }
         }
 
-        if (Activity.Current?.Id != null || Activity.Current?.TraceStateString != null)
+        if (Activity.Current is not null)
         {
             createInstanceRequest.ParentTraceContext ??= new P.TraceContext();
-
-            if (Activity.Current?.Id != null)
-            {
-                createInstanceRequest.ParentTraceContext.TraceParent = Activity.Current?.Id;
-            }
-
-            if (Activity.Current?.TraceStateString != null)
-            {
-                createInstanceRequest.ParentTraceContext.TraceState = Activity.Current?.TraceStateString;
-            }
+            createInstanceRequest.ParentTraceContext.TraceParent = Activity.Current.Id!;
+            createInstanceRequest.ParentTraceContext.TraceState = Activity.Current.TraceStateString;
         }
 
         return newActivity;
@@ -438,12 +430,9 @@ class TraceHelper
             return null;
         }
 
-        if (createdEvent.ParentTraceContext != null)
+        if (createdEvent.ParentTraceContext != null && ActivityContext.TryParse(createdEvent.ParentTraceContext.TraceParent, createdEvent.ParentTraceContext.TraceState, out ActivityContext parentContext))
         {
-            if (ActivityContext.TryParse(createdEvent.ParentTraceContext.TraceParent, createdEvent.ParentTraceContext?.TraceState, out ActivityContext parentContext))
-            {
-                activity.SetSpanId(parentContext.SpanId.ToString());
-            }
+            activity.SetSpanId(parentContext.SpanId.ToString());
         }
 
         activity.SetTag(Schema.Task.Type, TraceActivityConstants.Orchestration);

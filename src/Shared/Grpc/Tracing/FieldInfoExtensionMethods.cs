@@ -1,11 +1,10 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// NOTE: Modified from https://github.com/Azure/durabletask/blob/main/src/DurableTask.Core/Tracing/FieldInfoExtensionMethods.cs
-
 using System.Linq.Expressions;
 using System.Reflection;
 
+// NOTE: Modified from https://github.com/Azure/durabletask/blob/main/src/DurableTask.Core/Tracing/FieldInfoExtensionMethods.cs
 namespace Microsoft.DurableTask.Tracing;
 
 /// <summary>
@@ -23,9 +22,16 @@ static class FieldInfoExtensionMethods
     /// <returns>A re-usable action to set the field.</returns>
     internal static Action<TTarget, TValue> CreateSetter<TTarget, TValue>(this FieldInfo fieldInfo)
     {
+#pragma warning disable CA1510
         if (fieldInfo == null)
         {
             throw new ArgumentNullException(nameof(fieldInfo));
+        }
+#pragma warning restore CA1510
+
+        if (fieldInfo.DeclaringType is null)
+        {
+            throw new ArgumentException("FieldInfo.DeclaringType cannot be null.", nameof(fieldInfo));
         }
 
         ParameterExpression targetExp = Expression.Parameter(typeof(TTarget), "target");

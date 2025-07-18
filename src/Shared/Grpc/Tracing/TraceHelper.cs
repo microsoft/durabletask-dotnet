@@ -127,7 +127,7 @@ class TraceHelper
     /// <returns>
     /// Returns a newly started <see cref="Activity"/> with (task) activity and orchestration-specific metadata.
     /// </returns>
-    internal static Activity? StartTraceActivityForTaskExecution(
+    public static Activity? StartTraceActivityForTaskExecution(
         P.ActivityRequest request)
     {
         if (request.ParentTraceContext is null || !ActivityContext.TryParse(request.ParentTraceContext.TraceParent, request.ParentTraceContext.TraceState, out ActivityContext activityContext))
@@ -153,58 +153,6 @@ class TraceHelper
         if (!string.IsNullOrEmpty(request.Version))
         {
             newActivity.SetTag(Schema.Task.Version, request.Version);
-        }
-
-        return newActivity;
-    }
-
-    /// <summary>
-    /// Starts a new trace activity for (task) activity that represents the time between when the task message
-    /// is enqueued and when the response message is received.
-    /// </summary>
-    /// <param name="instanceId">The ID of the associated instance.</param>
-    /// <param name="historyEvent">The associated <see cref="P.HistoryEvent" />.</param>
-    /// <param name="taskScheduledEvent">The associated <see cref="P.TaskScheduledEvent"/>.</param>
-    /// <returns>
-    /// Returns a newly started <see cref="Activity"/> with (task) activity and orchestration-specific metadata.
-    /// </returns>
-    static Activity? StartTraceActivityForSchedulingTask(
-        string? instanceId,
-        P.HistoryEvent? historyEvent,
-        P.TaskScheduledEvent? taskScheduledEvent)
-    {
-        if (taskScheduledEvent == null)
-        {
-            return null;
-        }
-
-        Activity? newActivity = ActivityTraceSource.StartActivity(
-            CreateSpanName(TraceActivityConstants.Activity, taskScheduledEvent.Name, taskScheduledEvent.Version),
-            kind: ActivityKind.Client,
-            startTime: historyEvent?.Timestamp?.ToDateTimeOffset() ?? default,
-            parentContext: Activity.Current?.Context ?? default);
-
-        if (newActivity == null)
-        {
-            return null;
-        }
-
-        if (taskScheduledEvent.ParentTraceContext != null)
-        {
-            if (ActivityContext.TryParse(taskScheduledEvent.ParentTraceContext.TraceParent, taskScheduledEvent.ParentTraceContext?.TraceState, out ActivityContext parentContext))
-            {
-                newActivity.SetSpanId(parentContext.SpanId.ToString());
-            }
-        }
-
-        newActivity.AddTag(Schema.Task.Type, TraceActivityConstants.Activity);
-        newActivity.AddTag(Schema.Task.Name, taskScheduledEvent.Name);
-        newActivity.AddTag(Schema.Task.InstanceId, instanceId);
-        newActivity.AddTag(Schema.Task.TaskId, historyEvent?.EventId);
-
-        if (!string.IsNullOrEmpty(taskScheduledEvent.Version))
-        {
-            newActivity.AddTag(Schema.Task.Version, taskScheduledEvent.Version);
         }
 
         return newActivity;
@@ -257,57 +205,6 @@ class TraceHelper
     }
 
     /// <summary>
-    /// Starts a new trace activity for sub-orchestrations. Represents the time between enqueuing
-    /// the sub-orchestration message and it completing.
-    /// </summary>
-    /// <param name="instanceId">The ID of the associated orchestration.</param>
-    /// <param name="historyEvent">The associated <see cref="P.HistoryEvent" />.</param>
-    /// <param name="createdEvent">The associated <see cref="P.SubOrchestrationInstanceCreatedEvent"/>.</param>
-    /// <returns>
-    /// Returns a newly started <see cref="Activity"/> with (task) activity and orchestration-specific metadata.
-    /// </returns>
-    static Activity? CreateTraceActivityForSchedulingSubOrchestration(
-        string? instanceId,
-        P.HistoryEvent? historyEvent,
-        P.SubOrchestrationInstanceCreatedEvent? createdEvent)
-    {
-        if (instanceId == null || createdEvent == null)
-        {
-            return null;
-        }
-
-        Activity? activity = ActivityTraceSource.StartActivity(
-            CreateSpanName(TraceActivityConstants.Orchestration, createdEvent.Name, createdEvent.Version),
-            kind: ActivityKind.Client,
-            startTime: historyEvent?.Timestamp?.ToDateTimeOffset() ?? default,
-            parentContext: Activity.Current?.Context ?? default);
-
-        if (activity == null)
-        {
-            return null;
-        }
-
-        if (createdEvent.ParentTraceContext != null)
-        {
-            if (ActivityContext.TryParse(createdEvent.ParentTraceContext.TraceParent, createdEvent.ParentTraceContext?.TraceState, out ActivityContext parentContext))
-            {
-                activity.SetSpanId(parentContext.SpanId.ToString());
-            }
-        }
-
-        activity.SetTag(Schema.Task.Type, TraceActivityConstants.Orchestration);
-        activity.SetTag(Schema.Task.Name, createdEvent.Name);
-        activity.SetTag(Schema.Task.InstanceId, instanceId);
-
-        if (!string.IsNullOrEmpty(createdEvent.Version))
-        {
-            activity.SetTag(Schema.Task.Version, createdEvent.Version);
-        }
-
-        return activity;
-    }
-
-    /// <summary>
     /// Emits a new trace activity for sub-orchestration execution when the sub-orchestration
     /// completes successfully.
     /// </summary>
@@ -354,6 +251,15 @@ class TraceHelper
         activity?.Dispose();
     }
 
+    /// <summary>
+    /// Emits a new trace activity for events raised from the worker.
+    /// </summary>
+    /// <param name="eventRaisedEvent">The associated <see cref="SendEventOrchestratorAction"/>.</param>
+    /// <param name="instanceId">The instance ID of the associated orchestration.</param>
+    /// <param name="executionId">The execution ID of the associated orchestration.</param>
+    /// <returns>
+    /// Returns a newly started <see cref="Activity"/> with (task) activity and orchestration-specific metadata.
+    /// </returns>
     public static Activity? StartTraceActivityForEventRaisedFromWorker(
         SendEventOrchestratorAction eventRaisedEvent,
         string? instanceId,
@@ -447,6 +353,109 @@ class TraceHelper
         {
             return $"{spanDescription}:{taskName}";
         }
+    }
+
+    /// <summary>
+    /// Starts a new trace activity for (task) activity that represents the time between when the task message
+    /// is enqueued and when the response message is received.
+    /// </summary>
+    /// <param name="instanceId">The ID of the associated instance.</param>
+    /// <param name="historyEvent">The associated <see cref="P.HistoryEvent" />.</param>
+    /// <param name="taskScheduledEvent">The associated <see cref="P.TaskScheduledEvent"/>.</param>
+    /// <returns>
+    /// Returns a newly started <see cref="Activity"/> with (task) activity and orchestration-specific metadata.
+    /// </returns>
+    static Activity? StartTraceActivityForSchedulingTask(
+        string? instanceId,
+        P.HistoryEvent? historyEvent,
+        P.TaskScheduledEvent? taskScheduledEvent)
+    {
+        if (taskScheduledEvent == null)
+        {
+            return null;
+        }
+
+        Activity? newActivity = ActivityTraceSource.StartActivity(
+            CreateSpanName(TraceActivityConstants.Activity, taskScheduledEvent.Name, taskScheduledEvent.Version),
+            kind: ActivityKind.Client,
+            startTime: historyEvent?.Timestamp?.ToDateTimeOffset() ?? default,
+            parentContext: Activity.Current?.Context ?? default);
+
+        if (newActivity == null)
+        {
+            return null;
+        }
+
+        if (taskScheduledEvent.ParentTraceContext != null)
+        {
+            if (ActivityContext.TryParse(taskScheduledEvent.ParentTraceContext.TraceParent, taskScheduledEvent.ParentTraceContext?.TraceState, out ActivityContext parentContext))
+            {
+                newActivity.SetSpanId(parentContext.SpanId.ToString());
+            }
+        }
+
+        newActivity.AddTag(Schema.Task.Type, TraceActivityConstants.Activity);
+        newActivity.AddTag(Schema.Task.Name, taskScheduledEvent.Name);
+        newActivity.AddTag(Schema.Task.InstanceId, instanceId);
+        newActivity.AddTag(Schema.Task.TaskId, historyEvent?.EventId);
+
+        if (!string.IsNullOrEmpty(taskScheduledEvent.Version))
+        {
+            newActivity.AddTag(Schema.Task.Version, taskScheduledEvent.Version);
+        }
+
+        return newActivity;
+    }
+
+    /// <summary>
+    /// Starts a new trace activity for sub-orchestrations. Represents the time between enqueuing
+    /// the sub-orchestration message and it completing.
+    /// </summary>
+    /// <param name="instanceId">The ID of the associated orchestration.</param>
+    /// <param name="historyEvent">The associated <see cref="P.HistoryEvent" />.</param>
+    /// <param name="createdEvent">The associated <see cref="P.SubOrchestrationInstanceCreatedEvent"/>.</param>
+    /// <returns>
+    /// Returns a newly started <see cref="Activity"/> with (task) activity and orchestration-specific metadata.
+    /// </returns>
+    static Activity? CreateTraceActivityForSchedulingSubOrchestration(
+        string? instanceId,
+        P.HistoryEvent? historyEvent,
+        P.SubOrchestrationInstanceCreatedEvent? createdEvent)
+    {
+        if (instanceId == null || createdEvent == null)
+        {
+            return null;
+        }
+
+        Activity? activity = ActivityTraceSource.StartActivity(
+            CreateSpanName(TraceActivityConstants.Orchestration, createdEvent.Name, createdEvent.Version),
+            kind: ActivityKind.Client,
+            startTime: historyEvent?.Timestamp?.ToDateTimeOffset() ?? default,
+            parentContext: Activity.Current?.Context ?? default);
+
+        if (activity == null)
+        {
+            return null;
+        }
+
+        if (createdEvent.ParentTraceContext != null)
+        {
+            if (ActivityContext.TryParse(createdEvent.ParentTraceContext.TraceParent, createdEvent.ParentTraceContext?.TraceState, out ActivityContext parentContext))
+            {
+                activity.SetSpanId(parentContext.SpanId.ToString());
+            }
+        }
+
+        activity.SetTag(Schema.Task.Type, TraceActivityConstants.Orchestration);
+        activity.SetTag(Schema.Task.Name, createdEvent.Name);
+        activity.SetTag(Schema.Task.InstanceId, instanceId);
+
+        if (!string.IsNullOrEmpty(createdEvent.Version))
+        {
+            activity.SetTag(Schema.Task.Version, createdEvent.Version);
+        }
+
+        return activity;
     }
 
     static string CreateTimerSpanName(string orchestrationName)

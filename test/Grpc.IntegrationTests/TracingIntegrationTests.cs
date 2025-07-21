@@ -100,6 +100,7 @@ public class TracingIntegrationTests : IntegrationTestBase
                 a.TagObjects.Should().ContainKey("durabletask.task.instance_id").WhoseValue.Should().Be(instanceId);
                 a.TagObjects.Should().ContainKey("durabletask.task.name").WhoseValue.Should().Be(orchestratorName);
                 a.TagObjects.Should().ContainKey("durabletask.type").WhoseValue.Should().Be("orchestration");
+                a.TagObjects.Should().ContainKey("durabletask.task.status").WhoseValue.Should().Be("Completed");
             });
         
         var orchestrationActivity = orchestrationActivities.First();
@@ -201,6 +202,8 @@ public class TracingIntegrationTests : IntegrationTestBase
                 a.ParentId.Should().Be(createActivity.Id);
                 a.ParentSpanId.Should().Be(createActivity.SpanId);
                 a.Status.Should().Be(ActivityStatusCode.Error);
+                
+                a.TagObjects.Should().ContainKey("durabletask.task.status").WhoseValue.Should().Be("Failed");
             });
         
         var orchestrationActivity = orchestrationActivities.First();

@@ -304,12 +304,21 @@ static class ProtoUtils
         {
             var protoAction = new P.OrchestratorAction { Id = action.Id };
 
-            ActivityContext? clientActivityContext = null;
-
-            if (orchestrationActivity != null)
+            P.TraceContext? CreateTraceContext()
             {
+                if (orchestrationActivity is null)
+                {
+                    return null;
+                }
+
                 ActivitySpanId clientSpanId = ActivitySpanId.CreateRandom();
-                clientActivityContext = new(orchestrationActivity.TraceId, clientSpanId, orchestrationActivity.ActivityTraceFlags, orchestrationActivity.TraceStateString);
+                ActivityContext clientActivityContext = new(orchestrationActivity.TraceId, clientSpanId, orchestrationActivity.ActivityTraceFlags, orchestrationActivity.TraceStateString);
+
+                return new P.TraceContext
+                {
+                    TraceParent = $"00-{clientActivityContext.TraceId}-{clientActivityContext.SpanId}-0{clientActivityContext.TraceFlags:d}",
+                    TraceState = clientActivityContext.TraceState,
+                };
             }
 
             switch (action.OrchestratorActionType)
@@ -322,13 +331,7 @@ static class ProtoUtils
                         Name = scheduleTaskAction.Name,
                         Version = scheduleTaskAction.Version,
                         Input = scheduleTaskAction.Input,
-                        ParentTraceContext = clientActivityContext is not null
-                            ? new P.TraceContext
-                            {
-                                TraceParent = $"00-{clientActivityContext.Value.TraceId}-{clientActivityContext.Value.SpanId}-0{clientActivityContext.Value.TraceFlags:d}",
-                                TraceState = clientActivityContext.Value.TraceState,
-                            }
-                            : null,
+                        ParentTraceContext = CreateTraceContext(),
                     };
 
                     if (scheduleTaskAction.Tags != null)
@@ -348,13 +351,7 @@ static class ProtoUtils
                         InstanceId = subOrchestrationAction.InstanceId,
                         Name = subOrchestrationAction.Name,
                         Version = subOrchestrationAction.Version,
-                        ParentTraceContext = clientActivityContext is not null
-                            ? new P.TraceContext
-                            {
-                                TraceParent = $"00-{clientActivityContext.Value.TraceId}-{clientActivityContext.Value.SpanId}-0{clientActivityContext.Value.TraceFlags:d}",
-                                TraceState = clientActivityContext.Value.TraceState,
-                            }
-                            : null,
+                        ParentTraceContext = CreateTraceContext(),
                     };
                     break;
                 case OrchestratorActionType.CreateTimer:

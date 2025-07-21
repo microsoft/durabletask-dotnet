@@ -89,7 +89,7 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                 continue;
             }
 
-            ExecutionStartedEvent? executionStartedEvent = workItem.OrchestrationRuntimeState.NewEvents.OfType<ExecutionStartedEvent>().FirstOrDefault();
+            ExecutionStartedEvent? executionStartedEvent = workItem.OrchestrationRuntimeState.ExecutionStartedEvent;
 
             if (executionStartedEvent?.ParentTraceContext is not null)
             {

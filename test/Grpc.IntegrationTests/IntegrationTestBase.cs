@@ -37,6 +37,8 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
     /// </summary>
     public CancellationToken TimeoutToken => this.testTimeoutSource.Token;
 
+    public ICollection<Activity> ExportedItems = new List<Activity>();
+
     void IDisposable.Dispose()
     {
         this.testTimeoutSource.Dispose();
@@ -57,14 +59,15 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
     /// <param name="clientConfigure">Configures the durable task client builder.</param>
     protected IHostBuilder CreateHostBuilder(Action<IDurableTaskWorkerBuilder> workerConfigure, Action<IDurableTaskClientBuilder>? clientConfigure)
     {
-        return Host.CreateDefaultBuilder()
+        var host = Host.CreateDefaultBuilder()
             .ConfigureLogging(b =>
             {
                 b.ClearProviders();
                 b.AddProvider(this.logProvider);
                 b.SetMinimumLevel(LogLevel.Debug);
-            })
-            .ConfigureServices(services =>
+
+            })            
+            .ConfigureServices((context, services) =>
             {
                 services.AddDurableTaskWorker(b =>
                 {
@@ -79,6 +82,8 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
                     clientConfigure?.Invoke(b);
                 });
             });
+
+            return host;
     }
 
     protected IReadOnlyCollection<LogEntry> GetLogs()

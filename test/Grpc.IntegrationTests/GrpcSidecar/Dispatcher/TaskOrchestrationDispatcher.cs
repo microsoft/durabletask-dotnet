@@ -62,7 +62,7 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
 
             // Execute the orchestrator code and get back a set of new actions to take.
             // IMPORTANT: This IEnumerable<OrchestratorAction> may be lazily evaluated and should only be enumerated once!
-            OrchestratorExecutionResult result = await this.taskExecutor.ExecuteOrchestrator(
+            GrpcOrchestratorExecutionResult result = await this.taskExecutor.ExecuteOrchestrator(
                 instance,
                 workItem.OrchestrationRuntimeState.PastEvents,
                 workItem.OrchestrationRuntimeState.NewEvents);
@@ -87,6 +87,14 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                 }
 
                 continue;
+            }
+
+            ExecutionStartedEvent? executionStartedEvent = workItem.OrchestrationRuntimeState.ExecutionStartedEvent;
+
+            if (executionStartedEvent?.ParentTraceContext is not null)
+            {
+                executionStartedEvent.ParentTraceContext.ActivityStartTime = result.OrchestrationActivityStartTime;
+                executionStartedEvent.ParentTraceContext.SpanId = result.OrchestrationActivitySpanId;
             }
 
             // Commit the changes to the durable store
@@ -197,6 +205,11 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                     scheduleTaskAction.Version,
                     scheduleTaskAction.Input);
 
+                if (action is GrpcScheduleTaskOrchestratorAction { ParentTraceContext: not null } grpcAction)
+                {
+                    scheduledEvent.ParentTraceContext ??= new(grpcAction.ParentTraceContext.TraceParent, grpcAction.ParentTraceContext.TraceState);
+                }
+
                 newActivityMessages ??= new List<TaskMessage>();
                 newActivityMessages.Add(new TaskMessage
                 {
@@ -224,12 +237,15 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
             }
             else if (action is CreateSubOrchestrationAction subOrchestrationAction)
             {
-                runtimeState.AddEvent(new SubOrchestrationInstanceCreatedEvent(subOrchestrationAction.Id)
+                var grpcAction = action as GrpcCreateSubOrchestrationAction;
+
+                runtimeState.AddEvent(new GrpcSubOrchestrationInstanceCreatedEvent(subOrchestrationAction.Id)
                 {
                     Name = subOrchestrationAction.Name,
                     Version = subOrchestrationAction.Version,
                     InstanceId = subOrchestrationAction.InstanceId,
                     Input = subOrchestrationAction.Input,
+                    ParentTraceContext = grpcAction?.ParentTraceContext
                 });
 
                 ExecutionStartedEvent startedEvent = new(-1, subOrchestrationAction.Input)
@@ -248,6 +264,7 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                         Version = runtimeState.Version,
                         TaskScheduleId = subOrchestrationAction.Id,
                     },
+                    ParentTraceContext = grpcAction?.ParentTraceContext,
                     Tags = subOrchestrationAction.Tags,
                 };
 

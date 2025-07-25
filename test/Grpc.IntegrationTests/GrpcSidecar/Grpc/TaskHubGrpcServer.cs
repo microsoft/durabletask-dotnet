@@ -372,8 +372,8 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         {
             Actions = request.Actions.Select(ProtobufUtils.ToOrchestratorAction),
             CustomStatus = request.CustomStatus,
-            OrchestrationActivitySpanId = request.OrchestrationSpanID,
-            OrchestrationActivityStartTime = request.OrchestrationSpanStartTime?.ToDateTimeOffset(),
+            OrchestrationActivitySpanId = request.OrchestrationTraceContext.SpanID,
+            OrchestrationActivityStartTime = request.OrchestrationTraceContext.SpanStartTime?.ToDateTimeOffset(),
         };
 
         tcs.TrySetResult(result);
@@ -468,6 +468,16 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         IEnumerable<HistoryEvent> pastEvents,
         IEnumerable<HistoryEvent> newEvents)
     {
+        var executionStartedEvent = pastEvents.OfType<ExecutionStartedEvent>().FirstOrDefault();
+
+        P.OrchestrationTraceContext? orchestrationTraceContext = executionStartedEvent?.ParentTraceContext?.SpanId is not null
+            ? new P.OrchestrationTraceContext
+            {
+                SpanID = executionStartedEvent.ParentTraceContext.SpanId,
+                SpanStartTime = executionStartedEvent.ParentTraceContext.ActivityStartTime?.ToTimestamp(),
+            }
+            : null;
+
         // Create a task completion source that represents the async completion of the orchestrator execution.
         // This must be done before we start the orchestrator execution.
         TaskCompletionSource<GrpcOrchestratorExecutionResult> tcs =
@@ -482,6 +492,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                     InstanceId = instance.InstanceId,
                     ExecutionId = instance.ExecutionId,
                     NewEvents = { newEvents.Select(ProtobufUtils.ToHistoryEventProto) },
+                    OrchestrationTraceContext = orchestrationTraceContext,
                     PastEvents = { pastEvents.Select(ProtobufUtils.ToHistoryEventProto) },
                 }
             });

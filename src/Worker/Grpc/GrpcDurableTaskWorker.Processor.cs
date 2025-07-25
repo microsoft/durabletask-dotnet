@@ -367,7 +367,7 @@ sealed partial class GrpcDurableTaskWorker
                     .Select(e => e.ExecutionStarted)
                     .FirstOrDefault();
 
-            Activity? traceActivity = TraceHelper.StartTraceActivityForOrchestrationExecution(executionStartedEvent);
+            Activity? traceActivity = TraceHelper.StartTraceActivityForOrchestrationExecution(executionStartedEvent, request.OrchestrationTraceContext);
 
             if (executionStartedEvent is not null)
             {

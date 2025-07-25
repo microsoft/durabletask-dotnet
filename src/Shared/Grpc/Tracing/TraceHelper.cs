@@ -60,10 +60,13 @@ class TraceHelper
     /// Starts a new trace activity for orchestration execution.
     /// </summary>
     /// <param name="startEvent">The orchestration's execution started event.</param>
+    /// <param name="orchestrationTraceContext">The orchestration trace context containing span metadata.</param>
     /// <returns>
     /// Returns a newly started <see cref="Activity"/> with orchestration-specific metadata.
     /// </returns>
-    public static Activity? StartTraceActivityForOrchestrationExecution(P.ExecutionStartedEvent? startEvent)
+    public static Activity? StartTraceActivityForOrchestrationExecution(
+        P.ExecutionStartedEvent? startEvent,
+        P.OrchestrationTraceContext? orchestrationTraceContext)
     {
         if (startEvent == null)
         {
@@ -77,7 +80,7 @@ class TraceHelper
 
         string activityName = CreateSpanName(TraceActivityConstants.Orchestration, startEvent.Name, startEvent.Version);
         ActivityKind activityKind = ActivityKind.Server;
-        DateTimeOffset startTime = startEvent.OrchestrationSpanStartTime?.ToDateTimeOffset() ?? default;
+        DateTimeOffset startTime = orchestrationTraceContext?.SpanStartTime?.ToDateTimeOffset() ?? default;
 
         Activity? activity = ActivityTraceSource.StartActivity(
             activityName,
@@ -99,14 +102,9 @@ class TraceHelper
             activity.SetTag(Schema.Task.Version, startEvent.Version);
         }
 
-        if (startEvent.OrchestrationSpanID != null)
+        if (orchestrationTraceContext?.SpanID != null)
         {
-            activity.SetSpanId(startEvent.OrchestrationSpanID!);
-        }
-        else
-        {
-            startEvent.OrchestrationSpanID = activity.SpanId.ToString();
-            startEvent.OrchestrationSpanStartTime = Timestamp.FromDateTime(activity.StartTimeUtc);
+            activity.SetSpanId(orchestrationTraceContext.SpanID!);
         }
 
         return activity;

@@ -97,9 +97,7 @@ public static class ProtobufUtils
                     {
                         TraceParent = startedEvent.ParentTraceContext.TraceParent,
                         TraceState = startedEvent.ParentTraceContext.TraceState,
-                    },
-                    OrchestrationSpanID = startedEvent.ParentTraceContext?.SpanId,
-                    OrchestrationSpanStartTime = startedEvent.ParentTraceContext?.ActivityStartTime is not null ? Timestamp.FromDateTimeOffset(startedEvent.ParentTraceContext.ActivityStartTime.Value) : null
+                    }
                 };
                 break;
             case EventType.ExecutionTerminated:

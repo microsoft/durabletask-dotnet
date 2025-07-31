@@ -7,7 +7,7 @@ namespace Microsoft.DurableTask.Tracing;
 /// <summary>
 /// Constants for trace activity names used in Durable Task Framework.
 /// </summary>
-class TraceActivityConstants
+static class TraceActivityConstants
 {
     /// <summary>
     /// The name of the activity that represents orchestration operations.

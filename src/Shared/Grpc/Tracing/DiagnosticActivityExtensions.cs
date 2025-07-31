@@ -40,7 +40,9 @@ static class DiagnosticActivityExtensions
     static DiagnosticActivityExtensions()
     {
         BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Instance;
-        SetSpanIdMethod = (typeof(Activity).GetField("_spanId", flags) ?? throw new InvalidOperationException("The field Activity._spanId was not found.")).CreateSetter<Activity, string>();
+        SetSpanIdMethod = (typeof(Activity).GetField("_spanId", flags)
+                          ?? throw new InvalidOperationException("The field Activity._spanId was not found."))
+                            .CreateSetter<Activity, string>();
         SetStatusMethod = CreateSetStatus();
     }
 

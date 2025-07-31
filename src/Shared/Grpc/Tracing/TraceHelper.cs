@@ -14,7 +14,7 @@ namespace Microsoft.DurableTask.Tracing;
 /// <remarks>
 /// Adapted from "https://github.com/Azure/durabletask/blob/main/src/DurableTask.Core/Tracing/TraceHelper.cs".
 /// </remarks>
-class TraceHelper
+static class TraceHelper
 {
     const string Source = "Microsoft.DurableTask";
 
@@ -30,7 +30,10 @@ class TraceHelper
     public static Activity? StartActivityForNewOrchestration(P.CreateInstanceRequest createInstanceRequest)
     {
         Activity? newActivity = ActivityTraceSource.StartActivity(
-            name: CreateSpanName(TraceActivityConstants.CreateOrchestration, createInstanceRequest.Name, createInstanceRequest.Version),
+            name: CreateSpanName(
+                TraceActivityConstants.CreateOrchestration,
+                createInstanceRequest.Name,
+                createInstanceRequest.Version),
             kind: ActivityKind.Producer);
 
         if (newActivity != null)
@@ -44,13 +47,10 @@ class TraceHelper
             {
                 newActivity.SetTag(Schema.Task.Version, createInstanceRequest.Version);
             }
-        }
 
-        if (Activity.Current is not null)
-        {
             createInstanceRequest.ParentTraceContext ??= new P.TraceContext();
-            createInstanceRequest.ParentTraceContext.TraceParent = Activity.Current.Id!;
-            createInstanceRequest.ParentTraceContext.TraceState = Activity.Current.TraceStateString;
+            createInstanceRequest.ParentTraceContext.TraceParent = newActivity.Id!;
+            createInstanceRequest.ParentTraceContext.TraceState = newActivity.TraceStateString;
         }
 
         return newActivity;
@@ -73,7 +73,11 @@ class TraceHelper
             return null;
         }
 
-        if (startEvent.ParentTraceContext is null || !ActivityContext.TryParse(startEvent.ParentTraceContext.TraceParent, startEvent.ParentTraceContext.TraceState, out ActivityContext activityContext))
+        if (startEvent.ParentTraceContext is null
+            || !ActivityContext.TryParse(
+                startEvent.ParentTraceContext.TraceParent,
+                startEvent.ParentTraceContext.TraceState,
+                out ActivityContext activityContext))
         {
             return null;
         }
@@ -120,7 +124,11 @@ class TraceHelper
     public static Activity? StartTraceActivityForTaskExecution(
         P.ActivityRequest request)
     {
-        if (request.ParentTraceContext is null || !ActivityContext.TryParse(request.ParentTraceContext.TraceParent, request.ParentTraceContext.TraceState, out ActivityContext activityContext))
+        if (request.ParentTraceContext is null
+            || !ActivityContext.TryParse(
+                request.ParentTraceContext.TraceParent,
+                request.ParentTraceContext.TraceState,
+                out ActivityContext activityContext))
         {
             return null;
         }
@@ -234,7 +242,8 @@ class TraceHelper
 
         if (failedEvent != null)
         {
-            string statusDescription = failedEvent.FailureDetails.ErrorMessage ?? "Unspecified sub-orchestration failure";
+            string statusDescription = failedEvent.FailureDetails.ErrorMessage
+                                       ?? "Unspecified sub-orchestration failure";
             activity?.SetStatus(ActivityStatusCode.Error, statusDescription);
         }
 
@@ -378,7 +387,10 @@ class TraceHelper
 
         if (taskScheduledEvent.ParentTraceContext != null)
         {
-            if (ActivityContext.TryParse(taskScheduledEvent.ParentTraceContext.TraceParent, taskScheduledEvent.ParentTraceContext?.TraceState, out ActivityContext parentContext))
+            if (ActivityContext.TryParse(
+                    taskScheduledEvent.ParentTraceContext.TraceParent,
+                    taskScheduledEvent.ParentTraceContext?.TraceState,
+                    out ActivityContext parentContext))
             {
                 newActivity.SetSpanId(parentContext.SpanId.ToString());
             }
@@ -428,7 +440,11 @@ class TraceHelper
             return null;
         }
 
-        if (createdEvent.ParentTraceContext != null && ActivityContext.TryParse(createdEvent.ParentTraceContext.TraceParent, createdEvent.ParentTraceContext.TraceState, out ActivityContext parentContext))
+        if (createdEvent.ParentTraceContext != null
+            && ActivityContext.TryParse(
+                createdEvent.ParentTraceContext.TraceParent,
+                createdEvent.ParentTraceContext.TraceState,
+                out ActivityContext parentContext))
         {
             activity.SetSpanId(parentContext.SpanId.ToString());
         }

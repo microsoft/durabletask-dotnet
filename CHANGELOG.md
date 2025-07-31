@@ -2,13 +2,27 @@
 
 ## (Unreleased)
 
-- Add New Property Properties to TaskOrchestrationContext by @nytian in [#415](https://github.com/microsoft/durabletask-dotnet/pull/415)
-- Add automatic retry on gateway timeout in `GrpcDurableTaskClient.WaitForInstanceCompletionAsync` in [#412](https://github.com/microsoft/durabletask-dotnet/pull/412))
-- Add specific logging for NotFound error on worker connection by @halspang in ([#413](https://github.com/microsoft/durabletask-dotnet/pull/413))
-- Add user agent header to gRPC called in ([#417](https://github.com/microsoft/durabletask-dotnet/pull/417))
+- Expose gRPC retry options in Azure Managed extensions ([#447](https://github.com/microsoft/durabletask-dotnet/pull/447))
+
+## v1.12.0
+
+- Activity tag support ([#426](https://github.com/microsoft/durabletask-dotnet/pull/426))
+- Adding Analyzer to build and release ([#444](https://github.com/microsoft/durabletask-dotnet/pull/444))
+- Add ability to filter orchestrations at worker ([#443](https://github.com/microsoft/durabletask-dotnet/pull/443))
+- Removing breaking change for TaskOptions ([#446](https://github.com/microsoft/durabletask-dotnet/pull/446))
+
+## v1.11.0
+
+- Add New Property Properties to TaskOrchestrationContext ([#415](https://github.com/microsoft/durabletask-dotnet/pull/415))
+- Add automatic retry on gateway timeout in `GrpcDurableTaskClient.WaitForInstanceCompletionAsync` ([#412](https://github.com/microsoft/durabletask-dotnet/pull/412))
+- Add specific logging for NotFound error on worker connection ([#413](https://github.com/microsoft/durabletask-dotnet/pull/413))
+- Add user agent header to gRPC called ([#417](https://github.com/microsoft/durabletask-dotnet/pull/417))
 - Enrich User-Agent Header in gRPC Metadata to indicate Client or Worker as caller ([#421](https://github.com/microsoft/durabletask-dotnet/pull/421))
+- Change DTS user agent metadata to avoid overlap with gRPC user agent ([#423](https://github.com/microsoft/durabletask-dotnet/pull/423))
 - Add extension methods for registering entities by type ([#427](https://github.com/microsoft/durabletask-dotnet/pull/427))
 - Add TaskVersion and utilize it for version overrides when starting orchestrations ([#416](https://github.com/microsoft/durabletask-dotnet/pull/416))
+- Update sub-orchestration default versioning ([#437](https://github.com/microsoft/durabletask-dotnet/pull/437))
+- Distributed Tracing for Entities (Isolated) ([#404](https://github.com/microsoft/durabletask-dotnet/pull/404))
 
 ## v1.10.0
 

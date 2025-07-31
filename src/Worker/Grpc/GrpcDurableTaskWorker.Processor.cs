@@ -33,13 +33,16 @@ sealed partial class GrpcDurableTaskWorker
         readonly TaskHubSidecarServiceClient client;
         readonly DurableTaskShimFactory shimFactory;
         readonly GrpcDurableTaskWorkerOptions.InternalOptions internalOptions;
+        [Obsolete("Experimental")]
+        readonly IOrchestrationFilter? orchestrationFilter;
 
-        public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient client)
+        public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient client, IOrchestrationFilter? orchestrationFilter = null)
         {
             this.worker = worker;
             this.client = client;
             this.shimFactory = new DurableTaskShimFactory(this.worker.grpcOptions, this.worker.loggerFactory);
             this.internalOptions = this.worker.grpcOptions.Internal;
+            this.orchestrationFilter = orchestrationFilter;
         }
 
         ILogger Logger => this.worker.logger;
@@ -461,6 +464,31 @@ sealed partial class GrpcDurableTaskWorker
                     request,
                     entityConversionState,
                     cancellationToken);
+
+                bool filterPassed = true;
+                if (this.orchestrationFilter != null)
+                {
+                    filterPassed = await this.orchestrationFilter.IsOrchestrationValidAsync(
+                        new OrchestrationFilterParameters
+                        {
+                            Name = runtimeState.Name,
+                            Tags = runtimeState.Tags != null ? new Dictionary<string, string>(runtimeState.Tags) : null,
+                        },
+                        cancellationToken);
+                }
+
+                if (!filterPassed)
+                {
+                    this.Logger.AbandoningOrchestrationDueToOrchestrationFilter(request.InstanceId, completionToken);
+                    await this.client.AbandonTaskOrchestratorWorkItemAsync(
+                        new P.AbandonOrchestrationTaskRequest
+                        {
+                            CompletionToken = completionToken,
+                        },
+                        cancellationToken: cancellationToken);
+
+                    return;
+                }
 
                 // If versioning has been explicitly set, we attempt to follow that pattern. If it is not set, we don't compare versions here.
                 failureDetails = EvaluateOrchestrationVersioning(versioning, runtimeState.Version, out versionFailure);

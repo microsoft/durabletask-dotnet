@@ -14,9 +14,9 @@ public record TaskOptions
     /// Initializes a new instance of the <see cref="TaskOptions"/> class.
     /// </summary>
     /// <param name="retry">The task retry options.</param>
-    public TaskOptions(TaskRetryOptions? retry = null)
+    public TaskOptions(TaskRetryOptions? retry)
+        : this(retry, null)
     {
-        this.Retry = retry;
     }
 
     /// <summary>

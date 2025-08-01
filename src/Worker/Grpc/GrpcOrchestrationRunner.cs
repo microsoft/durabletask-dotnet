@@ -173,7 +173,7 @@ public static class GrpcOrchestrationRunner
         bool addToExtendedSessions = false;
         bool requiresHistory = false;
         double extendedSessionIdleTimeoutInSeconds = 0;
-        IMemoryCache? extendedSessions = null;
+        MemoryCache? extendedSessions = null;
 
         if (properties.TryGetValue("ExtendedSession", out object? isExtendedSessionObj)
             && isExtendedSessionObj is bool isExtendedSession

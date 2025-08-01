@@ -418,9 +418,9 @@ static class ProtoUtils
                     protoAction.CompleteOrchestration = new P.CompleteOrchestrationAction
                     {
                         CarryoverEvents =
-                    {
-                        // TODO
-                    },
+                        {
+                            // TODO
+                        },
                         Details = completeAction.Details,
                         NewVersion = completeAction.NewVersion,
                         OrchestrationStatus = completeAction.OrchestrationStatus.ToProtobuf(),

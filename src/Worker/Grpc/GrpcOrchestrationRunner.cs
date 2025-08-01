@@ -136,7 +136,7 @@ public static class GrpcOrchestrationRunner
     /// <param name="implementation">
     /// An <see cref="ITaskOrchestrator"/> implementation that defines the orchestrator logic.
     /// </param>
-    /// <param name="extendedSessions">
+    /// <param name="extendedSessionsCache">
     /// The cache of extended sessions which can be used to retrieve the <see cref="ExtendedSessionState"/> if this orchestration request is from within an extended session.
     /// </param>
     /// <param name="services">
@@ -154,7 +154,7 @@ public static class GrpcOrchestrationRunner
     public static string LoadAndRun(
         string encodedOrchestratorRequest,
         ITaskOrchestrator implementation,
-        IMemoryCache extendedSessions,
+        ExtendedSessionsCache extendedSessionsCache,
         IServiceProvider? services = null)
     {
         Check.NotNullOrEmpty(encodedOrchestratorRequest);
@@ -172,8 +172,19 @@ public static class GrpcOrchestrationRunner
         OrchestratorExecutionResult? result = null;
         bool addToExtendedSessions = false;
         bool requiresHistory = false;
-        if (properties.TryGetValue("ExtendedSession", out object? isExtendedSession) && (bool)isExtendedSession!)
+        double extendedSessionIdleTimeoutInSeconds = 0;
+        IMemoryCache? extendedSessions = null;
+
+        if (properties.TryGetValue("ExtendedSession", out object? isExtendedSessionObj)
+            && isExtendedSessionObj is bool isExtendedSession
+            && isExtendedSession
+            && properties.TryGetValue("ExtendedSessionIdleTimeoutInSeconds", out object? extendedSessionIdleTimeoutObj)
+            && extendedSessionIdleTimeoutObj is double extendedSessionIdleTimeout
+            && extendedSessionIdleTimeout >= 0)
         {
+            extendedSessionIdleTimeoutInSeconds = extendedSessionIdleTimeout;
+            extendedSessions = extendedSessionsCache.GetOrInitializeCache(extendedSessionIdleTimeoutInSeconds);
+
             if (extendedSessions.TryGetValue(request.InstanceId, out ExtendedSessionState? extendedSessionState))
             {
                 OrchestrationRuntimeState runtimeState = extendedSessionState!.RuntimeState;
@@ -197,17 +208,6 @@ public static class GrpcOrchestrationRunner
 
         if (result == null)
         {
-            double extendedSessionIdleTimeoutInSeconds = 0;
-            if (properties.TryGetValue("ExtendedSessionIdleTimeoutInSeconds", out object? extendedSessionIdleTimeout)
-                && (double)extendedSessionIdleTimeout! >= 0)
-            {
-                extendedSessionIdleTimeoutInSeconds = (double)extendedSessionIdleTimeout!;
-            }
-            else
-            {
-                addToExtendedSessions = false;
-            }
-
             // If this is the first orchestration execution, then the past events count will be 0 but includePastEvents will be true (there are just none to include).
             // Otherwise, there is an orchestration history but DurableTask.Core did not attach it since the extended session is still active on its end, but we have since evicted the
             // session and lost the orchestration history so we cannot replay the orchestration.
@@ -240,14 +240,14 @@ public static class GrpcOrchestrationRunner
 
                 if (addToExtendedSessions && !executor.IsCompleted)
                 {
-                    extendedSessions.Set<ExtendedSessionState>(
+                    extendedSessions!.Set<ExtendedSessionState>(
                         request.InstanceId,
                         new(runtimeState, shim, executor),
                         new MemoryCacheEntryOptions { SlidingExpiration = TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds) });
                 }
                 else
                 {
-                    extendedSessions.Remove(request.InstanceId);
+                    extendedSessions?.Remove(request.InstanceId);
                 }
             }
         }

@@ -25,7 +25,8 @@ public class ExtendedSessionsCache
     {
         this.extendedSessions ??= new MemoryCache(new MemoryCacheOptions
         {
-            ExpirationScanFrequency = TimeSpan.FromSeconds(expirationScanFrequencyInSeconds / 5),
+            // To avoid overloading the system with too-frequent scans, with cap the scanning frequency at 3 seconds.
+            ExpirationScanFrequency = TimeSpan.FromSeconds(Math.Max(expirationScanFrequencyInSeconds / 5, 3)),
         });
 
         return this.extendedSessions;

@@ -185,7 +185,7 @@ public static class GrpcOrchestrationRunner
             extendedSessionIdleTimeoutInSeconds = extendedSessionIdleTimeout;
             extendedSessions = extendedSessionsCache.GetOrInitializeCache(extendedSessionIdleTimeoutInSeconds);
 
-            if (extendedSessions.TryGetValue(request.InstanceId, out ExtendedSessionState? extendedSessionState))
+            if (extendedSessions.TryGetValue(request.InstanceId, out ExtendedSessionState? extendedSessionState) && extendedSessionState is not null)
             {
                 OrchestrationRuntimeState runtimeState = extendedSessionState!.RuntimeState;
                 runtimeState.NewEvents.Clear();

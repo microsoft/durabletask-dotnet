@@ -295,147 +295,149 @@ static class ProtoUtils
         };
 
         // If a history is required and the orchestration request was not completed, then there is no list of actions.
-        if (!requiresHistory)
+        if (requiresHistory)
         {
-            Check.NotNull(actions);
-            foreach (OrchestratorAction action in actions)
+            return response;
+        }
+
+        Check.NotNull(actions);
+        foreach (OrchestratorAction action in actions)
+        {
+            var protoAction = new P.OrchestratorAction { Id = action.Id };
+
+            switch (action.OrchestratorActionType)
             {
-                var protoAction = new P.OrchestratorAction { Id = action.Id };
+                case OrchestratorActionType.ScheduleOrchestrator:
+                    var scheduleTaskAction = (ScheduleTaskOrchestratorAction)action;
+                    protoAction.ScheduleTask = new P.ScheduleTaskAction
+                    {
+                        Name = scheduleTaskAction.Name,
+                        Version = scheduleTaskAction.Version,
+                        Input = scheduleTaskAction.Input,
+                    };
 
-                switch (action.OrchestratorActionType)
-                {
-                    case OrchestratorActionType.ScheduleOrchestrator:
-                        var scheduleTaskAction = (ScheduleTaskOrchestratorAction)action;
-                        protoAction.ScheduleTask = new P.ScheduleTaskAction
+                    if (scheduleTaskAction.Tags != null)
+                    {
+                        foreach (KeyValuePair<string, string> tag in scheduleTaskAction.Tags)
                         {
-                            Name = scheduleTaskAction.Name,
-                            Version = scheduleTaskAction.Version,
-                            Input = scheduleTaskAction.Input,
+                            protoAction.ScheduleTask.Tags[tag.Key] = tag.Value;
+                        }
+                    }
+
+                    break;
+                case OrchestratorActionType.CreateSubOrchestration:
+                    var subOrchestrationAction = (CreateSubOrchestrationAction)action;
+                    protoAction.CreateSubOrchestration = new P.CreateSubOrchestrationAction
+                    {
+                        Input = subOrchestrationAction.Input,
+                        InstanceId = subOrchestrationAction.InstanceId,
+                        Name = subOrchestrationAction.Name,
+                        Version = subOrchestrationAction.Version,
+                    };
+                    break;
+                case OrchestratorActionType.CreateTimer:
+                    var createTimerAction = (CreateTimerOrchestratorAction)action;
+                    protoAction.CreateTimer = new P.CreateTimerAction
+                    {
+                        FireAt = createTimerAction.FireAt.ToTimestamp(),
+                    };
+                    break;
+                case OrchestratorActionType.SendEvent:
+                    var sendEventAction = (SendEventOrchestratorAction)action;
+                    if (sendEventAction.Instance == null)
+                    {
+                        throw new ArgumentException(
+                            $"{nameof(SendEventOrchestratorAction)} cannot have a null Instance property!");
+                    }
+
+                    if (entityConversionState is not null
+                        && DTCore.Common.Entities.IsEntityInstance(sendEventAction.Instance.InstanceId)
+                        && sendEventAction.EventName is not null
+                        && sendEventAction.EventData is not null)
+                    {
+                        P.SendEntityMessageAction sendAction = new P.SendEntityMessageAction();
+                        protoAction.SendEntityMessage = sendAction;
+
+                        EntityConversions.DecodeEntityMessageAction(
+                            sendEventAction.EventName,
+                            sendEventAction.EventData,
+                            sendEventAction.Instance.InstanceId,
+                            sendAction,
+                            out string requestId);
+
+                        entityConversionState.EntityRequestIds.Add(requestId);
+
+                        switch (sendAction.EntityMessageTypeCase)
+                        {
+                            case P.SendEntityMessageAction.EntityMessageTypeOneofCase.EntityLockRequested:
+                                entityConversionState.AddUnlockObligations(sendAction.EntityLockRequested);
+                                break;
+                            case P.SendEntityMessageAction.EntityMessageTypeOneofCase.EntityUnlockSent:
+                                entityConversionState.RemoveUnlockObligation(sendAction.EntityUnlockSent.TargetInstanceId);
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                    else
+                    {
+                        protoAction.SendEvent = new P.SendEventAction
+                        {
+                            Instance = sendEventAction.Instance.ToProtobuf(),
+                            Name = sendEventAction.EventName,
+                            Data = sendEventAction.EventData,
                         };
+                    }
 
-                        if (scheduleTaskAction.Tags != null)
+                    break;
+                case OrchestratorActionType.OrchestrationComplete:
+
+                    if (entityConversionState is not null)
+                    {
+                        // as a precaution, unlock any entities that were not unlocked for some reason, before
+                        // completing the orchestration.
+                        foreach ((string target, string criticalSectionId) in entityConversionState.ResetObligations())
                         {
-                            foreach (KeyValuePair<string, string> tag in scheduleTaskAction.Tags)
+                            response.Actions.Add(new P.OrchestratorAction
                             {
-                                protoAction.ScheduleTask.Tags[tag.Key] = tag.Value;
-                            }
-                        }
-
-                        break;
-                    case OrchestratorActionType.CreateSubOrchestration:
-                        var subOrchestrationAction = (CreateSubOrchestrationAction)action;
-                        protoAction.CreateSubOrchestration = new P.CreateSubOrchestrationAction
-                        {
-                            Input = subOrchestrationAction.Input,
-                            InstanceId = subOrchestrationAction.InstanceId,
-                            Name = subOrchestrationAction.Name,
-                            Version = subOrchestrationAction.Version,
-                        };
-                        break;
-                    case OrchestratorActionType.CreateTimer:
-                        var createTimerAction = (CreateTimerOrchestratorAction)action;
-                        protoAction.CreateTimer = new P.CreateTimerAction
-                        {
-                            FireAt = createTimerAction.FireAt.ToTimestamp(),
-                        };
-                        break;
-                    case OrchestratorActionType.SendEvent:
-                        var sendEventAction = (SendEventOrchestratorAction)action;
-                        if (sendEventAction.Instance == null)
-                        {
-                            throw new ArgumentException(
-                                $"{nameof(SendEventOrchestratorAction)} cannot have a null Instance property!");
-                        }
-
-                        if (entityConversionState is not null
-                            && DTCore.Common.Entities.IsEntityInstance(sendEventAction.Instance.InstanceId)
-                            && sendEventAction.EventName is not null
-                            && sendEventAction.EventData is not null)
-                        {
-                            P.SendEntityMessageAction sendAction = new P.SendEntityMessageAction();
-                            protoAction.SendEntityMessage = sendAction;
-
-                            EntityConversions.DecodeEntityMessageAction(
-                                sendEventAction.EventName,
-                                sendEventAction.EventData,
-                                sendEventAction.Instance.InstanceId,
-                                sendAction,
-                                out string requestId);
-
-                            entityConversionState.EntityRequestIds.Add(requestId);
-
-                            switch (sendAction.EntityMessageTypeCase)
-                            {
-                                case P.SendEntityMessageAction.EntityMessageTypeOneofCase.EntityLockRequested:
-                                    entityConversionState.AddUnlockObligations(sendAction.EntityLockRequested);
-                                    break;
-                                case P.SendEntityMessageAction.EntityMessageTypeOneofCase.EntityUnlockSent:
-                                    entityConversionState.RemoveUnlockObligation(sendAction.EntityUnlockSent.TargetInstanceId);
-                                    break;
-                                default:
-                                    break;
-                            }
-                        }
-                        else
-                        {
-                            protoAction.SendEvent = new P.SendEventAction
-                            {
-                                Instance = sendEventAction.Instance.ToProtobuf(),
-                                Name = sendEventAction.EventName,
-                                Data = sendEventAction.EventData,
-                            };
-                        }
-
-                        break;
-                    case OrchestratorActionType.OrchestrationComplete:
-
-                        if (entityConversionState is not null)
-                        {
-                            // as a precaution, unlock any entities that were not unlocked for some reason, before
-                            // completing the orchestration.
-                            foreach ((string target, string criticalSectionId) in entityConversionState.ResetObligations())
-                            {
-                                response.Actions.Add(new P.OrchestratorAction
+                                Id = action.Id,
+                                SendEntityMessage = new P.SendEntityMessageAction
                                 {
-                                    Id = action.Id,
-                                    SendEntityMessage = new P.SendEntityMessageAction
+                                    EntityUnlockSent = new P.EntityUnlockSentEvent
                                     {
-                                        EntityUnlockSent = new P.EntityUnlockSentEvent
-                                        {
-                                            CriticalSectionId = criticalSectionId,
-                                            TargetInstanceId = target,
-                                            ParentInstanceId = entityConversionState.CurrentInstance?.InstanceId,
-                                        },
+                                        CriticalSectionId = criticalSectionId,
+                                        TargetInstanceId = target,
+                                        ParentInstanceId = entityConversionState.CurrentInstance?.InstanceId,
                                     },
-                                });
-                            }
+                                },
+                            });
                         }
+                    }
 
-                        var completeAction = (OrchestrationCompleteOrchestratorAction)action;
-                        protoAction.CompleteOrchestration = new P.CompleteOrchestrationAction
-                        {
-                            CarryoverEvents =
-                        {
-                            // TODO
-                        },
-                            Details = completeAction.Details,
-                            NewVersion = completeAction.NewVersion,
-                            OrchestrationStatus = completeAction.OrchestrationStatus.ToProtobuf(),
-                            Result = completeAction.Result,
-                        };
+                    var completeAction = (OrchestrationCompleteOrchestratorAction)action;
+                    protoAction.CompleteOrchestration = new P.CompleteOrchestrationAction
+                    {
+                        CarryoverEvents =
+                    {
+                        // TODO
+                    },
+                        Details = completeAction.Details,
+                        NewVersion = completeAction.NewVersion,
+                        OrchestrationStatus = completeAction.OrchestrationStatus.ToProtobuf(),
+                        Result = completeAction.Result,
+                    };
 
-                        if (completeAction.OrchestrationStatus == OrchestrationStatus.Failed)
-                        {
-                            protoAction.CompleteOrchestration.FailureDetails = completeAction.FailureDetails.ToProtobuf();
-                        }
+                    if (completeAction.OrchestrationStatus == OrchestrationStatus.Failed)
+                    {
+                        protoAction.CompleteOrchestration.FailureDetails = completeAction.FailureDetails.ToProtobuf();
+                    }
 
-                        break;
-                    default:
-                        throw new NotSupportedException($"Unknown orchestrator action: {action.OrchestratorActionType}");
-                }
-
-                response.Actions.Add(protoAction);
+                    break;
+                default:
+                    throw new NotSupportedException($"Unknown orchestrator action: {action.OrchestratorActionType}");
             }
+
+            response.Actions.Add(protoAction);
         }
 
         return response;

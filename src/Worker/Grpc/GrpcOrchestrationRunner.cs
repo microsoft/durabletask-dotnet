@@ -212,7 +212,10 @@ public static class GrpcOrchestrationRunner
             // If this is the first orchestration execution, then the past events count will be 0 but includePastEvents will be true (there are just none to include).
             // Otherwise, there is an orchestration history but DurableTask.Core did not attach it since the extended session is still active on its end, but we have since evicted the
             // session and lost the orchestration history so we cannot replay the orchestration.
-            if (pastEvents.Count == 0 && (properties.TryGetValue("IncludePastEvents", out object? pastEventsIncluded) && !(bool)pastEventsIncluded!))
+            if (pastEvents.Count == 0
+                && (properties.TryGetValue("IncludePastEvents", out object? pastEventsIncludedObj)
+                && pastEventsIncludedObj is bool pastEventsIncluded
+                && !pastEventsIncluded))
             {
                 requiresHistory = true;
             }

@@ -159,6 +159,7 @@ public static class GrpcOrchestrationRunner
     {
         Check.NotNullOrEmpty(encodedOrchestratorRequest);
         Check.NotNull(implementation);
+        Check.NotNull(extendedSessionsCache);
 
         P.OrchestratorRequest request = P.OrchestratorRequest.Parser.Base64Decode<P.OrchestratorRequest>(
             encodedOrchestratorRequest);

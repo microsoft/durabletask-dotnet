@@ -224,6 +224,72 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RestartAsync_EndToEnd(bool restartWithNewInstanceId)
+    {
+        await using HostTestLifetime server = await this.StartAsync();
+
+        // Start an initial orchestration
+        string originalInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: "test-input");
+
+        // Wait for it to start and then complete
+        await server.Client.WaitForInstanceStartAsync(originalInstanceId, default);
+        await server.Client.RaiseEventAsync(originalInstanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(originalInstanceId, default);
+
+        // Verify the original orchestration completed
+        OrchestrationMetadata? originalMetadata = await server.Client.GetInstanceAsync(originalInstanceId, true);
+        originalMetadata.Should().NotBeNull();
+        originalMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+
+        // Restart the orchestration
+        string restartedInstanceId = await server.Client.RestartAsync(originalInstanceId, restartWithNewInstanceId);
+
+        // Verify the restart behavior
+        if (restartWithNewInstanceId)
+        {
+            restartedInstanceId.Should().NotBe(originalInstanceId);
+        }
+        else
+        {
+            restartedInstanceId.Should().Be(originalInstanceId);
+        }
+
+        // Wait for the restarted orchestration to start
+        await server.Client.WaitForInstanceStartAsync(restartedInstanceId, default);
+
+        // Verify the restarted orchestration has the same input
+        OrchestrationMetadata? restartedMetadata = await server.Client.GetInstanceAsync(restartedInstanceId, true);
+        restartedMetadata.Should().NotBeNull();
+        restartedMetadata!.Name.Should().Be(OrchestrationName);
+        restartedMetadata.SerializedInput.Should().Be("\"test-input\"");
+
+        // Complete the restarted orchestration
+        await server.Client.RaiseEventAsync(restartedInstanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(restartedInstanceId, default);
+
+        // Verify the restarted orchestration completed
+        restartedMetadata = await server.Client.GetInstanceAsync(restartedInstanceId, true);
+        restartedMetadata.Should().NotBeNull();
+        restartedMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+    }
+
+    [Fact]
+    public async Task RestartAsync_InstanceNotFound_ThrowsArgumentException()
+    {
+        await using HostTestLifetime server = await this.StartAsync();
+
+        // Try to restart a non-existent orchestration
+        Func<Task> restartAction = () => server.Client.RestartAsync("non-existent-instance-id");
+
+        // Should throw ArgumentException
+        await restartAction.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*An orchestration with the instanceId non-existent-instance-id was not found*");
+    }
+
     Task<HostTestLifetime> StartAsync()
     {
         static async Task<string> Orchestration(TaskOrchestrationContext context, bool shouldThrow)

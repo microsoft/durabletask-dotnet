@@ -326,6 +326,71 @@ public class ShimDurableTaskClientTests
         await this.RunScheduleNewOrchestrationInstanceAsync("test", "input", options);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RestartAsync_EndToEnd(bool restartWithNewInstanceId)
+    {
+        string originalInstanceId = "test-instance-id";
+        string orchestratorName = "TestOrchestrator";
+        object input = "test-input";
+        string serializedInput = "\"test-input\"";
+
+        // Create a completed orchestration state
+        Core.OrchestrationState originalState = CreateState(input, "test-output");
+        originalState.OrchestrationInstance.InstanceId = originalInstanceId;
+        originalState.Name = orchestratorName;
+        originalState.OrchestrationStatus = Core.OrchestrationStatus.Completed;
+
+        // Setup the mock to return the original orchestration state
+        this.orchestrationClient
+            .Setup(x => x.GetOrchestrationStateAsync(originalInstanceId, false))
+            .ReturnsAsync(new List<Core.OrchestrationState> { originalState });
+
+        // Setup the mock for the new orchestration creation
+        this.orchestrationClient
+            .Setup(x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>()))
+            .Returns(Task.CompletedTask);
+
+        string restartedInstanceId = await this.client.RestartAsync(originalInstanceId, restartWithNewInstanceId);
+
+        if (restartWithNewInstanceId)
+        {
+            restartedInstanceId.Should().NotBe(originalInstanceId);
+        }
+        else
+        {
+            restartedInstanceId.Should().Be(originalInstanceId);
+        }
+
+        // Verify that CreateTaskOrchestrationAsync was called with the correct parameters
+        this.orchestrationClient.Verify(
+            x => x.CreateTaskOrchestrationAsync(It.Is<TaskMessage>(msg =>
+                msg.Event is ExecutionStartedEvent startedEvent &&
+                startedEvent.Name == orchestratorName &&
+                startedEvent.Input == serializedInput &&
+                (restartWithNewInstanceId ? 
+                    msg.OrchestrationInstance.InstanceId != originalInstanceId :
+                    msg.OrchestrationInstance.InstanceId == originalInstanceId))),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task RestartAsync_InstanceNotFound_ThrowsArgumentException()
+    {
+        string nonExistentInstanceId = "non-existent-instance-id";
+
+        // Setup the mock to client return empty orchestration state (instance not found)
+        this.orchestrationClient
+            .Setup(x => x.GetOrchestrationStateAsync(nonExistentInstanceId, false))
+            .ReturnsAsync(new List<Core.OrchestrationState>());
+
+        // RestartAsync should throw an ArgumentException since the instance is not found
+        Func<Task> restartAction = () => this.client.RestartAsync(nonExistentInstanceId);
+
+        await restartAction.Should().ThrowAsync<ArgumentException>()
+            .WithMessage($"*An orchestration with the instanceId {nonExistentInstanceId} was not found*");
+    }
 
     static Core.OrchestrationState CreateState(
         object input, object? output = null, DateTimeOffset start = default)

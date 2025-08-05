@@ -471,6 +471,15 @@ message PurgeInstancesResponse {
     google.protobuf.BoolValue isComplete = 2;
 }
 
+message RestartInstanceRequest {
+    string instanceId = 1;
+    bool restartWithNewInstanceId = 2;
+}
+
+message RestartInstanceResponse {
+    string instanceId = 1;
+}
+
 message CreateTaskHubRequest {
     bool recreateIfExists = 1;
 }
@@ -688,6 +697,9 @@ service TaskHubSidecarService {
 
     // Resumes a suspended orchestration instance.
     rpc ResumeInstance(ResumeRequest) returns (ResumeResponse);
+
+    // Restarts an orchestration instance with the same or a new instance ID.
+    rpc RestartInstance(RestartInstanceRequest) returns (RestartInstanceResponse);
 
     // rpc DeleteInstance(DeleteInstanceRequest) returns (DeleteInstanceResponse);
 

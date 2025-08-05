@@ -399,6 +399,46 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         throw new NotSupportedException($"{this.GetType()} does not support purging of orchestration instances.");
     }
 
+    /// <summary>
+    /// Restarts an orchestration instance with the same or a new instance ID.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method restarts an existing orchestration instance. If <paramref name="restartWithNewInstanceId"/> is <c>true</c>,
+    /// a new instance ID will be generated for the restarted orchestration. If <c>false</c>, the original instance ID will be reused.
+    /// </para><para>
+    /// The restarted orchestration will use the same input data as the original instance. If the original orchestration
+    /// instance is not found, an <see cref="ArgumentException"/> will be thrown.
+    /// </para><para>
+    /// Note that this operation is backend-specific and may not be supported by all durable task backends.
+    /// If the backend does not support restart operations, a <see cref="NotSupportedException"/> will be thrown.
+    /// </para>
+    /// </remarks>
+    /// <param name="instanceId">The ID of the orchestration instance to restart.</param>
+    /// <param name="restartWithNewInstanceId">
+    /// If <c>true</c>, a new instance ID will be generated for the restarted orchestration.
+    /// If <c>false</c>, the original instance ID will be reused.
+    /// </param>
+    /// <param name="cancellation">
+    /// The cancellation token. This only cancels enqueueing the restart request to the backend.
+    /// Does not abort restarting the orchestration once enqueued.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the orchestration instance is successfully restarted.
+    /// The value of this task is the instance ID of the restarted orchestration instance.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if an orchestration with the specified <paramref name="instanceId"/> was not found.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// Thrown if the backend does not support restart operations.
+    /// </exception>
+    public virtual Task<string> RestartAsync(
+        string instanceId,
+        bool restartWithNewInstanceId = false,
+        CancellationToken cancellation = default)
+        => throw new NotSupportedException($"{this.GetType()} does not support orchestration restart.");
+
     // TODO: Create task hub
 
     // TODO: Delete task hub

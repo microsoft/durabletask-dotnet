@@ -271,32 +271,28 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
             throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.");
         }
 
-        // Create options for the new orchestration
-        StartOrchestrationOptions options;
-        if (!restartWithNewInstanceId)
+        // Determine the instance ID for the restarted orchestration
+        string newInstanceId = restartWithNewInstanceId ? Guid.NewGuid().ToString("N") : instanceId;
+
+        OrchestrationInstance instance = new()
         {
-            options = new StartOrchestrationOptions()
+            InstanceId = newInstanceId,
+            ExecutionId = Guid.NewGuid().ToString("N"),
+        };
+
+        // Use the original serialized input directly to avoid double serialization
+        TaskMessage message = new()
+        {
+            OrchestrationInstance = instance,
+            Event = new ExecutionStartedEvent(-1, status.SerializedInput)
             {
-                InstanceId = instanceId,
-            };
-        }
-        else
-        {
-            options = new StartOrchestrationOptions();
-        }
+                Name = status.Name,
+                OrchestrationInstance = instance,
+            },
+        };
 
-        object? input = null;
-        if (!string.IsNullOrEmpty(status.SerializedInput))
-        {
-            input = this.DataConverter.Deserialize(status.SerializedInput, typeof(object));
-        }
-
-        // Start a new orchestration with the same name and input
-        return await this.ScheduleNewOrchestrationInstanceAsync(
-            new TaskName(status.Name),
-            input,
-            options,
-            cancellation);
+        await this.Client.CreateTaskOrchestrationAsync(message);
+        return newInstanceId;
     }
 
     [return: NotNullIfNotNull("state")]

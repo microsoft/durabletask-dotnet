@@ -347,9 +347,11 @@ public class ShimDurableTaskClientTests
             .Setup(x => x.GetOrchestrationStateAsync(originalInstanceId, false))
             .ReturnsAsync(new List<Core.OrchestrationState> { originalState });
 
-        // Setup the mock for the new orchestration creation
+        // Capture the TaskMessage for verification becasue we will create this message at RestartAsync.
+        TaskMessage? capturedMessage = null;
         this.orchestrationClient
             .Setup(x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>()))
+            .Callback<TaskMessage>(msg => capturedMessage = msg)
             .Returns(Task.CompletedTask);
 
         string restartedInstanceId = await this.client.RestartAsync(originalInstanceId, restartWithNewInstanceId);
@@ -363,16 +365,21 @@ public class ShimDurableTaskClientTests
             restartedInstanceId.Should().Be(originalInstanceId);
         }
 
-        // Verify that CreateTaskOrchestrationAsync was called with the correct parameters
+        // Verify that CreateTaskOrchestrationAsync was called
         this.orchestrationClient.Verify(
-            x => x.CreateTaskOrchestrationAsync(It.Is<TaskMessage>(msg =>
-                msg.Event is ExecutionStartedEvent startedEvent &&
-                startedEvent.Name == orchestratorName &&
-                startedEvent.Input == serializedInput &&
-                (restartWithNewInstanceId ? 
-                    msg.OrchestrationInstance.InstanceId != originalInstanceId :
-                    msg.OrchestrationInstance.InstanceId == originalInstanceId))),
+            x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>()),
             Times.Once);
+
+        // Verify the captured message details
+        capturedMessage.Should().NotBeNull();
+        capturedMessage!.Event.Should().BeOfType<ExecutionStartedEvent>();
+        
+        var startedEvent = (ExecutionStartedEvent)capturedMessage.Event;
+        startedEvent.Name.Should().Be(orchestratorName);
+        startedEvent.Input.Should().Be(serializedInput);
+        startedEvent.OrchestrationInstance.InstanceId.Should().Be(restartedInstanceId);
+        startedEvent.OrchestrationInstance.ExecutionId.Should().NotBeNullOrEmpty();
+        startedEvent.OrchestrationInstance.ExecutionId.Should().NotBe(originalState.OrchestrationInstance.ExecutionId);
     }
 
     [Fact]

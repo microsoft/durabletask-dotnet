@@ -135,7 +135,7 @@ public class DurableTaskSchedulerWorkerOptions
         switch (authType.ToLowerInvariant())
         {
             case "defaultazure":
-                return new DefaultAzureCredential();
+                return new DefaultAzureCredential(); // CodeQL [SM05137] Use DefaultAzureCredential explicitly for local development and is decided by the user
             case "managedidentity":
                 return new ManagedIdentityCredential(connectionString.ClientId);
             case "workloadidentity":

@@ -30,7 +30,7 @@ public class ExtendedSessionsCache : IDisposable
     /// This specifies how often the cache checks for stale items, and evicts them.
     /// </param>
     /// <returns>The IMemoryCache that holds the cached <see cref="ExtendedSessionState"/>.</returns>
-    internal MemoryCache GetOrInitializeCache(double expirationScanFrequencyInSeconds)
+    public MemoryCache GetOrInitializeCache(double expirationScanFrequencyInSeconds)
     {
         this.extendedSessions ??= new MemoryCache(new MemoryCacheOptions
         {
@@ -38,5 +38,14 @@ public class ExtendedSessionsCache : IDisposable
         });
 
         return this.extendedSessions;
+    }
+
+    /// <summary>
+    /// Returns whether or not the cache has been initialized.
+    /// </summary>
+    /// <returns>True if the cache has been initialized, false otherwise.</returns>
+    public bool IsInitialized()
+    {
+        return this.extendedSessions is not null;
     }
 }

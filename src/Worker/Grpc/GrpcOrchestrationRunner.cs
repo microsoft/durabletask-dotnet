@@ -176,16 +176,19 @@ public static class GrpcOrchestrationRunner
         double extendedSessionIdleTimeoutInSeconds = 0;
         MemoryCache? extendedSessions = null;
 
-        if (properties.TryGetValue("ExtendedSession", out object? isExtendedSessionObj)
-            && isExtendedSessionObj is bool isExtendedSession
-            && isExtendedSession
-            && properties.TryGetValue("ExtendedSessionIdleTimeoutInSeconds", out object? extendedSessionIdleTimeoutObj)
+        if (properties.TryGetValue("ExtendedSessionIdleTimeoutInSeconds", out object? extendedSessionIdleTimeoutObj)
             && extendedSessionIdleTimeoutObj is double extendedSessionIdleTimeout
             && extendedSessionIdleTimeout >= 0)
         {
             extendedSessionIdleTimeoutInSeconds = extendedSessionIdleTimeout;
             extendedSessions = extendedSessionsCache.GetOrInitializeCache(extendedSessionIdleTimeoutInSeconds);
+        }
 
+        if (properties.TryGetValue("ExtendedSession", out object? isExtendedSessionObj)
+            && isExtendedSessionObj is bool isExtendedSession
+            && isExtendedSession
+            && extendedSessions != null)
+        {
             if (extendedSessions.TryGetValue(request.InstanceId, out ExtendedSessionState? extendedSessionState) && extendedSessionState is not null)
             {
                 OrchestrationRuntimeState runtimeState = extendedSessionState!.RuntimeState;

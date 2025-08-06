@@ -229,6 +229,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
     [InlineData(true)]
     public async Task RestartAsync_EndToEnd(bool restartWithNewInstanceId)
     {
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1)); // Reduced timeout to 1 minute
         await using HostTestLifetime server = await this.StartAsync();
 
         // Start an initial orchestration with shouldThrow = false to ensure it completes successfully
@@ -238,8 +239,8 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         // Wait for it to start and then complete
         await server.Client.WaitForInstanceStartAsync(originalInstanceId, default);
         await server.Client.RaiseEventAsync(originalInstanceId, "event", default);
-        await server.Client.WaitForInstanceCompletionAsync(originalInstanceId, default);
-
+        await server.Client.WaitForInstanceCompletionAsync(originalInstanceId, cts.Token);
+        
         // Verify the original orchestration completed
         OrchestrationMetadata? originalMetadata = await server.Client.GetInstanceAsync(originalInstanceId, true);
         originalMetadata.Should().NotBeNull();
@@ -258,32 +259,29 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             restartedInstanceId.Should().Be(originalInstanceId);
         }
 
-        // Wait for the restarted orchestration to start
-        await server.Client.WaitForInstanceStartAsync(restartedInstanceId, default);
+        // Complete the restarted orchestration
+        await server.Client.RaiseEventAsync(restartedInstanceId, "event");
+        
+        // Wait for completion (with shorter timeout)
+        using var completionCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        await server.Client.WaitForInstanceCompletionAsync(restartedInstanceId, completionCts.Token);
 
-        // Verify the restarted orchestration has the same input
-        OrchestrationMetadata? restartedMetadata = await server.Client.GetInstanceAsync(restartedInstanceId, true);
+        // Verify the restarted orchestration completed
+        var restartedMetadata = await server.Client.GetInstanceAsync(restartedInstanceId, true);
         restartedMetadata.Should().NotBeNull();
         restartedMetadata!.Name.Should().Be(OrchestrationName);
         restartedMetadata.SerializedInput.Should().Be("false");
-
-        // Complete the restarted orchestration
-        await server.Client.RaiseEventAsync(restartedInstanceId, "event", default);
-        await server.Client.WaitForInstanceCompletionAsync(restartedInstanceId, default);
-
-        // Verify the restarted orchestration completed
-        restartedMetadata = await server.Client.GetInstanceAsync(restartedInstanceId, true);
-        restartedMetadata.Should().NotBeNull();
         restartedMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
     }
 
     [Fact]
     public async Task RestartAsync_InstanceNotFound_ThrowsArgumentException()
     {
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1)); // 1-minute timeout
         await using HostTestLifetime server = await this.StartAsync();
 
         // Try to restart a non-existent orchestration
-        Func<Task> restartAction = () => server.Client.RestartAsync("non-existent-instance-id");
+        Func<Task> restartAction = () => server.Client.RestartAsync("non-existent-instance-id", cancellation: cts.Token);
 
         // Should throw ArgumentException
         await restartAction.Should().ThrowAsync<ArgumentException>()

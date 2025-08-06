@@ -444,8 +444,21 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
             SerializedInstanceState state = this.store.GetOrAdd(instanceId, id => new SerializedInstanceState(id, executionId));
             lock (state)
             {
+                bool isRestart = state.ExecutionId != null && state.ExecutionId != executionId;
+                
                 if (message.Event is ExecutionStartedEvent startEvent)
                 {
+                    // For restart scenarios, clear the history and reset the state
+                    if (isRestart && state.IsCompleted)
+                    {
+                        state.HistoryEventsJson.Clear();
+                        state.ExecutionId = executionId; // Always update the execution ID
+                        state.IsCompleted = false;
+                    }
+                    
+                    // Add the ExecutionStartedEvent to history so the orchestration worker has proper context
+                    state.HistoryEventsJson.Add(startEvent);
+                    
                     OrchestrationState newStatusRecord = new()
                     {
                         OrchestrationInstance = startEvent.OrchestrationInstance,
@@ -460,7 +473,6 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                     };
 
                     state.StatusRecordJson = JsonValue.Create(newStatusRecord);
-                    state.HistoryEventsJson.Clear();
                     state.IsCompleted = false;
                 }
                 else if (state.IsCompleted)
@@ -661,13 +673,11 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
 
             public void Schedule(SerializedInstanceState state)
             {
-                // TODO: There is a race condition here. If another thread is calling TakeNextAsync
-                //       and removed the queue item before updating the dictionary, then we'll fail
-                //       to update the readyToRunQueue and the orchestration will get stuck.
-                if (this.readyInstances.TryAdd(state.InstanceId, state))
-                {
-                    this.readyToRunQueue.Writer.TryWrite(state);
-                }
+                // Always update the dictionary entry (for restart scenarios)
+                this.readyInstances[state.InstanceId] = state;
+                
+                // Always try to write to the queue
+                this.readyToRunQueue.Writer.TryWrite(state);
             }
         }
 

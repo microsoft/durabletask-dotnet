@@ -231,9 +231,9 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
     {
         await using HostTestLifetime server = await this.StartAsync();
 
-        // Start an initial orchestration
+        // Start an initial orchestration with shouldThrow = false to ensure it completes successfully
         string originalInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
-            OrchestrationName, input: "test-input");
+            OrchestrationName, input: false);
 
         // Wait for it to start and then complete
         await server.Client.WaitForInstanceStartAsync(originalInstanceId, default);
@@ -265,7 +265,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         OrchestrationMetadata? restartedMetadata = await server.Client.GetInstanceAsync(restartedInstanceId, true);
         restartedMetadata.Should().NotBeNull();
         restartedMetadata!.Name.Should().Be(OrchestrationName);
-        restartedMetadata.SerializedInput.Should().Be("\"test-input\"");
+        restartedMetadata.SerializedInput.Should().Be("false");
 
         // Complete the restarted orchestration
         await server.Client.RaiseEventAsync(restartedInstanceId, "event", default);

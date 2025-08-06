@@ -333,6 +333,60 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         return new P.ResumeResponse();
     }
 
+    public override async Task<P.RestartInstanceResponse> RestartInstance(P.RestartInstanceRequest request, ServerCallContext context)
+    {
+        try
+        {
+            // Get the original orchestration state
+            IList<OrchestrationState> states = await this.client.GetOrchestrationStateAsync(request.InstanceId, false);
+            if (states == null || states.Count == 0)
+            {
+                throw new RpcException(new Status(StatusCode.NotFound, $"An orchestration with the instanceId {request.InstanceId} was not found."));
+            }
+
+            OrchestrationState state = states[0];
+            string newInstanceId = request.RestartWithNewInstanceId ? Guid.NewGuid().ToString("N") : request.InstanceId;
+
+            // Create a new orchestration instance
+            OrchestrationInstance newInstance = new()
+            {
+                InstanceId = newInstanceId,
+                ExecutionId = Guid.NewGuid().ToString("N"),
+            };
+
+            // Create an ExecutionStartedEvent with the original input
+            ExecutionStartedEvent startedEvent = new(-1, state.Name)
+            {
+                Input = state.Input, // Use the original serialized input
+                Version = state.Version ?? string.Empty,
+                OrchestrationInstance = newInstance,
+            };
+
+            TaskMessage taskMessage = new()
+            {
+                OrchestrationInstance = newInstance,
+                Event = startedEvent,
+            };
+
+            await this.client.CreateTaskOrchestrationAsync(taskMessage);
+
+            return new P.RestartInstanceResponse
+            {
+                InstanceId = newInstanceId,
+            };
+        }
+        catch (RpcException)
+        {
+            // Re-throw RpcException as-is
+            throw;
+        }
+        catch (Exception ex)
+        {
+            this.log.LogError(ex, "Error restarting orchestration instance {InstanceId}", request.InstanceId);
+            throw new RpcException(new Status(StatusCode.Internal, ex.Message));
+        }
+    }
+
     static P.TaskFailureDetails? GetFailureDetails(FailureDetails? failureDetails)
     {
         if (failureDetails == null)

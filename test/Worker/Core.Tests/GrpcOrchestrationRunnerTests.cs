@@ -11,7 +11,7 @@ public class GrpcOrchestrationRunnerTests
 {
     const string TestInstanceId = "instance_id";
     const string TestExecutionId = "execution_id";
-    const int DefaultExtendedSessionIdleTimeoutInSeconds = 300;
+    const int DefaultExtendedSessionIdleTimeoutInSeconds = 30;
 
     [Fact]
     public void EmptyOrNullParameters_Throw()

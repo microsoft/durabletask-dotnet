@@ -451,10 +451,8 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                     // For restart scenarios, clear the history and reset the state
                     if (isRestart && state.IsCompleted)
                     {
-                        state.HistoryEventsJson.Clear();
-                        state.ExecutionId = executionId; // Always update the execution ID
-                        state.IsCompleted = false;
-                        state.IsLoaded = false; // Reset the loaded state for restart scenarios
+                        state.ExecutionId = executionId;
+                        state.IsLoaded = false;
                     }
                     
                     OrchestrationState newStatusRecord = new()
@@ -471,6 +469,7 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                     };
 
                     state.StatusRecordJson = JsonValue.Create(newStatusRecord);
+                    state.HistoryEventsJson.Clear();
                     state.IsCompleted = false;
                 }
                 else if (state.IsCompleted)

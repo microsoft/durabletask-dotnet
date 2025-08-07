@@ -265,7 +265,8 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         using var completionCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         await server.Client.WaitForInstanceCompletionAsync(restartedInstanceId, completionCts.Token);
 
-        // Verify the restarted orchestration completed
+        // Verify the restarted orchestration completed.
+        // Also verify input and orchestrator name are matched.
         var restartedMetadata = await server.Client.GetInstanceAsync(restartedInstanceId, true);
         restartedMetadata.Should().NotBeNull();
         restartedMetadata!.Name.Should().Be(OrchestrationName);

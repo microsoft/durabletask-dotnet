@@ -229,7 +229,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
     [InlineData(true)]
     public async Task RestartAsync_EndToEnd(bool restartWithNewInstanceId)
     {
-        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1)); // Reduced timeout to 1 minute
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1));
         await using HostTestLifetime server = await this.StartAsync();
 
         // Start an initial orchestration with shouldThrow = false to ensure it completes successfully
@@ -262,7 +262,6 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         // Complete the restarted orchestration
         await server.Client.RaiseEventAsync(restartedInstanceId, "event");
         
-        // Wait for completion (with shorter timeout)
         using var completionCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         await server.Client.WaitForInstanceCompletionAsync(restartedInstanceId, completionCts.Token);
 

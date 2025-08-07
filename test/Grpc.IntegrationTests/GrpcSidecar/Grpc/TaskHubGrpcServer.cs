@@ -363,9 +363,9 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             };
 
             // Create an ExecutionStartedEvent with the original input
-            ExecutionStartedEvent startedEvent = new(-1, state.Name)
+            ExecutionStartedEvent startedEvent = new(-1, state.Input)
             {
-                Input = state.Input, // Use the original serialized input
+                Name = state.Name,
                 Version = state.Version ?? string.Empty,
                 OrchestrationInstance = newInstance,
             };

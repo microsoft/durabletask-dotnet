@@ -449,15 +449,13 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                 if (message.Event is ExecutionStartedEvent startEvent)
                 {
                     // For restart scenarios, clear the history and reset the state
-                    if (isRestart && state.IsCompleted)
+                    if (isRestart)
                     {
                         state.HistoryEventsJson.Clear();
                         state.ExecutionId = executionId; // Always update the execution ID
                         state.IsCompleted = false;
+                        state.IsLoaded = false; // Reset the loaded state for restart scenarios
                     }
-                    
-                    // Add the ExecutionStartedEvent to history so the orchestration worker has proper context
-                    state.HistoryEventsJson.Add(startEvent);
                     
                     OrchestrationState newStatusRecord = new()
                     {
@@ -673,11 +671,16 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
 
             public void Schedule(SerializedInstanceState state)
             {
-                // Always update the dictionary entry (for restart scenarios)
-                this.readyInstances[state.InstanceId] = state;
-                
-                // Always try to write to the queue
-                this.readyToRunQueue.Writer.TryWrite(state);
+                // TODO: There is a race condition here. If another thread is calling TakeNextAsync
+                //       and removed the queue item before updating the dictionary, then we'll fail
+                //       to update the readyToRunQueue and the orchestration will get stuck.
+                if (this.readyInstances.TryAdd(state.InstanceId, state))
+                {
+                    if (!this.readyToRunQueue.Writer.TryWrite(state)) 
+                    {
+                        throw new InvalidOperationException($"unable to write to queue for {state.InstanceId}");
+                    }
+                }
             }
         }
 

@@ -449,7 +449,7 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                 if (message.Event is ExecutionStartedEvent startEvent)
                 {
                     // For restart scenarios, clear the history and reset the state
-                    if (isRestart)
+                    if (isRestart && state.IsCompleted)
                     {
                         state.HistoryEventsJson.Clear();
                         state.ExecutionId = executionId; // Always update the execution ID

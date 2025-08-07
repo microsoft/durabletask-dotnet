@@ -408,6 +408,38 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         return this.PurgeInstancesCoreAsync(request, cancellation);
     }
 
+    /// <inheritdoc/>
+    public override async Task<string> RestartAsync(
+        string instanceId,
+        bool restartWithNewInstanceId = false,
+        CancellationToken cancellation = default)
+    {
+        Check.NotNullOrEmpty(instanceId);
+        Check.NotEntity(this.options.EnableEntitySupport, instanceId);
+
+        var request = new P.RestartInstanceRequest
+        {
+            InstanceId = instanceId,
+            RestartWithNewInstanceId = restartWithNewInstanceId,
+        };
+
+        try
+        {
+            P.RestartInstanceResponse result = await this.sidecarClient.RestartInstanceAsync(
+                request, cancellationToken: cancellation);
+            return result.InstanceId;
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.NotFound)
+        {
+            throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.", e);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.RestartAsync)} operation was canceled.", e, cancellation);
+        }
+    }
+
     static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, out CallInvoker callInvoker)
     {
         if (options.Channel is GrpcChannel c)

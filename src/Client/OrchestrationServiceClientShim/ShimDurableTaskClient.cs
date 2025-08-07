@@ -254,6 +254,47 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
         }
     }
 
+    /// <inheritdoc/>
+    public override async Task<string> RestartAsync(
+        string instanceId,
+        bool restartWithNewInstanceId = false,
+        CancellationToken cancellation = default)
+    {
+        Check.NotNullOrEmpty(instanceId);
+        cancellation.ThrowIfCancellationRequested();
+
+        // Get the current orchestration status to retrieve the name and input
+        OrchestrationMetadata? status = await this.GetInstanceAsync(instanceId, getInputsAndOutputs: true, cancellation);
+
+        if (status == null)
+        {
+            throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.");
+        }
+
+        // Determine the instance ID for the restarted orchestration
+        string newInstanceId = restartWithNewInstanceId ? Guid.NewGuid().ToString("N") : instanceId;
+
+        OrchestrationInstance instance = new()
+        {
+            InstanceId = newInstanceId,
+            ExecutionId = Guid.NewGuid().ToString("N"),
+        };
+
+        // Use the original serialized input directly to avoid double serialization
+        TaskMessage message = new()
+        {
+            OrchestrationInstance = instance,
+            Event = new ExecutionStartedEvent(-1, status.SerializedInput)
+            {
+                Name = status.Name,
+                OrchestrationInstance = instance,
+            },
+        };
+
+        await this.Client.CreateTaskOrchestrationAsync(message);
+        return newInstanceId;
+    }
+
     [return: NotNullIfNotNull("state")]
     OrchestrationMetadata? ToMetadata(Core.OrchestrationState? state, bool getInputsAndOutputs)
     {

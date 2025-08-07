@@ -174,6 +174,14 @@ public class DurableTaskClientBuilderExtensionsTests
         {
             throw new NotImplementedException();
         }
+
+        public override Task<string> RestartAsync(
+            string instanceId, 
+            bool restartWithNewInstanceId = false, 
+            CancellationToken cancellation = default)
+        {
+            throw new NotImplementedException();
+        }
     }
 
     class GoodBuildTargetOptions : DurableTaskClientOptions

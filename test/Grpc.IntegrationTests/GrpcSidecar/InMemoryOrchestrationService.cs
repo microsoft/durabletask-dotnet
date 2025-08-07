@@ -444,8 +444,17 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
             SerializedInstanceState state = this.store.GetOrAdd(instanceId, id => new SerializedInstanceState(id, executionId));
             lock (state)
             {
+                bool isRestart = state.ExecutionId != null && state.ExecutionId != executionId;
+                
                 if (message.Event is ExecutionStartedEvent startEvent)
                 {
+                    // For restart scenarios, clear the history and reset the state
+                    if (isRestart && state.IsCompleted)
+                    {
+                        state.ExecutionId = executionId;
+                        state.IsLoaded = false;
+                    }
+                    
                     OrchestrationState newStatusRecord = new()
                     {
                         OrchestrationInstance = startEvent.OrchestrationInstance,
@@ -666,7 +675,10 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                 //       to update the readyToRunQueue and the orchestration will get stuck.
                 if (this.readyInstances.TryAdd(state.InstanceId, state))
                 {
-                    this.readyToRunQueue.Writer.TryWrite(state);
+                    if (!this.readyToRunQueue.Writer.TryWrite(state)) 
+                    {
+                        throw new InvalidOperationException($"unable to write to queue for {state.InstanceId}");
+                    }
                 }
             }
         }

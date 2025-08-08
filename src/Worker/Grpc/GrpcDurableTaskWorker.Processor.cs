@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
@@ -8,10 +9,12 @@ using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
 using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Entities;
+using Microsoft.DurableTask.Tracing;
 using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
+using ActivityStatusCode = System.Diagnostics.ActivityStatusCode;
 using DTCore = DurableTask.Core;
 using P = Microsoft.DurableTask.Protobuf;
 
@@ -359,6 +362,109 @@ sealed partial class GrpcDurableTaskWorker
             string completionToken,
             CancellationToken cancellationToken)
         {
+            var executionStartedEvent =
+                request
+                    .NewEvents
+                    .Concat(request.PastEvents)
+                    .Where(e => e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionStarted)
+                    .Select(e => e.ExecutionStarted)
+                    .FirstOrDefault();
+
+            Activity? traceActivity = TraceHelper.StartTraceActivityForOrchestrationExecution(
+                executionStartedEvent,
+                request.OrchestrationTraceContext);
+
+            if (executionStartedEvent is not null)
+            {
+                P.HistoryEvent? GetSuborchestrationInstanceCreatedEvent(int eventId)
+                {
+                    var subOrchestrationEvent =
+                        request
+                            .PastEvents
+                            .Where(x => x.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated)
+                            .FirstOrDefault(x => x.EventId == eventId);
+
+                    return subOrchestrationEvent;
+                }
+
+                P.HistoryEvent? GetTaskScheduledEvent(int eventId)
+                {
+                    var taskScheduledEvent =
+                        request
+                            .PastEvents
+                            .Where(x => x.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.TaskScheduled)
+                            .LastOrDefault(x => x.EventId == eventId);
+
+                    return taskScheduledEvent;
+                }
+
+                foreach (var newEvent in request.NewEvents)
+                {
+                    switch (newEvent.EventTypeCase)
+                    {
+                        case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted:
+                            {
+                                P.HistoryEvent? subOrchestrationInstanceCreatedEvent =
+                                    GetSuborchestrationInstanceCreatedEvent(
+                                        newEvent.SubOrchestrationInstanceCompleted.TaskScheduledId);
+
+                                TraceHelper.EmitTraceActivityForSubOrchestrationCompleted(
+                                    request.InstanceId,
+                                    subOrchestrationInstanceCreatedEvent,
+                                    subOrchestrationInstanceCreatedEvent?.SubOrchestrationInstanceCreated);
+                                break;
+                            }
+
+                        case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceFailed:
+                            {
+                                P.HistoryEvent? subOrchestrationInstanceCreatedEvent =
+                                    GetSuborchestrationInstanceCreatedEvent(
+                                        newEvent.SubOrchestrationInstanceFailed.TaskScheduledId);
+
+                                TraceHelper.EmitTraceActivityForSubOrchestrationFailed(
+                                    request.InstanceId,
+                                    subOrchestrationInstanceCreatedEvent,
+                                    subOrchestrationInstanceCreatedEvent?.SubOrchestrationInstanceCreated,
+                                    newEvent.SubOrchestrationInstanceFailed);
+                                break;
+                            }
+
+                        case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
+                            {
+                                P.HistoryEvent? taskScheduledEvent =
+                                    GetTaskScheduledEvent(newEvent.TaskCompleted.TaskScheduledId);
+
+                                TraceHelper.EmitTraceActivityForTaskCompleted(
+                                    request.InstanceId,
+                                    taskScheduledEvent,
+                                    taskScheduledEvent?.TaskScheduled);
+                                break;
+                            }
+
+                        case P.HistoryEvent.EventTypeOneofCase.TaskFailed:
+                            {
+                                P.HistoryEvent? taskScheduledEvent =
+                                    GetTaskScheduledEvent(newEvent.TaskFailed.TaskScheduledId);
+
+                                TraceHelper.EmitTraceActivityForTaskFailed(
+                                    request.InstanceId,
+                                    taskScheduledEvent,
+                                    taskScheduledEvent?.TaskScheduled,
+                                    newEvent.TaskFailed);
+                                break;
+                            }
+
+                        case P.HistoryEvent.EventTypeOneofCase.TimerFired:
+                            TraceHelper.EmitTraceActivityForTimer(
+                                request.InstanceId,
+                                executionStartedEvent.Name,
+                                newEvent.Timestamp.ToDateTime(),
+                                newEvent.TimerFired);
+                            break;
+                    }
+                }
+            }
+
             OrchestratorExecutionResult? result = null;
             P.TaskFailureDetails? failureDetails = null;
             TaskName name = new("(unknown)");
@@ -460,10 +566,12 @@ sealed partial class GrpcDurableTaskWorker
             {
                 response = ProtoUtils.ConstructOrchestratorResponse(
                     request.InstanceId,
+                    request.ExecutionId,
                     result.CustomStatus,
                     result.Actions,
                     completionToken,
-                    entityConversionState);
+                    entityConversionState,
+                    traceActivity);
             }
             else if (versioning != null && failureDetails != null && versionFailure)
             {
@@ -521,6 +629,25 @@ sealed partial class GrpcDurableTaskWorker
                 };
             }
 
+            var completeOrchestrationAction = response.Actions.FirstOrDefault(
+                a => a.CompleteOrchestration is not null);
+
+            if (completeOrchestrationAction is not null)
+            {
+                if (completeOrchestrationAction.CompleteOrchestration.OrchestrationStatus == P.OrchestrationStatus.Failed)
+                {
+                    traceActivity?.SetStatus(
+                        ActivityStatusCode.Error,
+                        completeOrchestrationAction.CompleteOrchestration.Result);
+                }
+
+                traceActivity?.SetTag(
+                    Schema.Task.Status,
+                    completeOrchestrationAction.CompleteOrchestration.OrchestrationStatus.ToString());
+
+                traceActivity?.Dispose();
+            }
+
             this.Logger.SendingOrchestratorResponse(
                 name,
                 response.InstanceId,
@@ -532,6 +659,8 @@ sealed partial class GrpcDurableTaskWorker
 
         async Task OnRunActivityAsync(P.ActivityRequest request, string completionToken, CancellationToken cancellation)
         {
+            using Activity? traceActivity = TraceHelper.StartTraceActivityForTaskExecution(request);
+
             OrchestrationInstance instance = request.OrchestrationInstance.ToCore();
             string rawInput = request.Input;
 
@@ -570,6 +699,8 @@ sealed partial class GrpcDurableTaskWorker
             int outputSizeInBytes = 0;
             if (failureDetails != null)
             {
+                traceActivity?.SetStatus(ActivityStatusCode.Error, failureDetails.ErrorMessage);
+
                 outputSizeInBytes = failureDetails.GetApproximateByteCount();
             }
             else if (output != null)
@@ -589,6 +720,9 @@ sealed partial class GrpcDurableTaskWorker
                 FailureDetails = failureDetails,
                 CompletionToken = completionToken,
             };
+
+            // Stop the trace activity here to avoid including the completion time in the latency calculation
+            traceActivity?.Stop();
 
             await this.client.CompleteActivityTaskAsync(response, cancellationToken: cancellation);
         }

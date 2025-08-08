@@ -6,8 +6,10 @@ using DurableTask.Core;
 using DurableTask.Core.Command;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
+using DurableTask.Core.Tracing;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
+using Microsoft.DurableTask.Sidecar.Dispatcher;
 using Proto = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Sidecar.Grpc;
@@ -95,7 +97,7 @@ public static class ProtobufUtils
                     {
                         TraceParent = startedEvent.ParentTraceContext.TraceParent,
                         TraceState = startedEvent.ParentTraceContext.TraceState,
-                    },
+                    }
                 };
                 break;
             case EventType.ExecutionTerminated:
@@ -144,6 +146,16 @@ public static class ProtobufUtils
                     Name = subOrchestrationCreated.Name,
                     Version = subOrchestrationCreated.Version,
                 };
+
+                if (subOrchestrationCreated is GrpcSubOrchestrationInstanceCreatedEvent { ParentTraceContext: not null } grpcEvent)
+                {
+                    payload.SubOrchestrationInstanceCreated.ParentTraceContext = new Proto.TraceContext
+                    {
+                        TraceParent = grpcEvent.ParentTraceContext.TraceParent,
+                        TraceState = grpcEvent.ParentTraceContext.TraceState,
+                    };
+                }
+                
                 break;
             case EventType.SubOrchestrationInstanceCompleted:
                 var subOrchestrationCompleted = (SubOrchestrationInstanceCompletedEvent)e;
@@ -237,20 +249,26 @@ public static class ProtobufUtils
         switch (a.OrchestratorActionTypeCase)
         {
             case Proto.OrchestratorAction.OrchestratorActionTypeOneofCase.ScheduleTask:
-                return new ScheduleTaskOrchestratorAction
+                return new GrpcScheduleTaskOrchestratorAction
                 {
                     Id = a.Id,
                     Input = a.ScheduleTask.Input,
                     Name = a.ScheduleTask.Name,
                     Version = a.ScheduleTask.Version,
+                    ParentTraceContext = a.ScheduleTask.ParentTraceContext is not null
+                        ? new DistributedTraceContext(a.ScheduleTask.ParentTraceContext.TraceParent, a.ScheduleTask.ParentTraceContext.TraceState)
+                        : null,
                 };
             case Proto.OrchestratorAction.OrchestratorActionTypeOneofCase.CreateSubOrchestration:
-                return new CreateSubOrchestrationAction
+                return new GrpcCreateSubOrchestrationAction
                 {
                     Id = a.Id,
                     Input = a.CreateSubOrchestration.Input,
                     Name = a.CreateSubOrchestration.Name,
                     InstanceId = a.CreateSubOrchestration.InstanceId,
+                    ParentTraceContext = a.CreateSubOrchestration.ParentTraceContext is not null
+                        ? new DistributedTraceContext(a.CreateSubOrchestration.ParentTraceContext.TraceParent, a.CreateSubOrchestration.ParentTraceContext.TraceState)
+                        : null,
                     Tags = null, // TODO
                     Version = a.CreateSubOrchestration.Version,
                 };

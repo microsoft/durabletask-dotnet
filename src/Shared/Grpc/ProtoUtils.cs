@@ -275,23 +275,32 @@ static class ProtoUtils
     /// value that was provided by the corresponding <see cref="P.WorkItem"/> that triggered the orchestrator execution.
     /// </param>
     /// <param name="entityConversionState">The entity conversion state, or null if no conversion is required.</param>
+    /// <param name="requiresHistory">Whether or not a history is required to complete the orchestration request and none was provided.</param>
     /// <returns>The orchestrator response.</returns>
     /// <exception cref="NotSupportedException">When an orchestrator action is unknown.</exception>
     internal static P.OrchestratorResponse ConstructOrchestratorResponse(
         string instanceId,
         string? customStatus,
-        IEnumerable<OrchestratorAction> actions,
+        IEnumerable<OrchestratorAction>? actions,
         string completionToken,
-        EntityConversionState? entityConversionState)
+        EntityConversionState? entityConversionState,
+        bool requiresHistory = false)
     {
-        Check.NotNull(actions);
         var response = new P.OrchestratorResponse
         {
             InstanceId = instanceId,
             CustomStatus = customStatus,
             CompletionToken = completionToken,
+            RequiresHistory = requiresHistory,
         };
 
+        // If a history is required and the orchestration request was not completed, then there is no list of actions.
+        if (requiresHistory)
+        {
+            return response;
+        }
+
+        Check.NotNull(actions);
         foreach (OrchestratorAction action in actions)
         {
             var protoAction = new P.OrchestratorAction { Id = action.Id };

@@ -10,12 +10,17 @@ namespace Microsoft.DurableTask;
 /// </summary>
 /// <remarks>
 /// Implementations of this abstract class are free to use any serialization method. The default implementation
-/// uses the JSON serializer from the System.Text.Json namespace. Currently only strings are supported as
-/// the serialized representation of data. Byte array payloads and streams are not supported by this abstraction.
-/// Note that these methods all accept null values, in which case the return value should also be null.
+/// uses the JSON serializer from the System.Text.Json namespace. Implementations may optionally externalize
+/// large payloads and return an opaque reference string that can be resolved during deserialization.
+/// These methods all accept null values, in which case the return value should also be null.
 /// </remarks>
 public abstract class DataConverter
 {
+    /// <summary>
+    /// Gets a value indicating whether this converter may return an external reference token instead of inline JSON.
+    /// </summary>
+    public virtual bool UsesExternalStorage => false;
+
     /// <summary>
     /// Serializes <paramref name="value"/> into a text string.
     /// </summary>

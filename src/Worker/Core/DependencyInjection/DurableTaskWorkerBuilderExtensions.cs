@@ -4,6 +4,7 @@
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.DurableTask.Converters;
 using static Microsoft.DurableTask.Worker.DurableTaskWorkerOptions;
 
 namespace Microsoft.DurableTask.Worker;
@@ -135,6 +136,38 @@ public static class DurableTaskWorkerBuilderExtensions
     {
         Check.NotNull(builder);
         builder.Services.AddSingleton(filter);
+        return builder;
+    }
+
+    /// <summary>
+    /// Enables externalized payload storage for the worker's data converter to mirror client behavior.
+    /// </summary>
+    /// <param name="builder">The <see cref="IDurableTaskWorkerBuilder"/> to configure.</param>
+    /// <param name="configure">The action to configure the <see cref="LargePayloadStorageOptions"/>.</param>
+    /// <returns>The <see cref="IDurableTaskWorkerBuilder"/>.</returns>
+    public static IDurableTaskWorkerBuilder UseExternalizedPayloads(
+        this IDurableTaskWorkerBuilder builder,
+        Action<LargePayloadStorageOptions> configure)
+    {
+        Check.NotNull(builder);
+        Check.NotNull(configure);
+
+        builder.Services.Configure(builder.Name, configure);
+        builder.Services.AddSingleton<IPayloadStore>(sp =>
+        {
+            LargePayloadStorageOptions opts = sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(builder.Name);
+            return new BlobPayloadStore(opts);
+        });
+
+        builder.Services
+            .AddOptions<DurableTaskWorkerOptions>(builder.Name)
+            .PostConfigure<IPayloadStore, IOptionsMonitor<LargePayloadStorageOptions>>((opt, store, monitor) =>
+            {
+                LargePayloadStorageOptions opts = monitor.Get(builder.Name);
+                DataConverter inner = opt.DataConverter ?? Converters.JsonDataConverter.Default;
+                opt.DataConverter = new LargePayloadDataConverter(inner, store, opts);
+            });
+
         return builder;
     }
 }

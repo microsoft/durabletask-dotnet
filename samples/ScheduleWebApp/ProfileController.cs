@@ -20,7 +20,7 @@ namespace ScheduleWebApp.Controllers;
 [Route("instances")]
 public class ProfileController : ControllerBase
 {
-    readonly ScheduledTaskClient scheduledTaskClient;
+    // readonly ScheduledTaskClient scheduledTaskClient;
     readonly DurableTaskClient durableTaskClient;
     readonly ILogger<ProfileController> logger;
 
@@ -31,11 +31,11 @@ public class ProfileController : ControllerBase
     /// <param name="durableTaskClient">Client for starting orchestrations.</param>
     /// <param name="logger">Logger for recording controller operations.</param>
     public ProfileController(
-        ScheduledTaskClient scheduledTaskClient,
+        // ScheduledTaskClient scheduledTaskClient,
         DurableTaskClient durableTaskClient,
         ILogger<ProfileController> logger)
     {
-        this.scheduledTaskClient = scheduledTaskClient ?? throw new ArgumentNullException(nameof(scheduledTaskClient));
+        // this.scheduledTaskClient = scheduledTaskClient ?? throw new ArgumentNullException(nameof(scheduledTaskClient));
         this.durableTaskClient = durableTaskClient ?? throw new ArgumentNullException(nameof(durableTaskClient));
         this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -119,9 +119,34 @@ public class ProfileController : ControllerBase
     // add another endpoint to call purge instances
     [HttpPost("purge")]
     public async Task<ActionResult<List<string>>> PurgeInstances()
-    {   
-        try
-        {
+    {
+        // try
+        // {
+        // find all running status orchestrations if any terminate them
+            AsyncPageable<OrchestrationMetadata> runningOrchestrations = this.durableTaskClient.GetAllInstancesAsync();
+            var terminateTasks = new List<Task>();
+            int maxDegreeOfParallelism = 10;
+
+            await foreach (OrchestrationMetadata orchestration in runningOrchestrations)
+            {
+                if (orchestration.RuntimeStatus == OrchestrationRuntimeStatus.Running)
+                {
+                    terminateTasks.Add(this.durableTaskClient.TerminateInstanceAsync(orchestration.InstanceId));
+
+                    this.logger.LogInformation("Terminating running orchestration instance: {InstanceId}", orchestration.InstanceId);
+                    if (terminateTasks.Count == maxDegreeOfParallelism)
+                {
+                    await Task.WhenAll(terminateTasks);
+                    terminateTasks.Clear();
+                }
+                }
+            }
+            if (terminateTasks.Count > 0)
+            {
+                await Task.WhenAll(terminateTasks);
+            }
+
+            // get all instances of the orchestration
             int totalPurgedCount = 0;
             bool? isComplete = null;
             
@@ -147,12 +172,12 @@ public class ProfileController : ControllerBase
             this.logger.LogInformation("Completed purging {Count} total orchestration instances", totalPurgedCount);
 
             return this.Ok(new { TotalPurgedCount = totalPurgedCount, IsComplete = true });
-        }
-        catch (Exception ex)
-        {
-            this.logger.LogError(ex, "Error purging orchestration instances");
-            return this.StatusCode(500, "An error occurred while purging orchestration instances");
-        }
+        // }
+        // catch (Exception ex)
+        // {
+        //     this.logger.LogError(ex, "Error purging orchestration instances");
+        //     return this.StatusCode(500, "An error occurred while purging orchestration instances");
+        // }
     }
 
     // add a endpoint to terminate an instance

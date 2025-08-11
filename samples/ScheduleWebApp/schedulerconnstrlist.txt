@@ -1,0 +1,4 @@
+Endpoint=https://wbmemleakchange-b0crfugg.westus2.durabletask.io;TaskHub=th2;Authentication=DefaultAzure
+Endpoint=https://wbmemleak1-hcayf2bpfmapa.westus2.durabletask.io;TaskHub=th2;Authentication=DefaultAzure
+Endpoint=https://wbmemleakbw1-d9gdh2hedsa.westus2.durabletask.io;TaskHub=th2;Authentication=DefaultAzure
+Endpoint=https://wbmemleakbw2-bmd3hkcfgca.westus2.durabletask.io;TaskHub=th2;Authentication=DefaultAzure

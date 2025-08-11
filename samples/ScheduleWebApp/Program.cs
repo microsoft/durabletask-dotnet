@@ -18,26 +18,26 @@ string connectionString = builder.Configuration.GetValue<string>("DURABLE_TASK_S
 builder.Services.AddSingleton<ILogger>(sp => sp.GetRequiredService<ILoggerFactory>().CreateLogger<Program>());
 builder.Services.AddLogging();
 // Add all the generated orchestrations and activities automatically
-builder.Services.AddDurableTaskWorker(builder =>
-{
-    builder.AddTasks(r =>
-    {
-        // Add your orchestrators and activities here
-        r.AddOrchestrator<CacheClearingOrchestrator>();
-        r.AddActivity<GetStockPrice>();
+// builder.Services.AddDurableTaskWorker(builder =>
+// {
+//     builder.AddTasks(r =>
+//     {
+//         // Add your orchestrators and activities here
+//         r.AddOrchestrator<CacheClearingOrchestrator>();
+//         r.AddActivity<GetStockPrice>();
 
-        // Add a simple orchestrator that logs "Hello World"
-        r.AddOrchestratorFunc("HelloWorldOrchestrator", (Microsoft.DurableTask.TaskOrchestrationContext context, string input) => Task.CompletedTask);
-    });
-    builder.UseDurableTaskScheduler(connectionString);
-    builder.UseScheduledTasks();
-});
+//         // Add a simple orchestrator that logs "Hello World"
+//         r.AddOrchestratorFunc("HelloWorldOrchestrator", (Microsoft.DurableTask.TaskOrchestrationContext context, string input) => Task.CompletedTask);
+//     });
+//     builder.UseDurableTaskScheduler(connectionString);
+//     builder.UseScheduledTasks();
+// });
 
 // Register the client, which can be used to start orchestrations
 builder.Services.AddDurableTaskClient(builder =>
 {
     builder.UseDurableTaskScheduler(connectionString);
-    builder.UseScheduledTasks();
+    // builder.UseScheduledTasks();
 });
 
 // Configure the HTTP request pipeline

@@ -43,7 +43,7 @@ public sealed class BlobPayloadStore : IPayloadStore
         await this.containerClient.CreateIfNotExistsAsync(PublicAccessType.None, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         // One blob per payload using GUID-based name for uniqueness
-        string timestamp = DateTimeOffset.UtcNow.ToString("yyyy/MM/dd/HH", CultureInfo.InvariantCulture);
+        string timestamp = DateTimeOffset.UtcNow.ToString("yyyy/MM/dd/HH/mm/ss", CultureInfo.InvariantCulture);
         string blobName = $"{timestamp}/{Guid.NewGuid():N}";
         BlobClient blob = this.containerClient.GetBlobClient(blobName);
 

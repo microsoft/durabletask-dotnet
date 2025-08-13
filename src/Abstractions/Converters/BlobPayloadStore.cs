@@ -12,7 +12,7 @@ namespace Microsoft.DurableTask.Converters;
 
 /// <summary>
 /// Azure Blob Storage implementation of <see cref="IPayloadStore"/>.
-/// Stores payloads as blobs and returns opaque tokens in the form "dtp:v1:&lt;container&gt;:&lt;blobName&gt;".
+/// Stores payloads as blobs and returns opaque tokens in the form "dts:v1:&lt;container&gt;:&lt;blobName&gt;".
 /// </summary>
 public sealed class BlobPayloadStore : IPayloadStore
 {
@@ -44,7 +44,7 @@ public sealed class BlobPayloadStore : IPayloadStore
 
         // One blob per payload using GUID-based name for uniqueness
         string timestamp = DateTimeOffset.UtcNow.ToString("yyyy/MM/dd/HH", CultureInfo.InvariantCulture);
-        string blobName = $"{timestamp}/{Guid.NewGuid():N}.bin";
+        string blobName = $"{timestamp}/{Guid.NewGuid():N}";
         BlobClient blob = this.containerClient.GetBlobClient(blobName);
 
         byte[] payloadBuffer = payloadBytes.ToArray();
@@ -77,16 +77,16 @@ public sealed class BlobPayloadStore : IPayloadStore
         return await reader.ReadToEndAsync();
     }
 
-    static string EncodeToken(string container, string name) => $"dtp:v1:{container}:{name}";
+    static string EncodeToken(string container, string name) => $"dts:v1:{container}:{name}";
 
     static (string Container, string Name) DecodeToken(string token)
     {
-        if (!token.StartsWith("dtp:v1:", StringComparison.Ordinal))
+        if (!token.StartsWith("dts:v1:", StringComparison.Ordinal))
         {
             throw new ArgumentException("Invalid external payload token.", nameof(token));
         }
 
-        string rest = token.Substring("dtp:v1:".Length);
+        string rest = token.Substring("dts:v1:".Length);
         int sep = rest.IndexOf(':');
         if (sep <= 0 || sep >= rest.Length - 1)
         {

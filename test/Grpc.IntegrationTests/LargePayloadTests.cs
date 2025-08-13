@@ -384,7 +384,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         {
             Interlocked.Increment(ref this.uploadCount);
             string json = System.Text.Encoding.UTF8.GetString(payloadBytes.Span);
-            string token = $"dtp:v1:test:{Guid.NewGuid():N}";
+            string token = $"dts:v1:test:{Guid.NewGuid():N}";
             this.tokenToPayload[token] = json;
             return Task.FromResult(token);
         }

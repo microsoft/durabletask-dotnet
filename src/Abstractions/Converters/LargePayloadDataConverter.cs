@@ -19,7 +19,7 @@ namespace Microsoft.DurableTask.Converters;
 /// <exception cref="ArgumentNullException">Thrown when <paramref name="innerConverter"/>, <paramref name="payloadStore"/>, or <paramref name="largePayloadStorageOptions"/> is null.</exception>
 public sealed class LargePayloadDataConverter(DataConverter innerConverter, IPayloadStore payloadStore, LargePayloadStorageOptions largePayloadStorageOptions) : DataConverter
 {
-    const string TokenPrefix = "dtp:v1:"; // matches BlobExternalPayloadStore
+    const string TokenPrefix = "dts:v1:"; // matches BlobExternalPayloadStore
 
     readonly DataConverter innerConverter = innerConverter ?? throw new ArgumentNullException(nameof(innerConverter));
     readonly IPayloadStore payLoadStore = payloadStore ?? throw new ArgumentNullException(nameof(payloadStore));

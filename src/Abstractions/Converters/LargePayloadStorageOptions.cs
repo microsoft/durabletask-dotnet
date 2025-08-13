@@ -11,6 +11,14 @@ public sealed class LargePayloadStorageOptions
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="LargePayloadStorageOptions"/> class.
+    /// Parameterless constructor required for options activation.
+    /// </summary>
+    public LargePayloadStorageOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LargePayloadStorageOptions"/> class.
     /// </summary>
     /// <param name="connectionString">The Azure Storage connection string to the customer's storage account.</param>
     public LargePayloadStorageOptions(string connectionString)
@@ -32,7 +40,7 @@ public sealed class LargePayloadStorageOptions
     /// <summary>
     /// Gets or sets the Azure Storage connection string to the customer's storage account. Required.
     /// </summary>
-    public string ConnectionString { get; set; }
+    public string ConnectionString { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the blob container name to use for payloads. Defaults to "durabletask-payloads".

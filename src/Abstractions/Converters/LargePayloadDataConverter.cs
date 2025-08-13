@@ -78,6 +78,17 @@ public sealed class LargePayloadDataConverter(DataConverter innerConverter, IPay
             toDeserialize = this.payLoadStore.DownloadAsync(data, CancellationToken.None).GetAwaiter().GetResult();
         }
 
-        return this.innerConverter.Deserialize(toDeserialize, targetType);
+        return this.innerConverter.Deserialize(StripArrayCharacters(toDeserialize), targetType);
+    }
+
+    static string? StripArrayCharacters(string? input)
+    {
+        if (input != null && input.StartsWith('[') && input.EndsWith(']'))
+        {
+            // Strip the outer bracket characters
+            return input[1..^1];
+        }
+
+        return input;
     }
 }

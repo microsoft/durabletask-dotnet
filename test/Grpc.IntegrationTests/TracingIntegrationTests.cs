@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using FluentAssertions;
 using Microsoft.DurableTask.Client;
@@ -16,7 +18,7 @@ public class TracingIntegrationTests : IntegrationTestBase
     {
     }
 
-    static ActivityListener CreateListener(string[] sources, ICollection<Activity> activities)
+    static ActivityListener CreateListener(string[] sources, ConcurrentBag<Activity> activities)
     {
         ActivityListener listener = new();
 
@@ -39,7 +41,7 @@ public class TracingIntegrationTests : IntegrationTestBase
     [Fact]
     public async Task MultiTaskOrchestration()
     {
-        var activities = new List<Activity>();
+        var activities = new ConcurrentBag<Activity>();
 
         using var listener = CreateListener(ActivitySourceNames, activities);
 
@@ -69,6 +71,9 @@ public class TracingIntegrationTests : IntegrationTestBase
 
             OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         }
+
+        await server.DisposeAsync();
+        listener.Dispose();
 
         var testActivity = activities.Single(a => a.Source == TestActivitySource && a.OperationName == "Test");
         var createActivity = activities.Single(a => a.Source.Name == CoreActivitySourceName && a.OperationName == $"create_orchestration:{orchestratorName}");
@@ -148,7 +153,7 @@ public class TracingIntegrationTests : IntegrationTestBase
     [Fact]
     public async Task TaskOrchestrationWithActivityFailure()
     {
-        var activities = new List<Activity>();
+        var activities = new ConcurrentBag<Activity>();
 
         using var listener = CreateListener(ActivitySourceNames, activities);
 
@@ -177,6 +182,9 @@ public class TracingIntegrationTests : IntegrationTestBase
 
             OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         }
+
+        await server.DisposeAsync();
+        listener.Dispose();
 
         var testActivity = activities.Single(a => a.Source == TestActivitySource && a.OperationName == "Test");
         var createActivity = activities.Single(a => a.Source.Name == CoreActivitySourceName && a.OperationName == $"create_orchestration:{orchestratorName}");
@@ -248,7 +256,7 @@ public class TracingIntegrationTests : IntegrationTestBase
     [Fact]
     public async Task TaskWithSuborchestration()
     {
-        var activities = new List<Activity>();
+        var activities = new ConcurrentBag<Activity>();
 
         using var listener = CreateListener(ActivitySourceNames, activities);
         
@@ -286,6 +294,9 @@ public class TracingIntegrationTests : IntegrationTestBase
 
             OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         }
+
+        await server.DisposeAsync();
+        listener.Dispose();
 
         var testActivity = activities.Single(a => a.Source == TestActivitySource && a.OperationName == "Test");
         var createActivity = activities.Single(a => a.Source.Name == CoreActivitySourceName && a.OperationName == $"create_orchestration:{orchestratorName}");
@@ -356,7 +367,7 @@ public class TracingIntegrationTests : IntegrationTestBase
     [Fact]
     public async Task TaskWithSuborchestrationFailure()
     {
-        var activities = new List<Activity>();
+        var activities = new ConcurrentBag<Activity>();
 
         using var listener = CreateListener(ActivitySourceNames, activities);
         
@@ -394,6 +405,9 @@ public class TracingIntegrationTests : IntegrationTestBase
 
             OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         }
+
+        await server.DisposeAsync();
+        listener.Dispose();
 
         var testActivity = activities.Single(a => a.Source == TestActivitySource && a.OperationName == "Test");
         var createActivity = activities.Single(a => a.Source.Name == CoreActivitySourceName && a.OperationName == $"create_orchestration:{orchestratorName}");
@@ -467,7 +481,7 @@ public class TracingIntegrationTests : IntegrationTestBase
     [Fact]
     public async Task TaskOrchestrationWithSentEvent()
     {
-        var activities = new List<Activity>();
+        var activities = new ConcurrentBag<Activity>();
 
         using var listener = CreateListener(ActivitySourceNames, activities);
 
@@ -498,6 +512,9 @@ public class TracingIntegrationTests : IntegrationTestBase
 
             OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         }
+
+        await server.DisposeAsync();
+        listener.Dispose();
 
         var testActivity = activities.Single(a => a.Source == TestActivitySource && a.OperationName == "Test");
         var createActivity = activities.Single(a => a.Source.Name == CoreActivitySourceName && a.OperationName == $"create_orchestration:{orchestratorName}");
@@ -547,7 +564,7 @@ public class TracingIntegrationTests : IntegrationTestBase
     [Fact]
     public async Task TaskOrchestrationWithTimer()
     {
-        var activities = new List<Activity>();
+        var activities = new ConcurrentBag<Activity>();
 
         using var listener = CreateListener(ActivitySourceNames, activities);
 
@@ -580,6 +597,9 @@ public class TracingIntegrationTests : IntegrationTestBase
 
             OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
         }
+
+        await server.DisposeAsync();
+        listener.Dispose();
 
         fireAt.Should().NotBe(default);
 
@@ -632,7 +652,7 @@ public class TracingIntegrationTests : IntegrationTestBase
     [Fact]
     public async Task ClientRaiseEvent()
     {
-        var activities = new List<Activity>();
+        var activities = new ConcurrentBag<Activity>();
 
         using var listener = CreateListener(ActivitySourceNames, activities);
 
@@ -663,6 +683,9 @@ public class TracingIntegrationTests : IntegrationTestBase
                 await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true,
                     this.TimeoutToken);
         }
+
+        await server.DisposeAsync();
+        listener.Dispose();
 
         var testActivity = activities.Single(a => a.Source == TestActivitySource && a.OperationName == "Test");
 

@@ -271,6 +271,16 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
             throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.");
         }
 
+        bool isInstaceNotCompleted = status.RuntimeStatus == OrchestrationRuntimeStatus.Running ||
+                                    status.RuntimeStatus == OrchestrationRuntimeStatus.Pending ||
+                                    status.RuntimeStatus == OrchestrationRuntimeStatus.Suspended;
+
+        if (isInstaceNotCompleted && !restartWithNewInstanceId)
+        {
+            throw new InvalidOperationException($"Instance '{instanceId}' cannot be restarted while it is in state '{status.RuntimeStatus}'. " +
+                   "Wait until it has completed, or restart with a new instance ID.");
+        }
+
         // Determine the instance ID for the restarted orchestration
         string newInstanceId = restartWithNewInstanceId ? Guid.NewGuid().ToString("N") : instanceId;
 
@@ -281,6 +291,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
         };
 
         // Use the original serialized input directly to avoid double serialization
+        // Note: OrchestrationMetada doesn't have version property so we don't support version here.
         TaskMessage message = new()
         {
             OrchestrationInstance = instance,

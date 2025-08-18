@@ -430,6 +430,9 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <exception cref="ArgumentException">
     /// Thrown if an orchestration with the specified <paramref name="instanceId"/> was not found.
     /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when attempting to restart an instance using the same instance Id
+    /// while the instance has not yet reached a completed or terminal state.
     /// <exception cref="NotSupportedException">
     /// Thrown if the backend does not support restart operations.
     /// </exception>

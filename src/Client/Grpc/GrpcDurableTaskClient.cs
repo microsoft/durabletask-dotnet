@@ -433,6 +433,10 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         {
             throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.", e);
         }
+        catch (RpcException e) when (e.StatusCode == StatusCode.FailedPrecondition)
+        {
+            throw new InvalidOperationException($"An orchestration with the instanceId {instanceId} cannot be restarted.", e);
+        }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
             throw new OperationCanceledException(

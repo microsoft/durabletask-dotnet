@@ -1,8 +1,7 @@
 ﻿# Changelog
 
-## (Unreleased)
-
-- Expose gRPC retry options in Azure Managed extensions ([#447](https://github.com/microsoft/durabletask-dotnet/pull/447))
+## v1.13.0
+- Add orchestration execution tracing ([#441](https://github.com/microsoft/durabletask-dotnet/pull/441))
 
 ## v1.12.0
 
@@ -10,6 +9,7 @@
 - Adding Analyzer to build and release ([#444](https://github.com/microsoft/durabletask-dotnet/pull/444))
 - Add ability to filter orchestrations at worker ([#443](https://github.com/microsoft/durabletask-dotnet/pull/443))
 - Removing breaking change for TaskOptions ([#446](https://github.com/microsoft/durabletask-dotnet/pull/446))
+- Expose gRPC retry options in Azure Managed extensions ([#447](https://github.com/microsoft/durabletask-dotnet/pull/447))
 
 ## v1.11.0
 

@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Text;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.DurableTask.Client.Entities;
+using Microsoft.DurableTask.Tracing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -107,24 +108,6 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             }
         }
 
-        if (Activity.Current?.Id != null || Activity.Current?.TraceStateString != null)
-        {
-            if (request.ParentTraceContext == null)
-            {
-                request.ParentTraceContext = new P.TraceContext();
-            }
-
-            if (Activity.Current?.Id != null)
-            {
-                request.ParentTraceContext.TraceParent = Activity.Current?.Id;
-            }
-
-            if (Activity.Current?.TraceStateString != null)
-            {
-                request.ParentTraceContext.TraceState = Activity.Current?.TraceStateString;
-            }
-        }
-
         DateTimeOffset? startAt = options?.StartAt;
         this.logger.SchedulingOrchestration(
             request.InstanceId,
@@ -137,6 +120,8 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             // Convert timestamps to UTC if not already UTC
             request.ScheduledStartTimestamp = Timestamp.FromDateTimeOffset(startAt.Value.ToUniversalTime());
         }
+
+        using Activity? newActivity = TraceHelper.StartActivityForNewOrchestration(request);
 
         P.CreateInstanceResponse? result = await this.sidecarClient.StartInstanceAsync(
             request, cancellationToken: cancellation);
@@ -158,6 +143,8 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             Name = eventName,
             Input = this.DataConverter.Serialize(eventPayload),
         };
+
+        using Activity? traceActivity = TraceHelper.StartActivityForNewEventRaisedFromClient(request, instanceId);
 
         await this.sidecarClient.RaiseEventAsync(request, cancellationToken: cancellation);
     }

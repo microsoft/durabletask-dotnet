@@ -118,10 +118,12 @@ public static class GrpcOrchestrationRunner
 
         P.OrchestratorResponse response = ProtoUtils.ConstructOrchestratorResponse(
             request.InstanceId,
+            request.ExecutionId,
             result.CustomStatus,
             result.Actions,
             completionToken: string.Empty, /* doesn't apply */
-            entityConversionState: null);
+            entityConversionState: null,
+            orchestrationActivity: null);
         byte[] responseBytes = response.ToByteArray();
         return Convert.ToBase64String(responseBytes);
     }
@@ -269,11 +271,13 @@ public static class GrpcOrchestrationRunner
 
         P.OrchestratorResponse response = ProtoUtils.ConstructOrchestratorResponse(
             request.InstanceId,
+            request.ExecutionId,
             result?.CustomStatus,
             result?.Actions,
             completionToken: string.Empty, /* doesn't apply */
             entityConversionState: null,
-            requiresHistory);
+            orchestrationActivity: null,
+            requiresHistory: requiresHistory);
         byte[] responseBytes = response.ToByteArray();
         return Convert.ToBase64String(responseBytes);
     }

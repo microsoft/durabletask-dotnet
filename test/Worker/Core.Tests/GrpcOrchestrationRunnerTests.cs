@@ -346,6 +346,41 @@ public class GrpcOrchestrationRunnerTests
         Assert.True(response.RequiresHistory);
     }
 
+    [Fact]
+    public void PastEventIncludes_Means_ExtendedSession_Evicted()
+    {
+        using var extendedSessions = new ExtendedSessionsCache();
+        int extendedSessionIdleTimeout = 5;
+        var historyEvent = new Protobuf.HistoryEvent
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new Protobuf.ExecutionStartedEvent()
+            {
+                OrchestrationInstance = new Protobuf.OrchestrationInstance
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+            }
+        };
+        Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludePastEvents", Value.ForBool(true) },
+            { "ExtendedSession", Value.ForBool(true) },
+            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(extendedSessionIdleTimeout) } });
+        byte[] requestBytes = orchestratorRequest.ToByteArray();
+        string requestString = Convert.ToBase64String(requestBytes);
+        GrpcOrchestrationRunner.LoadAndRun(requestString, new CallSubOrchestrationOrchestrator(), extendedSessions);
+        Assert.True(extendedSessions.IsInitialized());
+        Assert.True(extendedSessions.GetOrInitializeCache(extendedSessionIdleTimeout).TryGetValue(TestInstanceId, out object? extendedSession));
+
+        // Now we will retry the same exact request. If the extended session is not evicted, then the request will fail due to duplicate ExecutionStarted events being detected
+        // If the extended session is evicted because IncludePastEvents is true, then the request will succeed and a new extended session will be stored
+        GrpcOrchestrationRunner.LoadAndRun(requestString, new CallSubOrchestrationOrchestrator(), extendedSessions);
+        Assert.True(extendedSessions.GetOrInitializeCache(extendedSessionIdleTimeout).TryGetValue(TestInstanceId, out extendedSession));
+    }
+
     static Protobuf.OrchestratorRequest CreateOrchestratorRequest(IEnumerable<Protobuf.HistoryEvent> newEvents)
     {
         var orchestratorRequest = new Protobuf.OrchestratorRequest()

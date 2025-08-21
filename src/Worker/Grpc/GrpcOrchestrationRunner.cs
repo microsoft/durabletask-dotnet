@@ -171,10 +171,13 @@ public static class GrpcOrchestrationRunner
                 pair => ProtoUtils.ConvertValueToObject(pair.Value));
 
         OrchestratorExecutionResult? result = null;
+        MemoryCache? extendedSessions = null;
+
+        // If any of the request parameters are malformed, we assume the default - extended sessions are not enabled and the orchestration history is attached
         bool addToExtendedSessions = false;
         bool requiresHistory = false;
+        bool pastEventsIncluded = true;
         double extendedSessionIdleTimeoutInSeconds = 0;
-        MemoryCache? extendedSessions = null;
 
         if (properties.TryGetValue("ExtendedSessionIdleTimeoutInSeconds", out object? extendedSessionIdleTimeoutObj)
             && extendedSessionIdleTimeoutObj is double extendedSessionIdleTimeout
@@ -184,12 +187,20 @@ public static class GrpcOrchestrationRunner
             extendedSessions = extendedSessionsCache.GetOrInitializeCache(extendedSessionIdleTimeoutInSeconds);
         }
 
+        if (properties.TryGetValue("IncludePastEvents", out object? includePastEventsObj)
+            && includePastEventsObj is bool includePastEvents)
+        {
+            pastEventsIncluded = includePastEvents;
+        }
+
         if (properties.TryGetValue("ExtendedSession", out object? isExtendedSessionObj)
             && isExtendedSessionObj is bool isExtendedSession
             && isExtendedSession
             && extendedSessions != null)
         {
-            if (extendedSessions.TryGetValue(request.InstanceId, out ExtendedSessionState? extendedSessionState) && extendedSessionState is not null)
+            // If a history was provided, even if we already have an extended session stored, we always want to evict whatever state is in the cache and replace it with a new extended
+            // session based on the provided history
+            if (!pastEventsIncluded && extendedSessions.TryGetValue(request.InstanceId, out ExtendedSessionState? extendedSessionState) && extendedSessionState is not null)
             {
                 OrchestrationRuntimeState runtimeState = extendedSessionState!.RuntimeState;
                 runtimeState.NewEvents.Clear();
@@ -206,19 +217,16 @@ public static class GrpcOrchestrationRunner
             }
             else
             {
+                extendedSessions.Remove(request.InstanceId);
                 addToExtendedSessions = true;
             }
         }
 
         if (result == null)
         {
-            // If this is the first orchestration execution, then the past events count will be 0 but includePastEvents will be true (there are just none to include).
-            // Otherwise, there is an orchestration history but DurableTask.Core did not attach it since the extended session is still active on its end, but we have since evicted the
+            // DurableTask.Core did not attach the orchestration history since the extended session is still active on its end, but we have since evicted the
             // session and lost the orchestration history so we cannot replay the orchestration.
-            if (pastEvents.Count == 0
-                && (properties.TryGetValue("IncludePastEvents", out object? pastEventsIncludedObj)
-                && pastEventsIncludedObj is bool pastEventsIncluded
-                && !pastEventsIncluded))
+            if (!pastEventsIncluded)
             {
                 requiresHistory = true;
             }

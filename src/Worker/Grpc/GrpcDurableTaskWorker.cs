@@ -15,6 +15,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     readonly GrpcDurableTaskWorkerOptions grpcOptions;
     readonly DurableTaskWorkerOptions workerOptions;
     readonly IServiceProvider services;
+    readonly IHttpClientFactory? httpClientFactory;
     readonly ILoggerFactory loggerFactory;
     readonly ILogger logger;
 
@@ -23,6 +24,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     /// </summary>
     /// <param name="name">The name of the worker.</param>
     /// <param name="factory">The task factory.</param>
+    /// <param name="httpClientFactory">The HTTP client factory.</param>
     /// <param name="grpcOptions">The gRPC-specific worker options.</param>
     /// <param name="workerOptions">The generic worker options.</param>
     /// <param name="services">The service provider.</param>
@@ -33,12 +35,14 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         IOptionsMonitor<GrpcDurableTaskWorkerOptions> grpcOptions,
         IOptionsMonitor<DurableTaskWorkerOptions> workerOptions,
         IServiceProvider services,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IHttpClientFactory? httpClientFactory = null)
         : base(name, factory)
     {
         this.grpcOptions = Check.NotNull(grpcOptions).Get(name);
         this.workerOptions = Check.NotNull(workerOptions).Get(name);
         this.services = Check.NotNull(services);
+        this.httpClientFactory = httpClientFactory;
         this.loggerFactory = Check.NotNull(loggerFactory);
         this.logger = loggerFactory.CreateLogger("Dapr.DurableTask");
     }
@@ -51,29 +55,45 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         await new Processor(this, new(callInvoker)).ExecuteAsync(stoppingToken);
     }
 
-#if NET6_0_OR_GREATER
-    static GrpcChannel GetChannel(string? address)
+    GrpcChannel GetChannel(string? address)
     {
-        if (string.IsNullOrEmpty(address))
+        if (string.IsNullOrWhiteSpace(address))
         {
             address = "http://localhost:4001";
         }
 
-        return GrpcChannel.ForAddress(address);
-    }
-#endif
+        // Create the HttpClient so we can avoid the default 100 second timeout
+        // As this service is created as a singleton, it's ok to create the HttpClient once here as well
+        // Create the client from IHttpClientFactory if available, otherwise create a new instance
+        var httpClient = this.httpClientFactory?.CreateClient() ?? new HttpClient();
+        httpClient.Timeout = Timeout.InfiniteTimeSpan;
 
-#if NETSTANDARD2_0
-    static GrpcChannel GetChannel(string? address)
-    {
-        if (string.IsNullOrEmpty(address))
+        // Configure keep-alive settings to maintain long-lived connections
+        var handler = new SocketsHttpHandler
         {
-            address = "localhost:4001";
-        }
+            // Enable keep-alive
+            KeepAlivePingPolicy = HttpKeepAlivePingPolicy.Always,
+            KeepAlivePingDelay = TimeSpan.FromSeconds(30),
+            KeepAlivePingTimeout = TimeSpan.FromSeconds(30),
 
-        return new(address, ChannelCredentials.Insecure);
+            // Pooled connections are reused and won't time out from inactivity
+            EnableMultipleHttp2Connections = true,
+
+            // Set a very long connection lifetime - this allows a controlled connection refresh strategy
+            PooledConnectionLifetime = TimeSpan.FromDays(1),
+
+            // Disable idle timeout entirely
+            PooledConnectionIdleTimeout = Timeout.InfiniteTimeSpan,
+        };
+
+        return GrpcChannel.ForAddress(address, new GrpcChannelOptions
+        {
+            HttpHandler = handler,
+            HttpClient = httpClient,
+            MaxReceiveMessageSize = null, // No message size limit
+            DisposeHttpClient = false, // Lifetime managed by the HttpClientFactory
+        });
     }
-#endif
 
     AsyncDisposable GetCallInvoker(out CallInvoker callInvoker, out string address)
     {
@@ -91,7 +111,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
             return default;
         }
 
-        c = GetChannel(this.grpcOptions.Address);
+        c = this.GetChannel(this.grpcOptions.Address);
         callInvoker = c.CreateCallInvoker();
         address = c.Target;
         return new AsyncDisposable(() => new(c.ShutdownAsync()));

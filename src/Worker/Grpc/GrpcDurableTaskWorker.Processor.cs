@@ -2,13 +2,13 @@
 // Licensed under the MIT License.
 
 using System.Text;
+using Dapr.DurableTask.Abstractions;
+using Dapr.DurableTask.Entities;
+using Dapr.DurableTask.Worker.Shims;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
-using Dapr.DurableTask.Abstractions;
-using Dapr.DurableTask.Entities;
-using Dapr.DurableTask.Worker.Shims;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using static Dapr.DurableTask.Protobuf.TaskHubSidecarService;
@@ -101,21 +101,14 @@ sealed partial class GrpcDurableTaskWorker
 
         static string GetActionsListForLogging(IReadOnlyList<P.OrchestratorAction> actions)
         {
-            if (actions.Count == 0)
+            return actions.Count switch
             {
-                return string.Empty;
-            }
-            else if (actions.Count == 1)
-            {
-                return actions[0].OrchestratorActionTypeCase.ToString();
-            }
-            else
-            {
-                // Returns something like "ScheduleTask x5, CreateTimer x1,..."
-                return string.Join(", ", actions
-                    .GroupBy(a => a.OrchestratorActionTypeCase)
-                    .Select(group => $"{group.Key} x{group.Count()}"));
-            }
+                0 => string.Empty,
+                1 => actions[0].OrchestratorActionTypeCase.ToString(),
+                _ => string.Join(
+                    ", ",
+                    actions.GroupBy(a => a.OrchestratorActionTypeCase).Select(group => $"{group.Key} x{group.Count()}")),
+            };
         }
 
         static P.TaskFailureDetails? EvaluateOrchestrationVersioning(DurableTaskWorkerOptions.VersioningOptions? versioning, string orchestrationVersion, out bool versionCheckFailed)
@@ -253,51 +246,48 @@ sealed partial class GrpcDurableTaskWorker
         {
             await foreach (P.WorkItem workItem in stream.ResponseStream.ReadAllAsync(cancellationToken: cancellation))
             {
-                if (workItem.RequestCase == P.WorkItem.RequestOneofCase.OrchestratorRequest)
+                switch (workItem.RequestCase)
                 {
-                    this.RunBackgroundTask(
-                        workItem,
-                        () => this.OnRunOrchestratorAsync(
-                            workItem.OrchestratorRequest,
-                            workItem.CompletionToken,
-                            cancellation));
-                }
-                else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
-                {
-                    this.RunBackgroundTask(
-                        workItem,
-                        () => this.OnRunActivityAsync(
-                            workItem.ActivityRequest,
-                            workItem.CompletionToken,
-                            cancellation));
-                }
-                else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
-                {
-                    this.RunBackgroundTask(
-                        workItem,
-                        () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation));
-                }
-                else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequestV2)
-                {
-                    workItem.EntityRequestV2.ToEntityBatchRequest(
-                        out EntityBatchRequest batchRequest,
-                        out List<P.OperationInfo> operationInfos);
+                    case P.WorkItem.RequestOneofCase.OrchestratorRequest:
+                        this.RunBackgroundTask(
+                            workItem,
+                            () => this.OnRunOrchestratorAsync(
+                                workItem.OrchestratorRequest,
+                                workItem.CompletionToken,
+                                cancellation));
+                        break;
+                    case P.WorkItem.RequestOneofCase.ActivityRequest:
+                        this.RunBackgroundTask(
+                            workItem,
+                            () => this.OnRunActivityAsync(
+                                workItem.ActivityRequest,
+                                workItem.CompletionToken,
+                                cancellation));
+                        break;
+                    case P.WorkItem.RequestOneofCase.EntityRequest:
+                        this.RunBackgroundTask(
+                            workItem,
+                            () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation));
+                        break;
+                    case P.WorkItem.RequestOneofCase.EntityRequestV2:
+                        workItem.EntityRequestV2.ToEntityBatchRequest(
+                            out EntityBatchRequest batchRequest,
+                            out List<P.OperationInfo> operationInfos);
 
-                    this.RunBackgroundTask(
-                        workItem,
-                        () => this.OnRunEntityBatchAsync(
-                            batchRequest,
-                            cancellation,
-                            workItem.CompletionToken,
-                            operationInfos));
-                }
-                else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
-                {
-                    // No-op
-                }
-                else
-                {
-                    this.Logger.UnexpectedWorkItemType(workItem.RequestCase.ToString());
+                        this.RunBackgroundTask(
+                            workItem,
+                            () => this.OnRunEntityBatchAsync(
+                                batchRequest,
+                                cancellation,
+                                workItem.CompletionToken,
+                                operationInfos));
+                        break;
+                    case P.WorkItem.RequestOneofCase.HealthPing:
+                        // No-op
+                        break;
+                    default:
+                        this.Logger.UnexpectedWorkItemType(workItem.RequestCase.ToString());
+                        break;
                 }
             }
         }

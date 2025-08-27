@@ -37,7 +37,7 @@ public sealed class BlobPayloadStore : IPayloadStore
     }
 
     /// <inheritdoc/>
-    public async Task<string> UploadAsync(string contentType, ReadOnlyMemory<byte> payloadBytes, CancellationToken cancellationToken)
+    public async Task<string> UploadAsync(ReadOnlyMemory<byte> payloadBytes, CancellationToken cancellationToken)
     {
         // Ensure container exists
         await this.containerClient.CreateIfNotExistsAsync(PublicAccessType.None, cancellationToken: cancellationToken).ConfigureAwait(false);

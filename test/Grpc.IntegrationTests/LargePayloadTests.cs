@@ -380,7 +380,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         int downloadCount;
         public int DownloadCount => this.downloadCount;
 
-        public Task<string> UploadAsync(string contentType, ReadOnlyMemory<byte> payloadBytes, CancellationToken cancellationToken)
+        public Task<string> UploadAsync(ReadOnlyMemory<byte> payloadBytes, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref this.uploadCount);
             string json = System.Text.Encoding.UTF8.GetString(payloadBytes.Span);

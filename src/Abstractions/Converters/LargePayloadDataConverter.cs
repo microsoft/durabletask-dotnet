@@ -55,7 +55,7 @@ public sealed class LargePayloadDataConverter(DataConverter innerConverter, IPay
 
         // Upload synchronously in this context by blocking on async. SDK call sites already run on threadpool.
         byte[] bytes = this.utf8.GetBytes(json);
-        string token = this.payLoadStore.UploadAsync("application/json", bytes, CancellationToken.None).GetAwaiter().GetResult();
+        string token = this.payLoadStore.UploadAsync(bytes, CancellationToken.None).GetAwaiter().GetResult();
         return token;
     }
 

@@ -2,7 +2,9 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Converters;
+using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit.Abstractions;
@@ -11,6 +13,7 @@ namespace Microsoft.DurableTask.Grpc.Tests;
 
 public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture) : IntegrationTestBase(output, sidecarFixture)
 {
+    // Validates client externalizes a large orchestration input and worker resolves it.
     [Fact]
     public async Task OrchestrationInput_IsExternalizedByClient_ResolvedByWorker()
     {
@@ -69,6 +72,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.True(fakeStore.UploadCount >= 1);
     }
 
+    // Validates worker externalizes large activity input and delivers resolved payload to activity.
     [Fact]
     public async Task ActivityInput_IsExternalizedByWorker_ResolvedByActivity()
     {
@@ -110,6 +114,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.True(workerStore.DownloadCount >= 1);
     }
 
+    // Validates worker externalizes large activity output which is resolved by the orchestrator.
     [Fact]
     public async Task ActivityOutput_IsExternalizedByWorker_ResolvedByOrchestrator()
     {
@@ -151,6 +156,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.True(workerStore.DownloadCount >= 1);
     }
 
+    // Ensures querying a completed instance downloads and resolves an externalized output on the client.
     [Fact]
     public async Task QueryCompletedInstance_DownloadsExternalizedOutputOnClient()
     {
@@ -205,6 +211,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.True(clientStore.UploadCount == 1);
     }
 
+    // Ensures payloads below the threshold are not externalized by client or worker.
     [Fact]
     public async Task BelowThreshold_NotExternalized()
     {
@@ -255,6 +262,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.Equal(0, clientStore.DownloadCount);
     }
 
+    // Validates client externalizes a large external event payload and worker resolves it.
     [Fact]
     public async Task ExternalEventPayload_IsExternalizedByClient_ResolvedByWorker()
     {
@@ -306,6 +314,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.True(fakeStore.UploadCount >= 1);
     }
 
+    // Validates worker externalizes both output and custom status; client resolves them on query.
     [Fact]
     public async Task OutputAndCustomStatus_ExternalizedByWorker_ResolvedOnQuery()
     {

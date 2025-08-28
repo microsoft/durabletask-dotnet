@@ -27,7 +27,7 @@ public sealed class LargePayloadDataConverter(DataConverter innerConverter, IPay
     readonly Encoding utf8 = new UTF8Encoding(false);
 
     /// <inheritdoc/>
-    public override bool UsesExternalStorage => this.largePayloadStorageOptions.Enabled || this.innerConverter.UsesExternalStorage;
+    public override bool UsesExternalStorage => true;
 
     /// <summary>
     /// Serializes the value to a JSON string and uploads it to the external payload store if it exceeds the configured threshold.
@@ -42,10 +42,6 @@ public sealed class LargePayloadDataConverter(DataConverter innerConverter, IPay
         }
 
         string json = this.innerConverter.Serialize(value) ?? "null";
-        if (!this.largePayloadStorageOptions.Enabled)
-        {
-            return json;
-        }
 
         int byteCount = this.utf8.GetByteCount(json);
         if (byteCount < this.largePayloadStorageOptions.ExternalizeThresholdBytes)
@@ -73,7 +69,7 @@ public sealed class LargePayloadDataConverter(DataConverter innerConverter, IPay
         }
 
         string toDeserialize = data;
-        if (this.largePayloadStorageOptions.Enabled && data.StartsWith(TokenPrefix, StringComparison.Ordinal))
+        if (data.StartsWith(TokenPrefix, StringComparison.Ordinal))
         {
             toDeserialize = this.payLoadStore.DownloadAsync(data, CancellationToken.None).GetAwaiter().GetResult();
         }

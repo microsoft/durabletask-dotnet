@@ -28,11 +28,6 @@ public sealed class LargePayloadStorageOptions
     }
 
     /// <summary>
-    /// Gets or sets a value indicating whether externalized payload storage is enabled.
-    /// </summary>
-    public bool Enabled { get; set; } = true;
-
-    /// <summary>
     /// Gets or sets the threshold in bytes at which payloads are externalized. Default is 900_000 bytes.
     /// </summary>
     public int ExternalizeThresholdBytes { get; set; } = 900_000; // leave headroom below 1MB

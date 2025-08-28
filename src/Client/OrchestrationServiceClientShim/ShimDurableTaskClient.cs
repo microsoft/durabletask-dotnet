@@ -255,7 +255,6 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     }
 
     /// <inheritdoc/>
-    [Obsolete("Experimental")]
     public override async Task<string> RestartAsync(
         string instanceId,
         bool restartWithNewInstanceId = false,

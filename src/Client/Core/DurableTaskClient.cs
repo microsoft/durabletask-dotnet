@@ -434,7 +434,6 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// while the instance has not yet reached a completed or terminal state. </exception>
     /// <exception cref="NotSupportedException">
     /// Thrown if the backend does not support restart operations. </exception>
-    [Obsolete("Experimental")]
     public virtual Task<string> RestartAsync(
         string instanceId,
         bool restartWithNewInstanceId = false,

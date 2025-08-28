@@ -255,6 +255,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     }
 
     /// <inheritdoc/>
+    [Obsolete("Experimental")]
     public override async Task<string> RestartAsync(
         string instanceId,
         bool restartWithNewInstanceId = false,
@@ -291,7 +292,8 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
         };
 
         // Use the original serialized input directly to avoid double serialization
-        // Note: OrchestrationMetada doesn't have version property so we don't support version here.
+        // TODO: OrchestrationMetada doesn't have version property so we don't support version here.
+        // Issue link: https://github.com/microsoft/durabletask-dotnet/issues/463
         TaskMessage message = new()
         {
             OrchestrationInstance = instance,

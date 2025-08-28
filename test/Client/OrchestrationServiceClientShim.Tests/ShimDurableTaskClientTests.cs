@@ -377,6 +377,7 @@ public class ShimDurableTaskClientTests
         var startedEvent = (ExecutionStartedEvent)capturedMessage.Event;
         startedEvent.Name.Should().Be(orchestratorName);
         startedEvent.Input.Should().Be(serializedInput);
+        // TODO: once we support version at ShimDurableTaskClient, we should check version here. 
         startedEvent.OrchestrationInstance.InstanceId.Should().Be(restartedInstanceId);
         startedEvent.OrchestrationInstance.ExecutionId.Should().NotBeNullOrEmpty();
         startedEvent.OrchestrationInstance.ExecutionId.Should().NotBe(originalState.OrchestrationInstance.ExecutionId);

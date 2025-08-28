@@ -428,14 +428,13 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// The value of this task is the instance ID of the restarted orchestration instance.
     /// </returns>
     /// <exception cref="ArgumentException">
-    /// Thrown if an orchestration with the specified <paramref name="instanceId"/> was not found.
-    /// </exception>
+    /// Thrown if an orchestration with the specified <paramref name="instanceId"/> was not found. </exception>
     /// <exception cref="InvalidOperationException">
     /// Thrown when attempting to restart an instance using the same instance Id
-    /// while the instance has not yet reached a completed or terminal state.
+    /// while the instance has not yet reached a completed or terminal state. </exception>
     /// <exception cref="NotSupportedException">
-    /// Thrown if the backend does not support restart operations.
-    /// </exception>
+    /// Thrown if the backend does not support restart operations. </exception>
+    [Obsolete("Experimental")]
     public virtual Task<string> RestartAsync(
         string instanceId,
         bool restartWithNewInstanceId = false,

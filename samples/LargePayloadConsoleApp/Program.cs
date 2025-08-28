@@ -57,7 +57,7 @@ builder.Services.AddDurableTaskWorker(b =>
             }
 
             // If we ever see a token in the activity, externalization is not being resolved correctly.
-            if (value.StartsWith("dts:v1:", StringComparison.Ordinal))
+            if (value.StartsWith("blob:v1:", StringComparison.Ordinal))
             {
                 throw new InvalidOperationException("Activity received a payload token instead of raw input.");
             }

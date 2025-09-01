@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageDescription>Azure Blob Storage externalized payload support for Durable Task.</PackageDescription>
+    <AssemblyName>Microsoft.DurableTask.Extensions.AzureBlobPayloads</AssemblyName>
+    <RootNamespace>Microsoft.DurableTask</RootNamespace>
+    <EnableStyleCop>true</EnableStyleCop>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.Storage.Blobs" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Abstractions\Abstractions.csproj" />
+    <ProjectReference Include="..\..\Client\Core\Client.csproj" />
+    <ProjectReference Include="..\..\Worker\Core\Worker.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <SharedSection Include="Core" />
+  </ItemGroup>
+
+</Project>
+

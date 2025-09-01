@@ -49,7 +49,7 @@ public sealed class BlobPayloadStore : IPayloadStore
 
         byte[] payloadBuffer = payloadBytes.ToArray();
 
-       // Compress and upload streaming
+        // Compress and upload streaming
         using Stream blobStream = await blob.OpenWriteAsync(overwrite: true, cancellationToken: cancellationToken).ConfigureAwait(false);
         using GZipStream compressedBlobStream = new(blobStream, CompressionLevel.Optimal, leaveOpen: true);
         using MemoryStream payloadStream = new(payloadBuffer, writable: false);
@@ -96,3 +96,5 @@ public sealed class BlobPayloadStore : IPayloadStore
         return (rest.Substring(0, sep), rest.Substring(sep + 1));
     }
 }
+
+

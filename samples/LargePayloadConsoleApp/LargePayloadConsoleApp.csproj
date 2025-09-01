@@ -16,6 +16,7 @@
     <!-- Using p2p references so we can show latest changes in samples. -->
     <ProjectReference Include="$(SrcRoot)Client/AzureManaged/Client.AzureManaged.csproj" />
     <ProjectReference Include="$(SrcRoot)Worker/AzureManaged/Worker.AzureManaged.csproj" />
+    <ProjectReference Include="$(SrcRoot)Extensions/AzureBlobPayloads/AzureBlobPayloads.csproj" />
   </ItemGroup>
 
 </Project>

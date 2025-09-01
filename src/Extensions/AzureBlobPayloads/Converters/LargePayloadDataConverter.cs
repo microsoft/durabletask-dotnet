@@ -26,9 +26,6 @@ public sealed class LargePayloadDataConverter(DataConverter innerConverter, IPay
     readonly LargePayloadStorageOptions largePayloadStorageOptions = largePayloadStorageOptions ?? throw new ArgumentNullException(nameof(largePayloadStorageOptions));
     readonly Encoding utf8 = new UTF8Encoding(false);
 
-    /// <inheritdoc/>
-    public override bool UsesExternalStorage => true;
-
     /// <summary>
     /// Serializes the value to a JSON string and uploads it to the external payload store if it exceeds the configured threshold.
     /// </summary>

@@ -89,7 +89,6 @@ OrchestrationMetadata result = await client.WaitForInstanceCompletionAsync(
     cts.Token);
 
 Console.WriteLine($"RuntimeStatus: {result.RuntimeStatus}");
-Console.WriteLine($"UsesExternalStorage (result converter): {result.DataConverter?.UsesExternalStorage ?? false}");
 string deserializedInput = result.ReadInputAs<string>() ?? string.Empty;
 string deserializedOutput = result.ReadOutputAs<string>() ?? string.Empty;
 

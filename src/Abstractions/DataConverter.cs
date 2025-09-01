@@ -19,11 +19,6 @@ namespace Microsoft.DurableTask;
 public abstract class DataConverter
 {
     /// <summary>
-    /// Gets a value indicating whether this converter may return an external reference token instead of inline JSON.
-    /// </summary>
-    public virtual bool UsesExternalStorage => false;
-
-    /// <summary>
     /// Serializes <paramref name="value"/> into a text string.
     /// </summary>
     /// <param name="value">The value to be serialized.</param>

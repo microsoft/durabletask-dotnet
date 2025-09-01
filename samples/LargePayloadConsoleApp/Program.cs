@@ -28,9 +28,8 @@ builder.Services.AddDurableTaskClient(b =>
     {
         // Keep threshold small to force externalization for demo purposes
         opts.ExternalizeThresholdBytes = 1024; // 1KB
-        // Default to local Azurite/emulator. Override via environment or appsettings if desired.
-        opts.ConnectionString = Environment.GetEnvironmentVariable("DURABLETASK_STORAGE") ?? "UseDevelopmentStorage=true";
-        opts.ContainerName = Environment.GetEnvironmentVariable("DURABLETASK_PAYLOAD_CONTAINER") ?? "durabletask-payloads";
+        opts.ConnectionString = builder.Configuration.GetValue<string>("DURABLETASK_STORAGE") ?? "UseDevelopmentStorage=true";
+        opts.ContainerName = builder.Configuration.GetValue<string>("DURABLETASK_PAYLOAD_CONTAINER");
     });
 });
 
@@ -67,8 +66,8 @@ builder.Services.AddDurableTaskWorker(b =>
     b.UseExternalizedPayloads(opts =>
     {
         opts.ExternalizeThresholdBytes = 1024; // mirror client
-        opts.ConnectionString = Environment.GetEnvironmentVariable("DURABLETASK_STORAGE") ?? "UseDevelopmentStorage=true";
-        opts.ContainerName = Environment.GetEnvironmentVariable("DURABLETASK_PAYLOAD_CONTAINER") ?? "durabletask-payloads";
+        opts.ConnectionString = builder.Configuration.GetValue<string>("DURABLETASK_STORAGE") ?? "UseDevelopmentStorage=true";
+        opts.ContainerName = builder.Configuration.GetValue<string>("DURABLETASK_PAYLOAD_CONTAINER");
     });
 });
 

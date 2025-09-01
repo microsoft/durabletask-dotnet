@@ -15,10 +15,10 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
 {
     // Validates client externalizes a large orchestration input and worker resolves it.
     [Fact]
-    public async Task OrchestrationInput_IsExternalizedByClient_ResolvedByWorker()
+    public async Task LargeOrchestrationInput()
     {
         string largeInput = new string('A', 1024 * 1024); // 1MB
-        TaskName orchestratorName = nameof(OrchestrationInput_IsExternalizedByClient_ResolvedByWorker);
+        TaskName orchestratorName = nameof(LargeOrchestrationInput);
 
         InMemoryPayloadStore fakeStore = new InMemoryPayloadStore();
 
@@ -72,10 +72,10 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
 
     // Validates worker externalizes large activity input and delivers resolved payload to activity.
     [Fact]
-    public async Task ActivityInput_IsExternalizedByWorker_ResolvedByActivity()
+    public async Task LargeActivityInput()
     {
         string largeParam = new string('P', 700 * 1024); // 700KB
-        TaskName orchestratorName = nameof(ActivityInput_IsExternalizedByWorker_ResolvedByActivity);
+        TaskName orchestratorName = nameof(LargeActivityInput);
         TaskName activityName = "EchoLength";
 
         InMemoryPayloadStore workerStore = new InMemoryPayloadStore();
@@ -113,10 +113,10 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
 
     // Validates worker externalizes large activity output which is resolved by the orchestrator.
     [Fact]
-    public async Task ActivityOutput_IsExternalizedByWorker_ResolvedByOrchestrator()
+    public async Task LargeActivityOutput()
     {
         string largeResult = new string('R', 850 * 1024); // 850KB
-        TaskName orchestratorName = nameof(ActivityOutput_IsExternalizedByWorker_ResolvedByOrchestrator);
+        TaskName orchestratorName = nameof(LargeActivityOutput);
         TaskName activityName = "ProduceLarge";
 
         InMemoryPayloadStore workerStore = new InMemoryPayloadStore();
@@ -154,11 +154,11 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
 
     // Ensures querying a completed instance downloads and resolves an externalized output on the client.
     [Fact]
-    public async Task QueryCompletedInstance_DownloadsExternalizedOutputOnClient()
+    public async Task LargeOrchestrationOutput()
     {
         string largeOutput = new string('Q', 900 * 1024); // 900KB
         string smallInput = "input";
-        TaskName orchestratorName = nameof(QueryCompletedInstance_DownloadsExternalizedOutputOnClient);
+        TaskName orchestratorName = nameof(LargeOrchestrationOutput);
 
         Dictionary<string, string> shared = new System.Collections.Generic.Dictionary<string, string>();
         InMemoryPayloadStore workerStore = new InMemoryPayloadStore(shared);
@@ -207,10 +207,10 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
 
     // Ensures payloads below the threshold are not externalized by client or worker.
     [Fact]
-    public async Task BelowThreshold_NotExternalized()
+    public async Task NoLargePayloads()
     {
         string smallPayload = new string('X', 64 * 1024); // 64KB
-        TaskName orchestratorName = nameof(BelowThreshold_NotExternalized);
+        TaskName orchestratorName = nameof(NoLargePayloads);
 
         InMemoryPayloadStore workerStore = new InMemoryPayloadStore();
         InMemoryPayloadStore clientStore = new InMemoryPayloadStore();
@@ -256,10 +256,10 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
 
     // Validates client externalizes a large external event payload and worker resolves it.
     [Fact]
-    public async Task ExternalEventPayload_IsExternalizedByClient_ResolvedByWorker()
+    public async Task LargeExternalEvent()
     {
         string largeEvent = new string('E', 512 * 1024); // 512KB
-        TaskName orchestratorName = nameof(ExternalEventPayload_IsExternalizedByClient_ResolvedByWorker);
+        TaskName orchestratorName = nameof(LargeExternalEvent);
         const string EventName = "LargeEvent";
 
         InMemoryPayloadStore fakeStore = new InMemoryPayloadStore();
@@ -306,11 +306,11 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
 
     // Validates worker externalizes both output and custom status; client resolves them on query.
     [Fact]
-    public async Task OutputAndCustomStatus_ExternalizedByWorker_ResolvedOnQuery()
+    public async Task LargeOutputAndCustomStatus()
     {
         string largeOutput = new string('O', 768 * 1024); // 768KB
         string largeStatus = new string('S', 600 * 1024); // 600KB
-        TaskName orchestratorName = nameof(OutputAndCustomStatus_ExternalizedByWorker_ResolvedOnQuery);
+        TaskName orchestratorName = nameof(LargeOutputAndCustomStatus);
 
         InMemoryPayloadStore fakeStore = new InMemoryPayloadStore();
 

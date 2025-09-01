@@ -24,6 +24,10 @@ public sealed class LargePayloadDataConverter(DataConverter innerConverter, IPay
     readonly DataConverter innerConverter = innerConverter ?? throw new ArgumentNullException(nameof(innerConverter));
     readonly IPayloadStore payLoadStore = payloadStore ?? throw new ArgumentNullException(nameof(payloadStore));
     readonly LargePayloadStorageOptions largePayloadStorageOptions = largePayloadStorageOptions ?? throw new ArgumentNullException(nameof(largePayloadStorageOptions));
+    // Use UTF-8 without a BOM (encoderShouldEmitUTF8Identifier=false). JSON in UTF-8 should not include a
+    // byte order mark per RFC 8259, and omitting it avoids hidden extra bytes that could skew the
+    // externalization threshold calculation and prevents interop issues with strict JSON parsers.
+    // A few legacy tools rely on a BOM for encoding detection, but modern JSON tooling assumes BOM-less UTF-8.
     readonly Encoding utf8 = new UTF8Encoding(false);
 
     /// <summary>

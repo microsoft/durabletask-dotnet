@@ -1,15 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.AzureManaged;
-using Microsoft.DurableTask.Converters;
+using Microsoft.DurableTask.Client.Entities;
+using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.AzureManaged;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Configuration;
 
 // Demonstrates Large Payload Externalization using Azure Blob Storage.
 // This sample uses Azurite/emulator by default via UseDevelopmentStorage=true.
@@ -24,6 +24,8 @@ string schedulerConnectionString = builder.Configuration.GetValue<string>("DURAB
 builder.Services.AddDurableTaskClient(b =>
 {
     b.UseDurableTaskScheduler(schedulerConnectionString);
+    // Ensure entity APIs are enabled for the client
+    b.Configure(o => o.EnableEntitySupport = true);
     b.UseExternalizedPayloads(opts =>
     {
         // Keep threshold small to force externalization for demo purposes
@@ -62,6 +64,38 @@ builder.Services.AddDurableTaskWorker(b =>
 
             return value;
         });
+
+        // Entity samples
+        // 1) Large entity operation input (worker externalizes input; entity receives resolved payload)
+        tasks.AddOrchestratorFunc<object?, int>(
+            "LargeEntityOperationInput",
+            (ctx, _) => ctx.Entities.CallEntityAsync<int>(
+                new EntityInstanceId(nameof(EchoLengthEntity), "1"),
+                operationName: "EchoLength",
+                input: new string('E', 700 * 1024)));
+        tasks.AddEntity<EchoLengthEntity>(nameof(EchoLengthEntity));
+
+        // 2) Large entity operation output (worker externalizes output; orchestrator reads resolved payload)
+        tasks.AddOrchestratorFunc<object?, int>(
+            "LargeEntityOperationOutput",
+            async (ctx, _) => (await ctx.Entities.CallEntityAsync<string>(
+                new EntityInstanceId(nameof(LargeResultEntity), "1"),
+                operationName: "Produce",
+                input: 850 * 1024)).Length);
+        tasks.AddEntity<LargeResultEntity>(nameof(LargeResultEntity));
+
+        // 3) Large entity state (worker externalizes state; client resolves on query)
+        tasks.AddOrchestratorFunc<object?, object?>(
+            "LargeEntityState",
+            async (ctx, _) =>
+            {
+                await ctx.Entities.CallEntityAsync(
+                    new EntityInstanceId(nameof(StateEntity), "1"),
+                    operationName: "Set",
+                    input: new string('S', 900 * 1024));
+                return null;
+            });
+        tasks.AddEntity<StateEntity>(nameof(StateEntity));
     });
     b.UseExternalizedPayloads(opts =>
     {
@@ -69,6 +103,8 @@ builder.Services.AddDurableTaskWorker(b =>
         opts.ConnectionString = builder.Configuration.GetValue<string>("DURABLETASK_STORAGE") ?? "UseDevelopmentStorage=true";
         opts.ContainerName = builder.Configuration.GetValue<string>("DURABLETASK_PAYLOAD_CONTAINER");
     });
+    // Ensure entity APIs are enabled for the worker
+    b.Configure(o => o.EnableEntitySupport = true);
 });
 
 IHost host = builder.Build();
@@ -82,7 +118,7 @@ string instanceId = await client.ScheduleNewOrchestrationInstanceAsync("LargeInp
 Console.WriteLine($"Started orchestration with direct large input. Instance: {instanceId}");
 
 
-using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
 OrchestrationMetadata result = await client.WaitForInstanceCompletionAsync(
     instanceId,
     getInputsAndOutputs: true,
@@ -97,6 +133,63 @@ Console.WriteLine($"SerializedOutput: {result.SerializedOutput}");
 Console.WriteLine($"Deserialized input equals original: {deserializedInput == largeInput}");
 Console.WriteLine($"Deserialized output equals original: {deserializedOutput == largeInput}");
 Console.WriteLine($"Deserialized input length: {deserializedInput.Length}");
+
+
+
+// Run entity samples
+Console.WriteLine();
+Console.WriteLine("Running LargeEntityOperationInput...");
+string entityInputInstance = await client.ScheduleNewOrchestrationInstanceAsync("LargeEntityOperationInput");
+OrchestrationMetadata entityInputResult = await client.WaitForInstanceCompletionAsync(entityInputInstance, getInputsAndOutputs: true, cts.Token);
+Console.WriteLine($"Status: {entityInputResult.RuntimeStatus}, Output length: {entityInputResult.ReadOutputAs<int>()}");
+
+Console.WriteLine();
+Console.WriteLine("Running LargeEntityOperationOutput...");
+string entityOutputInstance = await client.ScheduleNewOrchestrationInstanceAsync("LargeEntityOperationOutput");
+OrchestrationMetadata entityOutputResult = await client.WaitForInstanceCompletionAsync(entityOutputInstance, getInputsAndOutputs: true, cts.Token);
+Console.WriteLine($"Status: {entityOutputResult.RuntimeStatus}, Output length: {entityOutputResult.ReadOutputAs<int>()}");
+
+Console.WriteLine();
+Console.WriteLine("Running LargeEntityState and querying state...");
+string entityStateInstance = await client.ScheduleNewOrchestrationInstanceAsync("LargeEntityState");
+OrchestrationMetadata entityStateOrch = await client.WaitForInstanceCompletionAsync(entityStateInstance, getInputsAndOutputs: true, cts.Token);
+Console.WriteLine($"Status: {entityStateOrch.RuntimeStatus}");
+EntityMetadata<string>? state = await client.Entities.GetEntityAsync<string>(new EntityInstanceId(nameof(StateEntity), "1"), includeState: true);
+Console.WriteLine($"State length: {state?.State?.Length ?? 0}");
+
+
+
+
+
+public class EchoLengthEntity : TaskEntity<int>
+{
+    public int EchoLength(string input)
+    {
+        return input.Length;
+    }
+}
+
+public class LargeResultEntity : TaskEntity<object?>
+{
+    public string Produce(int length)
+    {
+        return new string('R', length);
+    }
+}
+
+public class StateEntity : TaskEntity<string?>
+{
+    protected override string? InitializeState(TaskEntityOperation entityOperation)
+    {
+        // Avoid Activator.CreateInstance<string>() which throws; start as null (no state)
+        return null;
+    }
+
+    public void Set(string value)
+    {
+        this.State = value;
+    }
+}
 
 
 

@@ -72,7 +72,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// </summary>
     /// <remarks>
     /// <para>All orchestrations must have a unique instance ID. You can provide an instance ID using the
-    /// <paramref name="options"/> parameter or you can omit this and a random instance ID will be
+    /// <paramref name="orchestrationOptions"/> parameter or you can omit this and a random instance ID will be
     /// generated for you automatically. If an orchestration with the specified instance ID already exists and is in a
     /// non-terminal state (Pending, Running, etc.), then this operation may fail silently. However, if an orchestration
     /// instance with this ID already exists in a terminal state (Completed, Terminated, Failed, etc.) then the instance
@@ -82,7 +82,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <see cref="OrchestrationRuntimeStatus.Pending"/> state and will transition to the
     /// <see cref="OrchestrationRuntimeStatus.Running"/> after successfully awaiting its first task. The exact time it
     /// takes before a scheduled orchestration starts running depends on several factors, including the configuration
-    /// and health of the backend task hub, and whether a start time was provided via <paramref name="options" />.
+    /// and health of the backend task hub, and whether a start time was provided via <paramref name="orchestrationOptions" />.
     /// </para><para>
     /// The task associated with this method completes after the orchestration instance was successfully scheduled. You
     /// can use the <see cref="GetInstanceAsync(string, bool, CancellationToken)"/> to query the status of the
@@ -96,7 +96,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <param name="input">
     /// The optional input to pass to the scheduled orchestration instance. This must be a serializable value.
     /// </param>
-    /// <param name="options">The options to start the new orchestration with.</param>
+    /// <param name="orchestrationOptions">The options to start the new orchestration with.</param>
     /// <param name="cancellation">
     /// The cancellation token. This only cancels enqueueing the new orchestration to the backend. Does not cancel the
     /// orchestration once enqueued.
@@ -104,13 +104,13 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <returns>
     /// A task that completes when the orchestration instance is successfully scheduled. The value of this task is
     /// the instance ID of the scheduled orchestration instance. If a non-null instance ID was provided via
-    /// <paramref name="options" />, the same value will be returned by the completed task.
+    /// <paramref name="orchestrationOptions" />, the same value will be returned by the completed task.
     /// </returns>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="orchestratorName"/> is empty.</exception>
     public abstract Task<string> ScheduleNewOrchestrationInstanceAsync(
         TaskName orchestratorName,
         object? input = null,
-        StartOrchestrationOptions? options = null,
+        StartOrchestrationOptions? orchestrationOptions = null,
         CancellationToken cancellation = default);
 
     /// <inheritdoc cref="RaiseEventAsync(string, string, object, CancellationToken)"/>
@@ -247,13 +247,13 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// </para>
     /// </remarks>
     /// <param name="instanceId">The ID of the orchestration instance to terminate.</param>
-    /// <param name="options">The optional options for terminating the orchestration.</param>
+    /// <param name="instanceOptions">The optional options for terminating the orchestration.</param>
     /// <param name="cancellation">
     /// The cancellation token. This only cancels enqueueing the termination request to the backend. Does not abort
     /// termination of the orchestration once enqueued.
     /// </param>
     /// <returns>A task that completes when the terminate message is enqueued.</returns>
-    public virtual Task TerminateInstanceAsync(string instanceId, TerminateInstanceOptions? options = null, CancellationToken cancellation = default)
+    public virtual Task TerminateInstanceAsync(string instanceId, TerminateInstanceOptions? instanceOptions = null, CancellationToken cancellation = default)
         => throw new NotSupportedException($"{this.GetType()} does not support orchestration termination.");
 
     /// <inheritdoc cref="SuspendInstanceAsync(string, string, CancellationToken)"/>
@@ -362,7 +362,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// </para>
     /// </remarks>
     /// <param name="instanceId">The unique ID of the orchestration instance to purge.</param>
-    /// <param name="options">The optional options for purging the orchestration.</param>
+    /// <param name="instanceOptions">The optional options for purging the orchestration.</param>
     /// <param name="cancellation">
     /// A <see cref="CancellationToken"/> that can be used to cancel the purge operation.
     /// </param>
@@ -372,7 +372,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// including the count of sub-orchestrations purged if any.
     /// </returns>
     public virtual Task<PurgeResult> PurgeInstanceAsync(
-        string instanceId, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
+        string instanceId, PurgeInstanceOptions? instanceOptions = null, CancellationToken cancellation = default)
     {
         throw new NotSupportedException($"{this.GetType()} does not support purging of orchestration instances.");
     }
@@ -385,7 +385,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// Purges orchestration instances metadata from the durable store.
     /// </summary>
     /// <param name="filter">The filter for which orchestrations to purge.</param>
-    /// <param name="options">The optional options for purging the orchestration.</param>
+    /// <param name="purgeOptions">The optional options for purging the orchestration.</param>
     /// <param name="cancellation">
     /// A <see cref="CancellationToken"/> that can be used to cancel the purge operation.
     /// </param>
@@ -395,7 +395,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// including the count of sub-orchestrations purged if any.
     /// </returns>
     public virtual Task<PurgeResult> PurgeAllInstancesAsync(
-        PurgeInstancesFilter filter, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
+        PurgeInstancesFilter filter, PurgeInstanceOptions? purgeOptions = null, CancellationToken cancellation = default)
     {
         throw new NotSupportedException($"{this.GetType()} does not support purging of orchestration instances.");
     }

@@ -62,13 +62,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         {
             address = "http://localhost:4001";
         }
-
-        // Create the HttpClient so we can avoid the default 100 second timeout
-        // As this service is created as a singleton, it's ok to create the HttpClient once here as well
-        // Create the client from IHttpClientFactory if available, otherwise create a new instance
-        var httpClient = this.httpClientFactory?.CreateClient() ?? new HttpClient();
-        httpClient.Timeout = Timeout.InfiniteTimeSpan;
-
+        
         // Configure keep-alive settings to maintain long-lived connections
         var handler = new SocketsHttpHandler
         {
@@ -87,12 +81,17 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
             PooledConnectionIdleTimeout = Timeout.InfiniteTimeSpan,
         };
 
+        // Create the HttpClient so we can avoid the default 100-second timeout
+        // As this service is created as a singleton, it's ok to create the HttpClient once here as well
+        // Register using the handler here so we conform to Grpc validation rules
+        var httpClient = new HttpClient(handler, disposeHandler: true);
+        httpClient.Timeout = Timeout.InfiniteTimeSpan;
+
         return GrpcChannel.ForAddress(address, new GrpcChannelOptions
         {
-            HttpHandler = handler,
             HttpClient = httpClient,
             MaxReceiveMessageSize = null, // No message size limit
-            DisposeHttpClient = false, // Lifetime managed by the HttpClientFactory
+            DisposeHttpClient = true,
             ServiceConfig = new ServiceConfig
             {
                 MethodConfigs =

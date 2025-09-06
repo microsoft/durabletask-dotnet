@@ -360,6 +360,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
 
     class InMemoryPayloadStore : IPayloadStore
     {
+        const string TokenPrefix = "blob:v1:";
         readonly Dictionary<string, string> tokenToPayload;
 
         public InMemoryPayloadStore()
@@ -391,5 +392,11 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             Interlocked.Increment(ref this.downloadCount);
             return Task.FromResult(this.tokenToPayload[token]);
         }
+
+        public bool IsKnownPayloadToken(string value)
+        {
+            return value.StartsWith(TokenPrefix, StringComparison.Ordinal);
+        }
+
     }
 }

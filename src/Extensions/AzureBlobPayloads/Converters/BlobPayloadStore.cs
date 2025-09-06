@@ -15,6 +15,7 @@ namespace Microsoft.DurableTask.Converters;
 /// </summary>
 public sealed class BlobPayloadStore : IPayloadStore
 {
+    const string TokenPrefix = "blob:v1:";
     readonly BlobContainerClient containerClient;
     readonly LargePayloadStorageOptions options;
 
@@ -74,6 +75,17 @@ public sealed class BlobPayloadStore : IPayloadStore
         using GZipStream decompressedBlobStream = new GZipStream(result.Content, CompressionMode.Decompress);
         using StreamReader reader = new(decompressedBlobStream, Encoding.UTF8);
         return await reader.ReadToEndAsync();
+    }
+
+    /// <inheritdoc/>
+    public bool IsKnownPayloadToken(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return false;
+        }
+
+        return value.StartsWith(TokenPrefix, StringComparison.Ordinal);
     }
 
     static string EncodeToken(string container, string name) => $"blob:v1:{container}:{name}";

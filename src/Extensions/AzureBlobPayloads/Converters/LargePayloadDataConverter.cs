@@ -23,7 +23,6 @@ public sealed class LargePayloadDataConverter(
     LargePayloadStorageOptions largePayloadStorageOptions
 ) : DataConverter
 {
-    const string TokenPrefix = "blob:v1:"; // matches BlobExternalPayloadStore
 
     readonly DataConverter innerConverter = innerConverter ?? throw new ArgumentNullException(nameof(innerConverter));
     readonly IPayloadStore payLoadStore = payloadStore ?? throw new ArgumentNullException(nameof(payloadStore));
@@ -74,7 +73,7 @@ public sealed class LargePayloadDataConverter(
         }
 
         string toDeserialize = data;
-        if (data.StartsWith(TokenPrefix, StringComparison.Ordinal))
+        if (this.payLoadStore.IsKnownPayloadToken(data))
         {
             toDeserialize = this.payLoadStore.DownloadAsync(data, CancellationToken.None).GetAwaiter().GetResult();
         }

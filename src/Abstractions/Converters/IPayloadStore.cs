@@ -23,4 +23,12 @@ public interface IPayloadStore
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Payload string.</returns>
     Task<string> DownloadAsync(string token, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Returns true if the specified value appears to be a token understood by this store.
+    /// Implementations should not throw for unknown tokens.
+    /// </summary>
+    /// <param name="value">The value to check.</param>
+    /// <returns><c>true</c> if the value is a token issued by this store; otherwise, <c>false</c>.</returns>
+    bool IsKnownPayloadToken(string value);
 }

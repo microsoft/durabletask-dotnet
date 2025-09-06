@@ -4,7 +4,6 @@
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
-using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 
@@ -71,7 +70,7 @@ public sealed class BlobPayloadStore : IPayloadStore
         }
 
         BlobClient blob = this.containerClient.GetBlobClient(name);
-        using BlobDownloadStreamingResult result = await blob.DownloadStreamingAsync(cancellationToken);
+        using BlobDownloadStreamingResult result = await blob.DownloadStreamingAsync(cancellationToken: cancellationToken);
         using GZipStream decompressedBlobStream = new GZipStream(result.Content, CompressionMode.Decompress);
         using StreamReader reader = new(decompressedBlobStream, Encoding.UTF8);
         return await reader.ReadToEndAsync();
@@ -96,5 +95,3 @@ public sealed class BlobPayloadStore : IPayloadStore
         return (rest.Substring(0, sep), rest.Substring(sep + 1));
     }
 }
-
-

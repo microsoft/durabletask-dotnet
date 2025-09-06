@@ -37,12 +37,12 @@ public sealed class LargePayloadDataConverter(DataConverter innerConverter, IPay
     /// <returns>The serialized value or the token if externalized.</returns>
     public override string? Serialize(object? value)
     {
-        if (value is null)
+        string? json = this.innerConverter.Serialize(value);
+
+        if (string.IsNullOrEmpty(json))
         {
             return null;
         }
-
-        string json = this.innerConverter.Serialize(value) ?? "null";
 
         int byteCount = this.utf8.GetByteCount(json);
         if (byteCount < this.largePayloadStorageOptions.ExternalizeThresholdBytes)

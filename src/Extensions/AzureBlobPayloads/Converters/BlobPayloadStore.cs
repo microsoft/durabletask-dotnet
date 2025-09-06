@@ -40,7 +40,7 @@ public sealed class BlobPayloadStore : IPayloadStore
     public async Task<string> UploadAsync(ReadOnlyMemory<byte> payloadBytes, CancellationToken cancellationToken)
     {
         // Ensure container exists
-        await this.containerClient.CreateIfNotExistsAsync(PublicAccessType.None, cancellationToken: cancellationToken).ConfigureAwait(false);
+        await this.containerClient.CreateIfNotExistsAsync(PublicAccessType.None, default, default, cancellationToken);
 
         // One blob per payload using GUID-based name for uniqueness
         string timestamp = DateTimeOffset.UtcNow.ToString("yyyy/MM/dd/HH/mm/ss", CultureInfo.InvariantCulture);
@@ -50,13 +50,13 @@ public sealed class BlobPayloadStore : IPayloadStore
         byte[] payloadBuffer = payloadBytes.ToArray();
 
         // Compress and upload streaming
-        using Stream blobStream = await blob.OpenWriteAsync(overwrite: true, cancellationToken: cancellationToken).ConfigureAwait(false);
+        using Stream blobStream = await blob.OpenWriteAsync(true, default, cancellationToken);
         using GZipStream compressedBlobStream = new(blobStream, CompressionLevel.Optimal, leaveOpen: true);
         using MemoryStream payloadStream = new(payloadBuffer, writable: false);
 
-        await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: 81920, cancellationToken).ConfigureAwait(false);
-        await compressedBlobStream.FlushAsync(cancellationToken).ConfigureAwait(false);
-        await blobStream.FlushAsync(cancellationToken).ConfigureAwait(false);
+        await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: 81920, cancellationToken);
+        await compressedBlobStream.FlushAsync(cancellationToken);
+        await blobStream.FlushAsync(cancellationToken);
 
         return EncodeToken(this.containerClient.Name, blobName);
     }
@@ -71,7 +71,7 @@ public sealed class BlobPayloadStore : IPayloadStore
         }
 
         BlobClient blob = this.containerClient.GetBlobClient(name);
-        using BlobDownloadStreamingResult result = await blob.DownloadStreamingAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        using BlobDownloadStreamingResult result = await blob.DownloadStreamingAsync(cancellationToken);
         using GZipStream decompressedBlobStream = new GZipStream(result.Content, CompressionMode.Decompress);
         using StreamReader reader = new(decompressedBlobStream, Encoding.UTF8);
         return await reader.ReadToEndAsync();

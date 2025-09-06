@@ -137,6 +137,4 @@ public static class DurableTaskWorkerBuilderExtensions
         builder.Services.AddSingleton(filter);
         return builder;
     }
-
-    // Large payload enablement moved to Microsoft.DurableTask.Extensions.AzureBlobPayloads package.
 }

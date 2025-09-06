@@ -101,6 +101,4 @@ public static class DurableTaskBuilderExtensions
         builder.Configure(options => options.DefaultVersion = version);
         return builder;
     }
-
-    // Large payload enablement moved to Microsoft.DurableTask.Extensions.AzureBlobPayloads package.
 }

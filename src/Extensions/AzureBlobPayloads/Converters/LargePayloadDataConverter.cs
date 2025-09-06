@@ -17,7 +17,11 @@ namespace Microsoft.DurableTask.Converters;
 /// <param name="payloadStore">The external payload store to use.</param>
 /// <param name="largePayloadStorageOptions">The options for the externalizing data converter.</param>
 /// <exception cref="ArgumentNullException">Thrown when <paramref name="innerConverter"/>, <paramref name="payloadStore"/>, or <paramref name="largePayloadStorageOptions"/> is null.</exception>
-public sealed class LargePayloadDataConverter(DataConverter innerConverter, IPayloadStore payloadStore, LargePayloadStorageOptions largePayloadStorageOptions) : DataConverter
+public sealed class LargePayloadDataConverter(
+    DataConverter innerConverter,
+    IPayloadStore payloadStore,
+    LargePayloadStorageOptions largePayloadStorageOptions
+) : DataConverter
 {
     const string TokenPrefix = "blob:v1:"; // matches BlobExternalPayloadStore
 

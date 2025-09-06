@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using DurableTask.Core.Serializing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Dapr.DurableTask.Client;
@@ -91,6 +91,22 @@ public static class ServiceCollectionExtensions
                 }
             });
 
+        services.Configure<LoggerFilterOptions>(options =>
+        {
+            // Suppress verbose HttpClient logging
+            options.Rules.Add(new LoggerFilterRule(null, "System.Net.Http.HttpClient", LogLevel.Warning, null));
+            options.Rules.Add(new LoggerFilterRule(null, "Microsoft.Extensions.Http", LogLevel.Warning, null));
+
+            // Suppress noisy gRPC logging
+            options.Rules.Add(new LoggerFilterRule(null, "Grpc.Net.Client", LogLevel.Warning, null));
+            options.Rules.Add(new LoggerFilterRule(null, "Grpc.Core", LogLevel.Warning, null));
+            options.Rules.Add(new LoggerFilterRule(null, "Grpc.AspNetCore.Server", LogLevel.Warning, null));
+
+            // Suppress other noisy infrastructure
+            options.Rules.Add(new LoggerFilterRule(null, "System.Net.Http.SocketsHttpHandler", LogLevel.Warning, null));
+            options.Rules.Add(new LoggerFilterRule(null, "System.Net.NameResolution", LogLevel.Warning, null));
+        });
+
         return services;
     }
 
@@ -98,7 +114,7 @@ public static class ServiceCollectionExtensions
     {
         // To ensure the builders are tracked with this service collection, we use a singleton service descriptor as a
         // holder for all builders.
-        ServiceDescriptor descriptor = services.FirstOrDefault(sd => sd.ServiceType == typeof(BuilderContainer));
+        ServiceDescriptor? descriptor = services.FirstOrDefault(sd => sd.ServiceType == typeof(BuilderContainer));
 
         if (descriptor is null)
         {

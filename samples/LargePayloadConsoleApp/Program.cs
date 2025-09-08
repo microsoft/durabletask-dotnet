@@ -139,23 +139,32 @@ Console.WriteLine($"Deserialized input length: {deserializedInput.Length}");
 // Run entity samples
 Console.WriteLine();
 Console.WriteLine("Running LargeEntityOperationInput...");
+string largeEntityInput = new string('E', 700 * 1024); // 700KB
 string entityInputInstance = await client.ScheduleNewOrchestrationInstanceAsync("LargeEntityOperationInput");
 OrchestrationMetadata entityInputResult = await client.WaitForInstanceCompletionAsync(entityInputInstance, getInputsAndOutputs: true, cts.Token);
-Console.WriteLine($"Status: {entityInputResult.RuntimeStatus}, Output length: {entityInputResult.ReadOutputAs<int>()}");
+int entityInputLength = entityInputResult.ReadOutputAs<int>();
+Console.WriteLine($"Status: {entityInputResult.RuntimeStatus}, Output length: {entityInputLength}");
+Console.WriteLine($"Deserialized input length equals original: {entityInputLength == largeEntityInput.Length}");
 
 Console.WriteLine();
 Console.WriteLine("Running LargeEntityOperationOutput...");
+int largeEntityOutputLength = 850 * 1024; // 850KB
 string entityOutputInstance = await client.ScheduleNewOrchestrationInstanceAsync("LargeEntityOperationOutput");
 OrchestrationMetadata entityOutputResult = await client.WaitForInstanceCompletionAsync(entityOutputInstance, getInputsAndOutputs: true, cts.Token);
-Console.WriteLine($"Status: {entityOutputResult.RuntimeStatus}, Output length: {entityOutputResult.ReadOutputAs<int>()}");
+int entityOutputLength = entityOutputResult.ReadOutputAs<int>();
+Console.WriteLine($"Status: {entityOutputResult.RuntimeStatus}, Output length: {entityOutputLength}");
+Console.WriteLine($"Deserialized output length equals original: {entityOutputLength == largeEntityOutputLength}");
 
 Console.WriteLine();
 Console.WriteLine("Running LargeEntityState and querying state...");
+string largeEntityState = new string('S', 900 * 1024); // 900KB
 string entityStateInstance = await client.ScheduleNewOrchestrationInstanceAsync("LargeEntityState");
 OrchestrationMetadata entityStateOrch = await client.WaitForInstanceCompletionAsync(entityStateInstance, getInputsAndOutputs: true, cts.Token);
 Console.WriteLine($"Status: {entityStateOrch.RuntimeStatus}");
 EntityMetadata<string>? state = await client.Entities.GetEntityAsync<string>(new EntityInstanceId(nameof(StateEntity), "1"), includeState: true);
-Console.WriteLine($"State length: {state?.State?.Length ?? 0}");
+int stateLength = state?.State?.Length ?? 0;
+Console.WriteLine($"State length: {stateLength}");
+Console.WriteLine($"Deserialized state equals original: {state?.State == largeEntityState}");
 
 
 

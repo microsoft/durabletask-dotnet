@@ -49,14 +49,24 @@ public sealed class BlobPayloadStore : IPayloadStore
 
         byte[] payloadBuffer = payloadBytes.ToArray();
 
-        // Compress and upload streaming
-        using Stream blobStream = await blob.OpenWriteAsync(true, default, cancellationToken);
-        using GZipStream compressedBlobStream = new(blobStream, CompressionLevel.Optimal, leaveOpen: true);
-        using MemoryStream payloadStream = new(payloadBuffer, writable: false);
+        // Upload streaming, optionally compressing and marking ContentEncoding
+        if (this.options.CompressPayloads)
+        {
+            using Stream blobStream = await blob.OpenWriteAsync(true, default, cancellationToken);
+            using GZipStream compressedBlobStream = new(blobStream, CompressionLevel.Optimal, leaveOpen: true);
+            using MemoryStream payloadStream = new(payloadBuffer, writable: false);
 
-        await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: 81920, cancellationToken);
-        await compressedBlobStream.FlushAsync(cancellationToken);
-        await blobStream.FlushAsync(cancellationToken);
+            await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: 81920, cancellationToken);
+            await compressedBlobStream.FlushAsync(cancellationToken);
+            await blobStream.FlushAsync(cancellationToken);
+        }
+        else
+        {
+            using Stream blobStream = await blob.OpenWriteAsync(true, default, cancellationToken);
+            using MemoryStream payloadStream = new(payloadBuffer, writable: false);
+            await payloadStream.CopyToAsync(blobStream, bufferSize: 81920, cancellationToken);
+            await blobStream.FlushAsync(cancellationToken);
+        }
 
         return EncodeToken(this.containerClient.Name, blobName);
     }
@@ -72,9 +82,18 @@ public sealed class BlobPayloadStore : IPayloadStore
 
         BlobClient blob = this.containerClient.GetBlobClient(name);
         using BlobDownloadStreamingResult result = await blob.DownloadStreamingAsync(cancellationToken: cancellationToken);
-        using GZipStream decompressedBlobStream = new GZipStream(result.Content, CompressionMode.Decompress);
-        using StreamReader reader = new(decompressedBlobStream, Encoding.UTF8);
-        return await reader.ReadToEndAsync();
+        Stream contentStream = result.Content;
+        if (this.options.CompressPayloads)
+        {
+            using GZipStream decompressedBlobStream = new(contentStream, CompressionMode.Decompress);
+            using StreamReader reader = new(decompressedBlobStream, Encoding.UTF8);
+            return await reader.ReadToEndAsync();
+        }
+        else
+        {
+            using StreamReader reader = new(contentStream, Encoding.UTF8);
+            return await reader.ReadToEndAsync();
+        }
     }
 
     /// <inheritdoc/>

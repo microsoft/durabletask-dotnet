@@ -41,4 +41,10 @@ public sealed class LargePayloadStorageOptions
     /// Gets or sets the blob container name to use for payloads. Defaults to "durabletask-payloads".
     /// </summary>
     public string ContainerName { get; set; } = "durabletask-payloads";
+
+    /// <summary>
+    /// Gets or sets a value indicating whether payloads should be gzip-compressed when stored.
+    /// Defaults to true for reduced storage and bandwidth.
+    /// </summary>
+    public bool CompressPayloads { get; set; } = true;
 }

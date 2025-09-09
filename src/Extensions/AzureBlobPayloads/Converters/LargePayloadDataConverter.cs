@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
 namespace Microsoft.DurableTask.Converters;
@@ -20,25 +21,39 @@ namespace Microsoft.DurableTask.Converters;
 public sealed class LargePayloadDataConverter(
     DataConverter innerConverter,
     IPayloadStore payloadStore,
-    LargePayloadStorageOptions largePayloadStorageOptions
-) : DataConverter
+    LargePayloadStorageOptions largePayloadStorageOptions) : DataConverter
 {
-
     readonly DataConverter innerConverter = innerConverter ?? throw new ArgumentNullException(nameof(innerConverter));
     readonly IPayloadStore payLoadStore = payloadStore ?? throw new ArgumentNullException(nameof(payloadStore));
     readonly LargePayloadStorageOptions largePayloadStorageOptions = largePayloadStorageOptions ?? throw new ArgumentNullException(nameof(largePayloadStorageOptions));
+
     // Use UTF-8 without a BOM (encoderShouldEmitUTF8Identifier=false). JSON in UTF-8 should not include a
     // byte order mark per RFC 8259, and omitting it avoids hidden extra bytes that could skew the
     // externalization threshold calculation and prevents interop issues with strict JSON parsers.
     // A few legacy tools rely on a BOM for encoding detection, but modern JSON tooling assumes BOM-less UTF-8.
     readonly Encoding utf8 = new UTF8Encoding(false);
 
+    /// <inheritdoc/>
+    [return: NotNullIfNotNull("value")]
+    public override string? Serialize(object? value)
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <inheritdoc/>
+    [return: NotNullIfNotNull("data")]
+    public override object? Deserialize(string? data, Type targetType)
+    {
+        throw new NotImplementedException();
+    }
+
     /// <summary>
     /// Serializes the value to a JSON string and uploads it to the external payload store if it exceeds the configured threshold.
     /// </summary>
     /// <param name="value">The value to serialize.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The serialized value or the token if externalized.</returns>
-    public override string? Serialize(object? value)
+    public override async ValueTask<string?> SerializeAsync(object? value, CancellationToken cancellationToken = default)
     {
         string? json = this.innerConverter.Serialize(value);
 
@@ -55,8 +70,7 @@ public sealed class LargePayloadDataConverter(
 
         // Upload synchronously in this context by blocking on async. SDK call sites already run on threadpool.
         byte[] bytes = this.utf8.GetBytes(json);
-        string token = this.payLoadStore.UploadAsync(bytes, CancellationToken.None).GetAwaiter().GetResult();
-        return token;
+        return await this.payLoadStore.UploadAsync(bytes, cancellationToken);
     }
 
     /// <summary>
@@ -64,8 +78,12 @@ public sealed class LargePayloadDataConverter(
     /// </summary>
     /// <param name="data">The JSON string or token.</param>
     /// <param name="targetType">The type to deserialize to.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The deserialized value.</returns>
-    public override object? Deserialize(string? data, Type targetType)
+    public override async ValueTask<object?> DeserializeAsync(
+        string? data,
+        Type targetType,
+        CancellationToken cancellationToken = default)
     {
         if (data is null)
         {
@@ -75,7 +93,7 @@ public sealed class LargePayloadDataConverter(
         string toDeserialize = data;
         if (this.payLoadStore.IsKnownPayloadToken(data))
         {
-            toDeserialize = this.payLoadStore.DownloadAsync(data, CancellationToken.None).GetAwaiter().GetResult();
+            toDeserialize = await this.payLoadStore.DownloadAsync(data, CancellationToken.None);
         }
 
         return this.innerConverter.Deserialize(StripArrayCharacters(toDeserialize), targetType);
@@ -92,5 +110,3 @@ public sealed class LargePayloadDataConverter(
         return input;
     }
 }
-
-

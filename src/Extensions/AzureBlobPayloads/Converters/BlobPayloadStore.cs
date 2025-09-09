@@ -52,7 +52,11 @@ public sealed class BlobPayloadStore : IPayloadStore
         // Upload streaming, optionally compressing and marking ContentEncoding
         if (this.options.CompressPayloads)
         {
-            using Stream blobStream = await blob.OpenWriteAsync(true, default, cancellationToken);
+            BlobOpenWriteOptions writeOptions = new()
+            {
+                HttpHeaders = new BlobHttpHeaders { ContentEncoding = "gzip" },
+            };
+            using Stream blobStream = await blob.OpenWriteAsync(true, writeOptions, cancellationToken);
             using GZipStream compressedBlobStream = new(blobStream, CompressionLevel.Optimal, leaveOpen: true);
             using MemoryStream payloadStream = new(payloadBuffer, writable: false);
 
@@ -83,17 +87,18 @@ public sealed class BlobPayloadStore : IPayloadStore
         BlobClient blob = this.containerClient.GetBlobClient(name);
         using BlobDownloadStreamingResult result = await blob.DownloadStreamingAsync(cancellationToken: cancellationToken);
         Stream contentStream = result.Content;
-        if (this.options.CompressPayloads)
+        bool isGzip = string.Equals(
+            result.Details.ContentEncoding, "gzip", StringComparison.OrdinalIgnoreCase);
+
+        if (isGzip)
         {
-            using GZipStream decompressedBlobStream = new(contentStream, CompressionMode.Decompress);
-            using StreamReader reader = new(decompressedBlobStream, Encoding.UTF8);
+            using GZipStream decompressed = new(contentStream, CompressionMode.Decompress);
+            using StreamReader reader = new(decompressed, Encoding.UTF8);
             return await reader.ReadToEndAsync();
         }
-        else
-        {
-            using StreamReader reader = new(contentStream, Encoding.UTF8);
-            return await reader.ReadToEndAsync();
-        }
+
+        using StreamReader uncompressedReader = new(contentStream, Encoding.UTF8);
+        return await uncompressedReader.ReadToEndAsync();
     }
 
     /// <inheritdoc/>

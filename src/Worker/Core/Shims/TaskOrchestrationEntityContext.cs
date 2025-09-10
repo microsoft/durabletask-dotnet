@@ -98,7 +98,9 @@ sealed partial class TaskOrchestrationContextWrapper
             }
             else
             {
-                return this.wrapper.DataConverter.Deserialize<TResult>(operationResult.Result!);
+                return this.wrapper.SupportsAsyncSerialization
+                    ? await this.wrapper.DataConverter.DeserializeAsync<TResult>(operationResult.Result)
+                    : this.wrapper.DataConverter.Deserialize<TResult>(operationResult.Result);
             }
         }
 
@@ -173,7 +175,7 @@ sealed partial class TaskOrchestrationContextWrapper
         async Task<OperationResult> CallEntityInternalAsync(EntityInstanceId id, string operationName, object? input)
         {
             string instanceId = id.ToString();
-            Guid requestId = this.SendOperationMessage(instanceId, operationName, input, oneWay: false, scheduledTime: null);
+            Guid requestId = await this.SendOperationMessage(instanceId, operationName, input, oneWay: false, scheduledTime: null);
 
             OperationResult response = await this.wrapper.WaitForExternalEvent<OperationResult>(requestId.ToString());
 
@@ -186,7 +188,7 @@ sealed partial class TaskOrchestrationContextWrapper
             return response;
         }
 
-        Guid SendOperationMessage(string instanceId, string operationName, object? input, bool oneWay, DateTimeOffset? scheduledTime)
+        async Task<Guid> SendOperationMessage(string instanceId, string operationName, object? input, bool oneWay, DateTimeOffset? scheduledTime)
         {
             if (!this.EntityContext.ValidateOperationTransition(instanceId, oneWay, out string? errorMessage))
             {
@@ -194,7 +196,9 @@ sealed partial class TaskOrchestrationContextWrapper
             }
 
             Guid guid = this.wrapper.NewGuid(); // deterministically replayable unique id for this request
-            string? serializedInput = this.wrapper.DataConverter.Serialize(input);
+            string? serializedInput = this.wrapper.SupportsAsyncSerialization
+                ? await this.wrapper.DataConverter.SerializeAsync(input, CancellationToken.None)
+                : this.wrapper.DataConverter.Serialize(input);
             var target = new OrchestrationInstance() { InstanceId = instanceId };
 
             EntityMessageEvent entityMessageEvent = this.EntityContext.EmitRequestMessage(

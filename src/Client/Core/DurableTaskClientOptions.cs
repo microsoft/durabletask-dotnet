@@ -12,6 +12,7 @@ public class DurableTaskClientOptions
 {
     DataConverter dataConverter = JsonDataConverter.Default;
     bool enableEntitySupport;
+    bool enableLargePayloadSupport;
 
     /// <summary>
     /// Gets or sets the version of orchestrations that will be created.
@@ -70,6 +71,20 @@ public class DurableTaskClientOptions
     }
 
     /// <summary>
+    /// Gets or sets a value indicating whether this client should support large payloads using async serialization/deserialization.
+    /// When enabled, the client will use async methods for serialization and deserialization to support externalized payloads.
+    /// </summary>
+    public bool EnableLargePayloadSupport
+    {
+        get => this.enableLargePayloadSupport;
+        set
+        {
+            this.enableLargePayloadSupport = value;
+            this.LargePayloadSupportExplicitlySet = true;
+        }
+    }
+
+    /// <summary>
     /// Gets a value indicating whether <see cref="DataConverter" /> was explicitly set or not.
     /// </summary>
     /// <remarks>
@@ -84,6 +99,11 @@ public class DurableTaskClientOptions
     /// Gets a value indicating whether <see cref="EnableEntitySupport" /> was explicitly set or not.
     /// </summary>
     internal bool EntitySupportExplicitlySet { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether <see cref="EnableLargePayloadSupport" /> was explicitly set or not.
+    /// </summary>
+    internal bool LargePayloadSupportExplicitlySet { get; private set; }
 
     /// <summary>
     /// Applies these option values to another.
@@ -102,6 +122,11 @@ public class DurableTaskClientOptions
             if (!other.EntitySupportExplicitlySet)
             {
                 other.EnableEntitySupport = this.EnableEntitySupport;
+            }
+
+            if (!other.LargePayloadSupportExplicitlySet)
+            {
+                other.EnableLargePayloadSupport = this.EnableLargePayloadSupport;
             }
 
             if (!string.IsNullOrWhiteSpace(this.DefaultVersion))

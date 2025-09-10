@@ -197,6 +197,87 @@ public sealed class OrchestrationMetadata
     }
 
     /// <summary>
+    /// Asynchronously deserializes the orchestration's input into an object of the specified type.
+    /// </summary>
+    /// <remarks>
+    /// This method can only be used when inputs and outputs are explicitly requested from the
+    /// <see cref="DurableTaskClient.GetInstancesAsync(string, CancellationToken)"/> or
+    /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync(string, CancellationToken)"/> method that produced
+    /// this <see cref="OrchestrationMetadata"/> object.
+    /// </remarks>
+    /// <typeparam name="T">The type to deserialize the orchestration input into.</typeparam>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Returns the deserialized input value.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if this metadata object was fetched without the option to read inputs and outputs.
+    /// </exception>
+    public async ValueTask<T?> ReadInputAsAsync<T>(CancellationToken cancellationToken = default)
+    {
+        if (!this.RequestedInputsAndOutputs)
+        {
+            throw new InvalidOperationException(
+                $"The {nameof(this.ReadInputAsAsync)} method can only be used on {nameof(OrchestrationMetadata)} objects " +
+                "that are fetched with the option to include input data.");
+        }
+
+        return await this.DataConverter.DeserializeAsync<T>(this.SerializedInput, cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously deserializes the orchestration's output into an object of the specified type.
+    /// </summary>
+    /// <remarks>
+    /// This method can only be used when inputs and outputs are explicitly requested from the
+    /// <see cref="DurableTaskClient.GetInstancesAsync(string, CancellationToken)"/> or
+    /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync(string, CancellationToken)"/> method that produced
+    /// this <see cref="OrchestrationMetadata"/> object.
+    /// </remarks>
+    /// <typeparam name="T">The type to deserialize the orchestration output into.</typeparam>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Returns the deserialized output value.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if this metadata object was fetched without the option to read inputs and outputs.
+    /// </exception>
+    public async ValueTask<T?> ReadOutputAsAsync<T>(CancellationToken cancellationToken = default)
+    {
+        if (!this.RequestedInputsAndOutputs)
+        {
+            throw new InvalidOperationException(
+                $"The {nameof(this.ReadOutputAsAsync)} method can only be used on {nameof(OrchestrationMetadata)} objects " +
+                "that are fetched with the option to include output data.");
+        }
+
+        return await this.DataConverter.DeserializeAsync<T>(this.SerializedOutput, cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously deserializes the orchestration's custom status value into an object of the specified type.
+    /// </summary>
+    /// <remarks>
+    /// This method can only be used when inputs and outputs are explicitly requested from the
+    /// <see cref="DurableTaskClient.GetInstancesAsync(string, CancellationToken)"/> or
+    /// <see cref="DurableTaskClient.WaitForInstanceCompletionAsync(string, CancellationToken)"/> method that produced
+    /// this <see cref="OrchestrationMetadata"/> object.
+    /// </remarks>
+    /// <typeparam name="T">The type to deserialize the orchestration' custom status into.</typeparam>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Returns the deserialized custom status value.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if this metadata object was fetched without the option to read inputs and outputs.
+    /// </exception>
+    public async ValueTask<T?> ReadCustomStatusAsAsync<T>(CancellationToken cancellationToken = default)
+    {
+        if (!this.RequestedInputsAndOutputs)
+        {
+            throw new InvalidOperationException(
+                $"The {nameof(this.ReadCustomStatusAsAsync)} method can only be used on {nameof(OrchestrationMetadata)}" +
+                " objects that are fetched with the option to include input and output data.");
+        }
+
+        return await this.DataConverter.DeserializeAsync<T>(this.SerializedCustomStatus, cancellationToken);
+    }
+
+    /// <summary>
     /// Generates a user-friendly string representation of the current metadata object.
     /// </summary>
     /// <returns>A user-friendly string representation of the current metadata object.</returns>

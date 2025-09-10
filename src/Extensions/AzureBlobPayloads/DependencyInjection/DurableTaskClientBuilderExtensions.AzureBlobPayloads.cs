@@ -17,6 +17,9 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
     /// <summary>
     /// Enables externalized payload storage using Azure Blob Storage for the specified client builder.
     /// </summary>
+    /// <param name="builder">The client builder.</param>
+    /// <param name="configure">The configure action.</param>
+    /// <returns>The original builder, for call chaining.</returns>
     public static IDurableTaskClientBuilder UseExternalizedPayloads(
         this IDurableTaskClientBuilder builder,
         Action<LargePayloadStorageOptions> configure)
@@ -43,5 +46,3 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
         return builder;
     }
 }
-
-

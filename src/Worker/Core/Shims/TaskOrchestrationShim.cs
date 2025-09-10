@@ -55,6 +55,11 @@ partial class TaskOrchestrationShim : TaskOrchestration
 
     DataConverter DataConverter => this.invocationContext.Options.DataConverter;
 
+    /// <summary>
+    /// Gets a value indicating whether the DataConverter supports async operations (LargePayload enabled).
+    /// </summary>
+    bool SupportsAsyncSerialization => this.invocationContext.Options.EnableLargePayloadSupport;
+
     /// <inheritdoc/>
     public override async Task<string?> Execute(OrchestrationContext innerContext, string rawInput)
     {
@@ -63,7 +68,9 @@ partial class TaskOrchestrationShim : TaskOrchestration
         innerContext.MessageDataConverter = converterShim;
         innerContext.ErrorDataConverter = converterShim;
 
-        object? input = this.DataConverter.Deserialize(rawInput, this.implementation.InputType);
+        object? input = this.SupportsAsyncSerialization
+            ? await this.DataConverter.DeserializeAsync(rawInput, this.implementation.InputType)
+            : this.DataConverter.Deserialize(rawInput, this.implementation.InputType);
         this.wrapperContext = new(innerContext, this.invocationContext, input, this.properties);
 
         string instanceId = innerContext.OrchestrationInstance.InstanceId;
@@ -82,7 +89,9 @@ partial class TaskOrchestrationShim : TaskOrchestration
             }
 
             // Return the output (if any) as a serialized string.
-            return this.DataConverter.Serialize(output);
+            return this.SupportsAsyncSerialization
+                ? await this.DataConverter.SerializeAsync(output)
+                : this.DataConverter.Serialize(output);
         }
         catch (TaskFailedException e)
         {
@@ -103,6 +112,17 @@ partial class TaskOrchestrationShim : TaskOrchestration
             // if user code crashed inside a critical section, or did not exit it, do that now
             this.wrapperContext.ExitCriticalSectionIfNeeded();
         }
+    }
+
+    /// <inheritdoc/>
+    public override async Task<string?> GetStatusAsync()
+    {
+        if (this.wrapperContext == null)
+        {
+            return null;
+        }
+
+        return await this.wrapperContext.GetSerializedCustomStatusAsync();
     }
 
     /// <inheritdoc/>

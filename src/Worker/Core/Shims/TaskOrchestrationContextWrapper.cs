@@ -113,6 +113,11 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// </summary>
     internal DataConverter DataConverter => this.invocationContext.Options.DataConverter;
 
+    /// <summary>
+    /// Gets a value indicating whether the DataConverter supports async operations (LargePayload enabled).
+    /// </summary>
+    bool SupportsAsyncSerialization => this.invocationContext.Options.EnableLargePayloadSupport;
+
     /// <inheritdoc/>
     protected override ILoggerFactory LoggerFactory => this.invocationContext.LoggerFactory;
 
@@ -283,7 +288,9 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         // Return immediately if this external event has already arrived.
         if (this.externalEventBuffer.TryTake(eventName, out string? bufferedEventPayload))
         {
-            return Task.FromResult(this.DataConverter.Deserialize<T>(bufferedEventPayload));
+            return this.SupportsAsyncSerialization
+                ? this.DataConverter.DeserializeAsync<T>(bufferedEventPayload, cancellationToken).AsTask()
+                : Task.FromResult(this.DataConverter.Deserialize<T>(bufferedEventPayload));
         }
 
         // Create a task completion source that will be set when the external event arrives.
@@ -414,7 +421,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// </summary>
     /// <param name="eventName">The name of the event to complete.</param>
     /// <param name="rawEventPayload">The serialized event payload.</param>
-    internal void CompleteExternalEvent(string eventName, string rawEventPayload)
+    internal async Task CompleteExternalEvent(string eventName, string rawEventPayload)
     {
         if (this.externalEventSources.TryGetValue(eventName, out Queue<IEventSource>? waiters))
         {
@@ -429,7 +436,9 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             }
             else
             {
-                value = this.DataConverter.Deserialize(rawEventPayload, waiter.EventType);
+                value = this.SupportsAsyncSerialization
+                    ? await this.DataConverter.DeserializeAsync(rawEventPayload, waiter.EventType, CancellationToken.None)
+                    : this.DataConverter.Deserialize(rawEventPayload, waiter.EventType);
             }
 
             // Events are completed in FIFO order. Remove the key if the last event was delivered.
@@ -446,6 +455,17 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             // the orchestrator wants it later.
             this.externalEventBuffer.Add(eventName, rawEventPayload);
         }
+    }
+
+    /// <summary>
+    /// Gets the serialized custom status.
+    /// </summary>
+    /// <returns>The custom status serialized to a string, or <c>null</c> if there is not custom status.</returns>
+    internal async ValueTask<string?> GetSerializedCustomStatusAsync(CancellationToken cancellationToken = default)
+    {
+        return this.SupportsAsyncSerialization
+            ? await this.DataConverter.SerializeAsync(this.customStatus, cancellationToken)
+            : this.DataConverter.Serialize(this.customStatus);
     }
 
     /// <summary>

@@ -88,6 +88,12 @@ public class DurableTaskWorkerOptions
     public bool EnableEntitySupport { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether this worker should support large payloads using async serialization/deserialization.
+    /// When enabled, the worker will use async methods for serialization and deserialization to support externalized payloads.
+    /// </summary>
+    public bool EnableLargePayloadSupport { get; set; }
+
+    /// <summary>
     /// Gets or sets the maximum timer interval for the
     /// <see cref="TaskOrchestrationContext.CreateTimer(TimeSpan, CancellationToken)"/> method.
     /// </summary>
@@ -174,6 +180,7 @@ public class DurableTaskWorkerOptions
             other.DataConverter = this.DataConverter;
             other.MaximumTimerInterval = this.MaximumTimerInterval;
             other.EnableEntitySupport = this.EnableEntitySupport;
+            other.EnableLargePayloadSupport = this.EnableLargePayloadSupport;
             other.Versioning = this.Versioning;
             other.OrchestrationFilter = this.OrchestrationFilter;
         }

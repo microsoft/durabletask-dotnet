@@ -67,6 +67,11 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
 
     DataConverter DataConverter => this.options.DataConverter;
 
+    /// <summary>
+    /// Gets a value indicating whether the DataConverter supports async operations (LargePayload enabled).
+    /// </summary>
+    bool SupportsAsyncSerialization => this.options.EnableLargePayloadSupport;
+
     IOrchestrationServiceClient Client => this.options.Client!;
 
     IOrchestrationServicePurgeClient PurgeClient => this.CastClient<IOrchestrationServicePurgeClient>();
@@ -141,14 +146,16 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     }
 
     /// <inheritdoc/>
-    public override Task RaiseEventAsync(
+    public override async Task RaiseEventAsync(
         string instanceId, string eventName, object? eventPayload = null, CancellationToken cancellation = default)
     {
         Check.NotNullOrEmpty(instanceId);
         Check.NotNullOrEmpty(eventName);
 
-        string? serializedInput = this.DataConverter.Serialize(eventPayload);
-        return this.SendInstanceMessageAsync(
+        string? serializedInput = this.SupportsAsyncSerialization
+            ? await this.DataConverter.SerializeAsync(eventPayload, cancellation)
+            : this.DataConverter.Serialize(eventPayload);
+        await this.SendInstanceMessageAsync(
             instanceId, new EventRaisedEvent(-1, serializedInput) { Name = eventName }, cancellation);
     }
 
@@ -167,7 +174,9 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
             ExecutionId = Guid.NewGuid().ToString("N"),
         };
 
-        string? serializedInput = this.DataConverter.Serialize(input);
+        string? serializedInput = this.SupportsAsyncSerialization
+            ? await this.DataConverter.SerializeAsync(input, cancellation)
+            : this.DataConverter.Serialize(input);
 
         var tags = new Dictionary<string, string>();
         if (options?.Tags != null)
@@ -207,16 +216,18 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
         => this.SendInstanceMessageAsync(instanceId, new ExecutionResumedEvent(-1, reason), cancellation);
 
     /// <inheritdoc/>
-    public override Task TerminateInstanceAsync(
+    public override async Task TerminateInstanceAsync(
         string instanceId, TerminateInstanceOptions? options = null, CancellationToken cancellation = default)
     {
         object? output = options?.Output;
         Check.NotNullOrEmpty(instanceId);
         cancellation.ThrowIfCancellationRequested();
-        string? reason = this.DataConverter.Serialize(output);
+        string? reason = this.SupportsAsyncSerialization
+            ? await this.DataConverter.SerializeAsync(output, cancellation)
+            : this.DataConverter.Serialize(output);
 
         // TODO: Support recursive termination of sub-orchestrations
-        return this.Client.ForceTerminateTaskOrchestrationAsync(instanceId, reason);
+        await this.Client.ForceTerminateTaskOrchestrationAsync(instanceId, reason);
     }
 
     /// <inheritdoc/>

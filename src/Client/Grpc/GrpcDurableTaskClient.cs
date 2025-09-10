@@ -64,6 +64,11 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
     DataConverter DataConverter => this.options.DataConverter;
 
+    /// <summary>
+    /// Gets a value indicating whether the DataConverter supports async operations (LargePayload enabled).
+    /// </summary>
+    bool SupportsAsyncSerialization => this.options.EnableLargePayloadSupport;
+
     /// <inheritdoc/>
     public override ValueTask DisposeAsync()
     {
@@ -90,12 +95,16 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             version = this.options.DefaultVersion;
         }
 
+        string instanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N");
+
         var request = new P.CreateInstanceRequest
         {
             Name = orchestratorName.Name,
             Version = version,
-            InstanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N"),
-            Input = this.DataConverter.Serialize(input),
+            InstanceId = instanceId,
+            Input = this.SupportsAsyncSerialization
+                ? await this.DataConverter.SerializeAsync(input, cancellation)
+                : this.DataConverter.Serialize(input),
             RequestTime = DateTimeOffset.UtcNow.ToTimestamp(),
         };
 
@@ -109,11 +118,17 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
 
         DateTimeOffset? startAt = options?.StartAt;
-        this.logger.SchedulingOrchestration(
-            request.InstanceId,
-            orchestratorName,
-            sizeInBytes: request.Input != null ? Encoding.UTF8.GetByteCount(request.Input) : 0,
-            startAt.GetValueOrDefault(DateTimeOffset.UtcNow));
+        string name = orchestratorName.Name ?? string.Empty;
+        string? serializedInput = request.Input;
+        int sizeInBytes = 0;
+        if (!string.IsNullOrEmpty(serializedInput))
+        {
+            sizeInBytes = Encoding.UTF8.GetByteCount(serializedInput!);
+        }
+
+        DateTimeOffset startTime = startAt.GetValueOrDefault(DateTimeOffset.UtcNow);
+
+        this.logger.SchedulingOrchestration(instanceId, name, sizeInBytes, startTime);
 
         if (startAt.HasValue)
         {
@@ -141,7 +156,9 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         {
             InstanceId = instanceId,
             Name = eventName,
-            Input = this.DataConverter.Serialize(eventPayload),
+            Input = this.SupportsAsyncSerialization
+                ? await this.DataConverter.SerializeAsync(eventPayload, cancellation)
+                : this.DataConverter.Serialize(eventPayload),
         };
 
         using Activity? traceActivity = TraceHelper.StartActivityForNewEventRaisedFromClient(request, instanceId);
@@ -161,7 +178,9 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
         this.logger.TerminatingInstance(instanceId);
 
-        string? serializedOutput = this.DataConverter.Serialize(output);
+        string? serializedOutput = this.SupportsAsyncSerialization
+            ? await this.DataConverter.SerializeAsync(output, cancellation)
+            : this.DataConverter.Serialize(output);
         await this.sidecarClient.TerminateInstanceAsync(
             new P.TerminateRequest
             {

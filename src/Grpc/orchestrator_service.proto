@@ -691,6 +691,9 @@ service TaskHubSidecarService {
     // Rewinds an orchestration instance to last known good state and replays from there.
     rpc RewindInstance(RewindInstanceRequest) returns (RewindInstanceResponse);
 
+    // Restarts an orchestration instance.
+    rpc RestartInstance(RestartInstanceRequest) returns (RestartInstanceResponse);
+
     // Waits for an orchestration instance to reach a running or completion state.
     rpc WaitForInstanceStart(GetInstanceRequest) returns (GetInstanceResponse);
 
@@ -708,9 +711,6 @@ service TaskHubSidecarService {
 
     // Resumes a suspended orchestration instance.
     rpc ResumeInstance(ResumeRequest) returns (ResumeResponse);
-
-    // Restarts an orchestration instance with the same or a new instance ID.
-    rpc RestartInstance(RestartInstanceRequest) returns (RestartInstanceResponse);
 
     // rpc DeleteInstance(DeleteInstanceRequest) returns (DeleteInstanceResponse);
 

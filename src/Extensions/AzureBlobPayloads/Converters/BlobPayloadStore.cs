@@ -4,6 +4,8 @@
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
+using Azure;
+using Azure.Core;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 
@@ -16,6 +18,10 @@ namespace Microsoft.DurableTask.Converters;
 public sealed class BlobPayloadStore : IPayloadStore
 {
     const string TokenPrefix = "blob:v1:";
+
+    // Jitter RNG for retry backoff
+    static readonly object RandomLock = new object();
+    static readonly Random SharedRandom = new Random();
     readonly BlobContainerClient containerClient;
     readonly LargePayloadStorageOptions options;
 
@@ -32,47 +38,64 @@ public sealed class BlobPayloadStore : IPayloadStore
         Check.NotNullOrEmpty(options.ConnectionString, nameof(options.ConnectionString));
         Check.NotNullOrEmpty(options.ContainerName, nameof(options.ContainerName));
 
-        BlobServiceClient serviceClient = new(options.ConnectionString);
+        BlobClientOptions clientOptions = new()
+        {
+            Retry =
+            {
+                Mode = RetryMode.Exponential,
+                MaxRetries = 8,
+                Delay = TimeSpan.FromMilliseconds(250),
+                MaxDelay = TimeSpan.FromSeconds(10),
+                NetworkTimeout = TimeSpan.FromMinutes(2),
+            },
+        };
+        BlobServiceClient serviceClient = new(options.ConnectionString, clientOptions);
         this.containerClient = serviceClient.GetBlobContainerClient(options.ContainerName);
     }
 
     /// <inheritdoc/>
     public async Task<string> UploadAsync(ReadOnlyMemory<byte> payloadBytes, CancellationToken cancellationToken)
     {
-        // Ensure container exists
-        await this.containerClient.CreateIfNotExistsAsync(PublicAccessType.None, default, default, cancellationToken);
-
-        // One blob per payload using GUID-based name for uniqueness
+        // One blob per payload using GUID-based name for uniqueness (stable across retries)
         string timestamp = DateTimeOffset.UtcNow.ToString("yyyy/MM/dd/HH/mm/ss", CultureInfo.InvariantCulture);
         string blobName = $"{timestamp}/{Guid.NewGuid():N}";
         BlobClient blob = this.containerClient.GetBlobClient(blobName);
 
         byte[] payloadBuffer = payloadBytes.ToArray();
 
-        // Upload streaming, optionally compressing and marking ContentEncoding
-        if (this.options.CompressPayloads)
+        string token = await WithTransientRetryAsync(
+        async ct =>
         {
-            BlobOpenWriteOptions writeOptions = new()
+            // Ensure container exists (idempotent)
+            await this.containerClient.CreateIfNotExistsAsync(PublicAccessType.None, default, default, ct);
+
+            if (this.options.CompressPayloads)
             {
-                HttpHeaders = new BlobHttpHeaders { ContentEncoding = "gzip" },
-            };
-            using Stream blobStream = await blob.OpenWriteAsync(true, writeOptions, cancellationToken);
-            using GZipStream compressedBlobStream = new(blobStream, CompressionLevel.Optimal, leaveOpen: true);
-            using MemoryStream payloadStream = new(payloadBuffer, writable: false);
+                BlobOpenWriteOptions writeOptions = new()
+                {
+                    HttpHeaders = new BlobHttpHeaders { ContentEncoding = "gzip" },
+                };
+                using Stream blobStream = await blob.OpenWriteAsync(true, writeOptions, ct);
+                using GZipStream compressedBlobStream = new(blobStream, CompressionLevel.Optimal, leaveOpen: true);
+                using MemoryStream payloadStream = new(payloadBuffer, writable: false);
 
-            await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: 81920, cancellationToken);
-            await compressedBlobStream.FlushAsync(cancellationToken);
-            await blobStream.FlushAsync(cancellationToken);
-        }
-        else
-        {
-            using Stream blobStream = await blob.OpenWriteAsync(true, default, cancellationToken);
-            using MemoryStream payloadStream = new(payloadBuffer, writable: false);
-            await payloadStream.CopyToAsync(blobStream, bufferSize: 81920, cancellationToken);
-            await blobStream.FlushAsync(cancellationToken);
-        }
+                await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: 81920, ct);
+                await compressedBlobStream.FlushAsync(ct);
+                await blobStream.FlushAsync(ct);
+            }
+            else
+            {
+                using Stream blobStream = await blob.OpenWriteAsync(true, default, ct);
+                using MemoryStream payloadStream = new(payloadBuffer, writable: false);
+                await payloadStream.CopyToAsync(blobStream, bufferSize: 81920, ct);
+                await blobStream.FlushAsync(ct);
+            }
 
-        return EncodeToken(this.containerClient.Name, blobName);
+            return EncodeToken(this.containerClient.Name, blobName);
+        },
+        cancellationToken);
+
+        return token;
     }
 
     /// <inheritdoc/>
@@ -85,20 +108,26 @@ public sealed class BlobPayloadStore : IPayloadStore
         }
 
         BlobClient blob = this.containerClient.GetBlobClient(name);
-        using BlobDownloadStreamingResult result = await blob.DownloadStreamingAsync(cancellationToken: cancellationToken);
-        Stream contentStream = result.Content;
-        bool isGzip = string.Equals(
-            result.Details.ContentEncoding, "gzip", StringComparison.OrdinalIgnoreCase);
 
-        if (isGzip)
+        return await WithTransientRetryAsync(
+        async ct =>
         {
-            using GZipStream decompressed = new(contentStream, CompressionMode.Decompress);
-            using StreamReader reader = new(decompressed, Encoding.UTF8);
-            return await reader.ReadToEndAsync();
-        }
+            using BlobDownloadStreamingResult result = await blob.DownloadStreamingAsync(cancellationToken: ct);
+            Stream contentStream = result.Content;
+            bool isGzip = string.Equals(
+                result.Details.ContentEncoding, "gzip", StringComparison.OrdinalIgnoreCase);
 
-        using StreamReader uncompressedReader = new(contentStream, Encoding.UTF8);
-        return await uncompressedReader.ReadToEndAsync();
+            if (isGzip)
+            {
+                using GZipStream decompressed = new(contentStream, CompressionMode.Decompress);
+                using StreamReader reader = new(decompressed, Encoding.UTF8);
+                return await reader.ReadToEndAsync();
+            }
+
+            using StreamReader uncompressedReader = new(contentStream, Encoding.UTF8);
+            return await uncompressedReader.ReadToEndAsync();
+        },
+        cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -130,4 +159,51 @@ public sealed class BlobPayloadStore : IPayloadStore
 
         return (rest.Substring(0, sep), rest.Substring(sep + 1));
     }
+
+    static async Task<T> WithTransientRetryAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken)
+    {
+        const int maxAttempts = 8;
+        TimeSpan baseDelay = TimeSpan.FromMilliseconds(250);
+        int attempt = 0;
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return await operation(cancellationToken);
+            }
+            catch (RequestFailedException ex) when (IsTransient(ex) && attempt < maxAttempts - 1)
+            {
+                attempt++;
+                TimeSpan delay = ComputeBackoff(baseDelay, attempt);
+                await Task.Delay(delay, cancellationToken);
+            }
+            catch (IOException) when (attempt < maxAttempts - 1)
+            {
+                attempt++;
+                TimeSpan delay = ComputeBackoff(baseDelay, attempt);
+                await Task.Delay(delay, cancellationToken);
+            }
+        }
+    }
+
+    static bool IsTransient(RequestFailedException ex)
+    {
+        return ex.Status == 503 || ex.Status == 502 || ex.Status == 500 || ex.Status == 429 ||
+            string.Equals(ex.ErrorCode, "ServerBusy", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(ex.ErrorCode, "OperationTimedOut", StringComparison.OrdinalIgnoreCase);
+    }
+
+    static TimeSpan ComputeBackoff(TimeSpan baseDelay, int attempt)
+    {
+        double factor = Math.Pow(2, Math.Min(attempt, 6));
+        int jitterMs;
+        lock (RandomLock)
+        {
+            jitterMs = SharedRandom.Next(0, 100);
+        }
+        return TimeSpan.FromMilliseconds(Math.Min((baseDelay.TotalMilliseconds * factor) + jitterMs, 10_000));
+    }
+
 }

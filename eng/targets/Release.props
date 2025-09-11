@@ -17,8 +17,8 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <VersionPrefix>1.14.0</VersionPrefix>
-    <VersionSuffix>private1</VersionSuffix>
+    <VersionPrefix>1.13.0</VersionPrefix>
+    <VersionSuffix></VersionSuffix>
   </PropertyGroup>
 
 </Project>

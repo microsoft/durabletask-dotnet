@@ -41,10 +41,11 @@ jobs:
         - task: DotNetCoreCLI@2
           displayName: Restore
           inputs:
-            command: custom
-            custom: restore
+            command: restore
+            verbosityRestore: Minimal
             projects: $(project)
-            arguments: '-v m'
+            feedsToUse: config
+            nugetConfigPath: nuget.config
 
         # Build source directory
         - task: DotNetCoreCLI@2

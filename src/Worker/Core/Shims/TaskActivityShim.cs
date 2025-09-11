@@ -15,6 +15,7 @@ class TaskActivityShim : TaskActivity
     readonly ILogger logger;
     readonly DataConverter dataConverter;
     readonly TaskName name;
+    readonly bool enableLargePayloadSupport;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskActivityShim"/> class.
@@ -23,16 +24,19 @@ class TaskActivityShim : TaskActivity
     /// <param name="dataConverter">The data converter.</param>
     /// <param name="name">The name of the activity.</param>
     /// <param name="implementation">The activity implementation to wrap.</param>
+    /// <param name="enableLargePayloadSupport">Whether to use async serialization for large payloads.</param>
     public TaskActivityShim(
         ILoggerFactory loggerFactory,
         DataConverter dataConverter,
         TaskName name,
-        ITaskActivity implementation)
+        ITaskActivity implementation,
+        bool enableLargePayloadSupport = false)
     {
         this.logger = Logs.CreateWorkerLogger(Check.NotNull(loggerFactory), "Activities");
         this.dataConverter = Check.NotNull(dataConverter);
         this.name = Check.NotDefault(name);
         this.implementation = Check.NotNull(implementation);
+        this.enableLargePayloadSupport = enableLargePayloadSupport;
     }
 
     /// <inheritdoc/>
@@ -40,7 +44,9 @@ class TaskActivityShim : TaskActivity
     {
         Check.NotNull(coreContext);
         string? strippedRawInput = StripArrayCharacters(rawInput);
-        object? deserializedInput = this.dataConverter.Deserialize(strippedRawInput, this.implementation.InputType);
+        object? deserializedInput = this.enableLargePayloadSupport
+            ? await this.dataConverter.DeserializeAsync(strippedRawInput, this.implementation.InputType)
+            : this.dataConverter.Deserialize(strippedRawInput, this.implementation.InputType);
         TaskActivityContextWrapper contextWrapper = new(coreContext, this.name);
 
         string instanceId = coreContext.OrchestrationInstance.InstanceId;
@@ -51,7 +57,9 @@ class TaskActivityShim : TaskActivity
             object? output = await this.implementation.RunAsync(contextWrapper, deserializedInput);
 
             // Return the output (if any) as a serialized string.
-            string? serializedOutput = this.dataConverter.Serialize(output);
+            string? serializedOutput = this.enableLargePayloadSupport
+                ? await this.dataConverter.SerializeAsync(output)
+                : this.dataConverter.Serialize(output);
             this.logger.ActivityCompleted(instanceId, this.name);
 
             return serializedOutput;

@@ -19,6 +19,7 @@ class GrpcDurableEntityClient : DurableEntityClient
     readonly TaskHubSidecarServiceClient sidecarClient;
     readonly DataConverter dataConverter;
     readonly ILogger logger;
+    readonly bool enableLargePayloadSupport;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GrpcDurableEntityClient"/> class.
@@ -27,13 +28,15 @@ class GrpcDurableEntityClient : DurableEntityClient
     /// <param name="dataConverter">The data converter.</param>
     /// <param name="sidecarClient">The client for the GRPC connection to the sidecar.</param>
     /// <param name="logger">The logger for logging client requests.</param>
+    /// <param name="enableLargePayloadSupport">Whether to use async serialization for large payloads.</param>
     public GrpcDurableEntityClient(
-        string name, DataConverter dataConverter, TaskHubSidecarServiceClient sidecarClient, ILogger logger)
+        string name, DataConverter dataConverter, TaskHubSidecarServiceClient sidecarClient, ILogger logger, bool enableLargePayloadSupport = false)
         : base(name)
     {
         this.dataConverter = dataConverter;
         this.sidecarClient = sidecarClient;
         this.logger = logger;
+        this.enableLargePayloadSupport = enableLargePayloadSupport;
     }
 
     /// <inheritdoc/>
@@ -54,7 +57,9 @@ class GrpcDurableEntityClient : DurableEntityClient
             InstanceId = id.ToString(),
             RequestId = requestId.ToString(),
             Name = operationName,
-            Input = this.dataConverter.Serialize(input),
+            Input = this.enableLargePayloadSupport
+                ? await this.dataConverter.SerializeAsync(input, cancellation)
+                : this.dataConverter.Serialize(input),
             ScheduledTime = scheduledTime?.ToTimestamp(),
             RequestTime = DateTimeOffset.UtcNow.ToTimestamp(),
         };
@@ -86,7 +91,7 @@ class GrpcDurableEntityClient : DurableEntityClient
     /// <inheritdoc/>
     public override Task<EntityMetadata<TState>?> GetEntityAsync<TState>(
         EntityInstanceId id, bool includeState = false, CancellationToken cancellation = default)
-        => this.GetEntityCoreAsync(id, includeState, (e, s) => this.ToEntityMetadata<TState>(e, s), cancellation);
+        => this.GetEntityCoreAsync(id, includeState, this.ToEntityMetadata<TState>, cancellation);
 
     /// <inheritdoc/>
     public override AsyncPageable<EntityMetadata> GetAllEntitiesAsync(EntityQuery? filter = null)
@@ -94,7 +99,7 @@ class GrpcDurableEntityClient : DurableEntityClient
 
     /// <inheritdoc/>
     public override AsyncPageable<EntityMetadata<TState>> GetAllEntitiesAsync<TState>(EntityQuery? filter = null)
-        => this.GetAllEntitiesCoreAsync(filter, (x, s) => this.ToEntityMetadata<TState>(x, s));
+        => this.GetAllEntitiesCoreAsync(filter, this.ToEntityMetadata<TState>);
 
     /// <inheritdoc/>
     public override async Task<CleanEntityStorageResult> CleanEntityStorageAsync(
@@ -170,6 +175,36 @@ class GrpcDurableEntityClient : DurableEntityClient
         }
     }
 
+    async Task<TMetadata?> GetEntityCoreAsync<TMetadata>(
+        EntityInstanceId id,
+        bool includeState,
+        Func<P.EntityMetadata, bool, ValueTask<TMetadata>> select,
+        CancellationToken cancellation)
+        where TMetadata : class
+    {
+        Check.NotNullOrEmpty(id.Name);
+        Check.NotNull(id.Key);
+
+        P.GetEntityRequest request = new()
+        {
+            InstanceId = id.ToString(),
+            IncludeState = includeState,
+        };
+
+        try
+        {
+            P.GetEntityResponse response = await this.sidecarClient
+                .GetEntityAsync(request, cancellationToken: cancellation);
+
+            return response.Exists ? await select(response.Entity, includeState) : null;
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.GetEntityAsync)} operation was canceled.", e, cancellation);
+        }
+    }
+
     AsyncPageable<TMetadata> GetAllEntitiesCoreAsync<TMetadata>(
         EntityQuery? filter, Func<P.EntityMetadata, bool, TMetadata> select)
         where TMetadata : class
@@ -216,6 +251,54 @@ class GrpcDurableEntityClient : DurableEntityClient
         });
     }
 
+    AsyncPageable<TMetadata> GetAllEntitiesCoreAsync<TMetadata>(
+        EntityQuery? filter, Func<P.EntityMetadata, bool, ValueTask<TMetadata>> select)
+        where TMetadata : class
+    {
+        bool includeState = filter?.IncludeState ?? true;
+        bool includeTransient = filter?.IncludeTransient ?? false;
+        string startsWith = filter?.InstanceIdStartsWith ?? string.Empty;
+        DateTimeOffset? lastModifiedFrom = filter?.LastModifiedFrom;
+        DateTimeOffset? lastModifiedTo = filter?.LastModifiedTo;
+
+        return Pageable.Create(async (continuation, pageSize, cancellation) =>
+        {
+            pageSize ??= filter?.PageSize;
+
+            try
+            {
+                P.QueryEntitiesResponse response = await this.sidecarClient.QueryEntitiesAsync(
+                    new P.QueryEntitiesRequest
+                    {
+                        Query = new P.EntityQuery
+                        {
+                            InstanceIdStartsWith = startsWith,
+                            LastModifiedFrom = lastModifiedFrom?.ToTimestamp(),
+                            LastModifiedTo = lastModifiedTo?.ToTimestamp(),
+                            IncludeState = includeState,
+                            IncludeTransient = includeTransient,
+                            PageSize = pageSize,
+                            ContinuationToken = continuation ?? filter?.ContinuationToken,
+                        },
+                    },
+                    cancellationToken: cancellation);
+
+                List<TMetadata> values = new();
+                foreach (var entity in response.Entities)
+                {
+                    values.Add(await select(entity, includeState));
+                }
+
+                return new Page<TMetadata>(values, response.ContinuationToken);
+            }
+            catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+            {
+                throw new OperationCanceledException(
+                    $"The {nameof(this.GetAllEntitiesAsync)} operation was canceled.", e, cancellation);
+            }
+        });
+    }
+
     EntityMetadata ToEntityMetadata(P.EntityMetadata metadata, bool includeState)
     {
         var coreEntityId = DTCore.Entities.EntityId.FromString(metadata.InstanceId);
@@ -231,7 +314,7 @@ class GrpcDurableEntityClient : DurableEntityClient
         };
     }
 
-    EntityMetadata<T> ToEntityMetadata<T>(P.EntityMetadata metadata, bool includeState)
+    async ValueTask<EntityMetadata<T>> ToEntityMetadata<T>(P.EntityMetadata metadata, bool includeState)
     {
         var coreEntityId = DTCore.Entities.EntityId.FromString(metadata.InstanceId);
         EntityInstanceId entityId = new(coreEntityId.Name, coreEntityId.Key);
@@ -240,7 +323,11 @@ class GrpcDurableEntityClient : DurableEntityClient
 
         if (includeState && hasState)
         {
-            T? data = includeState ? this.dataConverter.Deserialize<T>(metadata.SerializedState) : default;
+            T? data = includeState
+                ? (this.enableLargePayloadSupport
+                    ? await this.dataConverter.DeserializeAsync<T>(metadata.SerializedState, CancellationToken.None)
+                    : this.dataConverter.Deserialize<T>(metadata.SerializedState))
+                : default;
             return new EntityMetadata<T>(entityId, data)
             {
                 LastModifiedTime = lastModified,

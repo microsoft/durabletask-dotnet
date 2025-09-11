@@ -55,7 +55,7 @@ public sealed class LargePayloadDataConverter(
     /// <returns>The serialized value or the token if externalized.</returns>
     public override async ValueTask<string?> SerializeAsync(object? value, CancellationToken cancellationToken = default)
     {
-        string? json = this.innerConverter.Serialize(value);
+        string? json = await this.innerConverter.SerializeAsync(value, cancellationToken);
 
         if (string.IsNullOrEmpty(json))
         {
@@ -96,7 +96,7 @@ public sealed class LargePayloadDataConverter(
             toDeserialize = await this.payLoadStore.DownloadAsync(data, CancellationToken.None);
         }
 
-        return this.innerConverter.Deserialize(StripArrayCharacters(toDeserialize), targetType);
+        return await this.innerConverter.DeserializeAsync(StripArrayCharacters(toDeserialize), targetType, cancellationToken);
     }
 
     static string? StripArrayCharacters(string? input)

@@ -26,6 +26,11 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
 
     DataConverter Converter => this.options.DataConverter;
 
+    /// <summary>
+    /// Gets a value indicating whether the DataConverter supports async operations (LargePayload enabled).
+    /// </summary>
+    bool SupportsAsyncSerialization => this.options.EnableLargePayloadSupport;
+
     /// <inheritdoc/>
     public override async Task<CleanEntityStorageResult> CleanEntityStorageAsync(
         CleanEntityStorageRequest? request = null,
@@ -82,7 +87,9 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
         Check.NotNull(id.Key);
 
         DateTimeOffset? scheduledTime = options?.SignalTime;
-        string? serializedInput = this.Converter.Serialize(input);
+        string? serializedInput = this.SupportsAsyncSerialization
+            ? await this.Converter.SerializeAsync(input, cancellation)
+            : this.Converter.Serialize(input);
 
         EntityMessageEvent eventToSend = ClientEntityHelpers.EmitOperationSignal(
             new OrchestrationInstance() { InstanceId = id.ToString() },
@@ -132,11 +139,15 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
         });
     }
 
-    EntityMetadata<T> Convert<T>(EntityBackendQueries.EntityMetadata metadata)
+    async Task<EntityMetadata<T>> Convert<T>(EntityBackendQueries.EntityMetadata metadata)
     {
+        T? state = this.SupportsAsyncSerialization
+            ? await this.Converter.DeserializeAsync<T>(metadata.SerializedState)
+            : this.Converter.Deserialize<T>(metadata.SerializedState);
+
         return new(
             metadata.EntityId.ConvertFromCore(),
-            this.Converter.Deserialize<T>(metadata.SerializedState))
+            state)
             {
                 LastModifiedTime = metadata.LastModifiedTime,
                 BacklogQueueSize = metadata.BacklogQueueSize,

@@ -153,7 +153,7 @@ public static class GrpcOrchestrationRunner
             pastEventsIncluded = includePastEvents;
         }
 
-        if (properties.TryGetValue("ExtendedSession", out object? isExtendedSessionObj)
+        if (properties.TryGetValue("IsExtendedSession", out object? isExtendedSessionObj)
             && isExtendedSessionObj is bool isExtendedSession
             && isExtendedSession
             && extendedSessions != null)

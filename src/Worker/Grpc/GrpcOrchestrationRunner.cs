@@ -84,48 +84,7 @@ public static class GrpcOrchestrationRunner
         ITaskOrchestrator implementation,
         IServiceProvider? services = null)
     {
-        Check.NotNullOrEmpty(encodedOrchestratorRequest);
-        Check.NotNull(implementation);
-
-        P.OrchestratorRequest request = P.OrchestratorRequest.Parser.Base64Decode<P.OrchestratorRequest>(
-            encodedOrchestratorRequest);
-
-        List<HistoryEvent> pastEvents = request.PastEvents.Select(ProtoUtils.ConvertHistoryEvent).ToList();
-        IEnumerable<HistoryEvent> newEvents = request.NewEvents.Select(ProtoUtils.ConvertHistoryEvent);
-        Dictionary<string, object?> properties = request.Properties.ToDictionary(
-                pair => pair.Key,
-                pair => ProtoUtils.ConvertValueToObject(pair.Value));
-
-        // Re-construct the orchestration state from the history.
-        // New events must be added using the AddEvent method.
-        OrchestrationRuntimeState runtimeState = new(pastEvents);
-        foreach (HistoryEvent newEvent in newEvents)
-        {
-            runtimeState.AddEvent(newEvent);
-        }
-
-        TaskName orchestratorName = new(runtimeState.Name);
-        ParentOrchestrationInstance? parent = runtimeState.ParentInstance is ParentInstance p
-            ? new(new(p.Name), p.OrchestrationInstance.InstanceId)
-            : null;
-
-        DurableTaskShimFactory factory = services is null
-            ? DurableTaskShimFactory.Default
-            : ActivatorUtilities.GetServiceOrCreateInstance<DurableTaskShimFactory>(services);
-        TaskOrchestration shim = factory.CreateOrchestration(orchestratorName, implementation, properties, parent);
-        TaskOrchestrationExecutor executor = new(runtimeState, shim, BehaviorOnContinueAsNew.Carryover, request.EntityParameters.ToCore(), ErrorPropagationMode.UseFailureDetails);
-        OrchestratorExecutionResult result = executor.Execute();
-
-        P.OrchestratorResponse response = ProtoUtils.ConstructOrchestratorResponse(
-            request.InstanceId,
-            request.ExecutionId,
-            result.CustomStatus,
-            result.Actions,
-            completionToken: string.Empty, /* doesn't apply */
-            entityConversionState: null,
-            orchestrationActivity: null);
-        byte[] responseBytes = response.ToByteArray();
-        return Convert.ToBase64String(responseBytes);
+        return LoadAndRun(encodedOrchestratorRequest, implementation, services);
     }
 
     /// <summary>
@@ -156,12 +115,11 @@ public static class GrpcOrchestrationRunner
     public static string LoadAndRun(
         string encodedOrchestratorRequest,
         ITaskOrchestrator implementation,
-        ExtendedSessionsCache extendedSessionsCache,
+        ExtendedSessionsCache? extendedSessionsCache,
         IServiceProvider? services = null)
     {
         Check.NotNullOrEmpty(encodedOrchestratorRequest);
         Check.NotNull(implementation);
-        Check.NotNull(extendedSessionsCache);
 
         P.OrchestratorRequest request = P.OrchestratorRequest.Parser.Base64Decode<P.OrchestratorRequest>(
             encodedOrchestratorRequest);
@@ -186,7 +144,7 @@ public static class GrpcOrchestrationRunner
             && extendedSessionIdleTimeout >= 0)
         {
             extendedSessionIdleTimeoutInSeconds = extendedSessionIdleTimeout;
-            extendedSessions = extendedSessionsCache.GetOrInitializeCache(extendedSessionIdleTimeoutInSeconds);
+            extendedSessions = extendedSessionsCache?.GetOrInitializeCache(extendedSessionIdleTimeoutInSeconds);
         }
 
         if (properties.TryGetValue("IncludePastEvents", out object? includePastEventsObj)

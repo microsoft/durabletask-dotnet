@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Caching.Memory;
 
-namespace Microsoft.DurableTask.Worker.Grpc;
+namespace Microsoft.DurableTask.Worker;
 
 /// <summary>
 /// A cache for extended sessions that wraps a <see cref="MemoryCache"/> instance.
@@ -12,6 +12,12 @@ namespace Microsoft.DurableTask.Worker.Grpc;
 public class ExtendedSessionsCache : IDisposable
 {
     MemoryCache? extendedSessions;
+
+    /// <summary>
+    /// Gets a value indicating whether returns whether or not the cache has been initialized.
+    /// </summary>
+    /// <returns>True if the cache has been initialized, false otherwise.</returns>
+    public bool IsInitialized => this.extendedSessions is not null;
 
     /// <summary>
     /// Dispose the cache and release all resources.
@@ -38,14 +44,5 @@ public class ExtendedSessionsCache : IDisposable
         });
 
         return this.extendedSessions;
-    }
-
-    /// <summary>
-    /// Returns whether or not the cache has been initialized.
-    /// </summary>
-    /// <returns>True if the cache has been initialized, false otherwise.</returns>
-    public bool IsInitialized()
-    {
-        return this.extendedSessions is not null;
     }
 }

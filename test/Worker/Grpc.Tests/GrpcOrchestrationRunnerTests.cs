@@ -4,9 +4,9 @@
 using Google.Protobuf;
 using Google.Protobuf.Collections;
 using Google.Protobuf.WellKnownTypes;
-using Microsoft.DurableTask.Worker.Grpc;
 
-namespace Microsoft.DurableTask.Worker.Tests;
+namespace Microsoft.DurableTask.Worker.Grpc.Tests;
+
 public class GrpcOrchestrationRunnerTests
 {
     const string TestInstanceId = "instance_id";
@@ -14,7 +14,7 @@ public class GrpcOrchestrationRunnerTests
     const int DefaultExtendedSessionIdleTimeoutInSeconds = 30;
 
     [Fact]
-    public void EmptyOrNullParameters_Throw()
+    public void EmptyOrNullParameters_Throw_Exceptions()
     {
         Action act = () =>
             GrpcOrchestrationRunner.LoadAndRun(string.Empty, new SimpleOrchestrator(), new ExtendedSessionsCache());
@@ -27,10 +27,6 @@ public class GrpcOrchestrationRunnerTests
         act = () =>
             GrpcOrchestrationRunner.LoadAndRun("request", null!, new ExtendedSessionsCache());
         act.Should().ThrowExactly<ArgumentNullException>().WithParameterName("implementation");
-
-        act = () =>
-            GrpcOrchestrationRunner.LoadAndRun("request", new SimpleOrchestrator(), extendedSessionsCache: null!);
-        act.Should().ThrowExactly<ArgumentNullException>().WithParameterName("extendedSessionsCache");
     }
 
     [Fact]
@@ -47,7 +43,7 @@ public class GrpcOrchestrationRunnerTests
         string stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
         Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
         Assert.True(response.RequiresHistory);
-        Assert.False(extendedSessions.IsInitialized());
+        Assert.False(extendedSessions.IsInitialized);
 
         // No history but with extended sessions enabled
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
@@ -58,7 +54,7 @@ public class GrpcOrchestrationRunnerTests
         stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
         response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
         Assert.True(response.RequiresHistory);
-        Assert.True(extendedSessions.IsInitialized());
+        Assert.True(extendedSessions.IsInitialized);
     }
 
     [Fact]
@@ -76,7 +72,7 @@ public class GrpcOrchestrationRunnerTests
         string requestString = Convert.ToBase64String(requestBytes);
         string stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
         Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
-        Assert.False(extendedSessions.IsInitialized());
+        Assert.False(extendedSessions.IsInitialized);
 
         // Wrong value type for extended session timeout key
         orchestratorRequest.Properties.Clear();
@@ -87,7 +83,7 @@ public class GrpcOrchestrationRunnerTests
         requestBytes = orchestratorRequest.ToByteArray();
         requestString = Convert.ToBase64String(requestBytes);
         GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
-        Assert.False(extendedSessions.IsInitialized());
+        Assert.False(extendedSessions.IsInitialized);
 
         // No extended session timeout key
         orchestratorRequest.Properties.Clear();
@@ -97,7 +93,7 @@ public class GrpcOrchestrationRunnerTests
         requestBytes = orchestratorRequest.ToByteArray();
         requestString = Convert.ToBase64String(requestBytes);
         GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
-        Assert.False(extendedSessions.IsInitialized());
+        Assert.False(extendedSessions.IsInitialized);
 
         // Misspelled extended session key
         orchestratorRequest.Properties.Clear();
@@ -110,7 +106,7 @@ public class GrpcOrchestrationRunnerTests
         stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
         response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
         // The extended session is still initialized due to the well-formed extended session timeout key
-        Assert.True(extendedSessions.IsInitialized());
+        Assert.True(extendedSessions.IsInitialized);
         Assert.False(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out object? extendedSession));
 
         // Wrong value type for extended session key
@@ -124,7 +120,7 @@ public class GrpcOrchestrationRunnerTests
         stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
         response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
         // The extended session is still initialized due to the well-formed extended session timeout key
-        Assert.True(extendedSessions.IsInitialized());
+        Assert.True(extendedSessions.IsInitialized);
         Assert.False(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out extendedSession));
 
         // No extended session key
@@ -137,7 +133,7 @@ public class GrpcOrchestrationRunnerTests
         stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
         response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
         // The extended session is still initialized due to the well-formed extended session timeout key
-        Assert.True(extendedSessions.IsInitialized());
+        Assert.True(extendedSessions.IsInitialized);
         Assert.False(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out extendedSession));
     }
 
@@ -226,7 +222,7 @@ public class GrpcOrchestrationRunnerTests
         byte[] requestBytes = orchestratorRequest.ToByteArray();
         string requestString = Convert.ToBase64String(requestBytes);
         GrpcOrchestrationRunner.LoadAndRun(requestString, new CallSubOrchestrationOrchestrator(), extendedSessions);
-        Assert.True(extendedSessions.IsInitialized());
+        Assert.True(extendedSessions.IsInitialized);
         Assert.True(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out object? extendedSession));
     }
 
@@ -255,7 +251,7 @@ public class GrpcOrchestrationRunnerTests
         byte[] requestBytes = orchestratorRequest.ToByteArray();
         string requestString = Convert.ToBase64String(requestBytes);
         GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
-        Assert.True(extendedSessions.IsInitialized());
+        Assert.True(extendedSessions.IsInitialized);
         Assert.False(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out object? extendedSession));
     }
 
@@ -284,7 +280,7 @@ public class GrpcOrchestrationRunnerTests
         byte[] requestBytes = orchestratorRequest.ToByteArray();
         string requestString = Convert.ToBase64String(requestBytes);
         GrpcOrchestrationRunner.LoadAndRun(requestString, new CallSubOrchestrationOrchestrator(), extendedSessions);
-        Assert.True(extendedSessions.IsInitialized());
+        Assert.True(extendedSessions.IsInitialized);
         Assert.True(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out object? extendedSession));
 
         // Now set the extended session flag to false for this instance
@@ -296,7 +292,7 @@ public class GrpcOrchestrationRunnerTests
         requestBytes = orchestratorRequest.ToByteArray();
         requestString = Convert.ToBase64String(requestBytes);
         GrpcOrchestrationRunner.LoadAndRun(requestString, new CallSubOrchestrationOrchestrator(), extendedSessions);
-        Assert.True(extendedSessions.IsInitialized());
+        Assert.True(extendedSessions.IsInitialized);
         Assert.False(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out extendedSession));
     }
 
@@ -326,7 +322,7 @@ public class GrpcOrchestrationRunnerTests
         byte[] requestBytes = orchestratorRequest.ToByteArray();
         string requestString = Convert.ToBase64String(requestBytes);
         GrpcOrchestrationRunner.LoadAndRun(requestString, new CallSubOrchestrationOrchestrator(), extendedSessions);
-        Assert.True(extendedSessions.IsInitialized());
+        Assert.True(extendedSessions.IsInitialized);
         Assert.True(extendedSessions.GetOrInitializeCache(extendedSessionIdleTimeout).TryGetValue(TestInstanceId, out object? extendedSession));
 
         // Wait for longer than the timeout to account for finite cache scan for stale items frequency 
@@ -372,13 +368,43 @@ public class GrpcOrchestrationRunnerTests
         byte[] requestBytes = orchestratorRequest.ToByteArray();
         string requestString = Convert.ToBase64String(requestBytes);
         GrpcOrchestrationRunner.LoadAndRun(requestString, new CallSubOrchestrationOrchestrator(), extendedSessions);
-        Assert.True(extendedSessions.IsInitialized());
+        Assert.True(extendedSessions.IsInitialized);
         Assert.True(extendedSessions.GetOrInitializeCache(extendedSessionIdleTimeout).TryGetValue(TestInstanceId, out object? extendedSession));
 
         // Now we will retry the same exact request. If the extended session is not evicted, then the request will fail due to duplicate ExecutionStarted events being detected
         // If the extended session is evicted because IncludePastEvents is true, then the request will succeed and a new extended session will be stored
         GrpcOrchestrationRunner.LoadAndRun(requestString, new CallSubOrchestrationOrchestrator(), extendedSessions);
         Assert.True(extendedSessions.GetOrInitializeCache(extendedSessionIdleTimeout).TryGetValue(TestInstanceId, out extendedSession));
+    }
+
+    [Fact]
+    public void Null_ExtendedSessionsCache_IsOkay()
+    {
+        var historyEvent = new Protobuf.HistoryEvent
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new Protobuf.ExecutionStartedEvent()
+            {
+                OrchestrationInstance = new Protobuf.OrchestrationInstance
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+            }
+        };
+        Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludePastEvents", Value.ForBool(true) },
+            { "ExtendedSession", Value.ForBool(true) },
+            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
+        byte[] requestBytes = orchestratorRequest.ToByteArray();
+        string requestString = Convert.ToBase64String(requestBytes);
+        string stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator());
+        Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
+        Assert.Single(response.Actions);
+        Assert.NotNull(response.Actions[0].CompleteOrchestration);
+        Assert.Equal(Protobuf.OrchestrationStatus.Completed, response.Actions[0].CompleteOrchestration.OrchestrationStatus);
     }
 
     static Protobuf.OrchestratorRequest CreateOrchestratorRequest(IEnumerable<Protobuf.HistoryEvent> newEvents)

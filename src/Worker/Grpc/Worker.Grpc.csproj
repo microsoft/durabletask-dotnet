@@ -7,10 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="../Core/Worker.csproj" />
     <ProjectReference Include="../../Abstractions/Abstractions.csproj" />
     <ProjectReference Include="../../Grpc/Grpc.csproj" />

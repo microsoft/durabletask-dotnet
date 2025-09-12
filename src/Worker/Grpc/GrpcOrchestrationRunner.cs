@@ -84,7 +84,7 @@ public static class GrpcOrchestrationRunner
         ITaskOrchestrator implementation,
         IServiceProvider? services = null)
     {
-        return LoadAndRun(encodedOrchestratorRequest, implementation, services);
+        return LoadAndRun(encodedOrchestratorRequest, implementation, extendedSessionsCache: null, services: services);
     }
 
     /// <summary>

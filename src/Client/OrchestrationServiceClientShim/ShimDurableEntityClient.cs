@@ -61,7 +61,9 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
 
     /// <inheritdoc/>
     public override AsyncPageable<EntityMetadata<T>> GetAllEntitiesAsync<T>(EntityQuery? filter = null)
-        => this.GetAllEntitiesAsync(this.Convert<T>, filter);
+        => this.SupportsAsyncSerialization
+            ? this.GetAllEntitiesAsync(this.Convert<T>, filter)
+            : this.GetAllEntitiesAsync(this.ConvertSync<T>, filter);
 
     /// <inheritdoc/>
     public override async Task<EntityMetadata?> GetEntityAsync(
@@ -139,11 +141,58 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
         });
     }
 
+    AsyncPageable<TMetadata> GetAllEntitiesAsync<TMetadata>(
+        Func<EntityBackendQueries.EntityMetadata, Task<TMetadata>> selectAsync,
+        EntityQuery? filter)
+        where TMetadata : notnull
+    {
+        bool includeState = filter?.IncludeState ?? true;
+        bool includeTransient = filter?.IncludeTransient ?? false;
+        string startsWith = filter?.InstanceIdStartsWith ?? string.Empty;
+        DateTime? lastModifiedFrom = filter?.LastModifiedFrom?.UtcDateTime;
+        DateTime? lastModifiedTo = filter?.LastModifiedTo?.UtcDateTime;
+
+        return Pageable.Create(async (continuation, size, cancellation) =>
+        {
+            continuation ??= filter?.ContinuationToken;
+            size ??= filter?.PageSize;
+            EntityBackendQueries.EntityQueryResult result = await this.Queries.QueryEntitiesAsync(
+                new EntityBackendQueries.EntityQuery()
+                {
+                    InstanceIdStartsWith = startsWith,
+                    LastModifiedFrom = lastModifiedFrom,
+                    LastModifiedTo = lastModifiedTo,
+                    IncludeTransient = includeTransient,
+                    IncludeState = includeState,
+                    ContinuationToken = continuation,
+                    PageSize = size,
+                },
+                cancellation);
+
+            TMetadata[] items = await Task.WhenAll(result.Results.Select(selectAsync));
+            return new Page<TMetadata>(items, result.ContinuationToken);
+        });
+    }
+
     async Task<EntityMetadata<T>> Convert<T>(EntityBackendQueries.EntityMetadata metadata)
     {
         T? state = this.SupportsAsyncSerialization
             ? await this.Converter.DeserializeAsync<T>(metadata.SerializedState)
             : this.Converter.Deserialize<T>(metadata.SerializedState);
+
+        return new(
+            metadata.EntityId.ConvertFromCore(),
+            state)
+            {
+                LastModifiedTime = metadata.LastModifiedTime,
+                BacklogQueueSize = metadata.BacklogQueueSize,
+                LockedBy = metadata.LockedBy,
+            };
+    }
+
+    EntityMetadata<T> ConvertSync<T>(EntityBackendQueries.EntityMetadata metadata)
+    {
+        T? state = this.Converter.Deserialize<T>(metadata.SerializedState);
 
         return new(
             metadata.EntityId.ConvertFromCore(),

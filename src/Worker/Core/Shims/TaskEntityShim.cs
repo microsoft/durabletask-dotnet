@@ -166,7 +166,18 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             this.cachedValue = null;
         }
 
-        public override async Task<object?> GetState(Type type)
+        public override object? GetState(Type type)
+        {
+            if (this.cachedValue?.GetType() is Type t && t.IsAssignableFrom(type))
+            {
+                return this.cachedValue;
+            }
+
+            this.cachedValue = this.dataConverter.Deserialize(this.value, type);
+            return this.cachedValue;
+        }
+
+        public override async Task<object?> GetStateAsync(Type type)
         {
             if (this.cachedValue?.GetType() is Type t && t.IsAssignableFrom(type))
             {
@@ -252,7 +263,25 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             });
         }
 
-        public override async Task<string> ScheduleNewOrchestration(TaskName name, object? input = null, StartOrchestrationOptions? options = null)
+        public override string ScheduleNewOrchestration(TaskName name, object? input = null, StartOrchestrationOptions? options = null)
+        {
+            Check.NotEntity(true, options?.InstanceId);
+
+            string instanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N");
+            this.operationActions.Add(new StartNewOrchestrationOperationAction()
+            {
+                Name = name.Name,
+                Version = options?.Version ?? string.Empty,
+                InstanceId = instanceId,
+                Input = this.dataConverter.Serialize(input),
+                ScheduledStartTime = options?.StartAt?.UtcDateTime,
+                RequestTime = DateTimeOffset.UtcNow,
+                ParentTraceContext = this.parentTraceContext,
+            });
+            return instanceId;
+        }
+
+        public override async Task<string> ScheduleNewOrchestrationAsync(TaskName name, object? input = null, StartOrchestrationOptions? options = null)
         {
             Check.NotEntity(true, options?.InstanceId);
 

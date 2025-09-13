@@ -72,7 +72,7 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
     /// <inheritdoc/>
     public override async Task<EntityMetadata<T>?> GetEntityAsync<T>(
         EntityInstanceId id, bool includeState = true, CancellationToken cancellation = default)
-        => this.Convert<T>(await this.Queries.GetEntityAsync(
+        => await this.Convert<T>(await this.Queries.GetEntityAsync(
             id.ConvertToCore(), includeState, false, cancellation));
 
     /// <inheritdoc/>
@@ -155,14 +155,14 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
             };
     }
 
-    EntityMetadata<T>? Convert<T>(EntityBackendQueries.EntityMetadata? metadata)
+    async Task<EntityMetadata<T>?> Convert<T>(EntityBackendQueries.EntityMetadata? metadata)
     {
         if (metadata is null)
         {
             return null;
         }
 
-        return this.Convert<T>(metadata.Value);
+        return await this.Convert<T>(metadata.Value);
     }
 
     EntityMetadata Convert(EntityBackendQueries.EntityMetadata metadata)

@@ -53,4 +53,16 @@ public abstract class TaskEntityContext
     /// <returns>The instance id for the new orchestration.</returns>
     public abstract string ScheduleNewOrchestration(
         TaskName name, object? input = null, StartOrchestrationOptions? options = null);
+
+    /// <summary>
+    /// Starts an orchestration.
+    /// </summary>
+    /// <param name="name">The name of the orchestration to start.</param>
+    /// <param name="input">The input for the orchestration.</param>
+    /// <param name="options">The options for starting the orchestration.</param>
+    /// <returns>The instance id for the new orchestration.</returns>
+    public virtual async Task<string> ScheduleNewOrchestrationAsync(TaskName name, object? input = null, StartOrchestrationOptions? options = null)
+    {
+        return await Task.FromResult(this.ScheduleNewOrchestration(name, input, options));
+    }
 }

@@ -36,6 +36,17 @@ public abstract class TaskEntityState
     }
 
     /// <summary>
+    /// Asynchronously gets the current state of the entity. This will return <c>null</c> if no state is present, regardless if
+    /// <paramref name="type"/> is a value-type or not.
+    /// </summary>
+    /// <param name="type">The type to retrieve the state as.</param>
+    /// <returns>The entity state.</returns>
+    public virtual Task<object?> GetStateAsync(Type type)
+    {
+        return Task.FromResult(this.GetState(type));
+    }
+
+    /// <summary>
     /// Gets the current state of the entity. This will return <c>null</c> if no state is present, regardless if
     /// <paramref name="type"/> is a value-type or not.
     /// </summary>

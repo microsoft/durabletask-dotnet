@@ -7,6 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="$(SrcRoot)Client/Grpc/Client.Grpc.csproj" />
     <ProjectReference Include="$(SrcRoot)Worker/Grpc/Worker.Grpc.csproj" />
+    <ProjectReference Include="$(SrcRoot)Extensions/AzureBlobPayloads/AzureBlobPayloads.csproj" />
   </ItemGroup>
 
   <ItemGroup>

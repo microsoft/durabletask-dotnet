@@ -19,6 +19,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
     readonly DataConverter dataConverter;
     readonly ITaskEntity taskEntity;
     readonly EntityInstanceId entityId;
+    readonly bool enableLargePayloadSupport;
 
     readonly StateShim state;
     readonly ContextShim context;
@@ -32,14 +33,16 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
     /// <param name="taskEntity">The task entity.</param>
     /// <param name="entityId">The entity ID.</param>
     /// <param name="logger">The logger.</param>
+    /// <param name="enableLargePayloadSupport">Whether to use async serialization for large payloads.</param>
     public TaskEntityShim(
-        DataConverter dataConverter, ITaskEntity taskEntity, EntityId entityId, ILogger logger)
+        DataConverter dataConverter, ITaskEntity taskEntity, EntityId entityId, ILogger logger, bool enableLargePayloadSupport = false)
     {
         this.dataConverter = Check.NotNull(dataConverter);
         this.taskEntity = Check.NotNull(taskEntity);
         this.entityId = new EntityInstanceId(entityId.Name, entityId.Key);
-        this.state = new StateShim(dataConverter);
-        this.context = new ContextShim(this.entityId, dataConverter);
+        this.enableLargePayloadSupport = enableLargePayloadSupport;
+        this.state = new StateShim(dataConverter, enableLargePayloadSupport);
+        this.context = new ContextShim(this.entityId, dataConverter, enableLargePayloadSupport);
         this.operation = new OperationShim(this);
         this.logger = logger;
     }
@@ -70,7 +73,9 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             try
             {
                 object? result = await this.taskEntity.RunAsync(this.operation);
-                string? serializedResult = this.dataConverter.Serialize(result);
+                string? serializedResult = this.enableLargePayloadSupport
+                    ? await this.dataConverter.SerializeAsync(result)
+                    : this.dataConverter.Serialize(result);
                 results.Add(new OperationResult()
                 {
                     Result = serializedResult,
@@ -116,14 +121,16 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
     class StateShim : TaskEntityState
     {
         readonly DataConverter dataConverter;
+        readonly bool enableLargePayloadSupport;
 
         string? value;
         object? cachedValue;
         string? checkpointValue;
 
-        public StateShim(DataConverter dataConverter)
+        public StateShim(DataConverter dataConverter, bool enableLargePayloadSupport = false)
         {
             this.dataConverter = dataConverter;
+            this.enableLargePayloadSupport = enableLargePayloadSupport;
         }
 
         /// <inheritdoc />
@@ -170,9 +177,24 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             return this.cachedValue;
         }
 
-        public override void SetState(object? state)
+        public override async Task<object?> GetStateAsync(Type type)
         {
-            this.value = this.dataConverter.Serialize(state);
+            if (this.cachedValue?.GetType() is Type t && t.IsAssignableFrom(type))
+            {
+                return this.cachedValue;
+            }
+
+            this.cachedValue = this.enableLargePayloadSupport
+                ? await this.dataConverter.DeserializeAsync(this.value, type)
+                : this.dataConverter.Deserialize(this.value, type);
+            return this.cachedValue;
+        }
+
+        public override async void SetState(object? state)
+        {
+            this.value = this.enableLargePayloadSupport
+                ? await this.dataConverter.SerializeAsync(state)
+                : this.dataConverter.Serialize(state);
             this.cachedValue = state;
         }
     }
@@ -181,16 +203,18 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
     {
         readonly EntityInstanceId entityInstanceId;
         readonly DataConverter dataConverter;
+        readonly bool enableLargePayloadSupport;
 
         List<OperationAction> operationActions;
         int checkpointPosition;
 
         DistributedTraceContext? parentTraceContext;
 
-        public ContextShim(EntityInstanceId entityInstanceId, DataConverter dataConverter)
+        public ContextShim(EntityInstanceId entityInstanceId, DataConverter dataConverter, bool enableLargePayloadSupport = false)
         {
             this.entityInstanceId = entityInstanceId;
             this.dataConverter = dataConverter;
+            this.enableLargePayloadSupport = enableLargePayloadSupport;
             this.operationActions = new List<OperationAction>();
         }
 
@@ -222,7 +246,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             this.checkpointPosition = 0;
         }
 
-        public override void SignalEntity(EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null)
+        public override async void SignalEntity(EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null)
         {
             Check.NotDefault(id);
 
@@ -230,7 +254,9 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             {
                 InstanceId = id.ToString(),
                 Name = operationName,
-                Input = this.dataConverter.Serialize(input),
+                Input = this.enableLargePayloadSupport
+                    ? await this.dataConverter.SerializeAsync(input)
+                    : this.dataConverter.Serialize(input),
                 ScheduledTime = options?.SignalTime?.UtcDateTime,
                 RequestTime = DateTimeOffset.UtcNow,
                 ParentTraceContext = this.parentTraceContext,
@@ -248,6 +274,26 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
                 Version = options?.Version ?? string.Empty,
                 InstanceId = instanceId,
                 Input = this.dataConverter.Serialize(input),
+                ScheduledStartTime = options?.StartAt?.UtcDateTime,
+                RequestTime = DateTimeOffset.UtcNow,
+                ParentTraceContext = this.parentTraceContext,
+            });
+            return instanceId;
+        }
+
+        public override async Task<string> ScheduleNewOrchestrationAsync(TaskName name, object? input = null, StartOrchestrationOptions? options = null)
+        {
+            Check.NotEntity(true, options?.InstanceId);
+
+            string instanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N");
+            this.operationActions.Add(new StartNewOrchestrationOperationAction()
+            {
+                Name = name.Name,
+                Version = options?.Version ?? string.Empty,
+                InstanceId = instanceId,
+                Input = this.enableLargePayloadSupport
+                    ? await this.dataConverter.SerializeAsync(input)
+                    : this.dataConverter.Serialize(input),
                 ScheduledStartTime = options?.StartAt?.UtcDateTime,
                 RequestTime = DateTimeOffset.UtcNow,
                 ParentTraceContext = this.parentTraceContext,
@@ -279,6 +325,13 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
         public override object? GetInput(Type inputType)
         {
             return this.taskEntityShim.dataConverter.Deserialize(this.input, inputType);
+        }
+
+        public override async Task<object?> GetInputAsync(Type inputType)
+        {
+            return this.taskEntityShim.enableLargePayloadSupport
+                ? await this.taskEntityShim.dataConverter.DeserializeAsync(this.input, inputType)
+                : this.taskEntityShim.dataConverter.Deserialize(this.input, inputType);
         }
 
         public void SetNameAndInput(string name, string? input)

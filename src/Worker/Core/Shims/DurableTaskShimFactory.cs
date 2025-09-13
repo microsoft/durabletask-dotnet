@@ -50,7 +50,7 @@ public class DurableTaskShimFactory
     {
         Check.NotDefault(name);
         Check.NotNull(activity);
-        return new TaskActivityShim(this.loggerFactory, this.options.DataConverter, name, activity);
+        return new TaskActivityShim(this.loggerFactory, this.options.DataConverter, name, activity, this.options.EnableLargePayloadSupport);
     }
 
     /// <summary>
@@ -151,6 +151,6 @@ public class DurableTaskShimFactory
         // In the future we may consider caching those shims and reusing them, which can reduce
         // deserialization and allocation overheads.
         ILogger logger = this.loggerFactory.CreateLogger(entity.GetType());
-        return new TaskEntityShim(this.options.DataConverter, entity, entityId, logger);
+        return new TaskEntityShim(this.options.DataConverter, entity, entityId, logger, this.options.EnableLargePayloadSupport);
     }
 }

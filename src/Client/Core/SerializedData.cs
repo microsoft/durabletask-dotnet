@@ -33,6 +33,13 @@ public sealed class SerializedData(string data, DataConverter? converter = null)
     public T ReadAs<T>() => this.Converter.Deserialize<T>(this.Value);
 
     /// <summary>
+    /// Deserializes the data into <typeparamref name="T"/>.
+    /// </summary>
+    /// <typeparam name="T">The type to deserialize into.</typeparam>
+    /// <returns>The deserialized type.</returns>
+    public async Task<T> ReadAsAsync<T>() => await this.Converter.DeserializeAsync<T>(this.Value);
+
+    /// <summary>
     /// Creates a new instance of <see cref="SerializedData"/> from the specified data.
     /// </summary>
     /// <param name="data">The data to serialize.</param>
@@ -42,5 +49,16 @@ public sealed class SerializedData(string data, DataConverter? converter = null)
     {
         converter ??= JsonDataConverter.Default;
         return new SerializedData(converter.Serialize(data), converter);
+    }
+
+    /// <summary>
+    /// Creates a new instance of <see cref="SerializedData"/> from the specified data.
+    /// </summary>
+    /// <param name="data">The data to serialize.</param>
+    /// <param name="converter">The data converter.</param>
+    /// <returns>Serialized data.</returns>
+    internal static async Task<SerializedData> CreateAsync(object data, DataConverter converter)
+    {
+        return new SerializedData(await converter.SerializeAsync(data), converter);
     }
 }

@@ -112,6 +112,22 @@ static class Check
     /// Checks if the supplied type is a concrete non-abstract type and implements the provided generic type.
     /// Throws <see cref="ArgumentException" /> if the conditions are not met.
     /// </summary>
+    /// <param name="largePayloadSupportEnabled">Whether large payload support is enabled.</param>
+    /// <param name="operationName">The name of the operation.</param>
+    public static void ThrowIfLargePayloadEnabled(bool largePayloadSupportEnabled, string operationName)
+    {
+        if (largePayloadSupportEnabled)
+        {
+            throw new NotSupportedException(
+            $"Operation '{operationName}' is not supported when LargePayload is enabled. " +
+            "Use the async version of this method instead.");
+        }
+    }
+
+    /// <summary>
+    /// Checks if the supplied type is a concrete non-abstract type and implements the provided generic type.
+    /// Throws <see cref="ArgumentException" /> if the conditions are not met.
+    /// </summary>
     /// <param name="argument">The type to check.</param>
     /// <param name="name">The name of the argument for the exception message.</param>
     /// <typeparam name="TImplements">The type <paramref name="argument" /> must implement.</typeparam>

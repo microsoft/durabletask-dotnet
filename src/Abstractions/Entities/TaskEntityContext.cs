@@ -61,11 +61,11 @@ public abstract class TaskEntityContext
     /// <param name="input">The input for the orchestration.</param>
     /// <param name="options">The options for starting the orchestration.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public virtual Task<string> ScheduleNewOrchestrationAsync(
+    public virtual ValueTask<string> ScheduleNewOrchestrationAsync(
         TaskName name,
         object? input = null,
         StartOrchestrationOptions? options = null)
     {
-        return Task.FromResult(this.ScheduleNewOrchestration(name, input, options));
+        return new ValueTask<string>(this.ScheduleNewOrchestration(name, input, options));
     }
 }

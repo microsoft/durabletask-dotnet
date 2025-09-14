@@ -54,9 +54,4 @@ public class TestEntityOperation : TaskEntityOperation
 
         return this.input.Value;
     }
-
-    public override Task<object?> GetInputAsync(Type inputType)
-    {
-        return Task.FromResult(this.GetInput(inputType));
-    }
 }

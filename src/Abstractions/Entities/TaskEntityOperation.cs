@@ -47,7 +47,10 @@ public abstract class TaskEntityOperation
     /// </summary>
     /// <param name="inputType">The type to deserialize the input as.</param>
     /// <returns>The deserialized input type.</returns>
-    public abstract Task<object?> GetInputAsync(Type inputType);
+    public virtual Task<object?> GetInputAsync(Type inputType)
+    {
+        return Task.FromResult(this.GetInput(inputType));
+    }
 
     /// <inheritdoc/>
     public override string ToString()

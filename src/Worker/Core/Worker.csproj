@@ -9,6 +9,7 @@ The worker is responsible for processing durable task work items.</PackageDescri
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Azure.DurableTask.Core" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="System.Text.Json" />

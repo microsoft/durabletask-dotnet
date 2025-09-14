@@ -168,6 +168,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
 
         public override object? GetState(Type type)
         {
+            Check.ThrowIfLargePayloadEnabled(this.enableLargePayloadSupport, nameof(this.GetState));
             if (this.cachedValue?.GetType() is Type t && t.IsAssignableFrom(type))
             {
                 return this.cachedValue;
@@ -272,6 +273,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
         public override string ScheduleNewOrchestration(TaskName name, object? input = null, StartOrchestrationOptions? options = null)
         {
             Check.NotEntity(true, options?.InstanceId);
+            Check.ThrowIfLargePayloadEnabled(this.enableLargePayloadSupport, nameof(this.ScheduleNewOrchestration));
 
             string instanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N");
             this.operationActions.Add(new StartNewOrchestrationOperationAction()
@@ -287,7 +289,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             return instanceId;
         }
 
-        public override async Task<string> ScheduleNewOrchestrationAsync(
+        public override async ValueTask<string> ScheduleNewOrchestrationAsync(
             TaskName name,
             object? input = null,
             StartOrchestrationOptions? options = null)
@@ -333,6 +335,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
 
         public override object? GetInput(Type inputType)
         {
+            Check.ThrowIfLargePayloadEnabled(this.taskEntityShim.enableLargePayloadSupport, nameof(this.GetInput));
             return this.taskEntityShim.dataConverter.Deserialize(this.input, inputType);
         }
 

@@ -37,14 +37,14 @@ public sealed class LargePayloadDataConverter(
     [return: NotNullIfNotNull("value")]
     public override string? Serialize(object? value)
     {
-        throw new NotImplementedException();
+        throw new NotSupportedException();
     }
 
     /// <inheritdoc/>
     [return: NotNullIfNotNull("data")]
     public override object? Deserialize(string? data, Type targetType)
     {
-        throw new NotImplementedException();
+        throw new NotSupportedException();
     }
 
     /// <summary>

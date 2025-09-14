@@ -18,6 +18,12 @@ namespace Microsoft.DurableTask.Converters;
 public sealed class BlobPayloadStore : IPayloadStore
 {
     const string TokenPrefix = "blob:v1:";
+    const string ContentEncodingGzip = "gzip";
+    const int DefaultCopyBufferSize = 81920;
+    const int MaxRetryAttempts = 8;
+    const int BaseDelayMs = 250;
+    const int MaxDelayMs = 10_000;
+    const int MaxJitterMs = 100;
 
     // Jitter RNG for retry backoff
     static readonly object RandomLock = new object();
@@ -43,8 +49,8 @@ public sealed class BlobPayloadStore : IPayloadStore
             Retry =
             {
                 Mode = RetryMode.Exponential,
-                MaxRetries = 8,
-                Delay = TimeSpan.FromMilliseconds(250),
+                MaxRetries = MaxRetryAttempts,
+                Delay = TimeSpan.FromMilliseconds(BaseDelayMs),
                 MaxDelay = TimeSpan.FromSeconds(10),
                 NetworkTimeout = TimeSpan.FromMinutes(2),
             },
@@ -73,13 +79,13 @@ public sealed class BlobPayloadStore : IPayloadStore
             {
                 BlobOpenWriteOptions writeOptions = new()
                 {
-                    HttpHeaders = new BlobHttpHeaders { ContentEncoding = "gzip" },
+                    HttpHeaders = new BlobHttpHeaders { ContentEncoding = ContentEncodingGzip },
                 };
                 using Stream blobStream = await blob.OpenWriteAsync(true, writeOptions, ct);
                 using GZipStream compressedBlobStream = new(blobStream, CompressionLevel.Optimal, leaveOpen: true);
                 using MemoryStream payloadStream = new(payloadBuffer, writable: false);
 
-                await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: 81920, ct);
+                await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: DefaultCopyBufferSize, ct);
                 await compressedBlobStream.FlushAsync(ct);
                 await blobStream.FlushAsync(ct);
             }
@@ -87,7 +93,7 @@ public sealed class BlobPayloadStore : IPayloadStore
             {
                 using Stream blobStream = await blob.OpenWriteAsync(true, default, ct);
                 using MemoryStream payloadStream = new(payloadBuffer, writable: false);
-                await payloadStream.CopyToAsync(blobStream, bufferSize: 81920, ct);
+                await payloadStream.CopyToAsync(blobStream, bufferSize: DefaultCopyBufferSize, ct);
                 await blobStream.FlushAsync(ct);
             }
 
@@ -115,7 +121,7 @@ public sealed class BlobPayloadStore : IPayloadStore
             using BlobDownloadStreamingResult result = await blob.DownloadStreamingAsync(cancellationToken: ct);
             Stream contentStream = result.Content;
             bool isGzip = string.Equals(
-                result.Details.ContentEncoding, "gzip", StringComparison.OrdinalIgnoreCase);
+                result.Details.ContentEncoding, ContentEncodingGzip, StringComparison.OrdinalIgnoreCase);
 
             if (isGzip)
             {
@@ -162,8 +168,8 @@ public sealed class BlobPayloadStore : IPayloadStore
 
     static async Task<T> WithTransientRetryAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken)
     {
-        const int maxAttempts = 8;
-        TimeSpan baseDelay = TimeSpan.FromMilliseconds(250);
+        const int maxAttempts = MaxRetryAttempts;
+        TimeSpan baseDelay = TimeSpan.FromMilliseconds(BaseDelayMs);
         int attempt = 0;
 
         while (true)
@@ -201,9 +207,9 @@ public sealed class BlobPayloadStore : IPayloadStore
         int jitterMs;
         lock (RandomLock)
         {
-            jitterMs = SharedRandom.Next(0, 100);
+            jitterMs = SharedRandom.Next(0, MaxJitterMs);
         }
-        return TimeSpan.FromMilliseconds(Math.Min((baseDelay.TotalMilliseconds * factor) + jitterMs, 10_000));
-    }
 
+        return TimeSpan.FromMilliseconds(Math.Min((baseDelay.TotalMilliseconds * factor) + jitterMs, MaxDelayMs));
+    }
 }

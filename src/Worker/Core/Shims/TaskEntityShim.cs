@@ -193,6 +193,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
 
         public override void SetState(object? state)
         {
+            Check.ThrowIfLargePayloadEnabled(this.enableLargePayloadSupport, nameof(this.SetState));
             this.value = this.dataConverter.Serialize(state);
             this.cachedValue = state;
         }
@@ -256,7 +257,7 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
         public override void SignalEntity(EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null)
         {
             Check.NotDefault(id);
-
+            Check.ThrowIfLargePayloadEnabled(this.enableLargePayloadSupport, nameof(this.SignalEntity));
             this.operationActions.Add(new SendSignalOperationAction()
             {
                 InstanceId = id.ToString(),

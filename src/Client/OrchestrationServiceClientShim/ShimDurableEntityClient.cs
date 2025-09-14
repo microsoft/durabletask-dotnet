@@ -216,7 +216,12 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
 
     EntityMetadata Convert(EntityBackendQueries.EntityMetadata metadata)
     {
-        SerializedData? data = metadata.SerializedState is null ? null : new(metadata.SerializedState, this.Converter);
+        SerializedData? data = metadata.SerializedState is null
+            ? null
+            : new SerializedData(metadata.SerializedState, this.Converter)
+            {
+                EnableLargePayloadSupport = this.SupportsAsyncSerialization,
+            };
         return new(new EntityInstanceId(metadata.EntityId.Name, metadata.EntityId.Key), data)
         {
             LastModifiedTime = metadata.LastModifiedTime,

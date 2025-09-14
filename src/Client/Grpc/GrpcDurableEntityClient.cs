@@ -30,7 +30,11 @@ class GrpcDurableEntityClient : DurableEntityClient
     /// <param name="logger">The logger for logging client requests.</param>
     /// <param name="enableLargePayloadSupport">Whether to use async serialization for large payloads.</param>
     public GrpcDurableEntityClient(
-        string name, DataConverter dataConverter, TaskHubSidecarServiceClient sidecarClient, ILogger logger, bool enableLargePayloadSupport = false)
+        string name,
+        DataConverter dataConverter,
+        TaskHubSidecarServiceClient sidecarClient,
+        ILogger logger,
+        bool enableLargePayloadSupport = false)
         : base(name)
     {
         this.dataConverter = dataConverter;
@@ -305,7 +309,10 @@ class GrpcDurableEntityClient : DurableEntityClient
         EntityInstanceId entityId = new(coreEntityId.Name, coreEntityId.Key);
         bool hasState = metadata.SerializedState != null;
 
-        SerializedData? data = (includeState && hasState) ? new(metadata.SerializedState!, this.dataConverter) : null;
+        SerializedData? data = (includeState && hasState)
+            ? new SerializedData(metadata.SerializedState!, this.dataConverter)
+                { EnableLargePayloadSupport = this.enableLargePayloadSupport }
+            : null;
         return new EntityMetadata(entityId, data)
         {
             LastModifiedTime = metadata.LastModifiedTime.ToDateTimeOffset(),

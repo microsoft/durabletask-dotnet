@@ -21,6 +21,11 @@ public sealed class SerializedData(string data, DataConverter? converter = null)
     public string Value { get; } = Check.NotNull(data);
 
     /// <summary>
+    /// Gets a value indicating whether large payload support is enabled.
+    /// </summary>
+    public bool EnableLargePayloadSupport { get; init; }
+
+    /// <summary>
     /// Gets the data converter.
     /// </summary>
     public DataConverter Converter { get; } = converter ?? JsonDataConverter.Default;
@@ -30,7 +35,11 @@ public sealed class SerializedData(string data, DataConverter? converter = null)
     /// </summary>
     /// <typeparam name="T">The type to deserialize into.</typeparam>
     /// <returns>The deserialized type.</returns>
-    public T ReadAs<T>() => this.Converter.Deserialize<T>(this.Value);
+    public T ReadAs<T>()
+    {
+        Check.ThrowIfLargePayloadEnabled(this.EnableLargePayloadSupport, nameof(this.ReadAs));
+        return this.Converter.Deserialize<T>(this.Value);
+    }
 
     /// <summary>
     /// Deserializes the data into <typeparamref name="T"/>.
@@ -44,11 +53,15 @@ public sealed class SerializedData(string data, DataConverter? converter = null)
     /// </summary>
     /// <param name="data">The data to serialize.</param>
     /// <param name="converter">The data converter.</param>
+    /// <param name="enableLargePayloadSupport">Whether to use async serialization for large payloads.</param>
     /// <returns>Serialized data.</returns>
-    internal static SerializedData Create(object data, DataConverter? converter = null)
+    internal static SerializedData Create(object data, DataConverter? converter = null, bool enableLargePayloadSupport = false)
     {
         converter ??= JsonDataConverter.Default;
-        return new SerializedData(converter.Serialize(data), converter);
+        return new SerializedData(converter.Serialize(data), converter)
+        {
+            EnableLargePayloadSupport = enableLargePayloadSupport,
+        };
     }
 
     /// <summary>
@@ -56,9 +69,13 @@ public sealed class SerializedData(string data, DataConverter? converter = null)
     /// </summary>
     /// <param name="data">The data to serialize.</param>
     /// <param name="converter">The data converter.</param>
+    /// <param name="enableLargePayloadSupport">Whether to use async serialization for large payloads.</param>
     /// <returns>Serialized data.</returns>
-    internal static async Task<SerializedData> CreateAsync(object data, DataConverter converter)
+    internal static async Task<SerializedData> CreateAsync(object data, DataConverter converter, bool enableLargePayloadSupport = false)
     {
-        return new SerializedData(await converter.SerializeAsync(data), converter);
+        return new SerializedData(await converter.SerializeAsync(data), converter)
+        {
+            EnableLargePayloadSupport = enableLargePayloadSupport,
+        };
     }
 }

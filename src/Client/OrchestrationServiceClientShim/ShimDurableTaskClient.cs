@@ -336,6 +336,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
             SerializedOutput = state.Output,
             SerializedCustomStatus = state.Status,
             FailureDetails = state.FailureDetails?.ConvertFromCore(),
+            EnableLargePayloadSupport = this.SupportsAsyncSerialization,
         };
     }
 

@@ -521,6 +521,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             SerializedCustomStatus = state.CustomStatus,
             FailureDetails = state.FailureDetails.ToTaskFailureDetails(),
             DataConverter = includeInputsAndOutputs ? this.DataConverter : null,
+            EnableLargePayloadSupport = this.SupportsAsyncSerialization,
             Tags = new Dictionary<string, string>(state.Tags),
         };
 

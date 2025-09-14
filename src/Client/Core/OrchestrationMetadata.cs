@@ -81,6 +81,12 @@ public sealed class OrchestrationMetadata
     public string? SerializedCustomStatus { get; init; }
 
     /// <summary>
+    /// Gets a value indicating whether large payload support is enabled.
+    /// </summary>
+    /// <value><c>true</c> if large payload support is enabled; <c>false</c> otherwise.</value>
+    public bool EnableLargePayloadSupport { get; init; }
+
+    /// <summary>
     /// Gets the tags associated with the orchestration instance.
     /// </summary>
     public IReadOnlyDictionary<string, string> Tags { get; init; } = ImmutableDictionary.Create<string, string>();
@@ -141,6 +147,7 @@ public sealed class OrchestrationMetadata
                 "that are fetched with the option to include input data.");
         }
 
+        Check.ThrowIfLargePayloadEnabled(this.EnableLargePayloadSupport, nameof(this.ReadInputAs));
         return this.DataConverter.Deserialize<T>(this.SerializedInput);
     }
 
@@ -167,6 +174,7 @@ public sealed class OrchestrationMetadata
                 "that are fetched with the option to include output data.");
         }
 
+        Check.ThrowIfLargePayloadEnabled(this.EnableLargePayloadSupport, nameof(this.ReadOutputAs));
         return this.DataConverter.Deserialize<T>(this.SerializedOutput);
     }
 
@@ -193,6 +201,7 @@ public sealed class OrchestrationMetadata
                 + " objects that are fetched with the option to include input and output data.");
         }
 
+        Check.ThrowIfLargePayloadEnabled(this.EnableLargePayloadSupport, nameof(this.ReadCustomStatusAs));
         return this.DataConverter.Deserialize<T>(this.SerializedCustomStatus);
     }
 
@@ -220,7 +229,12 @@ public sealed class OrchestrationMetadata
                 "that are fetched with the option to include input data.");
         }
 
-        return await this.DataConverter.DeserializeAsync<T>(this.SerializedInput, cancellationToken);
+        if (this.EnableLargePayloadSupport)
+        {
+            return await this.DataConverter.DeserializeAsync<T>(this.SerializedInput, cancellationToken);
+        }
+
+        return this.DataConverter.Deserialize<T>(this.SerializedInput);
     }
 
     /// <summary>
@@ -247,7 +261,12 @@ public sealed class OrchestrationMetadata
                 "that are fetched with the option to include output data.");
         }
 
-        return await this.DataConverter.DeserializeAsync<T>(this.SerializedOutput, cancellationToken);
+        if (this.EnableLargePayloadSupport)
+        {
+            return await this.DataConverter.DeserializeAsync<T>(this.SerializedOutput, cancellationToken);
+        }
+
+        return this.DataConverter.Deserialize<T>(this.SerializedOutput);
     }
 
     /// <summary>
@@ -272,6 +291,11 @@ public sealed class OrchestrationMetadata
             throw new InvalidOperationException(
                 $"The {nameof(this.ReadCustomStatusAsAsync)} method can only be used on {nameof(OrchestrationMetadata)}" +
                 " objects that are fetched with the option to include input and output data.");
+        }
+
+        if (this.EnableLargePayloadSupport)
+        {
+            return await this.DataConverter.DeserializeAsync<T>(this.SerializedCustomStatus, cancellationToken);
         }
 
         return await this.DataConverter.DeserializeAsync<T>(this.SerializedCustomStatus, cancellationToken);

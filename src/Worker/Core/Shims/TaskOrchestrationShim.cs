@@ -55,11 +55,6 @@ partial class TaskOrchestrationShim : TaskOrchestration
 
     DataConverter DataConverter => this.invocationContext.Options.DataConverter;
 
-    /// <summary>
-    /// Gets a value indicating whether the DataConverter supports async operations (LargePayload enabled).
-    /// </summary>
-    bool SupportsAsyncSerialization => this.invocationContext.Options.EnableLargePayloadSupport;
-
     /// <inheritdoc/>
     public override async Task<string?> Execute(OrchestrationContext innerContext, string rawInput)
     {
@@ -68,7 +63,7 @@ partial class TaskOrchestrationShim : TaskOrchestration
         innerContext.MessageDataConverter = converterShim;
         innerContext.ErrorDataConverter = converterShim;
 
-        object? input = this.SupportsAsyncSerialization
+        object? input = this.invocationContext.Options.EnableLargePayloadSupport
             ? await this.DataConverter.DeserializeAsync(rawInput, this.implementation.InputType)
             : this.DataConverter.Deserialize(rawInput, this.implementation.InputType);
         this.wrapperContext = new(innerContext, this.invocationContext, input, this.properties);
@@ -89,7 +84,7 @@ partial class TaskOrchestrationShim : TaskOrchestration
             }
 
             // Return the output (if any) as a serialized string.
-            return this.SupportsAsyncSerialization
+            return this.invocationContext.Options.EnableLargePayloadSupport
                 ? await this.DataConverter.SerializeAsync(output)
                 : this.DataConverter.Serialize(output);
         }
@@ -128,6 +123,7 @@ partial class TaskOrchestrationShim : TaskOrchestration
     /// <inheritdoc/>
     public override string? GetStatus()
     {
+        Check.ThrowIfLargePayloadEnabled(this.invocationContext.Options.EnableLargePayloadSupport, nameof(this.GetStatus));
         return this.wrapperContext?.GetSerializedCustomStatus();
     }
 
@@ -135,5 +131,14 @@ partial class TaskOrchestrationShim : TaskOrchestration
     public override void RaiseEvent(OrchestrationContext context, string name, string input)
     {
         this.wrapperContext?.CompleteExternalEvent(name, input);
+    }
+
+    /// <inheritdoc/>
+    public override async Task RaiseEventAsync(OrchestrationContext context, string name, string input)
+    {
+        if (this.wrapperContext != null)
+        {
+            await this.wrapperContext.CompleteExternalEventAsync(name, input);
+        }
     }
 }

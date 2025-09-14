@@ -68,4 +68,22 @@ public abstract class TaskEntityContext
     {
         return new ValueTask<string>(this.ScheduleNewOrchestration(name, input, options));
     }
+
+    /// <summary>
+    /// Signals an entity operation asynchronously.
+    /// </summary>
+    /// <param name="id">The entity to signal.</param>
+    /// <param name="operationName">The operation name.</param>
+    /// <param name="input">The operation input.</param>
+    /// <param name="options">The options to signal with.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public virtual ValueTask SignalEntityAsync(
+        EntityInstanceId id,
+        string operationName,
+        object? input = null,
+        SignalEntityOptions? options = null)
+    {
+        this.SignalEntity(id, operationName, input, options);
+        return default;
+    }
 }

@@ -113,11 +113,6 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// </summary>
     internal DataConverter DataConverter => this.invocationContext.Options.DataConverter;
 
-    /// <summary>
-    /// Gets a value indicating whether the DataConverter supports async operations (LargePayload enabled).
-    /// </summary>
-    bool SupportsAsyncSerialization => this.invocationContext.Options.EnableLargePayloadSupport;
-
     /// <inheritdoc/>
     protected override ILoggerFactory LoggerFactory => this.invocationContext.LoggerFactory;
 
@@ -288,7 +283,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         // Return immediately if this external event has already arrived.
         if (this.externalEventBuffer.TryTake(eventName, out string? bufferedEventPayload))
         {
-            return this.SupportsAsyncSerialization
+            return this.invocationContext.Options.EnableLargePayloadSupport
                 ? this.DataConverter.DeserializeAsync<T>(bufferedEventPayload, cancellationToken).AsTask()
                 : Task.FromResult(this.DataConverter.Deserialize<T>(bufferedEventPayload));
         }
@@ -421,7 +416,50 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// </summary>
     /// <param name="eventName">The name of the event to complete.</param>
     /// <param name="rawEventPayload">The serialized event payload.</param>
-    internal async Task CompleteExternalEvent(string eventName, string rawEventPayload)
+    internal void CompleteExternalEvent(string eventName, string rawEventPayload)
+    {
+        Check.ThrowIfLargePayloadEnabled(
+            this.invocationContext.Options.EnableLargePayloadSupport,
+            nameof(this.CompleteExternalEvent));
+        if (this.externalEventSources.TryGetValue(eventName, out Queue<IEventSource>? waiters))
+        {
+            object? value;
+
+            IEventSource waiter = waiters.Dequeue();
+            if (waiter.EventType == typeof(OperationResult))
+            {
+                // use the framework-defined deserialization for entity responses, not the application-defined data converter,
+                // because we are just unwrapping the entity response without yet deserializing any application-defined data.
+                value = this.entityFeature!.EntityContext.DeserializeEntityResponseEvent(rawEventPayload);
+            }
+            else
+            {
+                value = this.DataConverter.Deserialize(rawEventPayload, waiter.EventType);
+            }
+
+            // Events are completed in FIFO order. Remove the key if the last event was delivered.
+            if (waiters.Count == 0)
+            {
+                this.externalEventSources.Remove(eventName);
+            }
+
+            waiter.TrySetResult(value);
+        }
+        else
+        {
+            // The orchestrator isn't waiting for this event (yet?). Save it in case
+            // the orchestrator wants it later.
+            this.externalEventBuffer.Add(eventName, rawEventPayload);
+        }
+    }
+
+    /// <summary>
+    /// Completes the external event by name, allowing the orchestration to continue if it is waiting on this event.
+    /// </summary>
+    /// <param name="eventName">The name of the event to complete.</param>
+    /// <param name="rawEventPayload">The serialized event payload.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    internal async Task CompleteExternalEventAsync(string eventName, string rawEventPayload)
     {
         if (this.externalEventSources.TryGetValue(eventName, out Queue<IEventSource>? waiters))
         {
@@ -436,7 +474,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             }
             else
             {
-                value = this.SupportsAsyncSerialization
+                value = this.invocationContext.Options.EnableLargePayloadSupport
                     ? await this.DataConverter.DeserializeAsync(rawEventPayload, waiter.EventType, CancellationToken.None)
                     : this.DataConverter.Deserialize(rawEventPayload, waiter.EventType);
             }
@@ -460,10 +498,11 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <summary>
     /// Gets the serialized custom status.
     /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The custom status serialized to a string, or <c>null</c> if there is not custom status.</returns>
     internal async ValueTask<string?> GetSerializedCustomStatusAsync(CancellationToken cancellationToken = default)
     {
-        return this.SupportsAsyncSerialization
+        return this.invocationContext.Options.EnableLargePayloadSupport
             ? await this.DataConverter.SerializeAsync(this.customStatus, cancellationToken)
             : this.DataConverter.Serialize(this.customStatus);
     }
@@ -474,6 +513,9 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <returns>The custom status serialized to a string, or <c>null</c> if there is not custom status.</returns>
     internal string? GetSerializedCustomStatus()
     {
+        Check.ThrowIfLargePayloadEnabled(
+            this.invocationContext.Options.EnableLargePayloadSupport,
+            nameof(this.GetSerializedCustomStatus));
         return this.DataConverter.Serialize(this.customStatus);
     }
 

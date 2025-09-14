@@ -98,7 +98,7 @@ sealed partial class TaskOrchestrationContextWrapper
             }
             else
             {
-                return this.wrapper.SupportsAsyncSerialization
+                return this.wrapper.invocationContext.Options.EnableLargePayloadSupport
                     ? await this.wrapper.DataConverter.DeserializeAsync<TResult>(operationResult.Result)
                     : this.wrapper.DataConverter.Deserialize<TResult>(operationResult.Result);
             }
@@ -117,11 +117,10 @@ sealed partial class TaskOrchestrationContextWrapper
         }
 
         /// <inheritdoc/>
-        public override Task SignalEntityAsync(EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null)
+        public override async Task SignalEntityAsync(EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null)
         {
             Check.NotDefault(id);
-            this.SendOperationMessage(id.ToString(), operationName, input, oneWay: true, scheduledTime: options?.SignalTime);
-            return Task.CompletedTask;
+            await this.SendOperationMessage(id.ToString(), operationName, input, oneWay: true, scheduledTime: options?.SignalTime);
         }
 
         /// <inheritdoc/>
@@ -196,7 +195,7 @@ sealed partial class TaskOrchestrationContextWrapper
             }
 
             Guid guid = this.wrapper.NewGuid(); // deterministically replayable unique id for this request
-            string? serializedInput = this.wrapper.SupportsAsyncSerialization
+            string? serializedInput = this.wrapper.invocationContext.Options.EnableLargePayloadSupport
                 ? await this.wrapper.DataConverter.SerializeAsync(input, CancellationToken.None)
                 : this.wrapper.DataConverter.Serialize(input);
             var target = new OrchestrationInstance() { InstanceId = instanceId };

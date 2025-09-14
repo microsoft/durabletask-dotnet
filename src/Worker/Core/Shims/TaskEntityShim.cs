@@ -253,7 +253,26 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             this.checkpointPosition = 0;
         }
 
-        public override async void SignalEntity(EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null)
+        public override void SignalEntity(EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null)
+        {
+            Check.NotDefault(id);
+
+            this.operationActions.Add(new SendSignalOperationAction()
+            {
+                InstanceId = id.ToString(),
+                Name = operationName,
+                Input = this.dataConverter.Serialize(input),
+                ScheduledTime = options?.SignalTime?.UtcDateTime,
+                RequestTime = DateTimeOffset.UtcNow,
+                ParentTraceContext = this.parentTraceContext,
+            });
+        }
+
+        public override async ValueTask SignalEntityAsync(
+            EntityInstanceId id,
+            string operationName,
+            object? input = null,
+            SignalEntityOptions? options = null)
         {
             Check.NotDefault(id);
 
@@ -270,7 +289,10 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             });
         }
 
-        public override string ScheduleNewOrchestration(TaskName name, object? input = null, StartOrchestrationOptions? options = null)
+        public override string ScheduleNewOrchestration(
+            TaskName name,
+            object? input = null,
+            StartOrchestrationOptions? options = null)
         {
             Check.NotEntity(true, options?.InstanceId);
             Check.ThrowIfLargePayloadEnabled(this.enableLargePayloadSupport, nameof(this.ScheduleNewOrchestration));

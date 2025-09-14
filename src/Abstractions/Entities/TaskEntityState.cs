@@ -59,4 +59,15 @@ public abstract class TaskEntityState
     /// </summary>
     /// <param name="state">The state to set.</param>
     public abstract void SetState(object? state);
+
+    /// <summary>
+    /// Asynchronously sets the entity state. Setting of <c>null</c> will delete entity state.
+    /// </summary>
+    /// <param name="state">The state to set.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public virtual Task SetStateAsync(object? state)
+    {
+        this.SetState(state);
+        return Task.CompletedTask;
+    }
 }

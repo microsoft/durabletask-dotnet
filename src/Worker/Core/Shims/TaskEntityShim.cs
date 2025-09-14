@@ -190,7 +190,13 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             return this.cachedValue;
         }
 
-        public override async void SetState(object? state)
+        public override void SetState(object? state)
+        {
+            this.value = this.dataConverter.Serialize(state);
+            this.cachedValue = state;
+        }
+
+        public override async Task SetStateAsync(object? state)
         {
             this.value = this.enableLargePayloadSupport
                 ? await this.dataConverter.SerializeAsync(state)
@@ -281,7 +287,10 @@ class TaskEntityShim : DTCore.Entities.TaskEntity
             return instanceId;
         }
 
-        public override async Task<string> ScheduleNewOrchestrationAsync(TaskName name, object? input = null, StartOrchestrationOptions? options = null)
+        public override async Task<string> ScheduleNewOrchestrationAsync(
+            TaskName name,
+            object? input = null,
+            StartOrchestrationOptions? options = null)
         {
             Check.NotEntity(true, options?.InstanceId);
 

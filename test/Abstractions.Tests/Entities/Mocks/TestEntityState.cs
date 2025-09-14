@@ -28,4 +28,10 @@ public class TestEntityState : TaskEntityState
     {
         this.State = state;
     }
+
+    public override Task SetStateAsync(object? state)
+    {
+        this.SetState(state);
+        return Task.CompletedTask;
+    }
 }

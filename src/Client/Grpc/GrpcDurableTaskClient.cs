@@ -64,11 +64,6 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
     DataConverter DataConverter => this.options.DataConverter;
 
-    /// <summary>
-    /// Gets a value indicating whether the DataConverter supports async operations (LargePayload enabled).
-    /// </summary>
-    bool SupportsAsyncSerialization => this.options.EnableLargePayloadSupport;
-
     /// <inheritdoc/>
     public override ValueTask DisposeAsync()
     {
@@ -102,7 +97,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             Name = orchestratorName.Name,
             Version = version,
             InstanceId = instanceId,
-            Input = this.SupportsAsyncSerialization
+            Input = this.options.EnableLargePayloadSupport
                 ? await this.DataConverter.SerializeAsync(input, cancellation)
                 : this.DataConverter.Serialize(input),
             RequestTime = DateTimeOffset.UtcNow.ToTimestamp(),
@@ -156,7 +151,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         {
             InstanceId = instanceId,
             Name = eventName,
-            Input = this.SupportsAsyncSerialization
+            Input = this.options.EnableLargePayloadSupport
                 ? await this.DataConverter.SerializeAsync(eventPayload, cancellation)
                 : this.DataConverter.Serialize(eventPayload),
         };
@@ -178,7 +173,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
         this.logger.TerminatingInstance(instanceId);
 
-        string? serializedOutput = this.SupportsAsyncSerialization
+        string? serializedOutput = this.options.EnableLargePayloadSupport
             ? await this.DataConverter.SerializeAsync(output, cancellation)
             : this.DataConverter.Serialize(output);
         await this.sidecarClient.TerminateInstanceAsync(
@@ -521,7 +516,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             SerializedCustomStatus = state.CustomStatus,
             FailureDetails = state.FailureDetails.ToTaskFailureDetails(),
             DataConverter = includeInputsAndOutputs ? this.DataConverter : null,
-            EnableLargePayloadSupport = this.SupportsAsyncSerialization,
+            EnableLargePayloadSupport = this.options.EnableLargePayloadSupport,
             Tags = new Dictionary<string, string>(state.Tags),
         };
 

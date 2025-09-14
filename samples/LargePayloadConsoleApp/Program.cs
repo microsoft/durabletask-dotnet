@@ -25,7 +25,7 @@ builder.Services.AddDurableTaskClient(b =>
 {
     b.UseDurableTaskScheduler(schedulerConnectionString);
     // Ensure entity APIs are enabled for the client
-    b.Configure(o => o.EnableEntitySupport = true);
+    b.Configure(o => { o.EnableEntitySupport = true; o.EnableLargePayloadSupport = true; });
     b.UseExternalizedPayloads(opts =>
     {
         // Keep threshold small to force externalization for demo purposes
@@ -104,7 +104,7 @@ builder.Services.AddDurableTaskWorker(b =>
         opts.ContainerName = builder.Configuration.GetValue<string>("DURABLETASK_PAYLOAD_CONTAINER");
     });
     // Ensure entity APIs are enabled for the worker
-    b.Configure(o => o.EnableEntitySupport = true);
+    b.Configure(o => { o.EnableEntitySupport = true; o.EnableLargePayloadSupport = true; });
 });
 
 IHost host = builder.Build();

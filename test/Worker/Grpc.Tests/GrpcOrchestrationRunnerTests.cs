@@ -85,6 +85,28 @@ public class GrpcOrchestrationRunnerTests
         GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
         Assert.False(extendedSessions.IsInitialized);
 
+        // Invalid number for extended session timeout key (must be > 0)
+        orchestratorRequest.Properties.Clear();
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludePastEvents", Value.ForBool(false) },
+            { "IsExtendedSession", Value.ForBool(true) },
+            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(0) } });
+        requestBytes = orchestratorRequest.ToByteArray();
+        requestString = Convert.ToBase64String(requestBytes);
+        GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
+        Assert.False(extendedSessions.IsInitialized);
+
+        // Invalid number for extended session timeout key (must be > 0)
+        orchestratorRequest.Properties.Clear();
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludePastEvents", Value.ForBool(false) },
+            { "IsExtendedSession", Value.ForBool(true) },
+            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(-1) } });
+        requestBytes = orchestratorRequest.ToByteArray();
+        requestString = Convert.ToBase64String(requestBytes);
+        GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
+        Assert.False(extendedSessions.IsInitialized);
+
         // No extended session timeout key
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {

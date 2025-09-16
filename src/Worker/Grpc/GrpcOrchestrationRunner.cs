@@ -143,7 +143,7 @@ public static class GrpcOrchestrationRunner
         // Only attempt to initialize the extended sessions cache if all the parameters are correctly specified
         if (properties.TryGetValue("ExtendedSessionIdleTimeoutInSeconds", out object? extendedSessionIdleTimeoutObj)
             && extendedSessionIdleTimeoutObj is double extendedSessionIdleTimeout
-            && extendedSessionIdleTimeout >= 0
+            && extendedSessionIdleTimeout > 0
             && properties.TryGetValue("IsExtendedSession", out object? extendedSessionObj)
             && extendedSessionObj is bool extendedSession)
         {

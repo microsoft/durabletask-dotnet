@@ -6,8 +6,9 @@ using System.IO.Compression;
 using System.Text;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Microsoft.DurableTask.Converters;
 
-namespace Microsoft.DurableTask.Converters;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Azure Blob Storage implementation of <see cref="IPayloadStore"/>.

@@ -5,8 +5,11 @@ using Microsoft.DurableTask.Converters;
 using Microsoft.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.DurableTask.Worker.Grpc;
+using Grpc.Net.Client;
+using Grpc.Core.Interceptors;
 
-namespace Microsoft.DurableTask.Worker;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Extension methods to enable externalized payloads using Azure Blob Storage for Durable Task Worker.
@@ -16,6 +19,9 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
     /// <summary>
     /// Enables externalized payload storage using Azure Blob Storage for the specified worker builder.
     /// </summary>
+    /// <param name="builder">The builder to configure.</param>
+    /// <param name="configure">The callback to configure the storage options.</param>
+    /// <returns>The original builder, for call chaining.</returns>
     public static IDurableTaskWorkerBuilder UseExternalizedPayloads(
         this IDurableTaskWorkerBuilder builder,
         Action<LargePayloadStorageOptions> configure)
@@ -38,27 +44,22 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
                 LargePayloadStorageOptions opts = monitor.Get(builder.Name);
                 if (opt.Channel is not null)
                 {
-                    var invoker = opt.Channel.Intercept(new Grpc.Internal.AzureBlobPayloadsInterceptor(store, opts));
+                    var invoker = opt.Channel.Intercept(new AzureBlobPayloadsInterceptor(store, opts));
                     opt.CallInvoker = invoker;
+                    // Ensure worker uses the intercepted invoker path
+                    opt.Channel = null;
                 }
                 else if (opt.CallInvoker is not null)
                 {
-                    opt.CallInvoker = opt.CallInvoker.Intercept(new Grpc.Internal.AzureBlobPayloadsInterceptor(store, opts));
+                    opt.CallInvoker = opt.CallInvoker.Intercept(new AzureBlobPayloadsInterceptor(store, opts));
                 }
-                else if (!string.IsNullOrEmpty(opt.Address))
+                else
                 {
-                    // Channel will be built later; worker will build it, intercept when possible through CallInvoker path.
+                    throw new ArgumentException(
+                        "Channel or CallInvoker must be provided to use Azure Blob Payload Externalization feature"
+                    );
                 }
             });
-
-        // builder.Services
-        //     .AddOptions<DurableTaskWorkerOptions>(builder.Name)
-        //     .PostConfigure<IPayloadStore, IOptionsMonitor<LargePayloadStorageOptions>>((opt, store, monitor) =>
-        //     {
-        //         LargePayloadStorageOptions opts = monitor.Get(builder.Name);
-        //         DataConverter inner = opt.DataConverter ?? Converters.JsonDataConverter.Default;
-        //         opt.DataConverter = new LargePayloadDataConverter(inner, store, opts);
-        //     });
 
         return builder;
     }

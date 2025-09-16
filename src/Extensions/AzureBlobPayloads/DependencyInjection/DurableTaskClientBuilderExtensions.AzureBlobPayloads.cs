@@ -1,13 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Grpc.Core.Interceptors;
 using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.DurableTask.Converters;
+using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
-namespace Microsoft.DurableTask.Client;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Extension methods to enable externalized payloads using Azure Blob Storage for Durable Task Client.
@@ -17,6 +19,10 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
     /// <summary>
     /// Enables externalized payload storage using Azure Blob Storage for the specified client builder.
     /// </summary>
+    /// <param name="builder">The builder to configure.</param>
+    /// <param name="configure">The callback to configure the storage options.</param>
+    /// <returns>The original builder, for call chaining.</returns>
+    /// <returns></returns>
     public static IDurableTaskClientBuilder UseExternalizedPayloads(
         this IDurableTaskClientBuilder builder,
         Action<LargePayloadStorageOptions> configure)
@@ -39,30 +45,23 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
                 LargePayloadStorageOptions opts = monitor.Get(builder.Name);
                 if (opt.Channel is not null)
                 {
-                    var invoker = opt.Channel.Intercept(new Worker.Grpc.Internal.AzureBlobPayloadsInterceptor(store, opts));
+                    Grpc.Core.CallInvoker invoker = opt.Channel.Intercept(new AzureBlobPayloadsInterceptor(store, opts));
                     opt.CallInvoker = invoker;
+
+                    // Ensure client uses the intercepted invoker path
+                    opt.Channel = null;
                 }
                 else if (opt.CallInvoker is not null)
                 {
-                    opt.CallInvoker = opt.CallInvoker.Intercept(new Worker.Grpc.Internal.AzureBlobPayloadsInterceptor(store, opts));
+                    opt.CallInvoker = opt.CallInvoker.Intercept(new AzureBlobPayloadsInterceptor(store, opts));
                 }
-                else if (!string.IsNullOrEmpty(opt.Address))
+                else
                 {
-                    // Channel will be built later; we can't intercept here. This will be handled in the client if CallInvoker is null.
+                    throw new ArgumentException(
+                        "Channel or CallInvoker must be provided to use Azure Blob Payload Externalization feature");
                 }
             });
-
-        // builder.Services
-        //     .AddOptions<DurableTaskClientOptions>(builder.Name)
-        //     .PostConfigure<IPayloadStore, IOptionsMonitor<LargePayloadStorageOptions>>((opt, store, monitor) =>
-        //     {
-        //         LargePayloadStorageOptions opts = monitor.Get(builder.Name);
-        //         DataConverter inner = opt.DataConverter ?? Converters.JsonDataConverter.Default;
-        //         opt.DataConverter = new LargePayloadDataConverter(inner, store, opts);
-        //     });
 
         return builder;
     }
 }
-
-

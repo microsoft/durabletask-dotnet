@@ -12,12 +12,15 @@
     <PackageReference Include="Azure.Storage.Blobs" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Grpc.Net.Client" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\Abstractions\Abstractions.csproj" />
     <ProjectReference Include="..\..\Client\Core\Client.csproj" />
     <ProjectReference Include="..\..\Worker\Core\Worker.csproj" />
+    <ProjectReference Include="..\..\Client\Grpc\Client.Grpc.csproj" />
+    <ProjectReference Include="..\..\Worker\Grpc\Worker.Grpc.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -25,4 +28,3 @@
   </ItemGroup>
 
 </Project>
-

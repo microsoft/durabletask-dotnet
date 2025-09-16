@@ -30,6 +30,27 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
             return new BlobPayloadStore(opts);
         });
 
+        // Wrap the gRPC CallInvoker with our interceptor when using the gRPC worker
+        builder.Services
+            .AddOptions<GrpcDurableTaskWorkerOptions>(builder.Name)
+            .PostConfigure<IPayloadStore, IOptionsMonitor<LargePayloadStorageOptions>>((opt, store, monitor) =>
+            {
+                LargePayloadStorageOptions opts = monitor.Get(builder.Name);
+                if (opt.Channel is not null)
+                {
+                    var invoker = opt.Channel.Intercept(new Grpc.Internal.AzureBlobPayloadsInterceptor(store, opts));
+                    opt.CallInvoker = invoker;
+                }
+                else if (opt.CallInvoker is not null)
+                {
+                    opt.CallInvoker = opt.CallInvoker.Intercept(new Grpc.Internal.AzureBlobPayloadsInterceptor(store, opts));
+                }
+                else if (!string.IsNullOrEmpty(opt.Address))
+                {
+                    // Channel will be built later; worker will build it, intercept when possible through CallInvoker path.
+                }
+            });
+
         // builder.Services
         //     .AddOptions<DurableTaskWorkerOptions>(builder.Name)
         //     .PostConfigure<IPayloadStore, IOptionsMonitor<LargePayloadStorageOptions>>((opt, store, monitor) =>

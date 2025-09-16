@@ -241,9 +241,9 @@ public class RunBackgroundTaskLoggingTests
             return new TestFixture((ServiceProvider)services, logProvider, clientMock, worker, processorInstance, runBackgroundTask);
         }
 
-        public void InvokeRunBackgroundTask(P.WorkItem workItem, Func<Task> handler)
+        public void InvokeRunBackgroundTask(P.WorkItem workItem, Func<Task> handler, CancellationToken cancellationToken = default)
         {
-            this.RunBackgroundTaskMethod.Invoke(this.ProcessorInstance, new object?[] { workItem, handler });
+            this.RunBackgroundTaskMethod.Invoke(this.ProcessorInstance, new object?[] { workItem, handler, cancellationToken });
         }
 
         public IReadOnlyCollection<LogEntry> GetLogs()

@@ -276,7 +276,8 @@ sealed partial class GrpcDurableTaskWorker
                             () => this.OnRunOrchestratorAsync(
                                 workItem.OrchestratorRequest,
                                 workItem.CompletionToken,
-                                cancellation));
+                                cancellation),
+                            cancellation);
                     }
                     else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
                     {
@@ -285,13 +286,15 @@ sealed partial class GrpcDurableTaskWorker
                             () => this.OnRunActivityAsync(
                                 workItem.ActivityRequest,
                                 workItem.CompletionToken,
-                                cancellation));
+                                cancellation),
+                            cancellation);
                     }
                     else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
                     {
                         this.RunBackgroundTask(
                             workItem,
-                            () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation));
+                            () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation),
+                            cancellation);
                     }
                     else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequestV2)
                     {
@@ -305,7 +308,8 @@ sealed partial class GrpcDurableTaskWorker
                                 batchRequest,
                                 cancellation,
                                 workItem.CompletionToken,
-                                operationInfos));
+                                operationInfos),
+                             cancellation);
                     }
                     else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
                     {
@@ -333,10 +337,11 @@ sealed partial class GrpcDurableTaskWorker
             }
         }
 
-        void RunBackgroundTask(P.WorkItem? workItem, Func<Task> handler)
+        void RunBackgroundTask(P.WorkItem? workItem, Func<Task> handler, CancellationToken cancellation)
         {
             // TODO: is Task.Run appropriate here? Should we have finer control over the tasks and their threads?
-            _ = Task.Run(async () =>
+            _ = Task.Run(
+                async () =>
             {
                 try
                 {
@@ -358,70 +363,95 @@ sealed partial class GrpcDurableTaskWorker
 
                     if (workItem?.OrchestratorRequest != null)
                     {
-                        this.Logger.AbandoningOrchestratorWorkItem(instanceId, workItem?.CompletionToken ?? string.Empty);
-                        await this.client.AbandonTaskOrchestratorWorkItemAsync(
-                            new P.AbandonOrchestrationTaskRequest
-                            {
-                                CompletionToken = workItem?.CompletionToken,
-                            },
-                            cancellationToken: CancellationToken.None);
-                        this.Logger.AbandonedOrchestratorWorkItem(instanceId, workItem?.CompletionToken ?? string.Empty);
+                        try
+                        {
+                            this.Logger.AbandoningOrchestratorWorkItem(instanceId, workItem?.CompletionToken ?? string.Empty);
+                            await this.client.AbandonTaskOrchestratorWorkItemAsync(
+                                new P.AbandonOrchestrationTaskRequest
+                                {
+                                    CompletionToken = workItem?.CompletionToken,
+                                },
+                                cancellationToken: cancellation);
+                            this.Logger.AbandonedOrchestratorWorkItem(instanceId, workItem?.CompletionToken ?? string.Empty);
+                        }
+                        catch (Exception abandonException)
+                        {
+                            this.Logger.UnexpectedError(abandonException, instanceId);
+                        }
                     }
                     else if (workItem?.ActivityRequest != null)
                     {
-                        this.Logger.AbandoningActivityWorkItem(
-                            instanceId,
-                            workItem.ActivityRequest.Name,
-                            workItem.ActivityRequest.TaskId,
-                            workItem?.CompletionToken ?? string.Empty);
-                        await this.client.AbandonTaskActivityWorkItemAsync(
-                            new P.AbandonActivityTaskRequest
-                            {
-                                CompletionToken = workItem?.CompletionToken,
-                            },
-                            cancellationToken: CancellationToken.None);
-                        this.Logger.AbandonedActivityWorkItem(
-                            instanceId,
-                            workItem.ActivityRequest.Name,
-                            workItem.ActivityRequest.TaskId,
-                            workItem?.CompletionToken ?? string.Empty);
+                        try
+                        {
+                            this.Logger.AbandoningActivityWorkItem(
+                                instanceId,
+                                workItem.ActivityRequest.Name,
+                                workItem.ActivityRequest.TaskId,
+                                workItem?.CompletionToken ?? string.Empty);
+                            await this.client.AbandonTaskActivityWorkItemAsync(
+                                new P.AbandonActivityTaskRequest
+                                {
+                                    CompletionToken = workItem?.CompletionToken,
+                                },
+                                cancellationToken: cancellation);
+                            this.Logger.AbandonedActivityWorkItem(
+                                instanceId,
+                                workItem.ActivityRequest.Name,
+                                workItem.ActivityRequest.TaskId,
+                                workItem?.CompletionToken ?? string.Empty);
+                        }
+                        catch (Exception abandonException)
+                        {
+                            this.Logger.UnexpectedError(abandonException, instanceId);
+                        }
                     }
                     else if (workItem?.EntityRequest != null)
                     {
-                        this.Logger.AbandoningEntityWorkItem(
-                            workItem.EntityRequest.InstanceId,
-                            workItem?.CompletionToken ?? string.Empty);
-                        await this.client.AbandonTaskEntityWorkItemAsync(
-                            new P.AbandonEntityTaskRequest
-                            {
-                                CompletionToken = workItem?.CompletionToken,
-                            },
-                            cancellationToken: CancellationToken.None);
-                        this.Logger.AbandonedEntityWorkItem(
-                            workItem.EntityRequest.InstanceId,
-                            workItem?.CompletionToken ?? string.Empty);
+                        try
+                        {
+                            this.Logger.AbandoningEntityWorkItem(
+                                workItem.EntityRequest.InstanceId,
+                                workItem?.CompletionToken ?? string.Empty);
+                            await this.client.AbandonTaskEntityWorkItemAsync(
+                                new P.AbandonEntityTaskRequest
+                                {
+                                    CompletionToken = workItem?.CompletionToken,
+                                },
+                                cancellationToken: cancellation);
+                            this.Logger.AbandonedEntityWorkItem(
+                                workItem.EntityRequest.InstanceId,
+                                workItem?.CompletionToken ?? string.Empty);
+                        }
+                        catch (Exception abandonException)
+                        {
+                            this.Logger.UnexpectedError(abandonException, workItem.EntityRequest.InstanceId);
+                        }
                     }
                     else if (workItem?.EntityRequestV2 != null)
                     {
-                        this.Logger.AbandoningEntityWorkItem(
-                            workItem.EntityRequestV2.InstanceId,
-                            workItem?.CompletionToken ?? string.Empty);
-                        await this.client.AbandonTaskEntityWorkItemAsync(
-                            new P.AbandonEntityTaskRequest
-                            {
-                                CompletionToken = workItem?.CompletionToken,
-                            },
-                            cancellationToken: CancellationToken.None);
-                        this.Logger.AbandonedEntityWorkItem(
-                            workItem.EntityRequestV2.InstanceId,
-                            workItem?.CompletionToken ?? string.Empty);
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException("Unknown work item type");
+                        try
+                        {
+                            this.Logger.AbandoningEntityWorkItem(
+                                workItem.EntityRequestV2.InstanceId,
+                                workItem?.CompletionToken ?? string.Empty);
+                            await this.client.AbandonTaskEntityWorkItemAsync(
+                                new P.AbandonEntityTaskRequest
+                                {
+                                    CompletionToken = workItem?.CompletionToken,
+                                },
+                                cancellationToken: cancellation);
+                            this.Logger.AbandonedEntityWorkItem(
+                                workItem.EntityRequestV2.InstanceId,
+                                workItem?.CompletionToken ?? string.Empty);
+                        }
+                        catch (Exception abandonException)
+                        {
+                            this.Logger.UnexpectedError(abandonException, workItem.EntityRequestV2.InstanceId);
+                        }
                     }
                 }
-            });
+            },
+                cancellation);
         }
 
         async Task OnRunOrchestratorAsync(

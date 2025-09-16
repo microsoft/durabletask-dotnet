@@ -137,13 +137,18 @@ public static class GrpcOrchestrationRunner
         bool addToExtendedSessions = false;
         bool requiresHistory = false;
         bool pastEventsIncluded = true;
+        bool isExtendedSession = false;
         double extendedSessionIdleTimeoutInSeconds = 0;
 
+        // Only attempt to initialize the extended sessions cache if all the parameters are correctly specified
         if (properties.TryGetValue("ExtendedSessionIdleTimeoutInSeconds", out object? extendedSessionIdleTimeoutObj)
             && extendedSessionIdleTimeoutObj is double extendedSessionIdleTimeout
-            && extendedSessionIdleTimeout >= 0)
+            && extendedSessionIdleTimeout >= 0
+            && properties.TryGetValue("IsExtendedSession", out object? extendedSessionObj)
+            && extendedSessionObj is bool extendedSession)
         {
             extendedSessionIdleTimeoutInSeconds = extendedSessionIdleTimeout;
+            isExtendedSession = extendedSession;
             extendedSessions = extendedSessionsCache?.GetOrInitializeCache(extendedSessionIdleTimeoutInSeconds);
         }
 
@@ -153,10 +158,7 @@ public static class GrpcOrchestrationRunner
             pastEventsIncluded = includePastEvents;
         }
 
-        if (properties.TryGetValue("IsExtendedSession", out object? isExtendedSessionObj)
-            && isExtendedSessionObj is bool isExtendedSession
-            && isExtendedSession
-            && extendedSessions != null)
+        if (isExtendedSession && extendedSessions != null)
         {
             // If a history was provided, even if we already have an extended session stored, we always want to evict whatever state is in the cache and replace it with a new extended
             // session based on the provided history
@@ -215,7 +217,7 @@ public static class GrpcOrchestrationRunner
 
                 if (addToExtendedSessions && !executor.IsCompleted)
                 {
-                    extendedSessions!.Set<ExtendedSessionState>(
+                    extendedSessions.Set<ExtendedSessionState>(
                         request.InstanceId,
                         new(runtimeState, shim, executor),
                         new MemoryCacheEntryOptions { SlidingExpiration = TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds) });

@@ -58,7 +58,7 @@ public class GrpcOrchestrationRunnerTests
     }
 
     [Fact]
-    public void MalformedRequestParameters_Means_NoExtendedSessionsStored()
+    public void MalformedRequestParameters_Means_CacheNotInitialized()
     {
         using var extendedSessions = new ExtendedSessionsCache();
         Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([]);
@@ -103,11 +103,8 @@ public class GrpcOrchestrationRunnerTests
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = orchestratorRequest.ToByteArray();
         requestString = Convert.ToBase64String(requestBytes);
-        stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
-        response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
-        // The extended session is still initialized due to the well-formed extended session timeout key
-        Assert.True(extendedSessions.IsInitialized);
-        Assert.False(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out object? extendedSession));
+        GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
+        Assert.False(extendedSessions.IsInitialized);
 
         // Wrong value type for extended session key
         orchestratorRequest.Properties.Clear();
@@ -117,11 +114,8 @@ public class GrpcOrchestrationRunnerTests
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = orchestratorRequest.ToByteArray();
         requestString = Convert.ToBase64String(requestBytes);
-        stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
-        response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
-        // The extended session is still initialized due to the well-formed extended session timeout key
-        Assert.True(extendedSessions.IsInitialized);
-        Assert.False(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out extendedSession));
+        GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
+        Assert.False(extendedSessions.IsInitialized);
 
         // No extended session key
         orchestratorRequest.Properties.Clear();
@@ -130,11 +124,25 @@ public class GrpcOrchestrationRunnerTests
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = orchestratorRequest.ToByteArray();
         requestString = Convert.ToBase64String(requestBytes);
-        stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
-        response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
-        // The extended session is still initialized due to the well-formed extended session timeout key
+        GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
+        Assert.False(extendedSessions.IsInitialized);
+    }
+
+    [Fact]
+    public void IsExtendedSessionFalse_Means_NoExtendedSessionStored()
+    {
+        using var extendedSessions = new ExtendedSessionsCache();
+        Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([]);
+
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludePastEvents", Value.ForBool(false) },
+            { "IsExtendedSession", Value.ForBool(false) },
+            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
+        byte[] requestBytes = orchestratorRequest.ToByteArray();
+        string requestString = Convert.ToBase64String(requestBytes);
+        GrpcOrchestrationRunner.LoadAndRun(requestString, new CallSubOrchestrationOrchestrator(), extendedSessions);
         Assert.True(extendedSessions.IsInitialized);
-        Assert.False(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out extendedSession));
+        Assert.False(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out object? extendedSession));
     }
 
     /// <summary>
@@ -343,7 +351,7 @@ public class GrpcOrchestrationRunnerTests
     }
 
     [Fact]
-    public void PastEventIncludes_Means_ExtendedSession_Evicted()
+    public void PastEventIncluded_Means_ExtendedSession_Evicted()
     {
         using var extendedSessions = new ExtendedSessionsCache();
         int extendedSessionIdleTimeout = 5;
@@ -405,6 +413,16 @@ public class GrpcOrchestrationRunnerTests
         string requestString = Convert.ToBase64String(requestBytes);
         string stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator());
         Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
+        Assert.Single(response.Actions);
+        Assert.NotNull(response.Actions[0].CompleteOrchestration);
+        Assert.Equal(Protobuf.OrchestrationStatus.Completed, response.Actions[0].CompleteOrchestration.OrchestrationStatus);
+
+        // Now try it again without any properties specified. The request should still be successful.
+        orchestratorRequest.Properties.Clear();
+        requestBytes = orchestratorRequest.ToByteArray();
+        requestString = Convert.ToBase64String(requestBytes);
+        stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator());
+        response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
         Assert.Single(response.Actions);
         Assert.NotNull(response.Actions[0].CompleteOrchestration);
         Assert.Equal(Protobuf.OrchestrationStatus.Completed, response.Actions[0].CompleteOrchestration.OrchestrationStatus);

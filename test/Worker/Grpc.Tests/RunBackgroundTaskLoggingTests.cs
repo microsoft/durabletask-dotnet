@@ -55,6 +55,38 @@ public class RunBackgroundTaskLoggingTests
     }
 
     [Fact]
+    public async Task Logs_Abandoning_And_NoAbandoned_When_Orchestrator_Abandon_Fails()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+
+        string instanceId = Guid.NewGuid().ToString("N");
+        string completionToken = Guid.NewGuid().ToString("N");
+
+        fixture.ClientMock
+            .Setup(c => c.AbandonTaskOrchestratorWorkItemAsync(
+                It.IsAny<P.AbandonOrchestrationTaskRequest>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(() => FaultedAsyncUnaryCall<P.AbandonOrchestrationTaskResponse>(new Exception("abandon failure")));
+
+        P.WorkItem workItem = new()
+        {
+            OrchestratorRequest = new P.OrchestratorRequest { InstanceId = instanceId },
+            CompletionToken = completionToken,
+        };
+
+        fixture.InvokeRunBackgroundTask(workItem, () => Task.FromException(new Exception("boom")));
+
+        // Allow background task to execute
+        await Task.Delay(200);
+
+        await AssertEventually(() => fixture.GetLogs().Any(l => l.Message.Contains("Abandoning orchestrator work item") && l.Message.Contains(instanceId)));
+        Assert.DoesNotContain(fixture.GetLogs(), l => l.Message.Contains("Abandoned orchestrator work item") && l.Message.Contains(instanceId));
+        await AssertEventually(() => fixture.GetLogs().Any(l => l.Message.Contains("Unexpected error") && l.Message.Contains(instanceId)));
+    }
+
+    [Fact]
     public async Task Logs_Abandoning_And_Abandoned_For_Activity()
     {
         await using var fixture = await TestFixture.CreateAsync();
@@ -92,6 +124,42 @@ public class RunBackgroundTaskLoggingTests
     }
 
     [Fact]
+    public async Task Logs_Abandoning_And_NoAbandoned_When_Activity_Abandon_Fails()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+
+        string instanceId = Guid.NewGuid().ToString("N");
+        string completionToken = Guid.NewGuid().ToString("N");
+
+        fixture.ClientMock
+            .Setup(c => c.AbandonTaskActivityWorkItemAsync(
+                It.IsAny<P.AbandonActivityTaskRequest>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(() => FaultedAsyncUnaryCall<P.AbandonActivityTaskResponse>(new Exception("abandon failure")));
+
+        P.WorkItem workItem = new()
+        {
+            ActivityRequest = new P.ActivityRequest
+            {
+                Name = "MyActivity",
+                TaskId = 42,
+                OrchestrationInstance = new P.OrchestrationInstance { InstanceId = instanceId },
+            },
+            CompletionToken = completionToken,
+        };
+
+        fixture.InvokeRunBackgroundTask(workItem, () => Task.FromException(new Exception("boom")));
+
+        await Task.Delay(200);
+
+        await AssertEventually(() => fixture.GetLogs().Any(l => l.Message.Contains("Abandoning activity work item") && l.Message.Contains(instanceId)));
+        Assert.DoesNotContain(fixture.GetLogs(), l => l.Message.Contains("Abandoned activity work item") && l.Message.Contains(instanceId));
+        await AssertEventually(() => fixture.GetLogs().Any(l => l.Message.Contains("Unexpected error") && l.Message.Contains(instanceId)));
+    }
+
+    [Fact]
     public async Task Logs_Abandoning_And_Abandoned_For_Entity_V1()
     {
         await using var fixture = await TestFixture.CreateAsync();
@@ -124,6 +192,37 @@ public class RunBackgroundTaskLoggingTests
     }
 
     [Fact]
+    public async Task Logs_Abandoning_And_NoAbandoned_When_EntityV1_Abandon_Fails()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+
+        string instanceId = "entity@key";
+        string completionToken = Guid.NewGuid().ToString("N");
+
+        fixture.ClientMock
+            .Setup(c => c.AbandonTaskEntityWorkItemAsync(
+                It.IsAny<P.AbandonEntityTaskRequest>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(() => FaultedAsyncUnaryCall<P.AbandonEntityTaskResponse>(new Exception("abandon failure")));
+
+        P.WorkItem workItem = new()
+        {
+            EntityRequest = new P.EntityBatchRequest { InstanceId = instanceId },
+            CompletionToken = completionToken,
+        };
+
+        fixture.InvokeRunBackgroundTask(workItem, () => Task.FromException(new Exception("boom")));
+
+        await Task.Delay(200);
+
+        await AssertEventually(() => fixture.GetLogs().Any(l => l.Message.Contains("Abandoning entity work item") && l.Message.Contains(instanceId)));
+        Assert.DoesNotContain(fixture.GetLogs(), l => l.Message.Contains("Abandoned entity work item") && l.Message.Contains(instanceId));
+        await AssertEventually(() => fixture.GetLogs().Any(l => l.Message.Contains("Unexpected error") && l.Message.Contains(instanceId)));
+    }
+
+    [Fact]
     public async Task Logs_Abandoning_And_Abandoned_For_Entity_V2()
     {
         await using var fixture = await TestFixture.CreateAsync();
@@ -153,6 +252,74 @@ public class RunBackgroundTaskLoggingTests
 
         await AssertEventually(() => fixture.GetLogs().Any(l => l.Message.Contains("Abandoning entity work item") && l.Message.Contains(instanceId)));
         await AssertEventually(() => fixture.GetLogs().Any(l => l.Message.Contains("Abandoned entity work item") && l.Message.Contains(instanceId)));
+    }
+
+    [Fact]
+    public async Task Logs_Abandoning_And_NoAbandoned_When_EntityV2_Abandon_Fails()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+
+        string instanceId = "entity2@key";
+        string completionToken = Guid.NewGuid().ToString("N");
+
+        fixture.ClientMock
+            .Setup(c => c.AbandonTaskEntityWorkItemAsync(
+                It.IsAny<P.AbandonEntityTaskRequest>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(() => FaultedAsyncUnaryCall<P.AbandonEntityTaskResponse>(new Exception("abandon failure")));
+
+        P.WorkItem workItem = new()
+        {
+            EntityRequestV2 = new P.EntityRequest { InstanceId = instanceId },
+            CompletionToken = completionToken,
+        };
+
+        fixture.InvokeRunBackgroundTask(workItem, () => Task.FromException(new Exception("boom")));
+
+        await Task.Delay(200);
+
+        await AssertEventually(() => fixture.GetLogs().Any(l => l.Message.Contains("Abandoning entity work item") && l.Message.Contains(instanceId)));
+        Assert.DoesNotContain(fixture.GetLogs(), l => l.Message.Contains("Abandoned entity work item") && l.Message.Contains(instanceId));
+        await AssertEventually(() => fixture.GetLogs().Any(l => l.Message.Contains("Unexpected error") && l.Message.Contains(instanceId)));
+    }
+
+    [Fact]
+    public async Task Forwards_CancellationToken_To_Abandon_Orchestrator()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+
+        string instanceId = Guid.NewGuid().ToString("N");
+        string completionToken = Guid.NewGuid().ToString("N");
+
+        var cts = new CancellationTokenSource();
+        var observed = new TaskCompletionSource<bool>();
+
+        fixture.ClientMock
+            .Setup(c => c.AbandonTaskOrchestratorWorkItemAsync(
+                It.IsAny<P.AbandonOrchestrationTaskRequest>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((P.AbandonOrchestrationTaskRequest r, Metadata h, DateTime? d, CancellationToken ct) =>
+            {
+                if (ct == cts.Token)
+                {
+                    observed.TrySetResult(true);
+                }
+                return CompletedAsyncUnaryCall(new P.AbandonOrchestrationTaskResponse());
+            });
+
+        P.WorkItem workItem = new()
+        {
+            OrchestratorRequest = new P.OrchestratorRequest { InstanceId = instanceId },
+            CompletionToken = completionToken,
+        };
+
+        fixture.InvokeRunBackgroundTask(workItem, () => Task.FromException(new Exception("boom")), cts.Token);
+
+        await WaitAsync(observed.Task);
     }
 
     static async Task WaitAsync(Task task)
@@ -266,6 +433,17 @@ public class RunBackgroundTaskLoggingTests
             respTask,
             Task.FromResult(new Metadata()),
             () => new Status(StatusCode.OK, string.Empty),
+            () => new Metadata(),
+            () => { });
+    }
+
+    static AsyncUnaryCall<T> FaultedAsyncUnaryCall<T>(Exception ex)
+    {
+        var respTask = Task.FromException<T>(ex);
+        return new AsyncUnaryCall<T>(
+            respTask,
+            Task.FromResult(new Metadata()),
+            () => new Status(StatusCode.Unknown, ex.Message),
             () => new Metadata(),
             () => { });
     }

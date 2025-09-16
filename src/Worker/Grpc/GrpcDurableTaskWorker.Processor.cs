@@ -450,8 +450,7 @@ sealed partial class GrpcDurableTaskWorker
                         }
                     }
                 }
-            },
-                cancellation);
+            });
         }
 
         async Task OnRunOrchestratorAsync(

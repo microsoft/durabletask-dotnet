@@ -30,14 +30,14 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
             return new BlobPayloadStore(opts);
         });
 
-        builder.Services
-            .AddOptions<DurableTaskWorkerOptions>(builder.Name)
-            .PostConfigure<IPayloadStore, IOptionsMonitor<LargePayloadStorageOptions>>((opt, store, monitor) =>
-            {
-                LargePayloadStorageOptions opts = monitor.Get(builder.Name);
-                DataConverter inner = opt.DataConverter ?? Converters.JsonDataConverter.Default;
-                opt.DataConverter = new LargePayloadDataConverter(inner, store, opts);
-            });
+        // builder.Services
+        //     .AddOptions<DurableTaskWorkerOptions>(builder.Name)
+        //     .PostConfigure<IPayloadStore, IOptionsMonitor<LargePayloadStorageOptions>>((opt, store, monitor) =>
+        //     {
+        //         LargePayloadStorageOptions opts = monitor.Get(builder.Name);
+        //         DataConverter inner = opt.DataConverter ?? Converters.JsonDataConverter.Default;
+        //         opt.DataConverter = new LargePayloadDataConverter(inner, store, opts);
+        //     });
 
         return builder;
     }

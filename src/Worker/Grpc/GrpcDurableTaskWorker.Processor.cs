@@ -351,8 +351,75 @@ sealed partial class GrpcDurableTaskWorker
                     string instanceId =
                         workItem?.OrchestratorRequest?.InstanceId ??
                         workItem?.ActivityRequest?.OrchestrationInstance?.InstanceId ??
+                        workItem?.EntityRequest?.InstanceId ??
+                        workItem?.EntityRequestV2?.InstanceId ??
                         string.Empty;
                     this.Logger.UnexpectedError(ex, instanceId);
+
+                    if (workItem?.OrchestratorRequest != null)
+                    {
+                        this.Logger.AbandoningOrchestratorWorkItem(instanceId, workItem?.CompletionToken ?? string.Empty);
+                        await this.client.AbandonTaskOrchestratorWorkItemAsync(
+                            new P.AbandonOrchestrationTaskRequest
+                            {
+                                CompletionToken = workItem?.CompletionToken,
+                            },
+                            cancellationToken: CancellationToken.None);
+                        this.Logger.AbandonedOrchestratorWorkItem(instanceId, workItem?.CompletionToken ?? string.Empty);
+                    }
+                    else if (workItem?.ActivityRequest != null)
+                    {
+                        this.Logger.AbandoningActivityWorkItem(
+                            instanceId,
+                            workItem.ActivityRequest.Name,
+                            workItem.ActivityRequest.TaskId,
+                            workItem?.CompletionToken ?? string.Empty);
+                        await this.client.AbandonTaskActivityWorkItemAsync(
+                            new P.AbandonActivityTaskRequest
+                            {
+                                CompletionToken = workItem?.CompletionToken,
+                            },
+                            cancellationToken: CancellationToken.None);
+                        this.Logger.AbandonedActivityWorkItem(
+                            instanceId,
+                            workItem.ActivityRequest.Name,
+                            workItem.ActivityRequest.TaskId,
+                            workItem?.CompletionToken ?? string.Empty);
+                    }
+                    else if (workItem?.EntityRequest != null)
+                    {
+                        this.Logger.AbandoningEntityWorkItem(
+                            workItem.EntityRequest.InstanceId,
+                            workItem?.CompletionToken ?? string.Empty);
+                        await this.client.AbandonTaskEntityWorkItemAsync(
+                            new P.AbandonEntityTaskRequest
+                            {
+                                CompletionToken = workItem?.CompletionToken,
+                            },
+                            cancellationToken: CancellationToken.None);
+                        this.Logger.AbandonedEntityWorkItem(
+                            workItem.EntityRequest.InstanceId,
+                            workItem?.CompletionToken ?? string.Empty);
+                    }
+                    else if (workItem?.EntityRequestV2 != null)
+                    {
+                        this.Logger.AbandoningEntityWorkItem(
+                            workItem.EntityRequestV2.InstanceId,
+                            workItem?.CompletionToken ?? string.Empty);
+                        await this.client.AbandonTaskEntityWorkItemAsync(
+                            new P.AbandonEntityTaskRequest
+                            {
+                                CompletionToken = workItem?.CompletionToken,
+                            },
+                            cancellationToken: CancellationToken.None);
+                        this.Logger.AbandonedEntityWorkItem(
+                            workItem.EntityRequestV2.InstanceId,
+                            workItem?.CompletionToken ?? string.Empty);
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException("Unknown work item type");
+                    }
                 }
             });
         }

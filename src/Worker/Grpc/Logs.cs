@@ -60,5 +60,24 @@ namespace Microsoft.DurableTask.Worker.Grpc
 
         [LoggerMessage(EventId = 59, Level = LogLevel.Information, Message = "Abandoning orchestration due to filtering. InstanceId = '{instanceId}'. Completion token = '{completionToken}'")]
         public static partial void AbandoningOrchestrationDueToOrchestrationFilter(this ILogger logger, string instanceId, string completionToken);
+
+        // Abandoning/Abandoned logs for background task error handling
+        [LoggerMessage(EventId = 60, Level = LogLevel.Information, Message = "{instanceId}: Abandoning orchestrator work item. Completion token = '{completionToken}'")]
+        public static partial void AbandoningOrchestratorWorkItem(this ILogger logger, string instanceId, string completionToken);
+
+        [LoggerMessage(EventId = 61, Level = LogLevel.Information, Message = "{instanceId}: Abandoned orchestrator work item. Completion token = '{completionToken}'")]
+        public static partial void AbandonedOrchestratorWorkItem(this ILogger logger, string instanceId, string completionToken);
+
+        [LoggerMessage(EventId = 62, Level = LogLevel.Information, Message = "{instanceId}: Abandoning activity work item '{name}#{taskId}'. Completion token = '{completionToken}'")]
+        public static partial void AbandoningActivityWorkItem(this ILogger logger, string instanceId, string name, int taskId, string completionToken);
+
+        [LoggerMessage(EventId = 63, Level = LogLevel.Information, Message = "{instanceId}: Abandoned activity work item '{name}#{taskId}'. Completion token = '{completionToken}'")]
+        public static partial void AbandonedActivityWorkItem(this ILogger logger, string instanceId, string name, int taskId, string completionToken);
+
+        [LoggerMessage(EventId = 64, Level = LogLevel.Information, Message = "{instanceId}: Abandoning entity work item. Completion token = '{completionToken}'")]
+        public static partial void AbandoningEntityWorkItem(this ILogger logger, string instanceId, string completionToken);
+
+        [LoggerMessage(EventId = 65, Level = LogLevel.Information, Message = "{instanceId}: Abandoned entity work item. Completion token = '{completionToken}'")]
+        public static partial void AbandonedEntityWorkItem(this ILogger logger, string instanceId, string completionToken);
     }
 }

@@ -1,5 +1,8 @@
 ﻿# Changelog
-
+## v1.15.0
+- Abandon workitem if processing workitem failed by @YunchuWang in ([#467](https://github.com/microsoft/durabletask-dotnet/pull/467))
+- Extended Sessions for Isolated (Orchestrations) by @sophiatev in ([#449](https://github.com/microsoft/durabletask-dotnet/pull/449))
+  
 ## v1.14.0
 - Add RestartAsync API Support at DurableTaskClient ([#456](https://github.com/microsoft/durabletask-dotnet/pull/456))
 
@@ -292,3 +295,4 @@ Microsoft.DurableTask.Generators
 ## v0.4.1-beta
 
 Initial public release
+

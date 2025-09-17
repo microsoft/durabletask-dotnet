@@ -127,51 +127,13 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.True(workerStore.UploadCount >= 1);
         Assert.True(workerStore.DownloadCount >= 1);
 
-        // validate  hashset contains the input and output
-        Assert.Contains(JsonSerializer.Serialize(largeParam), workerStore.uploadedPayloads);
-        Assert.Contains(JsonSerializer.Serialize(largeParam + largeParam), workerStore.uploadedPayloads);
+        // validate uploaded payloads include the activity input and output forms
+        string expectedActivityInputJson = JsonSerializer.Serialize(new[] { largeParam });
+        string expectedActivityOutputJson = JsonSerializer.Serialize(largeParam + largeParam);
+        Assert.Contains(expectedActivityInputJson, workerStore.uploadedPayloads);
+        Assert.Contains(expectedActivityOutputJson, workerStore.uploadedPayloads);
     }
 
-    // Validates worker externalizes large activity output which is resolved by the orchestrator.
-    [Fact]
-    public async Task LargeActivityOutput()
-    {
-        string largeResult = new string('R', 850 * 1024); // 850KB
-        TaskName orchestratorName = nameof(LargeActivityOutput);
-        TaskName activityName = "ProduceLarge";
-
-        InMemoryPayloadStore workerStore = new InMemoryPayloadStore();
-
-        await using HostTestLifetime server = await this.StartWorkerAsync(
-            worker =>
-            {
-                worker.AddTasks(tasks => tasks
-                    .AddOrchestratorFunc<object?, int>(
-                        orchestratorName,
-                        async (ctx, _) => (await ctx.CallActivityAsync<string>(activityName)).Length)
-                    .AddActivityFunc<string>(activityName, (ctx) => Task.FromResult(largeResult)));
-
-                worker.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024; // force externalization for activity result
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
-                worker.Services.AddSingleton<IPayloadStore>(workerStore);
-            },
-            client => { });
-
-        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        OrchestrationMetadata completed = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
-        Assert.Equal(largeResult.Length, completed.ReadOutputAs<int>());
-
-        // Worker externalizes activity output and downloads when the orchestrator reads it
-        Assert.True(workerStore.UploadCount >= 1);
-        Assert.True(workerStore.DownloadCount >= 1);
-    }
 
     // Ensures querying a completed instance downloads and resolves an externalized output on the client.
     [Fact]

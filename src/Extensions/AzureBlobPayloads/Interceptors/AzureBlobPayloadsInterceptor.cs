@@ -245,6 +245,12 @@ sealed class AzureBlobPayloadsInterceptor(IPayloadStore payloadStore, LargePaylo
                 await this.MaybeResolveAsync(v => s.Output = v, s.Output, cancellation);
                 await this.MaybeResolveAsync(v => s.CustomStatus = v, s.CustomStatus, cancellation);
                 break;
+            case P.HistoryChunk c when c.Events != null:
+                foreach (P.HistoryEvent e in c.Events)
+                {
+                    await this.ResolveEventPayloadsAsync(e, cancellation);
+                }
+                break;
             case P.QueryInstancesResponse r:
                 foreach (P.OrchestrationState s in r.OrchestrationState)
                 {

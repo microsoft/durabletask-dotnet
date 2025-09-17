@@ -1,5 +1,8 @@
 ﻿# Changelog
 
+## v1.14.0
+- Add RestartAsync API Support at DurableTaskClient ([#456](https://github.com/microsoft/durabletask-dotnet/pull/456))
+
 ## v1.13.0
 - Add orchestration execution tracing ([#441](https://github.com/microsoft/durabletask-dotnet/pull/441))
 

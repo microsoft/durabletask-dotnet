@@ -88,6 +88,58 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.Contains(JsonSerializer.Serialize(largeInput + largeInput), fakeStore.uploadedPayloads);
     }
 
+    // Validates terminating an instance with a large output payload is externalized by the client.
+    [Fact]
+    public async Task LargeTerminateWithPayload()
+    {
+        string largeOutput = new string('T', 900 * 1024);
+        TaskName orch = nameof(LargeTerminateWithPayload);
+
+        InMemoryPayloadStore store = new InMemoryPayloadStore();
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(
+            worker =>
+            {
+                worker.AddTasks(tasks => tasks.AddOrchestratorFunc<object?, object?>(
+                    orch,
+                    async (ctx, _) =>
+                    {
+                        await ctx.CreateTimer(TimeSpan.FromSeconds(30), CancellationToken.None);
+                        return null;
+                    }));
+
+                worker.UseExternalizedPayloads(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+                worker.Services.AddSingleton<IPayloadStore>(store);
+            },
+            client =>
+            {
+                client.UseExternalizedPayloads(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+                client.Services.AddSingleton<IPayloadStore>(store);
+            });
+
+        string id = await server.Client.ScheduleNewOrchestrationInstanceAsync(orch);
+        await server.Client.WaitForInstanceStartAsync(id, this.TimeoutToken);
+
+        await server.Client.TerminateInstanceAsync(id, new TerminateInstanceOptions { Output = largeOutput }, this.TimeoutToken);
+
+        await server.Client.WaitForInstanceCompletionAsync(id, this.TimeoutToken);
+        OrchestrationMetadata? status = await server.Client.GetInstanceAsync(id, getInputsAndOutputs: false);
+        Assert.NotNull(status);
+        Assert.Equal(OrchestrationRuntimeStatus.Terminated, status!.RuntimeStatus);
+        Assert.True(store.UploadCount >= 1);
+        Assert.True(store.DownloadCount >= 1);
+        Assert.Contains(JsonSerializer.Serialize(largeOutput), store.uploadedPayloads);
+    }
     // Validates large custom status and ContinueAsNew input are externalized and resolved across iterations.
     [Fact]
     public async Task LargeContinueAsNewAndCustomStatus()
@@ -412,6 +464,8 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         string? output = completed.ReadOutputAs<string>();
         Assert.Equal(largeEvent, output);
         Assert.True(fakeStore.UploadCount >= 1);
+        Assert.True(fakeStore.DownloadCount >= 1);
+        Assert.Contains(JsonSerializer.Serialize(largeEvent), fakeStore.uploadedPayloads);
     }
 
 

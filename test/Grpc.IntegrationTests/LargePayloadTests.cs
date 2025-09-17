@@ -88,6 +88,81 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.Contains(JsonSerializer.Serialize(largeInput + largeInput), fakeStore.uploadedPayloads);
     }
 
+    // Validates client externalizes large suspend and resume reasons.
+    [Fact]
+    public async Task SuspendAndResume_Reason_IsExternalizedByClient()
+    {
+        string largeReason1 = new string('Z', 700 * 1024); // 700KB
+        string largeReason2 = new string('Y', 650 * 1024); // 650KB
+        TaskName orchestratorName = nameof(SuspendAndResume_Reason_IsExternalizedByClient);
+
+        InMemoryPayloadStore clientStore = new InMemoryPayloadStore();
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(
+            worker =>
+            {
+                // Long-running orchestrator to give time for suspend/resume
+                worker.AddTasks(tasks => tasks.AddOrchestratorFunc<object?, string>(
+                    orchestratorName,
+                    async (ctx, _) =>
+                    {
+                        await ctx.CreateTimer(TimeSpan.FromMinutes(5), CancellationToken.None);
+                        return "done";
+                    }));
+            },
+            client =>
+            {
+                // Enable externalization on the client and use the in-memory store to track uploads
+                client.UseExternalizedPayloads(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024; // 1KB threshold to force externalization
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+                client.Services.AddSingleton<IPayloadStore>(clientStore);
+            });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        await server.Client.WaitForInstanceStartAsync(instanceId, this.TimeoutToken);
+
+        // Suspend with large reason (should be externalized by client)
+        await server.Client.SuspendInstanceAsync(instanceId, largeReason1, this.TimeoutToken);
+        await server.Client.WaitForInstanceStartAsync(instanceId, this.TimeoutToken);
+
+        // verify it is suspended
+        OrchestrationMetadata? status = await server.Client.GetInstanceAsync(instanceId, getInputsAndOutputs: false, this.TimeoutToken);
+        Assert.NotNull(status);
+        Assert.Equal(OrchestrationRuntimeStatus.Suspended, status!.RuntimeStatus);
+
+        // Resume with large reason (should be externalized by client)
+        await server.Client.ResumeInstanceAsync(instanceId, largeReason2, this.TimeoutToken);
+
+        // verify it is resumed (poll up to 5 seconds)
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (true)
+        {
+            status = await server.Client.GetInstanceAsync(instanceId, getInputsAndOutputs: false, this.TimeoutToken);
+            if (status is not null && status.RuntimeStatus == OrchestrationRuntimeStatus.Running)
+            {
+                break;
+            }
+
+            if (DateTime.UtcNow >= deadline)
+            {
+                Assert.NotNull(status);
+                Assert.Equal(OrchestrationRuntimeStatus.Running, status!.RuntimeStatus);
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(1), this.TimeoutToken);
+        }
+
+
+
+        Assert.True(clientStore.UploadCount >= 2);
+        Assert.Contains(largeReason1, clientStore.uploadedPayloads);
+        Assert.Contains(largeReason2, clientStore.uploadedPayloads);
+    }
+
     // Validates terminating an instance with a large output payload is externalized by the client.
     [Fact]
     public async Task LargeTerminateWithPayload()

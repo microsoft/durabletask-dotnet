@@ -133,6 +133,10 @@ sealed class AzureBlobPayloadsInterceptor(IPayloadStore payloadStore, LargePaylo
                 return this.MaybeExternalizeAsync(v => r.Input = v, r.Input, cancellation);
             case P.TerminateRequest r:
                 return this.MaybeExternalizeAsync(v => r.Output = v, r.Output, cancellation);
+            case P.SuspendRequest r:
+                return this.MaybeExternalizeAsync(v => r.Reason = v, r.Reason, cancellation);
+            case P.ResumeRequest r:
+                return this.MaybeExternalizeAsync(v => r.Reason = v, r.Reason, cancellation);
             case P.SignalEntityRequest r:
                 return this.MaybeExternalizeAsync(v => r.Input = v, r.Input, cancellation);
             case P.ActivityResponse r:

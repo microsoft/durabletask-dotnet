@@ -1,10 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json;
 using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Converters;
-using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit.Abstractions;
@@ -15,10 +14,10 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
 {
     // Validates client externalizes a large orchestration input and worker resolves it.
     [Fact]
-    public async Task LargeOrchestrationInput()
+    public async Task LargeOrchestrationInputAndOutputAndCustomStatus()
     {
         string largeInput = new string('A', 1024 * 1024); // 1MB
-        TaskName orchestratorName = nameof(LargeOrchestrationInput);
+        TaskName orchestratorName = nameof(LargeOrchestrationInputAndOutputAndCustomStatus);
 
         InMemoryPayloadStore fakeStore = new InMemoryPayloadStore();
 
@@ -27,7 +26,11 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 worker.AddTasks(tasks => tasks.AddOrchestratorFunc<string, string>(
                     orchestratorName,
-                    (ctx, input) => Task.FromResult(input)));
+                    (ctx, input) =>
+                    {
+                        ctx.SetCustomStatus(largeInput);
+                        return Task.FromResult(input + input);
+                    }));
 
                 // Enable externalization on the worker
                 worker.UseExternalizedPayloads(opts =>
@@ -62,20 +65,35 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
 
         // Validate that the input made a roundtrip and was resolved on the worker
+        // validate input
+        string? input = completed.ReadInputAs<string>();
+        Assert.NotNull(input);
+        Assert.Equal(largeInput.Length, input!.Length);
+        Assert.Equal(largeInput, input);
+
         string? echoed = completed.ReadOutputAs<string>();
         Assert.NotNull(echoed);
-        Assert.Equal(largeInput.Length, echoed!.Length);
+        Assert.Equal(largeInput.Length * 2, echoed!.Length);
+        Assert.Equal(largeInput + largeInput, echoed);
+
+        string? customStatus = completed.ReadCustomStatusAs<string>();
+        Assert.NotNull(customStatus);
+        Assert.Equal(largeInput.Length, customStatus!.Length);
+        Assert.Equal(largeInput, customStatus);
 
         // Ensure client externalized the input
         Assert.True(fakeStore.UploadCount >= 1);
+        Assert.True(fakeStore.DownloadCount >= 1);
+        Assert.Contains(JsonSerializer.Serialize(largeInput), fakeStore.uploadedPayloads);
+        Assert.Contains(JsonSerializer.Serialize(largeInput + largeInput), fakeStore.uploadedPayloads);
     }
 
     // Validates worker externalizes large activity input and delivers resolved payload to activity.
     [Fact]
-    public async Task LargeActivityInput()
+    public async Task LargeActivityInputAndOutput()
     {
         string largeParam = new string('P', 700 * 1024); // 700KB
-        TaskName orchestratorName = nameof(LargeActivityInput);
+        TaskName orchestratorName = nameof(LargeActivityInputAndOutput);
         TaskName activityName = "EchoLength";
 
         InMemoryPayloadStore workerStore = new InMemoryPayloadStore();
@@ -84,10 +102,10 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             worker =>
             {
                 worker.AddTasks(tasks => tasks
-                    .AddOrchestratorFunc<object?, int>(
+                    .AddOrchestratorFunc<object?, string>(
                         orchestratorName,
-                        (ctx, _) => ctx.CallActivityAsync<int>(activityName, largeParam))
-                    .AddActivityFunc<string, int>(activityName, (ctx, input) => input.Length));
+                        (ctx, _) => ctx.CallActivityAsync<string>(activityName, largeParam))
+                    .AddActivityFunc<string, string>(activityName, (ctx, input) => input + input));
 
                 worker.UseExternalizedPayloads(opts =>
                 {
@@ -104,11 +122,14 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
 
         Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
-        Assert.Equal(largeParam.Length, completed.ReadOutputAs<int>());
 
-        // Worker externalizes when sending activity input; worker resolves when delivering to activity
+        // validate upload and download count
         Assert.True(workerStore.UploadCount >= 1);
         Assert.True(workerStore.DownloadCount >= 1);
+
+        // validate  hashset contains the input and output
+        Assert.Contains(JsonSerializer.Serialize(largeParam), workerStore.uploadedPayloads);
+        Assert.Contains(JsonSerializer.Serialize(largeParam + largeParam), workerStore.uploadedPayloads);
     }
 
     // Validates worker externalizes large activity output which is resolved by the orchestrator.
@@ -362,6 +383,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
     {
         const string TokenPrefix = "blob:v1:";
         readonly Dictionary<string, string> tokenToPayload;
+        public readonly HashSet<string> uploadedPayloads = new();
 
         public InMemoryPayloadStore()
             : this(new Dictionary<string, string>())
@@ -384,6 +406,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             string json = System.Text.Encoding.UTF8.GetString(payloadBytes.Span);
             string token = $"blob:v1:test:{Guid.NewGuid():N}";
             this.tokenToPayload[token] = json;
+            this.uploadedPayloads.Add(json);
             return Task.FromResult(token);
         }
 

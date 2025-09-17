@@ -92,6 +92,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
     [Fact]
     public async Task LargeTerminateWithPayload()
     {
+        string largeInput = new string('I', 900 * 1024);
         string largeOutput = new string('T', 900 * 1024);
         TaskName orch = nameof(LargeTerminateWithPayload);
 
@@ -127,7 +128,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                 client.Services.AddSingleton<IPayloadStore>(store);
             });
 
-        string id = await server.Client.ScheduleNewOrchestrationInstanceAsync(orch);
+        string id = await server.Client.ScheduleNewOrchestrationInstanceAsync(orch, largeInput);
         await server.Client.WaitForInstanceStartAsync(id, this.TimeoutToken);
 
         await server.Client.TerminateInstanceAsync(id, new TerminateInstanceOptions { Output = largeOutput }, this.TimeoutToken);
@@ -299,10 +300,10 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                 client.Services.AddSingleton<IPayloadStore>(workerStore);
             });
 
-        string id = await server.Client.ScheduleNewOrchestrationInstanceAsync(orch);
+        string id = await server.Client.ScheduleNewOrchestrationInstanceAsync(orch, largeIn);
         await server.Client.WaitForInstanceCompletionAsync(id, getInputsAndOutputs: false, this.TimeoutToken);
 
-        var page = server.Client.GetAllInstancesAsync(new OrchestrationQuery { FetchInputsAndOutputs = true });
+        var page = server.Client.GetAllInstancesAsync(new OrchestrationQuery { FetchInputsAndOutputs = true, InstanceIdPrefix = id });
         OrchestrationMetadata? found = null;
         await foreach (var item in page)
         {

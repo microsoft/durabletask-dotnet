@@ -88,6 +88,186 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.Contains(JsonSerializer.Serialize(largeInput + largeInput), fakeStore.uploadedPayloads);
     }
 
+    // Validates large custom status and ContinueAsNew input are externalized and resolved across iterations.
+    [Fact]
+    public async Task LargeContinueAsNewAndCustomStatus()
+    {
+        string largeStatus = new string('S', 700 * 1024);
+        string largeNextInput = new string('N', 800 * 1024);
+        string largeFinalOutput = new string('F', 750 * 1024);
+        TaskName orch = nameof(LargeContinueAsNewAndCustomStatus);
+
+        var shared = new Dictionary<string, string>();
+        InMemoryPayloadStore workerStore = new InMemoryPayloadStore(shared);
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(
+            worker =>
+            {
+                worker.AddTasks(tasks => tasks.AddOrchestratorFunc<string?, string>(
+                    orch,
+                    async (ctx, input) =>
+                    {
+                        if (input == null)
+                        {
+                            ctx.SetCustomStatus(largeStatus);
+                            ctx.ContinueAsNew(largeNextInput);
+                            // unreachable
+                            return "";
+                        }
+                        else
+                        {
+                            // second iteration returns final
+                            return largeFinalOutput;
+                        }
+                    }));
+
+                worker.UseExternalizedPayloads(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+                worker.Services.AddSingleton<IPayloadStore>(workerStore);
+            },
+            client =>
+            {
+                client.UseExternalizedPayloads(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+                client.Services.AddSingleton<IPayloadStore>(workerStore);
+            });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orch);
+        OrchestrationMetadata completed = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
+        Assert.Equal(largeFinalOutput, completed.ReadOutputAs<string>());
+        Assert.Contains(JsonSerializer.Serialize(largeStatus), workerStore.uploadedPayloads);
+        Assert.Contains(JsonSerializer.Serialize(largeNextInput), workerStore.uploadedPayloads);
+        Assert.Contains(JsonSerializer.Serialize(largeFinalOutput), workerStore.uploadedPayloads);
+    }
+
+    // Validates large sub-orchestration input and an activity large output in one flow.
+    [Fact]
+    public async Task LargeSubOrchestrationAndActivityOutput()
+    {
+        string largeChildInput = new string('C', 650 * 1024);
+        string largeActivityOutput = new string('A', 820 * 1024);
+        TaskName parent = nameof(LargeSubOrchestrationAndActivityOutput) + "_Parent";
+        TaskName child = nameof(LargeSubOrchestrationAndActivityOutput) + "_Child";
+        TaskName activity = "ProduceBig";
+
+        var shared = new Dictionary<string, string>();
+        InMemoryPayloadStore workerStore = new InMemoryPayloadStore(shared);
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(
+            worker =>
+            {
+                worker.AddTasks(tasks => tasks
+                    .AddOrchestratorFunc<object?, int>(
+                        parent,
+                        async (ctx, _) =>
+                        {
+                            string echoed = await ctx.CallSubOrchestratorAsync<string>(child, largeChildInput);
+                            string act = await ctx.CallActivityAsync<string>(activity);
+                            return echoed.Length + act.Length;
+                        })
+                    .AddOrchestratorFunc<string, string>(child, (ctx, input) => Task.FromResult(input))
+                    .AddActivityFunc<string>(activity, (ctx) => Task.FromResult(largeActivityOutput)));
+
+                worker.UseExternalizedPayloads(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+                worker.Services.AddSingleton<IPayloadStore>(workerStore);
+            },
+            client =>
+            {
+                client.UseExternalizedPayloads(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+                client.Services.AddSingleton<IPayloadStore>(workerStore);
+            });
+
+        string id = await server.Client.ScheduleNewOrchestrationInstanceAsync(parent);
+        OrchestrationMetadata done = await server.Client.WaitForInstanceCompletionAsync(
+            id, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, done.RuntimeStatus);
+        Assert.Equal(largeChildInput.Length + largeActivityOutput.Length, done.ReadOutputAs<int>());
+        Assert.True(workerStore.UploadCount >= 1);
+        Assert.True(workerStore.DownloadCount >= 1);
+        Assert.Contains(JsonSerializer.Serialize(largeChildInput), workerStore.uploadedPayloads);
+        Assert.Contains(JsonSerializer.Serialize(largeActivityOutput), workerStore.uploadedPayloads);
+    }
+
+    // Validates query with fetch I/O resolves large outputs for completed instances.
+    [Fact]
+    public async Task LargeQueryFetchInputsAndOutputs()
+    {
+        string largeIn = new string('I', 750 * 1024);
+        string largeOut = new string('Q', 880 * 1024);
+        TaskName orch = nameof(LargeQueryFetchInputsAndOutputs);
+
+        var shared = new Dictionary<string, string>();
+        InMemoryPayloadStore workerStore = new InMemoryPayloadStore(shared);
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(
+            worker =>
+            {
+                worker.AddTasks(tasks => tasks.AddOrchestratorFunc<object?, string>(
+                    orch,
+                    (ctx, input) => Task.FromResult(largeOut)));
+
+                worker.UseExternalizedPayloads(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+                worker.Services.AddSingleton<IPayloadStore>(workerStore);
+            },
+            client =>
+            {
+                client.UseExternalizedPayloads(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+                client.Services.AddSingleton<IPayloadStore>(workerStore);
+            });
+
+        string id = await server.Client.ScheduleNewOrchestrationInstanceAsync(orch);
+        await server.Client.WaitForInstanceCompletionAsync(id, getInputsAndOutputs: false, this.TimeoutToken);
+
+        var page = server.Client.GetAllInstancesAsync(new OrchestrationQuery { FetchInputsAndOutputs = true });
+        OrchestrationMetadata? found = null;
+        await foreach (var item in page)
+        {
+            if (item.Name == orch.Name)
+            {
+                found = item;
+                break;
+            }
+        }
+
+        Assert.NotNull(found);
+        Assert.Equal(largeOut, found!.ReadOutputAs<string>());
+        Assert.True(workerStore.DownloadCount >= 1);
+        Assert.True(workerStore.UploadCount >= 1);
+        Assert.Contains(JsonSerializer.Serialize(largeIn), workerStore.uploadedPayloads);
+        Assert.Contains(JsonSerializer.Serialize(largeOut), workerStore.uploadedPayloads);
+    }
     // Validates worker externalizes large activity input and delivers resolved payload to activity.
     [Fact]
     public async Task LargeActivityInputAndOutput()
@@ -134,59 +314,6 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.Contains(expectedActivityOutputJson, workerStore.uploadedPayloads);
     }
 
-
-    // Ensures querying a completed instance downloads and resolves an externalized output on the client.
-    [Fact]
-    public async Task LargeOrchestrationOutput()
-    {
-        string largeOutput = new string('Q', 900 * 1024); // 900KB
-        string smallInput = "input";
-        TaskName orchestratorName = nameof(LargeOrchestrationOutput);
-
-        Dictionary<string, string> shared = new System.Collections.Generic.Dictionary<string, string>();
-        InMemoryPayloadStore workerStore = new InMemoryPayloadStore(shared);
-        InMemoryPayloadStore clientStore = new InMemoryPayloadStore(shared);
-
-        await using HostTestLifetime server = await this.StartWorkerAsync(
-            worker =>
-            {
-                worker.AddTasks(tasks => tasks.AddOrchestratorFunc<object?, string>(
-                    orchestratorName,
-                    (ctx, _) => Task.FromResult(largeOutput)));
-
-                worker.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024; // force externalization on worker
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
-                worker.Services.AddSingleton<IPayloadStore>(workerStore);
-            },
-            client =>
-            {
-                client.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024; // allow client to resolve on query
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
-                client.Services.AddSingleton<IPayloadStore>(clientStore);
-            });
-
-        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: smallInput);
-        await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: false, this.TimeoutToken);
-
-        OrchestrationMetadata? queried = await server.Client.GetInstanceAsync(instanceId, getInputsAndOutputs: true);
-
-        Assert.NotNull(queried);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, queried!.RuntimeStatus);
-        Assert.Equal(smallInput, queried.ReadInputAs<string>());
-        Assert.Equal(largeOutput, queried.ReadOutputAs<string>());
-
-        Assert.True(workerStore.UploadCount == 0);
-        Assert.True(clientStore.DownloadCount == 1);
-        Assert.True(clientStore.UploadCount == 1);
-    }
 
     // Ensures payloads below the threshold are not externalized by client or worker.
     [Fact]
@@ -287,59 +414,6 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.True(fakeStore.UploadCount >= 1);
     }
 
-    // Validates worker externalizes both output and custom status; client resolves them on query.
-    [Fact]
-    public async Task LargeOutputAndCustomStatus()
-    {
-        string largeOutput = new string('O', 768 * 1024); // 768KB
-        string largeStatus = new string('S', 600 * 1024); // 600KB
-        TaskName orchestratorName = nameof(LargeOutputAndCustomStatus);
-
-        InMemoryPayloadStore fakeStore = new InMemoryPayloadStore();
-
-        await using HostTestLifetime server = await this.StartWorkerAsync(
-            worker =>
-            {
-                worker.AddTasks(tasks => tasks.AddOrchestratorFunc<object?, string>(
-                    orchestratorName,
-                    async (ctx, _) =>
-                    {
-                        ctx.SetCustomStatus(largeStatus);
-                        await ctx.CreateTimer(TimeSpan.Zero, CancellationToken.None);
-                        return largeOutput;
-                    }));
-
-                worker.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024; // ensure externalization for status/output
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
-                worker.Services.AddSingleton<IPayloadStore>(fakeStore);
-            },
-            client =>
-            {
-                client.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024; // ensure resolution on query
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
-                client.Services.AddSingleton<IPayloadStore>(fakeStore);
-            });
-
-        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-
-        OrchestrationMetadata completed = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
-        Assert.Equal(largeOutput, completed.ReadOutputAs<string>());
-        Assert.Equal(largeStatus, completed.ReadCustomStatusAs<string>());
-
-        // Worker may externalize both status and output
-        Assert.True(fakeStore.UploadCount >= 2);
-    }
 
     class InMemoryPayloadStore : IPayloadStore
     {

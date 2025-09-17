@@ -129,11 +129,22 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         await server.Client.SuspendInstanceAsync(instanceId, largeReason1, this.TimeoutToken);
         await server.Client.WaitForInstanceStartAsync(instanceId, this.TimeoutToken);
 
-        // verify it is suspended
-        OrchestrationMetadata? status = await server.Client.GetInstanceAsync(instanceId, getInputsAndOutputs: false, this.TimeoutToken);
-        Assert.NotNull(status);
-        Assert.Equal(OrchestrationRuntimeStatus.Suspended, status!.RuntimeStatus);
+        // poll up to 5 seconds to verify it is suspended
+        var deadline1 = DateTime.UtcNow.AddSeconds(5);
+        while (true)
+        {
+            OrchestrationMetadata? status1 = await server.Client.GetInstanceAsync(instanceId, getInputsAndOutputs: false, this.TimeoutToken);
+            if (status1 is not null && status1.RuntimeStatus == OrchestrationRuntimeStatus.Suspended)
+            {
+                break;
+            }
 
+            if (DateTime.UtcNow >= deadline1)
+            {
+                Assert.NotNull(status1);
+                Assert.Equal(OrchestrationRuntimeStatus.Suspended, status1!.RuntimeStatus);
+            }
+        }
         // Resume with large reason (should be externalized by client)
         await server.Client.ResumeInstanceAsync(instanceId, largeReason2, this.TimeoutToken);
 
@@ -141,7 +152,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         var deadline = DateTime.UtcNow.AddSeconds(5);
         while (true)
         {
-            status = await server.Client.GetInstanceAsync(instanceId, getInputsAndOutputs: false, this.TimeoutToken);
+            OrchestrationMetadata? status = await server.Client.GetInstanceAsync(instanceId, getInputsAndOutputs: false, this.TimeoutToken);
             if (status is not null && status.RuntimeStatus == OrchestrationRuntimeStatus.Running)
             {
                 break;

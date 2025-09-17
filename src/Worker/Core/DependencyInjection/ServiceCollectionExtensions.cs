@@ -87,20 +87,9 @@ public static class ServiceCollectionExtensions
                 }
             });
 
-        services.Configure<LoggerFilterOptions>(options =>
+        services.AddLogging(configure =>
         {
-            // Suppress verbose HttpClient logging
-            options.Rules.Add(new LoggerFilterRule(null, "System.Net.Http.HttpClient", LogLevel.Warning, null));
-            options.Rules.Add(new LoggerFilterRule(null, "Microsoft.Extensions.Http", LogLevel.Warning, null));
-
-            // Suppress noisy gRPC logging
-            options.Rules.Add(new LoggerFilterRule(null, "Grpc.Net.Client", LogLevel.Warning, null));
-            options.Rules.Add(new LoggerFilterRule(null, "Grpc.Core", LogLevel.Warning, null));
-            options.Rules.Add(new LoggerFilterRule(null, "Grpc.AspNetCore.Server", LogLevel.Warning, null));
-
-            // Suppress other noisy infrastructure
-            options.Rules.Add(new LoggerFilterRule(null, "System.Net.Http.SocketsHttpHandler", LogLevel.Warning, null));
-            options.Rules.Add(new LoggerFilterRule(null, "System.Net.NameResolution", LogLevel.Warning, null));
+            configure.AddFilter("System.Net.Http.HttpClient", LogLevel.None);
         });
 
         return services;

@@ -280,6 +280,32 @@ sealed class AzureBlobPayloadsInterceptor(IPayloadStore payloadStore, LargePaylo
                     }
                 }
 
+                // Resolve entity V1 batch request (OperationRequest inputs and entity state)
+                if (wi.EntityRequest is { } er1)
+                {
+                    await this.MaybeResolveAsync(v => er1.EntityState = v, er1.EntityState, cancellation);
+                    if (er1.Operations != null)
+                    {
+                        foreach (P.OperationRequest op in er1.Operations)
+                        {
+                            await this.MaybeResolveAsync(v => op.Input = v, op.Input, cancellation);
+                        }
+                    }
+                }
+
+                // Resolve entity V2 request (history-based operation requests and entity state)
+                if (wi.EntityRequestV2 is { } er2)
+                {
+                    await this.MaybeResolveAsync(v => er2.EntityState = v, er2.EntityState, cancellation);
+                    if (er2.OperationRequests != null)
+                    {
+                        foreach (P.HistoryEvent opEvt in er2.OperationRequests)
+                        {
+                            await this.ResolveEventPayloadsAsync(opEvt, cancellation);
+                        }
+                    }
+                }
+
                 break;
         }
     }

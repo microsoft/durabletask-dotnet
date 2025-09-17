@@ -88,6 +88,64 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.Contains(JsonSerializer.Serialize(largeInput + largeInput), fakeStore.uploadedPayloads);
     }
 
+    // Validates history streaming path resolves externalized inputs/outputs in HistoryChunk.
+    [Fact]
+    public async Task HistoryStreaming_ResolvesPayloads()
+    {
+        // Make payloads large enough so that past events history exceeds 1 MiB to trigger streaming
+        string largeInput = new string('H', 2 * 1024 * 1024);   // 2 MiB
+        string largeOutput = new string('O', 2 * 1024 * 1024);  // 2 MiB
+        TaskName orch = nameof(HistoryStreaming_ResolvesPayloads);
+
+        InMemoryPayloadStore store = new InMemoryPayloadStore();
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(
+            worker =>
+            {
+                worker.AddTasks(tasks => tasks.AddOrchestratorFunc<string, string>(
+                    orch,
+                    async (ctx, input) =>
+                    {
+                        // Emit several events so that the serialized history size grows
+                        for (int i = 0; i < 50; i++)
+                        {
+                            await ctx.CreateTimer(TimeSpan.FromMilliseconds(10), CancellationToken.None);
+                        }
+                        return largeOutput;
+                    }));
+
+                worker.UseExternalizedPayloads(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+                worker.Services.AddSingleton<IPayloadStore>(store);
+            },
+            client =>
+            {
+                // Enable client to resolve outputs on query
+                client.UseExternalizedPayloads(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+                client.Services.AddSingleton<IPayloadStore>(store);
+            });
+
+        // Start orchestration with large input to exercise history input resolution
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orch, largeInput);
+        OrchestrationMetadata completed = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
+        Assert.Equal(largeInput, completed.ReadInputAs<string>());
+        Assert.Equal(largeOutput, completed.ReadOutputAs<string>());
+        Assert.True(store.UploadCount >= 2);
+        Assert.True(store.DownloadCount >= 2);
+    }
+
     // Validates client externalizes large suspend and resume reasons.
     [Fact]
     public async Task SuspendAndResume_Reason_IsExternalizedByClient()

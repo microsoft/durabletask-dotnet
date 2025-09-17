@@ -417,6 +417,14 @@ sealed class AzureBlobPayloadsInterceptor(IPayloadStore payloadStore, LargePaylo
                     await this.MaybeResolveAsync(v => ecomp.Output = v, ecomp.Output, cancellation);
                 }
                 break;
+            case P.HistoryEvent.EventTypeOneofCase.HistoryState:
+                if (e.HistoryState is { } hs && hs.OrchestrationState is { } os)
+                {
+                    await this.MaybeResolveAsync(v => os.Input = v, os.Input, cancellation);
+                    await this.MaybeResolveAsync(v => os.Output = v, os.Output, cancellation);
+                    await this.MaybeResolveAsync(v => os.CustomStatus = v, os.CustomStatus, cancellation);
+                }
+                break;
         }
     }
 

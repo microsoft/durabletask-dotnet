@@ -1,9 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using DurableTask.Core;
-using DurableTask.Core.Entities;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
 using Microsoft.DurableTask.Client.Entities;
@@ -167,15 +168,27 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
         };
 
         string? serializedInput = this.DataConverter.Serialize(input);
+
+        var tags = new Dictionary<string, string>();
+        if (options?.Tags != null)
+        {
+            tags = options.Tags.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+        }
+
+        tags[OrchestrationTags.CreateTraceForNewOrchestration] = "true";
+        tags[OrchestrationTags.RequestTime] = DateTimeOffset.UtcNow.ToString(CultureInfo.InvariantCulture);
+
         TaskMessage message = new()
         {
             OrchestrationInstance = instance,
             Event = new ExecutionStartedEvent(-1, serializedInput)
             {
                 Name = orchestratorName.Name,
-                Version = orchestratorName.Version,
+                Version = options?.Version ?? string.Empty,
                 OrchestrationInstance = instance,
                 ScheduledStartTime = options?.StartAt?.UtcDateTime,
+                ParentTraceContext = Activity.Current is { } activity ? new Core.Tracing.DistributedTraceContext(activity.Id!, activity.TraceStateString) : null,
+                Tags = tags,
             },
         };
 
@@ -239,6 +252,59 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
 
             await Task.Delay(TimeSpan.FromSeconds(1), cancellation);
         }
+    }
+
+    /// <inheritdoc/>
+    public override async Task<string> RestartAsync(
+        string instanceId,
+        bool restartWithNewInstanceId = false,
+        CancellationToken cancellation = default)
+    {
+        Check.NotNullOrEmpty(instanceId);
+        cancellation.ThrowIfCancellationRequested();
+
+        // Get the current orchestration status to retrieve the name and input
+        OrchestrationMetadata? status = await this.GetInstanceAsync(instanceId, getInputsAndOutputs: true, cancellation);
+
+        if (status == null)
+        {
+            throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.");
+        }
+
+        bool isInstaceNotCompleted = status.RuntimeStatus == OrchestrationRuntimeStatus.Running ||
+                                    status.RuntimeStatus == OrchestrationRuntimeStatus.Pending ||
+                                    status.RuntimeStatus == OrchestrationRuntimeStatus.Suspended;
+
+        if (isInstaceNotCompleted && !restartWithNewInstanceId)
+        {
+            throw new InvalidOperationException($"Instance '{instanceId}' cannot be restarted while it is in state '{status.RuntimeStatus}'. " +
+                   "Wait until it has completed, or restart with a new instance ID.");
+        }
+
+        // Determine the instance ID for the restarted orchestration
+        string newInstanceId = restartWithNewInstanceId ? Guid.NewGuid().ToString("N") : instanceId;
+
+        OrchestrationInstance instance = new()
+        {
+            InstanceId = newInstanceId,
+            ExecutionId = Guid.NewGuid().ToString("N"),
+        };
+
+        // Use the original serialized input directly to avoid double serialization
+        // TODO: OrchestrationMetada doesn't have version property so we don't support version here.
+        // Issue link: https://github.com/microsoft/durabletask-dotnet/issues/463
+        TaskMessage message = new()
+        {
+            OrchestrationInstance = instance,
+            Event = new ExecutionStartedEvent(-1, status.SerializedInput)
+            {
+                Name = status.Name,
+                OrchestrationInstance = instance,
+            },
+        };
+
+        await this.Client.CreateTaskOrchestrationAsync(message);
+        return newInstanceId;
     }
 
     [return: NotNullIfNotNull("state")]

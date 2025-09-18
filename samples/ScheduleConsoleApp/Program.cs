@@ -36,16 +36,9 @@ builder.Services.AddDurableTaskClient(builder =>
     builder.UseScheduledTasks();
 });
 
-// Configure console logging
-builder.Services.AddLogging(logging =>
-{
-    logging.AddSimpleConsole(options =>
-    {
-        options.SingleLine = true;
-        options.UseUtcTimestamp = true;
-        options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ ";
-    });
-});
+// Configure logging
+builder.Services.AddSingleton<ILogger>(sp => sp.GetRequiredService<ILoggerFactory>().CreateLogger<Program>());
+builder.Services.AddLogging();
 
 IHost host = builder.Build();
 await host.StartAsync();

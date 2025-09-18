@@ -3,11 +3,11 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Microsoft.DurableTask.Worker;
+using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Tests.Logging;
+using Microsoft.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit.Abstractions;
-using Microsoft.DurableTask.Client;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
@@ -33,6 +33,38 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+    }
+
+    [Fact]
+    public async Task ScheduleOrchesrationWithTags()
+    {
+        TaskName orchestratorName = nameof(EmptyOrchestration);
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, ctx => Task.FromResult<object?>(null)));
+        });
+
+        // Schedule a new orchestration instance with tags
+        StartOrchestrationOptions options = new()
+        {
+            Tags = new Dictionary<string, string>
+            {
+                { "tag1", "value1" },
+                { "tag2", "value2" }
+            }
+        };
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, options);
+
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.NotNull(metadata.Tags);
+        Assert.Equal(2, metadata.Tags.Count);
+        Assert.Equal("value1", metadata.Tags["tag1"]);
+        Assert.Equal("value2", metadata.Tags["tag2"]);
     }
 
     [Fact]
@@ -178,6 +210,38 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.NotNull(metadata);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.Equal("Hello, World!", metadata.ReadOutputAs<string>());
+
+        IReadOnlyCollection<LogEntry> workerLogs = this.GetLogs("Microsoft.DurableTask.Worker");
+        Assert.NotEmpty(workerLogs);
+
+        // Validate logs.
+        Assert.Single(workerLogs, log => MatchLog(
+            log,
+            logEventName: "OrchestrationStarted",
+            exception: null,
+            ("InstanceId", instanceId),
+            ("Name", orchestratorName.Name)));
+
+        Assert.Single(workerLogs, log => MatchLog(
+            log,
+            logEventName: "ActivityStarted",
+            exception: null,
+            ("InstanceId", instanceId),
+            ("Name", sayHelloActivityName.Name)));
+
+        Assert.Single(workerLogs, log => MatchLog(
+            log,
+            logEventName: "ActivityCompleted",
+            exception: null,
+            ("InstanceId", instanceId),
+            ("Name", sayHelloActivityName.Name)));
+
+        Assert.Single(workerLogs, log => MatchLog(
+            log,
+            logEventName: "OrchestrationCompleted",
+            exception: null,
+            ("InstanceId", instanceId),
+            ("Name", orchestratorName.Name)));
     }
 
     [Fact]
@@ -561,8 +625,527 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal("new value", output?["newProperty"]?.ToString());
     }
 
+    // TODO: Additional versioning tests
+    [Fact]
+    public async Task OrchestrationVersionPassedThroughContext()
+    {
+        var version = "0.1";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Orchestration version: {input}";
+                }));
+        }, c =>
+        {
+            c.UseDefaultVersion(version);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        var output = result.ReadOutputAs<string>();
+
+        Assert.NotNull(output);
+        Assert.Equal(output, $"Orchestration version: {version}");
+    }
+
+    [Fact]
+    public async Task OrchestrationVersioning_MatchTypeNotSpecified_NoVersionFailure()
+    {
+        var workerVersion = "0.1";
+        var clientVersion = "0.2";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Orchestration version: {input}";
+                }));
+            b.UseVersioning(new()
+            {
+                Version = workerVersion,
+                FailureStrategy = DurableTaskWorkerOptions.VersionFailureStrategy.Fail
+            });
+        }, c =>
+        {
+            c.UseDefaultVersion(clientVersion);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        var output = result.ReadOutputAs<string>();
+
+        Assert.NotNull(output);
+        // The worker doesn't pass it's version through the context, so we check the client version. The fact that it passed indicates versioning was ignored.
+        Assert.Equal(output, $"Orchestration version: {clientVersion}");
+    }
+
+    [Fact]
+    public async Task OrchestrationVersioning_MatchTypeNone_NoVersionFailure()
+    {
+        var workerVersion = "0.1";
+        var clientVersion = "0.2";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Orchestration version: {input}";
+                }));
+            b.UseVersioning(new()
+            {
+                Version = workerVersion,
+                MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.None,
+                FailureStrategy = DurableTaskWorkerOptions.VersionFailureStrategy.Fail
+            });
+        }, c =>
+        {
+            c.UseDefaultVersion(clientVersion);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        var output = result.ReadOutputAs<string>();
+
+        Assert.NotNull(output);
+        // The worker doesn't pass it's version through the context, so we check the client version. The fact that it passed indicates versioning was ignored.
+        Assert.Equal(output, $"Orchestration version: {clientVersion}");
+    }
+
+    [Fact]
+    public async Task OrchestrationVersioning_MatchTypeStrict_VersionFailure()
+    {
+        var workerVersion = "0.1";
+        var clientVersion = "0.2";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Orchestration version: {input}";
+                }));
+            b.UseVersioning(new()
+            {
+                Version = workerVersion,
+                MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+                FailureStrategy = DurableTaskWorkerOptions.VersionFailureStrategy.Fail
+            });
+        }, c =>
+        {
+            c.UseDefaultVersion(clientVersion);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(result);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, result.RuntimeStatus);
+        Assert.NotNull(result.FailureDetails);
+        Assert.Equal("VersionMismatch", result.FailureDetails.ErrorType);
+    }
+
+    [Fact]
+    public async Task OrchestrationVersioning_MatchTypeCurrentOrOlder_VersionFailure()
+    {
+        var workerVersion = "0.1";
+        var clientVersion = "0.2";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Orchestration version: {input}";
+                }));
+            b.UseVersioning(new()
+            {
+                Version = workerVersion,
+                MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.CurrentOrOlder,
+                FailureStrategy = DurableTaskWorkerOptions.VersionFailureStrategy.Fail
+            });
+        }, c =>
+        {
+            c.UseDefaultVersion(clientVersion);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(result);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, result.RuntimeStatus);
+        Assert.NotNull(result.FailureDetails);
+        Assert.Equal("VersionMismatch", result.FailureDetails.ErrorType);
+    }
+
+    [Fact]
+    public async Task OrchestrationVersioning_MatchTypeCurrentOrOlder_VersionSuccess()
+    {
+        var workerVersion = "0.3";
+        var clientVersion = "0.2";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Orchestration version: {input}";
+                }));
+            b.UseVersioning(new()
+            {
+                Version = workerVersion,
+                MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.CurrentOrOlder,
+                FailureStrategy = DurableTaskWorkerOptions.VersionFailureStrategy.Fail
+            });
+        }, c =>
+        {
+            c.UseDefaultVersion(clientVersion);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        var output = result.ReadOutputAs<string>();
+
+        Assert.NotNull(output);
+        // The worker doesn't pass it's version through the context, so we check the client version. The fact that it passed indicates versioning was ignored.
+        Assert.Equal(output, $"Orchestration version: {clientVersion}");
+    }
+
+    [Fact]
+    public async Task SubOrchestrationInheritsDefaultVersion()
+    {
+        var version = "0.1";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallSubOrchestratorAsync<string>("Versioned_Sub_Orchestration");
+                })
+                .AddOrchestratorFunc<string, string>("Versioned_Sub_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Sub Orchestration version: {input}";
+                }));
+            b.UseVersioning(new DurableTaskWorkerOptions.VersioningOptions
+            {
+                DefaultVersion = version
+            });
+        }, c =>
+        {
+            c.UseDefaultVersion(version);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        var output = result.ReadOutputAs<string>();
+
+        Assert.NotNull(output);
+        Assert.Equal($"Sub Orchestration version: {version}", output);
+    }
+
+    [Theory]
+    [InlineData("0.2")]
+    [InlineData("")]
+    public async Task OrchestrationTaskVersionOverridesDefaultVersion(string overrideVersion)
+    {
+        var version = "0.1";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Orchestration version: {input}";
+                }));
+        }, c =>
+        {
+            c.UseDefaultVersion(version);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", string.Empty, new StartOrchestrationOptions
+        {
+            Version = overrideVersion
+        });
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        var output = result.ReadOutputAs<string>();
+
+        Assert.NotNull(output);
+        Assert.Equal($"Orchestration version: {overrideVersion}", output);
+    }
+
+    [Theory]
+    [InlineData("0.2")]
+    [InlineData("")]
+    public async Task SubOrchestrationTaskVersionOverridesDefaultVersion(string overrideVersion)
+    {
+        var version = "0.1";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallSubOrchestratorAsync<string>("Versioned_Sub_Orchestration", new SubOrchestrationOptions
+                    {
+                        Version = overrideVersion
+                    });
+                })
+                .AddOrchestratorFunc<string, string>("Versioned_Sub_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", ctx.Version);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Sub Orchestration version: {input}";
+                }));
+            b.UseVersioning(new DurableTaskWorkerOptions.VersioningOptions
+            {
+                DefaultVersion = version,
+            });
+        }, c =>
+        {
+            c.UseDefaultVersion(version);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        var output = result.ReadOutputAs<string>();
+
+        Assert.NotNull(output);
+        Assert.Equal($"Sub Orchestration version: {overrideVersion}", output);
+    }
+
+    [Fact]
+    public async Task RunActivityWithTags()
+    {
+        TaskName orchestratorName = nameof(RunActivityWithTags);
+        TaskName taggedActivityName = "TaggedActivity";
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>(
+                    orchestratorName, (ctx, input) => ctx.CallActivityAsync<string>(taggedActivityName, input))
+                .AddActivityFunc<string, string>(taggedActivityName, (ctx, name) => $"Hello from tagged activity, {name}!"));
+        });
+
+        // Schedule orchestration with tags
+        StartOrchestrationOptions options = new()
+        {
+            Tags = new Dictionary<string, string>
+            {
+                { "activityTag", "taggedExecution" },
+                { "testType", "activityTagTest" }
+            }
+        };
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            orchestratorName, input: "World", options);
+
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.Equal("Hello from tagged activity, World!", metadata.ReadOutputAs<string>());
+    }
+
+    [Obsolete("Experimental")]
+    [Fact]
+    public async Task FilterOrchestrationsByName()
+    {
+        // Setup a worker with an Orchestration Filter.
+        TaskName orchestratorName = nameof(EmptyOrchestration);
+        var orchestrationFilter = new OrchestrationFilter();
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, ctx => Task.FromResult<object?>(null)));
+            b.UseOrchestrationFilter(orchestrationFilter);
+        });
+
+        // Nothing in the filter set, the orchestration should complete.
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+
+        // Update the filter and re-enqueue. We should see the orchestration denied.
+        orchestrationFilter.NameDenySet.Add(orchestratorName);
+
+        // This should throw as the work is denied.
+        instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await Assert.ThrowsAsync<OperationCanceledException>(async () => await server.Client.WaitForInstanceCompletionAsync(instanceId, cts.Token));
+    }
+
+    [Obsolete("Experimental")]
+    [Fact]
+    public async Task FilterOrchestrationsByNamePassesWhenNotMatching()
+    {
+        // Setup a worker with an Orchestration Filter.
+        TaskName orchestratorName = nameof(EmptyOrchestration);
+        var orchestrationFilter = new OrchestrationFilter();
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, ctx => Task.FromResult<object?>(null)));
+            b.UseOrchestrationFilter(orchestrationFilter);
+        });
+
+        // Nothing in the filter set, the orchestration should complete.
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+
+        // Update the filter and re-enqueue. The name doesn't match so the filter should be OK.
+        orchestrationFilter.NameDenySet.Add($"not-{orchestratorName}");
+
+        // This should throw as the work is denied.
+        instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+    }
+
+    [Obsolete("Experimental")]
+    [Fact]
+    public async Task FilterOrchestrationsByTag()
+    {
+        // Setup a worker with an Orchestration Filter.
+        TaskName orchestratorName = nameof(EmptyOrchestration);
+        IReadOnlyDictionary<string, string> orchestratorTags = new Dictionary<string, string>
+        {
+            { "test", "true" }
+        };
+        var orchestrationFilter = new OrchestrationFilter();
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, ctx => Task.FromResult<object?>(null)));
+            b.UseOrchestrationFilter(orchestrationFilter);
+        });
+
+        // Nothing in the filter set, the orchestration should complete.
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, new StartOrchestrationOptions
+        {
+            Tags = orchestratorTags,
+        });
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+
+        // Update the filter and re-enqueue. We should see the orchestration denied.
+        orchestrationFilter.TagDenyDict.Add("test", "true");
+
+        // This should throw as the work is denied.
+        instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, new StartOrchestrationOptions
+        {
+            Tags = orchestratorTags,
+        });
+        using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await Assert.ThrowsAsync<OperationCanceledException>(async () => await server.Client.WaitForInstanceCompletionAsync(instanceId, cts.Token));
+    }
+
+    [Obsolete("Experimental")]
+    [Fact]
+    public async Task FilterOrchestrationsByTagPassesWithNoMatch()
+    {
+        // Setup a worker with an Orchestration Filter.
+        TaskName orchestratorName = nameof(EmptyOrchestration);
+        IReadOnlyDictionary<string, string> orchestratorTags = new Dictionary<string, string>
+        {
+            { "test", "true" }
+        };
+        var orchestrationFilter = new OrchestrationFilter();
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, ctx => Task.FromResult<object?>(null)));
+            b.UseOrchestrationFilter(orchestrationFilter);
+        });
+
+        // Nothing in the filter set, the orchestration should complete.
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, new StartOrchestrationOptions
+        {
+            Tags = orchestratorTags,
+        });
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+
+        // Update the filter and re-enqueue. The tags don't match so the orchestration should be OK.
+        orchestrationFilter.TagDenyDict.Add("test", "false");
+
+        // This should throw as the work is denied.
+        instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, new StartOrchestrationOptions
+        {
+            Tags = orchestratorTags,
+        });
+        metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+    }
+
+    [Obsolete("Experimental")]
+    class OrchestrationFilter : IOrchestrationFilter
+    {
+        public ISet<string> NameDenySet { get; set; } = new HashSet<string>();
+        public IDictionary<string, string> TagDenyDict = new Dictionary<string, string>();
+
+        public ValueTask<bool> IsOrchestrationValidAsync(OrchestrationFilterParameters info, CancellationToken cancellationToken = default)
+        {
+            return ValueTask.FromResult(
+                !this.NameDenySet.Contains(info.Name)
+                && !this.TagDenyDict.Any(kvp => info.Tags != null && info.Tags.ContainsKey(kvp.Key) && info.Tags[kvp.Key] == kvp.Value));
+        }
+    }
+
     // TODO: Test for multiple external events with the same name
     // TODO: Test for ContinueAsNew with external events that carry over
     // TODO: Test for catching activity exceptions of specific types
-    // TODO: Versioning tests
 }

@@ -17,7 +17,9 @@ public class TaskNameTests
     {
         TaskName name = new(string.Empty);
         name.Name.Should().Be(string.Empty);
+#pragma warning disable 0618
         name.Version.Should().Be(string.Empty);
+#pragma warning restore 0618
     }
 
     [Theory]

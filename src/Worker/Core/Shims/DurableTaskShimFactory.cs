@@ -50,7 +50,7 @@ public class DurableTaskShimFactory
     {
         Check.NotDefault(name);
         Check.NotNull(activity);
-        return new TaskActivityShim(this.options.DataConverter, name, activity);
+        return new TaskActivityShim(this.loggerFactory, this.options.DataConverter, name, activity);
     }
 
     /// <summary>
@@ -87,6 +87,29 @@ public class DurableTaskShimFactory
         Check.NotNull(orchestrator);
         OrchestrationInvocationContext context = new(name, this.options, this.loggerFactory, parent);
         return new TaskOrchestrationShim(context, orchestrator);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="TaskOrchestration" /> from a <see cref="ITaskOrchestrator" />.
+    /// </summary>
+    /// <param name="name">
+    /// The name of the orchestration. This should be the name the orchestration was invoked with.
+    /// </param>
+    /// <param name="orchestrator">The orchestration to wrap.</param>
+    /// <param name ="properties">Configuration for the orchestration.</param>
+    /// <param name="parent">The orchestration parent details or <c>null</c> if no parent.</param>
+    /// <returns>A new <see cref="TaskOrchestration" />.</returns>
+    public TaskOrchestration CreateOrchestration(
+        TaskName name,
+        ITaskOrchestrator orchestrator,
+        IReadOnlyDictionary<string, object?> properties,
+        ParentOrchestrationInstance? parent = null)
+    {
+        Check.NotDefault(name);
+        Check.NotNull(orchestrator);
+        Check.NotNull(properties);
+        OrchestrationInvocationContext context = new(name, this.options, this.loggerFactory, parent);
+        return new TaskOrchestrationShim(context, orchestrator, properties);
     }
 
     /// <summary>

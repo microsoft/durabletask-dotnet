@@ -1,20 +1,22 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.Buffers;
 using System.Buffers.Text;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Command;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
+using DurableTask.Core.Tracing;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using DTCore = DurableTask.Core;
 using P = Microsoft.DurableTask.Protobuf;
+using TraceHelper = Microsoft.DurableTask.Tracing.TraceHelper;
 
 namespace Microsoft.DurableTask;
 
@@ -59,6 +61,7 @@ static class ProtoUtils
                     Name = proto.ExecutionStarted.Name,
                     Version = proto.ExecutionStarted.Version,
                     OrchestrationInstance = instance,
+                    Tags = proto.ExecutionStarted.Tags,
                     ParentInstance = proto.ExecutionStarted.ParentInstance == null ? null : new ParentInstance
                     {
                         Name = proto.ExecutionStarted.ParentInstance.Name,
@@ -89,7 +92,10 @@ static class ProtoUtils
                     proto.EventId,
                     proto.TaskScheduled.Name,
                     proto.TaskScheduled.Version,
-                    proto.TaskScheduled.Input);
+                    proto.TaskScheduled.Input)
+                    {
+                        Tags = proto.TaskScheduled.Tags,
+                    };
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
                 historyEvent = new TaskCompletedEvent(
@@ -206,6 +212,7 @@ static class ProtoUtils
                         Input = proto.HistoryState.OrchestrationState.Input,
                         Output = proto.HistoryState.OrchestrationState.Output,
                         Status = proto.HistoryState.OrchestrationState.CustomStatus,
+                        Tags = proto.HistoryState.OrchestrationState.Tags,
                     });
                 break;
             default:
@@ -263,6 +270,7 @@ static class ProtoUtils
     /// Constructs a <see cref="P.OrchestratorResponse" />.
     /// </summary>
     /// <param name="instanceId">The orchestrator instance ID.</param>
+    /// <param name="executionId">The orchestrator execution ID.</param>
     /// <param name="customStatus">The orchestrator customer status or <c>null</c> if no custom status.</param>
     /// <param name="actions">The orchestrator actions.</param>
     /// <param name="completionToken">
@@ -270,37 +278,83 @@ static class ProtoUtils
     /// value that was provided by the corresponding <see cref="P.WorkItem"/> that triggered the orchestrator execution.
     /// </param>
     /// <param name="entityConversionState">The entity conversion state, or null if no conversion is required.</param>
+    /// <param name="orchestrationActivity">The <see cref="Activity" /> that represents orchestration execution.</param>
+    /// <param name="requiresHistory">Whether or not a history is required to complete the orchestration request and none was provided.</param>
     /// <returns>The orchestrator response.</returns>
     /// <exception cref="NotSupportedException">When an orchestrator action is unknown.</exception>
     internal static P.OrchestratorResponse ConstructOrchestratorResponse(
         string instanceId,
+        string executionId,
         string? customStatus,
-        IEnumerable<OrchestratorAction> actions,
+        IEnumerable<OrchestratorAction>? actions,
         string completionToken,
-        EntityConversionState? entityConversionState)
+        EntityConversionState? entityConversionState,
+        Activity? orchestrationActivity,
+        bool requiresHistory = false)
     {
-        Check.NotNull(actions);
         var response = new P.OrchestratorResponse
         {
             InstanceId = instanceId,
             CustomStatus = customStatus,
             CompletionToken = completionToken,
+            OrchestrationTraceContext =
+                new()
+                {
+                    SpanID = orchestrationActivity?.SpanId.ToString(),
+                    SpanStartTime = orchestrationActivity?.StartTimeUtc.ToTimestamp(),
+                },
+            RequiresHistory = requiresHistory,
         };
 
+        // If a history is required and the orchestration request was not completed, then there is no list of actions.
+        if (requiresHistory)
+        {
+            return response;
+        }
+
+        Check.NotNull(actions);
         foreach (OrchestratorAction action in actions)
         {
             var protoAction = new P.OrchestratorAction { Id = action.Id };
+
+            P.TraceContext? CreateTraceContext()
+            {
+                if (orchestrationActivity is null)
+                {
+                    return null;
+                }
+
+                ActivitySpanId clientSpanId = ActivitySpanId.CreateRandom();
+                ActivityContext clientActivityContext = new(orchestrationActivity.TraceId, clientSpanId, orchestrationActivity.ActivityTraceFlags, orchestrationActivity.TraceStateString);
+
+                return new P.TraceContext
+                {
+                    TraceParent = $"00-{clientActivityContext.TraceId}-{clientActivityContext.SpanId}-0{clientActivityContext.TraceFlags:d}",
+                    TraceState = clientActivityContext.TraceState,
+                };
+            }
 
             switch (action.OrchestratorActionType)
             {
                 case OrchestratorActionType.ScheduleOrchestrator:
                     var scheduleTaskAction = (ScheduleTaskOrchestratorAction)action;
+
                     protoAction.ScheduleTask = new P.ScheduleTaskAction
                     {
                         Name = scheduleTaskAction.Name,
                         Version = scheduleTaskAction.Version,
                         Input = scheduleTaskAction.Input,
+                        ParentTraceContext = CreateTraceContext(),
                     };
+
+                    if (scheduleTaskAction.Tags != null)
+                    {
+                        foreach (KeyValuePair<string, string> tag in scheduleTaskAction.Tags)
+                        {
+                            protoAction.ScheduleTask.Tags[tag.Key] = tag.Value;
+                        }
+                    }
+
                     break;
                 case OrchestratorActionType.CreateSubOrchestration:
                     var subOrchestrationAction = (CreateSubOrchestrationAction)action;
@@ -310,6 +364,7 @@ static class ProtoUtils
                         InstanceId = subOrchestrationAction.InstanceId,
                         Name = subOrchestrationAction.Name,
                         Version = subOrchestrationAction.Version,
+                        ParentTraceContext = CreateTraceContext(),
                     };
                     break;
                 case OrchestratorActionType.CreateTimer:
@@ -364,6 +419,12 @@ static class ProtoUtils
                             Name = sendEventAction.EventName,
                             Data = sendEventAction.EventData,
                         };
+
+                        // Distributed Tracing: start a new trace activity derived from the orchestration
+                        // for an EventRaisedEvent (external event)
+                        using Activity? traceActivity = TraceHelper.StartTraceActivityForEventRaisedFromWorker(sendEventAction, instanceId, executionId);
+
+                        traceActivity?.Stop();
                     }
 
                     break;
@@ -588,6 +649,10 @@ static class ProtoUtils
             Operation = operationRequest.Operation,
             Input = operationRequest.Input,
             Id = Guid.Parse(operationRequest.RequestId),
+            TraceContext = operationRequest.TraceContext != null ?
+            new DistributedTraceContext(
+                operationRequest.TraceContext.TraceParent,
+                operationRequest.TraceContext.TraceState) : null,
         };
     }
 
@@ -610,12 +675,16 @@ static class ProtoUtils
                 return new OperationResult()
                 {
                     Result = operationResult.Success.Result,
+                    StartTimeUtc = operationResult.Success.StartTimeUtc?.ToDateTime(),
+                    EndTimeUtc = operationResult.Success.EndTimeUtc?.ToDateTime(),
                 };
 
             case P.OperationResult.ResultTypeOneofCase.Failure:
                 return new OperationResult()
                 {
                     FailureDetails = operationResult.Failure.FailureDetails.ToCore(),
+                    StartTimeUtc = operationResult.Failure.StartTimeUtc?.ToDateTime(),
+                    EndTimeUtc = operationResult.Failure.EndTimeUtc?.ToDateTime(),
                 };
 
             default:
@@ -643,6 +712,8 @@ static class ProtoUtils
                 Success = new P.OperationResultSuccess()
                 {
                     Result = operationResult.Result,
+                    StartTimeUtc = operationResult.StartTimeUtc?.ToTimestamp(),
+                    EndTimeUtc = operationResult.EndTimeUtc?.ToTimestamp(),
                 },
             };
         }
@@ -653,6 +724,8 @@ static class ProtoUtils
                 Failure = new P.OperationResultFailure()
                 {
                     FailureDetails = ToProtobuf(operationResult.FailureDetails),
+                    StartTimeUtc = operationResult.StartTimeUtc?.ToTimestamp(),
+                    EndTimeUtc = operationResult.EndTimeUtc?.ToTimestamp(),
                 },
             };
         }
@@ -681,6 +754,11 @@ static class ProtoUtils
                     Input = operationAction.SendSignal.Input,
                     InstanceId = operationAction.SendSignal.InstanceId,
                     ScheduledTime = operationAction.SendSignal.ScheduledTime?.ToDateTime(),
+                    RequestTime = operationAction.SendSignal.RequestTime?.ToDateTimeOffset(),
+                    ParentTraceContext = operationAction.SendSignal.ParentTraceContext != null ?
+                        new DistributedTraceContext(
+                            operationAction.SendSignal.ParentTraceContext.TraceParent,
+                            operationAction.SendSignal.ParentTraceContext.TraceState) : null,
                 };
 
             case P.OperationAction.OperationActionTypeOneofCase.StartNewOrchestration:
@@ -692,6 +770,11 @@ static class ProtoUtils
                     InstanceId = operationAction.StartNewOrchestration.InstanceId,
                     Version = operationAction.StartNewOrchestration.Version,
                     ScheduledStartTime = operationAction.StartNewOrchestration.ScheduledTime?.ToDateTime(),
+                    RequestTime = operationAction.StartNewOrchestration.RequestTime?.ToDateTimeOffset(),
+                    ParentTraceContext = operationAction.StartNewOrchestration.ParentTraceContext != null ?
+                        new DistributedTraceContext(
+                            operationAction.StartNewOrchestration.ParentTraceContext.TraceParent,
+                            operationAction.StartNewOrchestration.ParentTraceContext.TraceState) : null,
                 };
             default:
                 throw new NotSupportedException($"Deserialization of {operationAction.OperationActionTypeCase} is not supported.");
@@ -723,6 +806,14 @@ static class ProtoUtils
                     Input = sendSignalAction.Input,
                     InstanceId = sendSignalAction.InstanceId,
                     ScheduledTime = sendSignalAction.ScheduledTime?.ToTimestamp(),
+                    RequestTime = sendSignalAction.RequestTime?.ToTimestamp(),
+                    ParentTraceContext = sendSignalAction.ParentTraceContext != null ?
+                        new P.TraceContext
+                        {
+                            TraceParent = sendSignalAction.ParentTraceContext.TraceParent,
+                            TraceState = sendSignalAction.ParentTraceContext.TraceState,
+                        }
+                    : null,
                 };
                 break;
 
@@ -735,6 +826,14 @@ static class ProtoUtils
                     Version = startNewOrchestrationAction.Version,
                     InstanceId = startNewOrchestrationAction.InstanceId,
                     ScheduledTime = startNewOrchestrationAction.ScheduledStartTime?.ToTimestamp(),
+                    RequestTime = startNewOrchestrationAction.RequestTime?.ToTimestamp(),
+                    ParentTraceContext = startNewOrchestrationAction.ParentTraceContext != null ?
+                        new P.TraceContext
+                        {
+                            TraceParent = startNewOrchestrationAction.ParentTraceContext.TraceParent,
+                            TraceState = startNewOrchestrationAction.ParentTraceContext.TraceState,
+                        }
+                    : null,
                 };
                 break;
         }
@@ -900,6 +999,37 @@ static class ProtoUtils
             failureDetails.StackTrace,
             failureDetails.InnerFailure.ToCore(),
             failureDetails.IsNonRetriable);
+    }
+
+    /// <summary>
+    /// Converts a <see cref="Google.Protobuf.WellKnownTypes.Value"/> instance to a corresponding C# object.
+    /// </summary>
+    /// <param name="value">The Protobuf Value to convert.</param>
+    /// <returns>The corresponding C# object.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when the Protobuf Value.KindCase is not one of the supported types.
+    /// </exception>
+    internal static object? ConvertValueToObject(Google.Protobuf.WellKnownTypes.Value value)
+    {
+        switch (value.KindCase)
+        {
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.NullValue:
+                return null;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.NumberValue:
+                return value.NumberValue;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.StringValue:
+                return value.StringValue;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.BoolValue:
+                return value.BoolValue;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.StructValue:
+                return value.StructValue.Fields.ToDictionary(
+                    pair => pair.Key,
+                    pair => ConvertValueToObject(pair.Value));
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.ListValue:
+                return value.ListValue.Values.Select(ConvertValueToObject).ToList();
+            default:
+                throw new NotSupportedException($"Unsupported Value kind: {value.KindCase}");
+        }
     }
 
     /// <summary>

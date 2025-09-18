@@ -1,10 +1,13 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+
 using System.ComponentModel.DataAnnotations;
 using Azure.Core;
 using Azure.Identity;
 using Grpc.Core;
 using Grpc.Net.Client;
+using Microsoft.DurableTask;
+using Microsoft.DurableTask.Worker.Hosting;
 
 namespace Microsoft.DurableTask;
 
@@ -100,6 +103,8 @@ public class DurableTaskSchedulerWorkerOptions
             async (context, metadata) =>
             {
                 metadata.Add("taskhub", taskHubName);
+                // Add user agent header with durabletask-dotnet and DLL version from util
+                metadata.Add("x-user-agent", $"{DurableTaskUserAgentUtil.GetUserAgent(nameof(DurableTaskWorker))}");
                 metadata.Add("workerid", this.WorkerId);
                 if (cache == null)
                 {
@@ -118,6 +123,7 @@ public class DurableTaskSchedulerWorkerOptions
         {
             Credentials = ChannelCredentials.Create(channelCreds, managedBackendCreds),
             UnsafeUseInsecureChannelCallCredentials = this.AllowInsecureCredentials,
+            ServiceConfig = GrpcRetryPolicyDefaults.DefaultServiceConfig,
         });
     }
 
@@ -129,11 +135,11 @@ public class DurableTaskSchedulerWorkerOptions
         switch (authType.ToLowerInvariant())
         {
             case "defaultazure":
-                return new DefaultAzureCredential();
+                return new DefaultAzureCredential(); // CodeQL [SM05137] Use DefaultAzureCredential explicitly for local development and is decided by the user
             case "managedidentity":
                 return new ManagedIdentityCredential(connectionString.ClientId);
             case "workloadidentity":
-                var opts = new WorkloadIdentityCredentialOptions();
+                WorkloadIdentityCredentialOptions opts = new WorkloadIdentityCredentialOptions();
                 if (!string.IsNullOrEmpty(connectionString.ClientId))
                 {
                     opts.ClientId = connectionString.ClientId;
@@ -159,6 +165,12 @@ public class DurableTaskSchedulerWorkerOptions
                 return new AzureCliCredential();
             case "azurepowershell":
                 return new AzurePowerShellCredential();
+            case "visualstudio":
+                return new VisualStudioCredential();
+            case "visualstudiocode":
+                return new VisualStudioCodeCredential();
+            case "interactivebrowser":
+                return new InteractiveBrowserCredential();
             case "none":
                 return null;
             default:

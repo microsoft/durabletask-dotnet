@@ -4,6 +4,7 @@
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using static Microsoft.DurableTask.Worker.DurableTaskWorkerOptions;
 
 namespace Microsoft.DurableTask.Worker;
 
@@ -84,6 +85,56 @@ public static class DurableTaskWorkerBuilderExtensions
                 DurableTaskWorkerOptions input = baseOptions.Get(builder.Name);
                 input.ApplyTo(options);
             });
+        return builder;
+    }
+
+    /// <summary>
+    /// Configures the versioning options for this builder.
+    /// </summary>
+    /// <param name="builder">The builder to set the builder target for.</param>
+    /// <param name="versionOptions">The collection of options specified for versioning the worker.</param>
+    /// <returns>The original builder, for call chaining.</returns>
+    public static IDurableTaskWorkerBuilder UseVersioning(this IDurableTaskWorkerBuilder builder, VersioningOptions versionOptions)
+    {
+        Check.NotNull(builder);
+        builder.Configure(options =>
+        {
+            options.Versioning = new VersioningOptions
+            {
+                Version = versionOptions.Version,
+                DefaultVersion = versionOptions.DefaultVersion,
+                MatchStrategy = versionOptions.MatchStrategy,
+                FailureStrategy = versionOptions.FailureStrategy,
+            };
+        });
+        return builder;
+    }
+
+    /// <summary>
+    /// Adds an orchestration filter to the specified <see cref="IDurableTaskWorkerBuilder"/>.
+    /// </summary>
+    /// <param name="builder">The builder to set the builder target for.</param>
+    /// <typeparam name="TOrchestrationFilter">The implementation of a <see cref="IOrchestrationFilter"/> that will be bound.</typeparam>
+    /// <returns>The same <see cref="IDurableTaskWorkerBuilder"/> instance, allowing for method chaining.</returns>
+    [Obsolete("Experimental")]
+    public static IDurableTaskWorkerBuilder UseOrchestrationFilter<TOrchestrationFilter>(this IDurableTaskWorkerBuilder builder) where TOrchestrationFilter : class, IOrchestrationFilter
+    {
+        Check.NotNull(builder);
+        builder.Services.AddSingleton<IOrchestrationFilter, TOrchestrationFilter>();
+        return builder;
+    }
+
+    /// <summary>
+    /// Adds an orchestration filter to the specified <see cref="IDurableTaskWorkerBuilder"/>.
+    /// </summary>
+    /// <param name="builder">The builder to set the builder target for.</param>
+    /// <param name="filter">The instance of an <see cref="IOrchestrationFilter"/> to use.</param>
+    /// <returns>The same <see cref="IDurableTaskWorkerBuilder"/> instance, allowing for method chaining.</returns>
+    [Obsolete("Experimental")]
+    public static IDurableTaskWorkerBuilder UseOrchestrationFilter(this IDurableTaskWorkerBuilder builder, IOrchestrationFilter filter)
+    {
+        Check.NotNull(builder);
+        builder.Services.AddSingleton(filter);
         return builder;
     }
 }

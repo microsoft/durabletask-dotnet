@@ -89,4 +89,16 @@ public static class DurableTaskBuilderExtensions
             });
         return builder;
     }
+
+    /// <summary>
+    /// Sets the default version for this builder. This version will be applied by default to all orchestrations if set.
+    /// </summary>
+    /// <param name="builder">The builder to set the version for.</param>
+    /// <param name="version">The version that will be used as the default version.</param>
+    /// <returns>The original builder, for call chaining.</returns>
+    public static IDurableTaskClientBuilder UseDefaultVersion(this IDurableTaskClientBuilder builder, string version)
+    {
+        builder.Configure(options => options.DefaultVersion = version);
+        return builder;
+    }
 }

@@ -1,4 +1,58 @@
 ﻿# Changelog
+## v1.15.0
+- Abandon workitem if processing workitem failed by @YunchuWang in ([#467](https://github.com/microsoft/durabletask-dotnet/pull/467))
+- Extended Sessions for Isolated (Orchestrations) by @sophiatev in ([#449](https://github.com/microsoft/durabletask-dotnet/pull/449))
+  
+## v1.14.0
+- Add RestartAsync API Support at DurableTaskClient ([#456](https://github.com/microsoft/durabletask-dotnet/pull/456))
+
+## v1.13.0
+- Add orchestration execution tracing ([#441](https://github.com/microsoft/durabletask-dotnet/pull/441))
+
+## v1.12.0
+
+- Activity tag support ([#426](https://github.com/microsoft/durabletask-dotnet/pull/426))
+- Adding Analyzer to build and release ([#444](https://github.com/microsoft/durabletask-dotnet/pull/444))
+- Add ability to filter orchestrations at worker ([#443](https://github.com/microsoft/durabletask-dotnet/pull/443))
+- Removing breaking change for TaskOptions ([#446](https://github.com/microsoft/durabletask-dotnet/pull/446))
+- Expose gRPC retry options in Azure Managed extensions ([#447](https://github.com/microsoft/durabletask-dotnet/pull/447))
+
+## v1.11.0
+
+- Add New Property Properties to TaskOrchestrationContext ([#415](https://github.com/microsoft/durabletask-dotnet/pull/415))
+- Add automatic retry on gateway timeout in `GrpcDurableTaskClient.WaitForInstanceCompletionAsync` ([#412](https://github.com/microsoft/durabletask-dotnet/pull/412))
+- Add specific logging for NotFound error on worker connection ([#413](https://github.com/microsoft/durabletask-dotnet/pull/413))
+- Add user agent header to gRPC called ([#417](https://github.com/microsoft/durabletask-dotnet/pull/417))
+- Enrich User-Agent Header in gRPC Metadata to indicate Client or Worker as caller ([#421](https://github.com/microsoft/durabletask-dotnet/pull/421))
+- Change DTS user agent metadata to avoid overlap with gRPC user agent ([#423](https://github.com/microsoft/durabletask-dotnet/pull/423))
+- Add extension methods for registering entities by type ([#427](https://github.com/microsoft/durabletask-dotnet/pull/427))
+- Add TaskVersion and utilize it for version overrides when starting orchestrations ([#416](https://github.com/microsoft/durabletask-dotnet/pull/416))
+- Update sub-orchestration default versioning ([#437](https://github.com/microsoft/durabletask-dotnet/pull/437))
+- Distributed Tracing for Entities (Isolated) ([#404](https://github.com/microsoft/durabletask-dotnet/pull/404))
+
+## v1.10.0
+
+- Update DurableTask.Core to v3.1.0 and Bump version to v1.10.0 by @nytian in ([#411](https://github.com/microsoft/durabletask-dotnet/pull/411))
+
+## v1.9.1
+
+- Add basic orchestration and activity execution logs by @cgillum in ([#405](https://github.com/microsoft/durabletask-dotnet/pull/405))
+- Add default version in `TaskOrchestrationContext` by @halspang in ([#408](https://github.com/microsoft/durabletask-dotnet/pull/408))
+
+## v1.9.0
+
+- Fix schedule sample logging setup by @YunchuWang in ([#392](https://github.com/microsoft/durabletask-dotnet/pull/392))
+- Introduce versioning to the DurableTaskClient by @halspang in ([#393](https://github.com/microsoft/durabletask-dotnet/pull/393))
+- Support for local credential types for DTS by @cgillum in ([#396](https://github.com/microsoft/durabletask-dotnet/pull/396))
+- Add utilities for easier versioning usage by @halspang in ([#394](https://github.com/microsoft/durabletask-dotnet/pull/394))
+- Add tags to CreateInstanceRequest by @torosent in ([#397](https://github.com/microsoft/durabletask-dotnet/pull/397))
+- Partial Purge Support by @YunchuWang in ([#400](https://github.com/microsoft/durabletask-dotnet/pull/400))
+- Dts Grpc client retry support by @YunchuWang in ([#403](https://github.com/microsoft/durabletask-dotnet/pull/403))
+- Introduce orchestration versioning into worker by @halspang in ([#401](https://github.com/microsoft/durabletask-dotnet/pull/401))
+
+## v1.8.1
+
+- Add timeout to gRPC workitem streaming ([#390](https://github.com/microsoft/durabletask-dotnet/pull/390))
 
 ## v1.8.0
 
@@ -241,3 +295,4 @@ Microsoft.DurableTask.Generators
 ## v0.4.1-beta
 
 Initial public release
+

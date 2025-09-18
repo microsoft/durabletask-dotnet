@@ -150,6 +150,144 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         page.ContinuationToken.Should().NotBeNull();
     }
 
+    [Fact]
+    public async Task PurgeInstance_EndToEnd()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartAsync();
+
+        // Create and complete an orchestration instance
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false);
+
+        // Wait for it to start and raise event to complete it
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+        await server.Client.RaiseEventAsync(instanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(instanceId, default);
+
+        // Verify instance exists before purge
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+        metadata.Should().NotBeNull();
+        metadata!.InstanceId.Should().Be(instanceId);
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+
+        // Act
+        PurgeResult result = await server.Client.PurgeInstanceAsync(
+            instanceId,
+            new PurgeInstanceOptions { Recursive = true });
+
+        // Assert
+        result.Should().NotBeNull();
+        result.PurgedInstanceCount.Should().Be(1);
+        result.IsComplete.Should().NotBeFalse();
+        // Verify instance no longer exists
+        OrchestrationMetadata? instance = await server.Client.GetInstanceAsync(instanceId, false);
+        instance.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PurgeInstances_WithFilter_EndToEnd()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartAsync();
+        List<string> instanceIds = new List<string>();
+
+        // Create multiple instances
+        for (int i = 0; i < 3; i++)
+        {
+            string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+                OrchestrationName, input: false);
+            instanceIds.Add(instanceId);
+
+            // Wait for it to start and raise event to complete it
+            await server.Client.WaitForInstanceStartAsync(instanceId, default);
+            await server.Client.RaiseEventAsync(instanceId, "event", default);
+            await server.Client.WaitForInstanceCompletionAsync(instanceId, default);
+        }
+
+        // Act
+        PurgeResult result = await server.Client.PurgeAllInstancesAsync(
+            new PurgeInstancesFilter(
+                CreatedFrom: DateTime.UtcNow.AddMinutes(-5),
+                CreatedTo: DateTime.UtcNow,
+                Statuses: new[] { OrchestrationRuntimeStatus.Completed }));
+
+        // Assert
+        result.Should().NotBeNull();
+        result.PurgedInstanceCount.Should().BeGreaterThan(3);
+        result.IsComplete.Should().NotBeFalse();
+        // Verify instances no longer exist
+        foreach (string instanceId in instanceIds)
+        {
+            OrchestrationMetadata? instance = await server.Client.GetInstanceAsync(instanceId, false);
+            instance.Should().BeNull();
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RestartAsync_EndToEnd(bool restartWithNewInstanceId)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+        await using HostTestLifetime server = await this.StartAsync();
+
+        // Start an initial orchestration with shouldThrow = false to ensure it completes successfully
+        string originalInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false);
+
+        // Wait for it to start and then complete
+        await server.Client.WaitForInstanceStartAsync(originalInstanceId, default);
+        await server.Client.RaiseEventAsync(originalInstanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(originalInstanceId, cts.Token);
+        
+        // Verify the original orchestration completed
+        OrchestrationMetadata? originalMetadata = await server.Client.GetInstanceAsync(originalInstanceId, true);
+        originalMetadata.Should().NotBeNull();
+        originalMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+
+        // Restart the orchestration
+        string restartedInstanceId = await server.Client.RestartAsync(originalInstanceId, restartWithNewInstanceId);
+
+        // Verify the restart behavior
+        if (restartWithNewInstanceId)
+        {
+            restartedInstanceId.Should().NotBe(originalInstanceId);
+        }
+        else
+        {
+            restartedInstanceId.Should().Be(originalInstanceId);
+        }
+
+        // Complete the restarted orchestration
+        await server.Client.RaiseEventAsync(restartedInstanceId, "event");
+        
+        using var completionCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        await server.Client.WaitForInstanceCompletionAsync(restartedInstanceId, completionCts.Token);
+
+        // Verify the restarted orchestration completed.
+        // Also verify input and orchestrator name are matched.
+        var restartedMetadata = await server.Client.GetInstanceAsync(restartedInstanceId, true);
+        restartedMetadata.Should().NotBeNull();
+        restartedMetadata!.Name.Should().Be(OrchestrationName);
+        restartedMetadata.SerializedInput.Should().Be("false");
+        restartedMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+    }
+
+    [Fact]
+    public async Task RestartAsync_InstanceNotFound_ThrowsArgumentException()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1)); // 1-minute timeout
+        await using HostTestLifetime server = await this.StartAsync();
+
+        // Try to restart a non-existent orchestration
+        Func<Task> restartAction = () => server.Client.RestartAsync("non-existent-instance-id", cancellation: cts.Token);
+
+        // Should throw ArgumentException
+        await restartAction.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*An orchestration with the instanceId non-existent-instance-id was not found*");
+    }
+
     Task<HostTestLifetime> StartAsync()
     {
         static async Task<string> Orchestration(TaskOrchestrationContext context, bool shouldThrow)

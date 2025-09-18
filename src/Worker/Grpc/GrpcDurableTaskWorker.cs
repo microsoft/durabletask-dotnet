@@ -17,6 +17,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     readonly IServiceProvider services;
     readonly ILoggerFactory loggerFactory;
     readonly ILogger logger;
+    readonly IOrchestrationFilter? orchestrationFilter;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GrpcDurableTaskWorker" /> class.
@@ -27,13 +28,15 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     /// <param name="workerOptions">The generic worker options.</param>
     /// <param name="services">The service provider.</param>
     /// <param name="loggerFactory">The logger.</param>
+    /// <param name="orchestrationFilter">The optional <see cref="IOrchestrationFilter"/> used to filter orchestration execution.</param>
     public GrpcDurableTaskWorker(
         string name,
         IDurableTaskFactory factory,
         IOptionsMonitor<GrpcDurableTaskWorkerOptions> grpcOptions,
         IOptionsMonitor<DurableTaskWorkerOptions> workerOptions,
         IServiceProvider services,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IOrchestrationFilter? orchestrationFilter = null)
         : base(name, factory)
     {
         this.grpcOptions = Check.NotNull(grpcOptions).Get(name);
@@ -41,6 +44,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         this.services = Check.NotNull(services);
         this.loggerFactory = Check.NotNull(loggerFactory);
         this.logger = loggerFactory.CreateLogger("Microsoft.DurableTask"); // TODO: use better category name.
+        this.orchestrationFilter = orchestrationFilter;
     }
 
     /// <inheritdoc />
@@ -48,7 +52,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     {
         await using AsyncDisposable disposable = this.GetCallInvoker(out CallInvoker callInvoker, out string address);
         this.logger.StartingTaskHubWorker(address);
-        await new Processor(this, new(callInvoker)).ExecuteAsync(stoppingToken);
+        await new Processor(this, new(callInvoker), this.orchestrationFilter).ExecuteAsync(stoppingToken);
     }
 
 #if NET6_0_OR_GREATER

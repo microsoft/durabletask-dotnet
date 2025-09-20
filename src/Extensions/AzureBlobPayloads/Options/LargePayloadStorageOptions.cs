@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 // Intentionally no DataAnnotations to avoid extra package requirements in minimal hosts.
-namespace Microsoft.DurableTask.Converters;
+namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Options for externalized payload storage, used by SDKs to store large payloads out-of-band.

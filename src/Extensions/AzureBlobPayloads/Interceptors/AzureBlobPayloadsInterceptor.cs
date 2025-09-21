@@ -13,7 +13,7 @@ namespace Microsoft.DurableTask;
 /// gRPC interceptor that externalizes large payloads to an <see cref="IPayloadStore"/> on requests
 /// and resolves known payload tokens on responses.
 /// </summary>
-sealed class AzureBlobPayloadsInterceptor(IPayloadStore payloadStore, LargePayloadStorageOptions options) : Interceptor
+internal sealed class AzureBlobPayloadsInterceptor(IPayloadStore payloadStore, LargePayloadStorageOptions options) : Interceptor
 {
     readonly IPayloadStore payloadStore = payloadStore;
     readonly LargePayloadStorageOptions options = options;

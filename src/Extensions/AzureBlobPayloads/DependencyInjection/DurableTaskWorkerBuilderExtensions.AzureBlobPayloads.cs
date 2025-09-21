@@ -1,13 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Grpc.Core.Interceptors;
+using Grpc.Net.Client;
 using Microsoft.DurableTask.Converters;
 using Microsoft.DurableTask.Worker;
+using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using Microsoft.DurableTask.Worker.Grpc;
-using Grpc.Net.Client;
-using Grpc.Core.Interceptors;
 
 namespace Microsoft.DurableTask;
 
@@ -64,5 +64,3 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
         return builder;
     }
 }
-
-

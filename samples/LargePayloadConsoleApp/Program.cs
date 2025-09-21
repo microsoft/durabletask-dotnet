@@ -135,8 +135,6 @@ Console.WriteLine($"Deserialized input equals original: {deserializedInput == la
 Console.WriteLine($"Deserialized output equals original: {deserializedOutput == largeInput}");
 Console.WriteLine($"Deserialized input length: {deserializedInput.Length}");
 
-
-
 // Run entity samples
 Console.WriteLine();
 Console.WriteLine("Running LargeEntityOperationInput...");
@@ -200,6 +198,3 @@ public class StateEntity : TaskEntity<string?>
         this.State = value;
     }
 }
-
-
-

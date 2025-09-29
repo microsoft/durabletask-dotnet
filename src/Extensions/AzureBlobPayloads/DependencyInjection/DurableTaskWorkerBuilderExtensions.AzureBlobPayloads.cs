@@ -44,14 +44,14 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
                 LargePayloadStorageOptions opts = monitor.Get(builder.Name);
                 if (opt.Channel is not null)
                 {
-                    var invoker = opt.Channel.Intercept(new AzureBlobPayloadsInterceptor(store, opts));
+                    var invoker = opt.Channel.Intercept(new AzureBlobPayloadsSideCarInterceptor(store, opts));
                     opt.CallInvoker = invoker;
                     // Ensure worker uses the intercepted invoker path
                     opt.Channel = null;
                 }
                 else if (opt.CallInvoker is not null)
                 {
-                    opt.CallInvoker = opt.CallInvoker.Intercept(new AzureBlobPayloadsInterceptor(store, opts));
+                    opt.CallInvoker = opt.CallInvoker.Intercept(new AzureBlobPayloadsSideCarInterceptor(store, opts));
                 }
                 else
                 {

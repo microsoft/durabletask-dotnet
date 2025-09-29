@@ -21,7 +21,6 @@ public static class AzureBlobPayloadCallInvokerFactory
     public static CallInvoker Create(GrpcChannel channel, LargePayloadStorageOptions options)
     {
         IPayloadStore payloadStore = new BlobPayloadStore(options);
-        // return channel.Intercept(new AzureBlobPayloadsInterceptor(payloadStore, options));
-        return channel.CreateCallInvoker().Intercept(new AzureBlobPayloadsInterceptor(payloadStore, options));
+        return channel.CreateCallInvoker().Intercept(new AzureBlobPayloadsAzureManagedBackendInterceptor(payloadStore, options));
     }
 }

@@ -84,7 +84,7 @@ internal sealed class BlobPayloadStore : IPayloadStore
                     HttpHeaders = new BlobHttpHeaders { ContentEncoding = ContentEncodingGzip },
                 };
                 using Stream blobStream = await blob.OpenWriteAsync(true, writeOptions, ct);
-                using GZipStream compressedBlobStream = new(blobStream, CompressionLevel.Optimal, leaveOpen: true);
+                using GZipStream compressedBlobStream = new(blobStream, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true);
                 using MemoryStream payloadStream = new(payloadBuffer, writable: false);
 
                 await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: DefaultCopyBufferSize, ct);

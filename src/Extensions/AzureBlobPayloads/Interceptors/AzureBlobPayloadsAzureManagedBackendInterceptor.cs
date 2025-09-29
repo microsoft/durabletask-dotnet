@@ -1,130 +1,25 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Text;
-using Grpc.Core;
 using Grpc.Core.Interceptors;
-using Microsoft.DurableTask.Converters;
+
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask;
 
 /// <summary>
 /// gRPC interceptor that externalizes large payloads to an <see cref="IPayloadStore"/> on requests
-/// and resolves known payload tokens on responses.
+/// and resolves known payload tokens on responses for Azure Managed Backend.
 /// </summary>
-internal sealed class AzureBlobPayloadsInterceptor(IPayloadStore payloadStore, LargePayloadStorageOptions options) : Interceptor
+public sealed class AzureBlobPayloadsAzureManagedBackendInterceptor(IPayloadStore payloadStore, LargePayloadStorageOptions options) 
+    : BasePayloadInterceptor<object, object>(payloadStore, options)
 {
-    readonly IPayloadStore payloadStore = payloadStore;
-    readonly LargePayloadStorageOptions options = options;
-
-    // Unary: externalize on request, resolve on response
-
-    /// <inheritdoc/>
-    public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(
-        TRequest request,
-        ClientInterceptorContext<TRequest, TResponse> context,
-        AsyncUnaryCallContinuation<TRequest, TResponse> continuation)
+    protected override Task ExternalizeRequestPayloadsAsync<TRequest>(TRequest request, CancellationToken cancellation)
     {
-        // Build the underlying call lazily after async externalization
-        Task<AsyncUnaryCall<TResponse>> startCallTask = Task.Run(async () =>
-        {
-            // Externalize first; if this fails, do not proceed to send the gRPC call
-            await this.ExternalizeRequestPayloadsAsync(request, context.Options.CancellationToken);
-            // Only if externalization succeeds, proceed with the continuation
-            return continuation(request, context);
-        });
-
-        async Task<TResponse> ResponseAsync()
-        {
-            AsyncUnaryCall<TResponse> innerCall = await startCallTask;
-            TResponse response = await innerCall.ResponseAsync;
-            await this.ResolveResponsePayloadsAsync(response, context.Options.CancellationToken);
-            return response;
-        }
-
-        async Task<Metadata> ResponseHeadersAsync()
-        {
-            AsyncUnaryCall<TResponse> innerCall = await startCallTask;
-            return await innerCall.ResponseHeadersAsync;
-        }
-
-        Status GetStatus()
-        {
-            if (startCallTask.IsCanceled)
-            {
-                return new Status(StatusCode.Cancelled, "Call was cancelled.");
-            }
-
-            if (startCallTask.IsFaulted)
-            {
-                return new Status(StatusCode.Internal, startCallTask.Exception?.Message ?? "Unknown error");
-            }
-            if (startCallTask.Status == TaskStatus.RanToCompletion)
-            {
-                return startCallTask.Result.GetStatus();
-            }
-
-            // Not started yet; unknown
-            return new Status(StatusCode.Unknown, string.Empty);
-        }
-
-        Metadata GetTrailers()
-        {
-            return startCallTask.Status == TaskStatus.RanToCompletion ? startCallTask.Result.GetTrailers() : [];
-        }
-
-        void Dispose()
-        {
-            _ = startCallTask.ContinueWith(
-                t =>
-                {
-                    if (t.Status == TaskStatus.RanToCompletion)
-                    {
-                        t.Result.Dispose();
-                    }
-                },
-                CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
-        }
-
-        return new AsyncUnaryCall<TResponse>(
-            ResponseAsync(),
-            ResponseHeadersAsync(),
-            GetStatus,
-            GetTrailers,
-            Dispose);
-    }
-
-    // Server streaming: resolve payloads in streamed responses (e.g., GetWorkItems)
-
-    /// <inheritdoc/>
-    public override AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(
-        TRequest request,
-        ClientInterceptorContext<TRequest, TResponse> context,
-        AsyncServerStreamingCallContinuation<TRequest, TResponse> continuation)
-    {
-        // For streaming, request externalization is not needed currently
-        AsyncServerStreamingCall<TResponse> call = continuation(request, context);
-
-        IAsyncStreamReader<TResponse> wrapped = new TransformingStreamReader<TResponse>(call.ResponseStream, async (msg, ct) =>
-        {
-            await this.ResolveResponsePayloadsAsync(msg, ct);
-            return msg;
-        });
-
-        return new AsyncServerStreamingCall<TResponse>(
-            wrapped,
-            call.ResponseHeadersAsync,
-            call.GetStatus,
-            call.GetTrailers,
-            call.Dispose);
-    }
-
-    Task ExternalizeRequestPayloadsAsync<TRequest>(TRequest request, CancellationToken cancellation)
-    {
-        // Client -> sidecar
+        // Azure Managed Backend -> Backend Service
+        // Note: This interceptor is designed for backend_service.proto types, but since those types
+        // are not yet generated with the updated namespace, we'll use the existing orchestrator_service.proto types
+        // for now. The user should run refresh-protos.ps1 to generate the proper types.
         switch (request)
         {
             case P.CreateInstanceRequest r:
@@ -164,28 +59,34 @@ internal sealed class AzureBlobPayloadsInterceptor(IPayloadStore payloadStore, L
                 await this.MaybeExternalizeAsync(v => complete.Result = v, complete.Result, cancellation);
                 await this.MaybeExternalizeAsync(v => complete.Details = v, complete.Details, cancellation);
             }
+
             if (a.TerminateOrchestration is { } term)
             {
                 await this.MaybeExternalizeAsync(v => term.Reason = v, term.Reason, cancellation);
             }
+
             if (a.ScheduleTask is { } schedule)
             {
                 await this.MaybeExternalizeAsync(v => schedule.Input = v, schedule.Input, cancellation);
             }
+
             if (a.CreateSubOrchestration is { } sub)
             {
                 await this.MaybeExternalizeAsync(v => sub.Input = v, sub.Input, cancellation);
             }
+
             if (a.SendEvent is { } sendEvt)
             {
                 await this.MaybeExternalizeAsync(v => sendEvt.Data = v, sendEvt.Data, cancellation);
             }
+
             if (a.SendEntityMessage is { } entityMsg)
             {
                 if (entityMsg.EntityOperationSignaled is { } sig)
                 {
                     await this.MaybeExternalizeAsync(v => sig.Input = v, sig.Input, cancellation);
                 }
+
                 if (entityMsg.EntityOperationCalled is { } called)
                 {
                     await this.MaybeExternalizeAsync(v => called.Input = v, called.Input, cancellation);
@@ -207,6 +108,7 @@ internal sealed class AzureBlobPayloadsInterceptor(IPayloadStore payloadStore, L
                 }
             }
         }
+
         if (r.Actions != null)
         {
             foreach (P.OperationAction action in r.Actions)
@@ -215,6 +117,7 @@ internal sealed class AzureBlobPayloadsInterceptor(IPayloadStore payloadStore, L
                 {
                     await this.MaybeExternalizeAsync(v => sendSig.Input = v, sendSig.Input, cancellation);
                 }
+
                 if (action.StartNewOrchestration is { } start)
                 {
                     await this.MaybeExternalizeAsync(v => start.Input = v, start.Input, cancellation);
@@ -235,9 +138,123 @@ internal sealed class AzureBlobPayloadsInterceptor(IPayloadStore payloadStore, L
         }
     }
 
-    async Task ResolveResponsePayloadsAsync<TResponse>(TResponse response, CancellationToken cancellation)
+    async Task ExternalizeHistoryEventAsync(P.HistoryEvent e, CancellationToken cancellation)
     {
-        // Sidecar -> client/worker
+        switch (e.EventTypeCase)
+        {
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionStarted:
+                if (e.ExecutionStarted is { } es)
+                {
+                    await this.MaybeExternalizeAsync(v => es.Input = v, es.Input, cancellation);
+                }
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted:
+                if (e.ExecutionCompleted is { } ec)
+                {
+                    await this.MaybeExternalizeAsync(v => ec.Result = v, ec.Result, cancellation);
+                }
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.EventRaised:
+                if (e.EventRaised is { } er)
+                {
+                    await this.MaybeExternalizeAsync(v => er.Input = v, er.Input, cancellation);
+                }
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.TaskScheduled:
+                if (e.TaskScheduled is { } ts)
+                {
+                    await this.MaybeExternalizeAsync(v => ts.Input = v, ts.Input, cancellation);
+                }
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
+                if (e.TaskCompleted is { } tc)
+                {
+                    await this.MaybeExternalizeAsync(v => tc.Result = v, tc.Result, cancellation);
+                }
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated:
+                if (e.SubOrchestrationInstanceCreated is { } soc)
+                {
+                    await this.MaybeExternalizeAsync(v => soc.Input = v, soc.Input, cancellation);
+                }
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted:
+                if (e.SubOrchestrationInstanceCompleted is { } sox)
+                {
+                    await this.MaybeExternalizeAsync(v => sox.Result = v, sox.Result, cancellation);
+                }
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.EventSent:
+                if (e.EventSent is { } esent)
+                {
+                    await this.MaybeExternalizeAsync(v => esent.Input = v, esent.Input, cancellation);
+                }
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.GenericEvent:
+                if (e.GenericEvent is { } ge)
+                {
+                    await this.MaybeExternalizeAsync(v => ge.Data = v, ge.Data, cancellation);
+                }
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.ContinueAsNew:
+                if (e.ContinueAsNew is { } can)
+                {
+                    await this.MaybeExternalizeAsync(v => can.Input = v, can.Input, cancellation);
+                }
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated:
+                if (e.ExecutionTerminated is { } et)
+                {
+                    await this.MaybeExternalizeAsync(v => et.Input = v, et.Input, cancellation);
+                }
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionSuspended:
+                if (e.ExecutionSuspended is { } esus)
+                {
+                    await this.MaybeExternalizeAsync(v => esus.Input = v, esus.Input, cancellation);
+                }
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionResumed:
+                if (e.ExecutionResumed is { } eres)
+                {
+                    await this.MaybeExternalizeAsync(v => eres.Input = v, eres.Input, cancellation);
+                }
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.EntityOperationSignaled:
+                if (e.EntityOperationSignaled is { } eos)
+                {
+                    await this.MaybeExternalizeAsync(v => eos.Input = v, eos.Input, cancellation);
+                }
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.EntityOperationCalled:
+                if (e.EntityOperationCalled is { } eoc)
+                {
+                    await this.MaybeExternalizeAsync(v => eoc.Input = v, eoc.Input, cancellation);
+                }
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.EntityOperationCompleted:
+                if (e.EntityOperationCompleted is { } ecomp)
+                {
+                    await this.MaybeExternalizeAsync(v => ecomp.Output = v, ecomp.Output, cancellation);
+                }
+                break;
+            case P.HistoryEvent.EventTypeOneofCase.HistoryState:
+                if (e.HistoryState is { } hs && hs.OrchestrationState is { } os)
+                {
+                    await this.MaybeExternalizeAsync(v => os.Input = v, os.Input, cancellation);
+                    await this.MaybeExternalizeAsync(v => os.Output = v, os.Output, cancellation);
+                    await this.MaybeExternalizeAsync(v => os.CustomStatus = v, os.CustomStatus, cancellation);
+                }
+                break;
+        }
+    }
+
+    protected override async Task ResolveResponsePayloadsAsync<TResponse>(TResponse response, CancellationToken cancellation)
+    {
+        // Backend Service -> Azure Managed Backend
+        // Note: This interceptor is designed for backend_service.proto types, but since those types
+        // are not yet generated with the updated namespace, we'll use the existing orchestrator_service.proto types
+        // for now. The user should run refresh-protos.ps1 to generate the proper types.
         switch (response)
         {
             case P.GetInstanceResponse r when r.OrchestrationState is { } s:
@@ -258,7 +275,6 @@ internal sealed class AzureBlobPayloadsInterceptor(IPayloadStore payloadStore, L
                     await this.MaybeResolveAsync(v => s.Output = v, s.Output, cancellation);
                     await this.MaybeResolveAsync(v => s.CustomStatus = v, s.CustomStatus, cancellation);
                 }
-
                 break;
             case P.GetEntityResponse r when r.Entity is { } em:
                 await this.MaybeResolveAsync(v => em.SerializedState = v, em.SerializedState, cancellation);
@@ -315,7 +331,6 @@ internal sealed class AzureBlobPayloadsInterceptor(IPayloadStore payloadStore, L
                         }
                     }
                 }
-
                 break;
         }
     }
@@ -329,21 +344,18 @@ internal sealed class AzureBlobPayloadsInterceptor(IPayloadStore payloadStore, L
                 {
                     await this.MaybeResolveAsync(v => es.Input = v, es.Input, cancellation);
                 }
-
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted:
                 if (e.ExecutionCompleted is { } ec)
                 {
                     await this.MaybeResolveAsync(v => ec.Result = v, ec.Result, cancellation);
                 }
-
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EventRaised:
                 if (e.EventRaised is { } er)
                 {
                     await this.MaybeResolveAsync(v => er.Input = v, er.Input, cancellation);
                 }
-
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TaskScheduled:
                 if (e.TaskScheduled is { } ts)
@@ -431,65 +443,6 @@ internal sealed class AzureBlobPayloadsInterceptor(IPayloadStore payloadStore, L
                     await this.MaybeResolveAsync(v => os.CustomStatus = v, os.CustomStatus, cancellation);
                 }
                 break;
-        }
-    }
-
-    Task MaybeExternalizeAsync(Action<string?> assign, string? value, CancellationToken cancellation)
-    {
-        if (string.IsNullOrEmpty(value))
-        {
-            return Task.CompletedTask;
-        }
-
-        int size = Encoding.UTF8.GetByteCount(value);
-        if (size < this.options.ExternalizeThresholdBytes)
-        {
-            return Task.CompletedTask;
-        }
-
-        return UploadAsync();
-
-        async Task UploadAsync()
-        {
-            string token = await this.payloadStore.UploadAsync(Encoding.UTF8.GetBytes(value), cancellation);
-            assign(token);
-        }
-    }
-
-    async Task MaybeResolveAsync(Action<string?> assign, string? value, CancellationToken cancellation)
-    {
-        if (string.IsNullOrEmpty(value) || !this.payloadStore.IsKnownPayloadToken(value))
-        {
-            return;
-        }
-
-        string resolved = await this.payloadStore.DownloadAsync(value, cancellation);
-        assign(resolved);
-    }
-
-    sealed class TransformingStreamReader<T> : IAsyncStreamReader<T>
-    {
-        readonly IAsyncStreamReader<T> inner;
-        readonly Func<T, CancellationToken, ValueTask<T>> transform;
-
-        public TransformingStreamReader(IAsyncStreamReader<T> inner, Func<T, CancellationToken, ValueTask<T>> transform)
-        {
-            this.inner = inner;
-            this.transform = transform;
-        }
-
-        public T Current { get; private set; } = default!;
-
-        public async Task<bool> MoveNext(CancellationToken cancellationToken)
-        {
-            bool hasNext = await this.inner.MoveNext(cancellationToken);
-            if (!hasNext)
-            {
-                return false;
-            }
-
-            this.Current = await this.transform(this.inner.Current, cancellationToken);
-            return true;
         }
     }
 }

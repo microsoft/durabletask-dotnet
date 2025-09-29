@@ -44,7 +44,7 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
                 LargePayloadStorageOptions opts = monitor.Get(builder.Name);
                 if (opt.Channel is not null)
                 {
-                    Grpc.Core.CallInvoker invoker = opt.Channel.Intercept(new AzureBlobPayloadsInterceptor(store, opts));
+                    Grpc.Core.CallInvoker invoker = opt.Channel.Intercept(new AzureBlobPayloadsSideCarInterceptor(store, opts));
                     opt.CallInvoker = invoker;
 
                     // Ensure client uses the intercepted invoker path
@@ -52,7 +52,7 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
                 }
                 else if (opt.CallInvoker is not null)
                 {
-                    opt.CallInvoker = opt.CallInvoker.Intercept(new AzureBlobPayloadsInterceptor(store, opts));
+                    opt.CallInvoker = opt.CallInvoker.Intercept(new AzureBlobPayloadsSideCarInterceptor(store, opts));
                 }
                 else
                 {

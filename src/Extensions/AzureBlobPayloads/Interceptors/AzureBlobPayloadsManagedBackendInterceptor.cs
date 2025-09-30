@@ -11,7 +11,7 @@ namespace Microsoft.DurableTask;
 /// gRPC interceptor that externalizes large payloads to an <see cref="IPayloadStore"/> on requests
 /// and resolves known payload tokens on responses for Azure Managed Backend.
 /// </summary>
-public sealed class AzureBlobPayloadsAzureManagedBackendInterceptor(IPayloadStore payloadStore, LargePayloadStorageOptions options) 
+public sealed class AzureBlobPayloadsManagedBackendInterceptor(IPayloadStore payloadStore, LargePayloadStorageOptions options) 
     : BasePayloadInterceptor<object, object>(payloadStore, options)
 {
     protected override Task ExternalizeRequestPayloadsAsync<TRequest>(TRequest request, CancellationToken cancellation)

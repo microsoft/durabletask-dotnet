@@ -759,37 +759,56 @@ sealed partial class GrpcDurableTaskWorker
 
             OrchestrationInstance instance = request.OrchestrationInstance.ToCore();
             string rawInput = request.Input;
-
             int inputSize = rawInput != null ? Encoding.UTF8.GetByteCount(rawInput) : 0;
             this.Logger.ReceivedActivityRequest(request.Name, request.TaskId, instance.InstanceId, inputSize);
 
+            P.TaskFailureDetails? failureDetails = null;
             TaskContext innerContext = new(instance);
             TaskName name = new(request.Name);
             string? output = null;
-            P.TaskFailureDetails? failureDetails = null;
-            try
+
+            failureDetails = EvaluateOrchestrationVersioning(this.worker.workerOptions.Versioning, request.Version, out bool versioningFailed);
+            if (!versioningFailed)
             {
-                await using AsyncServiceScope scope = this.worker.services.CreateAsyncScope();
-                if (this.worker.Factory.TryCreateActivity(name, scope.ServiceProvider, out ITaskActivity? activity))
+                try
                 {
-                    // Both the factory invocation and the RunAsync could involve user code and need to be handled as
-                    // part of try/catch.
-                    TaskActivity shim = this.shimFactory.CreateActivity(name, activity);
-                    output = await shim.RunAsync(innerContext, request.Input);
-                }
-                else
-                {
-                    failureDetails = new P.TaskFailureDetails
+                    await using AsyncServiceScope scope = this.worker.services.CreateAsyncScope();
+                    if (this.worker.Factory.TryCreateActivity(name, scope.ServiceProvider, out ITaskActivity? activity))
                     {
-                        ErrorType = "ActivityTaskNotFound",
-                        ErrorMessage = $"No activity task named '{name}' was found.",
-                        IsNonRetriable = true,
-                    };
+                        // Both the factory invocation and the RunAsync could involve user code and need to be handled as
+                        // part of try/catch.
+                        TaskActivity shim = this.shimFactory.CreateActivity(name, activity);
+                        output = await shim.RunAsync(innerContext, request.Input);
+                    }
+                    else
+                    {
+                        failureDetails = new P.TaskFailureDetails
+                        {
+                            ErrorType = "ActivityTaskNotFound",
+                            ErrorMessage = $"No activity task named '{name}' was found.",
+                            IsNonRetriable = true,
+                        };
+                    }
+                }
+                catch (Exception applicationException)
+                {
+                    failureDetails = applicationException.ToTaskFailureDetails();
                 }
             }
-            catch (Exception applicationException)
+            else
             {
-                failureDetails = applicationException.ToTaskFailureDetails();
+                if (this.worker.workerOptions.Versioning?.FailureStrategy == DurableTaskWorkerOptions.VersionFailureStrategy.Reject)
+                {
+                    this.Logger.AbandoningActivityWorkItem(instance.InstanceId, request.Name, request.TaskId, completionToken);
+                    await this.client.AbandonTaskActivityWorkItemAsync(
+                        new P.AbandonActivityTaskRequest
+                        {
+                            CompletionToken = completionToken,
+                        },
+                        cancellationToken: cancellation);
+                }
+
+                return;
             }
 
             int outputSizeInBytes = 0;

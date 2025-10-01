@@ -6,7 +6,7 @@ namespace Microsoft.DurableTask;
 /// <summary>
 /// Abstraction for storing and retrieving large payloads out-of-band.
 /// </summary>
-public interface IPayloadStore
+public abstract class IPayloadStore
 {
     /// <summary>
     /// Uploads a payload and returns an opaque reference token that can be embedded in orchestration messages.
@@ -14,7 +14,7 @@ public interface IPayloadStore
     /// <param name="payloadBytes">The payload bytes.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Opaque reference token.</returns>
-    Task<string> UploadAsync(ReadOnlyMemory<byte> payloadBytes, CancellationToken cancellationToken);
+    public abstract Task<string> UploadAsync(ReadOnlyMemory<byte> payloadBytes, CancellationToken cancellationToken);
 
     /// <summary>
     /// Downloads the payload referenced by the token.
@@ -22,7 +22,7 @@ public interface IPayloadStore
     /// <param name="token">The opaque reference token.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Payload string.</returns>
-    Task<string> DownloadAsync(string token, CancellationToken cancellationToken);
+    public abstract Task<string> DownloadAsync(string token, CancellationToken cancellationToken);
 
     /// <summary>
     /// Returns true if the specified value appears to be a token understood by this store.
@@ -30,5 +30,5 @@ public interface IPayloadStore
     /// </summary>
     /// <param name="value">The value to check.</param>
     /// <returns><c>true</c> if the value is a token issued by this store; otherwise, <c>false</c>.</returns>
-    bool IsKnownPayloadToken(string value);
+    public abstract bool IsKnownPayloadToken(string value);
 }

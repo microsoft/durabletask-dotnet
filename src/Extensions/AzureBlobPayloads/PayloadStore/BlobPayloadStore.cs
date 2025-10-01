@@ -62,7 +62,7 @@ internal sealed class BlobPayloadStore : IPayloadStore
     }
 
     /// <inheritdoc/>
-    public async Task<string> UploadAsync(ReadOnlyMemory<byte> payloadBytes, CancellationToken cancellationToken)
+    public override async Task<string> UploadAsync(ReadOnlyMemory<byte> payloadBytes, CancellationToken cancellationToken)
     {
         // One blob per payload using GUID-based name for uniqueness (stable across retries)
         string timestamp = DateTimeOffset.UtcNow.ToString("yyyy/MM/dd/HH/mm/ss", CultureInfo.InvariantCulture);
@@ -107,7 +107,7 @@ internal sealed class BlobPayloadStore : IPayloadStore
     }
 
     /// <inheritdoc/>
-    public async Task<string> DownloadAsync(string token, CancellationToken cancellationToken)
+    public override async Task<string> DownloadAsync(string token, CancellationToken cancellationToken)
     {
         (string container, string name) = DecodeToken(token);
         if (!string.Equals(container, this.containerClient.Name, StringComparison.Ordinal))
@@ -139,7 +139,7 @@ internal sealed class BlobPayloadStore : IPayloadStore
     }
 
     /// <inheritdoc/>
-    public bool IsKnownPayloadToken(string value)
+    public override bool IsKnownPayloadToken(string value)
     {
         if (string.IsNullOrEmpty(value))
         {

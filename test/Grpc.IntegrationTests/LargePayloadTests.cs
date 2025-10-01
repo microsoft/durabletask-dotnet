@@ -623,7 +623,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         int downloadCount;
         public int DownloadCount => this.downloadCount;
 
-        public Task<string> UploadAsync(ReadOnlyMemory<byte> payloadBytes, CancellationToken cancellationToken)
+        public override Task<string> UploadAsync(ReadOnlyMemory<byte> payloadBytes, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref this.uploadCount);
             string json = System.Text.Encoding.UTF8.GetString(payloadBytes.Span);
@@ -633,13 +633,13 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             return Task.FromResult(token);
         }
 
-        public Task<string> DownloadAsync(string token, CancellationToken cancellationToken)
+        public override Task<string> DownloadAsync(string token, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref this.downloadCount);
             return Task.FromResult(this.tokenToPayload[token]);
         }
 
-        public bool IsKnownPayloadToken(string value)
+        public override bool IsKnownPayloadToken(string value)
         {
             return value.StartsWith(TokenPrefix, StringComparison.Ordinal);
         }

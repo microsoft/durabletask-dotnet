@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask;
 using Microsoft.DurableTask.Converters;
 using Microsoft.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,26 +33,20 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                         return Task.FromResult(input + input);
                     }));
 
-                // Enable externalization on the worker
-                worker.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024; // small threshold to force externalization for test data
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
+                worker.UseExternalizedPayloads();
 
-                // Override store with in-memory test double
                 worker.Services.AddSingleton<IPayloadStore>(fakeStore);
             },
             client =>
             {
-                // Enable externalization on the client
-                client.UseExternalizedPayloads(opts =>
+                // Enable externalization on the client (shared store configuration)
+                client.Services.AddExternalizedPayloadStore(opts =>
                 {
                     opts.ExternalizeThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
+                client.UseExternalizedPayloads();
 
                 // Override store with in-memory test double
                 client.Services.AddSingleton<IPayloadStore>(fakeStore);
@@ -114,23 +109,12 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                         return largeOutput;
                     }));
 
-                worker.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024;
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
+                worker.UseExternalizedPayloads();
                 worker.Services.AddSingleton<IPayloadStore>(store);
             },
             client =>
             {
-                // Enable client to resolve outputs on query
-                client.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024;
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
+                client.UseExternalizedPayloads();
                 client.Services.AddSingleton<IPayloadStore>(store);
             });
 
@@ -171,12 +155,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             client =>
             {
                 // Enable externalization on the client and use the in-memory store to track uploads
-                client.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024; // 1KB threshold to force externalization
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
+                client.UseExternalizedPayloads();
                 client.Services.AddSingleton<IPayloadStore>(clientStore);
             });
 
@@ -253,22 +232,12 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                         return null;
                     }));
 
-                worker.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024;
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
+                worker.UseExternalizedPayloads();
                 worker.Services.AddSingleton<IPayloadStore>(store);
             },
             client =>
             {
-                client.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024;
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
+                client.UseExternalizedPayloads();
                 client.Services.AddSingleton<IPayloadStore>(store);
             });
 
@@ -318,22 +287,12 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                         }
                     }));
 
-                worker.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024;
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
+                worker.UseExternalizedPayloads();
                 worker.Services.AddSingleton<IPayloadStore>(workerStore);
             },
             client =>
             {
-                client.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024;
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
+                client.UseExternalizedPayloads();
                 client.Services.AddSingleton<IPayloadStore>(workerStore);
             });
 
@@ -376,22 +335,12 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                     .AddOrchestratorFunc<string, string>(child, (ctx, input) => Task.FromResult(input))
                     .AddActivityFunc<string>(activity, (ctx) => Task.FromResult(largeActivityOutput)));
 
-                worker.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024;
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
+                worker.UseExternalizedPayloads();
                 worker.Services.AddSingleton<IPayloadStore>(workerStore);
             },
             client =>
             {
-                client.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024;
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
+                client.UseExternalizedPayloads();
                 client.Services.AddSingleton<IPayloadStore>(workerStore);
             });
 
@@ -425,22 +374,12 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                     orch,
                     (ctx, input) => Task.FromResult(largeOut)));
 
-                worker.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024;
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
+                worker.UseExternalizedPayloads();
                 worker.Services.AddSingleton<IPayloadStore>(workerStore);
             },
             client =>
             {
-                client.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024;
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
+                client.UseExternalizedPayloads();
                 client.Services.AddSingleton<IPayloadStore>(workerStore);
             });
 
@@ -484,12 +423,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                         (ctx, _) => ctx.CallActivityAsync<string>(activityName, largeParam))
                     .AddActivityFunc<string, string>(activityName, (ctx, input) => input + input));
 
-                worker.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024; // force externalization for activity input
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
+                worker.UseExternalizedPayloads();
                 worker.Services.AddSingleton<IPayloadStore>(workerStore);
             },
             client => { /* client not needed for externalization path here */ });
@@ -529,22 +463,12 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                     orchestratorName,
                     (ctx, input) => Task.FromResult(input)));
 
-                worker.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 2 * 1024 * 1024; // 2MB, higher than payload
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
+                worker.UseExternalizedPayloads();
                 worker.Services.AddSingleton<IPayloadStore>(workerStore);
             },
             client =>
             {
-                client.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 2 * 1024 * 1024; // 2MB, higher than payload
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
+                client.UseExternalizedPayloads();
                 client.Services.AddSingleton<IPayloadStore>(clientStore);
             });
 
@@ -578,22 +502,12 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                     orchestratorName,
                     async ctx => await ctx.WaitForExternalEvent<string>(EventName)));
 
-                worker.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024; // force externalization
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
+                worker.UseExternalizedPayloads();
                 worker.Services.AddSingleton<IPayloadStore>(fakeStore);
             },
             client =>
             {
-                client.UseExternalizedPayloads(opts =>
-                {
-                    opts.ExternalizeThresholdBytes = 1024; // force externalization
-                    opts.ContainerName = "test";
-                    opts.ConnectionString = "UseDevelopmentStorage=true";
-                });
+                client.UseExternalizedPayloads();
                 client.Services.AddSingleton<IPayloadStore>(fakeStore);
             });
 

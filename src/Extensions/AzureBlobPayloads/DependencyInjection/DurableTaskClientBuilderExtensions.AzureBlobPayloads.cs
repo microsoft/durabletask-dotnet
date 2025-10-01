@@ -17,29 +17,6 @@ namespace Microsoft.DurableTask;
 public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
 {
     /// <summary>
-    /// Enables externalized payload storage using Azure Blob Storage for the specified client builder.
-    /// </summary>
-    /// <param name="builder">The builder to configure.</param>
-    /// <param name="configure">The callback to configure the storage options.</param>
-    /// <returns>The original builder, for call chaining.</returns>
-    public static IDurableTaskClientBuilder UseExternalizedPayloads(
-        this IDurableTaskClientBuilder builder,
-        Action<LargePayloadStorageOptions> configure)
-    {
-        Check.NotNull(builder);
-        Check.NotNull(configure);
-
-        builder.Services.Configure(builder.Name, configure);
-        builder.Services.AddSingleton<IPayloadStore>(sp =>
-        {
-            LargePayloadStorageOptions opts = sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(builder.Name);
-            return new BlobPayloadStore(opts);
-        });
-
-        return UseExternalizedPayloadsCore(builder);
-    }
-
-    /// <summary>
     /// Enables externalized payload storage using a pre-configured shared payload store.
     /// This overload helps ensure client and worker use the same configuration.
     /// </summary>

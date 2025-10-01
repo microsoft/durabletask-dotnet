@@ -5,7 +5,7 @@ syntax = "proto3";
 
 package durabletask.protos.backend.v1;
 
-option csharp_namespace = "Microsoft.DurableTask.AzureManagedBackend.Protobuf";
+option csharp_namespace = "Microsoft.DurableTask.Protobuf";
 option java_package = "com.microsoft.durabletask.implementation.protobuf";
 option go_package = "github.com/microsoft/durabletask-protobuf/internal/protos";
 

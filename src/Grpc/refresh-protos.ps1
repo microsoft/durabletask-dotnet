@@ -18,7 +18,7 @@ $commitId = $commitDetails.sha
 
 # These are the proto files we need to download from the durabletask-protobuf repository.
 $protoFileNames = @(
-    "orchestrator_service.proto", "backend_service.proto"
+    "orchestrator_service.proto","backend_service.proto"
 )
 
 # Download each proto file to the local directory using the above commit ID
@@ -35,14 +35,6 @@ foreach ($protoFileName in $protoFileNames) {
     }
 
     Write-Output "Downloaded $url to $outputFile"
-}
-
-# Post-process backend_service.proto to update the namespace
-$backendServiceFile = "$PSScriptRoot\backend_service.proto"
-if (Test-Path $backendServiceFile) {
-    $content = Get-Content $backendServiceFile -Raw
-    $content = $content -replace 'option csharp_namespace = "Microsoft\.DurableTask\.Protobuf";', 'option csharp_namespace = "Microsoft.DurableTask.AzureManagedBackend.Protobuf";'
-    Set-Content -Path $backendServiceFile -Value $content -NoNewline
 }
 
 # Log the commit ID and the URLs of the downloaded proto files to a versions file.

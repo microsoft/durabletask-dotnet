@@ -3,7 +3,7 @@
 
 using Grpc.Core.Interceptors;
 
-using P = Microsoft.DurableTask.Protobuf;
+using P = Microsoft.DurableTask.AzureManagedBackend.Protobuf;
 
 namespace Microsoft.DurableTask;
 

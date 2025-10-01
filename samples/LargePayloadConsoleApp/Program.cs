@@ -21,25 +21,30 @@ HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 string schedulerConnectionString = builder.Configuration.GetValue<string>("DURABLE_TASK_SCHEDULER_CONNECTION_STRING")
     ?? throw new InvalidOperationException("Missing required configuration 'DURABLE_TASK_SCHEDULER_CONNECTION_STRING'");
 
-// Configure Durable Task client with Durable Task Scheduler and externalized payloads
+// 1) Register shared payload store ONCE
+builder.Services.AddExternalizedPayloadStore(opts =>
+{
+    // Keep threshold small to force externalization for demo purposes
+    opts.ExternalizeThresholdBytes = 1024; // 1KB
+    opts.ConnectionString = builder.Configuration.GetValue<string>("DURABLETASK_STORAGE") ?? "UseDevelopmentStorage=true";
+    opts.ContainerName = builder.Configuration.GetValue<string>("DURABLETASK_PAYLOAD_CONTAINER");
+});
+
+// 2) Configure Durable Task client
 builder.Services.AddDurableTaskClient(b =>
 {
     b.UseDurableTaskScheduler(schedulerConnectionString);
-    // Ensure entity APIs are enabled for the client
     b.Configure(o => o.EnableEntitySupport = true);
-    b.UseExternalizedPayloads(opts =>
-    {
-        // Keep threshold small to force externalization for demo purposes
-        opts.ExternalizeThresholdBytes = 1024; // 1KB
-        opts.ConnectionString = builder.Configuration.GetValue<string>("DURABLETASK_STORAGE") ?? "UseDevelopmentStorage=true";
-        opts.ContainerName = builder.Configuration.GetValue<string>("DURABLETASK_PAYLOAD_CONTAINER");
-    });
+
+    // Use shared store (no duplication of options)
+    b.UseExternalizedPayloads();
 });
 
-// Configure Durable Task worker with tasks and externalized payloads
+// 3) Configure Durable Task worker
 builder.Services.AddDurableTaskWorker(b =>
 {
     b.UseDurableTaskScheduler(schedulerConnectionString);
+
     b.AddTasks(tasks =>
     {
         // Orchestrator: call activity first, return its output (should equal original input)
@@ -57,7 +62,6 @@ builder.Services.AddDurableTaskWorker(b =>
                 return string.Empty;
             }
 
-            // If we ever see a token in the activity, externalization is not being resolved correctly.
             if (value.StartsWith("blob:v1:", StringComparison.Ordinal))
             {
                 throw new InvalidOperationException("Activity received a payload token instead of raw input.");
@@ -67,7 +71,6 @@ builder.Services.AddDurableTaskWorker(b =>
         });
 
         // Entity samples
-        // 1) Large entity operation input (worker externalizes input; entity receives resolved payload)
         tasks.AddOrchestratorFunc<object?, int>(
             "LargeEntityOperationInput",
             (ctx, _) => ctx.Entities.CallEntityAsync<int>(
@@ -76,7 +79,6 @@ builder.Services.AddDurableTaskWorker(b =>
                 input: new string('E', 700 * 1024)));
         tasks.AddEntity<EchoLengthEntity>(nameof(EchoLengthEntity));
 
-        // 2) Large entity operation output (worker externalizes output; orchestrator reads resolved payload)
         tasks.AddOrchestratorFunc<object?, int>(
             "LargeEntityOperationOutput",
             async (ctx, _) => (await ctx.Entities.CallEntityAsync<string>(
@@ -85,7 +87,6 @@ builder.Services.AddDurableTaskWorker(b =>
                 input: 850 * 1024)).Length);
         tasks.AddEntity<LargeResultEntity>(nameof(LargeResultEntity));
 
-        // 3) Large entity state (worker externalizes state; client resolves on query)
         tasks.AddOrchestratorFunc<object?, object?>(
             "LargeEntityState",
             async (ctx, _) =>
@@ -98,13 +99,10 @@ builder.Services.AddDurableTaskWorker(b =>
             });
         tasks.AddEntity<StateEntity>(nameof(StateEntity));
     });
-    b.UseExternalizedPayloads(opts =>
-    {
-        opts.ExternalizeThresholdBytes = 1024; // mirror client
-        opts.ConnectionString = builder.Configuration.GetValue<string>("DURABLETASK_STORAGE") ?? "UseDevelopmentStorage=true";
-        opts.ContainerName = builder.Configuration.GetValue<string>("DURABLETASK_PAYLOAD_CONTAINER");
-    });
-    // Ensure entity APIs are enabled for the worker
+
+    // Use shared store (no duplication of options)
+    b.UseExternalizedPayloads();
+
     b.Configure(o => o.EnableEntitySupport = true);
 });
 

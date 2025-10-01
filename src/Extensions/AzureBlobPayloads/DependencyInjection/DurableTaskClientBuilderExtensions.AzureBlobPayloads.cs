@@ -36,6 +36,24 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
             return new BlobPayloadStore(opts);
         });
 
+        return UseExternalizedPayloadsCore(builder);
+    }
+
+    /// <summary>
+    /// Enables externalized payload storage using a pre-configured shared payload store.
+    /// This overload helps ensure client and worker use the same configuration.
+    /// </summary>
+    /// <param name="builder">The builder to configure.</param>
+    /// <returns>The original builder, for call chaining.</returns>
+    public static IDurableTaskClientBuilder UseExternalizedPayloads(
+        this IDurableTaskClientBuilder builder)
+    {
+        Check.NotNull(builder);
+        return UseExternalizedPayloadsCore(builder);
+    }
+
+    static IDurableTaskClientBuilder UseExternalizedPayloadsCore(IDurableTaskClientBuilder builder)
+    {
         // Wrap the gRPC CallInvoker with our interceptor when using the gRPC client
         builder.Services
             .AddOptions<GrpcDurableTaskClientOptions>(builder.Name)

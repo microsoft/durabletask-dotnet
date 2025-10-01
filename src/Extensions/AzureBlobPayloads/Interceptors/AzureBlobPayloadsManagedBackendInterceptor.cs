@@ -1,9 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Grpc.Core.Interceptors;
-
-using P = Microsoft.DurableTask.Protobuf;
+using P = Microsoft.DurableTask.AzureManagedBackend.Protobuf;
 
 namespace Microsoft.DurableTask;
 
@@ -11,9 +9,10 @@ namespace Microsoft.DurableTask;
 /// gRPC interceptor that externalizes large payloads to an <see cref="IPayloadStore"/> on requests
 /// and resolves known payload tokens on responses for Azure Managed Backend.
 /// </summary>
-public sealed class AzureBlobPayloadsManagedBackendInterceptor(IPayloadStore payloadStore, LargePayloadStorageOptions options) 
+public sealed class AzureBlobPayloadsManagedBackendInterceptor(IPayloadStore payloadStore, LargePayloadStorageOptions options)
     : BasePayloadInterceptor<object, object>(payloadStore, options)
 {
+    /// <inheritdoc/>
     protected override Task ExternalizeRequestPayloadsAsync<TRequest>(TRequest request, CancellationToken cancellation)
     {
         // Azure Managed Backend -> Backend Service
@@ -147,96 +146,112 @@ public sealed class AzureBlobPayloadsManagedBackendInterceptor(IPayloadStore pay
                 {
                     await this.MaybeExternalizeAsync(v => es.Input = v, es.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted:
                 if (e.ExecutionCompleted is { } ec)
                 {
                     await this.MaybeExternalizeAsync(v => ec.Result = v, ec.Result, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EventRaised:
                 if (e.EventRaised is { } er)
                 {
                     await this.MaybeExternalizeAsync(v => er.Input = v, er.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TaskScheduled:
                 if (e.TaskScheduled is { } ts)
                 {
                     await this.MaybeExternalizeAsync(v => ts.Input = v, ts.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
                 if (e.TaskCompleted is { } tc)
                 {
                     await this.MaybeExternalizeAsync(v => tc.Result = v, tc.Result, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated:
                 if (e.SubOrchestrationInstanceCreated is { } soc)
                 {
                     await this.MaybeExternalizeAsync(v => soc.Input = v, soc.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted:
                 if (e.SubOrchestrationInstanceCompleted is { } sox)
                 {
                     await this.MaybeExternalizeAsync(v => sox.Result = v, sox.Result, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EventSent:
                 if (e.EventSent is { } esent)
                 {
                     await this.MaybeExternalizeAsync(v => esent.Input = v, esent.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.GenericEvent:
                 if (e.GenericEvent is { } ge)
                 {
                     await this.MaybeExternalizeAsync(v => ge.Data = v, ge.Data, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ContinueAsNew:
                 if (e.ContinueAsNew is { } can)
                 {
                     await this.MaybeExternalizeAsync(v => can.Input = v, can.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated:
                 if (e.ExecutionTerminated is { } et)
                 {
                     await this.MaybeExternalizeAsync(v => et.Input = v, et.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionSuspended:
                 if (e.ExecutionSuspended is { } esus)
                 {
                     await this.MaybeExternalizeAsync(v => esus.Input = v, esus.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionResumed:
                 if (e.ExecutionResumed is { } eres)
                 {
                     await this.MaybeExternalizeAsync(v => eres.Input = v, eres.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EntityOperationSignaled:
                 if (e.EntityOperationSignaled is { } eos)
                 {
                     await this.MaybeExternalizeAsync(v => eos.Input = v, eos.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EntityOperationCalled:
                 if (e.EntityOperationCalled is { } eoc)
                 {
                     await this.MaybeExternalizeAsync(v => eoc.Input = v, eoc.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EntityOperationCompleted:
                 if (e.EntityOperationCompleted is { } ecomp)
                 {
                     await this.MaybeExternalizeAsync(v => ecomp.Output = v, ecomp.Output, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.HistoryState:
                 if (e.HistoryState is { } hs && hs.OrchestrationState is { } os)
@@ -245,10 +260,12 @@ public sealed class AzureBlobPayloadsManagedBackendInterceptor(IPayloadStore pay
                     await this.MaybeExternalizeAsync(v => os.Output = v, os.Output, cancellation);
                     await this.MaybeExternalizeAsync(v => os.CustomStatus = v, os.CustomStatus, cancellation);
                 }
+
                 break;
         }
     }
 
+    /// <inheritdoc/>
     protected override async Task ResolveResponsePayloadsAsync<TResponse>(TResponse response, CancellationToken cancellation)
     {
         // Backend Service -> Azure Managed Backend
@@ -267,6 +284,7 @@ public sealed class AzureBlobPayloadsManagedBackendInterceptor(IPayloadStore pay
                 {
                     await this.ResolveEventPayloadsAsync(e, cancellation);
                 }
+
                 break;
             case P.QueryInstancesResponse r:
                 foreach (P.OrchestrationState s in r.OrchestrationState)
@@ -275,6 +293,7 @@ public sealed class AzureBlobPayloadsManagedBackendInterceptor(IPayloadStore pay
                     await this.MaybeResolveAsync(v => s.Output = v, s.Output, cancellation);
                     await this.MaybeResolveAsync(v => s.CustomStatus = v, s.CustomStatus, cancellation);
                 }
+
                 break;
             case P.GetEntityResponse r when r.Entity is { } em:
                 await this.MaybeResolveAsync(v => em.SerializedState = v, em.SerializedState, cancellation);
@@ -284,6 +303,7 @@ public sealed class AzureBlobPayloadsManagedBackendInterceptor(IPayloadStore pay
                 {
                     await this.MaybeResolveAsync(v => em.SerializedState = v, em.SerializedState, cancellation);
                 }
+
                 break;
             case P.WorkItem wi:
                 // Resolve activity input
@@ -331,6 +351,7 @@ public sealed class AzureBlobPayloadsManagedBackendInterceptor(IPayloadStore pay
                         }
                     }
                 }
+
                 break;
         }
     }
@@ -344,96 +365,112 @@ public sealed class AzureBlobPayloadsManagedBackendInterceptor(IPayloadStore pay
                 {
                     await this.MaybeResolveAsync(v => es.Input = v, es.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted:
                 if (e.ExecutionCompleted is { } ec)
                 {
                     await this.MaybeResolveAsync(v => ec.Result = v, ec.Result, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EventRaised:
                 if (e.EventRaised is { } er)
                 {
                     await this.MaybeResolveAsync(v => er.Input = v, er.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TaskScheduled:
                 if (e.TaskScheduled is { } ts)
                 {
                     await this.MaybeResolveAsync(v => ts.Input = v, ts.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
                 if (e.TaskCompleted is { } tc)
                 {
                     await this.MaybeResolveAsync(v => tc.Result = v, tc.Result, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated:
                 if (e.SubOrchestrationInstanceCreated is { } soc)
                 {
                     await this.MaybeResolveAsync(v => soc.Input = v, soc.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted:
                 if (e.SubOrchestrationInstanceCompleted is { } sox)
                 {
                     await this.MaybeResolveAsync(v => sox.Result = v, sox.Result, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EventSent:
                 if (e.EventSent is { } esent)
                 {
                     await this.MaybeResolveAsync(v => esent.Input = v, esent.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.GenericEvent:
                 if (e.GenericEvent is { } ge)
                 {
                     await this.MaybeResolveAsync(v => ge.Data = v, ge.Data, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ContinueAsNew:
                 if (e.ContinueAsNew is { } can)
                 {
                     await this.MaybeResolveAsync(v => can.Input = v, can.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated:
                 if (e.ExecutionTerminated is { } et)
                 {
                     await this.MaybeResolveAsync(v => et.Input = v, et.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionSuspended:
                 if (e.ExecutionSuspended is { } esus)
                 {
                     await this.MaybeResolveAsync(v => esus.Input = v, esus.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionResumed:
                 if (e.ExecutionResumed is { } eres)
                 {
                     await this.MaybeResolveAsync(v => eres.Input = v, eres.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EntityOperationSignaled:
                 if (e.EntityOperationSignaled is { } eos)
                 {
                     await this.MaybeResolveAsync(v => eos.Input = v, eos.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EntityOperationCalled:
                 if (e.EntityOperationCalled is { } eoc)
                 {
                     await this.MaybeResolveAsync(v => eoc.Input = v, eoc.Input, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EntityOperationCompleted:
                 if (e.EntityOperationCompleted is { } ecomp)
                 {
                     await this.MaybeResolveAsync(v => ecomp.Output = v, ecomp.Output, cancellation);
                 }
+
                 break;
             case P.HistoryEvent.EventTypeOneofCase.HistoryState:
                 if (e.HistoryState is { } hs && hs.OrchestrationState is { } os)
@@ -442,6 +479,7 @@ public sealed class AzureBlobPayloadsManagedBackendInterceptor(IPayloadStore pay
                     await this.MaybeResolveAsync(v => os.Output = v, os.Output, cancellation);
                     await this.MaybeResolveAsync(v => os.CustomStatus = v, os.CustomStatus, cancellation);
                 }
+
                 break;
         }
     }

@@ -21,10 +21,10 @@
     <ProjectReference Include="..\..\Worker\Core\Worker.csproj" />
     <ProjectReference Include="..\..\Client\Grpc\Client.Grpc.csproj" />
     <ProjectReference Include="..\..\Worker\Grpc\Worker.Grpc.csproj" />
+    <ProjectReference Include="..\..\Grpc.AzureManagedBackend\Grpc.AzureManagedBackend.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <SharedSection Include="Core" />
   </ItemGroup>
-
 </Project>

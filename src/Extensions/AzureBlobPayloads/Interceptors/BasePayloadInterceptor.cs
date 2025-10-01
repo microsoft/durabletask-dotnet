@@ -20,6 +20,11 @@ public abstract class BasePayloadInterceptor<TRequestNamespace, TResponseNamespa
     readonly IPayloadStore payloadStore;
     readonly LargePayloadStorageOptions options;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BasePayloadInterceptor{TRequestNamespace, TResponseNamespace}"/> class.
+    /// </summary>
+    /// <param name="payloadStore">The payload store.</param>
+    /// <param name="options">The options.</param>
     protected BasePayloadInterceptor(IPayloadStore payloadStore, LargePayloadStorageOptions options)
     {
         this.payloadStore = payloadStore;

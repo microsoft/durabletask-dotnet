@@ -11,9 +11,10 @@ namespace Microsoft.DurableTask;
 /// gRPC interceptor that externalizes large payloads to an <see cref="IPayloadStore"/> on requests
 /// and resolves known payload tokens on responses for SideCar.
 /// </summary>
-public sealed class AzureBlobPayloadsSideCarInterceptor(IPayloadStore payloadStore, LargePayloadStorageOptions options) 
+public sealed class AzureBlobPayloadsSideCarInterceptor(IPayloadStore payloadStore, LargePayloadStorageOptions options)
     : BasePayloadInterceptor<object, object>(payloadStore, options)
 {
+    /// <inheritdoc/>
     protected override Task ExternalizeRequestPayloadsAsync<TRequest>(TRequest request, CancellationToken cancellation)
     {
         // Client -> sidecar
@@ -44,6 +45,94 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(IPayloadStore payloadSto
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    protected override async Task ResolveResponsePayloadsAsync<TResponse>(TResponse response, CancellationToken cancellation)
+    {
+        // Sidecar -> client/worker
+        switch (response)
+        {
+            case P.GetInstanceResponse r when r.OrchestrationState is { } s:
+                await this.MaybeResolveAsync(v => s.Input = v, s.Input, cancellation);
+                await this.MaybeResolveAsync(v => s.Output = v, s.Output, cancellation);
+                await this.MaybeResolveAsync(v => s.CustomStatus = v, s.CustomStatus, cancellation);
+                break;
+            case P.HistoryChunk c when c.Events != null:
+                foreach (P.HistoryEvent e in c.Events)
+                {
+                    await this.ResolveEventPayloadsAsync(e, cancellation);
+                }
+
+                break;
+            case P.QueryInstancesResponse r:
+                foreach (P.OrchestrationState s in r.OrchestrationState)
+                {
+                    await this.MaybeResolveAsync(v => s.Input = v, s.Input, cancellation);
+                    await this.MaybeResolveAsync(v => s.Output = v, s.Output, cancellation);
+                    await this.MaybeResolveAsync(v => s.CustomStatus = v, s.CustomStatus, cancellation);
+                }
+
+                break;
+            case P.GetEntityResponse r when r.Entity is { } em:
+                await this.MaybeResolveAsync(v => em.SerializedState = v, em.SerializedState, cancellation);
+                break;
+            case P.QueryEntitiesResponse r:
+                foreach (P.EntityMetadata em in r.Entities)
+                {
+                    await this.MaybeResolveAsync(v => em.SerializedState = v, em.SerializedState, cancellation);
+                }
+
+                break;
+            case P.WorkItem wi:
+                // Resolve activity input
+                if (wi.ActivityRequest is { } ar)
+                {
+                    await this.MaybeResolveAsync(v => ar.Input = v, ar.Input, cancellation);
+                }
+
+                // Resolve orchestration input embedded in ExecutionStarted event and external events
+                if (wi.OrchestratorRequest is { } or)
+                {
+                    foreach (P.HistoryEvent? e in or.PastEvents)
+                    {
+                        await this.ResolveEventPayloadsAsync(e, cancellation);
+                    }
+
+                    foreach (P.HistoryEvent? e in or.NewEvents)
+                    {
+                        await this.ResolveEventPayloadsAsync(e, cancellation);
+                    }
+                }
+
+                // Resolve entity V1 batch request (OperationRequest inputs and entity state)
+                if (wi.EntityRequest is { } er1)
+                {
+                    await this.MaybeResolveAsync(v => er1.EntityState = v, er1.EntityState, cancellation);
+                    if (er1.Operations != null)
+                    {
+                        foreach (P.OperationRequest op in er1.Operations)
+                        {
+                            await this.MaybeResolveAsync(v => op.Input = v, op.Input, cancellation);
+                        }
+                    }
+                }
+
+                // Resolve entity V2 request (history-based operation requests and entity state)
+                if (wi.EntityRequestV2 is { } er2)
+                {
+                    await this.MaybeResolveAsync(v => er2.EntityState = v, er2.EntityState, cancellation);
+                    if (er2.OperationRequests != null)
+                    {
+                        foreach (P.HistoryEvent opEvt in er2.OperationRequests)
+                        {
+                            await this.ResolveEventPayloadsAsync(opEvt, cancellation);
+                        }
+                    }
+                }
+
+                break;
+        }
     }
 
     async Task ExternalizeOrchestratorResponseAsync(P.OrchestratorResponse r, CancellationToken cancellation)
@@ -132,93 +221,6 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(IPayloadStore payloadSto
             {
                 await this.MaybeExternalizeAsync(v => op.Input = v, op.Input, cancellation);
             }
-        }
-    }
-
-    protected override async Task ResolveResponsePayloadsAsync<TResponse>(TResponse response, CancellationToken cancellation)
-    {
-        // Sidecar -> client/worker
-        switch (response)
-        {
-            case P.GetInstanceResponse r when r.OrchestrationState is { } s:
-                await this.MaybeResolveAsync(v => s.Input = v, s.Input, cancellation);
-                await this.MaybeResolveAsync(v => s.Output = v, s.Output, cancellation);
-                await this.MaybeResolveAsync(v => s.CustomStatus = v, s.CustomStatus, cancellation);
-                break;
-            case P.HistoryChunk c when c.Events != null:
-                foreach (P.HistoryEvent e in c.Events)
-                {
-                    await this.ResolveEventPayloadsAsync(e, cancellation);
-                }
-
-                break;
-            case P.QueryInstancesResponse r:
-                foreach (P.OrchestrationState s in r.OrchestrationState)
-                {
-                    await this.MaybeResolveAsync(v => s.Input = v, s.Input, cancellation);
-                    await this.MaybeResolveAsync(v => s.Output = v, s.Output, cancellation);
-                    await this.MaybeResolveAsync(v => s.CustomStatus = v, s.CustomStatus, cancellation);
-                }
-
-                break;
-            case P.GetEntityResponse r when r.Entity is { } em:
-                await this.MaybeResolveAsync(v => em.SerializedState = v, em.SerializedState, cancellation);
-                break;
-            case P.QueryEntitiesResponse r:
-                foreach (P.EntityMetadata em in r.Entities)
-                {
-                    await this.MaybeResolveAsync(v => em.SerializedState = v, em.SerializedState, cancellation);
-                }
-
-                break;
-            case P.WorkItem wi:
-                // Resolve activity input
-                if (wi.ActivityRequest is { } ar)
-                {
-                    await this.MaybeResolveAsync(v => ar.Input = v, ar.Input, cancellation);
-                }
-
-                // Resolve orchestration input embedded in ExecutionStarted event and external events
-                if (wi.OrchestratorRequest is { } or)
-                {
-                    foreach (P.HistoryEvent? e in or.PastEvents)
-                    {
-                        await this.ResolveEventPayloadsAsync(e, cancellation);
-                    }
-
-                    foreach (P.HistoryEvent? e in or.NewEvents)
-                    {
-                        await this.ResolveEventPayloadsAsync(e, cancellation);
-                    }
-                }
-
-                // Resolve entity V1 batch request (OperationRequest inputs and entity state)
-                if (wi.EntityRequest is { } er1)
-                {
-                    await this.MaybeResolveAsync(v => er1.EntityState = v, er1.EntityState, cancellation);
-                    if (er1.Operations != null)
-                    {
-                        foreach (P.OperationRequest op in er1.Operations)
-                        {
-                            await this.MaybeResolveAsync(v => op.Input = v, op.Input, cancellation);
-                        }
-                    }
-                }
-
-                // Resolve entity V2 request (history-based operation requests and entity state)
-                if (wi.EntityRequestV2 is { } er2)
-                {
-                    await this.MaybeResolveAsync(v => er2.EntityState = v, er2.EntityState, cancellation);
-                    if (er2.OperationRequests != null)
-                    {
-                        foreach (P.HistoryEvent opEvt in er2.OperationRequests)
-                        {
-                            await this.ResolveEventPayloadsAsync(opEvt, cancellation);
-                        }
-                    }
-                }
-
-                break;
         }
     }
 

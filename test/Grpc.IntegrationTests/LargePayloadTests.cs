@@ -39,17 +39,19 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             },
             client =>
             {
-                // Enable externalization on the client (shared store configuration)
-                client.Services.AddExternalizedPayloadStore(opts =>
+                client.UseExternalizedPayloads();
+
+                // Override store with in-memory test double
+                client.Services.AddSingleton<IPayloadStore>(fakeStore);
+            },
+            services =>
+            {
+                services.AddExternalizedPayloadStore(opts =>
                 {
                     opts.ExternalizeThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
-                client.UseExternalizedPayloads();
-
-                // Override store with in-memory test double
-                client.Services.AddSingleton<IPayloadStore>(fakeStore);
             });
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: largeInput);
@@ -116,6 +118,15 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 client.UseExternalizedPayloads();
                 client.Services.AddSingleton<IPayloadStore>(store);
+            },
+            services =>
+            {
+                services.AddExternalizedPayloadStore(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
             });
 
         // Start orchestration with large input to exercise history input resolution
@@ -157,6 +168,15 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                 // Enable externalization on the client and use the in-memory store to track uploads
                 client.UseExternalizedPayloads();
                 client.Services.AddSingleton<IPayloadStore>(clientStore);
+            },
+            services =>
+            {
+                services.AddExternalizedPayloadStore(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
             });
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
@@ -239,6 +259,15 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 client.UseExternalizedPayloads();
                 client.Services.AddSingleton<IPayloadStore>(store);
+            },
+            services =>
+            {
+                services.AddExternalizedPayloadStore(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
             });
 
         string id = await server.Client.ScheduleNewOrchestrationInstanceAsync(orch, largeInput);
@@ -294,6 +323,15 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 client.UseExternalizedPayloads();
                 client.Services.AddSingleton<IPayloadStore>(workerStore);
+            },
+            services =>
+            {
+                services.AddExternalizedPayloadStore(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
             });
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orch);
@@ -342,6 +380,15 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 client.UseExternalizedPayloads();
                 client.Services.AddSingleton<IPayloadStore>(workerStore);
+            },
+            services =>
+            {
+                services.AddExternalizedPayloadStore(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
             });
 
         string id = await server.Client.ScheduleNewOrchestrationInstanceAsync(parent);
@@ -381,6 +428,15 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 client.UseExternalizedPayloads();
                 client.Services.AddSingleton<IPayloadStore>(workerStore);
+            },
+            services =>
+            {
+                services.AddExternalizedPayloadStore(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
             });
 
         string id = await server.Client.ScheduleNewOrchestrationInstanceAsync(orch, largeIn);
@@ -426,7 +482,16 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                 worker.UseExternalizedPayloads();
                 worker.Services.AddSingleton<IPayloadStore>(workerStore);
             },
-            client => { /* client not needed for externalization path here */ });
+            client => { /* client not needed for externalization path here */ },
+            services =>
+            {
+                services.AddExternalizedPayloadStore(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+            });
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         OrchestrationMetadata completed = await server.Client.WaitForInstanceCompletionAsync(
@@ -502,13 +567,22 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                     orchestratorName,
                     async ctx => await ctx.WaitForExternalEvent<string>(EventName)));
 
-                worker.UseExternalizedPayloads();
                 worker.Services.AddSingleton<IPayloadStore>(fakeStore);
+                worker.UseExternalizedPayloads();
             },
             client =>
             {
-                client.UseExternalizedPayloads();
                 client.Services.AddSingleton<IPayloadStore>(fakeStore);
+                client.UseExternalizedPayloads();
+            },
+            services =>
+            {
+                services.AddExternalizedPayloadStore(opts =>
+                {
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
             });
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);

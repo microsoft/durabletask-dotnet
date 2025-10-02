@@ -6,9 +6,6 @@ namespace Microsoft.DurableTask.Worker;
 /// <summary>
 /// Provides custom exception property inclusion rules for enriching FailureDetails.
 /// </summary>
-/// <remarks>
-/// Implementations should be thread-safe. The worker may call this for many exceptions concurrently.
-/// </remarks>
 public interface IExceptionPropertiesProvider
 {
         /// <summary>

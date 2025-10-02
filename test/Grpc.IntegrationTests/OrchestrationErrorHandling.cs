@@ -633,7 +633,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
     }
 
     /// <summary>
-    /// Tests that custom exception properties are included in FailureDetails when using a custom IExceptionPropertiesProvider.
+    /// Tests that exception properties are included in FailureDetails when using a custom IExceptionPropertiesProvider.
     /// </summary>
     [Fact]
     public async Task CustomExceptionPropertiesInFailureDetails()
@@ -641,7 +641,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         TaskName orchestratorName = "OrchestrationWithCustomException";
         TaskName activityName = "BusinessActivity";
 
-        // Use local function definitions
+        // Register activity functions that will throw a exception.
         async Task MyOrchestrationImpl(TaskOrchestrationContext ctx) =>
             await ctx.CallActivityAsync(activityName);
 

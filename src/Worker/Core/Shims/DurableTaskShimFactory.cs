@@ -26,7 +26,6 @@ public class DurableTaskShimFactory
     /// </summary>
     /// <param name="options">The data converter.</param>
     /// <param name="loggerFactory">The logger factory.</param>
-    /// <param name="exceptionPropertiesProvider">Custom provider used to extract exception properties for inclusion in the failure details.</param>
     public DurableTaskShimFactory(
         DurableTaskWorkerOptions? options = null, ILoggerFactory? loggerFactory = null)
     {

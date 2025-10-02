@@ -359,7 +359,7 @@ public static class ProtobufUtils
             failureDetails.StackTrace,
             GetFailureDetails(failureDetails.InnerFailure),
             failureDetails.IsNonRetriable,
-            ConvertProperties(failureDetails.Properties));
+            ConvertMapToDictionary(failureDetails.Properties));
     }
 
     internal static Proto.TaskFailureDetails? GetFailureDetails(FailureDetails? failureDetails)
@@ -368,7 +368,7 @@ public static class ProtobufUtils
         {
             return null;
         }
-        
+
         var taskFailureDetails = new Proto.TaskFailureDetails
         {
             ErrorType = failureDetails.ErrorType,
@@ -454,7 +454,7 @@ public static class ProtobufUtils
     }
 
     /// <summary>
-    /// Converts a Dictionary<string, object?> into a MapField<string, Value>.
+    /// Converts a IDictionary<string, object?> into a MapField<string, Value>.
     /// Supports nested dictionaries and lists.
     /// </summary>
     public static MapField<string, Value> ConvertDictionaryToMapField(IDictionary<string, object?> dict)
@@ -470,15 +470,15 @@ public static class ProtobufUtils
     }
 
     /// <summary>
-    /// 
+    /// Converts a MapField<string, Value> into a IDictionary<string, object?>.
     /// </summary>
     /// <param name="properties"></param>
     /// <returns></returns>
-    public static IDictionary<string, object> ConvertProperties(MapField<string, Value> properties)
+    public static IDictionary<string, object?> ConvertMapToDictionary(MapField<string, Value> properties)
     {
         return properties.ToDictionary(
             kvp => kvp.Key,
-            kvp => ConvertValue(kvp.Value)
+            kvp => ConvertValueToObject(kvp.Value)
         );
     }
 
@@ -487,7 +487,7 @@ public static class ProtobufUtils
     /// </summary>
     /// <param name="obj">The object to convert.</param>
     /// <returns>The converted protobuf Value.</returns>
-    private static Value ConvertObjectToValue(object? obj)
+    static Value ConvertObjectToValue(object? obj)
     {
         return obj switch
         {
@@ -510,7 +510,7 @@ public static class ProtobufUtils
         };
     }
 
-    private static object ConvertValue(Value value)
+    static object ConvertValueToObject(Value value)
     {
         switch (value.KindCase)
         {
@@ -521,9 +521,9 @@ public static class ProtobufUtils
             case Value.KindOneofCase.BoolValue:
                 return value.BoolValue;
             case Value.KindOneofCase.StructValue:
-                return value.StructValue.Fields.ToDictionary(f => f.Key, f => ConvertValue(f.Value));
+                return value.StructValue.Fields.ToDictionary(f => f.Key, f => ConvertValueToObject(f.Value));
             case Value.KindOneofCase.ListValue:
-                return value.ListValue.Values.Select(ConvertValue).ToList();
+                return value.ListValue.Values.Select(ConvertValueToObject).ToList();
             case Value.KindOneofCase.NullValue:
                 return null!;
             default:

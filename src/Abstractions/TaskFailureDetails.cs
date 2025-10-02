@@ -16,7 +16,7 @@ namespace Microsoft.DurableTask;
 /// <param name="StackTrace">The stack trace of the failure.</param>
 /// <param name="InnerFailure">The inner cause of the task failure.</param>
 /// <param name="Properties">Additional properties associated with the exception.</param>
-public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? StackTrace, TaskFailureDetails? InnerFailure, IDictionary<string, object>? Properties)
+public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? StackTrace, TaskFailureDetails? InnerFailure, IDictionary<string, object?>? Properties)
 {
     Type? loadedExceptionType;
 

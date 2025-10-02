@@ -154,7 +154,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             {
                 return await this.innerContext.ScheduleTask<T>(
                     name.Name,
-                    name.Version,
+                    this.innerContext.Version,
                     options: ScheduleTaskOptions.CreateBuilder()
                         .WithRetryOptions(policy.ToDurableTaskCoreRetryOptions())
                         .WithTags(tags)
@@ -166,7 +166,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                 return await this.InvokeWithCustomRetryHandler(
                     () => this.innerContext.ScheduleTask<T>(
                         name.Name,
-                        name.Version,
+                        this.innerContext.Version,
                         options: ScheduleTaskOptions.CreateBuilder()
                             .WithTags(tags)
                             .Build(),
@@ -179,7 +179,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             {
                 return await this.innerContext.ScheduleTask<T>(
                     name.Name,
-                    name.Version,
+                    this.innerContext.Version,
                     options: ScheduleTaskOptions.CreateBuilder()
                         .WithTags(tags)
                         .Build(),

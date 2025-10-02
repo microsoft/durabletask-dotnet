@@ -33,13 +33,22 @@ sealed class BlobPayloadStore : IPayloadStore
     /// </summary>
     /// <param name="options">The options for the blob payload store.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="options.ConnectionString"/> is null or empty.</exception>
+    /// <exception cref="ArgumentException">Thrown when neither connection string nor account URI/credential are provided.</exception>
     public BlobPayloadStore(LargePayloadStorageOptions options)
     {
         this.options = options ?? throw new ArgumentNullException(nameof(options));
-
-        Check.NotNullOrEmpty(options.ConnectionString, nameof(options.ConnectionString));
         Check.NotNullOrEmpty(options.ContainerName, nameof(options.ContainerName));
+
+        // Validate that either connection string or account URI/credential are provided
+        bool hasConnectionString = !string.IsNullOrEmpty(options.ConnectionString);
+        bool hasIdentityAuth = options.AccountUri != null && options.Credential != null;
+
+        if (!hasConnectionString && !hasIdentityAuth)
+        {
+            throw new ArgumentException(
+                "Either ConnectionString or AccountUri and Credential must be provided.",
+                nameof(options));
+        }
 
         BlobClientOptions clientOptions = new()
         {
@@ -52,7 +61,11 @@ sealed class BlobPayloadStore : IPayloadStore
                 NetworkTimeout = TimeSpan.FromMinutes(NetworkTimeoutMinutes),
             },
         };
-        BlobServiceClient serviceClient = new(options.ConnectionString, clientOptions);
+
+        BlobServiceClient serviceClient = hasIdentityAuth
+            ? new BlobServiceClient(options.AccountUri, options.Credential, clientOptions)
+            : new BlobServiceClient(options.ConnectionString, clientOptions);
+
         this.containerClient = serviceClient.GetBlobContainerClient(options.ContainerName);
     }
 

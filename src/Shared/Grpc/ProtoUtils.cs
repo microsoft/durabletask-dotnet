@@ -13,6 +13,7 @@ using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
 using DurableTask.Core.Tracing;
 using Google.Protobuf;
+using Google.Protobuf.Collections;
 using Google.Protobuf.WellKnownTypes;
 using DTCore = DurableTask.Core;
 using P = Microsoft.DurableTask.Protobuf;
@@ -528,29 +529,43 @@ static class ProtoUtils
             failureDetails.ErrorType,
             failureDetails.ErrorMessage,
             failureDetails.StackTrace,
-            failureDetails.InnerFailure.ToTaskFailureDetails());
+            failureDetails.InnerFailure.ToTaskFailureDetails(),
+            ConvertProperties(failureDetails.Properties));
     }
 
     /// <summary>
     /// Converts a <see cref="Exception" /> to <see cref="P.TaskFailureDetails" />.
     /// </summary>
     /// <param name="e">The exception to convert.</param>
+    /// <param name="exceptionPropertiesProvider">Optional exception properties provider.</param>
     /// <returns>The task failure details.</returns>
     [return: NotNullIfNotNull(nameof(e))]
-    internal static P.TaskFailureDetails? ToTaskFailureDetails(this Exception? e)
+    internal static P.TaskFailureDetails? ToTaskFailureDetails(this Exception? e, global::DurableTask.Core.IExceptionPropertiesProvider? exceptionPropertiesProvider = null)
     {
         if (e == null)
         {
             return null;
         }
 
-        return new P.TaskFailureDetails
+        var properties = exceptionPropertiesProvider?.GetExceptionProperties(e);
+
+        var taskFailureDetails = new P.TaskFailureDetails
         {
             ErrorType = e.GetType().FullName,
             ErrorMessage = e.Message,
             StackTrace = e.StackTrace,
-            InnerFailure = e.InnerException.ToTaskFailureDetails(),
+            InnerFailure = e.InnerException.ToTaskFailureDetails(exceptionPropertiesProvider),
         };
+
+        if (properties != null)
+        {
+            foreach (var kvp in properties)
+            {
+                taskFailureDetails.Properties[kvp.Key] = ConvertObjectToValue(kvp.Value);
+            }
+        }
+
+        return taskFailureDetails;
     }
 
     /// <summary>
@@ -998,7 +1013,8 @@ static class ProtoUtils
             failureDetails.ErrorMessage,
             failureDetails.StackTrace,
             failureDetails.InnerFailure.ToCore(),
-            failureDetails.IsNonRetriable);
+            failureDetails.IsNonRetriable,
+            ConvertProperties(failureDetails.Properties));
     }
 
     /// <summary>
@@ -1044,7 +1060,7 @@ static class ProtoUtils
             return null;
         }
 
-        return new P.TaskFailureDetails
+        var taskFailureDetails = new P.TaskFailureDetails
         {
             ErrorType = failureDetails.ErrorType ?? "(unknown)",
             ErrorMessage = failureDetails.ErrorMessage ?? "(unknown)",
@@ -1052,6 +1068,17 @@ static class ProtoUtils
             IsNonRetriable = failureDetails.IsNonRetriable,
             InnerFailure = failureDetails.InnerFailure.ToProtobuf(),
         };
+
+        // Properly populate the MapField
+        if (failureDetails.Properties != null)
+        {
+            foreach (var kvp in failureDetails.Properties)
+            {
+                taskFailureDetails.Properties[kvp.Key] = ConvertObjectToValue(kvp.Value);
+            }
+        }
+
+        return taskFailureDetails;
     }
 
     static P.OrchestrationStatus ToProtobuf(this OrchestrationStatus status)
@@ -1167,6 +1194,68 @@ static class ProtoUtils
 
                 this.unlockObligations = null;
             }
+        }
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="properties"></param>
+    /// <returns></returns>
+    public static IDictionary<string, object> ConvertProperties(MapField<string, Value> properties)
+    {
+        return properties.ToDictionary(
+            kvp => kvp.Key,
+            kvp => ConvertValue(kvp.Value)
+        );
+    }
+
+    /// <summary>
+    /// Converts a C# object to a protobuf Value.
+    /// </summary>
+    /// <param name="obj">The object to convert.</param>
+    /// <returns>The converted protobuf Value.</returns>
+    private static Value ConvertObjectToValue(object? obj)
+    {
+        return obj switch
+        {
+            null => Value.ForNull(),
+            string str => Value.ForString(str),
+            bool b => Value.ForBool(b),
+            int i => Value.ForNumber(i),
+            long l => Value.ForNumber(l),
+            float f => Value.ForNumber(f),
+            double d => Value.ForNumber(d),
+            decimal dec => Value.ForNumber((double)dec),
+            DateTime dt => Value.ForString(dt.ToString("O")),
+            DateTimeOffset dto => Value.ForString(dto.ToString("O")),
+            IDictionary<string, object> dict => Value.ForStruct(new Struct
+            {
+                Fields = { dict.ToDictionary(kvp => kvp.Key, kvp => ConvertObjectToValue(kvp.Value)) },
+            }),
+            IEnumerable<object> list => Value.ForList(list.Select(ConvertObjectToValue).ToArray()),
+            _ => Value.ForString(obj.ToString() ?? string.Empty),
+        };
+    }
+
+    private static object ConvertValue(Value value)
+    {
+        switch (value.KindCase)
+        {
+            case Value.KindOneofCase.StringValue:
+                return value.StringValue;
+            case Value.KindOneofCase.NumberValue:
+                return value.NumberValue;
+            case Value.KindOneofCase.BoolValue:
+                return value.BoolValue;
+            case Value.KindOneofCase.StructValue:
+                return value.StructValue.Fields.ToDictionary(f => f.Key, f => ConvertValue(f.Value));
+            case Value.KindOneofCase.ListValue:
+                return value.ListValue.Values.Select(ConvertValue).ToList();
+            case Value.KindOneofCase.NullValue:
+                return null!;
+            default:
+                return value; // fallback
         }
     }
 }

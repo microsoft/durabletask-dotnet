@@ -8,6 +8,7 @@ using DurableTask.Core.History;
 using DurableTask.Core.Query;
 using DurableTask.Core.Tracing;
 using Google.Protobuf;
+using Google.Protobuf.Collections;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.DurableTask.Sidecar.Dispatcher;
 using Proto = Microsoft.DurableTask.Protobuf;
@@ -357,7 +358,8 @@ public static class ProtobufUtils
             failureDetails.ErrorMessage,
             failureDetails.StackTrace,
             GetFailureDetails(failureDetails.InnerFailure),
-            failureDetails.IsNonRetriable);
+            failureDetails.IsNonRetriable,
+            ConvertProperties(failureDetails.Properties));
     }
 
     internal static Proto.TaskFailureDetails? GetFailureDetails(FailureDetails? failureDetails)
@@ -366,8 +368,8 @@ public static class ProtobufUtils
         {
             return null;
         }
-
-        return new Proto.TaskFailureDetails
+        
+        var taskFailureDetails = new Proto.TaskFailureDetails
         {
             ErrorType = failureDetails.ErrorType,
             ErrorMessage = failureDetails.ErrorMessage,
@@ -375,6 +377,18 @@ public static class ProtobufUtils
             InnerFailure = GetFailureDetails(failureDetails.InnerFailure),
             IsNonRetriable = failureDetails.IsNonRetriable,
         };
+
+        // Add properties if they exist
+        if (failureDetails.Properties != null)
+        {
+            var mapField = ConvertDictionaryToMapField(failureDetails.Properties);
+            foreach (var kvp in mapField)
+            {
+                taskFailureDetails.Properties.Add(kvp.Key, kvp.Value);
+            }
+        }
+
+        return taskFailureDetails;
     }
 
     internal static OrchestrationQuery ToOrchestrationQuery(Proto.QueryInstancesRequest request)
@@ -437,5 +451,83 @@ public static class ProtobufUtils
             DeletedInstanceCount = result.DeletedInstanceCount
         };
         return response;
+    }
+
+    /// <summary>
+    /// Converts a Dictionary<string, object?> into a MapField<string, Value>.
+    /// Supports nested dictionaries and lists.
+    /// </summary>
+    public static MapField<string, Value> ConvertDictionaryToMapField(IDictionary<string, object?> dict)
+    {
+        var map = new MapField<string, Value>();
+
+        foreach (var kvp in dict)
+        {
+            map[kvp.Key] = ConvertObjectToValue(kvp.Value);
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="properties"></param>
+    /// <returns></returns>
+    public static IDictionary<string, object> ConvertProperties(MapField<string, Value> properties)
+    {
+        return properties.ToDictionary(
+            kvp => kvp.Key,
+            kvp => ConvertValue(kvp.Value)
+        );
+    }
+
+    /// <summary>
+    /// Converts a C# object to a protobuf Value.
+    /// </summary>
+    /// <param name="obj">The object to convert.</param>
+    /// <returns>The converted protobuf Value.</returns>
+    private static Value ConvertObjectToValue(object? obj)
+    {
+        return obj switch
+        {
+            null => Value.ForNull(),
+            string str => Value.ForString(str),
+            bool b => Value.ForBool(b),
+            int i => Value.ForNumber(i),
+            long l => Value.ForNumber(l),
+            float f => Value.ForNumber(f),
+            double d => Value.ForNumber(d),
+            decimal dec => Value.ForNumber((double)dec),
+            DateTime dt => Value.ForString(dt.ToString("O")),
+            DateTimeOffset dto => Value.ForString(dto.ToString("O")),
+            IDictionary<string, object> dict => Value.ForStruct(new Struct
+            {
+                Fields = { dict.ToDictionary(kvp => kvp.Key, kvp => ConvertObjectToValue(kvp.Value)) },
+            }),
+            IEnumerable<object> list => Value.ForList(list.Select(ConvertObjectToValue).ToArray()),
+            _ => Value.ForString(obj.ToString() ?? string.Empty),
+        };
+    }
+
+    private static object ConvertValue(Value value)
+    {
+        switch (value.KindCase)
+        {
+            case Value.KindOneofCase.StringValue:
+                return value.StringValue;
+            case Value.KindOneofCase.NumberValue:
+                return value.NumberValue;
+            case Value.KindOneofCase.BoolValue:
+                return value.BoolValue;
+            case Value.KindOneofCase.StructValue:
+                return value.StructValue.Fields.ToDictionary(f => f.Key, f => ConvertValue(f.Value));
+            case Value.KindOneofCase.ListValue:
+                return value.ListValue.Values.Select(ConvertValue).ToList();
+            case Value.KindOneofCase.NullValue:
+                return null!;
+            default:
+                return value; // fallback
+        }
     }
 }

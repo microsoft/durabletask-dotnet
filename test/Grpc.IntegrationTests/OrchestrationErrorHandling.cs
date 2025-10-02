@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Runtime.Serialization;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.DurableTask.Worker;
@@ -631,6 +632,61 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         return (Exception)Activator.CreateInstance(exceptionType, message)!;
     }
 
+    /// <summary>
+    /// Tests that custom exception properties are included in FailureDetails when using a custom IExceptionPropertiesProvider.
+    /// </summary>
+    [Fact]
+    public async Task CustomExceptionPropertiesInFailureDetails()
+    {
+        TaskName orchestratorName = "OrchestrationWithCustomException";
+        TaskName activityName = "BusinessActivity";
+
+        // Use local function definitions
+        async Task MyOrchestrationImpl(TaskOrchestrationContext ctx) =>
+            await ctx.CallActivityAsync(activityName);
+
+        void MyActivityImpl(TaskActivityContext ctx) =>
+            throw new ArgumentOutOfRangeException(
+                paramName: "age",
+                actualValue: 150,
+                message: "Age must be less than 120");
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            // Register the custom exception properties provider
+            b.Services.AddSingleton<IExceptionPropertiesProvider, TestExceptionPropertiesProvider>();
+            
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc(orchestratorName, MyOrchestrationImpl)
+                .AddActivityFunc(activityName, MyActivityImpl));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+
+        Assert.NotNull(metadata.FailureDetails);
+        TaskFailureDetails failureDetails = metadata.FailureDetails!;
+        Assert.Equal(typeof(TaskFailedException).FullName, failureDetails.ErrorType);
+
+        // Check that the activity failure is in the inner failure
+        Assert.NotNull(failureDetails.InnerFailure);
+        TaskFailureDetails innerFailure = failureDetails.InnerFailure!;
+        Assert.Equal(typeof(ArgumentOutOfRangeException).FullName, innerFailure.ErrorType);
+
+        // Check that custom properties are included
+        Assert.NotNull(innerFailure.Properties);
+        Assert.True(innerFailure.Properties.ContainsKey("Name"));
+        Assert.True(innerFailure.Properties.ContainsKey("Value"));
+
+        Assert.Equal("age", innerFailure.Properties["Name"]);
+        Assert.Equal((double)150, innerFailure.Properties["Value"]);
+    }
+
     [Serializable]
     class CustomException : Exception
     {
@@ -647,6 +703,23 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         protected CustomException(SerializationInfo info, StreamingContext context)
             : base(info, context)
         {
+        }
+    }
+
+    // Set a custom exception provider.
+    class TestExceptionPropertiesProvider : IExceptionPropertiesProvider
+    {
+        public IDictionary<string, object>? GetExceptionProperties(Exception exception)
+        {
+            return exception switch
+            {
+                ArgumentOutOfRangeException e => new Dictionary<string, object>
+                {
+                    ["Name"] = e.ParamName ?? string.Empty,
+                    ["Value"] = e.ActualValue ?? string.Empty,
+                },
+                _ => null // No custom properties for other exceptions
+            };
         }
     }
 }

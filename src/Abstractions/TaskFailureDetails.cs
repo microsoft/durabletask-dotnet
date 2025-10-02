@@ -15,7 +15,8 @@ namespace Microsoft.DurableTask;
 /// <param name="ErrorMessage">A summary description of the failure.</param>
 /// <param name="StackTrace">The stack trace of the failure.</param>
 /// <param name="InnerFailure">The inner cause of the task failure.</param>
-public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? StackTrace, TaskFailureDetails? InnerFailure)
+/// <param name="Properties">Additional properties associated with the exception.</param>
+public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? StackTrace, TaskFailureDetails? InnerFailure, IDictionary<string, object>? Properties)
 {
     Type? loadedExceptionType;
 
@@ -123,7 +124,8 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
             this.ErrorMessage,
             this.StackTrace,
             this.InnerFailure?.ToCoreFailureDetails(),
-            isNonRetriable: false);
+            isNonRetriable: false,
+            this.Properties);
     }
 
     /// <summary>
@@ -143,7 +145,8 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
             coreFailureDetails.ErrorType,
             coreFailureDetails.ErrorMessage,
             coreFailureDetails.StackTrace,
-            FromCoreFailureDetails(coreFailureDetails.InnerFailure));
+            FromCoreFailureDetails(coreFailureDetails.InnerFailure),
+            coreFailureDetails.Properties);
     }
 
     [return: NotNullIfNotNull(nameof(exception))]
@@ -160,14 +163,16 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
                 coreEx.FailureDetails?.ErrorType ?? "(unknown)",
                 coreEx.FailureDetails?.ErrorMessage ?? "(unknown)",
                 coreEx.FailureDetails?.StackTrace,
-                FromCoreFailureDetailsRecursive(coreEx.FailureDetails?.InnerFailure) ?? FromExceptionRecursive(coreEx.InnerException));
+                FromCoreFailureDetailsRecursive(coreEx.FailureDetails?.InnerFailure) ?? FromExceptionRecursive(coreEx.InnerException),
+                coreEx.FailureDetails?.Properties ?? null);
         }
 
         return new TaskFailureDetails(
             exception.GetType().ToString(),
             exception.Message,
             exception.StackTrace,
-            FromExceptionRecursive(exception.InnerException));
+            FromExceptionRecursive(exception.InnerException),
+            null);// might need to udpate this later 
     }
 
     static TaskFailureDetails? FromCoreFailureDetailsRecursive(CoreFailureDetails? coreFailureDetails)
@@ -181,6 +186,7 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
             coreFailureDetails.ErrorType,
             coreFailureDetails.ErrorMessage,
             coreFailureDetails.StackTrace,
-            FromCoreFailureDetailsRecursive(coreFailureDetails.InnerFailure));
+            FromCoreFailureDetailsRecursive(coreFailureDetails.InnerFailure),
+            coreFailureDetails.Properties);
     }
 }

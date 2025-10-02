@@ -18,10 +18,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Protobuf Include="orchestrator_service.proto" 
-              GrpcServices="Both" 
+    <Protobuf Include="backend_service.proto"
+              GrpcServices="None"
               Access="Public"
-              Namespace="Microsoft.DurableTask.Protobuf" />
+              Namespace="Microsoft.DurableTask.AzureManagedBackend.Protobuf" />
+    <Protobuf Include="orchestrator_service.proto"
+            GrpcServices="None"
+            Access="Public"
+            Namespace="Microsoft.DurableTask.AzureManagedBackend.Protobuf" />
   </ItemGroup>
-
+  
 </Project>

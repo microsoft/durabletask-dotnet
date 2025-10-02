@@ -3,7 +3,7 @@
 
 syntax = "proto3";
 
-option csharp_namespace = "Microsoft.DurableTask.Protobuf";
+option csharp_namespace = "Microsoft.DurableTask.AzureManagedBackend.Protobuf";
 option java_package = "com.microsoft.durabletask.implementation.protobuf";
 option go_package = "/internal/protos";
 

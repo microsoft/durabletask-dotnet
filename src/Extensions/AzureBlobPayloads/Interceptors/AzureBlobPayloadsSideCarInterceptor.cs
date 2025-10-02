@@ -15,36 +15,45 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(IPayloadStore payloadSto
     : BasePayloadInterceptor<object, object>(payloadStore, options)
 {
     /// <inheritdoc/>
-    protected override Task ExternalizeRequestPayloadsAsync<TRequest>(TRequest request, CancellationToken cancellation)
+    protected override async Task ExternalizeRequestPayloadsAsync<TRequest>(TRequest request, CancellationToken cancellation)
     {
         // Client -> sidecar
         switch (request)
         {
             case P.CreateInstanceRequest r:
-                return this.MaybeExternalizeAsync(v => r.Input = v, r.Input, cancellation);
+                r.Input = await this.MaybeExternalizeAsync(r.Input, cancellation);
+                break;
             case P.RaiseEventRequest r:
-                return this.MaybeExternalizeAsync(v => r.Input = v, r.Input, cancellation);
+                r.Input = await this.MaybeExternalizeAsync(r.Input, cancellation);
+                break;
             case P.TerminateRequest r:
-                return this.MaybeExternalizeAsync(v => r.Output = v, r.Output, cancellation);
+                r.Output = await this.MaybeExternalizeAsync(r.Output, cancellation);
+                break;
             case P.SuspendRequest r:
-                return this.MaybeExternalizeAsync(v => r.Reason = v, r.Reason, cancellation);
+                r.Reason = await this.MaybeExternalizeAsync(r.Reason, cancellation);
+                break;
             case P.ResumeRequest r:
-                return this.MaybeExternalizeAsync(v => r.Reason = v, r.Reason, cancellation);
+                r.Reason = await this.MaybeExternalizeAsync(r.Reason, cancellation);
+                break;
             case P.SignalEntityRequest r:
-                return this.MaybeExternalizeAsync(v => r.Input = v, r.Input, cancellation);
+                r.Input = await this.MaybeExternalizeAsync(r.Input, cancellation);
+                break;
             case P.ActivityResponse r:
-                return this.MaybeExternalizeAsync(v => r.Result = v, r.Result, cancellation);
+                r.Result = await this.MaybeExternalizeAsync(r.Result, cancellation);
+                break;
             case P.OrchestratorResponse r:
-                return this.ExternalizeOrchestratorResponseAsync(r, cancellation);
+                await this.ExternalizeOrchestratorResponseAsync(r, cancellation);
+                break;
             case P.EntityBatchResult r:
-                return this.ExternalizeEntityBatchResultAsync(r, cancellation);
+                await this.ExternalizeEntityBatchResultAsync(r, cancellation);
+                break;
             case P.EntityBatchRequest r:
-                return this.ExternalizeEntityBatchRequestAsync(r, cancellation);
+                await this.ExternalizeEntityBatchRequestAsync(r, cancellation);
+                break;
             case P.EntityRequest r:
-                return this.MaybeExternalizeAsync(v => r.EntityState = v, r.EntityState, cancellation);
+                r.EntityState = await this.MaybeExternalizeAsync(r.EntityState, cancellation);
+                break;
         }
-
-        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -137,45 +146,45 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(IPayloadStore payloadSto
 
     async Task ExternalizeOrchestratorResponseAsync(P.OrchestratorResponse r, CancellationToken cancellation)
     {
-        await this.MaybeExternalizeAsync(v => r.CustomStatus = v, r.CustomStatus, cancellation);
+        r.CustomStatus = await this.MaybeExternalizeAsync(r.CustomStatus, cancellation);
         foreach (P.OrchestratorAction a in r.Actions)
         {
             if (a.CompleteOrchestration is { } complete)
             {
-                await this.MaybeExternalizeAsync(v => complete.Result = v, complete.Result, cancellation);
-                await this.MaybeExternalizeAsync(v => complete.Details = v, complete.Details, cancellation);
+                complete.Result = await this.MaybeExternalizeAsync(complete.Result, cancellation);
+                complete.Details = await this.MaybeExternalizeAsync(complete.Details, cancellation);
             }
 
             if (a.TerminateOrchestration is { } term)
             {
-                await this.MaybeExternalizeAsync(v => term.Reason = v, term.Reason, cancellation);
+                term.Reason = await this.MaybeExternalizeAsync(term.Reason, cancellation);
             }
 
             if (a.ScheduleTask is { } schedule)
             {
-                await this.MaybeExternalizeAsync(v => schedule.Input = v, schedule.Input, cancellation);
+                schedule.Input = await this.MaybeExternalizeAsync(schedule.Input, cancellation);
             }
 
             if (a.CreateSubOrchestration is { } sub)
             {
-                await this.MaybeExternalizeAsync(v => sub.Input = v, sub.Input, cancellation);
+                sub.Input = await this.MaybeExternalizeAsync(sub.Input, cancellation);
             }
 
             if (a.SendEvent is { } sendEvt)
             {
-                await this.MaybeExternalizeAsync(v => sendEvt.Data = v, sendEvt.Data, cancellation);
+                sendEvt.Data = await this.MaybeExternalizeAsync(sendEvt.Data, cancellation);
             }
 
             if (a.SendEntityMessage is { } entityMsg)
             {
                 if (entityMsg.EntityOperationSignaled is { } sig)
                 {
-                    await this.MaybeExternalizeAsync(v => sig.Input = v, sig.Input, cancellation);
+                    sig.Input = await this.MaybeExternalizeAsync(sig.Input, cancellation);
                 }
 
                 if (entityMsg.EntityOperationCalled is { } called)
                 {
-                    await this.MaybeExternalizeAsync(v => called.Input = v, called.Input, cancellation);
+                    called.Input = await this.MaybeExternalizeAsync(called.Input, cancellation);
                 }
             }
         }
@@ -183,14 +192,14 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(IPayloadStore payloadSto
 
     async Task ExternalizeEntityBatchResultAsync(P.EntityBatchResult r, CancellationToken cancellation)
     {
-        await this.MaybeExternalizeAsync(v => r.EntityState = v, r.EntityState, cancellation);
+        r.EntityState = await this.MaybeExternalizeAsync(r.EntityState, cancellation);
         if (r.Results != null)
         {
             foreach (P.OperationResult result in r.Results)
             {
                 if (result.Success is { } success)
                 {
-                    await this.MaybeExternalizeAsync(v => success.Result = v, success.Result, cancellation);
+                    success.Result = await this.MaybeExternalizeAsync(success.Result, cancellation);
                 }
             }
         }
@@ -201,12 +210,12 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(IPayloadStore payloadSto
             {
                 if (action.SendSignal is { } sendSig)
                 {
-                    await this.MaybeExternalizeAsync(v => sendSig.Input = v, sendSig.Input, cancellation);
+                    sendSig.Input = await this.MaybeExternalizeAsync(sendSig.Input, cancellation);
                 }
 
                 if (action.StartNewOrchestration is { } start)
                 {
-                    await this.MaybeExternalizeAsync(v => start.Input = v, start.Input, cancellation);
+                    start.Input = await this.MaybeExternalizeAsync(start.Input, cancellation);
                 }
             }
         }
@@ -214,12 +223,12 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(IPayloadStore payloadSto
 
     async Task ExternalizeEntityBatchRequestAsync(P.EntityBatchRequest r, CancellationToken cancellation)
     {
-        await this.MaybeExternalizeAsync(v => r.EntityState = v, r.EntityState, cancellation);
+        r.EntityState = await this.MaybeExternalizeAsync(r.EntityState, cancellation);
         if (r.Operations != null)
         {
             foreach (P.OperationRequest op in r.Operations)
             {
-                await this.MaybeExternalizeAsync(v => op.Input = v, op.Input, cancellation);
+                op.Input = await this.MaybeExternalizeAsync(op.Input, cancellation);
             }
         }
     }
@@ -351,5 +360,4 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(IPayloadStore payloadSto
                 break;
         }
     }
-
 }

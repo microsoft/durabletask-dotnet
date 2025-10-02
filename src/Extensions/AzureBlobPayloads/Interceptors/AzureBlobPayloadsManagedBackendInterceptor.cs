@@ -13,7 +13,7 @@ public sealed class AzureBlobPayloadsManagedBackendInterceptor(IPayloadStore pay
     : BasePayloadInterceptor<object, object>(payloadStore, options)
 {
     /// <inheritdoc/>
-    protected override Task ExternalizeRequestPayloadsAsync<TRequest>(TRequest request, CancellationToken cancellation)
+    protected override async Task ExternalizeRequestPayloadsAsync<TRequest>(TRequest request, CancellationToken cancellation)
     {
         // Azure Managed Backend -> Backend Service
         // Note: This interceptor is designed for backend_service.proto types, but since those types
@@ -22,73 +22,82 @@ public sealed class AzureBlobPayloadsManagedBackendInterceptor(IPayloadStore pay
         switch (request)
         {
             case P.CreateInstanceRequest r:
-                return this.MaybeExternalizeAsync(v => r.Input = v, r.Input, cancellation);
+                r.Input = await this.MaybeExternalizeAsync(r.Input, cancellation);
+                break;
             case P.RaiseEventRequest r:
-                return this.MaybeExternalizeAsync(v => r.Input = v, r.Input, cancellation);
+                r.Input = await this.MaybeExternalizeAsync(r.Input, cancellation);
+                break;
             case P.TerminateRequest r:
-                return this.MaybeExternalizeAsync(v => r.Output = v, r.Output, cancellation);
+                r.Output = await this.MaybeExternalizeAsync(r.Output, cancellation);
+                break;
             case P.SuspendRequest r:
-                return this.MaybeExternalizeAsync(v => r.Reason = v, r.Reason, cancellation);
+                r.Reason = await this.MaybeExternalizeAsync(r.Reason, cancellation);
+                break;
             case P.ResumeRequest r:
-                return this.MaybeExternalizeAsync(v => r.Reason = v, r.Reason, cancellation);
+                r.Reason = await this.MaybeExternalizeAsync(r.Reason, cancellation);
+                break;
             case P.SignalEntityRequest r:
-                return this.MaybeExternalizeAsync(v => r.Input = v, r.Input, cancellation);
+                r.Input = await this.MaybeExternalizeAsync(r.Input, cancellation);
+                break;
             case P.ActivityResponse r:
-                return this.MaybeExternalizeAsync(v => r.Result = v, r.Result, cancellation);
+                r.Result = await this.MaybeExternalizeAsync(r.Result, cancellation);
+                break;
             case P.OrchestratorResponse r:
-                return this.ExternalizeOrchestratorResponseAsync(r, cancellation);
+                await this.ExternalizeOrchestratorResponseAsync(r, cancellation);
+                break;
             case P.EntityBatchResult r:
-                return this.ExternalizeEntityBatchResultAsync(r, cancellation);
+                await this.ExternalizeEntityBatchResultAsync(r, cancellation);
+                break;
             case P.EntityBatchRequest r:
-                return this.ExternalizeEntityBatchRequestAsync(r, cancellation);
+                await this.ExternalizeEntityBatchRequestAsync(r, cancellation);
+                break;
             case P.EntityRequest r:
-                return this.MaybeExternalizeAsync(v => r.EntityState = v, r.EntityState, cancellation);
+                r.EntityState = await this.MaybeExternalizeAsync(r.EntityState, cancellation);
+                break;
         }
-
-        return Task.CompletedTask;
     }
 
     async Task ExternalizeOrchestratorResponseAsync(P.OrchestratorResponse r, CancellationToken cancellation)
     {
-        await this.MaybeExternalizeAsync(v => r.CustomStatus = v, r.CustomStatus, cancellation);
+        r.CustomStatus = await this.MaybeExternalizeAsync(r.CustomStatus, cancellation);
         foreach (P.OrchestratorAction a in r.Actions)
         {
             if (a.CompleteOrchestration is { } complete)
             {
-                await this.MaybeExternalizeAsync(v => complete.Result = v, complete.Result, cancellation);
-                await this.MaybeExternalizeAsync(v => complete.Details = v, complete.Details, cancellation);
+                complete.Result = await this.MaybeExternalizeAsync(complete.Result, cancellation);
+                complete.Details = await this.MaybeExternalizeAsync(complete.Details, cancellation);
             }
 
             if (a.TerminateOrchestration is { } term)
             {
-                await this.MaybeExternalizeAsync(v => term.Reason = v, term.Reason, cancellation);
+                term.Reason = await this.MaybeExternalizeAsync(term.Reason, cancellation);
             }
 
             if (a.ScheduleTask is { } schedule)
             {
-                await this.MaybeExternalizeAsync(v => schedule.Input = v, schedule.Input, cancellation);
+                schedule.Input = await this.MaybeExternalizeAsync(schedule.Input, cancellation);
             }
 
             if (a.CreateSubOrchestration is { } sub)
             {
-                await this.MaybeExternalizeAsync(v => sub.Input = v, sub.Input, cancellation);
+                sub.Input = await this.MaybeExternalizeAsync(sub.Input, cancellation);
             }
 
             if (a.SendEvent is { } sendEvt)
             {
-                await this.MaybeExternalizeAsync(v => sendEvt.Data = v, sendEvt.Data, cancellation);
+                sendEvt.Data = await this.MaybeExternalizeAsync(sendEvt.Data, cancellation);
             }
 
             if (a.SendEntityMessage is { } entityMsg)
             {
                 if (entityMsg.EntityOperationSignaled is { } sig)
                 {
-                    await this.MaybeExternalizeAsync(v => sig.Input = v, sig.Input, cancellation);
+                    sig.Input = await this.MaybeExternalizeAsync(sig.Input, cancellation);
                 }
 
                 if (entityMsg.EntityOperationCalled is { } called)
                 {
-                    await this.MaybeExternalizeAsync(v => called.Input = v, called.Input, cancellation);
+                    called.Input = await this.MaybeExternalizeAsync(called.Input, cancellation);
                 }
             }
         }
@@ -96,14 +105,14 @@ public sealed class AzureBlobPayloadsManagedBackendInterceptor(IPayloadStore pay
 
     async Task ExternalizeEntityBatchResultAsync(P.EntityBatchResult r, CancellationToken cancellation)
     {
-        await this.MaybeExternalizeAsync(v => r.EntityState = v, r.EntityState, cancellation);
+        r.EntityState = await this.MaybeExternalizeAsync(r.EntityState, cancellation);
         if (r.Results != null)
         {
             foreach (P.OperationResult result in r.Results)
             {
                 if (result.Success is { } success)
                 {
-                    await this.MaybeExternalizeAsync(v => success.Result = v, success.Result, cancellation);
+                    success.Result = await this.MaybeExternalizeAsync(success.Result, cancellation);
                 }
             }
         }
@@ -114,12 +123,12 @@ public sealed class AzureBlobPayloadsManagedBackendInterceptor(IPayloadStore pay
             {
                 if (action.SendSignal is { } sendSig)
                 {
-                    await this.MaybeExternalizeAsync(v => sendSig.Input = v, sendSig.Input, cancellation);
+                    sendSig.Input = await this.MaybeExternalizeAsync(sendSig.Input, cancellation);
                 }
 
                 if (action.StartNewOrchestration is { } start)
                 {
-                    await this.MaybeExternalizeAsync(v => start.Input = v, start.Input, cancellation);
+                    start.Input = await this.MaybeExternalizeAsync(start.Input, cancellation);
                 }
             }
         }
@@ -127,12 +136,12 @@ public sealed class AzureBlobPayloadsManagedBackendInterceptor(IPayloadStore pay
 
     async Task ExternalizeEntityBatchRequestAsync(P.EntityBatchRequest r, CancellationToken cancellation)
     {
-        await this.MaybeExternalizeAsync(v => r.EntityState = v, r.EntityState, cancellation);
+        r.EntityState = await this.MaybeExternalizeAsync(r.EntityState, cancellation);
         if (r.Operations != null)
         {
             foreach (P.OperationRequest op in r.Operations)
             {
-                await this.MaybeExternalizeAsync(v => op.Input = v, op.Input, cancellation);
+                op.Input = await this.MaybeExternalizeAsync(op.Input, cancellation);
             }
         }
     }
@@ -144,121 +153,121 @@ public sealed class AzureBlobPayloadsManagedBackendInterceptor(IPayloadStore pay
             case P.HistoryEvent.EventTypeOneofCase.ExecutionStarted:
                 if (e.ExecutionStarted is { } es)
                 {
-                    await this.MaybeExternalizeAsync(v => es.Input = v, es.Input, cancellation);
+                    es.Input = await this.MaybeExternalizeAsync(es.Input, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted:
                 if (e.ExecutionCompleted is { } ec)
                 {
-                    await this.MaybeExternalizeAsync(v => ec.Result = v, ec.Result, cancellation);
+                    ec.Result = await this.MaybeExternalizeAsync(ec.Result, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EventRaised:
                 if (e.EventRaised is { } er)
                 {
-                    await this.MaybeExternalizeAsync(v => er.Input = v, er.Input, cancellation);
+                    er.Input = await this.MaybeExternalizeAsync(er.Input, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TaskScheduled:
                 if (e.TaskScheduled is { } ts)
                 {
-                    await this.MaybeExternalizeAsync(v => ts.Input = v, ts.Input, cancellation);
+                    ts.Input = await this.MaybeExternalizeAsync(ts.Input, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
                 if (e.TaskCompleted is { } tc)
                 {
-                    await this.MaybeExternalizeAsync(v => tc.Result = v, tc.Result, cancellation);
+                    tc.Result = await this.MaybeExternalizeAsync(tc.Result, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated:
                 if (e.SubOrchestrationInstanceCreated is { } soc)
                 {
-                    await this.MaybeExternalizeAsync(v => soc.Input = v, soc.Input, cancellation);
+                    soc.Input = await this.MaybeExternalizeAsync(soc.Input, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted:
                 if (e.SubOrchestrationInstanceCompleted is { } sox)
                 {
-                    await this.MaybeExternalizeAsync(v => sox.Result = v, sox.Result, cancellation);
+                    sox.Result = await this.MaybeExternalizeAsync(sox.Result, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EventSent:
                 if (e.EventSent is { } esent)
                 {
-                    await this.MaybeExternalizeAsync(v => esent.Input = v, esent.Input, cancellation);
+                    esent.Input = await this.MaybeExternalizeAsync(esent.Input, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.GenericEvent:
                 if (e.GenericEvent is { } ge)
                 {
-                    await this.MaybeExternalizeAsync(v => ge.Data = v, ge.Data, cancellation);
+                    ge.Data = await this.MaybeExternalizeAsync(ge.Data, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ContinueAsNew:
                 if (e.ContinueAsNew is { } can)
                 {
-                    await this.MaybeExternalizeAsync(v => can.Input = v, can.Input, cancellation);
+                    can.Input = await this.MaybeExternalizeAsync(can.Input, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated:
                 if (e.ExecutionTerminated is { } et)
                 {
-                    await this.MaybeExternalizeAsync(v => et.Input = v, et.Input, cancellation);
+                    et.Input = await this.MaybeExternalizeAsync(et.Input, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionSuspended:
                 if (e.ExecutionSuspended is { } esus)
                 {
-                    await this.MaybeExternalizeAsync(v => esus.Input = v, esus.Input, cancellation);
+                    esus.Input = await this.MaybeExternalizeAsync(esus.Input, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionResumed:
                 if (e.ExecutionResumed is { } eres)
                 {
-                    await this.MaybeExternalizeAsync(v => eres.Input = v, eres.Input, cancellation);
+                    eres.Input = await this.MaybeExternalizeAsync(eres.Input, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EntityOperationSignaled:
                 if (e.EntityOperationSignaled is { } eos)
                 {
-                    await this.MaybeExternalizeAsync(v => eos.Input = v, eos.Input, cancellation);
+                    eos.Input = await this.MaybeExternalizeAsync(eos.Input, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EntityOperationCalled:
                 if (e.EntityOperationCalled is { } eoc)
                 {
-                    await this.MaybeExternalizeAsync(v => eoc.Input = v, eoc.Input, cancellation);
+                    eoc.Input = await this.MaybeExternalizeAsync(eoc.Input, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.EntityOperationCompleted:
                 if (e.EntityOperationCompleted is { } ecomp)
                 {
-                    await this.MaybeExternalizeAsync(v => ecomp.Output = v, ecomp.Output, cancellation);
+                    ecomp.Output = await this.MaybeExternalizeAsync(ecomp.Output, cancellation);
                 }
 
                 break;
             case P.HistoryEvent.EventTypeOneofCase.HistoryState:
                 if (e.HistoryState is { } hs && hs.OrchestrationState is { } os)
                 {
-                    await this.MaybeExternalizeAsync(v => os.Input = v, os.Input, cancellation);
-                    await this.MaybeExternalizeAsync(v => os.Output = v, os.Output, cancellation);
-                    await this.MaybeExternalizeAsync(v => os.CustomStatus = v, os.CustomStatus, cancellation);
+                    os.Input = await this.MaybeExternalizeAsync(os.Input, cancellation);
+                    os.Output = await this.MaybeExternalizeAsync(os.Output, cancellation);
+                    os.CustomStatus = await this.MaybeExternalizeAsync(os.CustomStatus, cancellation);
                 }
 
                 break;

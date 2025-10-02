@@ -158,30 +158,23 @@ public abstract class BasePayloadInterceptor<TRequestNamespace, TResponseNamespa
     /// <summary>
     /// Externalizes a payload if it exceeds the threshold.
     /// </summary>
-    /// <param name="assign">Action to assign the externalized token.</param>
     /// <param name="value">The value to potentially externalize.</param>
     /// <param name="cancellation">Cancellation token.</param>
-    /// <returns>A task representing the async operation.</returns>
-    protected Task MaybeExternalizeAsync(Action<string?> assign, string? value, CancellationToken cancellation)
+    /// <returns>A task that returns the externalized token or the original value.</returns>
+    protected async Task<string?> MaybeExternalizeAsync(string? value, CancellationToken cancellation)
     {
         if (string.IsNullOrEmpty(value))
         {
-            return Task.CompletedTask;
+            return value;
         }
 
         int size = Encoding.UTF8.GetByteCount(value);
         if (size < this.options.ExternalizeThresholdBytes)
         {
-            return Task.CompletedTask;
+            return value;
         }
 
-        return UploadAsync();
-
-        async Task UploadAsync()
-        {
-            string token = await this.payloadStore.UploadAsync(Encoding.UTF8.GetBytes(value), cancellation);
-            assign(token);
-        }
+        return await this.payloadStore.UploadAsync(Encoding.UTF8.GetBytes(value), cancellation);
     }
 
     /// <summary>

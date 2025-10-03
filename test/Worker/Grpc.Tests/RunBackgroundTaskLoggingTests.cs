@@ -388,7 +388,9 @@ public class RunBackgroundTaskLoggingTests
                 grpcOptions: grpcOptions,
                 workerOptions: workerOptions,
                 services: services,
-                loggerFactory: loggerFactory);
+                loggerFactory: loggerFactory,
+                orchestrationFilter: null,
+                exceptionPropertiesProvider: null);
 
             // Client mock
             var callInvoker = Mock.Of<CallInvoker>();

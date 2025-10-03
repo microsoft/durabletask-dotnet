@@ -31,4 +31,9 @@ public abstract class DurableTaskWorker : BackgroundService
     /// the configured tasks during host construction.
     /// </summary>
     protected virtual IDurableTaskFactory Factory { get; }
+
+    /// <summary>
+    /// Gets or sets the exception properties provider used to enrich failure details with custom exception properties.
+    /// </summary>
+    protected IExceptionPropertiesProvider? ExceptionPropertiesProvider { get; set; }
 }

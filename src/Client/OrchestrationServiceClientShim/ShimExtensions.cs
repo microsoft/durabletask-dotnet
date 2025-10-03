@@ -75,7 +75,7 @@ static class ShimExtensions
         }
 
         TaskFailureDetails? inner = details.InnerFailure?.ConvertFromCore();
-        return new TaskFailureDetails(details.ErrorType, details.ErrorMessage, details.StackTrace, inner);
+        return new TaskFailureDetails(details.ErrorType, details.ErrorMessage, details.StackTrace, inner, details.Properties);
     }
 
     /// <summary>

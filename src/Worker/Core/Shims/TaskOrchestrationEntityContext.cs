@@ -168,7 +168,8 @@ sealed partial class TaskOrchestrationContextWrapper
              failureDetails.ErrorType,
              failureDetails.ErrorMessage,
              failureDetails.StackTrace,
-             failureDetails.InnerFailure != null ? ConvertFailureDetails(failureDetails.InnerFailure) : null);
+             failureDetails.InnerFailure != null ? ConvertFailureDetails(failureDetails.InnerFailure) : null,
+             failureDetails.Properties);
 
         async Task<OperationResult> CallEntityInternalAsync(EntityInstanceId id, string operationName, object? input)
         {

@@ -49,6 +49,7 @@ static class DurableTaskCoreExceptionsExtensions
             failureDetails.ErrorType,
             failureDetails.ErrorMessage,
             failureDetails.StackTrace,
-            failureDetails.InnerFailure?.ToTaskFailureDetails());
+            failureDetails.InnerFailure?.ToTaskFailureDetails(),
+            failureDetails.Properties);
     }
 }

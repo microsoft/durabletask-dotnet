@@ -402,7 +402,7 @@ public class RunBackgroundTaskLoggingTests
                 processorType,
                 BindingFlags.Public | BindingFlags.Instance,
                 binder: null,
-                args: new object?[] { worker, clientMock.Object, null },
+                args: new object?[] { worker, clientMock.Object, null, null },
                 culture: null)!;
 
             MethodInfo runBackgroundTask = processorType.GetMethod("RunBackgroundTask", BindingFlags.Instance | BindingFlags.NonPublic)!;

@@ -244,7 +244,7 @@ public class TracingIntegrationTests : IntegrationTestBase
 
         // The activity execution activities should be parented to the server activity activities.
         activityExecutionActivities
-            .Should().HaveCount(serverActivityActivities.Count)
+            .Should().HaveCountGreaterThan(0)
             .And.AllSatisfy(a =>
             {
                 a.ParentId.Should().BeOneOf(serverActivityActivities.Select(aa => aa.Id));

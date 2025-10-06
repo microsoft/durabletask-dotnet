@@ -18,6 +18,7 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// </remarks>
 public class DurableTaskShimFactory
 {
+    public readonly IExceptionPropertiesProvider? exceptionPropertiesProvider;
     readonly DurableTaskWorkerOptions options;
     readonly ILoggerFactory loggerFactory;
 
@@ -28,15 +29,28 @@ public class DurableTaskShimFactory
     /// <param name="loggerFactory">The logger factory.</param>
     public DurableTaskShimFactory(
         DurableTaskWorkerOptions? options = null, ILoggerFactory? loggerFactory = null)
+        : this(options, loggerFactory, null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DurableTaskShimFactory" /> class.
+    /// </summary>
+    /// <param name="options">The data converter.</param>
+    /// <param name="loggerFactory">The logger factory.</param>
+    /// <param name="provider">The exception properties provider for failure details.</param>
+    public DurableTaskShimFactory(
+        DurableTaskWorkerOptions? options = null, ILoggerFactory? loggerFactory = null, IExceptionPropertiesProvider? provider = null)
     {
         this.options = options ?? new();
         this.loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
+        this.exceptionPropertiesProvider = provider;
     }
 
     /// <summary>
     /// Gets the default <see cref="DurableTaskShimFactory" /> with default values.
     /// </summary>
-    public static DurableTaskShimFactory Default { get; } = new();
+    public static DurableTaskShimFactory Default { get; } = new(null, null, null);
 
     /// <summary>
     /// Creates a <see cref="TaskActivity" /> from a <see cref="ITaskActivity" />.

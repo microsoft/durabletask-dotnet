@@ -167,12 +167,13 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
                 coreEx.FailureDetails?.Properties ?? null);
         }
 
+        // might need to udpate this later
         return new TaskFailureDetails(
             exception.GetType().ToString(),
             exception.Message,
             exception.StackTrace,
             FromExceptionRecursive(exception.InnerException),
-            null);// might need to udpate this later 
+            null);
     }
 
     static TaskFailureDetails? FromCoreFailureDetailsRecursive(CoreFailureDetails? coreFailureDetails)

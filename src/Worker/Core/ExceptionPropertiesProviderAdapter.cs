@@ -27,6 +27,6 @@ public sealed class ExceptionPropertiesProviderAdapter : global::DurableTask.Cor
     /// </summary>
     /// <param name="exception">The exception to get properties for.</param>
     /// <returns>The exception properties dictionary.</returns>
-    public IDictionary<string, object>? GetExceptionProperties(Exception exception)
+    public IDictionary<string, object?>? GetExceptionProperties(Exception exception)
         => this.inner.GetExceptionProperties(exception);
 }

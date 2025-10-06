@@ -818,31 +818,6 @@ sealed partial class GrpcDurableTaskWorker
                 return;
             }
 
-            try
-            {
-                await using AsyncServiceScope scope = this.worker.services.CreateAsyncScope();
-                if (this.worker.Factory.TryCreateActivity(name, scope.ServiceProvider, out ITaskActivity? activity))
-                {
-                    // Both the factory invocation and the RunAsync could involve user code and need to be handled as
-                    // part of try/catch.
-                    TaskActivity shim = this.shimFactory.CreateActivity(name, activity);
-                    output = await shim.RunAsync(innerContext, request.Input);
-                }
-                else
-                {
-                    failureDetails = new P.TaskFailureDetails
-                    {
-                        ErrorType = "ActivityTaskNotFound",
-                        ErrorMessage = $"No activity task named '{name}' was found.",
-                        IsNonRetriable = true,
-                    };
-                }
-            }
-            catch (Exception applicationException)
-            {
-                failureDetails = applicationException.ToTaskFailureDetails(this.exceptionPropertiesProvider);
-            }
-
             int outputSizeInBytes = 0;
             if (failureDetails != null)
             {

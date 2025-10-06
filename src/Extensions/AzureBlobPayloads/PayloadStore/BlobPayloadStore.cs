@@ -1,22 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Globalization;
 using System.IO.Compression;
 using System.Text;
-using Azure;
 using Azure.Core;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
-using Microsoft.DurableTask.Converters;
 
 namespace Microsoft.DurableTask;
 
 /// <summary>
-/// Azure Blob Storage implementation of <see cref="IPayloadStore"/>.
+/// Azure Blob Storage implementation of <see cref="PayloadStore"/>.
 /// Stores payloads as blobs and returns opaque tokens in the form "blob:v1:&lt;container&gt;:&lt;blobName&gt;".
 /// </summary>
-sealed class BlobPayloadStore : IPayloadStore
+sealed class BlobPayloadStore : PayloadStore
 {
     const string TokenPrefix = "blob:v1:";
     const string ContentEncodingGzip = "gzip";
@@ -70,13 +67,13 @@ sealed class BlobPayloadStore : IPayloadStore
     }
 
     /// <inheritdoc/>
-    public override async Task<string> UploadAsync(ReadOnlyMemory<byte> payloadBytes, CancellationToken cancellationToken)
+    public override async Task<string> UploadAsync(string payLoad, CancellationToken cancellationToken)
     {
         // One blob per payload using GUID-based name for uniqueness (stable across retries)
         string blobName = $"{Guid.NewGuid():N}";
         BlobClient blob = this.containerClient.GetBlobClient(blobName);
 
-        byte[] payloadBuffer = payloadBytes.ToArray();
+        byte[] payloadBuffer = Encoding.UTF8.GetBytes(payLoad);
 
         // Ensure container exists (idempotent)
         await this.containerClient.CreateIfNotExistsAsync(PublicAccessType.None, default, default, cancellationToken);
@@ -89,17 +86,21 @@ sealed class BlobPayloadStore : IPayloadStore
             };
             using Stream blobStream = await blob.OpenWriteAsync(true, writeOptions, cancellationToken);
             using GZipStream compressedBlobStream = new(blobStream, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true);
-            using MemoryStream payloadStream = new(payloadBuffer, writable: false);
 
-            await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
+            // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
+
+            // await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
+            await compressedBlobStream.WriteAsync(payloadBuffer, 0, payloadBuffer.Length, cancellationToken);
             await compressedBlobStream.FlushAsync(cancellationToken);
             await blobStream.FlushAsync(cancellationToken);
         }
         else
         {
             using Stream blobStream = await blob.OpenWriteAsync(true, default, cancellationToken);
-            using MemoryStream payloadStream = new(payloadBuffer, writable: false);
-            await payloadStream.CopyToAsync(blobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
+
+            // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
+            // await payloadStream.CopyToAsync(blobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
+            await blobStream.WriteAsync(payloadBuffer, 0, payloadBuffer.Length, cancellationToken);
             await blobStream.FlushAsync(cancellationToken);
         }
 

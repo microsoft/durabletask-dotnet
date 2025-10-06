@@ -8,7 +8,7 @@ using Grpc.Core.Interceptors;
 namespace Microsoft.DurableTask;
 
 /// <summary>
-/// Base class for gRPC interceptors that externalize large payloads to an <see cref="IPayloadStore"/> on requests
+/// Base class for gRPC interceptors that externalize large payloads to an <see cref="PayloadStore"/> on requests
 /// and resolves known payload tokens on responses.
 /// </summary>
 /// <typeparam name="TRequestNamespace">The namespace for request message types.</typeparam>
@@ -17,7 +17,7 @@ public abstract class BasePayloadInterceptor<TRequestNamespace, TResponseNamespa
     where TRequestNamespace : class
     where TResponseNamespace : class
 {
-    readonly IPayloadStore payloadStore;
+    readonly PayloadStore payloadStore;
     readonly LargePayloadStorageOptions options;
 
     /// <summary>
@@ -25,7 +25,7 @@ public abstract class BasePayloadInterceptor<TRequestNamespace, TResponseNamespa
     /// </summary>
     /// <param name="payloadStore">The payload store.</param>
     /// <param name="options">The options.</param>
-    protected BasePayloadInterceptor(IPayloadStore payloadStore, LargePayloadStorageOptions options)
+    protected BasePayloadInterceptor(PayloadStore payloadStore, LargePayloadStorageOptions options)
     {
         this.payloadStore = payloadStore;
         this.options = options;
@@ -174,7 +174,7 @@ public abstract class BasePayloadInterceptor<TRequestNamespace, TResponseNamespa
             return value;
         }
 
-        return await this.payloadStore.UploadAsync(Encoding.UTF8.GetBytes(value), cancellation);
+        return await this.payloadStore.UploadAsync(value, cancellation);
     }
 
     /// <summary>

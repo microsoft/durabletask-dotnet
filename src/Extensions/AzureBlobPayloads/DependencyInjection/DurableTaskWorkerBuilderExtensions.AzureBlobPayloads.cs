@@ -30,7 +30,7 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
         Check.NotNull(configure);
 
         builder.Services.Configure(builder.Name, configure);
-        builder.Services.AddSingleton<IPayloadStore>(sp =>
+        builder.Services.AddSingleton<PayloadStore>(sp =>
         {
             LargePayloadStorageOptions opts = sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(builder.Name);
             return new BlobPayloadStore(opts);
@@ -57,7 +57,7 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
         // Wrap the gRPC CallInvoker with our interceptor when using the gRPC worker
         builder.Services
             .AddOptions<GrpcDurableTaskWorkerOptions>(builder.Name)
-            .PostConfigure<IPayloadStore, IOptionsMonitor<LargePayloadStorageOptions>>((opt, store, monitor) =>
+            .PostConfigure<PayloadStore, IOptionsMonitor<LargePayloadStorageOptions>>((opt, store, monitor) =>
             {
                 LargePayloadStorageOptions opts = monitor.Get(builder.Name);
                 if (opt.Channel is not null)

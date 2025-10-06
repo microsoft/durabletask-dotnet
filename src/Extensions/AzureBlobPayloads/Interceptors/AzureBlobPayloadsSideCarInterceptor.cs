@@ -8,10 +8,10 @@ using P = Microsoft.DurableTask.Protobuf;
 namespace Microsoft.DurableTask;
 
 /// <summary>
-/// gRPC interceptor that externalizes large payloads to an <see cref="IPayloadStore"/> on requests
+/// gRPC interceptor that externalizes large payloads to an <see cref="PayloadStore"/> on requests
 /// and resolves known payload tokens on responses for SideCar.
 /// </summary>
-public sealed class AzureBlobPayloadsSideCarInterceptor(IPayloadStore payloadStore, LargePayloadStorageOptions options)
+public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStore, LargePayloadStorageOptions options)
     : BasePayloadInterceptor<object, object>(payloadStore, options)
 {
     /// <inheritdoc/>

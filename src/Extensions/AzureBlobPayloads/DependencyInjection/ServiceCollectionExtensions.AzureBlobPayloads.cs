@@ -30,8 +30,8 @@ public static class ServiceCollectionExtensionsAzureBlobPayloads
         // so monitor.Get(builder.Name) in the client/worker extensions will see the same config.
         services.Configure(configure);
 
-        // Provide a single shared IPayloadStore instance built from the default options.
-        services.AddSingleton<IPayloadStore>(sp =>
+        // Provide a single shared PayloadStore instance built from the default options.
+        services.AddSingleton<PayloadStore>(sp =>
         {
             IOptionsMonitor<LargePayloadStorageOptions> monitor =
                 sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>();

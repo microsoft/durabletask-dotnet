@@ -6,15 +6,15 @@ namespace Microsoft.DurableTask;
 /// <summary>
 /// Abstraction for storing and retrieving large payloads out-of-band.
 /// </summary>
-public abstract class IPayloadStore
+public abstract class PayloadStore
 {
     /// <summary>
     /// Uploads a payload and returns an opaque reference token that can be embedded in orchestration messages.
     /// </summary>
-    /// <param name="payloadBytes">The payload bytes.</param>
+    /// <param name="payLoad">The payload.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Opaque reference token.</returns>
-    public abstract Task<string> UploadAsync(ReadOnlyMemory<byte> payloadBytes, CancellationToken cancellationToken);
+    public abstract Task<string> UploadAsync(string payLoad, CancellationToken cancellationToken);
 
     /// <summary>
     /// Downloads the payload referenced by the token.

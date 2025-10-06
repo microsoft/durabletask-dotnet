@@ -34,7 +34,7 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
         // Wrap the gRPC CallInvoker with our interceptor when using the gRPC client
         builder.Services
             .AddOptions<GrpcDurableTaskClientOptions>(builder.Name)
-            .PostConfigure<IPayloadStore, IOptionsMonitor<LargePayloadStorageOptions>>((opt, store, monitor) =>
+            .PostConfigure<PayloadStore, IOptionsMonitor<LargePayloadStorageOptions>>((opt, store, monitor) =>
             {
                 LargePayloadStorageOptions opts = monitor.Get(builder.Name);
                 if (opt.Channel is not null)

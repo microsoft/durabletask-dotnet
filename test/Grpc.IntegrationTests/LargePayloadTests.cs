@@ -35,14 +35,14 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
 
                 worker.UseExternalizedPayloads();
 
-                worker.Services.AddSingleton<IPayloadStore>(fakeStore);
+                worker.Services.AddSingleton<PayloadStore>(fakeStore);
             },
             client =>
             {
                 client.UseExternalizedPayloads();
 
                 // Override store with in-memory test double
-                client.Services.AddSingleton<IPayloadStore>(fakeStore);
+                client.Services.AddSingleton<PayloadStore>(fakeStore);
             },
             services =>
             {
@@ -112,12 +112,12 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                     }));
 
                 worker.UseExternalizedPayloads();
-                worker.Services.AddSingleton<IPayloadStore>(store);
+                worker.Services.AddSingleton<PayloadStore>(store);
             },
             client =>
             {
                 client.UseExternalizedPayloads();
-                client.Services.AddSingleton<IPayloadStore>(store);
+                client.Services.AddSingleton<PayloadStore>(store);
             },
             services =>
             {
@@ -167,7 +167,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 // Enable externalization on the client and use the in-memory store to track uploads
                 client.UseExternalizedPayloads();
-                client.Services.AddSingleton<IPayloadStore>(clientStore);
+                client.Services.AddSingleton<PayloadStore>(clientStore);
             },
             services =>
             {
@@ -253,12 +253,12 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                     }));
 
                 worker.UseExternalizedPayloads();
-                worker.Services.AddSingleton<IPayloadStore>(store);
+                worker.Services.AddSingleton<PayloadStore>(store);
             },
             client =>
             {
                 client.UseExternalizedPayloads();
-                client.Services.AddSingleton<IPayloadStore>(store);
+                client.Services.AddSingleton<PayloadStore>(store);
             },
             services =>
             {
@@ -317,12 +317,12 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                     }));
 
                 worker.UseExternalizedPayloads();
-                worker.Services.AddSingleton<IPayloadStore>(workerStore);
+                worker.Services.AddSingleton<PayloadStore>(workerStore);
             },
             client =>
             {
                 client.UseExternalizedPayloads();
-                client.Services.AddSingleton<IPayloadStore>(workerStore);
+                client.Services.AddSingleton<PayloadStore>(workerStore);
             },
             services =>
             {
@@ -374,12 +374,12 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                     .AddActivityFunc<string>(activity, (ctx) => Task.FromResult(largeActivityOutput)));
 
                 worker.UseExternalizedPayloads();
-                worker.Services.AddSingleton<IPayloadStore>(workerStore);
+                worker.Services.AddSingleton<PayloadStore>(workerStore);
             },
             client =>
             {
                 client.UseExternalizedPayloads();
-                client.Services.AddSingleton<IPayloadStore>(workerStore);
+                client.Services.AddSingleton<PayloadStore>(workerStore);
             },
             services =>
             {
@@ -422,12 +422,12 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                     (ctx, input) => Task.FromResult(largeOut)));
 
                 worker.UseExternalizedPayloads();
-                worker.Services.AddSingleton<IPayloadStore>(workerStore);
+                worker.Services.AddSingleton<PayloadStore>(workerStore);
             },
             client =>
             {
                 client.UseExternalizedPayloads();
-                client.Services.AddSingleton<IPayloadStore>(workerStore);
+                client.Services.AddSingleton<PayloadStore>(workerStore);
             },
             services =>
             {
@@ -480,7 +480,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                     .AddActivityFunc<string, string>(activityName, (ctx, input) => input + input));
 
                 worker.UseExternalizedPayloads();
-                worker.Services.AddSingleton<IPayloadStore>(workerStore);
+                worker.Services.AddSingleton<PayloadStore>(workerStore);
             },
             client => { /* client not needed for externalization path here */ },
             services =>
@@ -529,12 +529,12 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                     (ctx, input) => Task.FromResult(input)));
 
                 worker.UseExternalizedPayloads();
-                worker.Services.AddSingleton<IPayloadStore>(workerStore);
+                worker.Services.AddSingleton<PayloadStore>(workerStore);
             },
             client =>
             {
                 client.UseExternalizedPayloads();
-                client.Services.AddSingleton<IPayloadStore>(clientStore);
+                client.Services.AddSingleton<PayloadStore>(clientStore);
             });
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: smallPayload);
@@ -567,12 +567,12 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                     orchestratorName,
                     async ctx => await ctx.WaitForExternalEvent<string>(EventName)));
 
-                worker.Services.AddSingleton<IPayloadStore>(fakeStore);
+                worker.Services.AddSingleton<PayloadStore>(fakeStore);
                 worker.UseExternalizedPayloads();
             },
             client =>
             {
-                client.Services.AddSingleton<IPayloadStore>(fakeStore);
+                client.Services.AddSingleton<PayloadStore>(fakeStore);
                 client.UseExternalizedPayloads();
             },
             services =>
@@ -602,7 +602,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
     }
 
 
-    class InMemoryPayloadStore : IPayloadStore
+    class InMemoryPayloadStore : PayloadStore
     {
         const string TokenPrefix = "blob:v1:";
         readonly Dictionary<string, string> tokenToPayload;
@@ -623,13 +623,12 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         int downloadCount;
         public int DownloadCount => this.downloadCount;
 
-        public override Task<string> UploadAsync(ReadOnlyMemory<byte> payloadBytes, CancellationToken cancellationToken)
+        public override Task<string> UploadAsync(string payLoad, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref this.uploadCount);
-            string json = System.Text.Encoding.UTF8.GetString(payloadBytes.Span);
             string token = $"blob:v1:test:{Guid.NewGuid():N}";
-            this.tokenToPayload[token] = json;
-            this.uploadedPayloads.Add(json);
+            this.tokenToPayload[token] = payLoad;
+            this.uploadedPayloads.Add(payLoad);
             return Task.FromResult(token);
         }
 

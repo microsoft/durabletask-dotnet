@@ -744,6 +744,22 @@ sealed partial class GrpcDurableTaskWorker
                 traceActivity?.Dispose();
             }
 
+
+            // check if request new events contains ExportStartEvent
+            var exportStartedEvent = request.NewEvents.LastOrDefault(e => e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExportStarted);
+
+            if (exportStartedEvent is not null)
+            {
+
+                // TODO: Export the orchestration
+
+                
+                response.Actions.Add(new P.OrchestratorAction
+                {
+                    CompleteExport = new P.CompleteExportAction { InstanceId = request.InstanceId },
+                });
+            }
+
             this.Logger.SendingOrchestratorResponse(
                 name,
                 response.InstanceId,

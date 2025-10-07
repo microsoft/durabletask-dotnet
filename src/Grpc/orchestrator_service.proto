@@ -219,6 +219,14 @@ message EntityLockGrantedEvent {
     string criticalSectionId = 1;
 }
 
+message ExportStartedEvent {
+    string instanceId = 1;
+}
+
+message ExportCompletedEvent {
+    string instanceId = 1;
+}
+
 message HistoryEvent {
     int32 eventId = 1;
     google.protobuf.Timestamp timestamp = 2;
@@ -250,6 +258,8 @@ message HistoryEvent {
         EntityLockRequestedEvent entityLockRequested = 27;
         EntityLockGrantedEvent entityLockGranted = 28;
         EntityUnlockSentEvent entityUnlockSent = 29;
+        ExportStartedEvent exportStarted = 30;
+        ExportCompletedEvent exportCompleted = 31;
     }
 }
 
@@ -288,6 +298,10 @@ message CompleteOrchestrationAction {
     TaskFailureDetails failureDetails = 6;
 }
 
+message CompleteExportAction {
+    string instanceId = 1;
+}
+
 message TerminateOrchestrationAction {
     string instanceId = 1;
     google.protobuf.StringValue reason = 2;
@@ -313,6 +327,7 @@ message OrchestratorAction {
         CompleteOrchestrationAction completeOrchestration = 6;
         TerminateOrchestrationAction terminateOrchestration = 7;
         SendEntityMessageAction sendEntityMessage = 8;
+        CompleteExportAction completeExport = 9;
     }
 }
 
@@ -359,6 +374,7 @@ message CreateInstanceRequest {
     map<string, string> tags = 8;
     TraceContext parentTraceContext = 9;
     google.protobuf.Timestamp requestTime = 10;
+    bool exportable = 11;
 }
 
 message OrchestrationIdReusePolicy {

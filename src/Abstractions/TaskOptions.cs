@@ -24,10 +24,11 @@ public record TaskOptions
     /// </summary>
     /// <param name="retry">The task retry options.</param>
     /// <param name="tags">The tags to associate with the task.</param>
-    public TaskOptions(TaskRetryOptions? retry = null, IDictionary<string, string>? tags = null)
+    public TaskOptions(TaskRetryOptions? retry = null, IDictionary<string, string>? tags = null, bool exportable = false)
     {
         this.Retry = retry;
         this.Tags = tags;
+        this.Exportable = exportable;
     }
 
     /// <summary>
@@ -39,6 +40,11 @@ public record TaskOptions
     /// Gets the tags to associate with the task.
     /// </summary>
     public IDictionary<string, string>? Tags { get; init; }
+
+    /// <summary>
+    /// Gets the flag to indicate if the task is exportable.
+    /// </summary>
+    public bool Exportable { get; init; }
 
     /// <summary>
     /// Returns a new <see cref="TaskOptions" /> from the provided <see cref="RetryPolicy" />.

@@ -54,6 +54,11 @@ enum OrchestrationStatus {
     ORCHESTRATION_STATUS_SUSPENDED = 7;
 }
 
+enum ExportStatus {
+    EXPORT_STATUS_COMPLETED = 0;
+    EXPORT_STATUS_FAILED = 1;
+}
+
 message ParentInstanceInfo {
     int32 taskScheduledId = 1;
     google.protobuf.StringValue name = 2;
@@ -227,6 +232,11 @@ message ExportCompletedEvent {
     string instanceId = 1;
 }
 
+message ExportFailedEvent {
+    string instanceId = 1;
+    TaskFailureDetails failureDetails = 2;
+}
+
 message HistoryEvent {
     int32 eventId = 1;
     google.protobuf.Timestamp timestamp = 2;
@@ -260,6 +270,7 @@ message HistoryEvent {
         EntityUnlockSentEvent entityUnlockSent = 29;
         ExportStartedEvent exportStarted = 30;
         ExportCompletedEvent exportCompleted = 31;
+        ExportFailedEvent exportFailed = 32;
     }
 }
 
@@ -299,7 +310,8 @@ message CompleteOrchestrationAction {
 }
 
 message CompleteExportAction {
-    string instanceId = 1;
+    ExportStatus exportStatus = 1;
+    TaskFailureDetails failureDetails = 2;
 }
 
 message TerminateOrchestrationAction {

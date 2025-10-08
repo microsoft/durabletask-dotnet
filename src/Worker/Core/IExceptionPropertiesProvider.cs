@@ -13,5 +13,5 @@ public interface IExceptionPropertiesProvider
         /// </summary>
         /// <param name="exception">The exception to extract properties from.</param>
         /// <returns>A dictionary of custom properties to include in the FailureDetails, or null if no properties should be added.</returns>
-        IDictionary<string, object>? GetExceptionProperties(Exception exception);
+        IDictionary<string, object?>? GetExceptionProperties(Exception exception);
 }

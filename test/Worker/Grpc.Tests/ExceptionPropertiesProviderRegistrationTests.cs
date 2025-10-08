@@ -9,7 +9,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Xunit;
 
 namespace Worker.Grpc.Tests;
 
@@ -17,9 +16,9 @@ public class ExceptionPropertiesProviderRegistrationTests
 {
     sealed class TestExceptionPropertiesProvider : IExceptionPropertiesProvider
     {
-        public IDictionary<string, object>? GetExceptionProperties(Exception exception)
+        public IDictionary<string, object?>? GetExceptionProperties(Exception exception)
         {
-            return new Dictionary<string, object> { ["Foo"] = "Bar" };
+            return new Dictionary<string, object?> { ["Foo"] = "Bar" };
         }
     }
 

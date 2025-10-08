@@ -2,6 +2,9 @@
 // Licensed under the MIT License.
 
 using System.Buffers;
+using System.Collections;
+using System.Globalization;
+using System.Text.Json;
 using DurableTask.Core;
 using DurableTask.Core.Command;
 using DurableTask.Core.History;
@@ -487,7 +490,7 @@ public static class ProtobufUtils
     /// </summary>
     /// <param name="obj">The object to convert.</param>
     /// <returns>The converted protobuf Value.</returns>
-    static Value ConvertObjectToValue(object? obj)
+    internal static Value ConvertObjectToValue(object? obj)
     {
         return obj switch
         {
@@ -499,35 +502,57 @@ public static class ProtobufUtils
             float f => Value.ForNumber(f),
             double d => Value.ForNumber(d),
             decimal dec => Value.ForNumber((double)dec),
-            DateTime dt => Value.ForString(dt.ToString("O")),
-            DateTimeOffset dto => Value.ForString(dto.ToString("O")),
-            IDictionary<string, object> dict => Value.ForStruct(new Struct
+
+            // For DateTime and DateTimeOffset, add prefix to distinguish from normal string.
+            DateTime dt => Value.ForString($"dt:{dt.ToString("O")}"),
+            DateTimeOffset dto => Value.ForString($"dto:{dto.ToString("O")}"),
+            IDictionary<string, object?> dict => Value.ForStruct(new Struct
             {
                 Fields = { dict.ToDictionary(kvp => kvp.Key, kvp => ConvertObjectToValue(kvp.Value)) },
             }),
-            IEnumerable<object> list => Value.ForList(list.Select(ConvertObjectToValue).ToArray()),
+            IEnumerable e => Value.ForList(e.Cast<object?>().Select(ConvertObjectToValue).ToArray()),
+
+            // Fallback: convert unlisted type to string.
             _ => Value.ForString(obj.ToString() ?? string.Empty),
         };
     }
 
-    static object ConvertValueToObject(Value value)
+    static object? ConvertValueToObject(Google.Protobuf.WellKnownTypes.Value value)
     {
         switch (value.KindCase)
         {
-            case Value.KindOneofCase.StringValue:
-                return value.StringValue;
-            case Value.KindOneofCase.NumberValue:
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.NullValue:
+                return null;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.NumberValue:
                 return value.NumberValue;
-            case Value.KindOneofCase.BoolValue:
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.StringValue:
+                string stringValue = value.StringValue;
+
+                // Try to parse as DateTime if it's in ISO format
+                if (stringValue.StartsWith("dt:", StringComparison.Ordinal))
+                {
+                    return DateTime.Parse(stringValue[3..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+                }
+
+                // Try to parse as DateTimeOffset if it's in ISO format
+                if (stringValue.StartsWith("dto:", StringComparison.Ordinal))
+                {
+                    return DateTimeOffset.Parse(stringValue[4..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+                }
+
+                // Otherwise just return as string
+                return stringValue;
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.BoolValue:
                 return value.BoolValue;
-            case Value.KindOneofCase.StructValue:
-                return value.StructValue.Fields.ToDictionary(f => f.Key, f => ConvertValueToObject(f.Value));
-            case Value.KindOneofCase.ListValue:
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.StructValue:
+                return value.StructValue.Fields.ToDictionary(
+                    pair => pair.Key,
+                    pair => ConvertValueToObject(pair.Value));
+            case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.ListValue:
                 return value.ListValue.Values.Select(ConvertValueToObject).ToList();
-            case Value.KindOneofCase.NullValue:
-                return null!;
             default:
-                return value; // fallback
+                // Fallback: serialize the whole value to JSON string
+                return JsonSerializer.Serialize(value);
         }
     }
 }

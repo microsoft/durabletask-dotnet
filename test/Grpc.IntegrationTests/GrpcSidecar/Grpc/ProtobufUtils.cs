@@ -528,13 +528,11 @@ public static class ProtobufUtils
             case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.StringValue:
                 string stringValue = value.StringValue;
 
-                // Try to parse as DateTime if it's in ISO format
                 if (stringValue.StartsWith("dt:", StringComparison.Ordinal))
                 {
                     return DateTime.Parse(stringValue[3..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
                 }
 
-                // Try to parse as DateTimeOffset if it's in ISO format
                 if (stringValue.StartsWith("dto:", StringComparison.Ordinal))
                 {
                     return DateTimeOffset.Parse(stringValue[4..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);

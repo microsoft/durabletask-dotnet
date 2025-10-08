@@ -3,10 +3,12 @@
 
 using System.Buffers;
 using System.Buffers.Text;
+using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using DurableTask.Core;
 using DurableTask.Core.Command;
 using DurableTask.Core.Entities;
@@ -541,14 +543,14 @@ static class ProtoUtils
     /// <param name="exceptionPropertiesProvider">Optional exception properties provider.</param>
     /// <returns>The task failure details.</returns>
     [return: NotNullIfNotNull(nameof(e))]
-    internal static P.TaskFailureDetails? ToTaskFailureDetails(this Exception? e, global::DurableTask.Core.IExceptionPropertiesProvider? exceptionPropertiesProvider = null)
+    internal static P.TaskFailureDetails? ToTaskFailureDetails(this Exception? e, DTCore.IExceptionPropertiesProvider? exceptionPropertiesProvider = null)
     {
         if (e == null)
         {
             return null;
         }
 
-        var properties = exceptionPropertiesProvider?.GetExceptionProperties(e);
+        IDictionary<string, object?>? properties = exceptionPropertiesProvider?.GetExceptionProperties(e);
 
         var taskFailureDetails = new P.TaskFailureDetails
         {
@@ -1038,15 +1040,15 @@ static class ProtoUtils
                 string stringValue = value.StringValue;
 
                 // Try to parse as DateTime if it's in ISO format
-                if (DateTime.TryParse(stringValue, null, DateTimeStyles.RoundtripKind, out DateTime dateTime))
+                if (stringValue.StartsWith("dt:", StringComparison.Ordinal))
                 {
-                    return dateTime;
+                    return DateTime.Parse(stringValue[3..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
                 }
 
                 // Try to parse as DateTimeOffset if it's in ISO format
-                if (DateTimeOffset.TryParse(stringValue, null, DateTimeStyles.RoundtripKind, out DateTimeOffset dateTimeOffset))
+                if (stringValue.StartsWith("dto:", StringComparison.Ordinal))
                 {
-                    return dateTimeOffset;
+                    return DateTimeOffset.Parse(stringValue[4..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
                 }
 
                 // Otherwise just return as string
@@ -1060,7 +1062,8 @@ static class ProtoUtils
             case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.ListValue:
                 return value.ListValue.Values.Select(ConvertValueToObject).ToList();
             default:
-                throw new NotSupportedException($"Unsupported Value kind: {value.KindCase}");
+                // Fallback: serialize the whole value to JSON string
+                return JsonSerializer.Serialize(value);
         }
     }
 
@@ -1073,8 +1076,7 @@ static class ProtoUtils
     {
         return properties.ToDictionary(
             kvp => kvp.Key,
-            kvp => ConvertValueToObject(kvp.Value)
-        );
+            kvp => ConvertValueToObject(kvp.Value));
     }
 
     /// <summary>
@@ -1094,13 +1096,17 @@ static class ProtoUtils
             float f => Value.ForNumber(f),
             double d => Value.ForNumber(d),
             decimal dec => Value.ForNumber((double)dec),
-            DateTime dt => Value.ForString(dt.ToString("O")),
-            DateTimeOffset dto => Value.ForString(dto.ToString("O")),
-            IDictionary<string, object> dict => Value.ForStruct(new Struct
+
+            // For DateTime and DateTimeOffset, add prefix to distinguish from normal string.
+            DateTime dt => Value.ForString($"dt:{dt.ToString("O")}"),
+            DateTimeOffset dto => Value.ForString($"dto:{dto.ToString("O")}"),
+            IDictionary<string, object?> dict => Value.ForStruct(new Struct
             {
                 Fields = { dict.ToDictionary(kvp => kvp.Key, kvp => ConvertObjectToValue(kvp.Value)) },
             }),
-            IEnumerable<object> list => Value.ForList(list.Select(ConvertObjectToValue).ToArray()),
+            IEnumerable e => Value.ForList(e.Cast<object?>().Select(ConvertObjectToValue).ToArray()),
+
+            // Fallback: convert unlisted type to string.
             _ => Value.ForString(obj.ToString() ?? string.Empty),
         };
     }

@@ -384,10 +384,9 @@ public static class ProtobufUtils
         // Add properties if they exist
         if (failureDetails.Properties != null)
         {
-            var mapField = ConvertDictionaryToMapField(failureDetails.Properties);
-            foreach (var kvp in mapField)
+            foreach (var kvp in failureDetails.Properties)
             {
-                taskFailureDetails.Properties.Add(kvp.Key, kvp.Value);
+                taskFailureDetails.Properties.Add(kvp.Key, ConvertObjectToValue(kvp.Value));
             }
         }
 
@@ -454,22 +453,6 @@ public static class ProtobufUtils
             DeletedInstanceCount = result.DeletedInstanceCount
         };
         return response;
-    }
-
-    /// <summary>
-    /// Converts a IDictionary<string, object?> into a MapField<string, Value>.
-    /// Supports nested dictionaries and lists.
-    /// </summary>
-    public static MapField<string, Value> ConvertDictionaryToMapField(IDictionary<string, object?> dict)
-    {
-        var map = new MapField<string, Value>();
-
-        foreach (var kvp in dict)
-        {
-            map[kvp.Key] = ConvertObjectToValue(kvp.Value);
-        }
-
-        return map;
     }
 
     /// <summary>

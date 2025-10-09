@@ -164,7 +164,7 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
                 coreEx.FailureDetails?.ErrorMessage ?? "(unknown)",
                 coreEx.FailureDetails?.StackTrace,
                 FromCoreFailureDetailsRecursive(coreEx.FailureDetails?.InnerFailure) ?? FromExceptionRecursive(coreEx.InnerException),
-                coreEx.FailureDetails?.Properties ?? null);
+                coreEx.FailureDetails?.Properties);
         }
 
         // might need to udpate this later

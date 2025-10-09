@@ -751,11 +751,11 @@ sealed partial class GrpcDurableTaskWorker
             if (exportStartedEvent is not null)
             {
                 // TODO: Export the orchestration
-                ExportOrchestrationHistoryEvent(request, out P.ExportStatus exportStatus, out P.TaskFailureDetails? exportFailureDetails);
+                ExportOrchestrationHistoryEvent(request, out P.TaskFailureDetails? exportFailureDetails);
 
                 response.Actions.Add(new P.OrchestratorAction
                 {
-                    CompleteExport = new P.CompleteExportAction { ExportStatus = exportStatus, FailureDetails = exportFailureDetails },
+                    CompleteExport = new P.CompleteExportAction { FailureDetails = exportFailureDetails },
                 });
             }
 
@@ -768,18 +768,16 @@ sealed partial class GrpcDurableTaskWorker
             await this.client.CompleteOrchestratorTaskAsync(response, cancellationToken: cancellationToken);
         }
 
-        static void ExportOrchestrationHistoryEvent(P.OrchestratorRequest request, out P.ExportStatus exportStatus, out P.TaskFailureDetails? failureDetails)
+        static void ExportOrchestrationHistoryEvent(P.OrchestratorRequest request, out P.TaskFailureDetails? failureDetails)
         {
             try {
                 // extract all history events from the request in a list
                 var historyEvents = request.PastEvents.ToList();
 
-                JsonSerializer.Serialize(historyEvents);
                 // TODO: export this to external storage
-                exportStatus = P.ExportStatus.Completed;
+                Console.WriteLine(JsonSerializer.Serialize(historyEvents));
                 failureDetails = null;
             } catch (Exception ex) {
-                exportStatus = P.ExportStatus.Failed;
                 failureDetails = new P.TaskFailureDetails {
                     ErrorType = "ExportFailed",
                     ErrorMessage = ex.Message,

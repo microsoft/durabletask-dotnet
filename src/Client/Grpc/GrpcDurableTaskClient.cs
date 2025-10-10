@@ -97,6 +97,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             InstanceId = options?.InstanceId ?? Guid.NewGuid().ToString("N"),
             Input = this.DataConverter.Serialize(input),
             RequestTime = DateTimeOffset.UtcNow.ToTimestamp(),
+            Exportable = options?.Exportable ?? false,
         };
 
         // Add tags to the collection

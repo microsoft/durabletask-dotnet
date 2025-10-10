@@ -3,8 +3,10 @@
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.DurableTask;
+using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.ScheduledTasks;
 using ScheduleWebApp.Models;
+using ScheduleWebApp.Orchestrations;
 
 namespace ScheduleWebApp.Controllers;
 
@@ -18,6 +20,7 @@ namespace ScheduleWebApp.Controllers;
 public class ScheduleController : ControllerBase
 {
     readonly ScheduledTaskClient scheduledTaskClient;
+    readonly DurableTaskClient durableTaskClient;
     readonly ILogger<ScheduleController> logger;
 
     /// <summary>
@@ -27,8 +30,10 @@ public class ScheduleController : ControllerBase
     /// <param name="logger">Logger for recording controller operations.</param>
     public ScheduleController(
         ScheduledTaskClient scheduledTaskClient,
+        DurableTaskClient durableTaskClient,
         ILogger<ScheduleController> logger)
     {
+        this.durableTaskClient = durableTaskClient ?? throw new ArgumentNullException(nameof(durableTaskClient));
         this.scheduledTaskClient = scheduledTaskClient ?? throw new ArgumentNullException(nameof(scheduledTaskClient));
         this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -46,33 +51,42 @@ public class ScheduleController : ControllerBase
             return this.BadRequest("createScheduleRequest cannot be null");
         }
 
-        try
-        {
-            ScheduleCreationOptions creationOptions = new ScheduleCreationOptions(createScheduleRequest.Id.ToString(), createScheduleRequest.OrchestrationName, createScheduleRequest.Interval)
+        // try
+        // {
+        //     ScheduleCreationOptions creationOptions = new ScheduleCreationOptions(createScheduleRequest.Id.ToString(), createScheduleRequest.OrchestrationName, createScheduleRequest.Interval)
+        //     {
+        //         OrchestrationInput = createScheduleRequest.Input,
+        //         StartAt = createScheduleRequest.StartAt,
+        //         EndAt = createScheduleRequest.EndAt,
+        //         StartImmediatelyIfLate = true
+        //     };
+
+        //     ScheduleClient scheduleClient = await this.scheduledTaskClient.CreateScheduleAsync(creationOptions);
+        //     ScheduleDescription description = await scheduleClient.DescribeAsync();
+
+        //     this.logger.LogInformation("Created new schedule with ID: {ScheduleId}", createScheduleRequest.Id);
+
+        //     return this.CreatedAtAction(nameof(GetSchedule), new { id = createScheduleRequest.Id }, description);
+        // }
+        // catch (ScheduleClientValidationException ex)
+        // {
+        //     this.logger.LogError(ex, "Validation failed while creating schedule {ScheduleId}", createScheduleRequest.Id);
+        //     return this.BadRequest(ex.Message);
+        // }
+        // catch (Exception ex)
+        // {
+        //     this.logger.LogError(ex, "Error creating schedule {ScheduleId}", createScheduleRequest.Id);
+        //     return this.StatusCode(500, "An error occurred while creating the schedule");
+        // }
+
+        await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName(nameof(CacheClearingOrchestrator)),
+            "hello world", new StartOrchestrationOptions()
             {
-                OrchestrationInput = createScheduleRequest.Input,
-                StartAt = createScheduleRequest.StartAt,
-                EndAt = createScheduleRequest.EndAt,
-                StartImmediatelyIfLate = true
-            };
+                Exportable = true
+            });
 
-            ScheduleClient scheduleClient = await this.scheduledTaskClient.CreateScheduleAsync(creationOptions);
-            ScheduleDescription description = await scheduleClient.DescribeAsync();
-
-            this.logger.LogInformation("Created new schedule with ID: {ScheduleId}", createScheduleRequest.Id);
-
-            return this.CreatedAtAction(nameof(GetSchedule), new { id = createScheduleRequest.Id }, description);
-        }
-        catch (ScheduleClientValidationException ex)
-        {
-            this.logger.LogError(ex, "Validation failed while creating schedule {ScheduleId}", createScheduleRequest.Id);
-            return this.BadRequest(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            this.logger.LogError(ex, "Error creating schedule {ScheduleId}", createScheduleRequest.Id);
-            return this.StatusCode(500, "An error occurred while creating the schedule");
-        }
+        return this.Ok("Schedule created");
     }
 
     /// <summary>
@@ -247,4 +261,6 @@ public class ScheduleController : ControllerBase
             return this.StatusCode(500, "An error occurred while resuming the schedule");
         }
     }
+
+
 }

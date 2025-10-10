@@ -140,4 +140,9 @@ public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffse
     /// Gets the version to associate with the orchestration instance.
     /// </summary>
     public TaskVersion? Version { get; init; }
+
+    /// <summary>
+    /// Gets the flag to indicate if the task is exportable.
+    /// </summary>
+    public bool Exportable { get; init; }
 }

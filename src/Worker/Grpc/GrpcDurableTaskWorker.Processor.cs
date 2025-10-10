@@ -747,7 +747,8 @@ sealed partial class GrpcDurableTaskWorker
 
             // check if request new events contains ExportStartEvent
             var exportStartedEvent = request.NewEvents.LastOrDefault(e => e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExportStarted);
-
+            // print hey baby
+            Console.WriteLine("hey baby");
             if (exportStartedEvent is not null)
             {
                 // TODO: Export the orchestration

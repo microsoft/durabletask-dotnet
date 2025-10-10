@@ -192,6 +192,9 @@ static class ProtoUtils
             case P.HistoryEvent.EventTypeOneofCase.EntityOperationFailed:
                 historyEvent = EntityConversions.EncodeOperationFailed(proto);
                 break;
+            case P.HistoryEvent.EventTypeOneofCase.ExportStarted:
+                historyEvent = new ExportStartedEvent(proto.EventId);
+                break;
             case P.HistoryEvent.EventTypeOneofCase.GenericEvent:
                 historyEvent = new GenericEvent(proto.EventId, proto.GenericEvent.Data);
                 break;

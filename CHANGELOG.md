@@ -1,6 +1,8 @@
 ﻿# Changelog
+
 ## v1.16.0
 - Include Exception Properties at FailureDetails by nytian in([#474](https://github.com/microsoft/durabletask-dotnet/pull/474))
+
 ## v1.15.1 
 - Add version check to activities by @halspang in ([#472](https://github.com/microsoft/durabletask-dotnet/pull/472))
 
@@ -300,5 +302,6 @@ Microsoft.DurableTask.Generators
 ## v0.4.1-beta
 
 Initial public release
+
 
 

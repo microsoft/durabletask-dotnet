@@ -17,7 +17,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <VersionPrefix>1.15.1</VersionPrefix>
+    <VersionPrefix>1.16.0</VersionPrefix>
     <VersionSuffix></VersionSuffix>
   </PropertyGroup>
 

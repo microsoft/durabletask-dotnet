@@ -29,28 +29,6 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     /// <param name="services">The service provider.</param>
     /// <param name="loggerFactory">The logger.</param>
     /// <param name="orchestrationFilter">The optional <see cref="IOrchestrationFilter"/> used to filter orchestration execution.</param>
-    public GrpcDurableTaskWorker(
-        string name,
-        IDurableTaskFactory factory,
-        IOptionsMonitor<GrpcDurableTaskWorkerOptions> grpcOptions,
-        IOptionsMonitor<DurableTaskWorkerOptions> workerOptions,
-        IServiceProvider services,
-        ILoggerFactory loggerFactory,
-        IOrchestrationFilter? orchestrationFilter = null)
-        : this(name, factory, grpcOptions, workerOptions, services, loggerFactory, orchestrationFilter, null)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="GrpcDurableTaskWorker" /> class.
-    /// </summary>
-    /// <param name="name">The name of the worker.</param>
-    /// <param name="factory">The task factory.</param>
-    /// <param name="grpcOptions">The gRPC-specific worker options.</param>
-    /// <param name="workerOptions">The generic worker options.</param>
-    /// <param name="services">The service provider.</param>
-    /// <param name="loggerFactory">The logger.</param>
-    /// <param name="orchestrationFilter">The optional <see cref="IOrchestrationFilter"/> used to filter orchestration execution.</param>
     /// <param name="exceptionPropertiesProvider">The custom exception properties provider that help build failure details.</param>
     public GrpcDurableTaskWorker(
         string name,

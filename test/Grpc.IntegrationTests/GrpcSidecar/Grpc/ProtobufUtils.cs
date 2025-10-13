@@ -511,14 +511,22 @@ public static class ProtobufUtils
             case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.StringValue:
                 string stringValue = value.StringValue;
 
+                // If the value starts with the 'dt:' prefix, it may represent a DateTime value — attempt to parse it.
                 if (stringValue.StartsWith("dt:", StringComparison.Ordinal))
                 {
-                    return DateTime.Parse(stringValue[3..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+                    if (DateTime.TryParse(stringValue[3..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime date))
+                    {
+                        return date;
+                    }
                 }
 
+                // If the value starts with the 'dto:' prefix, it may represent a DateTime value — attempt to parse it.
                 if (stringValue.StartsWith("dto:", StringComparison.Ordinal))
                 {
-                    return DateTimeOffset.Parse(stringValue[4..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+                    if (DateTimeOffset.TryParse(stringValue[4..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTimeOffset date))
+                    {
+                        return date;
+                    }
                 }
 
                 // Otherwise just return as string

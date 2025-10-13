@@ -212,7 +212,13 @@ public static class GrpcOrchestrationRunner
                     ? DurableTaskShimFactory.Default
                     : ActivatorUtilities.GetServiceOrCreateInstance<DurableTaskShimFactory>(services);
                 TaskOrchestration shim = factory.CreateOrchestration(orchestratorName, implementation, properties, parent);
-                TaskOrchestrationExecutor executor = new(runtimeState, shim, BehaviorOnContinueAsNew.Carryover, request.EntityParameters.ToCore(), ErrorPropagationMode.UseFailureDetails);
+
+                TaskOrchestrationExecutor executor = new(
+                    runtimeState,
+                    shim,
+                    BehaviorOnContinueAsNew.Carryover,
+                    request.EntityParameters.ToCore(),
+                    ErrorPropagationMode.UseFailureDetails);
                 result = executor.Execute();
 
                 if (addToExtendedSessions && !executor.IsCompleted)

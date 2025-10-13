@@ -95,7 +95,9 @@ partial class TaskOrchestrationShim : TaskOrchestration
             // failure details are correctly propagated.
             throw new CoreTaskFailedException(e.Message, e.InnerException)
             {
-                FailureDetails = new FailureDetails(e, e.FailureDetails.ToCoreFailureDetails()),
+                FailureDetails = new FailureDetails(e,
+                    e.FailureDetails.ToCoreFailureDetails(),
+                    properties: e.FailureDetails.Properties),
             };
         }
         finally

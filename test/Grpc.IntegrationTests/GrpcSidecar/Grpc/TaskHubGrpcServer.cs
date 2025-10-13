@@ -306,7 +306,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                 Input = request.GetInputsAndOutputs ? state.Input : null,
                 Output = request.GetInputsAndOutputs ? state.Output : null,
                 CustomStatus = request.GetInputsAndOutputs ? state.Status : null,
-                FailureDetails = request.GetInputsAndOutputs ? GetFailureDetails(state.FailureDetails) : null,
+                FailureDetails = request.GetInputsAndOutputs ? ProtobufUtils.GetFailureDetails(state.FailureDetails) : null,
                 Tags = { state.Tags }
             }
         };
@@ -396,22 +396,6 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             this.log.LogError(ex, "Error restarting orchestration instance {InstanceId}", request.InstanceId);
             throw new RpcException(new Status(StatusCode.Internal, ex.Message));
         }
-    }
-
-    static P.TaskFailureDetails? GetFailureDetails(FailureDetails? failureDetails)
-    {
-        if (failureDetails == null)
-        {
-            return null;
-        }
-
-        return new P.TaskFailureDetails
-        {
-            ErrorType = failureDetails.ErrorType,
-            ErrorMessage = failureDetails.ErrorMessage,
-            StackTrace = failureDetails.StackTrace,
-            InnerFailure = GetFailureDetails(failureDetails.InnerFailure),
-        };
     }
 
     /// <summary>

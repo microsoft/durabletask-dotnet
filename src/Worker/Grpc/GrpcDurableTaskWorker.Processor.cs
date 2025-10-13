@@ -747,18 +747,22 @@ sealed partial class GrpcDurableTaskWorker
 
             // check if request new events contains ExportStartEvent
             var exportStartedEvent = request.NewEvents.LastOrDefault(e => e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExportStarted);
-            // print hey baby
-            Console.WriteLine("hey baby");
             if (exportStartedEvent is not null)
             {
                 // TODO: Export the orchestration
                 ExportOrchestrationHistoryEvent(request, out P.TaskFailureDetails? exportFailureDetails);
-
+                
+                response.Actions.Clear();
                 response.Actions.Add(new P.OrchestratorAction
                 {
                     CompleteExport = new P.CompleteExportAction { FailureDetails = exportFailureDetails },
                 });
+
+                Console.WriteLine("exported, you shall report export status baby");
+                Console.WriteLine("What you are completing with is: " + JsonSerializer.Serialize(response));
             }
+
+            Console.WriteLine("response size: " + response.CalculateSize() / 1024 + "kb");
 
             this.Logger.SendingOrchestratorResponse(
                 name,

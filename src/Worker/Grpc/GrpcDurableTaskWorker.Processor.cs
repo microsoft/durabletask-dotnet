@@ -33,16 +33,20 @@ sealed partial class GrpcDurableTaskWorker
         readonly TaskHubSidecarServiceClient client;
         readonly DurableTaskShimFactory shimFactory;
         readonly GrpcDurableTaskWorkerOptions.InternalOptions internalOptions;
+        readonly DTCore.IExceptionPropertiesProvider? exceptionPropertiesProvider;
         [Obsolete("Experimental")]
         readonly IOrchestrationFilter? orchestrationFilter;
 
-        public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient client, IOrchestrationFilter? orchestrationFilter = null)
+        public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient client, IOrchestrationFilter? orchestrationFilter = null, IExceptionPropertiesProvider? exceptionPropertiesProvider = null)
         {
             this.worker = worker;
             this.client = client;
             this.shimFactory = new DurableTaskShimFactory(this.worker.grpcOptions, this.worker.loggerFactory);
             this.internalOptions = this.worker.grpcOptions.Internal;
             this.orchestrationFilter = orchestrationFilter;
+            this.exceptionPropertiesProvider = exceptionPropertiesProvider is not null
+                ? new ExceptionPropertiesProviderAdapter(exceptionPropertiesProvider)
+                : null;
         }
 
         ILogger Logger => this.worker.logger;
@@ -636,7 +640,8 @@ sealed partial class GrpcDurableTaskWorker
                             shim,
                             BehaviorOnContinueAsNew.Carryover,
                             request.EntityParameters.ToCore(),
-                            ErrorPropagationMode.UseFailureDetails);
+                            ErrorPropagationMode.UseFailureDetails,
+                            this.exceptionPropertiesProvider);
                         result = executor.Execute();
                     }
                     else
@@ -654,7 +659,7 @@ sealed partial class GrpcDurableTaskWorker
             {
                 // This is not expected: Normally TaskOrchestrationExecutor handles exceptions in user code.
                 this.Logger.OrchestratorFailed(name, request.InstanceId, unexpected.ToString());
-                failureDetails = unexpected.ToTaskFailureDetails();
+                failureDetails = unexpected.ToTaskFailureDetails(this.exceptionPropertiesProvider);
             }
 
             P.OrchestratorResponse response;
@@ -764,6 +769,8 @@ sealed partial class GrpcDurableTaskWorker
 
             P.TaskFailureDetails? failureDetails = null;
             TaskContext innerContext = new(instance);
+            innerContext.ExceptionPropertiesProvider = this.exceptionPropertiesProvider;
+
             TaskName name = new(request.Name);
             string? output = null;
 
@@ -792,7 +799,7 @@ sealed partial class GrpcDurableTaskWorker
                 }
                 catch (Exception applicationException)
                 {
-                    failureDetails = applicationException.ToTaskFailureDetails();
+                    failureDetails = applicationException.ToTaskFailureDetails(this.exceptionPropertiesProvider);
                 }
             }
             else

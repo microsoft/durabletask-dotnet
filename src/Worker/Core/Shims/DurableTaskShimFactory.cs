@@ -36,7 +36,7 @@ public class DurableTaskShimFactory
     /// <summary>
     /// Gets the default <see cref="DurableTaskShimFactory" /> with default values.
     /// </summary>
-    public static DurableTaskShimFactory Default { get; } = new();
+    public static DurableTaskShimFactory Default { get; } = new(null, null);
 
     /// <summary>
     /// Creates a <see cref="TaskActivity" /> from a <see cref="ITaskActivity" />.

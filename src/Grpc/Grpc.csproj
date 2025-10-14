@@ -23,5 +23,17 @@
               Access="Public"
               Namespace="Microsoft.DurableTask.Protobuf" />
   </ItemGroup>
+  <ItemGroup>
+    <Protobuf Include="orchestrator_service.proto" 
+              GrpcServices="Both" 
+              Access="Public"
+              Namespace="Microsoft.DurableTask.AzureManagedBackend.Protobuf" />
+  </ItemGroup>
 
+  <ItemGroup>
+    <Protobuf Include="backend_service.proto" 
+              GrpcServices="Both" 
+              Access="Public"
+              Namespace="Microsoft.DurableTask.AzureManagedBackend.Protobuf" />
+  </ItemGroup>
 </Project>

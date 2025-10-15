@@ -423,25 +423,25 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
     }
 
     /// <summary>
-    /// 
+    /// Determines the delay, in seconds, before retrying after a fetch exception.
     /// </summary>
-    /// <param name="ex"></param>
-    /// <returns></returns>
+    /// <param name="ex">The exception that occurred while fetching work.</param>
+    /// <returns>The number of seconds to delay before retrying.</returns>
     public override int GetDelayInSecondsOnFetchException(Exception ex) =>
         this.service.GetDelayInSecondsAfterOnFetchException(ex);
 
     /// <summary>
     /// Get work item id.
     /// </summary>
-    /// <param name="workItem"></param>
+    /// <param name="workItem">The orchestration work item.</param>
     /// <returns>Work item id.</returns>
     public override string GetWorkItemId(TaskOrchestrationWorkItem workItem) => workItem.InstanceId;
 
     /// <summary>
-    /// 
+    /// Releases the specified orchestration work item.
     /// </summary>
-    /// <param name="workItem"></param>
-    /// <returns></returns>
+    /// <param name="workItem">The work item to release.</param>
+    /// <returns>A task that completes when the release is finished.</returns>
     public override Task ReleaseWorkItemAsync(TaskOrchestrationWorkItem workItem) =>
         this.service.ReleaseTaskOrchestrationWorkItemAsync(workItem);
 

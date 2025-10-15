@@ -23,8 +23,8 @@ class TaskHubDispatcherHost
         this.orchestrationService = orchestrationService ?? throw new ArgumentNullException(nameof(orchestrationService));
         this.log = loggerFactory.CreateLogger("Microsoft.DurableTask.Sidecar");
 
-        this.orchestrationDispatcher = new TaskOrchestrationDispatcher(log, trafficSignal, orchestrationService, taskExecutor);
-        this.activityDispatcher = new TaskActivityDispatcher(log, trafficSignal, orchestrationService, taskExecutor);
+        this.orchestrationDispatcher = new TaskOrchestrationDispatcher(this.log, trafficSignal, orchestrationService, taskExecutor);
+        this.activityDispatcher = new TaskActivityDispatcher(this.log, trafficSignal, orchestrationService, taskExecutor);
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)

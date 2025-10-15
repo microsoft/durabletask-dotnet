@@ -122,20 +122,44 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         }
     }
 
+    /// <summary>
+    /// Handles the Hello gRPC call.
+    /// </summary>
+    /// <param name="request">The empty request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>An empty response.</returns>
     public override Task<Empty> Hello(Empty request, ServerCallContext context) => Task.FromResult(new Empty());
 
+    /// <summary>
+    /// Creates a task hub.
+    /// </summary>
+    /// <param name="request">The create task hub request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>A create task hub response.</returns>
     public override Task<P.CreateTaskHubResponse> CreateTaskHub(P.CreateTaskHubRequest request, ServerCallContext context)
     {
         this.service.CreateAsync(request.RecreateIfExists);
         return Task.FromResult(new P.CreateTaskHubResponse());
     }
 
+    /// <summary>
+    /// Deletes a task hub.
+    /// </summary>
+    /// <param name="request">The delete task hub request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>A delete task hub response.</returns>
     public override Task<P.DeleteTaskHubResponse> DeleteTaskHub(P.DeleteTaskHubRequest request, ServerCallContext context)
     {
         this.service.DeleteAsync();
         return Task.FromResult(new P.DeleteTaskHubResponse());
     }
 
+    /// <summary>
+    /// Starts a new orchestration instance.
+    /// </summary>
+    /// <param name="request">The create instance request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>A create instance response.</returns>
     public override async Task<P.CreateInstanceResponse> StartInstance(P.CreateInstanceRequest request, ServerCallContext context)
     {
         var instance = new OrchestrationInstance
@@ -178,6 +202,12 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         };
     }
 
+    /// <summary>
+    /// Raises an event to an orchestration instance.
+    /// </summary>
+    /// <param name="request">The raise event request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>A raise event response.</returns>
     public override async Task<P.RaiseEventResponse> RaiseEvent(P.RaiseEventRequest request, ServerCallContext context)
     {
         try
@@ -206,6 +236,12 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         return new P.RaiseEventResponse();
     }
 
+    /// <summary>
+    /// Terminates an orchestration instance.
+    /// </summary>
+    /// <param name="request">The terminate request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>A terminate response.</returns>
     public override async Task<P.TerminateResponse> TerminateInstance(P.TerminateRequest request, ServerCallContext context)
     {
         try
@@ -225,6 +261,12 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         return new P.TerminateResponse();
     }
 
+    /// <summary>
+    /// Gets an orchestration instance.
+    /// </summary>
+    /// <param name="request">The get instance request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>A get instance response.</returns>
     public override async Task<P.GetInstanceResponse> GetInstance(P.GetInstanceRequest request, ServerCallContext context)
     {
         OrchestrationState state = await this.client.GetOrchestrationStateAsync(request.InstanceId, executionId: null);
@@ -236,6 +278,12 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         return CreateGetInstanceResponse(state, request);
     }
 
+    /// <summary>
+    /// Queries orchestration instances.
+    /// </summary>
+    /// <param name="request">The query instances request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>A query instances response.</returns>
     public override async Task<P.QueryInstancesResponse> QueryInstances(P.QueryInstancesRequest request, ServerCallContext context)
     {
         if (this.client is IOrchestrationServiceQueryClient queryClient)
@@ -250,6 +298,12 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         }
     }
 
+    /// <summary>
+    /// Purges orchestration instances.
+    /// </summary>
+    /// <param name="request">The purge instances request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>A purge instances response.</returns>
     public override async Task<P.PurgeInstancesResponse> PurgeInstances(P.PurgeInstancesRequest request, ServerCallContext context)
     {
         if (this.client is IOrchestrationServicePurgeClient purgeClient)
@@ -277,6 +331,12 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         }
     }
 
+    /// <summary>
+    /// Waits for an orchestration instance to start.
+    /// </summary>
+    /// <param name="request">The get instance request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>A get instance response.</returns>
     public override async Task<P.GetInstanceResponse> WaitForInstanceStart(P.GetInstanceRequest request, ServerCallContext context)
     {
         while (true)
@@ -295,6 +355,12 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         }
     }
 
+    /// <summary>
+    /// Waits for an orchestration instance to complete.
+    /// </summary>
+    /// <param name="request">The get instance request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>A get instance response.</returns>
     public override async Task<P.GetInstanceResponse> WaitForInstanceCompletion(P.GetInstanceRequest request, ServerCallContext context)
     {
         OrchestrationState state = await this.client.WaitForOrchestrationAsync(
@@ -327,6 +393,12 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         };
     }
 
+    /// <summary>
+    /// Suspends an orchestration instance.
+    /// </summary>
+    /// <param name="request">The suspend request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>A suspend response.</returns>
     public override async Task<P.SuspendResponse> SuspendInstance(P.SuspendRequest request, ServerCallContext context)
     {
         TaskMessage taskMessage = new()
@@ -339,6 +411,12 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         return new P.SuspendResponse();
     }
 
+    /// <summary>
+    /// Resumes an orchestration instance.
+    /// </summary>
+    /// <param name="request">The resume request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>A resume response.</returns>
     public override async Task<P.ResumeResponse> ResumeInstance(P.ResumeRequest request, ServerCallContext context)
     {
         TaskMessage taskMessage = new()
@@ -351,6 +429,12 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         return new P.ResumeResponse();
     }
 
+    /// <summary>
+    /// Restarts an orchestration instance.
+    /// </summary>
+    /// <param name="request">The restart instance request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>A restart instance response.</returns>
     public override async Task<P.RestartInstanceResponse> RestartInstance(P.RestartInstanceRequest request, ServerCallContext context)
     {
         try
@@ -476,6 +560,13 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         return EmptyCompleteTaskResponse;
     }
 
+    /// <summary>
+    /// Gets work items from the server.
+    /// </summary>
+    /// <param name="request">The get work items request.</param>
+    /// <param name="responseStream">The response stream.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public override async Task GetWorkItems(P.GetWorkItemsRequest request, IServerStreamWriter<P.WorkItem> responseStream, ServerCallContext context)
     {
         // Use a lock to mitigate the race condition where we signal the dispatch host to start but haven't
@@ -601,7 +692,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                             TraceState = activityEvent.ParentTraceContext.TraceState,
                         }
                         : null,
-                }
+                },
             });
         }
         catch
@@ -673,11 +764,23 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         return string.Concat(instanceId, "__", taskId.ToString());
     }
 
+    /// <summary>
+    /// Abandons a task activity work item.
+    /// </summary>
+    /// <param name="request">The abandon activity task request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>An abandon activity task response.</returns>
     public override Task<P.AbandonActivityTaskResponse> AbandonTaskActivityWorkItem(P.AbandonActivityTaskRequest request, ServerCallContext context)
     {
         return Task.FromResult<P.AbandonActivityTaskResponse>(new());
     }
 
+    /// <summary>
+    /// Abandons a task orchestration work item.
+    /// </summary>
+    /// <param name="request">The abandon orchestration task request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>An abandon orchestration task response.</returns>
     public override Task<P.AbandonOrchestrationTaskResponse> AbandonTaskOrchestratorWorkItem(P.AbandonOrchestrationTaskRequest request, ServerCallContext context)
     {
         return Task.FromResult<P.AbandonOrchestrationTaskResponse>(new());

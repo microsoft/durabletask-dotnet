@@ -14,28 +14,59 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Microsoft.DurableTask.Sidecar;
 
+/// <summary>
+/// An in-memory implementation of orchestration service interfaces for testing purposes.
+/// </summary>
+/// <remarks>
+/// This class provides a complete in-memory implementation of orchestration services,
+/// allowing for testing of durable task orchestrations without external dependencies.
+/// </remarks>
 public class InMemoryOrchestrationService : IOrchestrationService, IOrchestrationServiceClient, IOrchestrationServiceQueryClient, IOrchestrationServicePurgeClient
 {
     readonly InMemoryQueue activityQueue = new();
     readonly InMemoryInstanceStore instanceStore;
     readonly ILogger logger;
 
+    /// <summary>
+    /// Gets the number of task orchestration dispatchers.
+    /// </summary>
     public int TaskOrchestrationDispatcherCount => 1;
 
+    /// <summary>
+    /// Gets the number of task activity dispatchers.
+    /// </summary>
     public int TaskActivityDispatcherCount => 1;
 
+    /// <summary>
+    /// Gets the maximum number of concurrent task orchestration work items.
+    /// </summary>
     public int MaxConcurrentTaskOrchestrationWorkItems => Environment.ProcessorCount;
 
+    /// <summary>
+    /// Gets the maximum number of concurrent task activity work items.
+    /// </summary>
     public int MaxConcurrentTaskActivityWorkItems => Environment.ProcessorCount;
 
+    /// <summary>
+    /// Gets the behavior for events when continuing as new.
+    /// </summary>
     public BehaviorOnContinueAsNew EventBehaviourForContinueAsNew => BehaviorOnContinueAsNew.Carryover;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InMemoryOrchestrationService"/> class.
+    /// </summary>
+    /// <param name="loggerFactory">Optional logger factory for creating loggers.</param>
     public InMemoryOrchestrationService(ILoggerFactory? loggerFactory = null)
     {
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger("Microsoft.DurableTask.Sidecar.InMemoryStorageProvider");
         this.instanceStore = new InMemoryInstanceStore(this.logger);
     }
 
+    /// <summary>
+    /// Abandons a task activity work item.
+    /// </summary>
+    /// <param name="workItem">The work item to abandon.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task AbandonTaskActivityWorkItemAsync(TaskActivityWorkItem workItem)
     {
         this.logger.LogWarning("Abandoning task activity work item {id}", workItem.Id);
@@ -43,18 +74,40 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Abandons a task orchestration work item.
+    /// </summary>
+    /// <param name="workItem">The work item to abandon.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task AbandonTaskOrchestrationWorkItemAsync(TaskOrchestrationWorkItem workItem)
     {
         this.instanceStore.AbandonInstance(workItem.NewMessages);
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Completes a task activity work item.
+    /// </summary>
+    /// <param name="workItem">The work item to complete.</param>
+    /// <param name="responseMessage">The response message.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task CompleteTaskActivityWorkItemAsync(TaskActivityWorkItem workItem, TaskMessage responseMessage)
     {
         this.instanceStore.AddMessage(responseMessage);
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Completes a task orchestration work item.
+    /// </summary>
+    /// <param name="workItem">The work item to complete.</param>
+    /// <param name="newOrchestrationRuntimeState">The new orchestration runtime state.</param>
+    /// <param name="outboundMessages">The outbound messages.</param>
+    /// <param name="orchestratorMessages">The orchestrator messages.</param>
+    /// <param name="timerMessages">The timer messages.</param>
+    /// <param name="continuedAsNewMessage">The continued as new message.</param>
+    /// <param name="orchestrationState">The orchestration state.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task CompleteTaskOrchestrationWorkItemAsync(
         TaskOrchestrationWorkItem workItem,
         OrchestrationRuntimeState newOrchestrationRuntimeState,
@@ -73,8 +126,17 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the orchestration service.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task CreateAsync() => Task.CompletedTask;
 
+    /// <summary>
+    /// Creates the orchestration service.
+    /// </summary>
+    /// <param name="recreateInstanceStore">Whether to recreate the instance store.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task CreateAsync(bool recreateInstanceStore)
     {
         if (recreateInstanceStore)
@@ -84,8 +146,17 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the orchestration service if it does not exist.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task CreateIfNotExistsAsync() => Task.CompletedTask;
 
+    /// <summary>
+    /// Creates a task orchestration.
+    /// </summary>
+    /// <param name="creationMessage">The creation message.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task CreateTaskOrchestrationAsync(TaskMessage creationMessage)
     {
         return this.CreateTaskOrchestrationAsync(
@@ -93,6 +164,12 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
             new[] { OrchestrationStatus.Pending, OrchestrationStatus.Running });
     }
 
+    /// <summary>
+    /// Creates a task orchestration.
+    /// </summary>
+    /// <param name="creationMessage">The creation message.</param>
+    /// <param name="dedupeStatuses">The deduplication statuses.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task CreateTaskOrchestrationAsync(TaskMessage creationMessage, OrchestrationStatus[]? dedupeStatuses)
     {
         // Lock the instance store to prevent multiple "create" threads from racing with each other.
@@ -112,8 +189,17 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Deletes the orchestration service.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task DeleteAsync() => this.DeleteAsync(true);
 
+    /// <summary>
+    /// Deletes the orchestration service.
+    /// </summary>
+    /// <param name="deleteInstanceStore">Whether to delete the instance store.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task DeleteAsync(bool deleteInstanceStore)
     {
         if (deleteInstanceStore)
@@ -123,6 +209,12 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Force terminates a task orchestration.
+    /// </summary>
+    /// <param name="instanceId">The instance ID.</param>
+    /// <param name="reason">The termination reason.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task ForceTerminateTaskOrchestrationAsync(string instanceId, string reason)
     {
         var taskMessage = new TaskMessage
@@ -134,28 +226,57 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
         return this.SendTaskOrchestrationMessageAsync(taskMessage);
     }
 
+    /// <summary>
+    /// Gets the delay in seconds after an on-fetch exception.
+    /// </summary>
+    /// <param name="exception">The exception that occurred.</param>
+    /// <returns>The delay in seconds.</returns>
     public int GetDelayInSecondsAfterOnFetchException(Exception exception)
     {
         return exception is OperationCanceledException ? 0 : 1;
     }
 
+    /// <summary>
+    /// Gets the delay in seconds after an on-process exception.
+    /// </summary>
+    /// <param name="exception">The exception that occurred.</param>
+    /// <returns>The delay in seconds.</returns>
     public int GetDelayInSecondsAfterOnProcessException(Exception exception)
     {
         return exception is OperationCanceledException ? 0 : 1;
     }
 
+    /// <summary>
+    /// Gets the orchestration history.
+    /// </summary>
+    /// <param name="instanceId">The instance ID.</param>
+    /// <param name="executionId">The execution ID.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <exception cref="NotImplementedException">This method is not implemented in the in-memory service.</exception>
     public Task<string> GetOrchestrationHistoryAsync(string instanceId, string executionId)
     {
         // Also not supported in the emulator
         throw new NotImplementedException();
     }
 
+    /// <summary>
+    /// Gets the orchestration state.
+    /// </summary>
+    /// <param name="instanceId">The instance ID.</param>
+    /// <param name="allExecutions">Whether to get all executions.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public async Task<IList<OrchestrationState>> GetOrchestrationStateAsync(string instanceId, bool allExecutions)
     {
         OrchestrationState state = await this.GetOrchestrationStateAsync(instanceId, executionId: null);
         return new[] { state };
     }
 
+    /// <summary>
+    /// Gets the orchestration state.
+    /// </summary>
+    /// <param name="instanceId">The instance ID.</param>
+    /// <param name="executionId">The execution ID.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task<OrchestrationState> GetOrchestrationStateAsync(string instanceId, string? executionId)
     {
         if (this.instanceStore.TryGetState(instanceId, out OrchestrationState? statusRecord))
@@ -169,8 +290,20 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
         return Task.FromResult<OrchestrationState>(null!);
     }
 
+    /// <summary>
+    /// Determines if the maximum message count is exceeded.
+    /// </summary>
+    /// <param name="currentMessageCount">The current message count.</param>
+    /// <param name="runtimeState">The runtime state.</param>
+    /// <returns>Always returns false for the in-memory service.</returns>
     public bool IsMaxMessageCountExceeded(int currentMessageCount, OrchestrationRuntimeState runtimeState) => false;
 
+    /// <summary>
+    /// Locks the next task activity work item.
+    /// </summary>
+    /// <param name="receiveTimeout">The receive timeout.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public async Task<TaskActivityWorkItem> LockNextTaskActivityWorkItem(TimeSpan receiveTimeout, CancellationToken cancellationToken)
     {
         TaskMessage message = await this.activityQueue.DequeueAsync(cancellationToken);
@@ -182,6 +315,12 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
         };
     }
 
+    /// <summary>
+    /// Locks the next task orchestration work item.
+    /// </summary>
+    /// <param name="receiveTimeout">The receive timeout.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public async Task<TaskOrchestrationWorkItem> LockNextTaskOrchestrationWorkItemAsync(TimeSpan receiveTimeout, CancellationToken cancellationToken)
     {
         var (instanceId, runtimeState, messages) = await this.instanceStore.GetNextReadyToRunInstanceAsync(cancellationToken);
@@ -195,34 +334,66 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
         };
     }
 
+    /// <summary>
+    /// Purges orchestration history.
+    /// </summary>
+    /// <param name="thresholdDateTimeUtc">The threshold date time in UTC.</param>
+    /// <param name="timeRangeFilterType">The time range filter type.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <exception cref="NotImplementedException">This method is not implemented in the in-memory service.</exception>
     public Task PurgeOrchestrationHistoryAsync(DateTime thresholdDateTimeUtc, OrchestrationStateTimeRangeFilterType timeRangeFilterType)
     {
         // Also not supported in the emulator
         throw new NotImplementedException();
     }
 
+    /// <summary>
+    /// Releases a task orchestration work item.
+    /// </summary>
+    /// <param name="workItem">The work item to release.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task ReleaseTaskOrchestrationWorkItemAsync(TaskOrchestrationWorkItem workItem)
     {
         this.instanceStore.ReleaseLock(workItem.InstanceId);
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Renews a task activity work item lock.
+    /// </summary>
+    /// <param name="workItem">The work item to renew.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task<TaskActivityWorkItem> RenewTaskActivityWorkItemLockAsync(TaskActivityWorkItem workItem)
     {
         return Task.FromResult(workItem); // PeekLock isn't supported
     }
 
+    /// <summary>
+    /// Renews a task orchestration work item lock.
+    /// </summary>
+    /// <param name="workItem">The work item to renew.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task RenewTaskOrchestrationWorkItemLockAsync(TaskOrchestrationWorkItem workItem)
     {
         return Task.CompletedTask; // PeekLock isn't supported
     }
 
+    /// <summary>
+    /// Sends a task orchestration message.
+    /// </summary>
+    /// <param name="message">The message to send.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task SendTaskOrchestrationMessageAsync(TaskMessage message)
     {
         this.instanceStore.AddMessage(message);
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Sends a batch of task orchestration messages.
+    /// </summary>
+    /// <param name="messages">The messages to send.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task SendTaskOrchestrationMessageBatchAsync(params TaskMessage[] messages)
     {
         // NOTE: This is not transactionally consistent - some messages may get processed earlier than others.
@@ -234,12 +405,33 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Starts the orchestration service.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task StartAsync() => Task.CompletedTask;
 
+    /// <summary>
+    /// Stops the orchestration service.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task StopAsync() => Task.CompletedTask;
 
+    /// <summary>
+    /// Stops the orchestration service.
+    /// </summary>
+    /// <param name="isForced">Whether the stop is forced.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task StopAsync(bool isForced) => Task.CompletedTask;
 
+    /// <summary>
+    /// Waits for an orchestration to complete.
+    /// </summary>
+    /// <param name="instanceId">The instance ID.</param>
+    /// <param name="executionId">The execution ID.</param>
+    /// <param name="timeout">The timeout duration.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public async Task<OrchestrationState> WaitForOrchestrationAsync(string instanceId, string executionId, TimeSpan timeout, CancellationToken cancellationToken)
     {
         if (timeout <= TimeSpan.Zero)
@@ -281,16 +473,32 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
         }
     }
 
+    /// <summary>
+    /// Gets orchestrations with a query.
+    /// </summary>
+    /// <param name="query">The orchestration query.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task<OrchestrationQueryResult> GetOrchestrationWithQueryAsync(OrchestrationQuery query, CancellationToken cancellationToken)
     {
         return Task.FromResult(this.instanceStore.GetOrchestrationWithQuery(query));
     }
 
+    /// <summary>
+    /// Purges the state of a specific orchestration instance.
+    /// </summary>
+    /// <param name="instanceId">The instance ID to purge.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task<PurgeResult> PurgeInstanceStateAsync(string instanceId)
     {
         return Task.FromResult(this.instanceStore.PurgeInstanceState(instanceId));
     }
 
+    /// <summary>
+    /// Purges orchestration instances based on a filter.
+    /// </summary>
+    /// <param name="purgeInstanceFilter">The purge instance filter.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task<PurgeResult> PurgeInstanceStateAsync(PurgeInstanceFilter purgeInstanceFilter)
     {
         return Task.FromResult(this.instanceStore.PurgeInstanceState(purgeInstanceFilter));
@@ -545,7 +753,6 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                             return Task.FromResult(statusRecord);
                         }
                     }
-
                 }
             }
 
@@ -576,11 +783,31 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                 {
                     counter++;
                     OrchestrationState? statusRecord = item.Value.StatusRecordJson?.GetValue<OrchestrationState>();
-                    if (statusRecord == null) return false;
-                    if (query.CreatedTimeFrom != null && query.CreatedTimeFrom > statusRecord.CreatedTime) return false;
-                    if (query.CreatedTimeTo != null && query.CreatedTimeTo < statusRecord.CreatedTime) return false;
-                    if (query.RuntimeStatus != null && query.RuntimeStatus.Any() && !query.RuntimeStatus.Contains(statusRecord.OrchestrationStatus)) return false;
-                    if (query.InstanceIdPrefix != null && !statusRecord.OrchestrationInstance.InstanceId.StartsWith(query.InstanceIdPrefix)) return false;
+                    if (statusRecord == null)
+                    {
+                        return false;
+                    }
+
+                    if (query.CreatedTimeFrom != null && query.CreatedTimeFrom > statusRecord.CreatedTime)
+                    {
+                        return false;
+                    }
+
+                    if (query.CreatedTimeTo != null && query.CreatedTimeTo < statusRecord.CreatedTime)
+                    {
+                        return false;
+                    }
+
+                    if (query.RuntimeStatus != null && query.RuntimeStatus.Count != 0 && !query.RuntimeStatus.Contains(statusRecord.OrchestrationStatus))
+                    {
+                        return false;
+                    }
+
+                    if (query.InstanceIdPrefix != null && !statusRecord.OrchestrationInstance.InstanceId.StartsWith(query.InstanceIdPrefix))
+                    {
+                        return false;
+                    }
+
                     return true;
                 })
                 .Take(query.PageSize)
@@ -592,6 +819,7 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
             {
                 token = counter.ToString();
             }
+
             return new OrchestrationQueryResult(results, token);
         }
 

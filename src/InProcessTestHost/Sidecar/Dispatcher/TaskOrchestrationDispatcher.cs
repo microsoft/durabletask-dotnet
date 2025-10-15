@@ -245,7 +245,7 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                     Version = subOrchestrationAction.Version,
                     InstanceId = subOrchestrationAction.InstanceId,
                     Input = subOrchestrationAction.Input,
-                    ParentTraceContext = grpcAction?.ParentTraceContext
+                    ParentTraceContext = grpcAction?.ParentTraceContext,
                 });
 
                 ExecutionStartedEvent startedEvent = new(-1, subOrchestrationAction.Input)
@@ -315,7 +315,7 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                         Tags = runtimeState.Tags,
                         ParentInstance = runtimeState.ParentInstance,
                         Name = runtimeState.Name,
-                        Version = completeAction.NewVersion ?? runtimeState.Version
+                        Version = completeAction.NewVersion ?? runtimeState.Version,
                     });
                     newRuntimeState.Status = runtimeState.Status;
 
@@ -422,6 +422,40 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
         };
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="ex"></param>
+    /// <returns></returns>
+    public override int GetDelayInSecondsOnFetchException(Exception ex) =>
+        this.service.GetDelayInSecondsAfterOnFetchException(ex);
+
+    /// <summary>
+    /// Get work item id.
+    /// </summary>
+    /// <param name="workItem"></param>
+    /// <returns>Work item id.</returns>
+    public override string GetWorkItemId(TaskOrchestrationWorkItem workItem) => workItem.InstanceId;
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="workItem"></param>
+    /// <returns></returns>
+    public override Task ReleaseWorkItemAsync(TaskOrchestrationWorkItem workItem) =>
+        this.service.ReleaseTaskOrchestrationWorkItemAsync(workItem);
+
+    /// <summary>
+    /// Renew work item.
+    /// </summary>
+    /// <param name="workItem">The work item to be renewed.</param>
+    /// <returns>Work item renewed.</returns>
+    public override async Task<TaskOrchestrationWorkItem> RenewWorkItemAsync(TaskOrchestrationWorkItem workItem)
+    {
+        await this.service.RenewTaskOrchestrationWorkItemLockAsync(workItem);
+        return workItem;
+    }
+
     static string GetShortHistoryEventDescription(HistoryEvent e)
     {
         if (Utils.TryGetTaskScheduledId(e, out int taskScheduledId))
@@ -433,19 +467,4 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
             return e.EventType.ToString();
         }
     }
-
-    public override int GetDelayInSecondsOnFetchException(Exception ex) =>
-        this.service.GetDelayInSecondsAfterOnFetchException(ex);
-
-    public override string GetWorkItemId(TaskOrchestrationWorkItem workItem) => workItem.InstanceId;
-
-    public override Task ReleaseWorkItemAsync(TaskOrchestrationWorkItem workItem) =>
-        this.service.ReleaseTaskOrchestrationWorkItemAsync(workItem);
-
-    public override async Task<TaskOrchestrationWorkItem> RenewWorkItemAsync(TaskOrchestrationWorkItem workItem)
-    {
-        await this.service.RenewTaskOrchestrationWorkItemLockAsync(workItem);
-        return workItem;
-    }
 }
-

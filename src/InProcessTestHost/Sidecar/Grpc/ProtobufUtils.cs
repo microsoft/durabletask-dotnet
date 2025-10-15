@@ -26,7 +26,7 @@ public static class ProtobufUtils
     /// <summary>
     /// Convert HistoryEvent to Microsoft.DurableTask.Protobuf.HistoryEvent.
     /// </summary>
-    /// <param name="e">The event to convert</param>
+    /// <param name="e">The event to convert.</param>
     /// <returns>Microsoft.DurableTask.Protobuf.HistoryEvent of ths passed event.</returns>
     /// <exception cref="NotSupportedException">Throw if the provided event is not supported.</exception>
     public static Proto.HistoryEvent ToHistoryEventProto(HistoryEvent e)
@@ -168,7 +168,7 @@ public static class ProtobufUtils
                         TraceState = grpcEvent.ParentTraceContext.TraceState,
                     };
                 }
-                
+
                 break;
             case EventType.SubOrchestrationInstanceCompleted:
                 var subOrchestrationCompleted = (SubOrchestrationInstanceCompletedEvent)e;
@@ -257,6 +257,12 @@ public static class ProtobufUtils
         return payload;
     }
 
+    /// <summary>
+    /// Converts an orchestrator action from protobuf format.
+    /// </summary>
+    /// <param name="a">The protobuf orchestrator action.</param>
+    /// <returns>The converted orchestrator action.</returns>
+    /// <exception cref="NotSupportedException">Thrown if the action type is not supported.</exception>
     public static OrchestratorAction ToOrchestratorAction(Proto.OrchestratorAction a)
     {
         switch (a.OrchestratorActionTypeCase)
@@ -327,7 +333,6 @@ public static class ProtobufUtils
                                 Name = eventRaised.Name,
                             });
                         }
-
                     }
                 }
 
@@ -337,6 +342,11 @@ public static class ProtobufUtils
         }
     }
 
+    /// <summary>
+    /// Base64 encodes a protobuf message.
+    /// </summary>
+    /// <param name="message">The protobuf message to encode.</param>
+    /// <returns>The base64 encoded string.</returns>
     public static string Base64Encode(IMessage message)
     {
         // Create a serialized payload using lower-level protobuf APIs. We do this to avoid allocating
@@ -358,6 +368,25 @@ public static class ProtobufUtils
         }
     }
 
+    /// <summary>
+    /// Converts a MapField to a dictionary.
+    /// </summary>
+    /// <param name="properties">The MapField to convert.</param>
+    /// <returns>The converted dictionary.</returns>
+    public static IDictionary<string, object?> ConvertMapToDictionary(MapField<string, Value> properties)
+    {
+        return properties.ToDictionary(
+            kvp => kvp.Key,
+            kvp => ConvertValueToObject(kvp.Value));
+    }
+
+    /// <summary>
+    /// Converts the specified task failure details from proto format to a FailureDetails instance.
+    /// </summary>
+    /// <param name="failureDetails">The task failure details from the proto.</param>
+    /// <returns>
+    /// A <see cref="FailureDetails"/> object if <paramref name="failureDetails"/> is not null; otherwise, null.
+    /// </returns>
     internal static FailureDetails? GetFailureDetails(Proto.TaskFailureDetails? failureDetails)
     {
         if (failureDetails == null)
@@ -374,6 +403,11 @@ public static class ProtobufUtils
             ConvertMapToDictionary(failureDetails.Properties));
     }
 
+    /// <summary>
+    /// Convert FailureDetails class to proto format.
+    /// </summary>
+    /// <param name="failureDetails">The failure detials to convert.</param>
+    /// <returns>Proto format of failure details.</returns>
     internal static Proto.TaskFailureDetails? GetFailureDetails(FailureDetails? failureDetails)
     {
         if (failureDetails == null)
@@ -402,6 +436,11 @@ public static class ProtobufUtils
         return taskFailureDetails;
     }
 
+    /// <summary>
+    /// Convert QueryInstancesRequest from protobuf format to OrchestrationQuery.
+    /// </summary>
+    /// <param name="request">Protobuf request to convert.</param>
+    /// <returns>OrchestrationQuery instace.</returns>
     internal static OrchestrationQuery ToOrchestrationQuery(Proto.QueryInstancesRequest request)
     {
         var query = new OrchestrationQuery()
@@ -419,11 +458,17 @@ public static class ProtobufUtils
         return query;
     }
 
+    /// <summary>
+    /// Creates a protobuf response for an instances query.
+    /// </summary>
+    /// <param name="result">The query result to serialize.</param>
+    /// <param name="request">The original request that initiated the query.</param>
+    /// <returns>The populated protobuf response.</returns>
     internal static Proto.QueryInstancesResponse CreateQueryInstancesResponse(OrchestrationQueryResult result, Proto.QueryInstancesRequest request)
     {
         Proto.QueryInstancesResponse response = new Proto.QueryInstancesResponse
         {
-            ContinuationToken = result.ContinuationToken
+            ContinuationToken = result.ContinuationToken,
         };
         foreach (OrchestrationState state in result.OrchestrationState)
         {
@@ -442,39 +487,36 @@ public static class ProtobufUtils
             };
             response.OrchestrationState.Add(orchestrationState);
         }
+
         return response;
     }
 
+    /// <summary>
+    /// Convert PurgeInstancesRequest from protobuf format to PurgeInstanceFilter.
+    /// </summary>
+    /// <param name="request">Protobuf request to convert.</param>
+    /// <returns>PurgeInstanceFilter instance.</returns>
     internal static PurgeInstanceFilter ToPurgeInstanceFilter(Proto.PurgeInstancesRequest request)
     {
         var purgeInstanceFilter = new PurgeInstanceFilter(
             request.PurgeInstanceFilter.CreatedTimeFrom.ToDateTime(),
             request.PurgeInstanceFilter.CreatedTimeTo?.ToDateTime(),
-            request.PurgeInstanceFilter.RuntimeStatus?.Select(status => (OrchestrationStatus)status).ToList()
-        );
+            request.PurgeInstanceFilter.RuntimeStatus?.Select(status => (OrchestrationStatus)status).ToList());
         return purgeInstanceFilter;
     }
 
+    /// <summary>
+    /// Creates a protobuf response for a purge operation.
+    /// </summary>
+    /// <param name="result">The purge result to serialize.</param>
+    /// <returns>The populated protobuf response.</returns>
     internal static Proto.PurgeInstancesResponse CreatePurgeInstancesResponse(PurgeResult result)
     {
         Proto.PurgeInstancesResponse response = new Proto.PurgeInstancesResponse
         {
-            DeletedInstanceCount = result.DeletedInstanceCount
+            DeletedInstanceCount = result.DeletedInstanceCount,
         };
         return response;
-    }
-
-    /// <summary>
-    /// Converts a MapFieldinto a IDictionary.
-    /// </summary>
-    /// <param name="properties">IDictionary to convert.</param>
-    /// <returns>Converted map.</returns>
-    public static IDictionary<string, object?> ConvertMapToDictionary(MapField<string, Value> properties)
-    {
-        return properties.ToDictionary(
-            kvp => kvp.Key,
-            kvp => ConvertValueToObject(kvp.Value)
-        );
     }
 
     /// <summary>

@@ -40,4 +40,4 @@ var result = await testHost.Client.WaitForInstanceCompletionAsync(instanceId);
  .
 ## More Samples
 
-See [DurableTaskTestHostSamples.cs](./DurableTaskTestHostSamples.cs) for complete samples.
+See [BasicOrchestrationTests.cs](../../test/InProcessTestHost.Tests/BasicOrchestrationTests.cs) for complete samples showing both class-syntax and function-syntax orchestrations.

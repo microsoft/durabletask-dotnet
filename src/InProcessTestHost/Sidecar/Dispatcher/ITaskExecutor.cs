@@ -6,6 +6,9 @@ using DurableTask.Core.History;
 
 namespace Microsoft.DurableTask.Sidecar.Dispatcher;
 
+/// <summary>
+/// Task Executor.
+/// </summary>
 interface ITaskExecutor
 {
     /// <summary>
@@ -33,4 +36,3 @@ interface ITaskExecutor
         OrchestrationInstance instance,
         TaskScheduledEvent activityEvent);
 }
-

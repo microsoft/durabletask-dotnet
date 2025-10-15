@@ -166,4 +166,3 @@ public class DurableTaskTestHostOptions
     /// </summary>
     public ILoggerFactory? LoggerFactory { get; set; }
 }
-

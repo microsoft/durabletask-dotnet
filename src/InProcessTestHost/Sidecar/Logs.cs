@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using DurableTask.Core;
@@ -7,6 +7,9 @@ using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.Sidecar
 {
+    /// <summary>
+    /// Logger message definitions for the sidecar components.
+    /// </summary>
     static partial class Logs
     {
         [LoggerMessage(

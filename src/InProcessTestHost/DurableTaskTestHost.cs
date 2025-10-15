@@ -20,33 +20,19 @@ namespace Microsoft.DurableTask.Testing;
 /// In-process test host for testing class-based durable task orchestrations and activities
 /// without requiring any external backend (Azure Storage, SQL, etc).
 /// </summary>
-/// <remarks>
-/// This host runs a gRPC sidecar server in the same process with an in-memory orchestration service,
-/// allowing you to test your TaskOrchestrator and TaskActivity implementations easily.
-/// </remarks>
-/// <example>
-/// Basic usage:
-/// <code>
-/// // Create test host
-/// await using var testHost = await DurableTaskTestHost.StartAsync(tasks =>
-/// {
-///     tasks.AddOrchestrator&lt;MyOrchestrator&gt;();
-///     tasks.AddActivity&lt;MyActivity&gt;();
-/// });
-///
-/// // Schedule and run orchestration
-/// string instanceId = await testHost.Client.ScheduleNewOrchestrationInstanceAsync("MyOrchestrator");
-/// var result = await testHost.Client.WaitForInstanceCompletionAsync(instanceId);
-///
-/// Assert.Equal(OrchestrationRuntimeStatus.Completed, result.RuntimeStatus);
-/// </code>
-/// </example>
 public sealed class DurableTaskTestHost : IAsyncDisposable
 {
     readonly IWebHost sidecarHost;
     readonly IHost workerHost;
     readonly GrpcChannel grpcChannel;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DurableTaskTestHost"/> class.
+    /// </summary>
+    /// <param name="sidecarHost">The gRPC sidecar host.</param>
+    /// <param name="workerHost">The worker host.</param>
+    /// <param name="grpcChannel">The gRPC channel.</param>
+    /// <param name="client">The durable task client.</param>
     public DurableTaskTestHost(IWebHost sidecarHost, IHost workerHost, GrpcChannel grpcChannel, DurableTaskClient client)
     {
         this.sidecarHost = sidecarHost;
@@ -149,6 +135,7 @@ public sealed class DurableTaskTestHost : IAsyncDisposable
     /// <summary>
     /// Clean up all resources.
     /// </summary>
+    /// <returns>A task representing the asynchronous dispose operation.</returns>
     public async ValueTask DisposeAsync()
     {
         await this.workerHost.StopAsync();
@@ -179,3 +166,4 @@ public class DurableTaskTestHostOptions
     /// </summary>
     public ILoggerFactory? LoggerFactory { get; set; }
 }
+

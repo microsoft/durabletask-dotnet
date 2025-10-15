@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using DurableTask.Core;
@@ -56,3 +56,4 @@ class TaskActivityDispatcher : WorkItemDispatcher<TaskActivityWorkItem>
     public override Task<TaskActivityWorkItem> RenewWorkItemAsync(TaskActivityWorkItem workItem) =>
         this.service.RenewTaskActivityWorkItemLockAsync(workItem);
 }
+

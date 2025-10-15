@@ -6,7 +6,13 @@ using DurableTask.Core.Tracing;
 
 namespace Microsoft.DurableTask.Sidecar.Dispatcher;
 
+/// <summary>
+/// Action for creating sub-orchestration.
+/// </summary>
 public class GrpcCreateSubOrchestrationAction : CreateSubOrchestrationAction
 {
+    /// <summary>
+    /// Gets or sets distributed parent trace context.
+    /// </summary>
     public DistributedTraceContext? ParentTraceContext { get; set; }
 }

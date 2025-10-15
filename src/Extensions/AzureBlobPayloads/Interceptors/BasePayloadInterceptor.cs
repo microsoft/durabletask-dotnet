@@ -31,6 +31,14 @@ public abstract class BasePayloadInterceptor<TRequestNamespace, TResponseNamespa
         this.options = options;
     }
 
+    /// <summary>
+    /// Checks if an object's type name matches the given type's full name.
+    /// </summary>
+    /// <param name="o">The object to check.</param>
+    /// <param name="t">The type to compare against.</param>
+    /// <returns>True if the object's type full name matches the given type's full name.</returns>
+    protected static bool IsType(object o, Type t) => o.GetType().FullName == t.FullName;
+
     // Unary: externalize on request, resolve on response
 
     /// <inheritdoc/>

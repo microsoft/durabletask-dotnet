@@ -13,7 +13,7 @@ namespace Microsoft.DurableTask;
 /// Azure Blob Storage implementation of <see cref="PayloadStore"/>.
 /// Stores payloads as blobs and returns opaque tokens in the form "blob:v1:&lt;container&gt;:&lt;blobName&gt;".
 /// </summary>
-sealed class BlobPayloadStore : PayloadStore
+public sealed class BlobPayloadStore : PayloadStore
 {
     const string TokenPrefix = "blob:v1:";
     const string ContentEncodingGzip = "gzip";

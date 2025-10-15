@@ -163,12 +163,15 @@ public abstract class BasePayloadInterceptor<TRequestNamespace, TResponseNamespa
     /// <returns>A task that returns the externalized token or the original value.</returns>
     protected async Task<string?> MaybeExternalizeAsync(string? value, CancellationToken cancellation)
     {
+        Console.WriteLine($"--------------------------Value: {value}");
         if (string.IsNullOrEmpty(value))
         {
             return value;
         }
 
         int size = Encoding.UTF8.GetByteCount(value);
+        Console.WriteLine($"-------------------------Size: {size}");
+        Console.WriteLine($"-------------------------ExternalizeThresholdBytes: {this.options.ExternalizeThresholdBytes}");
         if (size < this.options.ExternalizeThresholdBytes)
         {
             return value;

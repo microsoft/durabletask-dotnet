@@ -29,6 +29,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     /// <param name="services">The service provider.</param>
     /// <param name="loggerFactory">The logger.</param>
     /// <param name="orchestrationFilter">The optional <see cref="IOrchestrationFilter"/> used to filter orchestration execution.</param>
+    /// <param name="exceptionPropertiesProvider">The custom exception properties provider that help build failure details.</param>
     public GrpcDurableTaskWorker(
         string name,
         IDurableTaskFactory factory,
@@ -36,7 +37,8 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         IOptionsMonitor<DurableTaskWorkerOptions> workerOptions,
         IServiceProvider services,
         ILoggerFactory loggerFactory,
-        IOrchestrationFilter? orchestrationFilter = null)
+        IOrchestrationFilter? orchestrationFilter = null,
+        IExceptionPropertiesProvider? exceptionPropertiesProvider = null)
         : base(name, factory)
     {
         this.grpcOptions = Check.NotNull(grpcOptions).Get(name);
@@ -45,6 +47,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         this.loggerFactory = Check.NotNull(loggerFactory);
         this.logger = loggerFactory.CreateLogger("Microsoft.DurableTask"); // TODO: use better category name.
         this.orchestrationFilter = orchestrationFilter;
+        this.ExceptionPropertiesProvider = exceptionPropertiesProvider;
     }
 
     /// <inheritdoc />
@@ -52,7 +55,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     {
         await using AsyncDisposable disposable = this.GetCallInvoker(out CallInvoker callInvoker, out string address);
         this.logger.StartingTaskHubWorker(address);
-        await new Processor(this, new(callInvoker), this.orchestrationFilter).ExecuteAsync(stoppingToken);
+        await new Processor(this, new(callInvoker), this.orchestrationFilter, this.ExceptionPropertiesProvider).ExecuteAsync(stoppingToken);
     }
 
 #if NET6_0_OR_GREATER

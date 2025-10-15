@@ -54,7 +54,19 @@ public class DefaultDurableTaskWorkerBuilder : IDurableTaskWorkerBuilder
         Verify.NotNull(this.buildTarget, error);
 
         DurableTaskRegistry registry = serviceProvider.GetOptions<DurableTaskRegistry>(this.Name);
-        return (IHostedService)ActivatorUtilities.CreateInstance(
-            serviceProvider, this.buildTarget, this.Name, registry.BuildFactory());
+
+        // Get the IExceptionPropertiesProvider from DI if registered
+        IExceptionPropertiesProvider? exceptionPropertiesProvider = serviceProvider.GetService<IExceptionPropertiesProvider>();
+
+        if (exceptionPropertiesProvider != null)
+        {
+            return (IHostedService)ActivatorUtilities.CreateInstance(
+                serviceProvider, this.buildTarget, this.Name, registry.BuildFactory(), exceptionPropertiesProvider);
+        }
+        else
+        {
+            return (IHostedService)ActivatorUtilities.CreateInstance(
+                serviceProvider, this.buildTarget, this.Name, registry.BuildFactory());
+        }
     }
 }

@@ -166,7 +166,7 @@ public class DefaultScheduleClientTests
             .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId)
             {
                 RuntimeStatus = OrchestrationRuntimeStatus.Failed,
-                FailureDetails = new TaskFailureDetails("TestError", errorMessage, null, null)
+                FailureDetails = new TaskFailureDetails("TestError", errorMessage, null, null, null)
             });
 
         // Act & Assert

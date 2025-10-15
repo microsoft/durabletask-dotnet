@@ -440,7 +440,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         CancellationToken cancellation = default)
         => throw new NotSupportedException($"{this.GetType()} does not support orchestration restart.");
 
-    public virtual Task RewindAsync(
+    public virtual Task RewindInstanceAsync(
         string instanceId,
         string reason,
         CancellationToken cancellation = default)

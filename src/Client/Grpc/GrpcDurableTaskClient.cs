@@ -431,7 +431,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
     }
 
-    public override async Task RewindAsync(
+    public override async Task RewindInstanceAsync(
         string instanceId,
         string reason,
         CancellationToken cancellation = default)
@@ -462,7 +462,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {
             throw new OperationCanceledException(
-                $"The {nameof(this.RewindAsync)} operation was canceled.", e, cancellation);
+                $"The {nameof(this.RewindInstanceAsync)} operation was canceled.", e, cancellation);
         }
     }
 

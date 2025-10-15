@@ -49,4 +49,9 @@ public enum OrchestrationRuntimeStatus
     /// The orchestration has been suspended.
     /// </summary>
     Suspended,
+
+    /// <summary>
+    /// The orchestration is rewinding.
+    /// </summary>
+    Rewinding,
 }

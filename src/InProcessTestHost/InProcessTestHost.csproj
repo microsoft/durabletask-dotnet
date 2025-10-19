@@ -5,8 +5,10 @@
     <RootNamespace>Microsoft.DurableTask.Testing</RootNamespace>
     <AssemblyName>Microsoft.DurableTask.InProcessTestHost</AssemblyName>
     <PackageId>Microsoft.DurableTask.InProcessTestHost</PackageId>
-    <EnableStyleCop>false</EnableStyleCop>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <Version>0.1.0-preview.1</Version>
+    
+    <!-- Suppress CA1848: Use LoggerMessage delegates for high-performance logging scenarios -->
+    <NoWarn>$(NoWarn);CA1848</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

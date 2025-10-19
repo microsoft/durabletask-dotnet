@@ -3,6 +3,7 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using DurableTask.Core;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
@@ -23,7 +24,7 @@ namespace Microsoft.DurableTask.Sidecar.Grpc;
 /// This class implements the gRPC service that handles communication between the durable task worker
 /// and the orchestration service, managing work items and execution results.
 /// </remarks>
-public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBase, ITaskExecutor
+public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBase, ITaskExecutor, IDisposable // CA1001: Types owning disposable fields should be disposable
 {
     static readonly Task<P.CompleteTaskResponse> EmptyCompleteTaskResponse = Task.FromResult(new P.CompleteTaskResponse());
 
@@ -41,6 +42,8 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
 
     // Initialized when a client connects to this service to receive work-item commands.
     IServerStreamWriter<P.WorkItem>? workerToClientStream;
+
+    bool disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskHubGrpcServer"/> class.
@@ -76,6 +79,29 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         this.options = options;
         this.hostLifetime.ApplicationStarted.Register(this.OnApplicationStarted);
         this.hostLifetime.ApplicationStopping.Register(this.OnApplicationStopping);
+    }
+
+    /// <summary>
+    /// Disposes the server resources.
+    /// </summary>
+    public void Dispose()
+    {
+        this.Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Disposes the server resources.
+    /// </summary>
+    /// <param name="disposing">Whether disposing from Dispose method.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!this.disposed && disposing)
+        {
+            this.sendWorkItemLock?.Dispose();
+            this.isConnectedSignal?.Reset(); // Clean up the signal
+            this.disposed = true;
+        }
     }
 
     async void OnApplicationStarted()
@@ -169,7 +195,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         };
 
         // TODO: Structured logging
-        this.log.LogInformation("Creating a new instance with ID = {instanceID}", instance.InstanceId);
+        this.log.LogInformation("Creating a new instance with ID = {InstanceId}", instance.InstanceId);
 
         try
         {
@@ -321,7 +347,8 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                     break;
 
                 default:
-                    throw new ArgumentException($"Unknown purge request type '{request.RequestCase}'.");
+                    // CA2201: Use specific exception types
+                    throw new NotSupportedException($"Unknown purge request type '{request.RequestCase}'.");
             }
             return ProtobufUtils.CreatePurgeInstancesResponse(result);
         }
@@ -510,6 +537,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             out TaskCompletionSource<GrpcOrchestratorExecutionResult>? tcs))
         {
             // TODO: Log?
+            // CA2201: Use specific exception types
             throw new RpcException(new Status(StatusCode.NotFound, $"Orchestration not found"));
         }
 
@@ -529,31 +557,32 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     /// <summary>
     /// Invoked by the remote SDK over gRPC when an activity task (episode) is completed.
     /// </summary>
-    /// <param name="response">Details about the completed activity task, including the output.</param>
+    /// <param name="request">Details about the completed activity task, including the output.</param>
     /// <param name="context">Context for the server-side gRPC call.</param>
     /// <returns>Returns an empty ack back to the remote SDK that we've received the completion.</returns>
-    public override Task<P.CompleteTaskResponse> CompleteActivityTask(P.ActivityResponse response, ServerCallContext context)
+    public override Task<P.CompleteTaskResponse> CompleteActivityTask(P.ActivityResponse request, ServerCallContext context)
     {
-        string taskIdKey = GetTaskIdKey(response.InstanceId, response.TaskId);
+        string taskIdKey = GetTaskIdKey(request.InstanceId, request.TaskId);
         if (!this.pendingActivityTasks.TryRemove(taskIdKey, out TaskCompletionSource<ActivityExecutionResult>? tcs))
         {
             // TODO: Log?
+            // CA2201: Use specific exception types
             throw new RpcException(new Status(StatusCode.NotFound, $"Activity not found"));
         }
 
         HistoryEvent resultEvent;
-        if (response.FailureDetails == null)
+        if (request.FailureDetails == null)
         {
-            resultEvent = new TaskCompletedEvent(-1, response.TaskId, response.Result);
+            resultEvent = new TaskCompletedEvent(-1, request.TaskId, request.Result);
         }
         else
         {
             resultEvent = new TaskFailedEvent(
                 eventId: -1,
-                taskScheduledId: response.TaskId,
+                taskScheduledId: request.TaskId,
                 reason: null,
                 details: null,
-                failureDetails: ProtobufUtils.GetFailureDetails(response.FailureDetails));
+                failureDetails: ProtobufUtils.GetFailureDetails(request.FailureDetails));
         }
 
         tcs.TrySetResult(new ActivityExecutionResult { ResponseEvent = resultEvent });
@@ -586,6 +615,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                 {
                     throw new RpcException(new Status(StatusCode.ResourceExhausted, "Another client is already connected"));
                 }
+                retryCount++; // Fix the increment
             }
 
             this.log.ClientConnected(context.Peer, context.Deadline);
@@ -718,7 +748,8 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         lock (this.isConnectedSignal)
         {
             outputStream = this.workerToClientStream ??
-                throw new Exception("TODO: No client is connected! Need to wait until a client connects before executing!");
+                // CA2201: Use specific exception types
+                throw new InvalidOperationException("TODO: No client is connected! Need to wait until a client connects before executing!");
         }
 
         // The gRPC channel can only handle one message at a time, so we need to serialize access to it.
@@ -761,7 +792,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
 
     static string GetTaskIdKey(string instanceId, int taskId)
     {
-        return string.Concat(instanceId, "__", taskId.ToString());
+        return string.Concat(instanceId, "_", taskId.ToString(CultureInfo.InvariantCulture));
     }
 
     /// <summary>

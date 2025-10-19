@@ -6,9 +6,13 @@ using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.Sidecar.Dispatcher;
 
-abstract class WorkItemDispatcher<T> where T : class
+/// <summary>
+/// Base class for dispatching and managing work items.
+/// </summary>
+/// <typeparam name="T">The type of work item to dispatch.</typeparam>
+abstract class WorkItemDispatcher<T> : IDisposable where T : class
 {
-    static int nextDispatcherId = 0;
+    static int nextDispatcherId; // CA1805: Remove explicit initialization
 
     readonly string name;
     readonly ILogger log;
@@ -17,7 +21,13 @@ abstract class WorkItemDispatcher<T> where T : class
     CancellationTokenSource? shutdownTcs;
     Task? workItemExecuteLoop;
     int currentWorkItems;
+    bool disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WorkItemDispatcher{T}"/> class.
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="trafficSignal">The traffic signal.</param>
     public WorkItemDispatcher(ILogger log, ITrafficSignal trafficSignal)
     {
         this.log = log ?? throw new ArgumentNullException(nameof(log));
@@ -26,22 +36,66 @@ abstract class WorkItemDispatcher<T> where T : class
         this.name = $"{this.GetType().Name}-{Interlocked.Increment(ref nextDispatcherId)}";
     }
 
+    /// <summary>
+    /// Gets the maximum number of concurrent work items.
+    /// </summary>
     public virtual int MaxWorkItems => 10;
 
+    /// <summary>
+    /// Fetches the next work item asynchronously.
+    /// </summary>
+    /// <param name="timeout">The timeout for the operation.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The next work item, or null if none available.</returns>
     public abstract Task<T?> FetchWorkItemAsync(TimeSpan timeout, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Executes the specified work item.
+    /// </summary>
+    /// <param name="workItem">The work item to execute.</param>
+    /// <returns>A task representing the execution.</returns>
     protected abstract Task ExecuteWorkItemAsync(T workItem);
 
+    /// <summary>
+    /// Releases the specified work item.
+    /// </summary>
+    /// <param name="workItem">The work item to release.</param>
+    /// <returns>A task representing the release operation.</returns>
     public abstract Task ReleaseWorkItemAsync(T workItem);
 
+    /// <summary>
+    /// Abandons the specified work item.
+    /// </summary>
+    /// <param name="workItem">The work item to abandon.</param>
+    /// <returns>A task representing the abandon operation.</returns>
     public abstract Task AbandonWorkItemAsync(T workItem);
 
+    /// <summary>
+    /// Renews the specified work item.
+    /// </summary>
+    /// <param name="workItem">The work item to renew.</param>
+    /// <returns>The renewed work item.</returns>
     public abstract Task<T> RenewWorkItemAsync(T workItem);
 
+    /// <summary>
+    /// Gets the ID of the specified work item.
+    /// </summary>
+    /// <param name="workItem">The work item.</param>
+    /// <returns>The work item ID.</returns>
     public abstract string GetWorkItemId(T workItem);
 
+    /// <summary>
+    /// Gets the delay in seconds after a fetch exception.
+    /// </summary>
+    /// <param name="ex">The exception that occurred.</param>
+    /// <returns>The delay in seconds.</returns>
     public abstract int GetDelayInSecondsOnFetchException(Exception ex);
 
+    /// <summary>
+    /// Starts the dispatcher.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the start operation.</returns>
     public virtual Task StartAsync(CancellationToken cancellationToken)
     {
         // Dispatchers can be stopped and started back up again
@@ -55,6 +109,11 @@ abstract class WorkItemDispatcher<T> where T : class
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Stops the dispatcher.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the stop operation.</returns>
     public virtual async Task StopAsync(CancellationToken cancellationToken)
     {
         // Trigger the cancellation tokens being used for background processing.
@@ -69,6 +128,28 @@ abstract class WorkItemDispatcher<T> where T : class
 
         // Wait for all outstanding work-item processing to complete for a fully graceful shutdown
         await this.WaitForOutstandingWorkItems(cancellationToken);
+    }
+
+    /// <summary>
+    /// Disposes the dispatcher resources.
+    /// </summary>
+    public void Dispose()
+    {
+        this.Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Disposes the dispatcher resources.
+    /// </summary>
+    /// <param name="disposing">Whether disposing from Dispose method.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!this.disposed && disposing)
+        {
+            this.shutdownTcs?.Dispose();
+            this.disposed = true;
+        }
     }
 
     async Task WaitForAllClear(CancellationToken cancellationToken)
@@ -128,11 +209,12 @@ abstract class WorkItemDispatcher<T> where T : class
     }
 
     // This method does not throw
+    // CA1068: CancellationToken should be last parameter
     async Task DelayOnException(
         Exception exception,
         string workItemId,
-        CancellationToken cancellationToken,
-        Func<Exception, int> delayInSecondsPolicy)
+        Func<Exception, int> delayInSecondsPolicy,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -208,7 +290,7 @@ abstract class WorkItemDispatcher<T> where T : class
                         action: "fetchWorkItem",
                         workItemId: unknownWorkItemId,
                         details: ex.ToString());
-                    await this.DelayOnException(ex, unknownWorkItemId, cancellationToken, this.GetDelayInSecondsOnFetchException);
+                    await this.DelayOnException(ex, unknownWorkItemId, this.GetDelayInSecondsOnFetchException, cancellationToken);
                     continue;
                 }
             }

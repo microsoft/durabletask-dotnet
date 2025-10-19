@@ -138,9 +138,9 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
             this.ApplyOrchestratorActions(
                 result,
                 ref workItem.OrchestrationRuntimeState,
-                out IList<TaskMessage> activityMessages,
-                out IList<TaskMessage> orchestratorMessages,
-                out IList<TaskMessage> timerMessages,
+                out List<TaskMessage> activityMessages, // CA1859: Use concrete types for better performance
+                out List<TaskMessage> orchestratorMessages, // CA1859: Use concrete types for better performance
+                out List<TaskMessage> timerMessages, // CA1859: Use concrete types for better performance
                 out OrchestrationState? updatedStatus,
                 out bool continueAsNew);
             if (continueAsNew)
@@ -247,9 +247,9 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
     void ApplyOrchestratorActions(
         OrchestratorExecutionResult result,
         ref OrchestrationRuntimeState runtimeState,
-        out IList<TaskMessage> activityMessages,
-        out IList<TaskMessage> orchestratorMessages,
-        out IList<TaskMessage> timerMessages,
+        out List<TaskMessage> activityMessages, // CA1859: Use concrete types for better performance
+        out List<TaskMessage> orchestratorMessages, // CA1859: Use concrete types for better performance
+        out List<TaskMessage> timerMessages, // CA1859: Use concrete types for better performance
         out OrchestrationState? updatedStatus,
         out bool continueAsNew)
     {
@@ -258,9 +258,9 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
             throw new ArgumentException($"The provided {nameof(OrchestrationRuntimeState)} doesn't contain an instance ID!", nameof(runtimeState));
         }
 
-        IList<TaskMessage>? newActivityMessages = null;
-        IList<TaskMessage>? newTimerMessages = null;
-        IList<TaskMessage>? newOrchestratorMessages = null;
+        List<TaskMessage>? newActivityMessages = null; // CA1859: Use concrete types for better performance
+        List<TaskMessage>? newTimerMessages = null; // CA1859: Use concrete types for better performance
+        List<TaskMessage>? newOrchestratorMessages = null; // CA1859: Use concrete types for better performance
         FailureDetails? failureDetails = null;
         continueAsNew = false;
 
@@ -408,9 +408,9 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                     }
 
                     runtimeState = newRuntimeState;
-                    activityMessages = Array.Empty<TaskMessage>();
-                    orchestratorMessages = Array.Empty<TaskMessage>();
-                    timerMessages = Array.Empty<TaskMessage>();
+                    activityMessages = new List<TaskMessage>();
+                    orchestratorMessages = new List<TaskMessage>();
+                    timerMessages = new List<TaskMessage>();
                     continueAsNew = true;
                     updatedStatus = null;
                     return;
@@ -475,9 +475,9 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
 
         runtimeState.AddEvent(new OrchestratorCompletedEvent(-1));
 
-        activityMessages = newActivityMessages ?? Array.Empty<TaskMessage>();
-        timerMessages = newTimerMessages ?? Array.Empty<TaskMessage>();
-        orchestratorMessages = newOrchestratorMessages ?? Array.Empty<TaskMessage>();
+        activityMessages = newActivityMessages ?? new List<TaskMessage>();
+        timerMessages = newTimerMessages ?? new List<TaskMessage>();
+        orchestratorMessages = newOrchestratorMessages ?? new List<TaskMessage>();
 
         updatedStatus = new OrchestrationState
         {

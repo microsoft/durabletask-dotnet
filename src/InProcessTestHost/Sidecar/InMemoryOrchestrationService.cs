@@ -3,6 +3,7 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using DurableTask.Core;
@@ -69,7 +70,7 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
     /// <returns>A task representing the asynchronous operation.</returns>
     public Task AbandonTaskActivityWorkItemAsync(TaskActivityWorkItem workItem)
     {
-        this.logger.LogWarning("Abandoning task activity work item {id}", workItem.Id);
+        this.logger.LogWarning("Abandoning task activity work item {Id}", workItem.Id);
         this.activityQueue.Enqueue(workItem.TaskMessage);
         return Task.CompletedTask;
     }
@@ -309,7 +310,7 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
         TaskMessage message = await this.activityQueue.DequeueAsync(cancellationToken);
         return new TaskActivityWorkItem
         {
-            Id = message.SequenceNumber.ToString(),
+            Id = message.SequenceNumber.ToString(CultureInfo.InvariantCulture), // CA1305: Use IFormatProvider
             LockedUntilUtc = DateTime.MaxValue,
             TaskMessage = message,
         };
@@ -803,7 +804,8 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                         return false;
                     }
 
-                    if (query.InstanceIdPrefix != null && !statusRecord.OrchestrationInstance.InstanceId.StartsWith(query.InstanceIdPrefix))
+                    // CA1310: Use StringComparison for culture-sensitive operations
+                    if (query.InstanceIdPrefix != null && !statusRecord.OrchestrationInstance.InstanceId.StartsWith(query.InstanceIdPrefix, StringComparison.OrdinalIgnoreCase))
                     {
                         return false;
                     }
@@ -817,7 +819,8 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
             string? token = null;
             if (results.Count == query.PageSize)
             {
-                token = counter.ToString();
+                // CA1305: Use IFormatProvider
+                token = counter.ToString(CultureInfo.InvariantCulture);
             }
 
             return new OrchestrationQueryResult(results, token);

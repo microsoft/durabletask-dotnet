@@ -29,7 +29,7 @@
 
   <!-- DurableTask Packages -->
   <ItemGroup>
-    <PackageVersion Include="Microsoft.Azure.DurableTask.Core" Version="3.5.0" />
+    <PackageVersion Include="Microsoft.Azure.DurableTask.Core" Version="3.5.1" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.2.2" />
   </ItemGroup>
 

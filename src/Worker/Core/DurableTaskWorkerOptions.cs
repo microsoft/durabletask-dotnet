@@ -162,7 +162,6 @@ public class DurableTaskWorkerOptions
     /// </remarks>
     internal bool DataConverterExplicitlySet { get; private set; }
 
-
     /// <summary>
     /// Applies these option values to another.
     /// </summary>

@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
@@ -9,16 +9,18 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.SourceGenerators.Testing" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Common" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.CodeAnalysis" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+    <PackageReference Include="Verify.Xunit" />
+    <PackageReference Include="Verify.SourceGenerators" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="$(SrcRoot)Abstractions/Abstractions.csproj" />
     <ProjectReference Include="$(SrcRoot)Generators/Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Registry\DurableTaskRegistryGeneratorTests.Generate_MultipleDurableTasks#DurableTaskRegistryExtensions.g.received.cs" />
   </ItemGroup>
 
 </Project>

@@ -7,9 +7,9 @@
     <!-- Do not include the generator as a lib dependency -->
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
-    <IncludeShared>false</IncludeShared>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <PolySharpExcludeGeneratedTypes>System.Runtime.CompilerServices.ModuleInitializerAttribute</PolySharpExcludeGeneratedTypes>
   </PropertyGroup>
 
     <!-- Package info -->
@@ -17,16 +17,20 @@
     <PackageDescription>.NET Source Generators for the Durable Task Framework.</PackageDescription>
   </PropertyGroup>
 
+  <ItemGroup>
+    <SharedSection Include="Core/Validation" />
+  </ItemGroup>
+
   <!-- Version info -->
   <PropertyGroup>
     <!-- This file intentionally versions separately from the other packages. -->
     <VersionPrefix>1.0.0</VersionPrefix>
-    <VersionSuffix>preview.1</VersionSuffix>
+    <VersionSuffix>preview.2</VersionSuffix>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+    <PackageReference Include="PolySharp" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

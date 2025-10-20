@@ -36,7 +36,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     }
 
     [Fact]
-    public async Task ScheduleOrchesrationWithTags()
+    public async Task ScheduleOrchestrationWithTags()
     {
         TaskName orchestratorName = nameof(EmptyOrchestration);
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
@@ -329,7 +329,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
 
         string[] expected = new[] { "9", "8", "7", "6", "5", "4", "3", "2", "1", "0" };
-        Assert.Equal<string>(expected, metadata.ReadOutputAs<string[]>());
+        Assert.Equal(expected.AsSpan(), metadata.ReadOutputAs<string[]>()!.AsSpan());
     }
 
     [Theory]
@@ -1140,7 +1140,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         public ValueTask<bool> IsOrchestrationValidAsync(OrchestrationFilterParameters info, CancellationToken cancellationToken = default)
         {
             return ValueTask.FromResult(
-                !this.NameDenySet.Contains(info.Name)
+                !this.NameDenySet.Contains(info.Name!)
                 && !this.TagDenyDict.Any(kvp => info.Tags != null && info.Tags.ContainsKey(kvp.Key) && info.Tags[kvp.Key] == kvp.Value));
         }
     }

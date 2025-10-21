@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Runtime.Serialization;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.DurableTask.Worker;
@@ -631,6 +632,107 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         return (Exception)Activator.CreateInstance(exceptionType, message)!;
     }
 
+    /// <summary>
+    /// Tests that exception properties are included in FailureDetails when using a custom IExceptionPropertiesProvider.
+    /// </summary>
+    [Fact]
+    public async Task CustomExceptionPropertiesInFailureDetails()
+    {
+        TaskName orchestratorName = "OrchestrationWithCustomException";
+        TaskName activityName = "BusinessActivity";
+
+        // Register activity functions that will throw a custom exception with diverse property types.
+        async Task MyOrchestrationImpl(TaskOrchestrationContext ctx) =>
+            await ctx.CallActivityAsync(activityName);
+
+        void MyActivityImpl(TaskActivityContext ctx) =>
+            throw new BusinessValidationException(
+                message: "Business logic validation failed",
+                stringProperty: "validation-error-123",
+                intProperty: 100,
+                longProperty: 999999999L,
+                dateTimeProperty: new DateTime(2025, 10, 15, 14, 30, 0, DateTimeKind.Utc),
+                dictionaryProperty: new Dictionary<string, object?>
+                {
+                    ["error_code"] = "VALIDATION_FAILED",
+                    ["retry_count"] = 3,
+                    ["is_critical"] = true
+                },
+                listProperty: new List<object?> { "error1", "error2", 500, null },
+                nullProperty: null);
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            // Register the custom exception properties provider
+            b.Services.AddSingleton<IExceptionPropertiesProvider, TestExceptionPropertiesProvider>();
+            
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc(orchestratorName, MyOrchestrationImpl)
+                .AddActivityFunc(activityName, MyActivityImpl));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+
+        Assert.NotNull(metadata.FailureDetails);
+        TaskFailureDetails failureDetails = metadata.FailureDetails!;
+        Assert.Equal(typeof(TaskFailedException).FullName, failureDetails.ErrorType);
+
+        // Check that the activity failure is in the inner failure
+        Assert.NotNull(failureDetails.InnerFailure);
+        TaskFailureDetails innerFailure = failureDetails.InnerFailure!;
+        Assert.Equal(typeof(BusinessValidationException).FullName, innerFailure.ErrorType);
+
+        // Check that custom properties are included and verify all property types
+        Assert.NotNull(innerFailure.Properties);
+
+        // We should contain 7 properties.
+        Assert.Equal(7, innerFailure.Properties.Count);
+
+        // Verify string property
+        Assert.True(innerFailure.Properties.ContainsKey("StringProperty"));
+        Assert.Equal("validation-error-123", innerFailure.Properties["StringProperty"]);
+
+        // Verify numeric properties (note: all numeric types are serialized as double in protobuf)
+        Assert.True(innerFailure.Properties.ContainsKey("IntProperty"));
+        Assert.Equal(100.0, innerFailure.Properties["IntProperty"]);
+
+        Assert.True(innerFailure.Properties.ContainsKey("LongProperty"));
+        Assert.Equal(999999999.0, innerFailure.Properties["LongProperty"]);
+
+        // Verify DateTime property
+        Assert.True(innerFailure.Properties.ContainsKey("DateTimeProperty"));
+        Assert.Equal(new DateTime(2025, 10, 15, 14, 30, 0, DateTimeKind.Utc), innerFailure.Properties["DateTimeProperty"]);
+
+        // Verify dictionary property with nested values
+        Assert.True(innerFailure.Properties.ContainsKey("DictionaryProperty"));
+        var dictProperty = innerFailure.Properties["DictionaryProperty"] as IDictionary<string, object?>;
+        Assert.NotNull(dictProperty);
+        Assert.Equal(3, dictProperty.Count);
+        Assert.Equal("VALIDATION_FAILED", dictProperty["error_code"]);
+        Assert.Equal(3.0, dictProperty["retry_count"]);
+        Assert.Equal(true, dictProperty["is_critical"]);
+
+        // Verify list property with mixed types
+        Assert.True(innerFailure.Properties.ContainsKey("ListProperty"));
+        var listProperty = innerFailure.Properties["ListProperty"] as IList<object?>;
+        Assert.NotNull(listProperty);
+        Assert.Equal(4, listProperty.Count);
+        Assert.Equal("error1", listProperty[0]);
+        Assert.Equal("error2", listProperty[1]);
+        Assert.Equal(500.0, listProperty[2]);
+        Assert.Null(listProperty[3]);
+
+        // Verify null property
+        Assert.True(innerFailure.Properties.ContainsKey("NullProperty"));
+        Assert.Null(innerFailure.Properties["NullProperty"]);
+    }
+
     [Serializable]
     class CustomException : Exception
     {
@@ -647,6 +749,71 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         protected CustomException(SerializationInfo info, StreamingContext context)
             : base(info, context)
         {
+        }
+    }
+
+    /// <summary>
+    /// A custom exception with diverse property types for comprehensive testing of exception properties.
+    /// </summary>
+    [Serializable]
+    class BusinessValidationException : Exception
+    {
+        public BusinessValidationException(string message, 
+            string stringProperty,
+            int intProperty,
+            long longProperty,
+            DateTime dateTimeProperty,
+            IDictionary<string, object?> dictionaryProperty,
+            IList<object?> listProperty,
+            object? nullProperty) : base(message)
+        {
+            this.StringProperty = stringProperty;
+            this.IntProperty = intProperty;
+            this.LongProperty = longProperty;
+            this.DateTimeProperty = dateTimeProperty;
+            this.DictionaryProperty = dictionaryProperty;
+            this.ListProperty = listProperty;
+            this.NullProperty = nullProperty;
+        }
+
+        public string? StringProperty { get; }
+        public int? IntProperty { get; }
+        public long? LongProperty { get; }
+        public DateTime? DateTimeProperty { get; }
+        public IDictionary<string, object?>? DictionaryProperty { get; }
+        public IList<object?>? ListProperty { get; }
+        public object? NullProperty { get; }
+
+        protected BusinessValidationException(SerializationInfo info, StreamingContext context)
+            : base(info, context)
+        {
+        }
+    }
+
+    // Set a custom exception provider.
+    class TestExceptionPropertiesProvider : IExceptionPropertiesProvider
+    {
+        public IDictionary<string, object?>? GetExceptionProperties(Exception exception)
+        {
+            return exception switch
+            {
+                ArgumentOutOfRangeException e => new Dictionary<string, object?>
+                {
+                    ["Name"] = e.ParamName ?? string.Empty,
+                    ["Value"] = e.ActualValue ?? string.Empty,
+                },
+                Microsoft.DurableTask.Grpc.Tests.OrchestrationErrorHandling.BusinessValidationException e => new Dictionary<string, object?>
+                {
+                    ["StringProperty"] = e.StringProperty,
+                    ["IntProperty"] = e.IntProperty,
+                    ["LongProperty"] = e.LongProperty,
+                    ["DateTimeProperty"] = e.DateTimeProperty,
+                    ["DictionaryProperty"] = e.DictionaryProperty,
+                    ["ListProperty"] = e.ListProperty,
+                    ["NullProperty"] = e.NullProperty,
+                },
+                _ => null // No custom properties for other exceptions
+            };
         }
     }
 }

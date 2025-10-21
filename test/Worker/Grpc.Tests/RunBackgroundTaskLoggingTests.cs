@@ -388,7 +388,9 @@ public class RunBackgroundTaskLoggingTests
                 grpcOptions: grpcOptions,
                 workerOptions: workerOptions,
                 services: services,
-                loggerFactory: loggerFactory);
+                loggerFactory: loggerFactory,
+                orchestrationFilter: null,
+                exceptionPropertiesProvider: null);
 
             // Client mock
             var callInvoker = Mock.Of<CallInvoker>();
@@ -400,7 +402,7 @@ public class RunBackgroundTaskLoggingTests
                 processorType,
                 BindingFlags.Public | BindingFlags.Instance,
                 binder: null,
-                args: new object?[] { worker, clientMock.Object, null },
+                args: new object?[] { worker, clientMock.Object, null, null },
                 culture: null)!;
 
             MethodInfo runBackgroundTask = processorType.GetMethod("RunBackgroundTask", BindingFlags.Instance | BindingFlags.NonPublic)!;

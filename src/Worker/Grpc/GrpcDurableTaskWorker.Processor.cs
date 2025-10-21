@@ -34,9 +34,11 @@ sealed partial class GrpcDurableTaskWorker
         readonly DurableTaskShimFactory shimFactory;
         readonly GrpcDurableTaskWorkerOptions.InternalOptions internalOptions;
         readonly DTCore.IExceptionPropertiesProvider? exceptionPropertiesProvider;
+
         [Obsolete("Experimental")]
         readonly IOrchestrationFilter? orchestrationFilter;
 
+#pragma warning disable CS0618 // Type or member is obsolete
         public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient client, IOrchestrationFilter? orchestrationFilter = null, IExceptionPropertiesProvider? exceptionPropertiesProvider = null)
         {
             this.worker = worker;
@@ -48,6 +50,7 @@ sealed partial class GrpcDurableTaskWorker
                 ? new ExceptionPropertiesProviderAdapter(exceptionPropertiesProvider)
                 : null;
         }
+#pragma warning restore CS0618 // Type or member is obsolete
 
         ILogger Logger => this.worker.logger;
 
@@ -346,115 +349,116 @@ sealed partial class GrpcDurableTaskWorker
             // TODO: is Task.Run appropriate here? Should we have finer control over the tasks and their threads?
             _ = Task.Run(
                 async () =>
-            {
-                try
                 {
-                    await handler();
-                }
-                catch (OperationCanceledException)
-                {
-                    // Shutting down - ignore
-                }
-                catch (Exception ex)
-                {
-                    string instanceId =
-                        workItem?.OrchestratorRequest?.InstanceId ??
-                        workItem?.ActivityRequest?.OrchestrationInstance?.InstanceId ??
-                        workItem?.EntityRequest?.InstanceId ??
-                        workItem?.EntityRequestV2?.InstanceId ??
-                        string.Empty;
-                    this.Logger.UnexpectedError(ex, instanceId);
+                    try
+                    {
+                        await handler();
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Shutting down - ignore
+                    }
+                    catch (Exception ex)
+                    {
+                        string instanceId =
+                            workItem?.OrchestratorRequest?.InstanceId ??
+                            workItem?.ActivityRequest?.OrchestrationInstance?.InstanceId ??
+                            workItem?.EntityRequest?.InstanceId ??
+                            workItem?.EntityRequestV2?.InstanceId ??
+                            string.Empty;
+                        this.Logger.UnexpectedError(ex, instanceId);
 
-                    if (workItem?.OrchestratorRequest != null)
-                    {
-                        try
+                        if (workItem?.OrchestratorRequest != null)
                         {
-                            this.Logger.AbandoningOrchestratorWorkItem(instanceId, workItem?.CompletionToken ?? string.Empty);
-                            await this.client.AbandonTaskOrchestratorWorkItemAsync(
-                                new P.AbandonOrchestrationTaskRequest
-                                {
-                                    CompletionToken = workItem?.CompletionToken,
-                                },
-                                cancellationToken: cancellation);
-                            this.Logger.AbandonedOrchestratorWorkItem(instanceId, workItem?.CompletionToken ?? string.Empty);
+                            try
+                            {
+                                this.Logger.AbandoningOrchestratorWorkItem(instanceId, workItem?.CompletionToken ?? string.Empty);
+                                await this.client.AbandonTaskOrchestratorWorkItemAsync(
+                                    new P.AbandonOrchestrationTaskRequest
+                                    {
+                                        CompletionToken = workItem?.CompletionToken,
+                                    },
+                                    cancellationToken: cancellation);
+                                this.Logger.AbandonedOrchestratorWorkItem(instanceId, workItem?.CompletionToken ?? string.Empty);
+                            }
+                            catch (Exception abandonException)
+                            {
+                                this.Logger.UnexpectedError(abandonException, instanceId);
+                            }
                         }
-                        catch (Exception abandonException)
+                        else if (workItem?.ActivityRequest != null)
                         {
-                            this.Logger.UnexpectedError(abandonException, instanceId);
+                            try
+                            {
+                                this.Logger.AbandoningActivityWorkItem(
+                                    instanceId,
+                                    workItem.ActivityRequest.Name,
+                                    workItem.ActivityRequest.TaskId,
+                                    workItem.CompletionToken ?? string.Empty);
+                                await this.client.AbandonTaskActivityWorkItemAsync(
+                                    new P.AbandonActivityTaskRequest
+                                    {
+                                        CompletionToken = workItem.CompletionToken,
+                                    },
+                                    cancellationToken: cancellation);
+                                this.Logger.AbandonedActivityWorkItem(
+                                    instanceId,
+                                    workItem.ActivityRequest.Name,
+                                    workItem.ActivityRequest.TaskId,
+                                    workItem.CompletionToken ?? string.Empty);
+                            }
+                            catch (Exception abandonException)
+                            {
+                                this.Logger.UnexpectedError(abandonException, instanceId);
+                            }
+                        }
+                        else if (workItem?.EntityRequest != null)
+                        {
+                            try
+                            {
+                                this.Logger.AbandoningEntityWorkItem(
+                                    workItem.EntityRequest.InstanceId,
+                                    workItem.CompletionToken ?? string.Empty);
+                                await this.client.AbandonTaskEntityWorkItemAsync(
+                                    new P.AbandonEntityTaskRequest
+                                    {
+                                        CompletionToken = workItem.CompletionToken,
+                                    },
+                                    cancellationToken: cancellation);
+                                this.Logger.AbandonedEntityWorkItem(
+                                    workItem.EntityRequest.InstanceId,
+                                    workItem.CompletionToken ?? string.Empty);
+                            }
+                            catch (Exception abandonException)
+                            {
+                                this.Logger.UnexpectedError(abandonException, workItem.EntityRequest.InstanceId);
+                            }
+                        }
+                        else if (workItem?.EntityRequestV2 != null)
+                        {
+                            try
+                            {
+                                this.Logger.AbandoningEntityWorkItem(
+                                    workItem.EntityRequestV2.InstanceId,
+                                    workItem.CompletionToken ?? string.Empty);
+                                await this.client.AbandonTaskEntityWorkItemAsync(
+                                    new P.AbandonEntityTaskRequest
+                                    {
+                                        CompletionToken = workItem.CompletionToken,
+                                    },
+                                    cancellationToken: cancellation);
+                                this.Logger.AbandonedEntityWorkItem(
+                                    workItem.EntityRequestV2.InstanceId,
+                                    workItem.CompletionToken ?? string.Empty);
+                            }
+                            catch (Exception abandonException)
+                            {
+                                this.Logger.UnexpectedError(abandonException, workItem.EntityRequestV2.InstanceId);
+                            }
                         }
                     }
-                    else if (workItem?.ActivityRequest != null)
-                    {
-                        try
-                        {
-                            this.Logger.AbandoningActivityWorkItem(
-                                instanceId,
-                                workItem.ActivityRequest.Name,
-                                workItem.ActivityRequest.TaskId,
-                                workItem?.CompletionToken ?? string.Empty);
-                            await this.client.AbandonTaskActivityWorkItemAsync(
-                                new P.AbandonActivityTaskRequest
-                                {
-                                    CompletionToken = workItem?.CompletionToken,
-                                },
-                                cancellationToken: cancellation);
-                            this.Logger.AbandonedActivityWorkItem(
-                                instanceId,
-                                workItem.ActivityRequest.Name,
-                                workItem.ActivityRequest.TaskId,
-                                workItem?.CompletionToken ?? string.Empty);
-                        }
-                        catch (Exception abandonException)
-                        {
-                            this.Logger.UnexpectedError(abandonException, instanceId);
-                        }
-                    }
-                    else if (workItem?.EntityRequest != null)
-                    {
-                        try
-                        {
-                            this.Logger.AbandoningEntityWorkItem(
-                                workItem.EntityRequest.InstanceId,
-                                workItem?.CompletionToken ?? string.Empty);
-                            await this.client.AbandonTaskEntityWorkItemAsync(
-                                new P.AbandonEntityTaskRequest
-                                {
-                                    CompletionToken = workItem?.CompletionToken,
-                                },
-                                cancellationToken: cancellation);
-                            this.Logger.AbandonedEntityWorkItem(
-                                workItem.EntityRequest.InstanceId,
-                                workItem?.CompletionToken ?? string.Empty);
-                        }
-                        catch (Exception abandonException)
-                        {
-                            this.Logger.UnexpectedError(abandonException, workItem.EntityRequest.InstanceId);
-                        }
-                    }
-                    else if (workItem?.EntityRequestV2 != null)
-                    {
-                        try
-                        {
-                            this.Logger.AbandoningEntityWorkItem(
-                                workItem.EntityRequestV2.InstanceId,
-                                workItem?.CompletionToken ?? string.Empty);
-                            await this.client.AbandonTaskEntityWorkItemAsync(
-                                new P.AbandonEntityTaskRequest
-                                {
-                                    CompletionToken = workItem?.CompletionToken,
-                                },
-                                cancellationToken: cancellation);
-                            this.Logger.AbandonedEntityWorkItem(
-                                workItem.EntityRequestV2.InstanceId,
-                                workItem?.CompletionToken ?? string.Empty);
-                        }
-                        catch (Exception abandonException)
-                        {
-                            this.Logger.UnexpectedError(abandonException, workItem.EntityRequestV2.InstanceId);
-                        }
-                    }
-                }
-            });
+                },
+                cancellation);
         }
 
         async Task OnRunOrchestratorAsync(
@@ -584,6 +588,7 @@ sealed partial class GrpcDurableTaskWorker
                     cancellationToken);
 
                 bool filterPassed = true;
+#pragma warning disable CS0618 // Type or member is obsolete
                 if (this.orchestrationFilter != null)
                 {
                     filterPassed = await this.orchestrationFilter.IsOrchestrationValidAsync(
@@ -594,6 +599,7 @@ sealed partial class GrpcDurableTaskWorker
                         },
                         cancellationToken);
                 }
+#pragma warning restore CS0618 // Type or member is obsolete
 
                 if (!filterPassed)
                 {

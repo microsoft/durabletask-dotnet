@@ -94,7 +94,7 @@ public class ShimDurableTaskClientTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async void GetInstanceMetadata_EmptyList_Null(bool isNull)
+    public async Task GetInstanceMetadata_EmptyList_Null(bool isNull)
     {
         // arrange
         List<Core.OrchestrationState>? states = isNull ? null : new();

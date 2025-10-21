@@ -59,10 +59,10 @@ public class DefaultScheduledTaskClientTests
     [Theory]
     [InlineData(null, typeof(ArgumentNullException), "Value cannot be null")]
     [InlineData("", typeof(ArgumentException), "Parameter cannot be an empty string")]
-    public void GetScheduleClient_WithInvalidId_ThrowsCorrectException(string scheduleId, Type expectedExceptionType, string expectedMessage)
+    public void GetScheduleClient_WithInvalidId_ThrowsCorrectException(string? scheduleId, Type expectedExceptionType, string expectedMessage)
     {
         // Act & Assert
-        var ex = Assert.Throws(expectedExceptionType, () => this.client.GetScheduleClient(scheduleId));
+        var ex = Assert.Throws(expectedExceptionType, () => this.client.GetScheduleClient(scheduleId!));
         Assert.Contains(expectedMessage, ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -104,7 +104,7 @@ public class DefaultScheduledTaskClientTests
                     r.EntityId.Name == entityInstanceId.Name &&
                     r.EntityId.Key == entityInstanceId.Key &&
                     r.OperationName == nameof(Schedule.CreateSchedule) &&
-                    ((ScheduleCreationOptions)r.Input).ScheduleId == options.ScheduleId &&
+                    ((ScheduleCreationOptions)r.Input!).ScheduleId == options.ScheduleId &&
                     ((ScheduleCreationOptions)r.Input).OrchestrationName == options.OrchestrationName &&
                     ((ScheduleCreationOptions)r.Input).Interval == options.Interval),
                 default),

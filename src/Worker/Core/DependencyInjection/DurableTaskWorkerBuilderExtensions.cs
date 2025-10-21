@@ -78,7 +78,7 @@ public static class DurableTaskWorkerBuilderExtensions
         where TTarget : DurableTaskWorker
         where TOptions : DurableTaskWorkerOptions
     {
-        builder.UseBuildTarget(typeof(TTarget));
+        builder.UseBuildTarget<TTarget>();
         builder.Services.AddOptions<TOptions>(builder.Name)
             .PostConfigure<IOptionsMonitor<DurableTaskWorkerOptions>>((options, baseOptions) =>
             {

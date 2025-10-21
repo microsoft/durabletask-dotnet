@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Castle.Components.DictionaryAdapter;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.DurableTask.Worker;
@@ -1134,14 +1135,35 @@ public class OrchestrationPatterns : IntegrationTestBase
     [Obsolete("Experimental")]
     class OrchestrationFilter : IOrchestrationFilter
     {
-        public ISet<string> NameDenySet { get; set; } = new HashSet<string>();
-        public IDictionary<string, string> TagDenyDict = new Dictionary<string, string>();
+        public ISet<string> NameDenySet { get; } = new HashSet<string>();
+        public IDictionary<string, string> TagDenyDict { get; } = new Dictionary<string, string>();
 
         public ValueTask<bool> IsOrchestrationValidAsync(OrchestrationFilterParameters info, CancellationToken cancellationToken = default)
         {
-            return ValueTask.FromResult(
-                !this.NameDenySet.Contains(info.Name)
-                && !this.TagDenyDict.Any(kvp => info.Tags != null && info.Tags.ContainsKey(kvp.Key) && info.Tags[kvp.Key] == kvp.Value));
+            bool NameAllowed(string? name)
+            {
+                return name == null || !this.NameDenySet.Contains(name);
+            }
+
+            bool TagsAllowed(IReadOnlyDictionary<string, string>? tags)
+            {
+                if (tags == null)
+                {
+                    return true;
+                }
+
+                foreach ((string key, string value) in this.TagDenyDict)
+                {
+                    if (tags.TryGetValue(key, out string? tagValue) && tagValue == value)
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            return ValueTask.FromResult(NameAllowed(info.Name) && TagsAllowed(info.Tags));
         }
     }
 

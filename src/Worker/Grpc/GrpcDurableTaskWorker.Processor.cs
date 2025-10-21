@@ -7,6 +7,7 @@ using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
+using Google.Protobuf.Collections;
 using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Tracing;
@@ -112,7 +113,7 @@ sealed partial class GrpcDurableTaskWorker
             }
         }
 
-        static string GetActionsListForLogging(IReadOnlyList<P.OrchestratorAction> actions)
+        static string GetActionsListForLogging(RepeatedField<P.OrchestratorAction> actions)
         {
             if (actions.Count == 0)
             {

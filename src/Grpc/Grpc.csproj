@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Protobuf Include="**/*.proto" GrpcServices="Both" Access="Public" />
+    <Protobuf Include="**/*.proto" GrpcServices="Both" Access="Public"  />
   </ItemGroup>
 
 </Project>

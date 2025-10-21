@@ -13,31 +13,19 @@ namespace Microsoft.DurableTask;
 /// </summary>
 /// <typeparam name="TRequestNamespace">The namespace for request message types.</typeparam>
 /// <typeparam name="TResponseNamespace">The namespace for response message types.</typeparam>
-public abstract class BasePayloadInterceptor<TRequestNamespace, TResponseNamespace> : Interceptor
+/// <remarks>
+/// Initializes a new instance of the <see cref="PayloadInterceptor{TRequestNamespace, TResponseNamespace}"/> class.
+/// </remarks>
+/// <param name="payloadStore">The payload store.</param>
+/// <param name="options">The options.</param>
+public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
+    PayloadStore payloadStore,
+    LargePayloadStorageOptions options) : Interceptor
     where TRequestNamespace : class
     where TResponseNamespace : class
 {
-    readonly PayloadStore payloadStore;
-    readonly LargePayloadStorageOptions options;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="BasePayloadInterceptor{TRequestNamespace, TResponseNamespace}"/> class.
-    /// </summary>
-    /// <param name="payloadStore">The payload store.</param>
-    /// <param name="options">The options.</param>
-    protected BasePayloadInterceptor(PayloadStore payloadStore, LargePayloadStorageOptions options)
-    {
-        this.payloadStore = payloadStore;
-        this.options = options;
-    }
-
-    /// <summary>
-    /// Checks if an object's type name matches the given type's full name.
-    /// </summary>
-    /// <param name="o">The object to check.</param>
-    /// <param name="t">The type to compare against.</param>
-    /// <returns>True if the object's type full name matches the given type's full name.</returns>
-    protected static bool IsType(object o, Type t) => o.GetType().FullName == t.FullName;
+    readonly PayloadStore payloadStore = payloadStore;
+    readonly LargePayloadStorageOptions options = options;
 
     // Unary: externalize on request, resolve on response
 

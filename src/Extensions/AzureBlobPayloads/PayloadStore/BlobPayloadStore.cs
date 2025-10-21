@@ -17,7 +17,6 @@ public sealed class BlobPayloadStore : PayloadStore
 {
     const string TokenPrefix = "blob:v1:";
     const string ContentEncodingGzip = "gzip";
-    const int DefaultCopyBufferSize = 81920;
     const int MaxRetryAttempts = 8;
     const int BaseDelayMs = 250;
     const int MaxDelayMs = 10_000;
@@ -149,12 +148,12 @@ public sealed class BlobPayloadStore : PayloadStore
 
     static (string Container, string Name) DecodeToken(string token)
     {
-        if (!token.StartsWith("blob:v1:", StringComparison.Ordinal))
+        if (!token.StartsWith(TokenPrefix, StringComparison.Ordinal))
         {
             throw new ArgumentException("Invalid external payload token.", nameof(token));
         }
 
-        string rest = token.Substring("blob:v1:".Length);
+        string rest = token.Substring(TokenPrefix.Length);
         int sep = rest.IndexOf(':');
         if (sep <= 0 || sep >= rest.Length - 1)
         {

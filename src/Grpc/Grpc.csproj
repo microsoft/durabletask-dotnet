@@ -18,10 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Protobuf Include="orchestrator_service.proto" 
-              GrpcServices="Both" 
-              Access="Public"
-              Namespace="Microsoft.DurableTask.Protobuf" />
+    <Protobuf Include="**/*.proto" GrpcServices="Both" Access="Public" />
   </ItemGroup>
 
 </Project>

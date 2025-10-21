@@ -41,6 +41,7 @@ message TaskFailureDetails {
     google.protobuf.StringValue stackTrace = 3;
     TaskFailureDetails innerFailure = 4;
     bool isNonRetriable = 5;
+    map<string, google.protobuf.Value> properties = 6;
 }
 
 enum OrchestrationStatus {

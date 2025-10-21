@@ -12,7 +12,7 @@ namespace Microsoft.DurableTask;
 /// and resolves known payload tokens on responses for SideCar.
 /// </summary>
 public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStore, LargePayloadStorageOptions options)
-    : BasePayloadInterceptor<object, object>(payloadStore, options)
+    : PayloadInterceptor<object, object>(payloadStore, options)
 {
     /// <inheritdoc/>
     protected override async Task ExternalizeRequestPayloadsAsync<TRequest>(TRequest request, CancellationToken cancellation)

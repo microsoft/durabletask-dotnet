@@ -108,9 +108,18 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
             Dispose);
     }
 
-    // Server streaming: resolve payloads in streamed responses (e.g., GetWorkItems)
-
-    /// <inheritdoc/>
+    /// <summary>
+    /// Asynchronously streams a response from a server.
+    /// </summary>
+    /// <typeparam name="TRequest">The request type.</typeparam>
+    /// <typeparam name="TResponse">The response type.</typeparam>
+    /// <param name="request">The request to process.</param>
+    /// <param name="context">The context of the call.</param>
+    /// <param name="continuation">The continuation of the call.</param>
+    /// <returns>A task representing the async operation.</returns>
+    /// <remarks>
+    /// Server streaming: resolve payloads in streamed responses (e.g., GetWorkItems).
+    /// </remarks>
     public override AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(
         TRequest request,
         ClientInterceptorContext<TRequest, TResponse> context,
@@ -165,44 +174,36 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
         }
 
         int size = Encoding.UTF8.GetByteCount(value);
-        Console.WriteLine($"-------------------------Size: {size}");
-        Console.WriteLine($"-------------------------ExternalizeThresholdBytes: {this.options.ExternalizeThresholdBytes}");
         if (size < this.options.ExternalizeThresholdBytes)
         {
             return value;
         }
 
-        return await this.payloadStore.UploadAsync(value, cancellation);
+        return await this.payloadStore.UploadAsync(value!, cancellation);
     }
 
     /// <summary>
     /// Resolves a payload token if it's known to the store.
     /// </summary>
-    /// <param name="assign">Action to assign the resolved value.</param>
     /// <param name="value">The value to potentially resolve.</param>
     /// <param name="cancellation">Cancellation token.</param>
-    /// <returns>A task representing the async operation.</returns>
-    protected async Task MaybeResolveAsync(Action<string?> assign, string? value, CancellationToken cancellation)
+    /// <returns>The resolved value or the original value if it's not a known payload token.</returns>
+    protected async Task<string?> MaybeResolveAsync(string? value, CancellationToken cancellation)
     {
-        if (string.IsNullOrEmpty(value) || !this.payloadStore.IsKnownPayloadToken(value))
+        if (string.IsNullOrEmpty(value) || !this.payloadStore.IsKnownPayloadToken(value ?? string.Empty))
         {
-            return;
+            return value;
         }
 
-        string resolved = await this.payloadStore.DownloadAsync(value, cancellation);
-        assign(resolved);
+        return await this.payloadStore.DownloadAsync(value!, cancellation);
     }
 
-    sealed class TransformingStreamReader<T> : IAsyncStreamReader<T>
+    sealed class TransformingStreamReader<T>(
+        IAsyncStreamReader<T> inner,
+        Func<T, CancellationToken, ValueTask<T>> transform) : IAsyncStreamReader<T>
     {
-        readonly IAsyncStreamReader<T> inner;
-        readonly Func<T, CancellationToken, ValueTask<T>> transform;
-
-        public TransformingStreamReader(IAsyncStreamReader<T> inner, Func<T, CancellationToken, ValueTask<T>> transform)
-        {
-            this.inner = inner;
-            this.transform = transform;
-        }
+        readonly IAsyncStreamReader<T> inner = inner;
+        readonly Func<T, CancellationToken, ValueTask<T>> transform = transform;
 
         public T Current { get; private set; } = default!;
 

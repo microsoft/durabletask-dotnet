@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net6.0</TargetFrameworks>
+    <PackageDescription>Azure Blob Storage externalized payload support for Durable Task.</PackageDescription>
+    <AssemblyName>Microsoft.DurableTask.Extensions.AzureBlobPayloads</AssemblyName>
+    <RootNamespace>Microsoft.DurableTask</RootNamespace>
+    <EnableStyleCop>true</EnableStyleCop>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.Storage.Blobs" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Grpc.Net.Client" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Abstractions\Abstractions.csproj" />
+    <ProjectReference Include="..\..\Client\Core\Client.csproj" />
+    <ProjectReference Include="..\..\Worker\Core\Worker.csproj" />
+    <ProjectReference Include="..\..\Client\Grpc\Client.Grpc.csproj" />
+    <ProjectReference Include="..\..\Worker\Grpc\Worker.Grpc.csproj" />
+    <ProjectReference Include="..\..\Grpc.AzureManagedBackend\Grpc.AzureManagedBackend.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <SharedSection Include="Core" />
+  </ItemGroup>
+</Project>

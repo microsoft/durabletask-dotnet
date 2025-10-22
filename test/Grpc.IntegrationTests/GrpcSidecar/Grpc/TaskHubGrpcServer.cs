@@ -31,6 +31,9 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     readonly TaskHubDispatcherHost dispatcherHost;
     readonly IsConnectedSignal isConnectedSignal = new();
     readonly SemaphoreSlim sendWorkItemLock = new(initialCount: 1);
+    readonly ConcurrentDictionary<string, List<P.HistoryEvent>> streamingPastEvents = new(StringComparer.OrdinalIgnoreCase);
+
+    volatile bool supportsHistoryStreaming;
 
     // Initialized when a client connects to this service to receive work-item commands.
     IServerStreamWriter<P.WorkItem>? workerToClientStream;
@@ -463,6 +466,8 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
 
     public override async Task GetWorkItems(P.GetWorkItemsRequest request, IServerStreamWriter<P.WorkItem> responseStream, ServerCallContext context)
     {
+        // Record whether the client supports history streaming
+        this.supportsHistoryStreaming = request.Capabilities.Contains(P.WorkerCapability.HistoryStreaming);
         // Use a lock to mitigate the race condition where we signal the dispatch host to start but haven't
         // yet saved a reference to the client response stream.
         lock (this.isConnectedSignal)
@@ -505,6 +510,35 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         }
     }
 
+    public override async Task StreamInstanceHistory(P.StreamInstanceHistoryRequest request, IServerStreamWriter<P.HistoryChunk> responseStream, ServerCallContext context)
+    {
+        if (this.streamingPastEvents.TryGetValue(request.InstanceId, out List<P.HistoryEvent>? pastEvents))
+        {
+            const int MaxChunkBytes = 256 * 1024; // 256KB per chunk to simulate chunked streaming
+            int currentSize = 0;
+            P.HistoryChunk chunk = new();
+
+            foreach (P.HistoryEvent e in pastEvents)
+            {
+                int eventSize = e.CalculateSize();
+                if (currentSize > 0 && currentSize + eventSize > MaxChunkBytes)
+                {
+                    await responseStream.WriteAsync(chunk);
+                    chunk = new P.HistoryChunk();
+                    currentSize = 0;
+                }
+
+                chunk.Events.Add(e);
+                currentSize += eventSize;
+            }
+
+            if (chunk.Events.Count > 0)
+            {
+                await responseStream.WriteAsync(chunk);
+            }
+        }
+    }
+
     /// <summary>
     /// Invoked by the <see cref="TaskHubDispatcherHost"/> when a work item is available, proxies the call to execute an orchestrator over a gRPC channel.
     /// </summary>
@@ -531,16 +565,37 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
 
         try
         {
+            var orkRequest = new P.OrchestratorRequest
+            {
+                InstanceId = instance.InstanceId,
+                ExecutionId = instance.ExecutionId,
+                NewEvents = { newEvents.Select(ProtobufUtils.ToHistoryEventProto) },
+                OrchestrationTraceContext = orchestrationTraceContext,
+            };
+
+            // Decide whether to stream based on total size of past events (> 1MiB)
+            List<P.HistoryEvent> protoPastEvents = pastEvents.Select(ProtobufUtils.ToHistoryEventProto).ToList();
+            int totalBytes = 0;
+            foreach (P.HistoryEvent ev in protoPastEvents)
+            {
+                totalBytes += ev.CalculateSize();
+            }
+
+            if (this.supportsHistoryStreaming && totalBytes > (1024))
+            {
+                orkRequest.RequiresHistoryStreaming = true;
+                // Store past events to serve via StreamInstanceHistory
+                this.streamingPastEvents[instance.InstanceId] = protoPastEvents;
+            }
+            else
+            {
+                // Embed full history in the work item
+                orkRequest.PastEvents.AddRange(protoPastEvents);
+            }
+
             await this.SendWorkItemToClientAsync(new P.WorkItem
             {
-                OrchestratorRequest = new P.OrchestratorRequest
-                {
-                    InstanceId = instance.InstanceId,
-                    ExecutionId = instance.ExecutionId,
-                    NewEvents = { newEvents.Select(ProtobufUtils.ToHistoryEventProto) },
-                    OrchestrationTraceContext = orchestrationTraceContext,
-                    PastEvents = { pastEvents.Select(ProtobufUtils.ToHistoryEventProto) },
-                }
+                OrchestratorRequest = orkRequest,
             });
         }
         catch

@@ -5,6 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="$(SrcRoot)Extensions/AzureBlobPayloads/AzureBlobPayloads.csproj" />
     <ProjectReference Include="$(SrcRoot)InProcessTestHost/InProcessTestHost.csproj" />
   </ItemGroup>
 

@@ -2,12 +2,14 @@
 // Licensed under the MIT License.
 
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 public class TestLogger : ILogger
 {
     public List<(LogLevel Level, string Message)> Logs { get; } = new();
 
-    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+    public IDisposable BeginScope<TState>(TState state)
+        => NullLogger.Instance.BeginScope(state);
 
     public bool IsEnabled(LogLevel logLevel) => true;
 
@@ -22,7 +24,8 @@ public class TestLogger<T> : ILogger<T>
 {
     public List<(LogLevel Level, string Message)> Logs { get; } = new();
 
-    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+    public IDisposable BeginScope<TState>(TState state)
+        => NullLogger<T>.Instance.BeginScope(state);
 
     public bool IsEnabled(LogLevel logLevel) => true;
 

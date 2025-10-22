@@ -10,10 +10,10 @@ public class DefaultDurableTaskClientProviderTests
     [InlineData("client1")]
     [InlineData("Not-found")] // case sensitive
     [InlineData("client1", "client2")]
-    public void GetClient_NotFound_Throws(params string[] clients)
+    public void GetClient_NotFound_Throws(params string?[] clients)
     {
-        clients ??= Array.Empty<string>();
-        DefaultDurableTaskClientProvider provider = new(CreateClients(clients));
+        clients ??= [];
+        DefaultDurableTaskClientProvider provider = new(CreateClients(clients!));
         string allNames = string.Join(", ", clients.Select(x => $"\"{x}\""));
 
         string message = $"The value of this argument must be in the set of available clients: [{allNames}]."
@@ -32,7 +32,7 @@ public class DefaultDurableTaskClientProviderTests
     [InlineData("Client1", "client1", "client2")]
     public void GetClient_Found_Returns(params string[] clients)
     {
-        clients ??= Array.Empty<string>();
+        clients ??= [];
         DefaultDurableTaskClientProvider provider = new(CreateClients(clients));
 
         DurableTaskClient client = provider.GetClient("client1");

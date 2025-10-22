@@ -279,9 +279,11 @@ namespace Microsoft.DurableTask
             readonly List<DurableTaskTypeInfo> activities = new();
             readonly List<DurableFunction> durableFunctions = new();
 
+#pragma warning disable CA1859 // Use concrete types when possible for performance -- not important here
             public IReadOnlyList<DurableTaskTypeInfo> Orchestrators => this.orchestrators;
             public IReadOnlyList<DurableTaskTypeInfo> Activities => this.activities;
             public IReadOnlyList<DurableFunction> DurableFunctions => this.durableFunctions;
+#pragma warning restore CA1859 // Use concrete types when possible for performance -- not important here
 
             public void OnVisitSyntaxNode(GeneratorSyntaxContext context)
             {

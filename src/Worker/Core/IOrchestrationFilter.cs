@@ -14,7 +14,7 @@ public interface IOrchestrationFilter
     /// </summary>
     /// <param name="info">The information on the orchestration to validate.</param>
     /// <param name="cancellationToken">The cancellation token for the request to timeout.</param>
-    /// <returns><code>true</code> if the orchestration is valid <code>false</code> otherwise.</returns>
+    /// <returns><c>true</c> if the orchestration is valid; <c>false</c> otherwise.</returns>
     ValueTask<bool> IsOrchestrationValidAsync(OrchestrationFilterParameters info, CancellationToken cancellationToken = default);
 }
 

@@ -18,7 +18,7 @@ public static class DurableTaskUserAgentUtil
     /// <summary>
     /// The version of the SDK used in the user agent string.
     /// </summary>
-    static readonly string PackageVersion = FileVersionInfo.GetVersionInfo(typeof(DurableTaskUserAgentUtil).Assembly.Location).FileVersion;
+    static readonly string? PackageVersion = FileVersionInfo.GetVersionInfo(typeof(DurableTaskUserAgentUtil).Assembly.Location).FileVersion;
 
     /// <summary>
     /// Generates the user agent string for the Durable Task SDK based on a fixed name, the package version, and the caller type.

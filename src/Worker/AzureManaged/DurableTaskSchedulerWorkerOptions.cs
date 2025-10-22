@@ -103,6 +103,7 @@ public class DurableTaskSchedulerWorkerOptions
             async (context, metadata) =>
             {
                 metadata.Add("taskhub", taskHubName);
+
                 // Add user agent header with durabletask-dotnet and DLL version from util
                 metadata.Add("x-user-agent", $"{DurableTaskUserAgentUtil.GetUserAgent(nameof(DurableTaskWorker))}");
                 metadata.Add("workerid", this.WorkerId);

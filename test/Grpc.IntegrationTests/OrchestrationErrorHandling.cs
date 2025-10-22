@@ -801,15 +801,12 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         string actualValue = "badNestedValue";
         string errorMessage = $"Nested parameter '{paramName}' is out of range.";
 
-        // Register parent orchestration that calls sub-orchestration
         async Task ParentOrchestrationImpl(TaskOrchestrationContext ctx) =>
             await ctx.CallSubOrchestratorAsync(subOrchestratorName);
 
-        // Register sub-orchestration that calls activity
         async Task SubOrchestrationImpl(TaskOrchestrationContext ctx) =>
             await ctx.CallActivityAsync(activityName);
 
-        // Register activity that throws ArgumentOutOfRangeException
         void ActivityImpl(TaskActivityContext ctx) =>
             throw new ArgumentOutOfRangeException(paramName, actualValue, errorMessage);
 

@@ -140,7 +140,7 @@ string largeEntityInput = new string('E', 700 * 1024); // 700KB
 string entityInputInstance = await client.ScheduleNewOrchestrationInstanceAsync("LargeEntityOperationInput");
 OrchestrationMetadata entityInputResult = await client.WaitForInstanceCompletionAsync(entityInputInstance, getInputsAndOutputs: true, cts.Token);
 int entityInputLength = entityInputResult.ReadOutputAs<int>();
-Console.WriteLine($"Status: {entityInputResult.RuntimeStatus}, Output length: {entityInputLength}");
+Console.WriteLine($"Status: {entityInputResult.RuntimeStatus}, Input length: {entityInputLength}");
 Console.WriteLine($"Deserialized input length equals original: {entityInputLength == largeEntityInput.Length}");
 
 Console.WriteLine();
@@ -162,10 +162,6 @@ EntityMetadata<string>? state = await client.Entities.GetEntityAsync<string>(new
 int stateLength = state?.State?.Length ?? 0;
 Console.WriteLine($"State length: {stateLength}");
 Console.WriteLine($"Deserialized state equals original: {state?.State == largeEntityState}");
-
-
-
-
 
 public class EchoLengthEntity : TaskEntity<int>
 {

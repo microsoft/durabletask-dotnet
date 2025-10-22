@@ -550,6 +550,44 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.Equal(0, clientStore.DownloadCount);
     }
 
+    // Validates that payloads exceeding max cap are rejected with a clear error.
+    [Fact]
+    public async Task ExceedingMaxPayloadIsRejected()
+    {
+        string tooLarge = new string('Z', 3044);
+        TaskName orch = nameof(ExceedingMaxPayloadIsRejected);
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(
+            worker =>
+            {
+                worker.AddTasks(tasks => tasks.AddOrchestratorFunc<string?, string>(
+                    orch,
+                    (ctx, input) => Task.FromResult("done")));
+                worker.UseExternalizedPayloads();
+            },
+            client =>
+            {
+                client.UseExternalizedPayloads();
+            },
+            services =>
+            {
+                services.AddExternalizedPayloadStore(opts =>
+                {
+                    // Keep a low threshold to force externalization, but default cap applies
+                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.MaxExternalizedPayloadBytes = 2048;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+            });
+
+        // The client will attempt to externalize the input and should fail fast on cap
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await server.Client.ScheduleNewOrchestrationInstanceAsync(orch, tooLarge);
+        });
+    }
+
     // Validates client externalizes a large external event payload and worker resolves it.
     [Fact]
     public async Task LargeExternalEvent()

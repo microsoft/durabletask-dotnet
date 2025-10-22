@@ -60,7 +60,14 @@ public sealed class LargePayloadStorageOptions
     /// <summary>
     /// Gets or sets the threshold in bytes at which payloads are externalized. Default is 900_000 bytes.
     /// </summary>
-    public int ExternalizeThresholdBytes { get; set; } = 900_000; // leave headroom below 1MB
+    public int ExternalizeThresholdBytes { get; set; } = 900_000;
+
+    /// <summary>
+    /// Gets or sets the maximum allowed size in bytes for any single externalized payload.
+    /// Defaults to 10MB. Requests exceeding this limit will fail fast
+    /// with a clear error to prevent unbounded payload growth and excessive storage/network usage.
+    /// </summary>
+    public int MaxExternalizedPayloadBytes { get; set; } = 10 * 1024 * 1024;
 
     /// <summary>
     /// Gets or sets the Azure Storage connection string to the customer's storage account.

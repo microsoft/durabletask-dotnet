@@ -179,6 +179,14 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
             return value;
         }
 
+        // Enforce a hard cap to prevent unbounded payload sizes
+        if (size > this.options.MaxExternalizedPayloadBytes)
+        {
+            throw new InvalidOperationException(
+                $"Payload size {size / 1024} kb exceeds the configured maximum of {this.options.MaxExternalizedPayloadBytes / 1024} kb. " +
+                "Consider reducing the payload or increase MaxExternalizedPayloadBytes setting.");
+        }
+
         return await this.payloadStore.UploadAsync(value!, cancellation);
     }
 

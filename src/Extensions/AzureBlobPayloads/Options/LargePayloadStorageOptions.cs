@@ -26,6 +26,8 @@ namespace Microsoft.DurableTask;
 /// </summary>
 public sealed class LargePayloadStorageOptions
 {
+    int externalizeThresholdBytes = 900_000;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="LargePayloadStorageOptions"/> class.
     /// Parameterless constructor required for options activation.
@@ -59,8 +61,25 @@ public sealed class LargePayloadStorageOptions
 
     /// <summary>
     /// Gets or sets the threshold in bytes at which payloads are externalized. Default is 900_000 bytes.
+    /// Value must not exceed 1 MiB (1,048,576 bytes).
     /// </summary>
-    public int ExternalizeThresholdBytes { get; set; } = 900_000;
+
+    public int ExternalizeThresholdBytes
+    {
+        get => this.externalizeThresholdBytes;
+        set
+        {
+            const int OneMiB = 1 * 1024 * 1024;
+            if (value > OneMiB)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(this.ExternalizeThresholdBytes),
+                    $"ExternalizeThresholdBytes cannot exceed 1 MiB ({OneMiB} bytes).");
+            }
+
+            this.externalizeThresholdBytes = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the maximum allowed size in bytes for any single externalized payload.

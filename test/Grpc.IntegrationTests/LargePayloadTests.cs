@@ -639,7 +639,6 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.Contains(JsonSerializer.Serialize(largeEvent), fakeStore.uploadedPayloads);
     }
 
-
     class InMemoryPayloadStore : PayloadStore
     {
         const string TokenPrefix = "blob:v1:";
@@ -680,6 +679,5 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         {
             return value.StartsWith(TokenPrefix, StringComparison.Ordinal);
         }
-
     }
 }

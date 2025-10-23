@@ -1,4 +1,7 @@
 ﻿# Changelog
+## v1.16.1
+- Include exception properties in failure details when orchestration throws directly by Naiyuan Tian ([#482](https://github.com/microsoft/durabletask-dotnet/pull/482))
+- Set low priority for scheduled runs by Daniel Castro ([#477](https://github.com/microsoft/durabletask-dotnet/pull/477))
 
 ## v1.16.0
 - Include Exception Properties at FailureDetails by nytian in([#474](https://github.com/microsoft/durabletask-dotnet/pull/474))

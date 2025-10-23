@@ -1,4 +1,9 @@
 ﻿# Changelog
+## v1.16.2
+- Generate changelog script + update changelog for v1.16.1 by wangbill ([#486](https://github.com/microsoft/durabletask-dotnet/pull/486))
+- Remove unnecessary project reference to grpc.azuremanagedbackend in azureblobpayloads.csproj by wangbill ([#485](https://github.com/microsoft/durabletask-dotnet/pull/485))
+- Large payload azure blob externalization support by wangbill ([#468](https://github.com/microsoft/durabletask-dotnet/pull/468))
+
 ## v1.16.1
 - Include exception properties in failure details when orchestration throws directly by Naiyuan Tian ([#482](https://github.com/microsoft/durabletask-dotnet/pull/482))
 - Set low priority for scheduled runs by Daniel Castro ([#477](https://github.com/microsoft/durabletask-dotnet/pull/477))

@@ -27,6 +27,7 @@ static class ProtoUtils
             OrchestrationRuntimeStatus.Running => P.OrchestrationStatus.Running,
             OrchestrationRuntimeStatus.Terminated => P.OrchestrationStatus.Terminated,
             OrchestrationRuntimeStatus.Suspended => P.OrchestrationStatus.Suspended,
+            OrchestrationRuntimeStatus.Rewinding => P.OrchestrationStatus.Rewinding,
             _ => throw new ArgumentOutOfRangeException(nameof(status), "Unexpected value"),
         };
 #pragma warning restore 0618 // Referencing Obsolete member.

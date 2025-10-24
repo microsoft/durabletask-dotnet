@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using DurableTask.Core;
@@ -6,6 +6,9 @@ using DurableTask.Core.History;
 
 namespace Microsoft.DurableTask.Sidecar.Dispatcher;
 
+/// <summary>
+/// Task Executor.
+/// </summary>
 interface ITaskExecutor
 {
     /// <summary>

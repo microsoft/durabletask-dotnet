@@ -3,7 +3,7 @@
 
 using DurableTask.Core;
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Microsoft.DurableTask.Testing.Sidecar.Dispatcher;
 
 /// <summary>
 /// Grpc orchestration execution result.

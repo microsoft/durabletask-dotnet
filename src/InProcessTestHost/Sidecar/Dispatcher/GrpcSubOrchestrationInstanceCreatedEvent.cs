@@ -5,7 +5,7 @@ using System.Runtime.Serialization;
 using DurableTask.Core.History;
 using DurableTask.Core.Tracing;
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Microsoft.DurableTask.Testing.Sidecar.Dispatcher;
 
 /// <summary>
 /// gRPC-specific implementation of SubOrchestrationInstanceCreatedEvent that includes distributed tracing context.

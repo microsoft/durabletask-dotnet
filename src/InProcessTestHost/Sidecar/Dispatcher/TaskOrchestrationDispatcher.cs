@@ -7,7 +7,7 @@ using DurableTask.Core.Command;
 using DurableTask.Core.History;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Microsoft.DurableTask.Testing.Sidecar.Dispatcher;
 
 /// <summary>
 /// Dispatches and manages the execution of <see cref="TaskOrchestrationWorkItem"/> instances.
@@ -138,9 +138,9 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
             this.ApplyOrchestratorActions(
                 result,
                 ref workItem.OrchestrationRuntimeState,
-                out List<TaskMessage> activityMessages, // CA1859: Use concrete types for better performance
-                out List<TaskMessage> orchestratorMessages, // CA1859: Use concrete types for better performance
-                out List<TaskMessage> timerMessages, // CA1859: Use concrete types for better performance
+                out List<TaskMessage> activityMessages,
+                out List<TaskMessage> orchestratorMessages,
+                out List<TaskMessage> timerMessages,
                 out OrchestrationState? updatedStatus,
                 out bool continueAsNew);
             if (continueAsNew)

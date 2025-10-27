@@ -5,7 +5,7 @@ using DurableTask.Core;
 using DurableTask.Core.History;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Microsoft.DurableTask.Testing.Sidecar.Dispatcher;
 
 /// <summary>
 /// Dispatches and manages the execution of <see cref="TaskActivityWorkItem"/> instances.

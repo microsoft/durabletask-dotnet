@@ -4,7 +4,7 @@
 using DurableTask.Core;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Microsoft.DurableTask.Testing.Sidecar.Dispatcher;
 
 class TaskHubDispatcherHost : IDisposable
 {

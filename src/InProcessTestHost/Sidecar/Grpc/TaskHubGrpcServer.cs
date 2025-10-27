@@ -9,13 +9,13 @@ using DurableTask.Core.History;
 using DurableTask.Core.Query;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
-using Microsoft.DurableTask.Sidecar.Dispatcher;
+using Microsoft.DurableTask.Testing.Sidecar.Dispatcher;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using P = Microsoft.DurableTask.Protobuf;
 
-namespace Microsoft.DurableTask.Sidecar.Grpc;
+namespace Microsoft.DurableTask.Testing.Sidecar.Grpc;
 
 /// <summary>
 /// gRPC server implementation for the TaskHub sidecar service.

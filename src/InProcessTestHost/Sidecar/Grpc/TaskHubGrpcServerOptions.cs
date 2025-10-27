@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Sidecar.Grpc;
+namespace Microsoft.DurableTask.Testing.Sidecar.Grpc;
 
 /// <summary>
 /// A set of options that determine what capabilities are enabled for the gRPC server.

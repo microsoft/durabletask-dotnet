@@ -3,7 +3,7 @@
 
 using DurableTask.Core.History;
 
-namespace Microsoft.DurableTask.Sidecar;
+namespace Microsoft.DurableTask.Testing.Sidecar;
 
 /// <summary>
 /// Utility methods for the sidecar components.

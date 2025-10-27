@@ -4,7 +4,7 @@
 using DurableTask.Core.Command;
 using DurableTask.Core.Tracing;
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Microsoft.DurableTask.Testing.Sidecar.Dispatcher;
 
 /// <summary>
 /// Action for creating sub-orchestration.

@@ -13,7 +13,7 @@ using DurableTask.Core.Query;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Microsoft.DurableTask.Sidecar;
+namespace Microsoft.DurableTask.Testing.Sidecar;
 
 /// <summary>
 /// An in-memory implementation of orchestration service interfaces for testing purposes.

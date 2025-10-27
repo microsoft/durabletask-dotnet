@@ -4,7 +4,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Microsoft.DurableTask.Testing.Sidecar.Dispatcher;
 
 /// <summary>
 /// Base class for dispatching and managing work items.

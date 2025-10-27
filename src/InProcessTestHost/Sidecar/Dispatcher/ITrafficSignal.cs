@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Microsoft.DurableTask.Testing.Sidecar.Dispatcher;
 
 /// <summary>
 /// A simple primitive that can be used to block logical threads until some condition occurs.
@@ -9,7 +9,7 @@ namespace Microsoft.DurableTask.Sidecar.Dispatcher;
 interface ITrafficSignal
 {
     /// <summary>
-    /// Gets provides a human-friendly reason for why the signal is in the "wait" state.
+    /// Gets a human-friendly reason for why the signal is in the "wait" state.
     /// </summary>
     string WaitReason { get; }
 

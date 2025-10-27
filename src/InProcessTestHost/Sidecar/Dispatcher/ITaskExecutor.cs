@@ -4,7 +4,7 @@
 using DurableTask.Core;
 using DurableTask.Core.History;
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Microsoft.DurableTask.Testing.Sidecar.Dispatcher;
 
 /// <summary>
 /// Task Executor.

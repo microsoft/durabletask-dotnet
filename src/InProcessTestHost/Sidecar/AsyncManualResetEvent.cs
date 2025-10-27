@@ -1,15 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Sidecar;
+namespace Microsoft.DurableTask.Testing.Sidecar;
 
 /// <summary>
-/// An asynchronous manual reset event implementation.
+/// Helper class for fetching TaskHub events.
 /// </summary>
-/// <remarks>
-/// This class provides an asynchronous version of ManualResetEvent that can be used
-/// for synchronization in async/await scenarios.
-/// </remarks>
 class AsyncManualResetEvent
 {
     readonly object mutex = new();

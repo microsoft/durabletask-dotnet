@@ -13,10 +13,10 @@ using DurableTask.Core.Tracing;
 using Google.Protobuf;
 using Google.Protobuf.Collections;
 using Google.Protobuf.WellKnownTypes;
-using Microsoft.DurableTask.Sidecar.Dispatcher;
+using Microsoft.DurableTask.Testing.Sidecar.Dispatcher;
 using Proto = Microsoft.DurableTask.Protobuf;
 
-namespace Microsoft.DurableTask.Sidecar.Grpc;
+namespace Microsoft.DurableTask.Testing.Sidecar.Grpc;
 
 /// <summary>
 /// Protobuf utils for the in-process grpc service.

@@ -4,7 +4,7 @@
 using DurableTask.Core.Command;
 using DurableTask.Core.Tracing;
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Microsoft.DurableTask.Testing.Sidecar.Dispatcher;
 
 /// <summary>
 /// gRPC-specific implementation of ScheduleTaskOrchestratorAction that includes distributed tracing context.

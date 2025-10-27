@@ -1,7 +1,7 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Microsoft.DurableTask.Testing.Sidecar.Dispatcher;
 
 /// <summary>
 /// A simple primitive that can be used to block logical threads until some condition occurs.
@@ -9,12 +9,12 @@ namespace Microsoft.DurableTask.Sidecar.Dispatcher;
 interface ITrafficSignal
 {
     /// <summary>
-    /// Provides a human-friendly reason for why the signal is in the "wait" state.
+    /// Gets a human-friendly reason for why the signal is in the "wait" state.
     /// </summary>
     string WaitReason { get; }
 
     /// <summary>
-    /// Blocks the caller until the <see cref="Set"/> method is called.
+    /// Blocks the caller until the Set method is called.
     /// </summary>
     /// <param name="waitTime">The amount of time to wait until the signal is unblocked.</param>
     /// <param name="cancellationToken">A cancellation token that can be used to interrupt a waiting caller.</param>
@@ -26,4 +26,3 @@ interface ITrafficSignal
     /// </exception>
     Task<bool> WaitAsync(TimeSpan waitTime, CancellationToken cancellationToken);
 }
-

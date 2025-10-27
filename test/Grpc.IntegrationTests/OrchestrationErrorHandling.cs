@@ -735,7 +735,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
 
     /// <summary>
     /// Tests that exception properties are included in FailureDetails when an orchestration 
-    /// throws exception directly without calling any other functions and a custom provider is set.
+    /// throws ArgumentOutOfRangeException directly without calling any other functions.
     /// </summary>
     [Fact]
     public async Task OrchestrationDirectArgumentOutOfRangeExceptionProperties()
@@ -745,6 +745,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         string actualValue = "invalidValue";
         string errorMessage = $"Parameter '{paramName}' is out of range.";
 
+        // Register orchestration that throws ArgumentOutOfRangeException directly
         void MyOrchestrationImpl(TaskOrchestrationContext ctx) =>
             throw new ArgumentOutOfRangeException(paramName, actualValue, errorMessage);
 
@@ -787,8 +788,8 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
     }
 
     /// <summary>
-    /// Tests that exception properties are included through nested orchestration calls when
-    /// a provider is set.
+    /// Tests that exception properties are preserved through nested orchestration calls when
+    /// a parent orchestration calls a sub-orchestration, which then calls an activity that throws ArgumentOutOfRangeException.
     /// </summary>
     [Fact]
     public async Task NestedOrchestrationArgumentOutOfRangeExceptionProperties()

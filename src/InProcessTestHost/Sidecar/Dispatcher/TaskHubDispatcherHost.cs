@@ -1,12 +1,12 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using DurableTask.Core;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Microsoft.DurableTask.Testing.Sidecar.Dispatcher;
 
-class TaskHubDispatcherHost
+class TaskHubDispatcherHost : IDisposable
 {
     readonly TaskOrchestrationDispatcher orchestrationDispatcher;
     readonly TaskActivityDispatcher activityDispatcher;
@@ -23,8 +23,8 @@ class TaskHubDispatcherHost
         this.orchestrationService = orchestrationService ?? throw new ArgumentNullException(nameof(orchestrationService));
         this.log = loggerFactory.CreateLogger("Microsoft.DurableTask.Sidecar");
 
-        this.orchestrationDispatcher = new TaskOrchestrationDispatcher(log, trafficSignal, orchestrationService, taskExecutor);
-        this.activityDispatcher = new TaskActivityDispatcher(log, trafficSignal, orchestrationService, taskExecutor);
+        this.orchestrationDispatcher = new TaskOrchestrationDispatcher(this.log, trafficSignal, orchestrationService, taskExecutor);
+        this.activityDispatcher = new TaskActivityDispatcher(this.log, trafficSignal, orchestrationService, taskExecutor);
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -48,4 +48,12 @@ class TaskHubDispatcherHost
         // Tell the storage provider to stop doing any background work.
         await this.orchestrationService.StopAsync();
     }
+
+    public void Dispose()
+    {
+        // Dispose owned disposable resources
+        this.activityDispatcher?.Dispose();
+        this.orchestrationDispatcher?.Dispose();
+    }
 }
+

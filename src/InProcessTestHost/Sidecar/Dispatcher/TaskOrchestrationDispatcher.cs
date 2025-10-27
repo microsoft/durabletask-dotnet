@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.Text;
@@ -7,14 +7,24 @@ using DurableTask.Core.Command;
 using DurableTask.Core.History;
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.Sidecar.Dispatcher;
+namespace Microsoft.DurableTask.Testing.Sidecar.Dispatcher;
 
+/// <summary>
+/// Dispatches and manages the execution of <see cref="TaskOrchestrationWorkItem"/> instances.
+/// </summary>
 class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem>
 {
     readonly ILogger log;
     readonly IOrchestrationService service;
     readonly ITaskExecutor taskExecutor;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TaskOrchestrationDispatcher"/> class.
+    /// </summary>
+    /// <param name="log">The logger used for diagnostic output.</param>
+    /// <param name="trafficSignal">A signal used to control dispatcher activity and flow.</param>
+    /// <param name="service">The orchestration service used to fetch and manage orchestration work items.</param>
+    /// <param name="taskExecutor">The task executor used for executing orchestration tasks.</param>
     public TaskOrchestrationDispatcher(ILogger log, ITrafficSignal trafficSignal, IOrchestrationService service, ITaskExecutor taskExecutor)
         : base(log, trafficSignal)
     {
@@ -23,14 +33,70 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
         this.taskExecutor = taskExecutor;
     }
 
+    /// <summary>
+    /// Gets the maximum number of concurrent orchestration work items allowed by the orchestration service.
+    /// </summary>
     public override int MaxWorkItems => this.service.MaxConcurrentTaskOrchestrationWorkItems;
 
+    /// <summary>
+    /// Abandons the specified orchestration work item, releasing any held locks or resources.
+    /// </summary>
+    /// <param name="workItem">The orchestration work item to abandon.</param>
+    /// <returns>A task that represents the asynchronous abandon operation.</returns>
     public override Task AbandonWorkItemAsync(TaskOrchestrationWorkItem workItem) =>
         this.service.AbandonTaskOrchestrationWorkItemAsync(workItem);
 
+    /// <summary>
+    /// Attempts to fetch the next available <see cref="TaskOrchestrationWorkItem"/> from the orchestration service.
+    /// </summary>
+    /// <param name="timeout">The maximum duration to wait for an available orchestration work item.</param>
+    /// <param name="cancellationToken">A token to signal cancellation of the fetch operation.</param>
+    /// <returns>
+    /// A task that returns the locked orchestration work item if available, or <c>null</c> if no items are ready.
+    /// </returns>
     public override Task<TaskOrchestrationWorkItem?> FetchWorkItemAsync(TimeSpan timeout, CancellationToken cancellationToken) =>
         this.service.LockNextTaskOrchestrationWorkItemAsync(timeout, cancellationToken);
 
+    /// <summary>
+    /// Determines the delay, in seconds, before retrying after a fetch exception.
+    /// </summary>
+    /// <param name="ex">The exception that occurred while fetching work.</param>
+    /// <returns>The number of seconds to delay before retrying.</returns>
+    public override int GetDelayInSecondsOnFetchException(Exception ex) =>
+        this.service.GetDelayInSecondsAfterOnFetchException(ex);
+
+    /// <summary>
+    /// Get work item id.
+    /// </summary>
+    /// <param name="workItem">The orchestration work item.</param>
+    /// <returns>Work item id.</returns>
+    public override string GetWorkItemId(TaskOrchestrationWorkItem workItem) => workItem.InstanceId;
+
+    /// <summary>
+    /// Releases the specified orchestration work item.
+    /// </summary>
+    /// <param name="workItem">The work item to release.</param>
+    /// <returns>A task that completes when the release is finished.</returns>
+    public override Task ReleaseWorkItemAsync(TaskOrchestrationWorkItem workItem) =>
+        this.service.ReleaseTaskOrchestrationWorkItemAsync(workItem);
+
+    /// <summary>
+    /// Renew work item.
+    /// </summary>
+    /// <param name="workItem">The work item to be renewed.</param>
+    /// <returns>Work item renewed.</returns>
+    public override async Task<TaskOrchestrationWorkItem> RenewWorkItemAsync(TaskOrchestrationWorkItem workItem)
+    {
+        await this.service.RenewTaskOrchestrationWorkItemLockAsync(workItem);
+        return workItem;
+    }
+
+    /// <summary>
+    /// Execute the work item.
+    /// </summary>
+    /// <param name="workItem">Work item to execute.</param>
+    /// <returns>Completed task.</returns>
+    /// <exception cref="ArgumentException">Throw when work item doesn't contain required message.</exception>
     protected override async Task ExecuteWorkItemAsync(TaskOrchestrationWorkItem workItem)
     {
         // Convert the new messages into new history events
@@ -72,9 +138,9 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
             this.ApplyOrchestratorActions(
                 result,
                 ref workItem.OrchestrationRuntimeState,
-                out IList<TaskMessage> activityMessages,
-                out IList<TaskMessage> orchestratorMessages,
-                out IList<TaskMessage> timerMessages,
+                out List<TaskMessage> activityMessages,
+                out List<TaskMessage> orchestratorMessages,
+                out List<TaskMessage> timerMessages,
                 out OrchestrationState? updatedStatus,
                 out bool continueAsNew);
             if (continueAsNew)
@@ -166,12 +232,24 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
         }
     }
 
+    static string GetShortHistoryEventDescription(HistoryEvent e)
+    {
+        if (Utils.TryGetTaskScheduledId(e, out int taskScheduledId))
+        {
+            return $"{e.EventType}#{taskScheduledId}";
+        }
+        else
+        {
+            return e.EventType.ToString();
+        }
+    }
+
     void ApplyOrchestratorActions(
         OrchestratorExecutionResult result,
         ref OrchestrationRuntimeState runtimeState,
-        out IList<TaskMessage> activityMessages,
-        out IList<TaskMessage> orchestratorMessages,
-        out IList<TaskMessage> timerMessages,
+        out List<TaskMessage> activityMessages, // CA1859: Use concrete types for better performance
+        out List<TaskMessage> orchestratorMessages, // CA1859: Use concrete types for better performance
+        out List<TaskMessage> timerMessages, // CA1859: Use concrete types for better performance
         out OrchestrationState? updatedStatus,
         out bool continueAsNew)
     {
@@ -180,9 +258,9 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
             throw new ArgumentException($"The provided {nameof(OrchestrationRuntimeState)} doesn't contain an instance ID!", nameof(runtimeState));
         }
 
-        IList<TaskMessage>? newActivityMessages = null;
-        IList<TaskMessage>? newTimerMessages = null;
-        IList<TaskMessage>? newOrchestratorMessages = null;
+        List<TaskMessage>? newActivityMessages = null; // CA1859: Use concrete types for better performance
+        List<TaskMessage>? newTimerMessages = null; // CA1859: Use concrete types for better performance
+        List<TaskMessage>? newOrchestratorMessages = null; // CA1859: Use concrete types for better performance
         FailureDetails? failureDetails = null;
         continueAsNew = false;
 
@@ -245,7 +323,7 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                     Version = subOrchestrationAction.Version,
                     InstanceId = subOrchestrationAction.InstanceId,
                     Input = subOrchestrationAction.Input,
-                    ParentTraceContext = grpcAction?.ParentTraceContext
+                    ParentTraceContext = grpcAction?.ParentTraceContext,
                 });
 
                 ExecutionStartedEvent startedEvent = new(-1, subOrchestrationAction.Input)
@@ -315,7 +393,7 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                         Tags = runtimeState.Tags,
                         ParentInstance = runtimeState.ParentInstance,
                         Name = runtimeState.Name,
-                        Version = completeAction.NewVersion ?? runtimeState.Version
+                        Version = completeAction.NewVersion ?? runtimeState.Version,
                     });
                     newRuntimeState.Status = runtimeState.Status;
 
@@ -330,9 +408,9 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                     }
 
                     runtimeState = newRuntimeState;
-                    activityMessages = Array.Empty<TaskMessage>();
-                    orchestratorMessages = Array.Empty<TaskMessage>();
-                    timerMessages = Array.Empty<TaskMessage>();
+                    activityMessages = new List<TaskMessage>();
+                    orchestratorMessages = new List<TaskMessage>();
+                    timerMessages = new List<TaskMessage>();
                     continueAsNew = true;
                     updatedStatus = null;
                     return;
@@ -397,9 +475,9 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
 
         runtimeState.AddEvent(new OrchestratorCompletedEvent(-1));
 
-        activityMessages = newActivityMessages ?? Array.Empty<TaskMessage>();
-        timerMessages = newTimerMessages ?? Array.Empty<TaskMessage>();
-        orchestratorMessages = newOrchestratorMessages ?? Array.Empty<TaskMessage>();
+        activityMessages = newActivityMessages ?? new List<TaskMessage>();
+        timerMessages = newTimerMessages ?? new List<TaskMessage>();
+        orchestratorMessages = newOrchestratorMessages ?? new List<TaskMessage>();
 
         updatedStatus = new OrchestrationState
         {
@@ -420,31 +498,5 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
             ScheduledStartTime = runtimeState.ExecutionStartedEvent?.ScheduledStartTime,
             FailureDetails = failureDetails,
         };
-    }
-
-    static string GetShortHistoryEventDescription(HistoryEvent e)
-    {
-        if (Utils.TryGetTaskScheduledId(e, out int taskScheduledId))
-        {
-            return $"{e.EventType}#{taskScheduledId}";
-        }
-        else
-        {
-            return e.EventType.ToString();
-        }
-    }
-
-    public override int GetDelayInSecondsOnFetchException(Exception ex) =>
-        this.service.GetDelayInSecondsAfterOnFetchException(ex);
-
-    public override string GetWorkItemId(TaskOrchestrationWorkItem workItem) => workItem.InstanceId;
-
-    public override Task ReleaseWorkItemAsync(TaskOrchestrationWorkItem workItem) =>
-        this.service.ReleaseTaskOrchestrationWorkItemAsync(workItem);
-
-    public override async Task<TaskOrchestrationWorkItem> RenewWorkItemAsync(TaskOrchestrationWorkItem workItem)
-    {
-        await this.service.RenewTaskOrchestrationWorkItemLockAsync(workItem);
-        return workItem;
     }
 }

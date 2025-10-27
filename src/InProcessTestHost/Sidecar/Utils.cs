@@ -1,12 +1,21 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using DurableTask.Core.History;
 
-namespace Microsoft.DurableTask.Sidecar;
+namespace Microsoft.DurableTask.Testing.Sidecar;
 
-internal static class Utils
+/// <summary>
+/// Utility methods for the sidecar components.
+/// </summary>
+static class Utils
 {
+    /// <summary>
+    /// Tries to get the task scheduled ID from a history event.
+    /// </summary>
+    /// <param name="historyEvent">The history event.</param>
+    /// <param name="taskScheduledId">The task scheduled ID if found.</param>
+    /// <returns>True if the task scheduled ID was found, false otherwise.</returns>
     public static bool TryGetTaskScheduledId(HistoryEvent historyEvent, out int taskScheduledId)
     {
         switch (historyEvent.EventType)
@@ -39,6 +48,7 @@ internal static class Utils
                     taskScheduledId = -1;
                     return false;
                 }
+
             default:
                 taskScheduledId = -1;
                 return false;

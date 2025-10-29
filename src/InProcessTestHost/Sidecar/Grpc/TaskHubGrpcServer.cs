@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.Collections.Concurrent;
@@ -325,6 +325,93 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         {
             throw new NotSupportedException($"{this.client.GetType().Name} doesn't support query operations.");
         }
+    }
+
+    /// <summary>
+    /// Lists terminal orchestration instances sorted by completed timestamp, returning only instance IDs.
+    /// </summary>
+    /// <param name="request">The list terminal instances request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>A list terminal instances response.</returns>
+    public override async Task<P.ListTerminalInstancesResponse> ListTerminalInstances(P.ListTerminalInstancesRequest request, ServerCallContext context)
+    {
+        if (this.client is IOrchestrationServiceQueryClient queryClient)
+        {
+            // Build query for terminal instances
+            var query = new OrchestrationQuery
+            {
+                RuntimeStatus = request.Query.RuntimeStatus?.Select(status => (OrchestrationStatus)status).ToList(),
+                CreatedTimeFrom = request.Query.CreatedTimeFrom?.ToDateTime(),
+                CreatedTimeTo = request.Query.CreatedTimeTo?.ToDateTime(),
+                PageSize = request.Query.MaxInstanceCount > 0 ? request.Query.MaxInstanceCount : 100,
+            };
+
+            // Query all matching instances (we'll filter and sort terminal ones)
+            // Use a larger page size to ensure we have enough instances after filtering
+            query.PageSize = request.Query.MaxInstanceCount > 0 ? request.Query.MaxInstanceCount * 2 : 200;
+            OrchestrationQueryResult result = await queryClient.GetOrchestrationWithQueryAsync(query, context.CancellationToken);
+
+            // Filter to only terminal instances and sort by completed timestamp
+            var terminalInstances = result.OrchestrationState
+                .Where(state => IsTerminalStatus(state.OrchestrationStatus))
+                .OrderBy(state => state.CompletedTime != default ? state.CompletedTime : state.LastUpdatedTime) // Sort by completed timestamp first
+                .ThenBy(state => state.OrchestrationInstance.InstanceId) // Secondary sort by instanceId for stable ordering
+                .ToList();
+
+            // Apply continuation token filter after sorting
+            if (!string.IsNullOrEmpty(request.Query.ContinuationToken))
+            {
+                // Find the position of the continuation token instanceId in the sorted list
+                // and skip all instances up to and including it
+                int continuationIndex = terminalInstances.FindIndex(
+                    state => state.OrchestrationInstance.InstanceId == request.Query.ContinuationToken);
+                
+                if (continuationIndex >= 0)
+                {
+                    // Skip the continuation token instance and all instances before it
+                    terminalInstances = terminalInstances.Skip(continuationIndex + 1).ToList();
+                }
+                else
+                {
+                    // If continuation token not found, skip instances with instanceId <= continuation token
+                    // This handles the case where the continuation token instance might have been deleted
+                    terminalInstances = terminalInstances
+                        .Where(state => string.Compare(state.OrchestrationInstance.InstanceId, request.Query.ContinuationToken, StringComparison.Ordinal) > 0)
+                        .ToList();
+                }
+            }
+
+            // Take the requested page size
+            terminalInstances = terminalInstances
+                .Take(request.Query.MaxInstanceCount > 0 ? request.Query.MaxInstanceCount : 100)
+                .ToList();
+
+            var response = new P.ListTerminalInstancesResponse();
+            foreach (var state in terminalInstances)
+            {
+                response.InstanceIds.Add(state.OrchestrationInstance.InstanceId);
+            }
+
+            // Set continuation token to last instanceId if we have results
+            if (terminalInstances.Count() > 0 && terminalInstances.Count() == (request.Query.MaxInstanceCount > 0 ? request.Query.MaxInstanceCount : 100))
+            {
+                response.ContinuationToken = terminalInstances.Last().OrchestrationInstance.InstanceId;
+            }
+
+            return response;
+        }
+        else
+        {
+            throw new NotSupportedException($"{this.client.GetType().Name} doesn't support query operations.");
+        }
+    }
+
+    static bool IsTerminalStatus(OrchestrationStatus status)
+    {
+        return status == OrchestrationStatus.Completed ||
+               status == OrchestrationStatus.Failed ||
+               status == OrchestrationStatus.Terminated ||
+               status == OrchestrationStatus.Canceled;
     }
 
     /// <summary>

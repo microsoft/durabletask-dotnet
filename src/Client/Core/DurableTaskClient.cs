@@ -352,8 +352,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <see cref="OrchestrationRuntimeStatus.Terminated"/> state can be purged.
     /// </para><para>
     /// Purging an orchestration will by default not purge any of the child sub-orchestrations that were started by the
-    /// orchetration instance. If you want to purge sub-orchestration instances, you can set <see cref="PurgeInstanceOptions.Recursive"/> flag to
-    /// true which will enable purging of child sub-orchestration instances. It is set to false by default.
+    /// orchetration instance. Currently, purging of sub-orchestrations is not supported.
     /// If <paramref name="instanceId"/> is not found in the data store, or if the instance is found but not in a
     /// terminal state, then the returned <see cref="PurgeResult"/> object will have a
     /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>0</c>. Otherwise, the existing data will be purged and
@@ -390,8 +389,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// </param>
     /// <returns>
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
-    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged,
-    /// including the count of sub-orchestrations purged if any.
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged.
     /// </returns>
     public virtual Task<PurgeResult> PurgeAllInstancesAsync(
         PurgeInstancesFilter filter, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)

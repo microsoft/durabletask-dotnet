@@ -13,7 +13,7 @@ namespace Microsoft.DurableTask.Client;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Adds and configures Durable Task worker services to the service collection.
+    /// Configures and adds a <see cref="DurableTaskClient" /> to the service collection.
     /// </summary>
     /// <param name="services">The service collection to add to.</param>
     /// <param name="name">The name of the builder to add.</param>
@@ -21,6 +21,7 @@ public static class ServiceCollectionExtensions
     public static IDurableTaskClientBuilder AddDurableTaskClient(this IServiceCollection services, string? name = null)
     {
         Check.NotNull(services);
+        services.TryAddSingleton<IDurableTaskClientProvider, DefaultDurableTaskClientProvider>();
         IDurableTaskClientBuilder builder = GetBuilder(services, name ?? Options.DefaultName, out bool added);
         ConditionalConfigureBuilder(services, builder, added);
         return builder;

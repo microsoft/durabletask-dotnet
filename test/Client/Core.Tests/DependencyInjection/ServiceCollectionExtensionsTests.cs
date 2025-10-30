@@ -124,6 +124,17 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public void AddDurableTaskClient_Unnamed_HostedServiceAdded()
+    {
+        ServiceCollection services = new();
+        services.AddDurableTaskClient();
+        services.Should().ContainSingle(
+            x => x.ServiceType == typeof(IDurableTaskClientProvider) && x.Lifetime == ServiceLifetime.Singleton);
+        services.Should().ContainSingle(
+            x => x.ServiceType == typeof(DurableTaskClient) && x.Lifetime == ServiceLifetime.Singleton);
+    }
+
+    [Fact]
     public void AddDurableTaskClient_ConfiguresConverter()
     {
         ServiceCollection services = new();

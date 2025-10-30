@@ -158,6 +158,19 @@ public class ServiceCollectionExtensionsTests
         options.DataConverter.Should().BeSameAs(JsonDataConverter.Default);
     }
 
+    [Fact]
+    public void AddDurableTaskClient_NullServices_ThrowsException()
+    {
+        Action act = () => ((ServiceCollection)null!).AddDurableTaskClient();
+        act.Should().Throw<ArgumentNullException>();
+
+        act = () => ((ServiceCollection)null!).AddDurableTaskClient(builder => { });
+        act.Should().Throw<ArgumentNullException>();
+
+        act = () => ((ServiceCollection)null!).AddDurableTaskClient("name", builder => { });
+        act.Should().Throw<ArgumentNullException>();
+    }
+
     class CustomDataConverter : DataConverter
     {
         public override object? Deserialize(string? data, Type targetType)

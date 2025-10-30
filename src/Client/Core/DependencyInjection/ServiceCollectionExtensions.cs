@@ -49,6 +49,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddDurableTaskClient(
         this IServiceCollection services, string name, Action<IDurableTaskClientBuilder> configure)
     {
+        Check.NotNull(services);
         services.TryAddSingleton<IDurableTaskClientProvider, DefaultDurableTaskClientProvider>();
         IDurableTaskClientBuilder builder = GetBuilder(services, name, out bool added);
         configure.Invoke(builder);

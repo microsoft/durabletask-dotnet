@@ -440,6 +440,25 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         CancellationToken cancellation = default)
         => throw new NotSupportedException($"{this.GetType()} does not support orchestration restart.");
 
+    /// <summary>
+    /// Rewinds the specified orchestration instance by re-executing any failed Activities, and recursively rewinding
+    /// any failed suborchestrations with failed Activities.
+    /// The orchestration's history will be replaced with a new history that excludes the failed Activities and suborchestrations,
+    /// and a new execution ID will be generated for the rewound orchestration instance. As the failed Activities and suborchestrations
+    /// re-execute, the history will be appended with new TaskScheduled, TaskCompleted, and SubOrchestrationInstanceCompleted events.
+    /// Note that only orchestrations in a "Failed" state can be rewound.
+    /// </summary>
+    /// <param name="instanceId">The instance ID of the orchestration to rewind.</param>
+    /// <param name="reason">The reason for the rewind.</param>
+    /// <param name="cancellation">The cancellation token. This only cancels enqueueing the rewind request to the backend.
+    /// It does not abort rewinding the orchestration once the request has been enqueued.</param>
+    /// <returns>A task that represents the enqueueing the rewind operation.</returns>
+    /// <exception cref="NotSupportedException">Thrown if this implementation of <see cref="DurableTaskClient"/> does not
+    /// support rewinding orchestrations.</exception>
+    /// <exception cref="ArgumentException">Thrown if an orchestration with the specified <paramref name="instanceId"/>" does not exist.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if a precondition of the operation fails, for example if the specified
+    /// orchestration is not in a "Failed" state.</exception>
+    /// <exception cref="OperationCanceledException">Thrown if the operation is canceled via the <paramref name="cancellation"/> token.</exception>
     public virtual Task RewindInstanceAsync(
         string instanceId,
         string reason,

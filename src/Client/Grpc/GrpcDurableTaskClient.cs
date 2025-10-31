@@ -431,6 +431,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
     }
 
+    /// <inheritdoc/>
     public override async Task RewindInstanceAsync(
         string instanceId,
         string reason,
@@ -454,10 +455,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.FailedPrecondition)
         {
-            throw new InvalidOperationException(
-                $"The orchestration with the instanceId {instanceId} cannot be rewound. " +
-                $"Only orchestrations in the \"Failed\" state can be rewound.",
-                e);
+            throw new InvalidOperationException(e.Message);
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {

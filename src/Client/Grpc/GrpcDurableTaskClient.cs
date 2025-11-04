@@ -431,6 +431,43 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
     }
 
+    /// <inheritdoc/>
+    public override async Task RewindInstanceAsync(
+        string instanceId,
+        string reason,
+        CancellationToken cancellation = default)
+    {
+        Check.NotNullOrEmpty(instanceId);
+        Check.NotEntity(this.options.EnableEntitySupport, instanceId);
+
+        var request = new P.RewindInstanceRequest
+        {
+            InstanceId = instanceId,
+            Reason = reason,
+        };
+        try
+        {
+            await this.sidecarClient.RewindInstanceAsync(request, cancellationToken: cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.NotFound)
+        {
+            throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.", e);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.FailedPrecondition)
+        {
+            throw new InvalidOperationException(e.Status.Detail);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
+        {
+            throw new NotImplementedException(e.Status.Detail);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.RewindInstanceAsync)} operation was canceled.", e, cancellation);
+        }
+    }
+
     static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, out CallInvoker callInvoker)
     {
         if (options.Channel is GrpcChannel c)

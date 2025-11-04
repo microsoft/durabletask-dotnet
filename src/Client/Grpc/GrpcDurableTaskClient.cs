@@ -455,7 +455,11 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.FailedPrecondition)
         {
-            throw new InvalidOperationException(e.Message);
+            throw new InvalidOperationException(e.Status.Detail);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
+        {
+            throw new NotImplementedException(e.Status.Detail);
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
         {

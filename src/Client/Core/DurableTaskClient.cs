@@ -452,10 +452,11 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <param name="reason">The reason for the rewind.</param>
     /// <param name="cancellation">The cancellation token. This only cancels enqueueing the rewind request to the backend.
     /// It does not abort rewinding the orchestration once the request has been enqueued.</param>
-    /// <returns>A task that represents the enqueueing the rewind operation.</returns>
+    /// <returns>A task that represents the enqueueing of the rewind operation.</returns>
     /// <exception cref="NotSupportedException">Thrown if this implementation of <see cref="DurableTaskClient"/> does not
     /// support rewinding orchestrations.</exception>
-    /// <exception cref="ArgumentException">Thrown if an orchestration with the specified <paramref name="instanceId"/>" does not exist.</exception>
+    /// <exception cref="NotImplementedException">Thrown if the backend storage provider does not support rewinding orchestrations.</exception>
+    /// <exception cref="ArgumentException">Thrown if an orchestration with the specified <paramref name="instanceId"/> does not exist.</exception>
     /// <exception cref="InvalidOperationException">Thrown if a precondition of the operation fails, for example if the specified
     /// orchestration is not in a "Failed" state.</exception>
     /// <exception cref="OperationCanceledException">Thrown if the operation is canceled via the <paramref name="cancellation"/> token.</exception>

@@ -733,6 +733,139 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.Null(innerFailure.Properties["NullProperty"]);
     }
 
+    /// <summary>
+    /// Tests that exception properties are included in FailureDetails when an orchestration 
+    /// throws ArgumentOutOfRangeException directly without calling any other functions.
+    /// </summary>
+    [Fact]
+    public async Task OrchestrationDirectArgumentOutOfRangeExceptionProperties()
+    {
+        TaskName orchestratorName = "OrchestrationWithDirectArgumentException";
+        string paramName = "testParameter";
+        string actualValue = "invalidValue";
+        string errorMessage = $"Parameter '{paramName}' is out of range.";
+
+        // Register orchestration that throws ArgumentOutOfRangeException directly
+        void MyOrchestrationImpl(TaskOrchestrationContext ctx) =>
+            throw new ArgumentOutOfRangeException(paramName, actualValue, errorMessage);
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            // Register the custom exception properties provider
+            b.Services.AddSingleton<IExceptionPropertiesProvider, TestExceptionPropertiesProvider>();
+            
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc(orchestratorName, MyOrchestrationImpl));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+
+        Assert.NotNull(metadata.FailureDetails);
+        TaskFailureDetails failureDetails = metadata.FailureDetails!;
+        Assert.Equal(typeof(ArgumentOutOfRangeException).FullName, failureDetails.ErrorType);
+        Assert.Contains(errorMessage, failureDetails.ErrorMessage);
+
+        // Check that custom properties are included for ArgumentOutOfRangeException
+        Assert.NotNull(failureDetails.Properties);
+        Assert.Equal(2, failureDetails.Properties.Count);
+
+        // Verify parameter name property
+        Assert.True(failureDetails.Properties.ContainsKey("Name"));
+        Assert.Equal(paramName, failureDetails.Properties["Name"]);
+
+        // Verify actual value property
+        Assert.True(failureDetails.Properties.ContainsKey("Value"));
+        Assert.Equal(actualValue, failureDetails.Properties["Value"]);
+
+        // Verify the exception type is correctly identified
+        Assert.True(failureDetails.IsCausedBy<ArgumentOutOfRangeException>());
+    }
+
+    /// <summary>
+    /// Tests that exception properties are preserved through nested orchestration calls when
+    /// a parent orchestration calls a sub-orchestration, which then calls an activity that throws ArgumentOutOfRangeException.
+    /// </summary>
+    [Fact]
+    public async Task NestedOrchestrationArgumentOutOfRangeExceptionProperties()
+    {
+        TaskName parentOrchestratorName = "ParentOrchestrationWithNestedArgumentException";
+        TaskName subOrchestratorName = "SubOrchestrationWithArgumentException";
+        TaskName activityName = "ActivityWithArgumentException";
+        string paramName = "nestedParameter";
+        string actualValue = "badNestedValue";
+        string errorMessage = $"Nested parameter '{paramName}' is out of range.";
+
+        async Task ParentOrchestrationImpl(TaskOrchestrationContext ctx) =>
+            await ctx.CallSubOrchestratorAsync(subOrchestratorName);
+
+        async Task SubOrchestrationImpl(TaskOrchestrationContext ctx) =>
+            await ctx.CallActivityAsync(activityName);
+
+        void ActivityImpl(TaskActivityContext ctx) =>
+            throw new ArgumentOutOfRangeException(paramName, actualValue, errorMessage);
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            // Register the custom exception properties provider
+            b.Services.AddSingleton<IExceptionPropertiesProvider, TestExceptionPropertiesProvider>();
+            
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc(parentOrchestratorName, ParentOrchestrationImpl)
+                .AddOrchestratorFunc(subOrchestratorName, SubOrchestrationImpl)
+                .AddActivityFunc(activityName, ActivityImpl));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(parentOrchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+
+        Assert.NotNull(metadata.FailureDetails);
+        TaskFailureDetails failureDetails = metadata.FailureDetails!;
+        
+        // The parent orchestration failed due to a TaskFailedException from the sub-orchestration
+        Assert.Equal(typeof(TaskFailedException).FullName, failureDetails.ErrorType);
+        Assert.Contains(subOrchestratorName, failureDetails.ErrorMessage);
+
+        // Check the first level inner failure (sub-orchestration failure)
+        Assert.NotNull(failureDetails.InnerFailure);
+        TaskFailureDetails subOrchestrationFailure = failureDetails.InnerFailure!;
+        Assert.Equal(typeof(TaskFailedException).FullName, subOrchestrationFailure.ErrorType);
+        Assert.Contains(activityName, subOrchestrationFailure.ErrorMessage);
+
+        // Check the second level inner failure (activity failure with ArgumentOutOfRangeException)
+        Assert.NotNull(subOrchestrationFailure.InnerFailure);
+        TaskFailureDetails activityFailure = subOrchestrationFailure.InnerFailure!;
+        Assert.Equal(typeof(ArgumentOutOfRangeException).FullName, activityFailure.ErrorType);
+        Assert.Contains(errorMessage, activityFailure.ErrorMessage);
+
+        // Verify that the original ArgumentOutOfRangeException properties are preserved
+        Assert.NotNull(activityFailure.Properties);
+        Assert.Equal(2, activityFailure.Properties.Count);
+
+        // Verify parameter name property
+        Assert.True(activityFailure.Properties.ContainsKey("Name"));
+        Assert.Equal(paramName, activityFailure.Properties["Name"]);
+
+        // Verify actual value property
+        Assert.True(activityFailure.Properties.ContainsKey("Value"));
+        Assert.Equal(actualValue, activityFailure.Properties["Value"]);
+
+        // Verify the exception type hierarchy is correctly identified
+        Assert.True(failureDetails.IsCausedBy<TaskFailedException>());
+        Assert.True(subOrchestrationFailure.IsCausedBy<TaskFailedException>());
+        Assert.True(activityFailure.IsCausedBy<ArgumentOutOfRangeException>());
+    }
+
     [Serializable]
     class CustomException : Exception
     {

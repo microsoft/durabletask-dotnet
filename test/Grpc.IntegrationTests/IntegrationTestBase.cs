@@ -45,9 +45,12 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
         GC.SuppressFinalize(this);
     }
 
-    protected async Task<HostTestLifetime> StartWorkerAsync(Action<IDurableTaskWorkerBuilder> workerConfigure, Action<IDurableTaskClientBuilder>? clientConfigure = null)
+    protected async Task<HostTestLifetime> StartWorkerAsync(
+        Action<IDurableTaskWorkerBuilder> workerConfigure,
+        Action<IDurableTaskClientBuilder>? clientConfigure = null,
+        Action<IServiceCollection>? servicesConfigure = null)
     {
-        IHost host = this.CreateHostBuilder(workerConfigure, clientConfigure).Build();
+        IHost host = this.CreateHostBuilder(workerConfigure, clientConfigure, servicesConfigure).Build();
         await host.StartAsync(this.TimeoutToken);
         return new HostTestLifetime(host, this.TimeoutToken);
     }
@@ -57,7 +60,10 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
     /// </summary>
     /// <param name="workerConfigure">Configures the durable task worker builder.</param>
     /// <param name="clientConfigure">Configures the durable task client builder.</param>
-    protected IHostBuilder CreateHostBuilder(Action<IDurableTaskWorkerBuilder> workerConfigure, Action<IDurableTaskClientBuilder>? clientConfigure)
+    protected IHostBuilder CreateHostBuilder(
+        Action<IDurableTaskWorkerBuilder> workerConfigure,
+        Action<IDurableTaskClientBuilder>? clientConfigure,
+        Action<IServiceCollection>? servicesConfigure)
     {
         var host = Host.CreateDefaultBuilder()
             .ConfigureLogging(b =>
@@ -69,6 +75,7 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
             })            
             .ConfigureServices((context, services) =>
             {
+                servicesConfigure?.Invoke(services);
                 services.AddDurableTaskWorker(b =>
                 {
                     b.UseGrpc(this.sidecarFixture.Channel);

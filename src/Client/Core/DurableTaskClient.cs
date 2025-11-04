@@ -441,11 +441,13 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <summary>
     /// Rewinds the specified orchestration instance by re-executing any failed Activities, and recursively rewinding
     /// any failed suborchestrations with failed Activities.
+    /// </summary>
+    /// <remarks>
     /// The orchestration's history will be replaced with a new history that excludes the failed Activities and suborchestrations,
     /// and a new execution ID will be generated for the rewound orchestration instance. As the failed Activities and suborchestrations
     /// re-execute, the history will be appended with new TaskScheduled, TaskCompleted, and SubOrchestrationInstanceCompleted events.
     /// Note that only orchestrations in a "Failed" state can be rewound.
-    /// </summary>
+    /// </remarks>
     /// <param name="instanceId">The instance ID of the orchestration to rewind.</param>
     /// <param name="reason">The reason for the rewind.</param>
     /// <param name="cancellation">The cancellation token. This only cancels enqueueing the rewind request to the backend.

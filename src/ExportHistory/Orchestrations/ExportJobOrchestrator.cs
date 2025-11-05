@@ -9,7 +9,7 @@ namespace Microsoft.DurableTask.ExportHistory;
 /// <summary>
 /// Orchestrator input to start a runner for a given job.
 /// </summary>
-public sealed record ExportJobRunRequest(EntityInstanceId JobEntityId);
+public sealed record ExportJobRunRequest(EntityInstanceId JobEntityId, int ProcessedCycles = 0);
 
 /// <summary>
 /// Orchestrator that performs the actual export work by querying orchestration instances
@@ -18,32 +18,33 @@ public sealed record ExportJobRunRequest(EntityInstanceId JobEntityId);
 [DurableTask]
 public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, object?>
 {
-    readonly ILogger<ExportJobOrchestrator> logger;
     const int MaxRetryAttempts = 3;
     const int MinBackoffSeconds = 60; // 1 minute
     const int MaxBackoffSeconds = 300; // 5 minutes
-    const int ContinueAsNewFrequency = 50;
+    const int ContinueAsNewFrequency = 5;
+    static readonly TimeSpan ContinuousExportIdleDelay = TimeSpan.FromMinutes(1);
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ExportJobOrchestrator"/> class.
-    /// </summary>
-    public ExportJobOrchestrator(ILogger<ExportJobOrchestrator> logger)
-    {
-        this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    }
+    // Retry policy for individual export activities: 3 attempts with exponential backoff
+    // First retry after 15s, second retry after 30s (capped at 60s)
+    static readonly RetryPolicy ExportActivityRetryPolicy = new(
+        maxNumberOfAttempts: 3,
+        firstRetryInterval: TimeSpan.FromSeconds(15),
+        backoffCoefficient: 2.0,
+        maxRetryInterval: TimeSpan.FromSeconds(60));
 
     /// <inheritdoc/>
     public override async Task<object?> RunAsync(TaskOrchestrationContext context, ExportJobRunRequest input)
     {
+        ILogger logger = context.CreateReplaySafeLogger<ExportJobOrchestrator>();
         string jobId = input.JobEntityId.Key;
-        this.logger.ExportJobOperationInfo(jobId, nameof(ExportJobOrchestrator), "Export orchestrator started");
+        logger.ExportJobOperationInfo(jobId, nameof(ExportJobOrchestrator), "Export orchestrator started");
 
         try
         {
             // Get the export job state and configuration from the entity
             ExportJobState? jobState = await context.Entities.CallEntityAsync<ExportJobState?>(
                 input.JobEntityId,
-                ExportJobOperations.Get,
+                nameof(ExportJob.Get),
                 null);
 
             if (jobState == null || jobState.Config == null)
@@ -54,58 +55,90 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
             // Check if job is still active
             if (jobState.Status != ExportJobStatus.Active)
             {
-                this.logger.ExportJobOperationWarning(jobId, nameof(ExportJobOrchestrator), $"Job status is {jobState.Status}, not Active - orchestrator cancelled");
+                logger.ExportJobOperationWarning(jobId, nameof(ExportJobOrchestrator), $"Job status is {jobState.Status}, not Active - orchestrator cancelled");
                 return null;
             }
 
             ExportJobConfiguration config = jobState.Config;
 
-            // Process instances in batches using explicit loop state
-            
-            bool hasMore = true;
-            int batchesProcessed = 0;
+            int processedCycles = input.ProcessedCycles;
 
-            while (hasMore)
+            while (true)
             {
+                processedCycles++;
+                if (processedCycles > ContinueAsNewFrequency)
+                {
+                    context.ContinueAsNew(new ExportJobRunRequest(input.JobEntityId, ProcessedCycles: 0));
+                    return null!;
+                }
+
                 // Check if job is still active (entity might have been deleted or failed)
                 ExportJobState? currentState = await context.Entities.CallEntityAsync<ExportJobState?>(
                     input.JobEntityId,
-                    ExportJobOperations.Get,
+                    nameof(ExportJob.Get),
                     null);
 
-                if (currentState == null || 
+                if (currentState == null ||
+                    currentState.Config == null ||
                     currentState.Status != ExportJobStatus.Active)
                 {
-                    this.logger.ExportJobOperationWarning(jobId, nameof(ExportJobOrchestrator), "Job is no longer active - orchestrator cancelled");
+                    logger.ExportJobOperationWarning(jobId, nameof(ExportJobOrchestrator), "Job is no longer active");
                     return null;
                 }
 
+                // if (currentState.Checkpoint is not null &&
+                //     string.IsNullOrEmpty(currentState.Checkpoint.LastInstanceKey))
+                // {
+                //     if (config.Mode == ExportMode.Batch)
+                //     {
+                //         logger.ExportJobOperationInfo(jobId, nameof(ExportJobOrchestrator), "No more instances to export - export complete.");
+                //         break;
+                //     }
+                //     else if (config.Mode == ExportMode.Continuous)
+                //     {
+                //         logger.ExportJobOperationInfo(jobId, nameof(ExportJobOrchestrator), "No more instances to export currently - will check again later.");
+                //         await context.CreateTimer(ContinuousExportIdleDelay, default);
+                //         continue;
+                //     }
+                //     else
+                //     {
+                //         throw new InvalidOperationException("Invalid export mode.");
+                //     }
+                // }
+
                 // Call activity to list terminal instances with only necessary information
                 ListTerminalInstancesRequest listRequest = new ListTerminalInstancesRequest(
-                    CreatedTimeFrom: currentState.Config.Filter.CreatedTimeFrom,
-                    CreatedTimeTo: currentState.Config.Filter.CreatedTimeTo,
+                    CompletedTimeFrom: currentState.Config.Filter.CompletedTimeFrom,
+                    CompletedTimeTo: currentState.Config.Filter.CompletedTimeTo,
                     RuntimeStatus: currentState.Config.Filter.RuntimeStatus,
-                    ContinuationToken: currentState.Checkpoint?.ContinuationToken,
+                    LastInstanceKey: currentState.Checkpoint?.LastInstanceKey,
                     MaxInstancesPerBatch: currentState.Config.MaxInstancesPerBatch);
 
                 InstancePage pageResult = await context.CallActivityAsync<InstancePage>(
                     nameof(ListTerminalInstancesActivity),
                     listRequest);
 
-                // Handle empty page result - no instances found, treat as end of data
-                if (pageResult == null || pageResult.InstanceIds.Count == 0)
-                {
-                    if (config.Mode == ExportMode.Batch)
-                    {
-                        hasMore = false;
-                        continue;
-                    }
-                    await context.CreateTimer(TimeSpan.FromMinutes(5), default);
-                    continue;
-                }
-
                 List<string> instancesToExport = pageResult.InstanceIds;
                 long scannedCount = instancesToExport.Count;
+
+                if (scannedCount == 0)
+                {
+                    if (config.Mode == ExportMode.Continuous)
+                    {
+                        logger.ExportJobOperationInfo(jobId, nameof(ExportJobOrchestrator), "No more instances to export - export complete.");
+                        await context.CreateTimer(ContinuousExportIdleDelay, default);
+                        continue;
+                    }
+                    else if (config.Mode == ExportMode.Batch)
+                    {
+                        logger.ExportJobOperationInfo(jobId, nameof(ExportJobOrchestrator), "No more instances to export currently - will retry later.");
+                        break;
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException("Invalid export mode.");
+                    }
+                }
 
                 // Process batch with retry logic
                 BatchExportResult batchResult = await this.ProcessBatchWithRetryAsync(
@@ -117,7 +150,6 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
                 // Commit checkpoint based on batch result
                 if (batchResult.AllSucceeded)
                 {
-                    batchesProcessed++;
                     // All exports succeeded - commit with checkpoint to move cursor forward
                     await this.CommitCheckpointAsync(
                         context,
@@ -126,12 +158,6 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
                         exportedInstances: batchResult.ExportedCount,
                         checkpoint: pageResult.NextCheckpoint,
                         failures: null);
-
-                    if (batchesProcessed >= ContinueAsNewFrequency)
-                    {
-                        context.ContinueAsNew(input);
-                        return null;
-                    }
                 }
                 else
                 {
@@ -149,7 +175,8 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
                     string failureDetails;
                     if (batchResult.Failures != null && batchResult.Failures.Count > 0)
                     {
-                        failureDetails = string.Join("; ",
+                        failureDetails = string.Join(
+                            "; ",
                             batchResult.Failures
                                 .Take(10)
                                 .Select(f =>
@@ -159,7 +186,7 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
                     {
                         failureDetails = "No failure details available";
                     }
-                    
+
                     if (batchResult.Failures != null && batchResult.Failures.Count > 10)
                     {
                         failureDetails += $" ... and {batchResult.Failures.Count - 10} more failures";
@@ -173,15 +200,15 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
 
             await this.MarkAsCompletedAsync(context, input.JobEntityId);
 
-            this.logger.ExportJobOperationInfo(jobId, nameof(ExportJobOrchestrator), "Export orchestrator completed");
+            logger.ExportJobOperationInfo(jobId, nameof(ExportJobOrchestrator), "Export orchestrator completed");
             return null!;
         }
         catch (Exception ex)
         {
-            this.logger.ExportJobOperationError(jobId, nameof(ExportJobOrchestrator), "Export orchestrator failed", ex);
-            
+            logger.ExportJobOperationError(jobId, nameof(ExportJobOrchestrator), "Export orchestrator failed", ex);
+
             await this.MarkAsFailedAsync(context, input.JobEntityId, ex.Message);
-            
+
             throw;
         }
     }
@@ -192,13 +219,14 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
         List<string> instanceIds,
         ExportJobConfiguration config)
     {
+        ILogger logger = context.CreateReplaySafeLogger<ExportJobOrchestrator>();
         string jobId = jobEntityId.Key;
-        
+
         for (int attempt = 1; attempt <= MaxRetryAttempts; attempt++)
         {
-            this.logger.ExportJobOperationInfo(
+            logger.ExportJobOperationInfo(
                 jobId,
-                nameof(ProcessBatchWithRetryAsync),
+                nameof(this.ProcessBatchWithRetryAsync),
                 $"Processing batch of {instanceIds.Count} instances (attempt {attempt}/{MaxRetryAttempts})");
 
             // Export all instances in the batch
@@ -206,16 +234,16 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
 
             // Check if all exports succeeded
             List<ExportResult> failedResults = results.Where(r => !r.Success).ToList();
-            
+
             if (failedResults.Count == 0)
             {
                 // All exports succeeded
                 int exportedCount = results.Count;
-                this.logger.ExportJobOperationInfo(
+                logger.ExportJobOperationInfo(
                     jobId,
-                    nameof(ProcessBatchWithRetryAsync),
+                    nameof(this.ProcessBatchWithRetryAsync),
                     $"Batch export succeeded on attempt {attempt} - exported {exportedCount} instances");
-                
+
                 return new BatchExportResult
                 {
                     AllSucceeded = true,
@@ -225,9 +253,9 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
             }
 
             // Some exports failed
-            this.logger.ExportJobOperationWarning(
+            logger.ExportJobOperationWarning(
                 jobId,
-                nameof(ProcessBatchWithRetryAsync),
+                nameof(this.ProcessBatchWithRetryAsync),
                 $"Batch export failed on attempt {attempt} - {failedResults.Count} failures out of {instanceIds.Count} instances");
 
             // If this is the last attempt, return failures
@@ -240,7 +268,7 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
                     LastAttempt: DateTimeOffset.UtcNow)).ToList();
 
                 int exportedCount = results.Count(r => r.Success);
-                
+
                 return new BatchExportResult
                 {
                     AllSucceeded = false,
@@ -253,9 +281,9 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
             int backoffSeconds = Math.Min(MinBackoffSeconds * (int)Math.Pow(2, attempt - 1), MaxBackoffSeconds);
             TimeSpan backoffDelay = TimeSpan.FromSeconds(backoffSeconds);
 
-            this.logger.ExportJobOperationInfo(
+            logger.ExportJobOperationInfo(
                 jobId,
-                nameof(ProcessBatchWithRetryAsync),
+                nameof(this.ProcessBatchWithRetryAsync),
                 $"Retrying batch export after {backoffDelay.TotalMinutes:F1} minutes (attempt {attempt + 1}/{MaxRetryAttempts})");
 
             // Wait before retrying
@@ -265,7 +293,7 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
         // Should not reach here, but return empty result if we do
         return new BatchExportResult
         {
-            AllSucceeded = false,
+            AllSucceeded = true,
             ExportedCount = 0,
             Failures = new List<ExportFailure>(),
         };
@@ -289,10 +317,12 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
                 Format = config.Format,
             };
 
+            // Use retry policy for individual export activities (up to 3 attempts)
             exportTasks.Add(
                 context.CallActivityAsync<ExportResult>(
                     nameof(ExportInstanceHistoryActivity),
-                    exportRequest));
+                    exportRequest,
+                    new TaskOptions(ExportActivityRetryPolicy)));
 
             // Limit parallel export activities
             if (exportTasks.Count >= config.MaxParallelExports)
@@ -359,7 +389,9 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
     sealed class BatchExportResult
     {
         public bool AllSucceeded { get; set; }
+
         public int ExportedCount { get; set; }
+
         public List<ExportFailure>? Failures { get; set; }
     }
 }

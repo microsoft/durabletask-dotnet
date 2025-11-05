@@ -475,6 +475,19 @@ message QueryInstancesResponse {
     google.protobuf.StringValue continuationToken = 2;
 }
 
+message ListInstanceIdsRequest {
+    repeated OrchestrationStatus runtimeStatus = 1;
+    google.protobuf.Timestamp completedTimeFrom = 2;
+    google.protobuf.Timestamp completedTimeTo = 3;
+    int32 pageSize = 4;
+    google.protobuf.StringValue lastInstanceKey = 5;
+}
+
+message ListInstanceIdsResponse {
+    repeated string instanceIds = 1;
+    google.protobuf.StringValue lastInstanceKey = 2;
+}
+
 // Removed ListTerminalInstances in favor of using QueryInstances
 
 message PurgeInstancesRequest {
@@ -741,6 +754,7 @@ service TaskHubSidecarService {
     // rpc DeleteInstance(DeleteInstanceRequest) returns (DeleteInstanceResponse);
 
     rpc QueryInstances(QueryInstancesRequest) returns (QueryInstancesResponse);
+    rpc ListInstanceIds(ListInstanceIdsRequest) returns (ListInstanceIdsResponse);
     rpc PurgeInstances(PurgeInstancesRequest) returns (PurgeInstancesResponse);
 
     rpc GetWorkItems(GetWorkItemsRequest) returns (stream WorkItem);

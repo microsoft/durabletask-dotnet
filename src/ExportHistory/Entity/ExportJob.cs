@@ -43,8 +43,8 @@ class ExportJob(ILogger<ExportJob> logger) : TaskEntity<ExportJobState>
             ExportJobConfiguration config = new ExportJobConfiguration(
                 Mode: creationOptions.Mode,
                 Filter: new ExportFilter(
-                    CreatedTimeFrom: creationOptions.CreatedTimeFrom,
-                    CreatedTimeTo: creationOptions.CreatedTimeTo,
+                    CompletedTimeFrom: creationOptions.CompletedTimeFrom,
+                    CompletedTimeTo: creationOptions.CompletedTimeTo,
                     RuntimeStatus: creationOptions.RuntimeStatus),
                 Destination: creationOptions.Destination,
                 Format: creationOptions.Format,
@@ -71,6 +71,16 @@ class ExportJob(ILogger<ExportJob> logger) : TaskEntity<ExportJobState>
                 ex);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Gets the current state of the export job.
+    /// </summary>
+    /// <param name="context">The entity context.</param>
+    /// <returns>The current export job state.</returns>
+    public ExportJobState Get(TaskEntityContext context)
+    {
+        return this.State;
     }
 
     /// <summary>
@@ -250,6 +260,34 @@ class ExportJob(ILogger<ExportJob> logger) : TaskEntity<ExportJobState>
                 context.Id.Key,
                 nameof(this.MarkAsFailed),
                 "Failed to mark export job as failed",
+                ex);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Deletes the export job entity.
+    /// </summary>
+    /// <param name="context">The entity context.</param>
+    public void Delete(TaskEntityContext context)
+    {
+        try
+        {
+            logger.ExportJobOperationInfo(
+                context.Id.Key,
+                nameof(this.Delete),
+                "Deleting export job entity");
+
+            // Delete the entity by setting state to null
+            // This is the standard way to delete a durable entity
+            this.State = null!;
+        }
+        catch (Exception ex)
+        {
+            logger.ExportJobOperationError(
+                context.Id.Key,
+                nameof(this.Delete),
+                "Failed to delete export job entity",
                 ex);
             throw;
         }

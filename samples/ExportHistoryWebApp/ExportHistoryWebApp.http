@@ -1,6 +1,6 @@
 ### Variables
-@baseUrl = http://localhost:5009
-@jobId = export-job-123
+@baseUrl = http://localhost:5010
+@jobId = export-job-12345
 
 ### Create a new batch export job
 # @name createBatchExportJob
@@ -8,14 +8,14 @@ POST {{baseUrl}}/export-jobs
 Content-Type: application/json
 
 {
-    "jobId": "{{jobId}}",
-    "mode": "Batch",
-    "createdTimeFrom": "2024-01-01T00:00:00Z",
-    "createdTimeTo": "2024-12-31T23:59:59Z",
-    "containerName": "export-history",
-    "prefix": "exports/",
-    "maxInstancesPerBatch": 100,
-    "runtimeStatus": ["Completed", "Failed"]
+  "jobId": "{{jobId}}",
+  "mode": "Batch",
+  "completedTimeFrom": "2025-10-01T00:00:00Z",
+  "completedTimeTo": "2025-11-06T23:59:59Z",
+  "container": "export-history",
+  # "prefix": "exports/",
+  "maxInstancesPerBatch": 1,
+  "runtimeStatus": []
 }
 
 ### Create a new continuous export job
@@ -26,23 +26,21 @@ Content-Type: application/json
 {
     "jobId": "export-job-continuous-123",
     "mode": "Continuous",
-    "createdTimeFrom": "2024-01-01T00:00:00Z",
-    "createdTimeTo": null,
-    "containerName": "export-history",
-    "prefix": "continuous-exports/",
-    "maxInstancesPerBatch": 50
+    "container": "export-history",
+    # "prefix": "continuous-exports/",
+    "maxInstancesPerBatch": 1000
+    # "runtimeStatus": ["asdasd"]
 }
 
 ### Create an export job with default storage (no container specified)
 # @name createExportJobWithDefaultStorage
 POST {{baseUrl}}/export-jobs
 Content-Type: application/json
-
 {
     "jobId": "export-job-default-storage",
     "mode": "Batch",
-    "createdTimeFrom": "2024-01-01T00:00:00Z",
-    "createdTimeTo": "2024-12-31T23:59:59Z",
+    "completedTimeFrom": "2024-01-01T00:00:00Z",
+    "completedTimeTo": "2024-12-31T23:59:59Z",
     "maxInstancesPerBatch": 100
 }
 
@@ -55,27 +53,30 @@ GET {{baseUrl}}/export-jobs/{{jobId}}
 GET {{baseUrl}}/export-jobs/list
 
 ### List export jobs with filters
-# Filter by status
+### Filter by status
 GET {{baseUrl}}/export-jobs/list?status=Active
 
-# Filter by job ID prefix
+### Filter by job ID prefix
 GET {{baseUrl}}/export-jobs/list?jobIdPrefix=export-job-
 
-# Filter by creation time range
+### Filter by creation time range
 GET {{baseUrl}}/export-jobs/list?createdFrom=2024-01-01T00:00:00Z&createdTo=2024-12-31T23:59:59Z
 
-# Combined filters
+### Combined filters
 GET {{baseUrl}}/export-jobs/list?status=Completed&jobIdPrefix=export-job-&pageSize=50
 
 ### Delete an export job
-DELETE {{baseUrl}}/export-jobs/{{jobId}}
+# DELETE {{baseUrl}}/export-jobs/{{jobId}}
+
+# Delete a continuous export job
+DELETE {{baseUrl}}/export-jobs/export-job-continuous-123jk
 
 ### Tips:
 # - Replace the baseUrl variable if your application runs on a different port
 # - The jobId variable can be changed to test different export job instances
 # - Export modes:
-#   - "Batch": Exports all instances within a time range (requires createdTimeTo)
-#   - "Continuous": Continuously exports instances from a start time (createdTimeTo must be null)
+#   - "Batch": Exports all instances within a time range (requires completedTimeTo)
+#   - "Continuous": Continuously exports instances from a start time (completedTimeTo must be null)
 # - Runtime status filters (valid values):
 #   - "Completed": Exports only completed orchestrations
 #   - "Failed": Exports only failed orchestrations

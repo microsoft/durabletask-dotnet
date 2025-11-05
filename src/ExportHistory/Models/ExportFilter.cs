@@ -7,6 +7,6 @@ using Microsoft.DurableTask.Entities;
 namespace Microsoft.DurableTask.ExportHistory;
 
 public record ExportFilter(
-    DateTimeOffset CreatedTimeFrom,
-    DateTimeOffset? CreatedTimeTo = null,
+    DateTimeOffset CompletedTimeFrom,
+    DateTimeOffset? CompletedTimeTo = null,
     IEnumerable<OrchestrationRuntimeStatus>? RuntimeStatus = null);

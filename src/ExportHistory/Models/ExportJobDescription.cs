@@ -39,4 +39,29 @@ public record ExportJobDescription
     /// Gets or sets the instance ID of the running export orchestrator, if any.
     /// </summary>
     public string? OrchestratorInstanceId { get; init; }
+
+    /// <summary>
+    /// Gets or sets the total number of instances scanned.
+    /// </summary>
+    public long ScannedInstances { get; init; }
+
+    /// <summary>
+    /// Gets or sets the total number of instances exported.
+    /// </summary>
+    public long ExportedInstances { get; init; }
+
+    /// <summary>
+    /// Gets or sets the last error message, if any.
+    /// </summary>
+    public string? LastError { get; init; }
+
+    /// <summary>
+    /// Gets or sets the checkpoint for resuming the export.
+    /// </summary>
+    public ExportCheckpoint? Checkpoint { get; init; }
+
+    /// <summary>
+    /// Gets or sets the time of the last checkpoint.
+    /// </summary>
+    public DateTimeOffset? LastCheckpointTime { get; init; }
 }

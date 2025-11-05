@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.ExportHistory;
 using ExportHistoryWebApp.Models;
@@ -48,9 +49,9 @@ public class ExportJobController : ControllerBase
         try
         {
             ExportDestination? destination = null;
-            if (!string.IsNullOrEmpty(request.ContainerName))
+            if (!string.IsNullOrEmpty(request.Container))
             {
-                destination = new ExportDestination(request.ContainerName)
+                destination = new ExportDestination(request.Container)
                 {
                     Prefix = request.Prefix,
                 };
@@ -58,8 +59,8 @@ public class ExportJobController : ControllerBase
 
             ExportJobCreationOptions creationOptions = new ExportJobCreationOptions(
                 mode: request.Mode,
-                createdTimeFrom: request.CreatedTimeFrom,
-                createdTimeTo: request.CreatedTimeTo,
+                completedTimeFrom: request.CompletedTimeFrom,
+                completedTimeTo: request.CompletedTimeTo,
                 destination: destination,
                 jobId: request.JobId,
                 format: request.Format,
@@ -128,6 +129,7 @@ public class ExportJobController : ControllerBase
         [FromQuery] int? pageSize = null,
         [FromQuery] string? continuationToken = null)
     {
+        this.logger.LogInformation("GET list endpoint called with method: {Method}", this.HttpContext.Request.Method);
         try
         {
             ExportJobQuery? query = null;
@@ -177,14 +179,17 @@ public class ExportJobController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteExportJob(string id)
     {
+        this.logger.LogInformation("DELETE endpoint called for job ID: {JobId}", id);
         try
         {
             ExportHistoryJobClient jobClient = this.exportHistoryClient.GetJobClient(id);
             await jobClient.DeleteAsync();
+            this.logger.LogInformation("Successfully deleted export job {JobId}", id);
             return this.NoContent();
         }
         catch (ExportJobNotFoundException)
         {
+            this.logger.LogWarning("Export job {JobId} not found for deletion", id);
             return this.NotFound();
         }
         catch (Exception ex)

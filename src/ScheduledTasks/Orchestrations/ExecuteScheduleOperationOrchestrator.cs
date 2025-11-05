@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Entities;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
-// TODO: logging
 // TODO: May need separate orchs, result is obj now
 
 /// <summary>
@@ -18,7 +18,23 @@ public class ExecuteScheduleOperationOrchestrator : TaskOrchestrator<ScheduleOpe
     /// <inheritdoc/>
     public override async Task<object> RunAsync(TaskOrchestrationContext context, ScheduleOperationRequest input)
     {
-        return await context.Entities.CallEntityAsync<object>(input.EntityId, input.OperationName, input.Input);
+        ILogger logger = context.CreateReplaySafeLogger<ExecuteScheduleOperationOrchestrator>();
+
+        try
+        {
+            return await context.Entities.CallEntityAsync<object>(input.EntityId, input.OperationName, input.Input);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "Failed to execute schedule operation '{OperationName}' on entity '{EntityId}': {ErrorMessage}",
+                input.OperationName,
+                input.EntityId,
+                ex.Message);
+
+            return null!;
+        }
     }
 }
 

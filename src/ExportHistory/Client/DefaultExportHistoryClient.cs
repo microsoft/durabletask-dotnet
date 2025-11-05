@@ -131,6 +131,11 @@ public sealed class DefaultExportHistoryClient(
                             LastModifiedAt = state.LastModifiedAt,
                             Config = config,
                             OrchestratorInstanceId = state.OrchestratorInstanceId,
+                            ScannedInstances = state.ScannedInstances,
+                            ExportedInstances = state.ExportedInstances,
+                            LastError = state.LastError,
+                            Checkpoint = state.Checkpoint,
+                            LastCheckpointTime = state.LastCheckpointTime,
                         });
                     }
 

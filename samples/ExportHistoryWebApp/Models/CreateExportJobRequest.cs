@@ -22,19 +22,19 @@ public class CreateExportJobRequest
     public ExportMode Mode { get; set; }
 
     /// <summary>
-    /// Gets or sets the start time for the export (inclusive). Required.
+    /// Gets or sets the start time for the export based on completion time (inclusive). Required.
     /// </summary>
-    public DateTimeOffset CreatedTimeFrom { get; set; }
+    public DateTimeOffset CompletedTimeFrom { get; set; }
 
     /// <summary>
-    /// Gets or sets the end time for the export (inclusive). Required for Batch mode, null for Continuous mode.
+    /// Gets or sets the end time for the export based on completion time (inclusive). Required for Batch mode, null for Continuous mode.
     /// </summary>
-    public DateTimeOffset? CreatedTimeTo { get; set; }
+    public DateTimeOffset? CompletedTimeTo { get; set; }
 
     /// <summary>
     /// Gets or sets the blob container name where exported data will be stored. Optional if default storage is configured.
     /// </summary>
-    public string? ContainerName { get; set; }
+    public string? Container { get; set; }
 
     /// <summary>
     /// Gets or sets an optional prefix for blob paths.

@@ -119,6 +119,7 @@ public class ExportInstanceHistoryActivity : TaskActivity<ExportRequest, ExportR
                 blobPath,
                 jsonContent,
                 input.Format,
+                instanceId,
                 CancellationToken.None);
 
             this.logger.LogInformation(
@@ -179,22 +180,26 @@ public class ExportInstanceHistoryActivity : TaskActivity<ExportRequest, ExportR
         ExportFormat format)
     {
         string formatKind = format.Kind.ToLowerInvariant();
-        var serializerOptions = new JsonSerializerOptions
+        JsonSerializerOptions serializerOptions = new JsonSerializerOptions
         {
             WriteIndented = false,
-            ReferenceHandler = ReferenceHandler.IgnoreCycles,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            IncludeFields = true, // Include fields, not just properties (matches JsonDataConverter pattern)
+            Converters = { new JsonStringEnumConverter() }, // Serialize enums as strings
         };
 
         if (formatKind == "jsonl")
         {
             // JSONL format: one history event per line
+            // Serialize as object to preserve runtime type (polymorphic serialization)
             StringBuilder jsonlBuilder = new();
 
             foreach (HistoryEvent historyEvent in historyEvents)
             {
-                jsonlBuilder.AppendLine(JsonSerializer.Serialize(historyEvent, serializerOptions));
+                // Serialize as object to preserve the actual derived type
+                string json = JsonSerializer.Serialize((object)historyEvent, historyEvent.GetType(), serializerOptions);
+                jsonlBuilder.AppendLine(json);
             }
 
             return jsonlBuilder.ToString();
@@ -202,7 +207,9 @@ public class ExportInstanceHistoryActivity : TaskActivity<ExportRequest, ExportR
         else
         {
             // JSON format: array of history events
-            return JsonSerializer.Serialize(historyEvents, serializerOptions);
+            // Convert to object array to preserve runtime types
+            object[] eventsAsObjects = historyEvents.Cast<object>().ToArray();
+            return JsonSerializer.Serialize(eventsAsObjects, serializerOptions);
         }
     }
 
@@ -211,6 +218,7 @@ public class ExportInstanceHistoryActivity : TaskActivity<ExportRequest, ExportR
         string blobPath,
         string content,
         ExportFormat format,
+        string instanceId,
         CancellationToken cancellationToken)
     {
         // Create blob service client from connection string
@@ -228,7 +236,7 @@ public class ExportInstanceHistoryActivity : TaskActivity<ExportRequest, ExportR
         // Upload content
         byte[] contentBytes = Encoding.UTF8.GetBytes(content);
 
-        if (format.Kind.ToLowerInvariant() == "jsonl")
+        if (format.Kind.Equals("jsonl", StringComparison.InvariantCultureIgnoreCase))
         {
             // Compress with gzip
             using MemoryStream compressedStream = new();
@@ -247,6 +255,10 @@ public class ExportInstanceHistoryActivity : TaskActivity<ExportRequest, ExportR
                     ContentType = "application/jsonl+gzip",
                     ContentEncoding = "gzip",
                 },
+                Metadata = new Dictionary<string, string>
+                {
+                    { "instanceId", instanceId },
+                },
             };
 
             await blobClient.UploadAsync(compressedStream, uploadOptions, cancellationToken);
@@ -259,6 +271,10 @@ public class ExportInstanceHistoryActivity : TaskActivity<ExportRequest, ExportR
                 HttpHeaders = new BlobHttpHeaders
                 {
                     ContentType = "application/json",
+                },
+                Metadata = new Dictionary<string, string>
+                {
+                    { "instanceId", instanceId },
                 },
             };
 

@@ -6,4 +6,4 @@ namespace Microsoft.DurableTask.ExportHistory;
 /// <summary>
 /// Checkpoint information used to resume export.
 /// </summary>
-public sealed record ExportCheckpoint(string? ContinuationToken = null);
+public sealed record ExportCheckpoint(string? LastInstanceKey = null);

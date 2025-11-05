@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Grpc.Core;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Entities;
@@ -29,16 +30,31 @@ public sealed class DefaultExportHistoryJobClient(
         {
             Check.NotNull(options, nameof(options));
 
+            // Determine default prefix based on mode if not already set
+            string? defaultPrefix = $"{options.Mode.ToString().ToLower()}/";
+
             // If destination is not provided, construct it from storage options
             ExportJobCreationOptions optionsWithDestination = options;
             if (options.Destination == null)
             {
+                // Use storage options prefix if provided, otherwise use mode-based default
+                string? prefix = this.storageOptions.Prefix ?? defaultPrefix;
+
                 ExportDestination destination = new ExportDestination(this.storageOptions.ContainerName)
                 {
-                    Prefix = this.storageOptions.Prefix,
+                    Prefix = prefix,
                 };
 
                 optionsWithDestination = options with { Destination = destination };
+            }
+            else if (string.IsNullOrEmpty(options.Destination.Prefix))
+            {
+                // Destination provided but no prefix set - use mode-based default
+                ExportDestination destinationWithPrefix = new ExportDestination(options.Destination.Container)
+                {
+                    Prefix = defaultPrefix,
+                };
+                optionsWithDestination = options with { Destination = destinationWithPrefix };
             }
 
             ExportJobOperationRequest request = 
@@ -138,6 +154,11 @@ public sealed class DefaultExportHistoryJobClient(
                 LastModifiedAt = state.LastModifiedAt,
                 Config = config,
                 OrchestratorInstanceId = state.OrchestratorInstanceId,
+                ScannedInstances = state.ScannedInstances,
+                ExportedInstances = state.ExportedInstances,
+                LastError = state.LastError,
+                Checkpoint = state.Checkpoint,
+                LastCheckpointTime = state.LastCheckpointTime,
             };
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -173,6 +194,13 @@ public sealed class DefaultExportHistoryJobClient(
 
             // Purge the orchestration instance after it's terminated
             await this.durableTaskClient.PurgeInstanceAsync(orchestrationInstanceId, cancellation: cancellation);
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.NotFound)
+        {
+            // Orchestration instance doesn't exist - this is expected if it was already deleted or never existed
+            this.logger.LogInformation(
+                "Orchestration instance '{OrchestrationInstanceId}' is already purged",
+                orchestrationInstanceId);
         }
         catch (Exception ex)
         {

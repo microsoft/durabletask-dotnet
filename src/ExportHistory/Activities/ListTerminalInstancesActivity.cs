@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.ExportHistory;
@@ -11,68 +10,49 @@ namespace Microsoft.DurableTask.ExportHistory;
 /// Input for listing terminal instances activity.
 /// </summary>
 public sealed record ListTerminalInstancesRequest(
-    DateTimeOffset CreatedTimeFrom,
-    DateTimeOffset? CreatedTimeTo,
+    DateTimeOffset CompletedTimeFrom,
+    DateTimeOffset? CompletedTimeTo,
     IEnumerable<OrchestrationRuntimeStatus>? RuntimeStatus,
-    string? ContinuationToken,
+    string? LastInstanceKey,
     int MaxInstancesPerBatch = 100);
 
 /// <summary>
 /// Activity that lists terminal orchestration instances using the configured filters and checkpoint.
 /// </summary>
+/// <remarks>
+/// Initializes a new instance of the <see cref="ListTerminalInstancesActivity"/> class.
+/// </remarks>
 [DurableTask]
-public class ListTerminalInstancesActivity : TaskActivity<ListTerminalInstancesRequest, InstancePage>
+public class ListTerminalInstancesActivity(
+    IDurableTaskClientProvider clientProvider,
+    ILogger<ListTerminalInstancesActivity> logger) : TaskActivity<ListTerminalInstancesRequest, InstancePage>
 {
-    readonly IDurableTaskClientProvider clientProvider;
-    readonly ILogger<ListTerminalInstancesActivity> logger;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ListTerminalInstancesActivity"/> class.
-    /// </summary>
-    public ListTerminalInstancesActivity(
-        IDurableTaskClientProvider clientProvider,
-        ILogger<ListTerminalInstancesActivity> logger)
-    {
-        this.clientProvider = Check.NotNull(clientProvider, nameof(clientProvider));
-        this.logger = Check.NotNull(logger, nameof(logger));
-    }
+    readonly IDurableTaskClientProvider clientProvider = Check.NotNull(clientProvider, nameof(clientProvider));
+    readonly ILogger<ListTerminalInstancesActivity> logger = Check.NotNull(logger, nameof(logger));
 
     /// <inheritdoc/>
-    public override async Task<InstancePage> RunAsync(TaskActivityContext context, ListTerminalInstancesRequest request)
+    public override async Task<InstancePage> RunAsync(TaskActivityContext context, ListTerminalInstancesRequest input)
     {
-        Check.NotNull(request, nameof(request));
+        Check.NotNull(input, nameof(input));
 
         try
         {
             DurableTaskClient client = this.clientProvider.GetClient();
 
-            // Use QueryInstances to fetch terminal instances and project to IDs
-            OrchestrationQuery query = new(
-                CreatedFrom: request.CreatedTimeFrom,
-                CreatedTo: request.CreatedTimeTo,
-                Statuses: request.RuntimeStatus,
-                PageSize: request.MaxInstancesPerBatch,
-                FetchInputsAndOutputs: false,
-                ContinuationToken: request.ContinuationToken);
-
-            List<string> instanceIds = new();
-            string? nextContinuationToken = null;
-
-            await foreach (Page<OrchestrationMetadata> page in client
-                .GetAllInstancesAsync(query)
-                .AsPages()
-                .WithCancellation(CancellationToken.None))
-            {
-                instanceIds.AddRange(page.Values.Select(v => v.InstanceId));
-                nextContinuationToken = page.ContinuationToken;
-                break;
-            }
+            // Try to use ListInstanceIds endpoint first (available in gRPC client)
+            Page<string> page = await client.ListInstanceIdsAsync(
+                    runtimeStatus: input.RuntimeStatus,
+                    completedTimeFrom: input.CompletedTimeFrom,
+                    completedTimeTo: input.CompletedTimeTo,
+                    pageSize: input.MaxInstancesPerBatch,
+                    lastInstanceKey: input.LastInstanceKey,
+                    cancellation: CancellationToken.None);
 
             this.logger.LogInformation(
-                "ListTerminalInstancesActivity returned {Count} instance IDs",
-                instanceIds.Count);
+                "ListTerminalInstancesActivity returned {Count} instance IDs using ListInstanceIds",
+                page.Values.Count);
 
-            return new InstancePage(instanceIds, new ExportCheckpoint(nextContinuationToken));
+            return new InstancePage(page.Values.ToList(), new ExportCheckpoint(page.ContinuationToken));
         }
         catch (Exception ex)
         {
@@ -87,8 +67,24 @@ public class ListTerminalInstancesActivity : TaskActivity<ListTerminalInstancesR
 /// </summary>
 public sealed class InstancePage
 {
-    public List<string> InstanceIds { get; set; } = new();
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InstancePage"/> class.
+    /// </summary>
+    /// <param name="instanceIds">The list of instance IDs.</param>
+    /// <param name="nextCheckpoint">The next checkpoint for pagination.</param>
+    public InstancePage(List<string> instanceIds, ExportCheckpoint nextCheckpoint)
+    {
+        this.InstanceIds = instanceIds;
+        this.NextCheckpoint = nextCheckpoint;
+    }
+
+    /// <summary>
+    /// Gets or sets the list of instance IDs.
+    /// </summary>
+    public List<string> InstanceIds { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the next checkpoint for pagination.
+    /// </summary>
     public ExportCheckpoint NextCheckpoint { get; set; }
 }
-
-

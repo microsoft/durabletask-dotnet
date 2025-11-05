@@ -338,6 +338,27 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <returns>An async pageable of the query results.</returns>
     public abstract AsyncPageable<OrchestrationMetadata> GetAllInstancesAsync(OrchestrationQuery? filter = null);
 
+    /// <summary>
+    /// Lists orchestration instance IDs filtered by completed time.
+    /// </summary>
+    /// <param name="runtimeStatus">The runtime statuses to filter by.</param>
+    /// <param name="completedTimeFrom">The start time for completed time filter (inclusive).</param>
+    /// <param name="completedTimeTo">The end time for completed time filter (inclusive).</param>
+    /// <param name="pageSize">The page size for pagination.</param>
+    /// <param name="lastInstanceKey">The last fetched instance key.</param>
+    /// <param name="cancellation">The cancellation token.</param>
+    /// <returns>A page of instance IDs with continuation token.</returns>
+    public virtual Task<Page<string>> ListInstanceIdsAsync(
+        IEnumerable<OrchestrationRuntimeStatus>? runtimeStatus = null,
+        DateTimeOffset? completedTimeFrom = null,
+        DateTimeOffset? completedTimeTo = null,
+        int pageSize = OrchestrationQuery.DefaultPageSize,
+        string? lastInstanceKey = null,
+        CancellationToken cancellation = default)
+    {
+        throw new NotSupportedException($"{this.GetType()} does not support listing orchestration instance IDs by completed time.");
+    }
+
     /// <inheritdoc cref="PurgeInstanceAsync(string, PurgeInstanceOptions, CancellationToken)"/>
     public virtual Task<PurgeResult> PurgeInstanceAsync(string instanceId, CancellationToken cancellation)
         => this.PurgeInstanceAsync(instanceId, null, cancellation);

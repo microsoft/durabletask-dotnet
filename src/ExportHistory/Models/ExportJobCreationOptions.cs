@@ -39,20 +39,40 @@ public record ExportJobCreationOptions
         if (mode == ExportMode.Batch && !createdTimeTo.HasValue)
         {
             throw new ArgumentException(
-                "CreatedTimeTo is required for Batch export mode. For Continuous mode, CreatedTimeTo must be null.",
+                "CreatedTimeTo is required for Batch export mode.",
+                nameof(createdTimeTo));
+        }
+
+        if (mode == ExportMode.Batch && createdTimeTo.HasValue && createdTimeTo.Value <= createdTimeFrom)
+        {
+            throw new ArgumentException(
+                $"CreatedTimeTo({createdTimeTo.Value}) must be greater than CreatedTimeFrom({createdTimeFrom}) for Batch export mode.",
                 nameof(createdTimeTo));
         }
 
         if (mode == ExportMode.Continuous && createdTimeTo.HasValue)
         {
             throw new ArgumentException(
-                "CreatedTimeTo must be null for Continuous export mode. For Batch mode, CreatedTimeTo is required.",
+                "CreatedTimeTo must be null for Continuous export mode.",
                 nameof(createdTimeTo));
         }
 
+        // Validate maxInstancesPerBatch range if provided (must be 1..999)
+        if (maxInstancesPerBatch.HasValue && (maxInstancesPerBatch.Value <= 0 || maxInstancesPerBatch.Value >= 1001))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maxInstancesPerBatch),
+                maxInstancesPerBatch,
+                "MaxInstancesPerBatch must be between 1 and 1000.");
+        }
+
         // Validate terminal status-only filter here if provided
-        if (runtimeStatus?.Any() == true &&
-            runtimeStatus.Any(s => s is not (OrchestrationRuntimeStatus.Completed or OrchestrationRuntimeStatus.Failed or OrchestrationRuntimeStatus.Terminated or OrchestrationRuntimeStatus.ContinuedAsNew)))
+        if (runtimeStatus?.Any() == true
+            && runtimeStatus.Any(
+                s => s is not (OrchestrationRuntimeStatus.Completed
+                               or OrchestrationRuntimeStatus.Failed
+                               or OrchestrationRuntimeStatus.Terminated
+                               or OrchestrationRuntimeStatus.ContinuedAsNew)))
         {
             throw new ArgumentException(
                 "Export supports terminal orchestration statuses only. Valid statuses are: Completed, Failed, Terminated, and ContinuedAsNew.",
@@ -63,10 +83,17 @@ public record ExportJobCreationOptions
         this.CreatedTimeFrom = createdTimeFrom;
         this.CreatedTimeTo = createdTimeTo;
         this.Destination = destination;
-        this.Format = format ?? new ExportFormat();
-        this.RuntimeStatus = runtimeStatus;
+        this.Format = format ?? ExportFormat.Default;
+        this.RuntimeStatus = (runtimeStatus is { Count: > 0 })
+            ? runtimeStatus
+            : new List<OrchestrationRuntimeStatus>
+            {
+                OrchestrationRuntimeStatus.Completed,
+                OrchestrationRuntimeStatus.Failed,
+                OrchestrationRuntimeStatus.Terminated,
+                OrchestrationRuntimeStatus.ContinuedAsNew
+            };
         this.MaxInstancesPerBatch = maxInstancesPerBatch ?? 100;
-    }
 
     /// <summary>
     /// Gets the unique identifier for the export job.

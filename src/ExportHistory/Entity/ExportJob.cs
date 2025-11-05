@@ -122,6 +122,9 @@ class ExportJob(ILogger<ExportJob> logger) : TaskEntity<ExportJobState>
                 new TaskName(nameof(ExportJobOrchestrator)),
                 new ExportJobRunRequest(context.Id),
                 startOrchestrationOptions);
+
+            this.State.OrchestratorInstanceId = instanceId;
+            this.State.LastModifiedAt = DateTimeOffset.UtcNow;
         }
         catch (Exception ex)
         {
@@ -163,18 +166,8 @@ class ExportJob(ILogger<ExportJob> logger) : TaskEntity<ExportJobState>
             this.State.Checkpoint = request.Checkpoint;
         }
 
-        // Record failures if any
-        if (request.Failures != null && request.Failures.Count > 0)
-        {
-            foreach (ExportFailure failure in request.Failures)
-            {
-                this.State.FailedInstances[failure.InstanceId] = failure;
-            }
-        }
-
         // Update checkpoint time and last modified time
-        this.State.LastCheckpointTime = DateTimeOffset.UtcNow;
-        this.State.LastModifiedAt = DateTimeOffset.UtcNow;
+        this.State.LastCheckpointTime = this.State.LastModifiedAt = DateTimeOffset.UtcNow;
 
         // If there are failures and checkpoint is null (batch failed), mark job as failed
         if (request.Checkpoint is null && request.Failures != null && request.Failures.Count > 0)

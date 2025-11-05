@@ -22,6 +22,7 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
     const int MaxRetryAttempts = 3;
     const int MinBackoffSeconds = 60; // 1 minute
     const int MaxBackoffSeconds = 300; // 5 minutes
+    const int ContinueAsNewFrequency = 50;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ExportJobOrchestrator"/> class.
@@ -60,7 +61,10 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
             ExportJobConfiguration config = jobState.Config;
 
             // Process instances in batches using explicit loop state
+            
             bool hasMore = true;
+            int batchesProcessed = 0;
+
             while (hasMore)
             {
                 // Check if job is still active (entity might have been deleted or failed)
@@ -73,8 +77,7 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
                     currentState.Status != ExportJobStatus.Active)
                 {
                     this.logger.ExportJobOperationWarning(jobId, nameof(ExportJobOrchestrator), "Job is no longer active - orchestrator cancelled");
-                    hasMore = false;
-                    continue;
+                    return null;
                 }
 
                 // Call activity to list terminal instances with only necessary information
@@ -114,6 +117,7 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
                 // Commit checkpoint based on batch result
                 if (batchResult.AllSucceeded)
                 {
+                    batchesProcessed++;
                     // All exports succeeded - commit with checkpoint to move cursor forward
                     await this.CommitCheckpointAsync(
                         context,
@@ -122,6 +126,12 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
                         exportedInstances: batchResult.ExportedCount,
                         checkpoint: pageResult.NextCheckpoint,
                         failures: null);
+
+                    if (batchesProcessed >= ContinueAsNewFrequency)
+                    {
+                        context.ContinueAsNew(input);
+                        return null;
+                    }
                 }
                 else
                 {
@@ -129,14 +139,35 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
                     await this.CommitCheckpointAsync(
                         context,
                         input.JobEntityId,
-                        scannedInstances: scannedCount,
-                        exportedInstances: batchResult.ExportedCount,
+                        scannedInstances: 0,
+                        exportedInstances: 0,
                         checkpoint: null,
                         failures: batchResult.Failures);
 
-                    // Job is now marked as failed in the entity, stop processing
-                    hasMore = false;
-                    continue;
+                    // Throw detailed exception with failure information
+                    int failureCount = batchResult.Failures?.Count ?? 0;
+                    string failureDetails;
+                    if (batchResult.Failures != null && batchResult.Failures.Count > 0)
+                    {
+                        failureDetails = string.Join("; ",
+                            batchResult.Failures
+                                .Take(10)
+                                .Select(f =>
+                                    $"InstanceId: {f.InstanceId}, Reason: {f.Reason}"));
+                    }
+                    else
+                    {
+                        failureDetails = "No failure details available";
+                    }
+                    
+                    if (batchResult.Failures != null && batchResult.Failures.Count > 10)
+                    {
+                        failureDetails += $" ... and {batchResult.Failures.Count - 10} more failures";
+                    }
+
+                    throw new InvalidOperationException(
+                        $"Export job '{jobId}' batch export failed after {MaxRetryAttempts} retry attempts. " +
+                        $"Failure details: {failureDetails}");
                 }
             }
 

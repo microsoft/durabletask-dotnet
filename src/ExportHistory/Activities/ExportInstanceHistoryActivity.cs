@@ -5,8 +5,10 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using DurableTask.Core.History;
 using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -52,6 +54,7 @@ public class ExportInstanceHistoryActivity : TaskActivity<ExportRequest, ExportR
 
             // Get the client and instance metadata with inputs and outputs
             DurableTaskClient client = this.clientProvider.GetClient();
+
             OrchestrationMetadata? metadata = await client.GetInstanceAsync(
                 instanceId,
                 getInputsAndOutputs: true,
@@ -83,6 +86,22 @@ public class ExportInstanceHistoryActivity : TaskActivity<ExportRequest, ExportR
                 };
             }
 
+            // Stream all history events
+            this.logger.LogInformation("Streaming history events for instance {InstanceId}", instanceId);
+            List<HistoryEvent> historyEvents = new();
+            await foreach (HistoryEvent historyEvent in client.StreamInstanceHistoryAsync(
+                instanceId,
+                executionId: null, // Use latest execution
+                cancellation: CancellationToken.None))
+            {
+                historyEvents.Add(historyEvent);
+            }
+
+            this.logger.LogInformation(
+                "Retrieved {EventCount} history events for instance {InstanceId}",
+                historyEvents.Count,
+                instanceId);
+
             // Create blob filename from hash of completed timestamp and instance ID
             string blobFileName = GenerateBlobFileName(completedTimestamp, instanceId, input.Format);
 
@@ -91,11 +110,11 @@ public class ExportInstanceHistoryActivity : TaskActivity<ExportRequest, ExportR
                 ? blobFileName
                 : $"{input.Destination.Prefix.TrimEnd('/')}/{blobFileName}";
 
-            // Serialize instance metadata to JSON
-            string jsonContent = SerializeInstanceMetadata(metadata);
+            // Serialize history events to JSON
+            string jsonContent = SerializeInstanceData(historyEvents, input.Format);
 
             // Upload to blob storage
-            await UploadToBlobStorageAsync(
+            await this.UploadToBlobStorageAsync(
                 input.Destination.Container,
                 blobPath,
                 jsonContent,
@@ -146,7 +165,7 @@ public class ExportInstanceHistoryActivity : TaskActivity<ExportRequest, ExportR
     static string GetFileExtension(ExportFormat format)
     {
         string formatKind = format.Kind.ToLowerInvariant();
-        
+
         return formatKind switch
         {
             "jsonl" => "jsonl.gz",  // JSONL format is compressed
@@ -155,31 +174,36 @@ public class ExportInstanceHistoryActivity : TaskActivity<ExportRequest, ExportR
         };
     }
 
-    static string SerializeInstanceMetadata(OrchestrationMetadata metadata)
+    static string SerializeInstanceData(
+        List<HistoryEvent> historyEvents,
+        ExportFormat format)
     {
-        var exportData = new
-        {
-            instanceId = metadata.InstanceId,
-            name = metadata.Name,
-            runtimeStatus = metadata.RuntimeStatus.ToString(),
-            createdAt = metadata.CreatedAt,
-            lastUpdatedAt = metadata.LastUpdatedAt,
-            input = metadata.SerializedInput,
-            output = metadata.SerializedOutput,
-            customStatus = metadata.SerializedCustomStatus,
-            tags = metadata.Tags,
-            failureDetails = metadata.FailureDetails != null ? new
-            {
-                errorType = metadata.FailureDetails.ErrorType,
-                errorMessage = metadata.FailureDetails.ErrorMessage,
-                stackTrace = metadata.FailureDetails.StackTrace,
-            } : null,
-        };
-
-        return JsonSerializer.Serialize(exportData, new JsonSerializerOptions
+        string formatKind = format.Kind.ToLowerInvariant();
+        var serializerOptions = new JsonSerializerOptions
         {
             WriteIndented = false,
-        });
+            ReferenceHandler = ReferenceHandler.IgnoreCycles,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        };
+
+        if (formatKind == "jsonl")
+        {
+            // JSONL format: one history event per line
+            StringBuilder jsonlBuilder = new();
+
+            foreach (HistoryEvent historyEvent in historyEvents)
+            {
+                jsonlBuilder.AppendLine(JsonSerializer.Serialize(historyEvent, serializerOptions));
+            }
+
+            return jsonlBuilder.ToString();
+        }
+        else
+        {
+            // JSON format: array of history events
+            return JsonSerializer.Serialize(historyEvents, serializerOptions);
+        }
     }
 
     async Task UploadToBlobStorageAsync(
@@ -278,7 +302,7 @@ public sealed class ExportResult
     public string InstanceId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets whether the export was successful.
+    /// Gets or sets a value indicating whether gets or sets whether the export was successful.
     /// </summary>
     public bool Success { get; set; }
 
@@ -287,5 +311,3 @@ public sealed class ExportResult
     /// </summary>
     public string? Error { get; set; }
 }
-
-

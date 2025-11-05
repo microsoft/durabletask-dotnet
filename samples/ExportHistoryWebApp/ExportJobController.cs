@@ -131,7 +131,14 @@ public class ExportJobController : ControllerBase
         try
         {
             ExportJobQuery? query = null;
-            if (status.HasValue || !string.IsNullOrEmpty(jobIdPrefix) || createdFrom.HasValue || createdTo.HasValue || pageSize.HasValue || !string.IsNullOrEmpty(continuationToken))
+            if (
+                status.HasValue ||
+                !string.IsNullOrEmpty(jobIdPrefix) ||
+                createdFrom.HasValue ||
+                createdTo.HasValue ||
+                pageSize.HasValue ||
+                !string.IsNullOrEmpty(continuationToken)
+            )
             {
                 query = new ExportJobQuery
                 {

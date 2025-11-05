@@ -3,7 +3,9 @@
 
 using System.Diagnostics;
 using System.Text;
+using DurableTask.Core.History;
 using Google.Protobuf.WellKnownTypes;
+using Grpc.Core;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Tracing;
 using Microsoft.Extensions.DependencyInjection;
@@ -323,55 +325,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
     }
 
-    /// <summary>
-    /// Lists terminal orchestration instances sorted by completed timestamp, returning only instance IDs.
-    /// </summary>
-    /// <param name="createdFrom">Creation date of instances to query from.</param>
-    /// <param name="createdTo">Creation date of instances to query to.</param>
-    /// <param name="statuses">Runtime statuses of instances to query (should be terminal statuses).</param>
-    /// <param name="pageSize">Maximum number of instance IDs to return per page.</param>
-    /// <param name="continuationToken">The continuation token (instanceId) to continue from.</param>
-    /// <param name="cancellation">The cancellation token.</param>
-    /// <returns>A tuple containing the list of instance IDs and the continuation token for the next page.</returns>
-    public async Task<(IReadOnlyList<string> InstanceIds, string? ContinuationToken)> ListTerminalInstancesAsync(
-        DateTimeOffset? createdFrom = null,
-        DateTimeOffset? createdTo = null,
-        IEnumerable<OrchestrationRuntimeStatus>? statuses = null,
-        int pageSize = 100,
-        string? continuationToken = null,
-        CancellationToken cancellation = default)
-    {
-        Check.NotEntity(this.options.EnableEntitySupport, continuationToken);
-
-        P.ListTerminalInstancesRequest request = new()
-        {
-            Query = new P.TerminalInstanceQuery
-            {
-                CreatedTimeFrom = createdFrom?.ToTimestamp(),
-                CreatedTimeTo = createdTo?.ToTimestamp(),
-                MaxInstanceCount = pageSize,
-                ContinuationToken = continuationToken,
-            },
-        };
-
-        if (statuses is not null)
-        {
-            request.Query.RuntimeStatus.AddRange(statuses.Select(x => x.ToGrpcStatus()));
-        }
-
-        try
-        {
-            P.ListTerminalInstancesResponse response = await this.sidecarClient.ListTerminalInstancesAsync(
-                request, cancellationToken: cancellation);
-
-            return (response.InstanceIds.ToList(), response.ContinuationToken);
-        }
-        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
-        {
-            throw new OperationCanceledException(
-                $"The {nameof(this.ListTerminalInstancesAsync)} operation was canceled.", e, cancellation);
-        }
-    }
+    // Removed ListTerminalInstances; use GetAllInstancesAsync with OrchestrationQuery instead
 
     /// <inheritdoc/>
     public override async Task<OrchestrationMetadata> WaitForInstanceCompletionAsync(
@@ -515,6 +469,57 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         {
             throw new OperationCanceledException(
                 $"The {nameof(this.RewindInstanceAsync)} operation was canceled.", e, cancellation);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override async IAsyncEnumerable<HistoryEvent> StreamInstanceHistoryAsync(
+        string instanceId,
+        string? executionId = null,
+        CancellationToken cancellation = default)
+    {
+        Check.NotNullOrEmpty(instanceId);
+        Check.NotEntity(this.options.EnableEntitySupport, instanceId);
+
+        P.StreamInstanceHistoryRequest request = new()
+        {
+            InstanceId = instanceId,
+            ExecutionId = executionId,
+            ForWorkItemProcessing = false,
+        };
+
+        using AsyncServerStreamingCall<P.HistoryChunk> streamResponse =
+            this.sidecarClient.StreamInstanceHistory(request, cancellationToken: cancellation);
+
+        IAsyncStreamReader<P.HistoryChunk> responseStream = streamResponse.ResponseStream;
+
+        bool hasMore = true;
+        while (hasMore)
+        {
+            bool moveNextResult;
+            try
+            {
+                moveNextResult = await responseStream.MoveNext(cancellation).ConfigureAwait(false);
+            }
+            catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+            {
+                throw new OperationCanceledException(
+                    $"The {nameof(this.StreamInstanceHistoryAsync)} operation was canceled.", e, cancellation);
+            }
+            catch (RpcException e) when (e.StatusCode == StatusCode.NotFound)
+            {
+                throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.", e);
+            }
+
+            hasMore = moveNextResult;
+            if (hasMore)
+            {
+                P.HistoryChunk chunk = responseStream.Current;
+                foreach (P.HistoryEvent protoEvent in chunk.Events)
+                {
+                    yield return Microsoft.DurableTask.ProtoUtils.ConvertHistoryEvent(protoEvent);
+                }
+            }
         }
     }
 

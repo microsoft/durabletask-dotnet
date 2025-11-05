@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Client.Grpc;
+using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.ExportHistory;
@@ -46,45 +46,33 @@ public class ListTerminalInstancesActivity : TaskActivity<ListTerminalInstancesR
         {
             DurableTaskClient client = this.clientProvider.GetClient();
 
-            // Check if the client is a gRPC client that supports ListTerminalInstances
-            if (client is not GrpcDurableTaskClient grpcClient)
-            {
-                throw new NotSupportedException(
-                    $"ListTerminalInstancesActivity requires a GrpcDurableTaskClient, but got {client.GetType().Name}");
-            }
+            // Use QueryInstances to fetch terminal instances and project to IDs
+            OrchestrationQuery query = new(
+                CreatedFrom: request.CreatedTimeFrom,
+                CreatedTo: request.CreatedTimeTo,
+                Statuses: request.RuntimeStatus,
+                PageSize: request.MaxInstancesPerBatch,
+                FetchInputsAndOutputs: false,
+                ContinuationToken: request.ContinuationToken);
 
-            // Call the gRPC endpoint to list terminal instances
-            (IReadOnlyList<string> instanceIds, string? nextContinuationToken) = await grpcClient.ListTerminalInstancesAsync(
-                createdFrom: request.CreatedTimeFrom,
-                createdTo: request.CreatedTimeTo,
-                statuses: request.RuntimeStatus,
-                pageSize: request.MaxInstancesPerBatch,
-                continuationToken: request.ContinuationToken,
-                cancellation: CancellationToken.None);
+            List<string> instanceIds = new();
+            string? nextContinuationToken = null;
+
+            await foreach (Page<OrchestrationMetadata> page in client
+                .GetAllInstancesAsync(query)
+                .AsPages()
+                .WithCancellation(CancellationToken.None))
+            {
+                instanceIds.AddRange(page.Values.Select(v => v.InstanceId));
+                nextContinuationToken = page.ContinuationToken;
+                break;
+            }
 
             this.logger.LogInformation(
                 "ListTerminalInstancesActivity returned {Count} instance IDs",
                 instanceIds.Count);
 
-            // Create next checkpoint if we have a continuation token
-            ExportCheckpoint? nextCheckpoint = null;
-            if (!string.IsNullOrEmpty(nextContinuationToken) && instanceIds.Count > 0)
-            {
-                // Use the continuation token from the response (which is the last instanceId)
-                string lastInstanceId = nextContinuationToken;
-                nextCheckpoint = new ExportCheckpoint
-                {
-                    ContinuationToken = lastInstanceId,
-                    LastInstanceIdProcessed = lastInstanceId,
-                    // Note: LastTerminalTimeProcessed would require querying the instance, which we skip for performance
-                };
-            }
-
-            return new InstancePage
-            {
-                InstanceIds = instanceIds.ToList(),
-                NextCheckpoint = nextCheckpoint,
-            };
+            return new InstancePage(instanceIds, new ExportCheckpoint(nextContinuationToken));
         }
         catch (Exception ex)
         {
@@ -100,7 +88,7 @@ public class ListTerminalInstancesActivity : TaskActivity<ListTerminalInstancesR
 public sealed class InstancePage
 {
     public List<string> InstanceIds { get; set; } = new();
-    public ExportCheckpoint? NextCheckpoint { get; set; }
+    public ExportCheckpoint NextCheckpoint { get; set; }
 }
 
 

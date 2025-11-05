@@ -97,19 +97,8 @@ public sealed class DefaultExportHistoryJobClient(
                 request,
                 cancellation);
 
-            // Wait for the orchestration to complete
-            OrchestrationMetadata state = await this.durableTaskClient.WaitForInstanceCompletionAsync(instanceId, true, cancellation);
-
-            if (state.RuntimeStatus != OrchestrationRuntimeStatus.Completed)
-            {
-                throw new InvalidOperationException($"Failed to delete export job '{this.JobId}': {state.FailureDetails?.ErrorMessage ?? string.Empty}");
-            }
-
             // Then terminate the linked export orchestration if it exists
             await this.TerminateAndPurgeOrchestrationAsync(orchestrationInstanceId, cancellation);
-
-            // Verify both entity and orchestration are gone
-            await this.VerifyDeletionAsync(orchestrationInstanceId, cancellation);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
@@ -141,11 +130,6 @@ public sealed class DefaultExportHistoryJobClient(
 
             ExportJobConfiguration? config = state.Config;
 
-            // Determine if the export orchestrator instance exists and capture its instance ID if so
-            string orchestratorInstanceId = ExportHistoryConstants.GetOrchestratorInstanceId(this.JobId);
-            OrchestrationMetadata? orchestratorState = await this.durableTaskClient.GetInstanceAsync(orchestratorInstanceId, cancellation: cancellation);
-            string? presentOrchestratorId = orchestratorState != null ? orchestratorInstanceId : null;
-
             return new ExportJobDescription
             {
                 JobId = this.JobId,
@@ -153,7 +137,7 @@ public sealed class DefaultExportHistoryJobClient(
                 CreatedAt = state.CreatedAt,
                 LastModifiedAt = state.LastModifiedAt,
                 Config = config,
-                OrchestratorInstanceId = presentOrchestratorId,
+                OrchestratorInstanceId = state.OrchestratorInstanceId,
             };
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -185,113 +169,17 @@ public sealed class DefaultExportHistoryJobClient(
                 cancellation);
 
             // Wait for the orchestration to be terminated before purging
-            OrchestrationMetadata? orchestrationState = await this.WaitForOrchestrationTerminationAsync(
-                orchestrationInstanceId,
-                cancellation);
+            await this.durableTaskClient.WaitForInstanceCompletionAsync(orchestrationInstanceId, cancellation);
 
             // Purge the orchestration instance after it's terminated
-            if (orchestrationState != null && DefaultExportHistoryJobClient.IsTerminalStatus(orchestrationState.RuntimeStatus))
-            {
-                await this.durableTaskClient.PurgeInstanceAsync(
-                    orchestrationInstanceId,
-                    cancellation: cancellation);
-            }
-            else if (orchestrationState != null)
-            {
-                throw new InvalidOperationException(
-                    $"Failed to delete export job '{this.JobId}': Cannot purge orchestration '{orchestrationInstanceId}' because it is still in '{orchestrationState.RuntimeStatus}' status.");
-            }
+            await this.durableTaskClient.PurgeInstanceAsync(orchestrationInstanceId, cancellation: cancellation);
         }
-        catch (Exception ex) when (!(ex is InvalidOperationException))
+        catch (Exception ex)
         {
-            // Log but don't fail if termination fails (orchestration may not exist or already be terminated)
             this.logger.ClientError(
                 $"Failed to terminate or purge linked orchestration '{orchestrationInstanceId}': {ex.Message}",
                 this.JobId,
                 ex);
-            // Continue to verification - if orchestration doesn't exist, verification will pass
-        }
-    }
-
-    /// <summary>
-    /// Waits for an orchestration to reach a terminal state.
-    /// </summary>
-    /// <param name="orchestrationInstanceId">The orchestration instance ID.</param>
-    /// <param name="cancellation">The cancellation token.</param>
-    /// <returns>The orchestration metadata, or null if the orchestration doesn't exist.</returns>
-    async Task<OrchestrationMetadata?> WaitForOrchestrationTerminationAsync(
-        string orchestrationInstanceId,
-        CancellationToken cancellation)
-    {
-        OrchestrationMetadata? orchestrationState = null;
-        int waitAttempt = 0;
-
-        while (waitAttempt < ExportHistoryConstants.MaxTerminationWaitAttempts)
-        {
-            orchestrationState = await this.durableTaskClient.GetInstanceAsync(
-                orchestrationInstanceId,
-                cancellation: cancellation);
-
-            if (orchestrationState == null || DefaultExportHistoryJobClient.IsTerminalStatus(orchestrationState.RuntimeStatus))
-            {
-                break;
-            }
-
-            // Wait a bit before checking again
-            await Task.Delay(
-                TimeSpan.FromMilliseconds(ExportHistoryConstants.TerminationWaitDelayMs),
-                cancellation);
-            waitAttempt++;
-        }
-
-        return orchestrationState;
-    }
-
-    /// <summary>
-    /// Checks if an orchestration runtime status is a terminal state.
-    /// </summary>
-    /// <param name="runtimeStatus">The runtime status to check.</param>
-    /// <returns>True if the status is terminal; otherwise, false.</returns>
-    static bool IsTerminalStatus(OrchestrationRuntimeStatus runtimeStatus)
-    {
-        return runtimeStatus == OrchestrationRuntimeStatus.Terminated ||
-               runtimeStatus == OrchestrationRuntimeStatus.Completed ||
-               runtimeStatus == OrchestrationRuntimeStatus.Failed;
-    }
-
-    /// <summary>
-    /// Verifies that both the entity and orchestration have been deleted.
-    /// </summary>
-    /// <param name="orchestrationInstanceId">The orchestration instance ID to verify.</param>
-    /// <param name="cancellation">The cancellation token.</param>
-    async Task VerifyDeletionAsync(string orchestrationInstanceId, CancellationToken cancellation)
-    {
-        List<string> stillExist = new();
-
-        // Check if entity still exists
-        EntityMetadata<ExportJobState>? entityMetadata = await this.durableTaskClient.Entities.GetEntityAsync<ExportJobState>(
-            this.entityId,
-            cancellation: cancellation);
-        if (entityMetadata != null)
-        {
-            stillExist.Add($"entity '{this.entityId}'");
-        }
-
-        // Check if orchestration still exists
-        OrchestrationMetadata? orchestrationMetadata = await this.durableTaskClient.GetInstanceAsync(
-            orchestrationInstanceId,
-            cancellation: cancellation);
-        if (orchestrationMetadata != null)
-        {
-            stillExist.Add($"orchestration '{orchestrationInstanceId}'");
-        }
-
-        // Throw exception if either still exists
-        if (stillExist.Count > 0)
-        {
-            string items = string.Join(" and ", stillExist);
-            throw new InvalidOperationException(
-                $"Failed to delete export job '{this.JobId}': The following resources still exist: {items}.");
         }
     }
 }

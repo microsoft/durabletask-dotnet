@@ -54,8 +54,8 @@ public sealed class ExportJobState
     public long ExportedInstances { get; set; }
 
     /// <summary>
-    /// Gets or sets the dictionary of failed instance exports.
+    /// Gets or sets the instance ID of the orchestrator running this export job, if any.
     /// </summary>
-    public Dictionary<string, ExportFailure> FailedInstances { get; set; } = new();
+    public string? OrchestratorInstanceId { get; set; }
 }
 

@@ -123,11 +123,6 @@ public sealed class DefaultExportHistoryClient(
                         ExportJobState state = metadata.State;
                         ExportJobConfiguration? config = state.Config;
 
-                        // Determine orchestrator presence for this job
-                        string orchestratorInstanceId = ExportHistoryConstants.GetOrchestratorInstanceId(metadata.Id.Key);
-                        OrchestrationMetadata? orchestratorState = await this.durableTaskClient.GetInstanceAsync(orchestratorInstanceId, cancellation: cancellation);
-                        string? presentOrchestratorId = orchestratorState != null ? orchestratorInstanceId : null;
-
                         exportJobs.Add(new ExportJobDescription
                         {
                             JobId = metadata.Id.Key,
@@ -135,7 +130,7 @@ public sealed class DefaultExportHistoryClient(
                             CreatedAt = state.CreatedAt,
                             LastModifiedAt = state.LastModifiedAt,
                             Config = config,
-                            OrchestratorInstanceId = presentOrchestratorId,
+                            OrchestratorInstanceId = state.OrchestratorInstanceId,
                         });
                     }
 

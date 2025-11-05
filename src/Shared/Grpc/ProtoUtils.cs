@@ -472,6 +472,11 @@ static class ProtoUtils
                         Result = completeAction.Result,
                     };
 
+                    foreach (KeyValuePair<string, string> tag in completeAction.Tags)
+                    {
+                        protoAction.CompleteOrchestration.Tags[tag.Key] = tag.Value;
+                    }
+
                     if (completeAction.OrchestrationStatus == OrchestrationStatus.Failed)
                     {
                         protoAction.CompleteOrchestration.FailureDetails = completeAction.FailureDetails.ToProtobuf();

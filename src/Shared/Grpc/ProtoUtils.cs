@@ -219,6 +219,9 @@ static class ProtoUtils
                         Tags = proto.HistoryState.OrchestrationState.Tags,
                     });
                 break;
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionRewound:
+                historyEvent = new ExecutionRewoundEvent(proto.EventId);
+                break;
             default:
                 throw new NotSupportedException($"Deserialization of {proto.EventTypeCase} is not supported.");
         }
@@ -468,6 +471,11 @@ static class ProtoUtils
                         OrchestrationStatus = completeAction.OrchestrationStatus.ToProtobuf(),
                         Result = completeAction.Result,
                     };
+
+                    foreach (KeyValuePair<string, string> tag in completeAction.Tags)
+                    {
+                        protoAction.CompleteOrchestration.Tags[tag.Key] = tag.Value;
+                    }
 
                     if (completeAction.OrchestrationStatus == OrchestrationStatus.Failed)
                     {

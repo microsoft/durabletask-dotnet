@@ -10,6 +10,11 @@
     <PackageReference Include="xunit" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <!-- This is not a unit test project, but a standalone test app, so it should not be run with dotnet test. -->
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\Client\AzureManaged\Client.AzureManaged.csproj" />
     <ProjectReference Include="..\..\src\Worker\AzureManaged\Worker.AzureManaged.csproj" />

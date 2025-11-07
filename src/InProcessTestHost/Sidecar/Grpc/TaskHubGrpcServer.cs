@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.
+﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.Collections.Concurrent;
@@ -326,8 +326,6 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             throw new NotSupportedException($"{this.client.GetType().Name} doesn't support query operations.");
         }
     }
-
-    // Removed ListTerminalInstances; use QueryInstances instead on client side
 
     /// <summary>
     /// Purges orchestration instances.

@@ -29,4 +29,3 @@ public sealed class CommitCheckpointRequest
     /// </summary>
     public List<ExportFailure>? Failures { get; set; }
 }
-

@@ -1,29 +1,40 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Entities;
-
 namespace Microsoft.DurableTask.ExportHistory;
 
 /// <summary>
 /// Convenience client for managing export jobs via entity signals and reads.
 /// </summary>
-public abstract class ExportHistoryJobClient
+/// <remarks>
+/// Initializes a new instance of the <see cref="ExportHistoryJobClient"/> class.
+/// </remarks>
+public abstract class ExportHistoryJobClient(string jobId)
 {
-    public readonly string JobId;
+    /// <summary>
+    /// The ID of the export job.
+    /// </summary>
+    protected readonly string JobId = Check.NotNullOrEmpty(jobId, nameof(jobId));
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ExportJobClient"/> class.
+    /// Creates a new export job.
     /// </summary>
-    protected ExportHistoryJobClient(string jobId)
-    {
-        this.JobId = Check.NotNullOrEmpty(jobId, nameof(jobId));
-    }
-
+    /// <param name="options">The options for the export job.</param>
+    /// <param name="cancellation">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public abstract Task CreateAsync(ExportJobCreationOptions options, CancellationToken cancellation = default);
+
+    /// <summary>
+    /// Describes the export job.
+    /// </summary>
+    /// <param name="cancellation">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public abstract Task<ExportJobDescription> DescribeAsync(CancellationToken cancellation = default);
+
+    /// <summary>
+    /// Deletes the export job.
+    /// </summary>
+    /// <param name="cancellation">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public abstract Task DeleteAsync(CancellationToken cancellation = default);
 }
-
-

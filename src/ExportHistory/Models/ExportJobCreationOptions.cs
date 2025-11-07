@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-using System.Text.Json.Serialization;
 using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Entities;
 
 namespace Microsoft.DurableTask.ExportHistory;
 
@@ -11,6 +9,9 @@ namespace Microsoft.DurableTask.ExportHistory;
 /// </summary>
 public record ExportJobCreationOptions
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ExportJobCreationOptions"/> class.
+    /// </summary>
     public ExportJobCreationOptions()
     {
     }
@@ -69,7 +70,9 @@ public record ExportJobCreationOptions
                     $"CompletedTimeTo({completedTimeTo.Value}) cannot be in the future. It must be less than or equal to the current time ({DateTimeOffset.UtcNow}).",
                     nameof(completedTimeTo));
             }
-        } else if (mode == ExportMode.Continuous) {
+        }
+        else if (mode == ExportMode.Continuous)
+        {
             if (completedTimeFrom != default)
             {
                 throw new ArgumentException(
@@ -83,7 +86,9 @@ public record ExportJobCreationOptions
                     "CompletedTimeTo is not allowed for Continuous export mode.",
                     nameof(completedTimeTo));
             }
-        } else {
+        }
+        else
+        {
             throw new ArgumentException(
                 "Invalid export mode.",
                 nameof(mode));
@@ -99,7 +104,7 @@ public record ExportJobCreationOptions
         }
 
         // Validate terminal status-only filter here if provided
-        if (runtimeStatus?.Any() == true
+        if (runtimeStatus is { Count: > 0 }
             && runtimeStatus.Any(
                 s => s is not (OrchestrationRuntimeStatus.Completed
                                or OrchestrationRuntimeStatus.Failed
@@ -123,7 +128,7 @@ public record ExportJobCreationOptions
                 OrchestrationRuntimeStatus.Completed,
                 OrchestrationRuntimeStatus.Failed,
                 OrchestrationRuntimeStatus.Terminated,
-                OrchestrationRuntimeStatus.ContinuedAsNew
+                OrchestrationRuntimeStatus.ContinuedAsNew,
             };
         this.MaxInstancesPerBatch = maxInstancesPerBatch ?? 100;
     }

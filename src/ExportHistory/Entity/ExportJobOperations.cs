@@ -17,4 +17,3 @@ static class ExportJobOperations
     /// </summary>
     public const string Delete = "Delete";
 }
-

@@ -3,6 +3,11 @@
 
 namespace Microsoft.DurableTask.ExportHistory;
 
+/// <summary>
+/// Export format settings.
+/// </summary>
+/// <param name="Kind">The kind of export format.</param>
+/// <param name="SchemaVersion">The schema version.</param>
 public partial record ExportFormat(
     string Kind = "jsonl",
     string SchemaVersion = "1.0")

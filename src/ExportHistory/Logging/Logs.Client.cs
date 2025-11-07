@@ -13,7 +13,6 @@ static partial class Logs
     [LoggerMessage(EventId = 80, Level = LogLevel.Information, Message = "Creating export job with options: {exportJobCreationOptions}")]
     public static partial void ClientCreatingExportJob(this ILogger logger, ExportJobCreationOptions exportJobCreationOptions);
 
-
     [LoggerMessage(EventId = 84, Level = LogLevel.Information, Message = "Deleting export job '{jobId}'")]
     public static partial void ClientDeletingExportJob(this ILogger logger, string jobId);
 

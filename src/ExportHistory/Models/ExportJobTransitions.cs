@@ -40,4 +40,3 @@ static class ExportJobTransitions
         };
     }
 }
-

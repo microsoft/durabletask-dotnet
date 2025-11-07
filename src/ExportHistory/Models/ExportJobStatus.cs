@@ -26,5 +26,5 @@ public enum ExportJobStatus
     /// <summary>
     /// Export history job completed.
     /// </summary>
-    Completed
+    Completed,
 }

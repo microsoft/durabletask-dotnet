@@ -24,4 +24,3 @@ public sealed class ExportHistoryStorageOptions
     /// </summary>
     public string? Prefix { get; set; }
 }
-

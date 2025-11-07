@@ -18,25 +18,18 @@ namespace Microsoft.DurableTask.ExportHistory;
 /// <summary>
 /// Activity that exports one orchestration instance history to the configured blob destination.
 /// </summary>
+/// <remarks>
+/// Initializes a new instance of the <see cref="ExportInstanceHistoryActivity"/> class.
+/// </remarks>
 [DurableTask]
-public class ExportInstanceHistoryActivity : TaskActivity<ExportRequest, ExportResult>
+public class ExportInstanceHistoryActivity(
+    IDurableTaskClientProvider clientProvider,
+    ILogger<ExportInstanceHistoryActivity> logger,
+    IOptions<ExportHistoryStorageOptions> storageOptions) : TaskActivity<ExportRequest, ExportResult>
 {
-    readonly IDurableTaskClientProvider clientProvider;
-    readonly ILogger<ExportInstanceHistoryActivity> logger;
-    readonly ExportHistoryStorageOptions storageOptions;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ExportInstanceHistoryActivity"/> class.
-    /// </summary>
-    public ExportInstanceHistoryActivity(
-        IDurableTaskClientProvider clientProvider,
-        ILogger<ExportInstanceHistoryActivity> logger,
-        IOptions<ExportHistoryStorageOptions> storageOptions)
-    {
-        this.clientProvider = Check.NotNull(clientProvider, nameof(clientProvider));
-        this.logger = Check.NotNull(logger, nameof(logger));
-        this.storageOptions = Check.NotNull(storageOptions?.Value, nameof(storageOptions));
-    }
+    readonly IDurableTaskClientProvider clientProvider = Check.NotNull(clientProvider, nameof(clientProvider));
+    readonly ILogger<ExportInstanceHistoryActivity> logger = Check.NotNull(logger, nameof(logger));
+    readonly ExportHistoryStorageOptions storageOptions = Check.NotNull(storageOptions?.Value, nameof(storageOptions));
 
     /// <inheritdoc/>
     public override async Task<ExportResult> RunAsync(TaskActivityContext context, ExportRequest input)
@@ -236,7 +229,7 @@ public class ExportInstanceHistoryActivity : TaskActivity<ExportRequest, ExportR
         // Upload content
         byte[] contentBytes = Encoding.UTF8.GetBytes(content);
 
-        if (format.Kind.Equals("jsonl", StringComparison.InvariantCultureIgnoreCase))
+        if (format.Kind.Equals("jsonl", StringComparison.OrdinalIgnoreCase))
         {
             // Compress with gzip
             using MemoryStream compressedStream = new();

@@ -3,7 +3,6 @@
 
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Entities;
-using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.ExportHistory;
@@ -35,8 +34,7 @@ public sealed class DefaultExportHistoryClient(
                 this.durableTaskClient,
                 options.JobId,
                 this.logger,
-                this.storageOptions
-            );
+                this.storageOptions);
 
             // Create the export job using the client (validation already done in constructor)
             await exportHistoryJobClient.CreateAsync(options, cancellation);

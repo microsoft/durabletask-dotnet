@@ -16,14 +16,14 @@ public sealed class DefaultExportHistoryJobClient(
     DurableTaskClient durableTaskClient,
     string jobId,
     ILogger logger,
-    ExportHistoryStorageOptions storageOptions
-) : ExportHistoryJobClient(jobId)
+    ExportHistoryStorageOptions storageOptions) : ExportHistoryJobClient(jobId)
 {
     readonly DurableTaskClient durableTaskClient = Check.NotNull(durableTaskClient, nameof(durableTaskClient));
     readonly ILogger logger = Check.NotNull(logger, nameof(logger));
     readonly ExportHistoryStorageOptions storageOptions = Check.NotNull(storageOptions, nameof(storageOptions));
     readonly EntityInstanceId entityId = new(nameof(ExportJob), jobId);
 
+    /// <inheritdoc/>
     public override async Task CreateAsync(ExportJobCreationOptions options, CancellationToken cancellation = default)
     {
         try
@@ -31,7 +31,7 @@ public sealed class DefaultExportHistoryJobClient(
             Check.NotNull(options, nameof(options));
 
             // Determine default prefix based on mode if not already set
-            string? defaultPrefix = $"{options.Mode.ToString().ToLower()}/";
+            string? defaultPrefix = $"{options.Mode.ToString().ToLower(System.Globalization.CultureInfo.CurrentCulture)}/";
 
             // If destination is not provided, construct it from storage options
             ExportJobCreationOptions optionsWithDestination = options;
@@ -57,10 +57,10 @@ public sealed class DefaultExportHistoryJobClient(
                 optionsWithDestination = options with { Destination = destinationWithPrefix };
             }
 
-            ExportJobOperationRequest request = 
+            ExportJobOperationRequest request =
                 new ExportJobOperationRequest(
-                    this.entityId, 
-                    nameof(ExportJob.Create), 
+                    this.entityId,
+                    nameof(ExportJob.Create),
                     optionsWithDestination);
 
             string instanceId = await this.durableTaskClient
@@ -72,8 +72,8 @@ public sealed class DefaultExportHistoryJobClient(
             // Wait for the orchestration to complete
             OrchestrationMetadata state = await this.durableTaskClient
                 .WaitForInstanceCompletionAsync(
-                    instanceId, 
-                    true, 
+                    instanceId,
+                    true,
                     cancellation);
 
             if (state.RuntimeStatus != OrchestrationRuntimeStatus.Completed)
@@ -98,6 +98,8 @@ public sealed class DefaultExportHistoryJobClient(
 
     // TODO: there is no atomicity guarantee of deleting entity and purging the orchestrator
     // Add sweeping process to clean up orphaned orchestrations failed to be purged
+
+    /// <inheritdoc/>
     public override async Task DeleteAsync(CancellationToken cancellation = default)
     {
         try
@@ -129,6 +131,7 @@ public sealed class DefaultExportHistoryJobClient(
         }
     }
 
+    /// <inheritdoc/>
     public override async Task<ExportJobDescription> DescribeAsync(CancellationToken cancellation = default)
     {
         try
@@ -211,5 +214,3 @@ public sealed class DefaultExportHistoryJobClient(
         }
     }
 }
-
-

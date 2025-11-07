@@ -31,7 +31,8 @@ public static class DurableTaskClientBuilderExtensions
         // Register and validate options
         services.AddOptions<ExportHistoryStorageOptions>()
                 .Configure(configure)
-                .Validate(o =>
+                .Validate(
+                    o =>
                     !string.IsNullOrEmpty(o.ConnectionString) &&
                     !string.IsNullOrEmpty(o.ContainerName),
                     $"{nameof(ExportHistoryStorageOptions)} must specify both {nameof(ExportHistoryStorageOptions.ConnectionString)} and {nameof(ExportHistoryStorageOptions.ContainerName)}.");

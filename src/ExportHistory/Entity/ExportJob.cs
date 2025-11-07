@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -39,7 +38,7 @@ class ExportJob(ILogger<ExportJob> logger) : TaskEntity<ExportJobState>
             // Note: RuntimeStatus validation already done in ExportJobCreationOptions constructor
             // Note: Destination should be populated by the client before reaching here
             Verify.NotNull(creationOptions.Destination, nameof(creationOptions.Destination));
-            
+
             ExportJobConfiguration config = new ExportJobConfiguration(
                 Mode: creationOptions.Mode,
                 Filter: new ExportFilter(
@@ -112,48 +111,6 @@ class ExportJob(ILogger<ExportJob> logger) : TaskEntity<ExportJobState>
                 ex);
             throw;
         }
-    }
-
-    void StartExportOrchestration(TaskEntityContext context)
-    {
-        try
-        {
-            // Use a fixed instance ID based on job ID to ensure only one orchestrator runs per job
-            // This prevents concurrent orchestrators if Run is called multiple times
-            string instanceId = ExportHistoryConstants.GetOrchestratorInstanceId(context.Id.Key);
-            StartOrchestrationOptions startOrchestrationOptions = new StartOrchestrationOptions(instanceId);
-
-            logger.ExportJobOperationInfo(
-                context.Id.Key,
-                nameof(this.StartExportOrchestration),
-                $"Starting new orchestration named '{nameof(ExportJobOrchestrator)}' with instance ID: {instanceId}");
-
-            context.ScheduleNewOrchestration(
-                new TaskName(nameof(ExportJobOrchestrator)),
-                new ExportJobRunRequest(context.Id),
-                startOrchestrationOptions);
-
-            this.State.OrchestratorInstanceId = instanceId;
-            this.State.LastModifiedAt = DateTimeOffset.UtcNow;
-        }
-        catch (Exception ex)
-        {
-            // Mark job as failed and record the exception
-            this.State.Status = ExportJobStatus.Failed;
-            this.State.LastError = ex.Message;
-            this.State.LastModifiedAt = DateTimeOffset.UtcNow;
-
-            logger.ExportJobOperationError(
-                context.Id.Key,
-                nameof(this.StartExportOrchestration),
-                "Failed to start export orchestration",
-                ex);
-        }
-    }
-
-    bool CanTransitionTo(string operationName, ExportJobStatus targetStatus)
-    {
-        return ExportJobTransitions.IsValidTransition(operationName, this.State.Status, targetStatus);
     }
 
     /// <summary>
@@ -291,5 +248,47 @@ class ExportJob(ILogger<ExportJob> logger) : TaskEntity<ExportJobState>
                 ex);
             throw;
         }
+    }
+
+    void StartExportOrchestration(TaskEntityContext context)
+    {
+        try
+        {
+            // Use a fixed instance ID based on job ID to ensure only one orchestrator runs per job
+            // This prevents concurrent orchestrators if Run is called multiple times
+            string instanceId = ExportHistoryConstants.GetOrchestratorInstanceId(context.Id.Key);
+            StartOrchestrationOptions startOrchestrationOptions = new StartOrchestrationOptions(instanceId);
+
+            logger.ExportJobOperationInfo(
+                context.Id.Key,
+                nameof(this.StartExportOrchestration),
+                $"Starting new orchestration named '{nameof(ExportJobOrchestrator)}' with instance ID: {instanceId}");
+
+            context.ScheduleNewOrchestration(
+                new TaskName(nameof(ExportJobOrchestrator)),
+                new ExportJobRunRequest(context.Id),
+                startOrchestrationOptions);
+
+            this.State.OrchestratorInstanceId = instanceId;
+            this.State.LastModifiedAt = DateTimeOffset.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            // Mark job as failed and record the exception
+            this.State.Status = ExportJobStatus.Failed;
+            this.State.LastError = ex.Message;
+            this.State.LastModifiedAt = DateTimeOffset.UtcNow;
+
+            logger.ExportJobOperationError(
+                context.Id.Key,
+                nameof(this.StartExportOrchestration),
+                "Failed to start export orchestration",
+                ex);
+        }
+    }
+
+    bool CanTransitionTo(string operationName, ExportJobStatus targetStatus)
+    {
+        return ExportJobTransitions.IsValidTransition(operationName, this.State.Status, targetStatus);
     }
 }

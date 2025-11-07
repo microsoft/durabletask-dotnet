@@ -19,7 +19,7 @@ public class ExportJobNotFoundException : InvalidOperationException
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ScheduleNotFoundException"/> class.
+    /// Initializes a new instance of the <see cref="ExportJobNotFoundException"/> class.
     /// </summary>
     /// <param name="jobId">The ID of the export history job that was not found.</param>
     /// <param name="innerException">The exception that is the cause of the current exception.</param>

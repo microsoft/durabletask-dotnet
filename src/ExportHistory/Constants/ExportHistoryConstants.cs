@@ -10,7 +10,7 @@ static class ExportHistoryConstants
 {
     /// <summary>
     /// The prefix pattern used for generating export job orchestrator instance IDs.
-    /// Format: "ExportJob-{jobId}"
+    /// Format: "ExportJob-{jobId}".
     /// </summary>
     public const string OrchestratorInstanceIdPrefix = "ExportJob-";
 

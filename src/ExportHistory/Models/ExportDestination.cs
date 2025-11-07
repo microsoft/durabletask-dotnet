@@ -8,7 +8,13 @@ namespace Microsoft.DurableTask.ExportHistory;
 /// </summary>
 public sealed class ExportDestination
 {
-    public ExportDestination() { }
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ExportDestination"/> class.
+    /// </summary>
+    public ExportDestination()
+    {
+    }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ExportDestination"/> class.
     /// </summary>
@@ -21,7 +27,7 @@ public sealed class ExportDestination
     }
 
     /// <summary>
-    /// Gets the blob container name.
+    /// Gets or sets the blob container name.
     /// </summary>
     public string Container { get; set; }
 
@@ -30,4 +36,3 @@ public sealed class ExportDestination
     /// </summary>
     public string? Prefix { get; set; }
 }
-

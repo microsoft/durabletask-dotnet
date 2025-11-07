@@ -41,6 +41,7 @@ message TaskFailureDetails {
     google.protobuf.StringValue stackTrace = 3;
     TaskFailureDetails innerFailure = 4;
     bool isNonRetriable = 5;
+    map<string, google.protobuf.Value> properties = 6;
 }
 
 enum OrchestrationStatus {
@@ -219,6 +220,13 @@ message EntityLockGrantedEvent {
     string criticalSectionId = 1;
 }
 
+message ExecutionRewoundEvent {
+    google.protobuf.StringValue reason = 1;
+    google.protobuf.StringValue parentExecutionId = 2; // used only for rewinding suborchestrations, null otherwise
+    google.protobuf.StringValue instanceId = 3; // used only for rewinding suborchestrations, null otherwise
+    TraceContext parentTraceContext = 4; // used only for rewinding suborchestrations, null otherwise
+}
+
 message HistoryEvent {
     int32 eventId = 1;
     google.protobuf.Timestamp timestamp = 2;
@@ -250,6 +258,7 @@ message HistoryEvent {
         EntityLockRequestedEvent entityLockRequested = 27;
         EntityLockGrantedEvent entityLockGranted = 28;
         EntityUnlockSentEvent entityUnlockSent = 29;
+        ExecutionRewoundEvent executionRewound = 30;
     }
 }
 
@@ -286,6 +295,7 @@ message CompleteOrchestrationAction {
     google.protobuf.StringValue newVersion = 4;
     repeated HistoryEvent carryoverEvents = 5;
     TaskFailureDetails failureDetails = 6;
+    map<string, string> tags = 7;
 }
 
 message TerminateOrchestrationAction {
@@ -465,10 +475,26 @@ message QueryInstancesResponse {
     google.protobuf.StringValue continuationToken = 2;
 }
 
+message ListInstanceIdsRequest {
+    repeated OrchestrationStatus runtimeStatus = 1;
+    google.protobuf.Timestamp completedTimeFrom = 2;
+    google.protobuf.Timestamp completedTimeTo = 3;
+    int32 pageSize = 4;
+    google.protobuf.StringValue lastInstanceKey = 5;
+}
+
+message ListInstanceIdsResponse {
+    repeated string instanceIds = 1;
+    google.protobuf.StringValue lastInstanceKey = 2;
+}
+
+// Removed ListTerminalInstances in favor of using QueryInstances
+
 message PurgeInstancesRequest {
     oneof request {
         string instanceId = 1;
         PurgeInstanceFilter purgeInstanceFilter = 2;
+        InstanceBatch instanceBatch = 4;
     }
     bool recursive = 3;
 }
@@ -681,8 +707,7 @@ message AbandonEntityTaskResponse {
 }
 
 message SkipGracefulOrchestrationTerminationsRequest {
-    // A maximum of 500 instance IDs can be provided in this list.
-    repeated string instanceIds = 1;
+    InstanceBatch instanceBatch = 1;
     google.protobuf.StringValue reason = 2;
 }
 
@@ -729,6 +754,7 @@ service TaskHubSidecarService {
     // rpc DeleteInstance(DeleteInstanceRequest) returns (DeleteInstanceResponse);
 
     rpc QueryInstances(QueryInstancesRequest) returns (QueryInstancesResponse);
+    rpc ListInstanceIds(ListInstanceIdsRequest) returns (ListInstanceIdsResponse);
     rpc PurgeInstances(PurgeInstancesRequest) returns (PurgeInstancesResponse);
 
     rpc GetWorkItems(GetWorkItemsRequest) returns (stream WorkItem);
@@ -818,4 +844,9 @@ message StreamInstanceHistoryRequest {
 
 message HistoryChunk {
     repeated HistoryEvent events = 1;
+}
+
+message InstanceBatch {
+    // A maximum of 500 instance IDs can be provided in this list.
+    repeated string instanceIds = 1;
 }

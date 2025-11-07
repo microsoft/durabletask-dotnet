@@ -26,5 +26,4 @@
   <ItemGroup>
     <SharedSection Include="Core" />
   </ItemGroup>
-
 </Project>

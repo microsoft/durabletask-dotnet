@@ -1,7 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Generic;
 using System.ComponentModel;
+using DurableTask.Core.History;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Internal;
 
@@ -336,6 +338,27 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <returns>An async pageable of the query results.</returns>
     public abstract AsyncPageable<OrchestrationMetadata> GetAllInstancesAsync(OrchestrationQuery? filter = null);
 
+    /// <summary>
+    /// Lists orchestration instance IDs filtered by completed time.
+    /// </summary>
+    /// <param name="runtimeStatus">The runtime statuses to filter by.</param>
+    /// <param name="completedTimeFrom">The start time for completed time filter (inclusive).</param>
+    /// <param name="completedTimeTo">The end time for completed time filter (inclusive).</param>
+    /// <param name="pageSize">The page size for pagination.</param>
+    /// <param name="lastInstanceKey">The last fetched instance key.</param>
+    /// <param name="cancellation">The cancellation token.</param>
+    /// <returns>A page of instance IDs with continuation token.</returns>
+    public virtual Task<Page<string>> ListInstanceIdsAsync(
+        IEnumerable<OrchestrationRuntimeStatus>? runtimeStatus = null,
+        DateTimeOffset? completedTimeFrom = null,
+        DateTimeOffset? completedTimeTo = null,
+        int pageSize = OrchestrationQuery.DefaultPageSize,
+        string? lastInstanceKey = null,
+        CancellationToken cancellation = default)
+    {
+        throw new NotSupportedException($"{this.GetType()} does not support listing orchestration instance IDs by completed time.");
+    }
+
     /// <inheritdoc cref="PurgeInstanceAsync(string, PurgeInstanceOptions, CancellationToken)"/>
     public virtual Task<PurgeResult> PurgeInstanceAsync(string instanceId, CancellationToken cancellation)
         => this.PurgeInstanceAsync(instanceId, null, cancellation);
@@ -352,8 +375,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <see cref="OrchestrationRuntimeStatus.Terminated"/> state can be purged.
     /// </para><para>
     /// Purging an orchestration will by default not purge any of the child sub-orchestrations that were started by the
-    /// orchetration instance. If you want to purge sub-orchestration instances, you can set <see cref="PurgeInstanceOptions.Recursive"/> flag to
-    /// true which will enable purging of child sub-orchestration instances. It is set to false by default.
+    /// orchetration instance. Currently, purging of sub-orchestrations is not supported.
     /// If <paramref name="instanceId"/> is not found in the data store, or if the instance is found but not in a
     /// terminal state, then the returned <see cref="PurgeResult"/> object will have a
     /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>0</c>. Otherwise, the existing data will be purged and
@@ -390,8 +412,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// </param>
     /// <returns>
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
-    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged,
-    /// including the count of sub-orchestrations purged if any.
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged.
     /// </returns>
     public virtual Task<PurgeResult> PurgeAllInstancesAsync(
         PurgeInstancesFilter filter, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
@@ -439,6 +460,58 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         bool restartWithNewInstanceId = false,
         CancellationToken cancellation = default)
         => throw new NotSupportedException($"{this.GetType()} does not support orchestration restart.");
+
+    /// <summary>
+    /// Rewinds the specified orchestration instance by re-executing any failed Activities, and recursively rewinding
+    /// any failed suborchestrations with failed Activities.
+    /// </summary>
+    /// <remarks>
+    /// The orchestration's history will be replaced with a new history that excludes the failed Activities and suborchestrations,
+    /// and a new execution ID will be generated for the rewound orchestration instance. As the failed Activities and suborchestrations
+    /// re-execute, the history will be appended with new TaskScheduled, TaskCompleted, and SubOrchestrationInstanceCompleted events.
+    /// Note that only orchestrations in a "Failed" state can be rewound.
+    /// </remarks>
+    /// <param name="instanceId">The instance ID of the orchestration to rewind.</param>
+    /// <param name="reason">The reason for the rewind.</param>
+    /// <param name="cancellation">The cancellation token. This only cancels enqueueing the rewind request to the backend.
+    /// It does not abort rewinding the orchestration once the request has been enqueued.</param>
+    /// <returns>A task that represents the enqueueing of the rewind operation.</returns>
+    /// <exception cref="NotSupportedException">Thrown if this implementation of <see cref="DurableTaskClient"/> does not
+    /// support rewinding orchestrations.</exception>
+    /// <exception cref="NotImplementedException">Thrown if the backend storage provider does not support rewinding orchestrations.</exception>
+    /// <exception cref="ArgumentException">Thrown if an orchestration with the specified <paramref name="instanceId"/> does not exist.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if a precondition of the operation fails, for example if the specified
+    /// orchestration is not in a "Failed" state.</exception>
+    /// <exception cref="OperationCanceledException">Thrown if the operation is canceled via the <paramref name="cancellation"/> token.</exception>
+    public virtual Task RewindInstanceAsync(
+        string instanceId,
+        string reason,
+        CancellationToken cancellation = default)
+        => throw new NotSupportedException($"{this.GetType()} does not support orchestration rewind.");
+
+    /// <summary>
+    /// Streams the execution history events for an orchestration instance.
+    /// </summary>
+    /// <remarks>
+    /// This method returns an async enumerable that yields history events as they are retrieved from the backend.
+    /// The history events are returned in chronological order and include all events that occurred during the
+    /// orchestration instance's execution.
+    /// </remarks>
+    /// <param name="instanceId">The instance ID of the orchestration to stream history for.</param>
+    /// <param name="executionId">The optional execution ID. If null, the latest execution will be used.</param>
+    /// <param name="cancellation">
+    /// A <see cref="CancellationToken"/> that can be used to cancel the streaming operation.
+    /// </param>
+    /// <returns>An async enumerable of <see cref="HistoryEvent"/> objects.</returns>
+    /// <exception cref="ArgumentException">Thrown if an orchestration with the specified <paramref name="instanceId"/> does not exist.</exception>
+    /// <exception cref="OperationCanceledException">Thrown if the operation is canceled via the <paramref name="cancellation"/> token.</exception>
+    public virtual IAsyncEnumerable<HistoryEvent> StreamInstanceHistoryAsync(
+        string instanceId,
+        string? executionId = null,
+        CancellationToken cancellation = default)
+    {
+        throw new NotSupportedException($"{this.GetType()} does not support streaming instance history.");
+    }
 
     // TODO: Create task hub
 

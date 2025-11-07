@@ -30,34 +30,52 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
         Check.NotNull(configure);
 
         builder.Services.Configure(builder.Name, configure);
-        builder.Services.AddSingleton<IPayloadStore>(sp =>
+        builder.Services.AddSingleton<PayloadStore>(sp =>
         {
             LargePayloadStorageOptions opts = sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(builder.Name);
             return new BlobPayloadStore(opts);
         });
 
+        return UseExternalizedPayloadsCore(builder);
+    }
+
+    /// <summary>
+    /// Enables externalized payload storage using a pre-configured shared payload store.
+    /// This overload helps ensure client and worker use the same configuration.
+    /// </summary>
+    /// <param name="builder">The builder to configure.</param>
+    /// <returns>The original builder, for call chaining.</returns>
+    public static IDurableTaskWorkerBuilder UseExternalizedPayloads(
+        this IDurableTaskWorkerBuilder builder)
+    {
+        Check.NotNull(builder);
+        return UseExternalizedPayloadsCore(builder);
+    }
+
+    static IDurableTaskWorkerBuilder UseExternalizedPayloadsCore(IDurableTaskWorkerBuilder builder)
+    {
         // Wrap the gRPC CallInvoker with our interceptor when using the gRPC worker
         builder.Services
             .AddOptions<GrpcDurableTaskWorkerOptions>(builder.Name)
-            .PostConfigure<IPayloadStore, IOptionsMonitor<LargePayloadStorageOptions>>((opt, store, monitor) =>
+            .PostConfigure<PayloadStore, IOptionsMonitor<LargePayloadStorageOptions>>((opt, store, monitor) =>
             {
                 LargePayloadStorageOptions opts = monitor.Get(builder.Name);
                 if (opt.Channel is not null)
                 {
-                    var invoker = opt.Channel.Intercept(new AzureBlobPayloadsInterceptor(store, opts));
+                    var invoker = opt.Channel.Intercept(new AzureBlobPayloadsSideCarInterceptor(store, opts));
                     opt.CallInvoker = invoker;
+
                     // Ensure worker uses the intercepted invoker path
                     opt.Channel = null;
                 }
                 else if (opt.CallInvoker is not null)
                 {
-                    opt.CallInvoker = opt.CallInvoker.Intercept(new AzureBlobPayloadsInterceptor(store, opts));
+                    opt.CallInvoker = opt.CallInvoker.Intercept(new AzureBlobPayloadsSideCarInterceptor(store, opts));
                 }
                 else
                 {
                     throw new ArgumentException(
-                        "Channel or CallInvoker must be provided to use Azure Blob Payload Externalization feature"
-                    );
+                        "Channel or CallInvoker must be provided to use Azure Blob Payload Externalization feature");
                 }
             });
 

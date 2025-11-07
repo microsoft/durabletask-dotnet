@@ -54,6 +54,9 @@ public class DefaultDurableTaskWorkerBuilder : IDurableTaskWorkerBuilder
         Verify.NotNull(this.buildTarget, error);
 
         DurableTaskRegistry registry = serviceProvider.GetOptions<DurableTaskRegistry>(this.Name);
+
+        // Note: Modifying any logic in this section could introduce breaking changes.
+        // Do not alter the input parameter.
         return (IHostedService)ActivatorUtilities.CreateInstance(
             serviceProvider, this.buildTarget, this.Name, registry.BuildFactory());
     }

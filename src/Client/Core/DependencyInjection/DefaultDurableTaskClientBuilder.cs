@@ -50,6 +50,8 @@ public class DefaultDurableTaskClientBuilder(string? name, IServiceCollection se
                 + " 'UseBuildTarget(Type target)'. An example of a valid client is '.UseGrpc()'.");
         }
 
+        // Note: Modifying any logic in this section could introduce breaking changes.
+        // Do not alter the input parameter.
         return (DurableTaskClient)ActivatorUtilities.CreateInstance(serviceProvider, this.buildTarget, this.Name);
     }
 

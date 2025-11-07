@@ -3,7 +3,9 @@
 
 using System.Diagnostics;
 using System.Text;
+using DurableTask.Core.History;
 using Google.Protobuf.WellKnownTypes;
+using Grpc.Core;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Tracing;
 using Microsoft.Extensions.DependencyInjection;
@@ -323,6 +325,55 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
     }
 
+    // Removed ListTerminalInstances; use GetAllInstancesAsync with OrchestrationQuery instead
+
+    /// <inheritdoc/>
+    public override async Task<Page<string>> ListInstanceIdsAsync(
+        IEnumerable<OrchestrationRuntimeStatus>? runtimeStatus = null,
+        DateTimeOffset? completedTimeFrom = null,
+        DateTimeOffset? completedTimeTo = null,
+        int pageSize = OrchestrationQuery.DefaultPageSize,
+        string? lastInstanceKey = null,
+        CancellationToken cancellation = default)
+    {
+        Check.NotEntity(this.options.EnableEntitySupport, null);
+
+        P.ListInstanceIdsRequest request = new()
+        {
+            PageSize = pageSize,
+            LastInstanceKey = lastInstanceKey ?? string.Empty,
+        };
+
+        if (runtimeStatus != null)
+        {
+            request.RuntimeStatus.AddRange(runtimeStatus.Select(x => x.ToGrpcStatus()));
+        }
+
+        if (completedTimeFrom.HasValue)
+        {
+            request.CompletedTimeFrom = completedTimeFrom.Value.ToTimestamp();
+        }
+
+        if (completedTimeTo.HasValue)
+        {
+            request.CompletedTimeTo = completedTimeTo.Value.ToTimestamp();
+        }
+
+        try
+        {
+            P.ListInstanceIdsResponse response = await this.sidecarClient.ListInstanceIdsAsync(
+                request,
+                cancellationToken: cancellation);
+
+            return new Page<string>(response.InstanceIds.ToList(), response.LastInstanceKey);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.ListInstanceIdsAsync)} operation was canceled.", e, cancellation);
+        }
+    }
+
     /// <inheritdoc/>
     public override async Task<OrchestrationMetadata> WaitForInstanceCompletionAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
@@ -428,6 +479,101 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         {
             throw new OperationCanceledException(
                 $"The {nameof(this.RestartAsync)} operation was canceled.", e, cancellation);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override async Task RewindInstanceAsync(
+        string instanceId,
+        string reason,
+        CancellationToken cancellation = default)
+    {
+        Check.NotNullOrEmpty(instanceId);
+        Check.NotEntity(this.options.EnableEntitySupport, instanceId);
+
+        var request = new P.RewindInstanceRequest
+        {
+            InstanceId = instanceId,
+            Reason = reason,
+        };
+        try
+        {
+            await this.sidecarClient.RewindInstanceAsync(request, cancellationToken: cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.NotFound)
+        {
+            throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.", e);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.FailedPrecondition)
+        {
+            throw new InvalidOperationException(e.Status.Detail);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
+        {
+            throw new NotImplementedException(e.Status.Detail);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.RewindInstanceAsync)} operation was canceled.", e, cancellation);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override async IAsyncEnumerable<HistoryEvent> StreamInstanceHistoryAsync(
+        string instanceId,
+        string? executionId = null,
+        CancellationToken cancellation = default)
+    {
+        Check.NotNullOrEmpty(instanceId);
+        Check.NotEntity(this.options.EnableEntitySupport, instanceId);
+
+        P.StreamInstanceHistoryRequest request = new()
+        {
+            InstanceId = instanceId,
+            ExecutionId = executionId,
+            ForWorkItemProcessing = false,
+        };
+
+        using AsyncServerStreamingCall<P.HistoryChunk> streamResponse =
+            this.sidecarClient.StreamInstanceHistory(request, cancellationToken: cancellation);
+
+        IAsyncStreamReader<P.HistoryChunk> responseStream = streamResponse.ResponseStream;
+
+        // Create conversion state to maintain orchestration instance across events
+        // This is required for entity-related events (EntityOperationCalled, EntityLockRequested, etc.)
+        // which need the parent orchestration instance information from ExecutionStartedEvent
+        Microsoft.DurableTask.ProtoUtils.EntityConversionState conversionState = new(insertMissingEntityUnlocks: false);
+
+        bool hasMore = true;
+        while (hasMore)
+        {
+            bool moveNextResult;
+            try
+            {
+                moveNextResult = await responseStream.MoveNext(cancellation).ConfigureAwait(false);
+            }
+            catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+            {
+                throw new OperationCanceledException(
+                    $"The {nameof(this.StreamInstanceHistoryAsync)} operation was canceled.", e, cancellation);
+            }
+            catch (RpcException e) when (e.StatusCode == StatusCode.NotFound)
+            {
+                throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.", e);
+            }
+
+            hasMore = moveNextResult;
+            if (hasMore)
+            {
+                P.HistoryChunk chunk = responseStream.Current;
+                foreach (P.HistoryEvent protoEvent in chunk.Events)
+                {
+                    // Use the conversion state's converter to maintain state across events
+                    // This ensures entity events can access the orchestration instance from ExecutionStartedEvent
+                    yield return conversionState.ConvertFromProto(protoEvent);
+                }
+            }
         }
     }
 

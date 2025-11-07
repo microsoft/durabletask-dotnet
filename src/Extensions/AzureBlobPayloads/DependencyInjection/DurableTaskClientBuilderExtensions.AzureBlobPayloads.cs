@@ -17,34 +17,29 @@ namespace Microsoft.DurableTask;
 public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
 {
     /// <summary>
-    /// Enables externalized payload storage using Azure Blob Storage for the specified client builder.
+    /// Enables externalized payload storage using a pre-configured shared payload store.
+    /// This overload helps ensure client and worker use the same configuration.
     /// </summary>
     /// <param name="builder">The builder to configure.</param>
-    /// <param name="configure">The callback to configure the storage options.</param>
     /// <returns>The original builder, for call chaining.</returns>
     public static IDurableTaskClientBuilder UseExternalizedPayloads(
-        this IDurableTaskClientBuilder builder,
-        Action<LargePayloadStorageOptions> configure)
+        this IDurableTaskClientBuilder builder)
     {
         Check.NotNull(builder);
-        Check.NotNull(configure);
+        return UseExternalizedPayloadsCore(builder);
+    }
 
-        builder.Services.Configure(builder.Name, configure);
-        builder.Services.AddSingleton<IPayloadStore>(sp =>
-        {
-            LargePayloadStorageOptions opts = sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(builder.Name);
-            return new BlobPayloadStore(opts);
-        });
-
+    static IDurableTaskClientBuilder UseExternalizedPayloadsCore(IDurableTaskClientBuilder builder)
+    {
         // Wrap the gRPC CallInvoker with our interceptor when using the gRPC client
         builder.Services
             .AddOptions<GrpcDurableTaskClientOptions>(builder.Name)
-            .PostConfigure<IPayloadStore, IOptionsMonitor<LargePayloadStorageOptions>>((opt, store, monitor) =>
+            .PostConfigure<PayloadStore, IOptionsMonitor<LargePayloadStorageOptions>>((opt, store, monitor) =>
             {
                 LargePayloadStorageOptions opts = monitor.Get(builder.Name);
                 if (opt.Channel is not null)
                 {
-                    Grpc.Core.CallInvoker invoker = opt.Channel.Intercept(new AzureBlobPayloadsInterceptor(store, opts));
+                    Grpc.Core.CallInvoker invoker = opt.Channel.Intercept(new AzureBlobPayloadsSideCarInterceptor(store, opts));
                     opt.CallInvoker = invoker;
 
                     // Ensure client uses the intercepted invoker path
@@ -52,7 +47,7 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
                 }
                 else if (opt.CallInvoker is not null)
                 {
-                    opt.CallInvoker = opt.CallInvoker.Intercept(new AzureBlobPayloadsInterceptor(store, opts));
+                    opt.CallInvoker = opt.CallInvoker.Intercept(new AzureBlobPayloadsSideCarInterceptor(store, opts));
                 }
                 else
                 {

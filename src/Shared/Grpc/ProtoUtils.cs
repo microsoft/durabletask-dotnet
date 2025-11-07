@@ -394,7 +394,7 @@ static class ProtoUtils
                         && sendEventAction.EventName is not null
                         && sendEventAction.EventData is not null)
                     {
-                        P.SendEntityMessageAction sendAction = new P.SendEntityMessageAction();
+                        P.SendEntityMessageAction sendAction = new();
                         protoAction.SendEntityMessage = sendAction;
 
                         EntityConversions.DecodeEntityMessageAction(
@@ -462,10 +462,7 @@ static class ProtoUtils
                     var completeAction = (OrchestrationCompleteOrchestratorAction)action;
                     protoAction.CompleteOrchestration = new P.CompleteOrchestrationAction
                     {
-                        CarryoverEvents =
-                        {
-                            // TODO
-                        },
+                        CarryoverEvents = { completeAction.CarryoverEvents.Select(ToProtobuf) },
                         Details = completeAction.Details,
                         NewVersion = completeAction.NewVersion,
                         OrchestrationStatus = completeAction.OrchestrationStatus.ToProtobuf(),

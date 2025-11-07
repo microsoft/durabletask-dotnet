@@ -113,6 +113,11 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// </summary>
     internal DataConverter DataConverter => this.invocationContext.Options.DataConverter;
 
+    /// <summary>
+    /// Gets a value indicating whether the orchestration should preserve unprocessed events when continuing as new.
+    /// </summary>
+    internal bool PreserveUnprocessedEvents { get; private set; }
+
     /// <inheritdoc/>
     protected override ILoggerFactory LoggerFactory => this.invocationContext.LoggerFactory;
 
@@ -328,18 +333,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     public override void ContinueAsNew(object? newInput = null, bool preserveUnprocessedEvents = true)
     {
         this.innerContext.ContinueAsNew(newInput);
-
-        if (preserveUnprocessedEvents)
-        {
-            // Send all the buffered external events to ourself.
-            OrchestrationInstance instance = new() { InstanceId = this.InstanceId };
-            foreach ((string eventName, string eventPayload) in this.externalEventBuffer.TakeAll())
-            {
-#pragma warning disable CS0618 // Type or member is obsolete -- 'internal' usage.
-                this.innerContext.SendEvent(instance, eventName, new RawInput(eventPayload));
-#pragma warning restore CS0618 // Type or member is obsolete
-            }
-        }
+        this.PreserveUnprocessedEvents = preserveUnprocessedEvents;
     }
 
     /// <inheritdoc/>
@@ -399,6 +393,22 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         SwapByteArrayValues(newGuidByteArray);
 
         return new Guid(newGuidByteArray);
+    }
+
+    /// <summary>
+    /// Reschedules all buffered external events to the current orchestration instance.
+    /// This is intended to be called when the orchestration continues as new.
+    /// </summary>
+    internal void RescheduleBufferedExternalEvents()
+    {
+        // Send all the buffered external events to ourself.
+        OrchestrationInstance instance = new() { InstanceId = this.InstanceId };
+        foreach ((string eventName, string eventPayload) in this.externalEventBuffer.TakeAll())
+        {
+#pragma warning disable CS0618 // Type or member is obsolete -- 'internal' usage.
+            this.innerContext.SendEvent(instance, eventName, new RawInput(eventPayload));
+#pragma warning restore CS0618 // Type or member is obsolete
+        }
     }
 
     /// <summary>

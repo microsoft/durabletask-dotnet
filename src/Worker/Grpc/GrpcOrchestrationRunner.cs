@@ -232,6 +232,8 @@ public static class GrpcOrchestrationRunner
                 {
                     extendedSessions?.Remove(request.InstanceId);
                 }
+
+                DurableTaskShimFactory.OnPostExecute(shim);
             }
         }
 

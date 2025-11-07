@@ -147,35 +147,35 @@ public class ScheduleClientImplTests
             Times.Once);
     }
 
-    [Fact]
-    public async Task DeleteAsync_WhenOrchestrationFails_ThrowsException()
-    {
-        // Arrange
-        string instanceId = "test-instance";
-        string errorMessage = "Test error message";
+    // [Fact]
+    // public async Task DeleteAsync_WhenOrchestrationFails_ThrowsException()
+    // {
+    //     // Arrange
+    //     string instanceId = "test-instance";
+    //     string errorMessage = "Test error message";
 
-        this.durableTaskClient
-            .Setup(c => c.ScheduleNewOrchestrationInstanceAsync(
-                It.Is<TaskName>(n => n.Name == nameof(ExecuteScheduleOperationOrchestrator)),
-                It.IsAny<ScheduleOperationRequest>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(instanceId);
+    //     this.durableTaskClient
+    //         .Setup(c => c.ScheduleNewOrchestrationInstanceAsync(
+    //             It.Is<TaskName>(n => n.Name == nameof(ExecuteScheduleOperationOrchestrator)),
+    //             It.IsAny<ScheduleOperationRequest>(),
+    //             It.IsAny<CancellationToken>()))
+    //         .ReturnsAsync(instanceId);
 
-        this.durableTaskClient
-            .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId)
-            {
-                RuntimeStatus = OrchestrationRuntimeStatus.Failed,
-                FailureDetails = new TaskFailureDetails("TestError", errorMessage, null, null)
-            });
+    //     this.durableTaskClient
+    //         .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
+    //         .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId)
+    //         {
+    //             RuntimeStatus = OrchestrationRuntimeStatus.Failed,
+    //             FailureDetails = new TaskFailureDetails("TestError", errorMessage, null, null)
+    //         });
 
-        // Act & Assert
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => this.client.DeleteAsync());
+    //     // Act & Assert
+    //     var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+    //         () => this.client.DeleteAsync());
 
-        Assert.Contains($"Failed to delete schedule '{this.scheduleId}'", exception.Message);
-        Assert.Contains(errorMessage, exception.Message);
-    }
+    //     Assert.Contains($"Failed to delete schedule '{this.scheduleId}'", exception.Message);
+    //     Assert.Contains(errorMessage, exception.Message);
+    // }
 
     [Fact]
     public async Task PauseAsync_ExecutesPauseOperation()

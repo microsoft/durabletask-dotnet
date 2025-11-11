@@ -462,10 +462,7 @@ static class ProtoUtils
                     var completeAction = (OrchestrationCompleteOrchestratorAction)action;
                     protoAction.CompleteOrchestration = new P.CompleteOrchestrationAction
                     {
-                        CarryoverEvents =
-                        {
-                            // TODO
-                        },
+                        CarryoverEvents = { completeAction.CarryoverEvents.Select(ToProtobuf) },
                         Details = completeAction.Details,
                         NewVersion = completeAction.NewVersion,
                         OrchestrationStatus = completeAction.OrchestrationStatus.ToProtobuf(),
@@ -1170,6 +1167,28 @@ static class ProtoUtils
             InstanceId = instance.InstanceId,
             ExecutionId = instance.ExecutionId,
         };
+    }
+
+    static P.HistoryEvent ToProtobuf(HistoryEvent e)
+    {
+        var payload = new P.HistoryEvent()
+        {
+            EventId = e.EventId,
+            Timestamp = Timestamp.FromDateTime(e.Timestamp),
+        };
+
+        if (e.EventType == EventType.EventRaised)
+        {
+            var eventRaised = (EventRaisedEvent)e;
+            payload.EventRaised = new P.EventRaisedEvent
+            {
+                Name = eventRaised.Name,
+                Input = eventRaised.Input,
+            };
+            return payload;
+        }
+
+        throw new ArgumentException("Unsupported event type");
     }
 
     /// <summary>

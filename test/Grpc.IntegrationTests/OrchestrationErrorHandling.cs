@@ -879,6 +879,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         {
         }
 
+        [Obsolete]
         protected CustomException(SerializationInfo info, StreamingContext context)
             : base(info, context)
         {
@@ -917,6 +918,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         public IList<object?>? ListProperty { get; }
         public object? NullProperty { get; }
 
+        [Obsolete]
         protected BusinessValidationException(SerializationInfo info, StreamingContext context)
             : base(info, context)
         {

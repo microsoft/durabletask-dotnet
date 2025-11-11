@@ -343,7 +343,8 @@ public class RunBackgroundTaskLoggingTests
             }
             await Task.Delay(50);
         }
-        Assert.True(false, "Condition not met within timeout");
+
+        Assert.Fail("Condition not met within timeout");
     }
 
     sealed class TestFixture : IAsyncDisposable
@@ -366,10 +367,11 @@ public class RunBackgroundTaskLoggingTests
             this.RunBackgroundTaskMethod = runBackgroundTaskMethod;
         }
 
-        public static async Task<TestFixture> CreateAsync()
+        public static Task<TestFixture> CreateAsync()
         {
             // Logging
             var logProvider = new TestLogProvider(new NullOutput());
+
             // DI
             var services = new ServiceCollection().BuildServiceProvider();
             var loggerFactory = new SimpleLoggerFactory(logProvider);
@@ -393,8 +395,8 @@ public class RunBackgroundTaskLoggingTests
                 exceptionPropertiesProvider: null);
 
             // Client mock
-            var callInvoker = Mock.Of<CallInvoker>();
-            var clientMock = new Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient>(MockBehavior.Strict, new object[] { callInvoker });
+            CallInvoker callInvoker = Mock.Of<CallInvoker>();
+            var clientMock = new Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient>(MockBehavior.Strict, [callInvoker]);
 
             // Build Processor via reflection
             Type processorType = typeof(GrpcDurableTaskWorker).GetNestedType("Processor", BindingFlags.NonPublic)!;
@@ -402,17 +404,18 @@ public class RunBackgroundTaskLoggingTests
                 processorType,
                 BindingFlags.Public | BindingFlags.Instance,
                 binder: null,
-                args: new object?[] { worker, clientMock.Object, null, null },
+                args: [worker, clientMock.Object, null, null],
                 culture: null)!;
 
             MethodInfo runBackgroundTask = processorType.GetMethod("RunBackgroundTask", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
-            return new TestFixture((ServiceProvider)services, logProvider, clientMock, worker, processorInstance, runBackgroundTask);
+            TestFixture fixture = new(services, logProvider, clientMock, worker, processorInstance, runBackgroundTask);
+            return Task.FromResult(fixture);
         }
 
         public void InvokeRunBackgroundTask(P.WorkItem workItem, Func<Task> handler, CancellationToken cancellationToken = default)
         {
-            this.RunBackgroundTaskMethod.Invoke(this.ProcessorInstance, new object?[] { workItem, handler, cancellationToken });
+            this.RunBackgroundTaskMethod.Invoke(this.ProcessorInstance, [workItem, handler, cancellationToken]);
         }
 
         public IReadOnlyCollection<LogEntry> GetLogs()

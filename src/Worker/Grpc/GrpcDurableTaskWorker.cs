@@ -17,7 +17,10 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     readonly IServiceProvider services;
     readonly ILoggerFactory loggerFactory;
     readonly ILogger logger;
+
+#pragma warning disable CS0618 // Type or member is obsolete
     readonly IOrchestrationFilter? orchestrationFilter;
+#pragma warning restore CS0618 // Type or member is obsolete
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GrpcDurableTaskWorker" /> class.
@@ -37,7 +40,9 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         IOptionsMonitor<DurableTaskWorkerOptions> workerOptions,
         IServiceProvider services,
         ILoggerFactory loggerFactory,
+#pragma warning disable CS0618 // Type or member is obsolete
         IOrchestrationFilter? orchestrationFilter = null,
+#pragma warning restore CS0618 // Type or member is obsolete
         IExceptionPropertiesProvider? exceptionPropertiesProvider = null)
         : base(name, factory)
     {

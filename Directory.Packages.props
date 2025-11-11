@@ -9,6 +9,7 @@
 
   <!-- Microsoft.Extensions.* Packages -->
   <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="6.0.3" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="6.0.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="6.0.2" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="6.0.0" />
@@ -23,16 +24,22 @@
   <!-- Azure.* Packages -->
   <ItemGroup>
     <PackageVersion Include="Azure.Identity" Version="1.13.1" />
+    <PackageVersion Include="Azure.Storage.Blobs" Version="12.20.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker" Version="1.21.0" />
   </ItemGroup>
 
   <!-- DurableTask Packages -->
   <ItemGroup>
-    <PackageVersion Include="Microsoft.Azure.DurableTask.Core" Version="3.3.0" />
+    <PackageVersion Include="Microsoft.Azure.DurableTask.Core" Version="3.6.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.2.2" />
   </ItemGroup>
 
   <!-- Grpc / Protobuf Packages -->
+  
+  <!-- BCL Packages -->
+  <ItemGroup>
+    <PackageVersion Include="System.ComponentModel.Annotations" Version="5.0.0" />
+  </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="Google.Protobuf" Version="3.21.12" />
     <PackageVersion Include="Grpc.Core" Version="2.46.5" />

@@ -3,9 +3,12 @@
 
 using System.Buffers;
 using System.Buffers.Text;
+using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using DurableTask.Core;
 using DurableTask.Core.Command;
 using DurableTask.Core.Entities;
@@ -13,6 +16,7 @@ using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
 using DurableTask.Core.Tracing;
 using Google.Protobuf;
+using Google.Protobuf.Collections;
 using Google.Protobuf.WellKnownTypes;
 using DTCore = DurableTask.Core;
 using P = Microsoft.DurableTask.Protobuf;
@@ -215,6 +219,9 @@ static class ProtoUtils
                         Tags = proto.HistoryState.OrchestrationState.Tags,
                     });
                 break;
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionRewound:
+                historyEvent = new ExecutionRewoundEvent(proto.EventId);
+                break;
             default:
                 throw new NotSupportedException($"Deserialization of {proto.EventTypeCase} is not supported.");
         }
@@ -279,18 +286,19 @@ static class ProtoUtils
     /// </param>
     /// <param name="entityConversionState">The entity conversion state, or null if no conversion is required.</param>
     /// <param name="orchestrationActivity">The <see cref="Activity" /> that represents orchestration execution.</param>
+    /// <param name="requiresHistory">Whether or not a history is required to complete the orchestration request and none was provided.</param>
     /// <returns>The orchestrator response.</returns>
     /// <exception cref="NotSupportedException">When an orchestrator action is unknown.</exception>
     internal static P.OrchestratorResponse ConstructOrchestratorResponse(
         string instanceId,
         string executionId,
         string? customStatus,
-        IEnumerable<OrchestratorAction> actions,
+        IEnumerable<OrchestratorAction>? actions,
         string completionToken,
         EntityConversionState? entityConversionState,
-        Activity? orchestrationActivity)
+        Activity? orchestrationActivity,
+        bool requiresHistory = false)
     {
-        Check.NotNull(actions);
         var response = new P.OrchestratorResponse
         {
             InstanceId = instanceId,
@@ -302,8 +310,16 @@ static class ProtoUtils
                     SpanID = orchestrationActivity?.SpanId.ToString(),
                     SpanStartTime = orchestrationActivity?.StartTimeUtc.ToTimestamp(),
                 },
+            RequiresHistory = requiresHistory,
         };
 
+        // If a history is required and the orchestration request was not completed, then there is no list of actions.
+        if (requiresHistory)
+        {
+            return response;
+        }
+
+        Check.NotNull(actions);
         foreach (OrchestratorAction action in actions)
         {
             var protoAction = new P.OrchestratorAction { Id = action.Id };
@@ -446,15 +462,17 @@ static class ProtoUtils
                     var completeAction = (OrchestrationCompleteOrchestratorAction)action;
                     protoAction.CompleteOrchestration = new P.CompleteOrchestrationAction
                     {
-                        CarryoverEvents =
-                        {
-                            // TODO
-                        },
+                        CarryoverEvents = { completeAction.CarryoverEvents.Select(ToProtobuf) },
                         Details = completeAction.Details,
                         NewVersion = completeAction.NewVersion,
                         OrchestrationStatus = completeAction.OrchestrationStatus.ToProtobuf(),
                         Result = completeAction.Result,
                     };
+
+                    foreach (KeyValuePair<string, string> tag in completeAction.Tags)
+                    {
+                        protoAction.CompleteOrchestration.Tags[tag.Key] = tag.Value;
+                    }
 
                     if (completeAction.OrchestrationStatus == OrchestrationStatus.Failed)
                     {
@@ -519,29 +537,43 @@ static class ProtoUtils
             failureDetails.ErrorType,
             failureDetails.ErrorMessage,
             failureDetails.StackTrace,
-            failureDetails.InnerFailure.ToTaskFailureDetails());
+            failureDetails.InnerFailure.ToTaskFailureDetails(),
+            ConvertProperties(failureDetails.Properties));
     }
 
     /// <summary>
     /// Converts a <see cref="Exception" /> to <see cref="P.TaskFailureDetails" />.
     /// </summary>
     /// <param name="e">The exception to convert.</param>
+    /// <param name="exceptionPropertiesProvider">Optional exception properties provider.</param>
     /// <returns>The task failure details.</returns>
     [return: NotNullIfNotNull(nameof(e))]
-    internal static P.TaskFailureDetails? ToTaskFailureDetails(this Exception? e)
+    internal static P.TaskFailureDetails? ToTaskFailureDetails(this Exception? e, DTCore.IExceptionPropertiesProvider? exceptionPropertiesProvider = null)
     {
         if (e == null)
         {
             return null;
         }
 
-        return new P.TaskFailureDetails
+        IDictionary<string, object?>? properties = exceptionPropertiesProvider?.GetExceptionProperties(e);
+
+        var taskFailureDetails = new P.TaskFailureDetails
         {
             ErrorType = e.GetType().FullName,
             ErrorMessage = e.Message,
             StackTrace = e.StackTrace,
-            InnerFailure = e.InnerException.ToTaskFailureDetails(),
+            InnerFailure = e.InnerException.ToTaskFailureDetails(exceptionPropertiesProvider),
         };
+
+        if (properties != null)
+        {
+            foreach (var kvp in properties)
+            {
+                taskFailureDetails.Properties[kvp.Key] = ConvertObjectToValue(kvp.Value);
+            }
+        }
+
+        return taskFailureDetails;
     }
 
     /// <summary>
@@ -989,7 +1021,8 @@ static class ProtoUtils
             failureDetails.ErrorMessage,
             failureDetails.StackTrace,
             failureDetails.InnerFailure.ToCore(),
-            failureDetails.IsNonRetriable);
+            failureDetails.IsNonRetriable,
+            ConvertProperties(failureDetails.Properties));
     }
 
     /// <summary>
@@ -1009,7 +1042,28 @@ static class ProtoUtils
             case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.NumberValue:
                 return value.NumberValue;
             case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.StringValue:
-                return value.StringValue;
+                string stringValue = value.StringValue;
+
+                // If the value starts with the 'dt:' prefix, it may represent a DateTime value — attempt to parse it.
+                if (stringValue.StartsWith("dt:", StringComparison.Ordinal))
+                {
+                    if (DateTime.TryParse(stringValue[3..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime date))
+                    {
+                        return date;
+                    }
+                }
+
+                // If the value starts with the 'dto:' prefix, it may represent a DateTime value — attempt to parse it.
+                if (stringValue.StartsWith("dto:", StringComparison.Ordinal))
+                {
+                    if (DateTimeOffset.TryParse(stringValue[4..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTimeOffset date))
+                    {
+                        return date;
+                    }
+                }
+
+                // Otherwise just return as string
+                return stringValue;
             case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.BoolValue:
                 return value.BoolValue;
             case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.StructValue:
@@ -1019,8 +1073,53 @@ static class ProtoUtils
             case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.ListValue:
                 return value.ListValue.Values.Select(ConvertValueToObject).ToList();
             default:
-                throw new NotSupportedException($"Unsupported Value kind: {value.KindCase}");
+                // Fallback: serialize the whole value to JSON string
+                return JsonSerializer.Serialize(value);
         }
+    }
+
+    /// <summary>
+    /// Converts a MapFieldinto a IDictionary.
+    /// </summary>
+    /// <param name="properties"> The map to convert.</param>
+    /// <returns>Dictionary contains the converted obejct.</returns>
+    internal static IDictionary<string, object?> ConvertProperties(MapField<string, Value> properties)
+    {
+        return properties.ToDictionary(
+            kvp => kvp.Key,
+            kvp => ConvertValueToObject(kvp.Value));
+    }
+
+    /// <summary>
+    /// Converts a C# object to a protobuf Value.
+    /// </summary>
+    /// <param name="obj">The object to convert.</param>
+    /// <returns>The converted protobuf Value.</returns>
+    internal static Value ConvertObjectToValue(object? obj)
+    {
+        return obj switch
+        {
+            null => Value.ForNull(),
+            string str => Value.ForString(str),
+            bool b => Value.ForBool(b),
+            int i => Value.ForNumber(i),
+            long l => Value.ForNumber(l),
+            float f => Value.ForNumber(f),
+            double d => Value.ForNumber(d),
+            decimal dec => Value.ForNumber((double)dec),
+
+            // For DateTime and DateTimeOffset, add prefix to distinguish from normal string.
+            DateTime dt => Value.ForString($"dt:{dt.ToString("O")}"),
+            DateTimeOffset dto => Value.ForString($"dto:{dto.ToString("O")}"),
+            IDictionary<string, object?> dict => Value.ForStruct(new Struct
+            {
+                Fields = { dict.ToDictionary(kvp => kvp.Key, kvp => ConvertObjectToValue(kvp.Value)) },
+            }),
+            IEnumerable e => Value.ForList(e.Cast<object?>().Select(ConvertObjectToValue).ToArray()),
+
+            // Fallback: convert unlisted type to string.
+            _ => Value.ForString(obj.ToString() ?? string.Empty),
+        };
     }
 
     /// <summary>
@@ -1035,7 +1134,7 @@ static class ProtoUtils
             return null;
         }
 
-        return new P.TaskFailureDetails
+        var taskFailureDetails = new P.TaskFailureDetails
         {
             ErrorType = failureDetails.ErrorType ?? "(unknown)",
             ErrorMessage = failureDetails.ErrorMessage ?? "(unknown)",
@@ -1043,6 +1142,17 @@ static class ProtoUtils
             IsNonRetriable = failureDetails.IsNonRetriable,
             InnerFailure = failureDetails.InnerFailure.ToProtobuf(),
         };
+
+        // Properly populate the MapField
+        if (failureDetails.Properties != null)
+        {
+            foreach (var kvp in failureDetails.Properties)
+            {
+                taskFailureDetails.Properties[kvp.Key] = ConvertObjectToValue(kvp.Value);
+            }
+        }
+
+        return taskFailureDetails;
     }
 
     static P.OrchestrationStatus ToProtobuf(this OrchestrationStatus status)
@@ -1057,6 +1167,28 @@ static class ProtoUtils
             InstanceId = instance.InstanceId,
             ExecutionId = instance.ExecutionId,
         };
+    }
+
+    static P.HistoryEvent ToProtobuf(HistoryEvent e)
+    {
+        var payload = new P.HistoryEvent()
+        {
+            EventId = e.EventId,
+            Timestamp = Timestamp.FromDateTime(e.Timestamp),
+        };
+
+        if (e.EventType == EventType.EventRaised)
+        {
+            var eventRaised = (EventRaisedEvent)e;
+            payload.EventRaised = new P.EventRaisedEvent
+            {
+                Name = eventRaised.Name,
+                Input = eventRaised.Input,
+            };
+            return payload;
+        }
+
+        throw new ArgumentException("Unsupported event type");
     }
 
     /// <summary>

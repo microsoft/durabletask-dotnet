@@ -39,21 +39,6 @@ public class DurableTaskShimFactory
     public static DurableTaskShimFactory Default { get; } = new(null, null);
 
     /// <summary>
-    /// Used to do post-processing after an orchestration has executed.
-    /// </summary>
-    /// <param name="orchestration">The orchestration that finished executing.</param>
-    /// <exception cref="ArgumentException">An invalid <see cref="TaskOrchestration"/> was provided.</exception>
-    public static void OnPostExecute(TaskOrchestration orchestration)
-    {
-        // This method should only be called on orchestrations created by the CreateOrchestration method above.
-        TaskOrchestrationShim shim = orchestration as TaskOrchestrationShim
-            ?? throw new ArgumentException("Invalid orchestration type", nameof(orchestration));
-
-        // If the orchestration continued-as-new, we need to reschedule buffered external events.
-        ////shim.TryRescheduleBufferedExternalEvents();
-    }
-
-    /// <summary>
     /// Creates a <see cref="TaskActivity" /> from a <see cref="ITaskActivity" />.
     /// </summary>
     /// <param name="name">

@@ -218,24 +218,10 @@ sealed partial class GrpcDurableTaskWorker
                 pastEvents = orchestratorRequest.PastEvents.Select(converter);
             }
 
-            List<HistoryEvent> pastEventsList = pastEvents.ToList();
-            this.Logger.LogDebug(
-                "{InstanceId}: Processing {Count} past event(s): {EventList}",
-                orchestratorRequest.InstanceId,
-                pastEventsList.Count,
-                string.Join(", ", pastEventsList.Select(e => e.EventType.ToString())));
-
-            IList<HistoryEvent> newEvents = orchestratorRequest.NewEvents.Select(converter).ToList();
-
-            this.Logger.LogDebug(
-                "{InstanceId}: Processing {Count} new event(s): {EventList}",
-                orchestratorRequest.InstanceId,
-                newEvents.Count,
-                string.Join(", ", newEvents.Select(e => e.EventType.ToString())));
-
+            IEnumerable<HistoryEvent> newEvents = orchestratorRequest.NewEvents.Select(converter);
 
             // Reconstruct the orchestration state in a way that correctly distinguishes new events from past events
-            var runtimeState = new OrchestrationRuntimeState(pastEventsList);
+            var runtimeState = new OrchestrationRuntimeState(pastEvents.ToList());
             foreach (HistoryEvent e in newEvents)
             {
                 // AddEvent() puts events into the NewEvents list.

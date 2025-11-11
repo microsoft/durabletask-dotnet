@@ -1169,6 +1169,28 @@ static class ProtoUtils
         };
     }
 
+    static P.HistoryEvent ToProtobuf(HistoryEvent e)
+    {
+        var payload = new P.HistoryEvent()
+        {
+            EventId = e.EventId,
+            Timestamp = Timestamp.FromDateTime(e.Timestamp),
+        };
+
+        if (e.EventType == EventType.EventRaised)
+        {
+            var eventRaised = (EventRaisedEvent)e;
+            payload.EventRaised = new P.EventRaisedEvent
+            {
+                Name = eventRaised.Name,
+                Input = eventRaised.Input,
+            };
+            return payload;
+        }
+
+        throw new ArgumentException("Unsupported event type");
+    }
+
     /// <summary>
     /// Tracks state required for converting orchestration histories containing entity-related events.
     /// </summary>

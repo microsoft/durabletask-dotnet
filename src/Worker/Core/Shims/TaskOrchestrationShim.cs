@@ -53,8 +53,6 @@ partial class TaskOrchestrationShim : TaskOrchestration
         this.logger = Logs.CreateWorkerLogger(this.invocationContext.LoggerFactory, "Orchestrations");
     }
 
-    internal OrchestrationInvocationContext InvocationContext => this.invocationContext;
-
     DataConverter DataConverter => this.invocationContext.Options.DataConverter;
 
     /// <inheritdoc/>
@@ -81,11 +79,6 @@ partial class TaskOrchestrationShim : TaskOrchestration
             if (!innerContext.IsReplaying)
             {
                 this.logger.OrchestrationCompleted(instanceId, this.invocationContext.Name);
-            }
-
-            if (this.wrapperContext.PreserveUnprocessedEvents)
-            {
-                this.wrapperContext.RescheduleBufferedExternalEvents();
             }
 
             // Return the output (if any) as a serialized string.
@@ -124,27 +117,5 @@ partial class TaskOrchestrationShim : TaskOrchestration
     public override void RaiseEvent(OrchestrationContext context, string name, string input)
     {
         this.wrapperContext?.CompleteExternalEvent(name, input);
-    }
-
-    /// <summary>
-    /// Reschedules buffered external events if the orchestration continued-as-new and has unprocessed external events
-    /// in its internal buffer.
-    /// </summary>
-    /// <returns><c>true</c> if unprocessed external events were scheduled; <c>false</c> otherwise.</returns>
-    /// <exception cref="InvalidOperationException">This method was called prior to <see cref="Execute"/>.</exception>
-    internal bool TryRescheduleBufferedExternalEvents()
-    {
-        if (this.wrapperContext is null)
-        {
-            throw new InvalidOperationException("RescheduleBufferedExternalEvents can only be called after Execute.");
-        }
-
-        if (this.wrapperContext.PreserveUnprocessedEvents)
-        {
-            this.wrapperContext.RescheduleBufferedExternalEvents();
-            return true;
-        }
-
-        return false;
     }
 }

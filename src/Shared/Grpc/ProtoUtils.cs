@@ -394,7 +394,7 @@ static class ProtoUtils
                         && sendEventAction.EventName is not null
                         && sendEventAction.EventData is not null)
                     {
-                        P.SendEntityMessageAction sendAction = new();
+                        P.SendEntityMessageAction sendAction = new P.SendEntityMessageAction();
                         protoAction.SendEntityMessage = sendAction;
 
                         EntityConversions.DecodeEntityMessageAction(

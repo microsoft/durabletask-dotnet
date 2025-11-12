@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using P = Microsoft.DurableTask.Protobuf;
+
 namespace Microsoft.DurableTask.Worker.Grpc;
 
 /// <summary>
@@ -22,6 +24,12 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
     /// Gets or sets the gRPC call invoker to use. Will supersede <see cref="Address" /> when provided.
     /// </summary>
     public CallInvoker? CallInvoker { get; set; }
+
+    /// <summary>
+    /// Gets the collection of capabilities enabled on this worker.
+    /// Capabilities are announced to the backend on connection.
+    /// </summary>
+    public HashSet<P.WorkerCapability> Capabilities { get; } = new() { P.WorkerCapability.HistoryStreaming };
 
     /// <summary>
     /// Gets the internal protocol options. These are used to control backend-dependent features.

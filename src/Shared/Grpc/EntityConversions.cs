@@ -138,7 +138,7 @@ static class EntityConversions
        OrchestrationInstance? instance)
     {
         P.EntityUnlockSentEvent unlockSentEvent = protoEvent.EntityUnlockSent;
-        string name = EncodeEventName(null);
+        string name = "release";
         string input = JsonConvert.SerializeObject(
             new ReleaseMessage()
             {

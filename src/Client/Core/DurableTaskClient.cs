@@ -352,8 +352,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <see cref="OrchestrationRuntimeStatus.Terminated"/> state can be purged.
     /// </para><para>
     /// Purging an orchestration will by default not purge any of the child sub-orchestrations that were started by the
-    /// orchetration instance. If you want to purge sub-orchestration instances, you can set <see cref="PurgeInstanceOptions.Recursive"/> flag to
-    /// true which will enable purging of child sub-orchestration instances. It is set to false by default.
+    /// orchetration instance. Currently, purging of sub-orchestrations is not supported.
     /// If <paramref name="instanceId"/> is not found in the data store, or if the instance is found but not in a
     /// terminal state, then the returned <see cref="PurgeResult"/> object will have a
     /// <see cref="PurgeResult.PurgedInstanceCount"/> value of <c>0</c>. Otherwise, the existing data will be purged and
@@ -390,14 +389,82 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// </param>
     /// <returns>
     /// This method returns a <see cref="PurgeResult"/> object after the operation has completed with a
-    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged,
-    /// including the count of sub-orchestrations purged if any.
+    /// <see cref="PurgeResult.PurgedInstanceCount"/> indicating the number of orchestration instances that were purged.
     /// </returns>
     public virtual Task<PurgeResult> PurgeAllInstancesAsync(
         PurgeInstancesFilter filter, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
         throw new NotSupportedException($"{this.GetType()} does not support purging of orchestration instances.");
     }
+
+    /// <summary>
+    /// Restarts an orchestration instance with the same or a new instance ID.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method restarts an existing orchestration instance. If <paramref name="restartWithNewInstanceId"/> is <c>true</c>,
+    /// a new instance ID will be generated for the restarted orchestration. If <c>false</c>, the original instance ID will be reused.
+    /// </para><para>
+    /// The restarted orchestration will use the same input data as the original instance. If the original orchestration
+    /// instance is not found, an <see cref="ArgumentException"/> will be thrown.
+    /// </para><para>
+    /// Note that this operation is backend-specific and may not be supported by all durable task backends.
+    /// If the backend does not support restart operations, a <see cref="NotSupportedException"/> will be thrown.
+    /// </para>
+    /// </remarks>
+    /// <param name="instanceId">The ID of the orchestration instance to restart.</param>
+    /// <param name="restartWithNewInstanceId">
+    /// If <c>true</c>, a new instance ID will be generated for the restarted orchestration.
+    /// If <c>false</c>, the original instance ID will be reused.
+    /// </param>
+    /// <param name="cancellation">
+    /// The cancellation token. This only cancels enqueueing the restart request to the backend.
+    /// Does not abort restarting the orchestration once enqueued.
+    /// </param>
+    /// <returns>
+    /// A task that completes when the orchestration instance is successfully restarted.
+    /// The value of this task is the instance ID of the restarted orchestration instance.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if an orchestration with the specified <paramref name="instanceId"/> was not found. </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when attempting to restart an instance using the same instance Id
+    /// while the instance has not yet reached a completed or terminal state. </exception>
+    /// <exception cref="NotSupportedException">
+    /// Thrown if the backend does not support restart operations. </exception>
+    public virtual Task<string> RestartAsync(
+        string instanceId,
+        bool restartWithNewInstanceId = false,
+        CancellationToken cancellation = default)
+        => throw new NotSupportedException($"{this.GetType()} does not support orchestration restart.");
+
+    /// <summary>
+    /// Rewinds the specified orchestration instance by re-executing any failed Activities, and recursively rewinding
+    /// any failed suborchestrations with failed Activities.
+    /// </summary>
+    /// <remarks>
+    /// The orchestration's history will be replaced with a new history that excludes the failed Activities and suborchestrations,
+    /// and a new execution ID will be generated for the rewound orchestration instance. As the failed Activities and suborchestrations
+    /// re-execute, the history will be appended with new TaskScheduled, TaskCompleted, and SubOrchestrationInstanceCompleted events.
+    /// Note that only orchestrations in a "Failed" state can be rewound.
+    /// </remarks>
+    /// <param name="instanceId">The instance ID of the orchestration to rewind.</param>
+    /// <param name="reason">The reason for the rewind.</param>
+    /// <param name="cancellation">The cancellation token. This only cancels enqueueing the rewind request to the backend.
+    /// It does not abort rewinding the orchestration once the request has been enqueued.</param>
+    /// <returns>A task that represents the enqueueing of the rewind operation.</returns>
+    /// <exception cref="NotSupportedException">Thrown if this implementation of <see cref="DurableTaskClient"/> does not
+    /// support rewinding orchestrations.</exception>
+    /// <exception cref="NotImplementedException">Thrown if the backend storage provider does not support rewinding orchestrations.</exception>
+    /// <exception cref="ArgumentException">Thrown if an orchestration with the specified <paramref name="instanceId"/> does not exist.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if a precondition of the operation fails, for example if the specified
+    /// orchestration is not in a "Failed" state.</exception>
+    /// <exception cref="OperationCanceledException">Thrown if the operation is canceled via the <paramref name="cancellation"/> token.</exception>
+    public virtual Task RewindInstanceAsync(
+        string instanceId,
+        string reason,
+        CancellationToken cancellation = default)
+        => throw new NotSupportedException($"{this.GetType()} does not support orchestration rewind.");
 
     // TODO: Create task hub
 

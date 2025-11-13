@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "LargePayloadConsoleApp": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DURABLE_TASK_SCHEDULER_CONNECTION_STRING": "",
+        "DURABLETASK_STORAGE": "",
+        "DURABLETASK_PAYLOAD_CONTAINER": ""
+      }
+    }
+  }
+}

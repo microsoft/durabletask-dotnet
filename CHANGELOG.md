@@ -1,14 +1,64 @@
 ﻿# Changelog
 
-## (Unreleased)
+## v1.17.1
+- Fix Worker Registry and Add Documentation Notes by nytian in [#462](https://github.com/microsoft/durabletask-dotnet/pull/495)
+- Initial attempt to fix carryover events issue on continue-as-new by cgillum in [#496](https://github.com/microsoft/durabletask-dotnet/pull/496)
+- Fix encoding of entity unlock events by sebastianburckhardt in [#462](https://github.com/microsoft/durabletask-dotnet/pull/462)
 
-- Add New Property Properties to TaskOrchestrationContext by @nytian in [#415](https://github.com/microsoft/durabletask-dotnet/pull/415)
-- Add automatic retry on gateway timeout in `GrpcDurableTaskClient.WaitForInstanceCompletionAsync` in [#412](https://github.com/microsoft/durabletask-dotnet/pull/412))
-- Add specific logging for NotFound error on worker connection by @halspang in ([#413](https://github.com/microsoft/durabletask-dotnet/pull/413))
-- Add user agent header to gRPC called in ([#417](https://github.com/microsoft/durabletask-dotnet/pull/417))
+## v1.17.0
+-Add Microsoft.DurableTask.Extensions.AzureBlobPayloads to nuget publish by YunchuWang in [#488](https://github.com/microsoft/durabletask-dotnet/pull/488)
+-Add API for In-process Testing and Add Class-Syntax Integration Tests by nytian in [#476](https://github.com/microsoft/durabletask-dotnet/pull/476)
+-Fix Purge Instance Comments by sophiatev in [#489](https://github.com/microsoft/durabletask-dotnet/pull/489)
+-Fix ServiceCollectionExtensions.AddDurableTaskClient by sophiatev in [#490](https://github.com/microsoft/durabletask-dotnet/pull/490)
+-Update zuremanaged sdks to official version by YunchuWang in [#493](https://github.com/microsoft/durabletask-dotnet/pull/493)
+-Add Rewind to .NET isolated by sophiatev in [#479](https://github.com/microsoft/durabletask-dotnet/pull/479)
+-Add tags field to CompleteOrchestratorAction by sophiatev in [#492](https://github.com/microsoft/durabletask-dotnet/pull/492)
+
+## v1.16.2
+- Generate changelog script + update changelog for v1.16.1 by wangbill ([#486](https://github.com/microsoft/durabletask-dotnet/pull/486))
+- Remove unnecessary project reference to grpc.azuremanagedbackend in azureblobpayloads.csproj by wangbill ([#485](https://github.com/microsoft/durabletask-dotnet/pull/485))
+- Large payload azure blob externalization support by wangbill ([#468](https://github.com/microsoft/durabletask-dotnet/pull/468))
+
+## v1.16.1
+- Include exception properties in failure details when orchestration throws directly by Naiyuan Tian ([#482](https://github.com/microsoft/durabletask-dotnet/pull/482))
+- Set low priority for scheduled runs by Daniel Castro ([#477](https://github.com/microsoft/durabletask-dotnet/pull/477))
+
+## v1.16.0
+- Include Exception Properties at FailureDetails by nytian in([#474](https://github.com/microsoft/durabletask-dotnet/pull/474))
+
+## v1.15.1 
+- Add version check to activities by @halspang in ([#472](https://github.com/microsoft/durabletask-dotnet/pull/472))
+
+## v1.15.0
+- Abandon workitem if processing workitem failed by @YunchuWang in ([#467](https://github.com/microsoft/durabletask-dotnet/pull/467))
+- Extended Sessions for Isolated (Orchestrations) by @sophiatev in ([#449](https://github.com/microsoft/durabletask-dotnet/pull/449))
+  
+## v1.14.0
+- Add RestartAsync API Support at DurableTaskClient ([#456](https://github.com/microsoft/durabletask-dotnet/pull/456))
+
+## v1.13.0
+- Add orchestration execution tracing ([#441](https://github.com/microsoft/durabletask-dotnet/pull/441))
+
+## v1.12.0
+
+- Activity tag support ([#426](https://github.com/microsoft/durabletask-dotnet/pull/426))
+- Adding Analyzer to build and release ([#444](https://github.com/microsoft/durabletask-dotnet/pull/444))
+- Add ability to filter orchestrations at worker ([#443](https://github.com/microsoft/durabletask-dotnet/pull/443))
+- Removing breaking change for TaskOptions ([#446](https://github.com/microsoft/durabletask-dotnet/pull/446))
+- Expose gRPC retry options in Azure Managed extensions ([#447](https://github.com/microsoft/durabletask-dotnet/pull/447))
+
+## v1.11.0
+
+- Add New Property Properties to TaskOrchestrationContext ([#415](https://github.com/microsoft/durabletask-dotnet/pull/415))
+- Add automatic retry on gateway timeout in `GrpcDurableTaskClient.WaitForInstanceCompletionAsync` ([#412](https://github.com/microsoft/durabletask-dotnet/pull/412))
+- Add specific logging for NotFound error on worker connection ([#413](https://github.com/microsoft/durabletask-dotnet/pull/413))
+- Add user agent header to gRPC called ([#417](https://github.com/microsoft/durabletask-dotnet/pull/417))
 - Enrich User-Agent Header in gRPC Metadata to indicate Client or Worker as caller ([#421](https://github.com/microsoft/durabletask-dotnet/pull/421))
+- Change DTS user agent metadata to avoid overlap with gRPC user agent ([#423](https://github.com/microsoft/durabletask-dotnet/pull/423))
 - Add extension methods for registering entities by type ([#427](https://github.com/microsoft/durabletask-dotnet/pull/427))
 - Add TaskVersion and utilize it for version overrides when starting orchestrations ([#416](https://github.com/microsoft/durabletask-dotnet/pull/416))
+- Update sub-orchestration default versioning ([#437](https://github.com/microsoft/durabletask-dotnet/pull/437))
+- Distributed Tracing for Entities (Isolated) ([#404](https://github.com/microsoft/durabletask-dotnet/pull/404))
 
 ## v1.10.0
 
@@ -275,3 +325,7 @@ Microsoft.DurableTask.Generators
 ## v0.4.1-beta
 
 Initial public release
+
+
+
+

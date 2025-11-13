@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
@@ -8,10 +9,12 @@ using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
 using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Entities;
+using Microsoft.DurableTask.Tracing;
 using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using static Microsoft.DurableTask.Protobuf.TaskHubSidecarService;
+using ActivityStatusCode = System.Diagnostics.ActivityStatusCode;
 using DTCore = DurableTask.Core;
 using P = Microsoft.DurableTask.Protobuf;
 
@@ -30,16 +33,20 @@ sealed partial class GrpcDurableTaskWorker
         readonly TaskHubSidecarServiceClient client;
         readonly DurableTaskShimFactory shimFactory;
         readonly GrpcDurableTaskWorkerOptions.InternalOptions internalOptions;
+        readonly DTCore.IExceptionPropertiesProvider? exceptionPropertiesProvider;
         [Obsolete("Experimental")]
         readonly IOrchestrationFilter? orchestrationFilter;
 
-        public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient client, IOrchestrationFilter? orchestrationFilter = null)
+        public Processor(GrpcDurableTaskWorker worker, TaskHubSidecarServiceClient client, IOrchestrationFilter? orchestrationFilter = null, IExceptionPropertiesProvider? exceptionPropertiesProvider = null)
         {
             this.worker = worker;
             this.client = client;
             this.shimFactory = new DurableTaskShimFactory(this.worker.grpcOptions, this.worker.loggerFactory);
             this.internalOptions = this.worker.grpcOptions.Internal;
             this.orchestrationFilter = orchestrationFilter;
+            this.exceptionPropertiesProvider = exceptionPropertiesProvider is not null
+                ? new ExceptionPropertiesProviderAdapter(exceptionPropertiesProvider)
+                : null;
         }
 
         ILogger Logger => this.worker.logger;
@@ -273,7 +280,8 @@ sealed partial class GrpcDurableTaskWorker
                             () => this.OnRunOrchestratorAsync(
                                 workItem.OrchestratorRequest,
                                 workItem.CompletionToken,
-                                cancellation));
+                                cancellation),
+                            cancellation);
                     }
                     else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
                     {
@@ -282,13 +290,15 @@ sealed partial class GrpcDurableTaskWorker
                             () => this.OnRunActivityAsync(
                                 workItem.ActivityRequest,
                                 workItem.CompletionToken,
-                                cancellation));
+                                cancellation),
+                            cancellation);
                     }
                     else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
                     {
                         this.RunBackgroundTask(
                             workItem,
-                            () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation));
+                            () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation),
+                            cancellation);
                     }
                     else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequestV2)
                     {
@@ -302,7 +312,8 @@ sealed partial class GrpcDurableTaskWorker
                                 batchRequest,
                                 cancellation,
                                 workItem.CompletionToken,
-                                operationInfos));
+                                operationInfos),
+                             cancellation);
                     }
                     else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
                     {
@@ -330,10 +341,11 @@ sealed partial class GrpcDurableTaskWorker
             }
         }
 
-        void RunBackgroundTask(P.WorkItem? workItem, Func<Task> handler)
+        void RunBackgroundTask(P.WorkItem? workItem, Func<Task> handler, CancellationToken cancellation)
         {
             // TODO: is Task.Run appropriate here? Should we have finer control over the tasks and their threads?
-            _ = Task.Run(async () =>
+            _ = Task.Run(
+                async () =>
             {
                 try
                 {
@@ -348,8 +360,99 @@ sealed partial class GrpcDurableTaskWorker
                     string instanceId =
                         workItem?.OrchestratorRequest?.InstanceId ??
                         workItem?.ActivityRequest?.OrchestrationInstance?.InstanceId ??
+                        workItem?.EntityRequest?.InstanceId ??
+                        workItem?.EntityRequestV2?.InstanceId ??
                         string.Empty;
                     this.Logger.UnexpectedError(ex, instanceId);
+
+                    if (workItem?.OrchestratorRequest != null)
+                    {
+                        try
+                        {
+                            this.Logger.AbandoningOrchestratorWorkItem(instanceId, workItem?.CompletionToken ?? string.Empty);
+                            await this.client.AbandonTaskOrchestratorWorkItemAsync(
+                                new P.AbandonOrchestrationTaskRequest
+                                {
+                                    CompletionToken = workItem?.CompletionToken,
+                                },
+                                cancellationToken: cancellation);
+                            this.Logger.AbandonedOrchestratorWorkItem(instanceId, workItem?.CompletionToken ?? string.Empty);
+                        }
+                        catch (Exception abandonException)
+                        {
+                            this.Logger.UnexpectedError(abandonException, instanceId);
+                        }
+                    }
+                    else if (workItem?.ActivityRequest != null)
+                    {
+                        try
+                        {
+                            this.Logger.AbandoningActivityWorkItem(
+                                instanceId,
+                                workItem.ActivityRequest.Name,
+                                workItem.ActivityRequest.TaskId,
+                                workItem?.CompletionToken ?? string.Empty);
+                            await this.client.AbandonTaskActivityWorkItemAsync(
+                                new P.AbandonActivityTaskRequest
+                                {
+                                    CompletionToken = workItem?.CompletionToken,
+                                },
+                                cancellationToken: cancellation);
+                            this.Logger.AbandonedActivityWorkItem(
+                                instanceId,
+                                workItem.ActivityRequest.Name,
+                                workItem.ActivityRequest.TaskId,
+                                workItem?.CompletionToken ?? string.Empty);
+                        }
+                        catch (Exception abandonException)
+                        {
+                            this.Logger.UnexpectedError(abandonException, instanceId);
+                        }
+                    }
+                    else if (workItem?.EntityRequest != null)
+                    {
+                        try
+                        {
+                            this.Logger.AbandoningEntityWorkItem(
+                                workItem.EntityRequest.InstanceId,
+                                workItem?.CompletionToken ?? string.Empty);
+                            await this.client.AbandonTaskEntityWorkItemAsync(
+                                new P.AbandonEntityTaskRequest
+                                {
+                                    CompletionToken = workItem?.CompletionToken,
+                                },
+                                cancellationToken: cancellation);
+                            this.Logger.AbandonedEntityWorkItem(
+                                workItem.EntityRequest.InstanceId,
+                                workItem?.CompletionToken ?? string.Empty);
+                        }
+                        catch (Exception abandonException)
+                        {
+                            this.Logger.UnexpectedError(abandonException, workItem.EntityRequest.InstanceId);
+                        }
+                    }
+                    else if (workItem?.EntityRequestV2 != null)
+                    {
+                        try
+                        {
+                            this.Logger.AbandoningEntityWorkItem(
+                                workItem.EntityRequestV2.InstanceId,
+                                workItem?.CompletionToken ?? string.Empty);
+                            await this.client.AbandonTaskEntityWorkItemAsync(
+                                new P.AbandonEntityTaskRequest
+                                {
+                                    CompletionToken = workItem?.CompletionToken,
+                                },
+                                cancellationToken: cancellation);
+                            this.Logger.AbandonedEntityWorkItem(
+                                workItem.EntityRequestV2.InstanceId,
+                                workItem?.CompletionToken ?? string.Empty);
+                        }
+                        catch (Exception abandonException)
+                        {
+                            this.Logger.UnexpectedError(abandonException, workItem.EntityRequestV2.InstanceId);
+                        }
+                    }
                 }
             });
         }
@@ -359,6 +462,109 @@ sealed partial class GrpcDurableTaskWorker
             string completionToken,
             CancellationToken cancellationToken)
         {
+            var executionStartedEvent =
+                request
+                    .NewEvents
+                    .Concat(request.PastEvents)
+                    .Where(e => e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionStarted)
+                    .Select(e => e.ExecutionStarted)
+                    .FirstOrDefault();
+
+            Activity? traceActivity = TraceHelper.StartTraceActivityForOrchestrationExecution(
+                executionStartedEvent,
+                request.OrchestrationTraceContext);
+
+            if (executionStartedEvent is not null)
+            {
+                P.HistoryEvent? GetSuborchestrationInstanceCreatedEvent(int eventId)
+                {
+                    var subOrchestrationEvent =
+                        request
+                            .PastEvents
+                            .Where(x => x.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated)
+                            .FirstOrDefault(x => x.EventId == eventId);
+
+                    return subOrchestrationEvent;
+                }
+
+                P.HistoryEvent? GetTaskScheduledEvent(int eventId)
+                {
+                    var taskScheduledEvent =
+                        request
+                            .PastEvents
+                            .Where(x => x.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.TaskScheduled)
+                            .LastOrDefault(x => x.EventId == eventId);
+
+                    return taskScheduledEvent;
+                }
+
+                foreach (var newEvent in request.NewEvents)
+                {
+                    switch (newEvent.EventTypeCase)
+                    {
+                        case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted:
+                            {
+                                P.HistoryEvent? subOrchestrationInstanceCreatedEvent =
+                                    GetSuborchestrationInstanceCreatedEvent(
+                                        newEvent.SubOrchestrationInstanceCompleted.TaskScheduledId);
+
+                                TraceHelper.EmitTraceActivityForSubOrchestrationCompleted(
+                                    request.InstanceId,
+                                    subOrchestrationInstanceCreatedEvent,
+                                    subOrchestrationInstanceCreatedEvent?.SubOrchestrationInstanceCreated);
+                                break;
+                            }
+
+                        case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceFailed:
+                            {
+                                P.HistoryEvent? subOrchestrationInstanceCreatedEvent =
+                                    GetSuborchestrationInstanceCreatedEvent(
+                                        newEvent.SubOrchestrationInstanceFailed.TaskScheduledId);
+
+                                TraceHelper.EmitTraceActivityForSubOrchestrationFailed(
+                                    request.InstanceId,
+                                    subOrchestrationInstanceCreatedEvent,
+                                    subOrchestrationInstanceCreatedEvent?.SubOrchestrationInstanceCreated,
+                                    newEvent.SubOrchestrationInstanceFailed);
+                                break;
+                            }
+
+                        case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
+                            {
+                                P.HistoryEvent? taskScheduledEvent =
+                                    GetTaskScheduledEvent(newEvent.TaskCompleted.TaskScheduledId);
+
+                                TraceHelper.EmitTraceActivityForTaskCompleted(
+                                    request.InstanceId,
+                                    taskScheduledEvent,
+                                    taskScheduledEvent?.TaskScheduled);
+                                break;
+                            }
+
+                        case P.HistoryEvent.EventTypeOneofCase.TaskFailed:
+                            {
+                                P.HistoryEvent? taskScheduledEvent =
+                                    GetTaskScheduledEvent(newEvent.TaskFailed.TaskScheduledId);
+
+                                TraceHelper.EmitTraceActivityForTaskFailed(
+                                    request.InstanceId,
+                                    taskScheduledEvent,
+                                    taskScheduledEvent?.TaskScheduled,
+                                    newEvent.TaskFailed);
+                                break;
+                            }
+
+                        case P.HistoryEvent.EventTypeOneofCase.TimerFired:
+                            TraceHelper.EmitTraceActivityForTimer(
+                                request.InstanceId,
+                                executionStartedEvent.Name,
+                                newEvent.Timestamp.ToDateTime(),
+                                newEvent.TimerFired);
+                            break;
+                    }
+                }
+            }
+
             OrchestratorExecutionResult? result = null;
             P.TaskFailureDetails? failureDetails = null;
             TaskName name = new("(unknown)");
@@ -434,7 +640,8 @@ sealed partial class GrpcDurableTaskWorker
                             shim,
                             BehaviorOnContinueAsNew.Carryover,
                             request.EntityParameters.ToCore(),
-                            ErrorPropagationMode.UseFailureDetails);
+                            ErrorPropagationMode.UseFailureDetails,
+                            this.exceptionPropertiesProvider);
                         result = executor.Execute();
                     }
                     else
@@ -452,7 +659,7 @@ sealed partial class GrpcDurableTaskWorker
             {
                 // This is not expected: Normally TaskOrchestrationExecutor handles exceptions in user code.
                 this.Logger.OrchestratorFailed(name, request.InstanceId, unexpected.ToString());
-                failureDetails = unexpected.ToTaskFailureDetails();
+                failureDetails = unexpected.ToTaskFailureDetails(this.exceptionPropertiesProvider);
             }
 
             P.OrchestratorResponse response;
@@ -460,10 +667,12 @@ sealed partial class GrpcDurableTaskWorker
             {
                 response = ProtoUtils.ConstructOrchestratorResponse(
                     request.InstanceId,
+                    request.ExecutionId,
                     result.CustomStatus,
                     result.Actions,
                     completionToken,
-                    entityConversionState);
+                    entityConversionState,
+                    traceActivity);
             }
             else if (versioning != null && failureDetails != null && versionFailure)
             {
@@ -521,6 +730,25 @@ sealed partial class GrpcDurableTaskWorker
                 };
             }
 
+            var completeOrchestrationAction = response.Actions.FirstOrDefault(
+                a => a.CompleteOrchestration is not null);
+
+            if (completeOrchestrationAction is not null)
+            {
+                if (completeOrchestrationAction.CompleteOrchestration.OrchestrationStatus == P.OrchestrationStatus.Failed)
+                {
+                    traceActivity?.SetStatus(
+                        ActivityStatusCode.Error,
+                        completeOrchestrationAction.CompleteOrchestration.Result);
+                }
+
+                traceActivity?.SetTag(
+                    Schema.Task.Status,
+                    completeOrchestrationAction.CompleteOrchestration.OrchestrationStatus.ToString());
+
+                traceActivity?.Dispose();
+            }
+
             this.Logger.SendingOrchestratorResponse(
                 name,
                 response.InstanceId,
@@ -532,44 +760,69 @@ sealed partial class GrpcDurableTaskWorker
 
         async Task OnRunActivityAsync(P.ActivityRequest request, string completionToken, CancellationToken cancellation)
         {
+            using Activity? traceActivity = TraceHelper.StartTraceActivityForTaskExecution(request);
+
             OrchestrationInstance instance = request.OrchestrationInstance.ToCore();
             string rawInput = request.Input;
-
             int inputSize = rawInput != null ? Encoding.UTF8.GetByteCount(rawInput) : 0;
             this.Logger.ReceivedActivityRequest(request.Name, request.TaskId, instance.InstanceId, inputSize);
 
+            P.TaskFailureDetails? failureDetails = null;
             TaskContext innerContext = new(instance);
+            innerContext.ExceptionPropertiesProvider = this.exceptionPropertiesProvider;
+
             TaskName name = new(request.Name);
             string? output = null;
-            P.TaskFailureDetails? failureDetails = null;
-            try
+
+            failureDetails = EvaluateOrchestrationVersioning(this.worker.workerOptions.Versioning, request.Version, out bool versioningFailed);
+            if (!versioningFailed)
             {
-                await using AsyncServiceScope scope = this.worker.services.CreateAsyncScope();
-                if (this.worker.Factory.TryCreateActivity(name, scope.ServiceProvider, out ITaskActivity? activity))
+                try
                 {
-                    // Both the factory invocation and the RunAsync could involve user code and need to be handled as
-                    // part of try/catch.
-                    TaskActivity shim = this.shimFactory.CreateActivity(name, activity);
-                    output = await shim.RunAsync(innerContext, request.Input);
-                }
-                else
-                {
-                    failureDetails = new P.TaskFailureDetails
+                    await using AsyncServiceScope scope = this.worker.services.CreateAsyncScope();
+                    if (this.worker.Factory.TryCreateActivity(name, scope.ServiceProvider, out ITaskActivity? activity))
                     {
-                        ErrorType = "ActivityTaskNotFound",
-                        ErrorMessage = $"No activity task named '{name}' was found.",
-                        IsNonRetriable = true,
-                    };
+                        // Both the factory invocation and the RunAsync could involve user code and need to be handled as
+                        // part of try/catch.
+                        TaskActivity shim = this.shimFactory.CreateActivity(name, activity);
+                        output = await shim.RunAsync(innerContext, request.Input);
+                    }
+                    else
+                    {
+                        failureDetails = new P.TaskFailureDetails
+                        {
+                            ErrorType = "ActivityTaskNotFound",
+                            ErrorMessage = $"No activity task named '{name}' was found.",
+                            IsNonRetriable = true,
+                        };
+                    }
+                }
+                catch (Exception applicationException)
+                {
+                    failureDetails = applicationException.ToTaskFailureDetails(this.exceptionPropertiesProvider);
                 }
             }
-            catch (Exception applicationException)
+            else
             {
-                failureDetails = applicationException.ToTaskFailureDetails();
+                if (this.worker.workerOptions.Versioning?.FailureStrategy == DurableTaskWorkerOptions.VersionFailureStrategy.Reject)
+                {
+                    this.Logger.AbandoningActivityWorkItem(instance.InstanceId, request.Name, request.TaskId, completionToken);
+                    await this.client.AbandonTaskActivityWorkItemAsync(
+                        new P.AbandonActivityTaskRequest
+                        {
+                            CompletionToken = completionToken,
+                        },
+                        cancellationToken: cancellation);
+                }
+
+                return;
             }
 
             int outputSizeInBytes = 0;
             if (failureDetails != null)
             {
+                traceActivity?.SetStatus(ActivityStatusCode.Error, failureDetails.ErrorMessage);
+
                 outputSizeInBytes = failureDetails.GetApproximateByteCount();
             }
             else if (output != null)
@@ -589,6 +842,9 @@ sealed partial class GrpcDurableTaskWorker
                 FailureDetails = failureDetails,
                 CompletionToken = completionToken,
             };
+
+            // Stop the trace activity here to avoid including the completion time in the latency calculation
+            traceActivity?.Stop();
 
             await this.client.CompleteActivityTaskAsync(response, cancellationToken: cancellation);
         }

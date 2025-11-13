@@ -124,6 +124,17 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public void AddDurableTaskClient_Unnamed_HostedServiceAdded()
+    {
+        ServiceCollection services = new();
+        services.AddDurableTaskClient();
+        services.Should().ContainSingle(
+            x => x.ServiceType == typeof(IDurableTaskClientProvider) && x.Lifetime == ServiceLifetime.Singleton);
+        services.Should().ContainSingle(
+            x => x.ServiceType == typeof(DurableTaskClient) && x.Lifetime == ServiceLifetime.Singleton);
+    }
+
+    [Fact]
     public void AddDurableTaskClient_ConfiguresConverter()
     {
         ServiceCollection services = new();
@@ -145,6 +156,19 @@ public class ServiceCollectionExtensionsTests
 
         DurableTaskClientOptions options = services.BuildServiceProvider().GetOptions<DurableTaskClientOptions>();
         options.DataConverter.Should().BeSameAs(JsonDataConverter.Default);
+    }
+
+    [Fact]
+    public void AddDurableTaskClient_NullServices_ThrowsException()
+    {
+        Action act = () => ((ServiceCollection)null!).AddDurableTaskClient();
+        act.Should().Throw<ArgumentNullException>();
+
+        act = () => ((ServiceCollection)null!).AddDurableTaskClient(builder => { });
+        act.Should().Throw<ArgumentNullException>();
+
+        act = () => ((ServiceCollection)null!).AddDurableTaskClient("name", builder => { });
+        act.Should().Throw<ArgumentNullException>();
     }
 
     class CustomDataConverter : DataConverter

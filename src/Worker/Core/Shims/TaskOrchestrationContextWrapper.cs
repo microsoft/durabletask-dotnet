@@ -154,7 +154,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             {
                 return await this.innerContext.ScheduleTask<T>(
                     name.Name,
-                    name.Version,
+                    this.innerContext.Version,
                     options: ScheduleTaskOptions.CreateBuilder()
                         .WithRetryOptions(policy.ToDurableTaskCoreRetryOptions())
                         .WithTags(tags)
@@ -166,7 +166,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                 return await this.InvokeWithCustomRetryHandler(
                     () => this.innerContext.ScheduleTask<T>(
                         name.Name,
-                        name.Version,
+                        this.innerContext.Version,
                         options: ScheduleTaskOptions.CreateBuilder()
                             .WithTags(tags)
                             .Build(),
@@ -179,7 +179,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             {
                 return await this.innerContext.ScheduleTask<T>(
                     name.Name,
-                    name.Version,
+                    this.innerContext.Version,
                     options: ScheduleTaskOptions.CreateBuilder()
                         .WithTags(tags)
                         .Build(),
@@ -379,7 +379,9 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
         byte[] hashByteArray;
 #pragma warning disable CA5350 // Do Not Use Weak Cryptographic Algorithms -- not for cryptography
-        using (HashAlgorithm hashAlgorithm = SHA1.Create())
+        using (HashAlgorithm hashAlgorithm = SHA1.Create()) /* CodeQL [SM02196] Suppressed: SHA1 is not used for cryptographic purposes here. The information being hashed is not sensitive,
+                                                               and the goal is to generate a deterministic Guid. We cannot update to SHA2-based algorithms without breaking
+                                                               customers' inflight orchestrations. */
         {
             hashAlgorithm.TransformBlock(namespaceValueByteArray, 0, namespaceValueByteArray.Length, null, 0);
             hashAlgorithm.TransformFinalBlock(nameByteArray, 0, nameByteArray.Length);

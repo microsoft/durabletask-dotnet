@@ -254,6 +254,59 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
         }
     }
 
+    /// <inheritdoc/>
+    public override async Task<string> RestartAsync(
+        string instanceId,
+        bool restartWithNewInstanceId = false,
+        CancellationToken cancellation = default)
+    {
+        Check.NotNullOrEmpty(instanceId);
+        cancellation.ThrowIfCancellationRequested();
+
+        // Get the current orchestration status to retrieve the name and input
+        OrchestrationMetadata? status = await this.GetInstanceAsync(instanceId, getInputsAndOutputs: true, cancellation);
+
+        if (status == null)
+        {
+            throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.");
+        }
+
+        bool isInstaceNotCompleted = status.RuntimeStatus == OrchestrationRuntimeStatus.Running ||
+                                    status.RuntimeStatus == OrchestrationRuntimeStatus.Pending ||
+                                    status.RuntimeStatus == OrchestrationRuntimeStatus.Suspended;
+
+        if (isInstaceNotCompleted && !restartWithNewInstanceId)
+        {
+            throw new InvalidOperationException($"Instance '{instanceId}' cannot be restarted while it is in state '{status.RuntimeStatus}'. " +
+                   "Wait until it has completed, or restart with a new instance ID.");
+        }
+
+        // Determine the instance ID for the restarted orchestration
+        string newInstanceId = restartWithNewInstanceId ? Guid.NewGuid().ToString("N") : instanceId;
+
+        OrchestrationInstance instance = new()
+        {
+            InstanceId = newInstanceId,
+            ExecutionId = Guid.NewGuid().ToString("N"),
+        };
+
+        // Use the original serialized input directly to avoid double serialization
+        // TODO: OrchestrationMetada doesn't have version property so we don't support version here.
+        // Issue link: https://github.com/microsoft/durabletask-dotnet/issues/463
+        TaskMessage message = new()
+        {
+            OrchestrationInstance = instance,
+            Event = new ExecutionStartedEvent(-1, status.SerializedInput)
+            {
+                Name = status.Name,
+                OrchestrationInstance = instance,
+            },
+        };
+
+        await this.Client.CreateTaskOrchestrationAsync(message);
+        return newInstanceId;
+    }
+
     [return: NotNullIfNotNull("state")]
     OrchestrationMetadata? ToMetadata(Core.OrchestrationState? state, bool getInputsAndOutputs)
     {

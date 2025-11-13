@@ -1,4 +1,19 @@
 ﻿# Changelog
+
+## v1.17.1
+- Fix Worker Registry and Add Documentation Notes by nytian in [#462](https://github.com/microsoft/durabletask-dotnet/pull/495)
+- Initial attempt to fix carryover events issue on continue-as-new by cgillum in [#496](https://github.com/microsoft/durabletask-dotnet/pull/496)
+- Fix encoding of entity unlock events by sebastianburckhardt in [#462](https://github.com/microsoft/durabletask-dotnet/pull/462)
+
+## v1.17.0
+-Add Microsoft.DurableTask.Extensions.AzureBlobPayloads to nuget publish by YunchuWang in [#488](https://github.com/microsoft/durabletask-dotnet/pull/488)
+-Add API for In-process Testing and Add Class-Syntax Integration Tests by nytian in [#476](https://github.com/microsoft/durabletask-dotnet/pull/476)
+-Fix Purge Instance Comments by sophiatev in [#489](https://github.com/microsoft/durabletask-dotnet/pull/489)
+-Fix ServiceCollectionExtensions.AddDurableTaskClient by sophiatev in [#490](https://github.com/microsoft/durabletask-dotnet/pull/490)
+-Update zuremanaged sdks to official version by YunchuWang in [#493](https://github.com/microsoft/durabletask-dotnet/pull/493)
+-Add Rewind to .NET isolated by sophiatev in [#479](https://github.com/microsoft/durabletask-dotnet/pull/479)
+-Add tags field to CompleteOrchestratorAction by sophiatev in [#492](https://github.com/microsoft/durabletask-dotnet/pull/492)
+
 ## v1.16.2
 - Generate changelog script + update changelog for v1.16.1 by wangbill ([#486](https://github.com/microsoft/durabletask-dotnet/pull/486))
 - Remove unnecessary project reference to grpc.azuremanagedbackend in azureblobpayloads.csproj by wangbill ([#485](https://github.com/microsoft/durabletask-dotnet/pull/485))
@@ -310,6 +325,7 @@ Microsoft.DurableTask.Generators
 ## v0.4.1-beta
 
 Initial public release
+
 
 
 

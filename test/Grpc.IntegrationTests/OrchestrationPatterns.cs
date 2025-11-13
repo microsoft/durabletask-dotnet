@@ -1145,7 +1145,51 @@ public class OrchestrationPatterns : IntegrationTestBase
         }
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ContinueAsNewEventsArePreserved(bool injectTimers)
+    {
+        const int EventCount = 10;
+        async Task<int> OrchestratorFunc(TaskOrchestrationContext ctx, int counter)
+        {
+            await ctx.WaitForExternalEvent<string>("Event");
+            counter++;
+
+            if (injectTimers)
+            {
+                await ctx.CreateTimer(TimeSpan.FromMilliseconds(1), CancellationToken.None);
+            }
+
+            if (counter < EventCount)
+            {
+                ctx.ContinueAsNew(counter, preserveUnprocessedEvents: true);
+            }
+
+            return counter;
+        }
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(
+            b => b.AddTasks(
+                tasks => tasks.AddOrchestratorFunc<int, int>(nameof(OrchestratorFunc), OrchestratorFunc)));
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            nameof(OrchestratorFunc),
+            input: 0);
+
+        for (int i = 0; i < EventCount; i++)
+        {
+            await server.Client.RaiseEventAsync(instanceId, eventName: "Event");
+            await Task.Delay(TimeSpan.FromMilliseconds(1), this.TimeoutToken);
+        }
+
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        Assert.NotNull(metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.Equal(EventCount, metadata.ReadOutputAs<int>());
+    }
+
     // TODO: Test for multiple external events with the same name
-    // TODO: Test for ContinueAsNew with external events that carry over
     // TODO: Test for catching activity exceptions of specific types
 }

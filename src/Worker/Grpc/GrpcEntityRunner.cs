@@ -3,7 +3,6 @@
 
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
-using DurableTask.Core.Exceptions;
 using Google.Protobuf;
 using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Worker.Shims;
@@ -28,8 +27,6 @@ namespace Microsoft.DurableTask.Worker.Grpc;
 /// </remarks>
 public static class GrpcEntityRunner
 {
-    const int DefaultExtendedSessionIdleTimeoutInSeconds = 30;
-
     /// <summary>
     /// Deserializes entity batch request from <paramref name="encodedEntityRequest"/> and uses it to invoke the
     /// requested operations implemented by <paramref name="implementation"/>.
@@ -54,7 +51,39 @@ public static class GrpcEntityRunner
     /// Thrown if <paramref name="encodedEntityRequest"/> contains invalid data.
     /// </exception>
     public static async Task<string> LoadAndRunAsync(
-        string encodedEntityRequest, ITaskEntity implementation, IMemoryCache entityStates, IServiceProvider? services = null)
+        string encodedEntityRequest, ITaskEntity implementation, IServiceProvider? services = null)
+    {
+        return await LoadAndRunAsync(encodedEntityRequest, implementation, extendedSessionsCache: null, services: services);
+    }
+
+    /// <summary>
+    /// Deserializes entity batch request from <paramref name="encodedEntityRequest"/> and uses it to invoke the
+    /// requested operations implemented by <paramref name="implementation"/>.
+    /// </summary>
+    /// <param name="encodedEntityRequest">
+    /// The encoded protobuf payload representing an entity batch request. This is a base64-encoded string.
+    /// </param>
+    /// <param name="implementation">
+    /// An <see cref="ITaskEntity"/> implementation that defines the entity logic.
+    /// </param>
+    /// <param name="extendedSessionsCache">
+    /// The cache of entity states which can be used to retrieve the entity state if this request is from within an extended session.
+    /// </param>
+    /// <param name="services">
+    /// Optional <see cref="IServiceProvider"/> from which injected dependencies can be retrieved.
+    /// </param>
+    /// <returns>
+    /// Returns a serialized result of the entity batch that should be used as the return value of the entity function
+    /// trigger.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown if <paramref name="encodedEntityRequest"/> or <paramref name="implementation"/> is <c>null</c>.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown if <paramref name="encodedEntityRequest"/> contains invalid data.
+    /// </exception>
+    public static async Task<string> LoadAndRunAsync(
+        string encodedEntityRequest, ITaskEntity implementation, ExtendedSessionsCache? extendedSessionsCache, IServiceProvider? services = null)
     {
         Check.NotNullOrEmpty(encodedEntityRequest);
         Check.NotNull(implementation);
@@ -69,30 +98,49 @@ public static class GrpcEntityRunner
         EntityId id = EntityId.FromString(batch.InstanceId!);
         TaskName entityName = new(id.Name);
 
-        string? entityState = null;
-        bool entityStateFound = false;
-        bool addToEntityStates = false;
+        MemoryCache? extendedSessions = null;
 
-        if (properties.TryGetValue("ExtendedSession", out object? isExtendedSession) && (bool)isExtendedSession!)
+        // If any of the request parameters are malformed, we assume the default - extended sessions are not enabled and the orchestration history is attached
+        bool addToExtendedSessions = false;
+        bool entityStateIncluded = true;
+        bool entityStateCached = false;
+        bool isExtendedSession = false;
+        double extendedSessionIdleTimeoutInSeconds = 0;
+
+        // Only attempt to initialize the extended sessions cache if all the parameters are correctly specified
+        if (properties.TryGetValue("ExtendedSessionIdleTimeoutInSeconds", out object? extendedSessionIdleTimeoutObj)
+            && extendedSessionIdleTimeoutObj is double extendedSessionIdleTimeout
+            && extendedSessionIdleTimeout > 0
+            && properties.TryGetValue("IsExtendedSession", out object? extendedSessionObj)
+            && extendedSessionObj is bool extendedSession)
         {
-            addToEntityStates = true;
-            if (entityStates.TryGetValue(request.InstanceId, out entityState))
+            extendedSessionIdleTimeoutInSeconds = extendedSessionIdleTimeout;
+            isExtendedSession = extendedSession;
+            extendedSessions = extendedSessionsCache?.GetOrInitializeCache(extendedSessionIdleTimeoutInSeconds);
+        }
+
+        if (properties.TryGetValue("IncludeEntityState", out object? includeEntityStateObj)
+            && includeEntityStateObj is bool includeEntityState)
+        {
+            entityStateIncluded = includeEntityState;
+        }
+
+        if (isExtendedSession && extendedSessions != null)
+        {
+            addToExtendedSessions = true;
+
+            // If an entity state was provided, even if we already have one stored, we always want to use the provided state.
+            if (!entityStateIncluded && extendedSessions.TryGetValue(request.InstanceId, out string? entityState))
             {
-                entityStateFound = true;
                 batch.EntityState = entityState;
+                entityStateCached = true;
             }
         }
 
-        int extendedSessionIdleTimeoutInSeconds = DefaultExtendedSessionIdleTimeoutInSeconds;
-        if (properties.TryGetValue("ExtendedSessionIdleTimeoutInSeconds", out object? extendedSessionIdleTimeout)
-            && (int)extendedSessionIdleTimeout! >= 0)
+        if (!entityStateCached && !entityStateIncluded)
         {
-            extendedSessionIdleTimeoutInSeconds = (int)extendedSessionIdleTimeout!;
-        }
-
-        if (!entityStateFound && (properties.TryGetValue("IncludeEntityState", out object? entityStateIncluded) && (bool)entityStateIncluded!))
-        {
-            throw new SessionAbortedException($"The worker has since ended the extended session due to its being idle longer than the maximum of {extendedSessionIdleTimeoutInSeconds} seconds.");
+            // No state was provided, and we do not have one cached, so we cannot execute the batch request.
+            return Convert.ToBase64String(new P.EntityBatchResult { RequiresState = true }.ToByteArray());
         }
 
         DurableTaskShimFactory factory = services is null
@@ -102,12 +150,16 @@ public static class GrpcEntityRunner
         TaskEntity entity = factory.CreateEntity(entityName, implementation, id);
         EntityBatchResult result = await entity.ExecuteOperationBatchAsync(batch);
 
-        if (addToEntityStates)
+        if (addToExtendedSessions)
         {
-            entityStates.Set<string?>(
+            extendedSessions.Set(
                 request.InstanceId,
                 result.EntityState,
                 new MemoryCacheEntryOptions { SlidingExpiration = TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds) });
+        }
+        else
+        {
+            extendedSessions?.Remove(request.InstanceId);
         }
 
         P.EntityBatchResult response = result.ToEntityBatchResult();

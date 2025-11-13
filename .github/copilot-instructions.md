@@ -72,6 +72,6 @@ Unit tests should follow these guidelines:
 - Ensure that all private classes, that are not subclassed, are sealed.
 - Use the Async suffix on the name of all async methods.
 - Use the Moq library for mocking objects where possible.
-- Validate that each test actually tests the target behavior, e.g. we should not have tests that creates a mock, calls the mock and then verifies that the mock was called, without the target code being involved. We also shouldn't have tests that test language features, e.g. something that the compiler would catch anyway.
+- Validate that each test actually tests the target behavior, e.g. we should not have tests that create a mock, call the mock and then verify that the mock was called, without the target code being involved. We also shouldn't have tests that test language features, e.g. something that the compiler would catch anyway.
 - Avoid adding excessive comments to tests. Instead favor clear easy to understand code.
 - Follow the patterns in the unit tests in the same project or classes to which new tests are being added.

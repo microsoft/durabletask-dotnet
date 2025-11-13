@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.ComponentModel;
+using DurableTask.Core.History;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Internal;
 
@@ -465,6 +466,18 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         string reason,
         CancellationToken cancellation = default)
         => throw new NotSupportedException($"{this.GetType()} does not support orchestration rewind.");
+
+    /// <summary>
+    /// Retrieves the history of the specified orchestration instance as a list of <see cref="HistoryEvent"/> objects.
+    /// </summary>
+    /// <param name="instanceId">The instance ID of the orchestration.</param>
+    /// <param name="executionId">The execution ID of the orchestration. If null, the history for the most recent execution is retrieved.</param>
+    /// <param name="cancellation">The cancellation token.</param>
+    /// <returns>The list of <see cref="HistoryEvent"/> objects representing the orchestration's history.</returns>
+    public abstract Task<IList<HistoryEvent>> GetOrchestrationHistoryAsync(
+        string instanceId,
+        string? executionId = null,
+        CancellationToken cancellation = default);
 
     // TODO: Create task hub
 

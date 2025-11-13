@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using System.Text;
+using DurableTask.Core.History;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Tracing;
@@ -466,6 +467,38 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             throw new OperationCanceledException(
                 $"The {nameof(this.RewindInstanceAsync)} operation was canceled.", e, cancellation);
         }
+    }
+
+    /// <inheritdoc/>
+    public override async Task<IList<HistoryEvent>> GetOrchestrationHistoryAsync(
+        string instanceId,
+        string? executionId = null,
+        CancellationToken cancellation = default)
+    {
+        Check.NotEntity(this.options.EnableEntitySupport, instanceId);
+
+        if (string.IsNullOrEmpty(instanceId))
+        {
+            throw new ArgumentNullException(nameof(instanceId));
+        }
+
+        P.StreamInstanceHistoryRequest streamRequest = new()
+        {
+            InstanceId = instanceId,
+            ExecutionId = executionId,
+            ForWorkItemProcessing = false,
+        };
+
+        using AsyncServerStreamingCall<P.HistoryChunk> streamResponse =
+            this.sidecarClient.StreamInstanceHistory(streamRequest, cancellationToken: cancellation);
+
+        List<HistoryEvent> pastEvents = [];
+        while (await streamResponse.ResponseStream.MoveNext(cancellation))
+        {
+            pastEvents.AddRange(streamResponse.ResponseStream.Current.Events.Select(DurableTask.ProtoUtils.ConvertHistoryEvent));
+        }
+
+        return pastEvents;
     }
 
     static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, out CallInvoker callInvoker)

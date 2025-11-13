@@ -1,10 +1,8 @@
 # GitHub Copilot Instructions
 
-This repository contains both Python and C# code.
-All python code resides under the `python/` directory.
-All C# code resides under the `dotnet/` directory.
+This repository contains C# code.
 
-The purpose of the code is to provide a framework for building AI agents.
+The purpose of the code is to provide a standalone SDK for interacting with Durable Functions.
 
 When contributing to this repository, please follow these guidelines:
 
@@ -15,7 +13,9 @@ Here are some general guidelines that apply to all code.
 - The top of all *.cs files should have a copyright notice: `// Copyright (c) Microsoft. All rights reserved.`
 - All public methods and classes should have XML documentation comments.
 - No change should introduce a breaking change unless an exception is otherwise noted in the PR Summary, linked github issue, or discussion.
-  - Breaking change reference: https://github.com/dotnet/runtime/blob/main/docs/coding-guidelines/breaking-change-rules.md  
+  - Breaking change reference: https://github.com/dotnet/runtime/blob/main/docs/coding-guidelines/breaking-change-rules.md 
+- Use `this.` for accessing class members.
+- Use the Async suffix on the name of all async methods.
 
 ### C# Sample Code Guidelines
 
@@ -23,7 +23,7 @@ Sample code is located in the `samples` directory.
 
 When adding a new sample, follow these steps:
 
-- The sample should be a standalone .net project in one of the subdirectories of the samples directory.
+- The sample should be a standalone .NET project in one of the subdirectories of the samples directory.
 - The directory name should be the same as the project name.
 - The directory should contain a README.md file that explains what the sample does and how to run it.
 - The README.md file should follow the same format as other samples.
@@ -59,11 +59,11 @@ Unit tests are located in the `test` root directory in projects with a `.Tests.c
 
 Unit tests should follow these guidelines:
 
-- Use `this.` for accessing class members
-- Add Arrange, Act and Assert comments for each test
-- Ensure that all private classes, that are not subclassed, are sealed
-- Use the Async suffix on the name of all async methods
-- Use the Moq library for mocking objects where possible
+- Use `this.` for accessing class members.
+- Add Arrange, Act and Assert comments for each test.
+- Ensure that all private classes, that are not subclassed, are sealed.
+- Use the Async suffix on the name of all async methods.
+- Use the Moq library for mocking objects where possible.
 - Validate that each test actually tests the target behavior, e.g. we should not have tests that creates a mock, calls the mock and then verifies that the mock was called, without the target code being involved. We also shouldn't have tests that test language features, e.g. something that the compiler would catch anyway.
 - Avoid adding excessive comments to tests. Instead favour clear easy to understand code.
-- Follow the patterns in the unit tests in the same project or classes to which new tests are being added
+- Follow the patterns in the unit tests in the same project or classes to which new tests are being added.

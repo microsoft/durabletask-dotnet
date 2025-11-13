@@ -1,0 +1,16 @@
+# For more info on HTTP files go to https://aka.ms/vs/httpfile
+
+### List all tests
+GET http://localhost:5203/tests
+ 
+
+### List all tests with prefix 'EntityQueries'
+GET http://localhost:5203/tests?prefix=EntityQueries
+ 
+
+### Run all tests
+POST http://localhost:5203/tests
+
+
+### Run all tests with prefix 'EntityQueries'
+POST http://localhost:5203/tests?prefix=EntityQueries

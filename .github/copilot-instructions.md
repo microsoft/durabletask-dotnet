@@ -10,7 +10,11 @@ When contributing to this repository, please follow these guidelines:
 
 Here are some general guidelines that apply to all code.
 
-- The top of all *.cs files should have a copyright notice: `// Copyright (c) Microsoft. All rights reserved.`
+- The top of all *.cs files should have a copyright notice: 
+  ```csharp
+  // Copyright (c) Microsoft Corporation.
+  // Licensed under the MIT License.
+  ```
 - All public methods and classes should have XML documentation comments.
 - No change should introduce a breaking change unless an exception is otherwise noted in the PR Summary, linked github issue, or discussion.
   - Breaking change reference: https://github.com/dotnet/runtime/blob/main/docs/coding-guidelines/breaking-change-rules.md 
@@ -47,7 +51,11 @@ The sample code should follow these guidelines:
 - Prefer defining variables using types rather than var, to help users understand the types involved.
 - Follow the patterns in the samples in the same directories where new samples are being added.
 - The structure of the sample should be as follows:
-  - The top of the Program.cs should have a copyright notice: `// Copyright (c) Microsoft. All rights reserved.`
+  - The top of the Program.cs should have a copyright notice: 
+    ```csharp
+    // Copyright (c) Microsoft Corporation.
+    // Licensed under the MIT License.
+    ```
   - Then add a comment describing what the sample is demonstrating.
   - Then add the necessary using statements.
   - Then add the main code logic.
@@ -65,5 +73,5 @@ Unit tests should follow these guidelines:
 - Use the Async suffix on the name of all async methods.
 - Use the Moq library for mocking objects where possible.
 - Validate that each test actually tests the target behavior, e.g. we should not have tests that creates a mock, calls the mock and then verifies that the mock was called, without the target code being involved. We also shouldn't have tests that test language features, e.g. something that the compiler would catch anyway.
-- Avoid adding excessive comments to tests. Instead favour clear easy to understand code.
+- Avoid adding excessive comments to tests. Instead favor clear easy to understand code.
 - Follow the patterns in the unit tests in the same project or classes to which new tests are being added.

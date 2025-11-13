@@ -42,8 +42,8 @@ The sample code should follow these guidelines:
 - The code should be well-documented with comments explaining the purpose of each step.
 - The code should be simple and to the point, avoiding unnecessary complexity.
 - Prefer inline literals over constants for values that are not reused. For example, use `new ChatClientAgent(chatClient, instructions: "You are a helpful assistant.")` instead of defining a constant for "instructions".
-- Ensure that all private classes are sealed
-- Use the Async suffix on the name of all async methods that return a Task or ValueTask.
+- Ensure that all private classes, that are not subclassed, are sealed.
+- Use the Async suffix on the name of all async methods.
 - Prefer defining variables using types rather than var, to help users understand the types involved.
 - Follow the patterns in the samples in the same directories where new samples are being added.
 - The structure of the sample should be as follows:

@@ -24,7 +24,7 @@ public static class DurableTaskWorkerBuilderExtensions
             r.AddOrchestrator<ExecuteScheduleOperationOrchestrator>();
         });
 
-        // Register the feature for gRPC workers
+        // Register the capability for gRPC workers
         builder.Services
             .AddOptions<GrpcDurableTaskWorkerOptions>(builder.Name)
             .PostConfigure(opt =>

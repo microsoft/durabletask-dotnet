@@ -38,7 +38,7 @@ public class GrpcOrchestrationRunnerTests
         // No history and without extended sessions enabled
         Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([]);
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) }});
+            { "IncludeState", Value.ForBool(false) }});
         byte[] requestBytes = orchestratorRequest.ToByteArray();
         string requestString =  Convert.ToBase64String(requestBytes);
         string responseString = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
@@ -70,7 +70,7 @@ public class GrpcOrchestrationRunnerTests
         // No history, so response indicates that a history is required
         Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([]);
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
@@ -95,7 +95,7 @@ public class GrpcOrchestrationRunnerTests
         };
         orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = orchestratorRequest.ToByteArray();
@@ -115,7 +115,7 @@ public class GrpcOrchestrationRunnerTests
 
         // Misspelled extended session timeout key
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionsIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
@@ -127,7 +127,7 @@ public class GrpcOrchestrationRunnerTests
         // Wrong value type for extended session timeout key
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForString("hi") } });
         requestBytes = orchestratorRequest.ToByteArray();
@@ -138,7 +138,7 @@ public class GrpcOrchestrationRunnerTests
         // Invalid number for extended session timeout key (must be > 0)
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(0) } });
         requestBytes = orchestratorRequest.ToByteArray();
@@ -149,7 +149,7 @@ public class GrpcOrchestrationRunnerTests
         // Invalid number for extended session timeout key (must be > 0)
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(-1) } });
         requestBytes = orchestratorRequest.ToByteArray();
@@ -160,7 +160,7 @@ public class GrpcOrchestrationRunnerTests
         // No extended session timeout key
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) } });
         requestBytes = orchestratorRequest.ToByteArray();
         requestString = Convert.ToBase64String(requestBytes);
@@ -170,7 +170,7 @@ public class GrpcOrchestrationRunnerTests
         // Misspelled extended session key
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "isExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = orchestratorRequest.ToByteArray();
@@ -181,7 +181,7 @@ public class GrpcOrchestrationRunnerTests
         // Wrong value type for extended session key
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForNumber(1) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = orchestratorRequest.ToByteArray();
@@ -192,7 +192,7 @@ public class GrpcOrchestrationRunnerTests
         // No extended session key
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = orchestratorRequest.ToByteArray();
         requestString = Convert.ToBase64String(requestBytes);
@@ -207,7 +207,7 @@ public class GrpcOrchestrationRunnerTests
         Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([]);
 
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(false) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
@@ -218,9 +218,9 @@ public class GrpcOrchestrationRunnerTests
     }
 
     /// <summary>
-    /// These tests verify that a malformed/nonexistent "IncludePastEvents" parameter means that the worker will attempt to 
+    /// These tests verify that a malformed/nonexistent "IncludeState" parameter means that the worker will attempt to 
     /// fulfill the orchestration request and not request a history for it. However, it is of course very undesirable that a 
-    /// history is not attached to the request, but no history is requested by the worker due to a malformed "IncludePastEvents" parameter
+    /// history is not attached to the request, but no history is requested by the worker due to a malformed "IncludeState" parameter
     /// even when it needs one to fulfill the request. This would need to be checked on whatever side is calling this SDK. 
     /// </summary>
     [Fact]
@@ -244,7 +244,7 @@ public class GrpcOrchestrationRunnerTests
 
         // Misspelled include past events key
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "INcludePastEvents", Value.ForBool(false) },
+            { "IncludeSTate", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(false) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
@@ -256,7 +256,7 @@ public class GrpcOrchestrationRunnerTests
         // Wrong value type for include past events key
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForString("no") },
+            { "IncludeState", Value.ForString("no") },
             { "IsExtendedSession", Value.ForBool(false) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = orchestratorRequest.ToByteArray();
@@ -296,7 +296,7 @@ public class GrpcOrchestrationRunnerTests
         };
         Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
@@ -325,7 +325,7 @@ public class GrpcOrchestrationRunnerTests
         };
         Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
@@ -354,7 +354,7 @@ public class GrpcOrchestrationRunnerTests
         };
         Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
@@ -366,7 +366,7 @@ public class GrpcOrchestrationRunnerTests
         // Now set the extended session flag to false for this instance
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(false) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = orchestratorRequest.ToByteArray();
@@ -396,7 +396,7 @@ public class GrpcOrchestrationRunnerTests
         };
         Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(extendedSessionIdleTimeout) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
@@ -412,7 +412,7 @@ public class GrpcOrchestrationRunnerTests
         // Now that the entry was evicted from the cache, the orchestration runner needs an orchestration history to complete the request
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(extendedSessionIdleTimeout) } });
         requestBytes = orchestratorRequest.ToByteArray();
@@ -441,7 +441,7 @@ public class GrpcOrchestrationRunnerTests
         };
         Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
@@ -451,7 +451,7 @@ public class GrpcOrchestrationRunnerTests
         Assert.True(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out object? extendedSession));
 
         // Now we will retry the same exact request. If the extended session is not evicted, then the request will fail due to duplicate ExecutionStarted events being detected
-        // If the extended session is evicted because IncludePastEvents is true, then the request will succeed and a new extended session will be stored
+        // If the extended session is evicted because IncludeState is true, then the request will succeed and a new extended session will be stored
         GrpcOrchestrationRunner.LoadAndRun(requestString, new CallSubOrchestrationOrchestrator(), extendedSessions);
         Assert.True(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out extendedSession));
     }
@@ -477,7 +477,7 @@ public class GrpcOrchestrationRunnerTests
         // Set up the parameters as if extended sessions are enabled, but do not pass an extended session cache to the request.
         // The request should still be successful.
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();

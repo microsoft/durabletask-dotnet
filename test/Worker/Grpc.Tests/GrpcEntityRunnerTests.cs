@@ -33,51 +33,14 @@ public class GrpcEntityRunnerTests
     }
 
     [Fact]
-    public async Task NullStateStored_Means_StoredStateNotUsed()
-    {
-        using var extendedSessions = new ExtendedSessionsCache();
-        extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).Set<string>(
-            TestInstanceId,
-            null!,
-            new MemoryCacheEntryOptions { SlidingExpiration = TimeSpan.FromSeconds(DefaultExtendedSessionIdleTimeoutInSeconds) });
-
-        // No state, so response indicates that a state is required
-        Protobuf.EntityBatchRequest entityRequest = CreateEntityRequest([]);
-        entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(false) },
-            { "IsExtendedSession", Value.ForBool(true) },
-            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
-        byte[] requestBytes = entityRequest.ToByteArray();
-        string requestString = Convert.ToBase64String(requestBytes);
-        string responseString = await GrpcEntityRunner.LoadAndRunAsync(requestString, new SimpleEntity(), extendedSessions);
-        Protobuf.EntityBatchResult response = Protobuf.EntityBatchResult.Parser.ParseFrom(Convert.FromBase64String(responseString));
-        Assert.True(response.RequiresState);
-
-        // State provided so request can be fulfilled, new state stored
-        entityRequest = CreateEntityRequest([setOperation]);
-        entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(true) },
-            { "IsExtendedSession", Value.ForBool(true) },
-            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
-        requestBytes = entityRequest.ToByteArray();
-        requestString = Convert.ToBase64String(requestBytes);
-        responseString = await GrpcEntityRunner.LoadAndRunAsync(requestString, new SimpleEntity(), extendedSessions);
-        response = Protobuf.EntityBatchResult.Parser.ParseFrom(Convert.FromBase64String(responseString));
-        Assert.False(response.RequiresState);
-        Assert.True(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out object? extendedSession));
-        Assert.Equal("1", extendedSession);
-        Assert.Equal("1", response.EntityState);
-    }
-
-    [Fact]
-    public async Task EmptyState_Returns_NeedsStateInResponse()
+    public async Task EmptyHistory_Returns_NeedsHistoryInResponse_Async()
     {
         using var extendedSessions = new ExtendedSessionsCache();
 
         // No state and without extended sessions enabled
         Protobuf.EntityBatchRequest entityRequest = CreateEntityRequest([]);
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(false) }});
+            { "IncludeState", Value.ForBool(false) }});
         byte[] requestBytes = entityRequest.ToByteArray();
         string requestString =  Convert.ToBase64String(requestBytes);
         string responseString = await GrpcEntityRunner.LoadAndRunAsync(requestString, new SimpleEntity(), extendedSessions);
@@ -98,14 +61,14 @@ public class GrpcEntityRunnerTests
     }
 
     [Fact]
-    public async Task MalformedRequestParameters_Means_CacheNotInitialized()
+    public async Task MalformedRequestParameters_Means_CacheNotInitialized_Async()
     {
         using var extendedSessions = new ExtendedSessionsCache();
         Protobuf.EntityBatchRequest entityRequest = CreateEntityRequest([]);
 
         // Misspelled extended session timeout key
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionsIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = entityRequest.ToByteArray();
@@ -117,7 +80,7 @@ public class GrpcEntityRunnerTests
         // Wrong value type for extended session timeout key
         entityRequest.Properties.Clear();
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForString("hi") } });
         requestBytes = entityRequest.ToByteArray();
@@ -128,7 +91,7 @@ public class GrpcEntityRunnerTests
         // Invalid number for extended session timeout key (must be > 0)
         entityRequest.Properties.Clear();
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(0) } });
         requestBytes = entityRequest.ToByteArray();
@@ -139,7 +102,7 @@ public class GrpcEntityRunnerTests
         // Invalid number for extended session timeout key (must be > 0)
         entityRequest.Properties.Clear();
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(-1) } });
         requestBytes = entityRequest.ToByteArray();
@@ -150,7 +113,7 @@ public class GrpcEntityRunnerTests
         // No extended session timeout key
         entityRequest.Properties.Clear();
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) } });
         requestBytes = entityRequest.ToByteArray();
         requestString = Convert.ToBase64String(requestBytes);
@@ -160,7 +123,7 @@ public class GrpcEntityRunnerTests
         // Misspelled extended session key
         entityRequest.Properties.Clear();
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "isExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = entityRequest.ToByteArray();
@@ -171,7 +134,7 @@ public class GrpcEntityRunnerTests
         // Wrong value type for extended session key
         entityRequest.Properties.Clear();
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForNumber(1) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = entityRequest.ToByteArray();
@@ -182,7 +145,7 @@ public class GrpcEntityRunnerTests
         // No extended session key
         entityRequest.Properties.Clear();
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = entityRequest.ToByteArray();
         requestString = Convert.ToBase64String(requestBytes);
@@ -191,13 +154,13 @@ public class GrpcEntityRunnerTests
     }
 
     [Fact]
-    public async Task IsExtendedSessionFalse_Means_NoExtendedSessionStored()
+    public async Task IsExtendedSessionFalse_Means_NoExtendedSessionStored_Async()
     {
         using var extendedSessions = new ExtendedSessionsCache();
         Protobuf.EntityBatchRequest entityRequest = CreateEntityRequest([setOperation]);
 
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(false) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = entityRequest.ToByteArray();
@@ -208,20 +171,20 @@ public class GrpcEntityRunnerTests
     }
 
     /// <summary>
-    /// These tests verify that a malformed/nonexistent "IncludeEntityState" parameter means that the worker will attempt to 
+    /// These tests verify that a malformed/nonexistent "IncludeState" parameter means that the worker will attempt to 
     /// fulfill the entity request and not request a state for it. However, it is of course very undesirable that a 
-    /// state is not attached to the request, but no state is requested by the worker due to a malformed "IncludeEntityState" parameter
+    /// state is not attached to the request, but no state is requested by the worker due to a malformed "IncludeState" parameter
     /// even when it needs one to fulfill the request. This would need to be checked on whatever side is calling this SDK. 
     /// </summary>
     [Fact]
-    public async Task MalformedIncludeEntityStateParameter_Means_NoStateRequired()
+    public async Task MalformedIncludeStateParameter_Means_NoStateRequired_Async()
     {
         using var extendedSessions = new ExtendedSessionsCache();
         Protobuf.EntityBatchRequest entityRequest = CreateEntityRequest([addOperation], entityState: 1.ToString());
 
         // Misspelled include entity state key
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeENtityState", Value.ForBool(false) },
+            { "IncludeSTate", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(false) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = entityRequest.ToByteArray();
@@ -234,7 +197,7 @@ public class GrpcEntityRunnerTests
         // Wrong value type for include entity state key
         entityRequest.Properties.Clear();
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForString("no") },
+            { "IncludeState", Value.ForString("no") },
             { "IsExtendedSession", Value.ForBool(false) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = entityRequest.ToByteArray();
@@ -258,12 +221,12 @@ public class GrpcEntityRunnerTests
     }
 
     [Fact]
-    public async Task Entity_State_Stored()
+    public async Task Entity_State_Stored_Async()
     {
         using var extendedSessions = new ExtendedSessionsCache();
         Protobuf.EntityBatchRequest entityRequest = CreateEntityRequest([setOperation]);
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = entityRequest.ToByteArray();
@@ -277,28 +240,12 @@ public class GrpcEntityRunnerTests
     }
 
     [Fact]
-    public async Task Null_Entity_State_NotStored()
-    {
-        using var extendedSessions = new ExtendedSessionsCache();
-        Protobuf.EntityBatchRequest entityRequest = CreateEntityRequest([new Protobuf.OperationRequest() { RequestId = Guid.NewGuid().ToString(), Operation = "Delete" }]);
-        entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(true) },
-            { "IsExtendedSession", Value.ForBool(true) },
-            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
-        byte[] requestBytes = entityRequest.ToByteArray();
-        string requestString = Convert.ToBase64String(requestBytes);
-        await GrpcEntityRunner.LoadAndRunAsync(requestString, new SimpleEntity(), extendedSessions);
-        Assert.True(extendedSessions.IsInitialized);
-        Assert.False(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out object? extendedSession));
-    }
-
-    [Fact]
-    public async Task ExternallyEndedExtendedSession_Evicted()
+    public async Task ExternallyEndedExtendedSession_Evicted_Async()
     {
         using var extendedSessions = new ExtendedSessionsCache();
         Protobuf.EntityBatchRequest entityRequest = CreateEntityRequest([setOperation]);
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = entityRequest.ToByteArray();
@@ -313,7 +260,7 @@ public class GrpcEntityRunnerTests
         // Now set the extended session flag to false for this instance
         entityRequest.Properties.Clear();
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(false) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = entityRequest.ToByteArray();
@@ -330,7 +277,7 @@ public class GrpcEntityRunnerTests
         int extendedSessionIdleTimeout = 5;
         Protobuf.EntityBatchRequest entityRequest = CreateEntityRequest([setOperation]);
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(extendedSessionIdleTimeout) } });
         byte[] requestBytes = entityRequest.ToByteArray();
@@ -349,7 +296,7 @@ public class GrpcEntityRunnerTests
         // Now that the entry was evicted from the cache, the entity runner needs an entity state to complete the request
         entityRequest.Properties.Clear();
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(extendedSessionIdleTimeout) } });
         requestBytes = entityRequest.ToByteArray();
@@ -360,12 +307,12 @@ public class GrpcEntityRunnerTests
     }
 
     [Fact]
-    public async Task EntityStateIncluded_Means_ExtendedSession_Evicted()
+    public async Task EntityStateIncluded_Means_ExtendedSession_Evicted_Async()
     {
         using var extendedSessions = new ExtendedSessionsCache();
         Protobuf.EntityBatchRequest entityRequest = CreateEntityRequest([addOperation], entityState: 1.ToString());
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = entityRequest.ToByteArray();
@@ -377,7 +324,7 @@ public class GrpcEntityRunnerTests
         // Now we will retry the same request, but with a different value for the state. If the extended session is not evicted, then the result will be incorrect.
         entityRequest = CreateEntityRequest([addOperation], entityState: 5.ToString());
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = entityRequest.ToByteArray();
@@ -390,14 +337,14 @@ public class GrpcEntityRunnerTests
     }
 
     [Fact]
-    public async Task Null_ExtendedSessionsCache_IsOkay()
+    public async Task Null_ExtendedSessionsCache_IsOkay_Async()
     {
         Protobuf.EntityBatchRequest entityRequest = CreateEntityRequest([setOperation]);
 
         // Set up the parameters as if extended sessions are enabled, but do not pass an extended session cache to the request.
         // The request should still be successful.
         entityRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludeEntityState", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = entityRequest.ToByteArray();

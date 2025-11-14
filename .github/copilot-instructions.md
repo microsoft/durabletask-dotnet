@@ -2,7 +2,7 @@
 
 This repository contains C# code.
 
-The purpose of the code is to provide a standalone SDK for interacting with Durable Functions.
+The purpose of this code is to provide a standalone SDK that can be used to interact with the Durable Task coding paradigm, both through Azure Functions (Durable Functions) and non-function based Durable Task Scheduler (DTS).
 
 When contributing to this repository, please follow these guidelines:
 
@@ -46,17 +46,11 @@ The sample code should follow these guidelines:
 - Secrets should not be hardcoded in the code or committed to the repository.
 - The code should be well-documented with comments explaining the purpose of each step.
 - The code should be simple and to the point, avoiding unnecessary complexity.
-- Prefer inline literals over constants for values that are not reused. For example, use `new ChatClientAgent(chatClient, instructions: "You are a helpful assistant.")` instead of defining a constant for "instructions
-- Use the Async suffix on the name of all async methods.
+- Prefer inline literals over constants for values that are not reused. For example, use `new ChatClientAgent(chatClient, instructions: "You are a helpful assistant.")` instead of defining a constant for "instructions".
 - Prefer defining variables using types rather than var, to help users understand the types involved.
 - Follow the patterns in the samples in the same directories where new samples are being added.
 - The structure of the sample should be as follows:
-  - The top of the Program.cs should have a copyright notice: 
-    ```csharp
-    // Copyright (c) Microsoft Corporation.
-    // Licensed under the MIT License.
-    ```
-  - Then add a comment describing what the sample is demonstrating.
+  - Add a comment describing what the sample is demonstrating.
   - Then add the necessary using statements.
   - Then add the main code logic.
   - Finally, add any helper methods or classes at the bottom of the file.
@@ -67,8 +61,7 @@ Unit tests are located in the `test` root directory in projects with a `.Tests.c
 
 Unit tests should follow these guidelines:
 
-- Add Arrange, Act and Assert comments for each test
-- Use the Async suffix on the name of all async methods.
+- Add Arrange, Act and Assert comments for each 
 - Use the Moq library for mocking objects where possible.
 - Validate that each test actually tests the target behavior, e.g. we should not have tests that create a mock, call the mock and then verify that the mock was called, without the target code being involved. We also shouldn't have tests that test language features, e.g. something that the compiler would catch anyway.
 - Avoid adding excessive comments to tests. Instead favor clear easy to understand code.

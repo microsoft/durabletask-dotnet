@@ -8,6 +8,7 @@ using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask;
 
@@ -77,6 +78,8 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
                     throw new ArgumentException(
                         "Channel or CallInvoker must be provided to use Azure Blob Payload Externalization feature");
                 }
+
+                opt.Capabilities.Add(P.WorkerCapability.LargePayloads);
             });
 
         return builder;

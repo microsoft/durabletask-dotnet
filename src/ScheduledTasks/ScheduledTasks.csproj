@@ -11,6 +11,7 @@
     <ProjectReference Include="../Abstractions/Abstractions.csproj" />
     <ProjectReference Include="../Client/Core/Client.csproj" />
     <ProjectReference Include="../Worker/Core/Worker.csproj" />
+    <ProjectReference Include="../Worker/Grpc/Worker.Grpc.csproj" />
   </ItemGroup>
 
   <ItemGroup>

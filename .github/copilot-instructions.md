@@ -37,7 +37,7 @@ When adding a new sample, follow these steps:
 - The project should preferably contain a single Program.cs file that contains all the sample code.
 - The sample should be added to the solution file in the samples directory.
 - The sample should be tested to ensure it works as expected.
-- A reference to the new samples should be added to the README.md file in the parent directory of the new sample.
+- A reference to the new sample should be added to the README.md file in the parent directory of the new sample.
 
 The sample code should follow these guidelines:
 

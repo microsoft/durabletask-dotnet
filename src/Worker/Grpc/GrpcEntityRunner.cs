@@ -103,7 +103,6 @@ public static class GrpcEntityRunner
         // If any of the request parameters are malformed, we assume the default - extended sessions are not enabled and the orchestration history is attached
         bool addToExtendedSessions = false;
         bool entityStateIncluded = true;
-        bool entityStateCached = false;
         bool isExtendedSession = false;
         double extendedSessionIdleTimeoutInSeconds = 0;
 
@@ -130,14 +129,13 @@ public static class GrpcEntityRunner
             addToExtendedSessions = true;
 
             // If an entity state was provided, even if we already have one stored, we always want to use the provided state.
-            if (!entityStateIncluded && extendedSessions.TryGetValue(request.InstanceId, out string? entityState))
+            if (!entityStateIncluded && extendedSessions.TryGetValue(request.InstanceId, out string? entityState) && entityState is not null)
             {
                 batch.EntityState = entityState;
-                entityStateCached = true;
             }
         }
 
-        if (!entityStateCached && !entityStateIncluded)
+        if (batch.EntityState == null && !entityStateIncluded)
         {
             // No state was provided, and we do not have one cached, so we cannot execute the batch request.
             return Convert.ToBase64String(new P.EntityBatchResult { RequiresState = true }.ToByteArray());
@@ -150,7 +148,8 @@ public static class GrpcEntityRunner
         TaskEntity entity = factory.CreateEntity(entityName, implementation, id);
         EntityBatchResult result = await entity.ExecuteOperationBatchAsync(batch);
 
-        if (addToExtendedSessions)
+        // An entity with a null state will be deleted, so we should not cache it.
+        if (addToExtendedSessions && result.EntityState != null)
         {
             extendedSessions.Set(
                 request.InstanceId,

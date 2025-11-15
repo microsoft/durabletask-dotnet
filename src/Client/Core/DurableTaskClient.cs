@@ -1,7 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Generic;
 using System.ComponentModel;
+using DurableTask.Core.History;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Internal;
 
@@ -336,6 +338,27 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <returns>An async pageable of the query results.</returns>
     public abstract AsyncPageable<OrchestrationMetadata> GetAllInstancesAsync(OrchestrationQuery? filter = null);
 
+    /// <summary>
+    /// Lists orchestration instance IDs filtered by completed time.
+    /// </summary>
+    /// <param name="runtimeStatus">The runtime statuses to filter by.</param>
+    /// <param name="completedTimeFrom">The start time for completed time filter (inclusive).</param>
+    /// <param name="completedTimeTo">The end time for completed time filter (inclusive).</param>
+    /// <param name="pageSize">The page size for pagination.</param>
+    /// <param name="lastInstanceKey">The last fetched instance key.</param>
+    /// <param name="cancellation">The cancellation token.</param>
+    /// <returns>A page of instance IDs with continuation token.</returns>
+    public virtual Task<Page<string>> ListInstanceIdsAsync(
+        IEnumerable<OrchestrationRuntimeStatus>? runtimeStatus = null,
+        DateTimeOffset? completedTimeFrom = null,
+        DateTimeOffset? completedTimeTo = null,
+        int pageSize = OrchestrationQuery.DefaultPageSize,
+        string? lastInstanceKey = null,
+        CancellationToken cancellation = default)
+    {
+        throw new NotSupportedException($"{this.GetType()} does not support listing orchestration instance IDs by completed time.");
+    }
+
     /// <inheritdoc cref="PurgeInstanceAsync(string, PurgeInstanceOptions, CancellationToken)"/>
     public virtual Task<PurgeResult> PurgeInstanceAsync(string instanceId, CancellationToken cancellation)
         => this.PurgeInstanceAsync(instanceId, null, cancellation);
@@ -465,6 +488,30 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         string reason,
         CancellationToken cancellation = default)
         => throw new NotSupportedException($"{this.GetType()} does not support orchestration rewind.");
+
+    /// <summary>
+    /// Streams the execution history events for an orchestration instance.
+    /// </summary>
+    /// <remarks>
+    /// This method returns an async enumerable that yields history events as they are retrieved from the backend.
+    /// The history events are returned in chronological order and include all events that occurred during the
+    /// orchestration instance's execution.
+    /// </remarks>
+    /// <param name="instanceId">The instance ID of the orchestration to stream history for.</param>
+    /// <param name="executionId">The optional execution ID. If null, the latest execution will be used.</param>
+    /// <param name="cancellation">
+    /// A <see cref="CancellationToken"/> that can be used to cancel the streaming operation.
+    /// </param>
+    /// <returns>An async enumerable of <see cref="HistoryEvent"/> objects.</returns>
+    /// <exception cref="ArgumentException">Thrown if an orchestration with the specified <paramref name="instanceId"/> does not exist.</exception>
+    /// <exception cref="OperationCanceledException">Thrown if the operation is canceled via the <paramref name="cancellation"/> token.</exception>
+    public virtual IAsyncEnumerable<HistoryEvent> StreamInstanceHistoryAsync(
+        string instanceId,
+        string? executionId = null,
+        CancellationToken cancellation = default)
+    {
+        throw new NotSupportedException($"{this.GetType()} does not support streaming instance history.");
+    }
 
     // TODO: Create task hub
 

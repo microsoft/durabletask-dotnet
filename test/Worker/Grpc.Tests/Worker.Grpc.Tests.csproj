@@ -12,4 +12,8 @@
     <ProjectReference Include="$(SrcRoot)Worker/Grpc/Worker.Grpc.csproj" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)' == 'net6.0'">
+    <ProjectReference Include="$(SrcRoot)ScheduledTasks/ScheduledTasks.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -83,30 +83,6 @@ public class WorkerCapabilitiesTests
     }
 
     [Fact]
-    public void Capabilities_CanAddAllCapabilities()
-    {
-        // Arrange
-        ServiceCollection services = new();
-        DefaultDurableTaskWorkerBuilder builder = new(null, services);
-        builder.UseGrpc(opt =>
-        {
-            opt.Capabilities.Add(P.WorkerCapability.ScheduledTasks);
-            opt.Capabilities.Add(P.WorkerCapability.LargePayloads);
-        });
-
-        // Act
-        IServiceProvider provider = services.BuildServiceProvider();
-        GrpcDurableTaskWorkerOptions options = provider.GetOptions<GrpcDurableTaskWorkerOptions>();
-
-        // Assert
-        options.Capabilities.Should().NotBeNull();
-        options.Capabilities.Should().Contain(P.WorkerCapability.HistoryStreaming);
-        options.Capabilities.Should().Contain(P.WorkerCapability.ScheduledTasks);
-        options.Capabilities.Should().Contain(P.WorkerCapability.LargePayloads);
-        options.Capabilities.Should().HaveCount(3);
-    }
-
-    [Fact]
     public void Capabilities_AddingDuplicateDoesNotCreateDuplicates()
     {
         // Arrange

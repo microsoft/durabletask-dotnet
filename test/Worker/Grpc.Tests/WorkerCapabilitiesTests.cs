@@ -4,6 +4,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using P = Microsoft.DurableTask.Protobuf;
 #if NET6_0_OR_GREATER
+using Microsoft.DurableTask;
 using Microsoft.DurableTask.ScheduledTasks;
 #endif
 
@@ -221,6 +222,91 @@ public class WorkerCapabilitiesTests
         options.Capabilities.Should().Contain(P.WorkerCapability.ScheduledTasks);
         options.Capabilities.Should().Contain(P.WorkerCapability.LargePayloads);
         options.Capabilities.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void UseExternalizedPayloads_AddsLargePayloadsCapability()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        DefaultDurableTaskWorkerBuilder builder = new(null, services);
+        GrpcChannel channel = GetChannel();
+        builder.UseGrpc(channel);
+        
+        // Register required dependencies for UseExternalizedPayloads
+        services.AddSingleton<PayloadStore>(new TestPayloadStore());
+        services.Configure<LargePayloadStorageOptions>(builder.Name, opt =>
+        {
+            opt.ContainerName = "test";
+            opt.ConnectionString = "UseDevelopmentStorage=true";
+        });
+        
+        builder.UseExternalizedPayloads();
+
+        // Act
+        IServiceProvider provider = services.BuildServiceProvider();
+        GrpcDurableTaskWorkerOptions options = provider.GetOptions<GrpcDurableTaskWorkerOptions>();
+
+        // Assert
+        options.Capabilities.Should().NotBeNull();
+        options.Capabilities.Should().Contain(P.WorkerCapability.HistoryStreaming);
+        options.Capabilities.Should().Contain(P.WorkerCapability.LargePayloads);
+        options.Capabilities.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void UseExternalizedPayloads_WithExistingCapabilities_PreservesOtherCapabilities()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        DefaultDurableTaskWorkerBuilder builder = new(null, services);
+        GrpcChannel channel = GetChannel();
+        builder.UseGrpc(opt =>
+        {
+            opt.Channel = channel;
+            opt.Capabilities.Add(P.WorkerCapability.ScheduledTasks);
+        });
+        
+        // Register required dependencies for UseExternalizedPayloads
+        services.AddSingleton<PayloadStore>(new TestPayloadStore());
+        services.Configure<LargePayloadStorageOptions>(builder.Name, opt =>
+        {
+            opt.ContainerName = "test";
+            opt.ConnectionString = "UseDevelopmentStorage=true";
+        });
+        
+        builder.UseExternalizedPayloads();
+
+        // Act
+        IServiceProvider provider = services.BuildServiceProvider();
+        GrpcDurableTaskWorkerOptions options = provider.GetOptions<GrpcDurableTaskWorkerOptions>();
+
+        // Assert
+        options.Capabilities.Should().NotBeNull();
+        options.Capabilities.Should().Contain(P.WorkerCapability.HistoryStreaming);
+        options.Capabilities.Should().Contain(P.WorkerCapability.ScheduledTasks);
+        options.Capabilities.Should().Contain(P.WorkerCapability.LargePayloads);
+        options.Capabilities.Should().HaveCount(3);
+    }
+
+    static GrpcChannel GetChannel() => GrpcChannel.ForAddress("http://localhost:9001");
+
+    sealed class TestPayloadStore : PayloadStore
+    {
+        public override Task<string> UploadAsync(string payLoad, CancellationToken cancellationToken)
+        {
+            return Task.FromResult($"token:{Guid.NewGuid()}");
+        }
+
+        public override Task<string> DownloadAsync(string token, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(string.Empty);
+        }
+
+        public override bool IsKnownPayloadToken(string value)
+        {
+            return value.StartsWith("token:", StringComparison.Ordinal);
+        }
     }
 #endif
 }

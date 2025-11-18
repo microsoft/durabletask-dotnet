@@ -30,4 +30,21 @@ static class ProtoUtils
             _ => throw new ArgumentOutOfRangeException(nameof(status), "Unexpected value"),
         };
 #pragma warning restore 0618 // Referencing Obsolete member.
+
+    /// <summary>
+    /// Converts <see cref="OrchestrationPriorityLevel" /> to <see cref="P.OrchestrationPriorityLevel" />.
+    /// </summary>
+    /// <param name="priorityLevel">The priority level.</param>
+    /// <returns>A <see cref="P.OrchestrationPriorityLevel" />.</returns>
+    internal static P.OrchestrationPriorityLevel ToGrpcPriorityLevel(this OrchestrationPriorityLevel priorityLevel)
+        => priorityLevel switch
+        {
+            OrchestrationPriorityLevel.Unspecified => P.OrchestrationPriorityLevel.Unspecified,
+            OrchestrationPriorityLevel.Urgent => P.OrchestrationPriorityLevel.Urgent,
+            OrchestrationPriorityLevel.High => P.OrchestrationPriorityLevel.High,
+            OrchestrationPriorityLevel.Normal => P.OrchestrationPriorityLevel.Normal,
+            OrchestrationPriorityLevel.Low => P.OrchestrationPriorityLevel.Low,
+            OrchestrationPriorityLevel.Background => P.OrchestrationPriorityLevel.Background,
+            _ => throw new ArgumentOutOfRangeException(nameof(priorityLevel), "Unexpected value"),
+        };
 }

@@ -134,4 +134,14 @@ public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffse
     /// Gets the version to associate with the orchestration instance.
     /// </summary>
     public TaskVersion? Version { get; init; }
+
+    /// <summary>
+    /// Gets the optional custom numeric priority. Lower numbers are processed more urgently. Takes precedence over PriorityLevel.
+    /// </summary>
+    public long? Priority { get; init; }
+
+    /// <summary>
+    /// Gets the optional priority level for intuitive priority specification. Ignored if Priority is set.
+    /// </summary>
+    public OrchestrationPriorityLevel? PriorityLevel { get; init; }
 }

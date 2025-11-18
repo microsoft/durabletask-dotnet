@@ -16,7 +16,7 @@ public class ExportFormatTests
 
         // Assert
         format.Should().NotBeNull();
-        format.Kind.Should().Be("jsonl");
+        format.Kind.Should().Be(ExportFormatKind.Jsonl);
         format.SchemaVersion.Should().Be("1.0");
     }
 
@@ -24,7 +24,7 @@ public class ExportFormatTests
     public void Constructor_WithCustomValues_CreatesInstance()
     {
         // Arrange
-        string kind = "json";
+        ExportFormatKind kind = ExportFormatKind.Json;
         string schemaVersion = "2.0";
 
         // Act
@@ -44,7 +44,7 @@ public class ExportFormatTests
 
         // Assert
         format.Should().NotBeNull();
-        format.Kind.Should().Be("jsonl");
+        format.Kind.Should().Be(ExportFormatKind.Jsonl);
         format.SchemaVersion.Should().Be("1.0");
     }
 

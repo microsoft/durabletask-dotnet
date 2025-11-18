@@ -325,8 +325,6 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
     }
 
-    // Removed ListTerminalInstances; use GetAllInstancesAsync with OrchestrationQuery instead
-
     /// <inheritdoc/>
     public override async Task<Page<string>> ListInstanceIdsAsync(
         IEnumerable<OrchestrationRuntimeStatus>? runtimeStatus = null,

@@ -79,7 +79,7 @@ public class ExecuteExportJobOperationOrchestratorTests
     {
         // Arrange
         var entityId = new EntityInstanceId(nameof(ExportJob), "test-job");
-        string operationName = ExportJobOperations.Delete;
+        string operationName = nameof(ExportJob.Delete);
         var request = new ExportJobOperationRequest(entityId, operationName, null);
 
         this.mockEntityClient

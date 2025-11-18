@@ -23,11 +23,11 @@ namespace Microsoft.DurableTask.ExportHistory;
 /// </remarks>
 [DurableTask]
 public class ExportInstanceHistoryActivity(
-    IDurableTaskClientProvider clientProvider,
+    DurableTaskClient client,
     ILogger<ExportInstanceHistoryActivity> logger,
     IOptions<ExportHistoryStorageOptions> storageOptions) : TaskActivity<ExportRequest, ExportResult>
 {
-    readonly IDurableTaskClientProvider clientProvider = Check.NotNull(clientProvider, nameof(clientProvider));
+    readonly DurableTaskClient client = Check.NotNull(client, nameof(client));
     readonly ILogger<ExportInstanceHistoryActivity> logger = Check.NotNull(logger, nameof(logger));
     readonly ExportHistoryStorageOptions storageOptions = Check.NotNull(storageOptions?.Value, nameof(storageOptions));
 
@@ -45,10 +45,8 @@ public class ExportInstanceHistoryActivity(
         {
             this.logger.LogInformation("Starting export for instance {InstanceId}", instanceId);
 
-            // Get the client and instance metadata with inputs and outputs
-            DurableTaskClient client = this.clientProvider.GetClient();
-
-            OrchestrationMetadata? metadata = await client.GetInstanceAsync(
+            // Get instance metadata with inputs and outputs
+            OrchestrationMetadata? metadata = await this.client.GetInstanceAsync(
                 instanceId,
                 getInputsAndOutputs: true,
                 cancellation: CancellationToken.None);
@@ -82,7 +80,7 @@ public class ExportInstanceHistoryActivity(
             // Stream all history events
             this.logger.LogInformation("Streaming history events for instance {InstanceId}", instanceId);
             List<HistoryEvent> historyEvents = new();
-            await foreach (HistoryEvent historyEvent in client.StreamInstanceHistoryAsync(
+            await foreach (HistoryEvent historyEvent in this.client.StreamInstanceHistoryAsync(
                 instanceId,
                 executionId: null, // Use latest execution
                 cancellation: CancellationToken.None))
@@ -158,13 +156,11 @@ public class ExportInstanceHistoryActivity(
     /// <returns>The file extension (e.g., "json", "jsonl.gz").</returns>
     static string GetFileExtension(ExportFormat format)
     {
-        string formatKind = format.Kind.ToLowerInvariant();
-
-        return formatKind switch
+        return format.Kind switch
         {
-            "jsonl" => "jsonl.gz",  // JSONL format is compressed
-            "json" => "json",       // JSON format is uncompressed
-            _ => "jsonl.gz",        // Default to JSONL compressed
+            ExportFormatKind.Jsonl => "jsonl.gz",  // JSONL format is compressed
+            ExportFormatKind.Json => "json",       // JSON format is uncompressed
+            _ => "jsonl.gz",                       // Default to JSONL compressed
         };
     }
 
@@ -172,7 +168,6 @@ public class ExportInstanceHistoryActivity(
         List<HistoryEvent> historyEvents,
         ExportFormat format)
     {
-        string formatKind = format.Kind.ToLowerInvariant();
         JsonSerializerOptions serializerOptions = new JsonSerializerOptions
         {
             WriteIndented = false,
@@ -182,7 +177,7 @@ public class ExportInstanceHistoryActivity(
             Converters = { new JsonStringEnumConverter() }, // Serialize enums as strings
         };
 
-        if (formatKind == "jsonl")
+        if (format.Kind == ExportFormatKind.Jsonl)
         {
             // JSONL format: one history event per line
             // Serialize as object to preserve runtime type (polymorphic serialization)
@@ -215,6 +210,10 @@ public class ExportInstanceHistoryActivity(
         CancellationToken cancellationToken)
     {
         // Create blob service client from connection string
+        // Note: Azure.Storage.Blobs clients (BlobServiceClient, BlobContainerClient, BlobClient) are lightweight
+        // wrappers that don't implement IDisposable/IAsyncDisposable. They use HttpClient internally which is
+        // managed by the framework and doesn't require explicit disposal. The clients are designed to be
+        // stateless and safe for reuse or short-lived usage without disposal.
         BlobServiceClient serviceClient = new(this.storageOptions.ConnectionString);
         BlobContainerClient containerClient = serviceClient.GetBlobContainerClient(containerName);
 
@@ -229,7 +228,7 @@ public class ExportInstanceHistoryActivity(
         // Upload content
         byte[] contentBytes = Encoding.UTF8.GetBytes(content);
 
-        if (format.Kind.Equals("jsonl", StringComparison.OrdinalIgnoreCase))
+        if (format.Kind == ExportFormatKind.Jsonl)
         {
             // Compress with gzip
             using MemoryStream compressedStream = new();

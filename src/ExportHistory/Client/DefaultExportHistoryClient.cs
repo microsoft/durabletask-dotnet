@@ -30,11 +30,7 @@ public sealed class DefaultExportHistoryClient(
         try
         {
             // Create export job client instance
-            ExportHistoryJobClient exportHistoryJobClient = new DefaultExportHistoryJobClient(
-                this.durableTaskClient,
-                options.JobId,
-                this.logger,
-                this.storageOptions);
+            ExportHistoryJobClient exportHistoryJobClient = this.GetJobClient(options.JobId);
 
             // Create the export job using the client (validation already done in constructor)
             await exportHistoryJobClient.CreateAsync(options, cancellation);

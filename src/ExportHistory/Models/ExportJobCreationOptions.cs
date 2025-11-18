@@ -5,7 +5,7 @@ using Microsoft.DurableTask.Client;
 namespace Microsoft.DurableTask.ExportHistory;
 
 /// <summary>
-/// Configuration for a export job.
+/// Configuration for an export job.
 /// </summary>
 public record ExportJobCreationOptions
 {
@@ -30,7 +30,7 @@ public record ExportJobCreationOptions
     /// <exception cref="ArgumentException">Thrown when validation fails.</exception>
     public ExportJobCreationOptions(
         ExportMode mode,
-        DateTimeOffset completedTimeFrom,
+        DateTimeOffset? completedTimeFrom,
         DateTimeOffset? completedTimeTo,
         ExportDestination? destination,
         string? jobId = null,
@@ -43,7 +43,7 @@ public record ExportJobCreationOptions
 
         if (mode == ExportMode.Batch)
         {
-            if (completedTimeFrom == default)
+            if (!completedTimeFrom.HasValue)
             {
                 throw new ArgumentException(
                     "CompletedTimeFrom is required for Batch export mode.",
@@ -73,13 +73,6 @@ public record ExportJobCreationOptions
         }
         else if (mode == ExportMode.Continuous)
         {
-            if (completedTimeFrom != default)
-            {
-                throw new ArgumentException(
-                    "CompletedTimeFrom is not allowed for Continuous export mode.",
-                    nameof(completedTimeFrom));
-            }
-
             if (completedTimeTo.HasValue)
             {
                 throw new ArgumentException(
@@ -108,16 +101,15 @@ public record ExportJobCreationOptions
             && runtimeStatus.Any(
                 s => s is not (OrchestrationRuntimeStatus.Completed
                                or OrchestrationRuntimeStatus.Failed
-                               or OrchestrationRuntimeStatus.Terminated
-                               or OrchestrationRuntimeStatus.ContinuedAsNew)))
+                               or OrchestrationRuntimeStatus.Terminated)))
         {
             throw new ArgumentException(
-                "Export supports terminal orchestration statuses only. Valid statuses are: Completed, Failed, Terminated, and ContinuedAsNew.",
+                "Export supports terminal orchestration statuses only. Valid statuses are: Completed, Failed, and Terminated.",
                 nameof(runtimeStatus));
         }
 
         this.Mode = mode;
-        this.CompletedTimeFrom = completedTimeFrom;
+        this.CompletedTimeFrom = completedTimeFrom ?? DateTimeOffset.UtcNow;
         this.CompletedTimeTo = completedTimeTo;
         this.Destination = destination;
         this.Format = format ?? ExportFormat.Default;
@@ -128,7 +120,6 @@ public record ExportJobCreationOptions
                 OrchestrationRuntimeStatus.Completed,
                 OrchestrationRuntimeStatus.Failed,
                 OrchestrationRuntimeStatus.Terminated,
-                OrchestrationRuntimeStatus.ContinuedAsNew,
             };
         this.MaxInstancesPerBatch = maxInstancesPerBatch ?? 100;
     }

@@ -13,20 +13,9 @@ public class ExportJobClientValidationException : InvalidOperationException
     /// </summary>
     /// <param name="jobId">The ID of the export job that failed validation.</param>
     /// <param name="message">The validation error message.</param>
-    public ExportJobClientValidationException(string jobId, string message)
-        : base($"Validation failed for export job '{jobId}': {message}")
-    {
-        this.JobId = jobId;
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ExportJobClientValidationException"/> class.
-    /// </summary>
-    /// <param name="jobId">The ID of the export job that failed validation.</param>
-    /// <param name="message">The validation error message.</param>
     /// <param name="innerException">The exception that is the cause of the current exception.</param>
-    public ExportJobClientValidationException(string jobId, string message, Exception innerException)
-        : base($"Validation failed for export job '{jobId}': {message}", innerException)
+    public ExportJobClientValidationException(string jobId, string message, Exception? innerException = null)
+        : base($"Validation failed for export job '{jobId}': {message}", innerException!)
     {
         this.JobId = jobId;
     }

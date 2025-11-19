@@ -48,7 +48,7 @@ public class CreateExportJobRequest
 
     /// <summary>
     /// Gets or sets the orchestration runtime statuses to filter by. Optional.
-    /// Valid statuses are: Completed, Failed, Terminated, and ContinuedAsNew.
+    /// Valid statuses are: Completed, Failed, Terminated.
     /// </summary>
     public List<OrchestrationRuntimeStatus>? RuntimeStatus { get; set; }
 

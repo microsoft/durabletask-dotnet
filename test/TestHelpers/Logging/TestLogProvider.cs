@@ -18,7 +18,7 @@ public sealed class TestLogProvider(ITestOutputHelper output) : ILoggerProvider
         // (e.g. "Microsoft.DurableTask.Worker" will return all logs for "Microsoft.DurableTask.Worker.*")
         logs = this.loggers
             .Where(kvp => kvp.Key.StartsWith(category, StringComparison.OrdinalIgnoreCase))
-            .SelectMany(kvp => kvp.Value.GetLogs())
+            .SelectMany(kvp => kvp.Value.GetLogs().ToList()) // Create a snapshot to avoid concurrent modification
             .OrderBy(log => log.Timestamp)
             .ToList();
         return logs.Count > 0;

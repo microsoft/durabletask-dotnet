@@ -86,26 +86,6 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
                     return null;
                 }
 
-                // if (currentState.Checkpoint is not null &&
-                //     string.IsNullOrEmpty(currentState.Checkpoint.LastInstanceKey))
-                // {
-                //     if (config.Mode == ExportMode.Batch)
-                //     {
-                //         logger.ExportJobOperationInfo(jobId, nameof(ExportJobOrchestrator), "No more instances to export - export complete.");
-                //         break;
-                //     }
-                //     else if (config.Mode == ExportMode.Continuous)
-                //     {
-                //         logger.ExportJobOperationInfo(jobId, nameof(ExportJobOrchestrator), "No more instances to export currently - will check again later.");
-                //         await context.CreateTimer(ContinuousExportIdleDelay, default);
-                //         continue;
-                //     }
-                //     else
-                //     {
-                //         throw new InvalidOperationException("Invalid export mode.");
-                //     }
-                // }
-
                 // Call activity to list terminal instances with only necessary information
                 ListTerminalInstancesRequest listRequest = new ListTerminalInstancesRequest(
                     CompletedTimeFrom: currentState.Config.Filter.CompletedTimeFrom,
@@ -171,7 +151,6 @@ public class ExportJobOrchestrator : TaskOrchestrator<ExportJobRunRequest, objec
                         failures: batchResult.Failures);
 
                     // Throw detailed exception with failure information
-                    int failureCount = batchResult.Failures?.Count ?? 0;
                     string failureDetails;
                     if (batchResult.Failures != null && batchResult.Failures.Count > 0)
                     {

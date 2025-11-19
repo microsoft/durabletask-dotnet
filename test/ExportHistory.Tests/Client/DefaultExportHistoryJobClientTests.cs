@@ -74,12 +74,12 @@ public class DefaultExportHistoryJobClientTests
         // Arrange
         // Check.NotNullOrEmpty only checks for null, empty, or strings starting with '\0'
         // It does NOT check for whitespace-only strings, so "   " is valid
-        string jobId = "   ";
+        string testJobId = "   ";
 
         // Act
         var client = new DefaultExportHistoryJobClient(
             this.durableTaskClient.Object,
-            jobId,
+            testJobId,
             this.logger,
             this.storageOptions);
 

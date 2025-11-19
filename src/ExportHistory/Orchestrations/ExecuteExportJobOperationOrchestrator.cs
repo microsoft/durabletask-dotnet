@@ -20,7 +20,7 @@ public class ExecuteExportJobOperationOrchestrator : TaskOrchestrator<ExportJobO
 }
 
 /// <summary>
-/// Request for executing a export job operation.
+/// Request for executing an export job operation.
 /// </summary>
 /// <param name="EntityId">The ID of the entity to execute the operation on.</param>
 /// <param name="OperationName">The name of the operation to execute.</param>

@@ -54,6 +54,12 @@ class ExportJob(ILogger<ExportJob> logger) : TaskEntity<ExportJobState>
             this.State.CreatedAt = this.State.LastModifiedAt = DateTimeOffset.UtcNow;
             this.State.LastError = null;
 
+            // Reset progress counters and checkpoint for clean restart
+            this.State.ScannedInstances = 0;
+            this.State.ExportedInstances = 0;
+            this.State.Checkpoint = null;
+            this.State.LastCheckpointTime = null;
+
             logger.CreatedExportJob(creationOptions.JobId);
 
             // Signal the Run method to start the export

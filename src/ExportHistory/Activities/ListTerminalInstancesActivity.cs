@@ -24,10 +24,10 @@ public sealed record ListTerminalInstancesRequest(
 /// </remarks>
 [DurableTask]
 public class ListTerminalInstancesActivity(
-    IDurableTaskClientProvider clientProvider,
+    DurableTaskClient client,
     ILogger<ListTerminalInstancesActivity> logger) : TaskActivity<ListTerminalInstancesRequest, InstancePage>
 {
-    readonly IDurableTaskClientProvider clientProvider = Check.NotNull(clientProvider, nameof(clientProvider));
+    readonly DurableTaskClient client = Check.NotNull(client, nameof(client));
     readonly ILogger<ListTerminalInstancesActivity> logger = Check.NotNull(logger, nameof(logger));
 
     /// <inheritdoc/>
@@ -37,10 +37,8 @@ public class ListTerminalInstancesActivity(
 
         try
         {
-            DurableTaskClient client = this.clientProvider.GetClient();
-
             // Try to use ListInstanceIds endpoint first (available in gRPC client)
-            Page<string> page = await client.ListInstanceIdsAsync(
+            Page<string> page = await this.client.ListInstanceIdsAsync(
                     runtimeStatus: input.RuntimeStatus,
                     completedTimeFrom: input.CompletedTimeFrom,
                     completedTimeTo: input.CompletedTimeTo,

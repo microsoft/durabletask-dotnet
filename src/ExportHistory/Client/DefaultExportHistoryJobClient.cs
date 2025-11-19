@@ -31,31 +31,18 @@ public sealed class DefaultExportHistoryJobClient(
             Check.NotNull(options, nameof(options));
 
             // Determine default prefix based on mode if not already set
-            string? defaultPrefix = $"{options.Mode.ToString().ToLower(System.Globalization.CultureInfo.CurrentCulture)}/";
+            string? defaultPrefix = $"{options.Mode.ToString().ToLower(System.Globalization.CultureInfo.CurrentCulture)}-{this.JobId}/";
 
             // If destination is not provided, construct it from storage options
-            ExportJobCreationOptions optionsWithDestination = options;
-            if (options.Destination == null)
-            {
-                // Use storage options prefix if provided, otherwise use mode-based default
-                string? prefix = this.storageOptions.Prefix ?? defaultPrefix;
+            string prefix = options.Destination?.Prefix ?? this.storageOptions.Prefix ?? defaultPrefix;
+            string container = options.Destination?.Container ?? this.storageOptions.ContainerName;
 
-                ExportDestination destination = new ExportDestination(this.storageOptions.ContainerName)
-                {
-                    Prefix = prefix,
-                };
-
-                optionsWithDestination = options with { Destination = destination };
-            }
-            else if (string.IsNullOrEmpty(options.Destination.Prefix))
+            ExportDestination destination = new ExportDestination(container)
             {
-                // Destination provided but no prefix set - use mode-based default
-                ExportDestination destinationWithPrefix = new ExportDestination(options.Destination.Container)
-                {
-                    Prefix = defaultPrefix,
-                };
-                optionsWithDestination = options with { Destination = destinationWithPrefix };
-            }
+                Prefix = prefix,
+            };
+
+            ExportJobCreationOptions optionsWithDestination = options with { Destination = destination };
 
             ExportJobOperationRequest request =
                 new ExportJobOperationRequest(
@@ -109,8 +96,8 @@ public sealed class DefaultExportHistoryJobClient(
             string orchestrationInstanceId = ExportHistoryConstants.GetOrchestratorInstanceId(this.JobId);
 
             // First, delete the entity
-            ExportJobOperationRequest request = new ExportJobOperationRequest(this.entityId, ExportJobOperations.Delete);
-            string instanceId = await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
+            ExportJobOperationRequest request = new ExportJobOperationRequest(this.entityId, nameof(ExportJob.Delete));
+            await this.durableTaskClient.ScheduleNewOrchestrationInstanceAsync(
                 new TaskName(nameof(ExecuteExportJobOperationOrchestrator)),
                 request,
                 cancellation);
@@ -202,7 +189,7 @@ public sealed class DefaultExportHistoryJobClient(
         {
             // Orchestration instance doesn't exist - this is expected if it was already deleted or never existed
             this.logger.LogInformation(
-                "Orchestration instance '{OrchestrationInstanceId}' is already purged",
+                "Orchestration instance '{OrchestrationInstanceId}' is already purged or never existed",
                 orchestrationInstanceId);
         }
         catch (Exception ex)

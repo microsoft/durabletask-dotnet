@@ -105,6 +105,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExportHistory", "src\Export
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExportHistoryWebApp", "samples\ExportHistoryWebApp\ExportHistoryWebApp.csproj", "{FE1E17DD-595A-123A-EA4C-AA313BBFB685}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExportHistoryTests", "samples\ExportHistoryTests\ExportHistoryTests.csproj", "{F834D6F7-1F46-4BCA-9E05-7A1241583A8C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -283,6 +285,10 @@ Global
 		{FE1E17DD-595A-123A-EA4C-AA313BBFB685}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FE1E17DD-595A-123A-EA4C-AA313BBFB685}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FE1E17DD-595A-123A-EA4C-AA313BBFB685}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F834D6F7-1F46-4BCA-9E05-7A1241583A8C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F834D6F7-1F46-4BCA-9E05-7A1241583A8C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F834D6F7-1F46-4BCA-9E05-7A1241583A8C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F834D6F7-1F46-4BCA-9E05-7A1241583A8C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -335,6 +341,7 @@ Global
 		{B894780C-338F-475E-8E84-56AFA8197A06} = {E5637F81-2FB9-4CD7-900D-455363B142A7}
 		{354CE69B-78DB-9B29-C67E-0DBB862C7A65} = {8AFC9781-F6F1-4696-BB4A-9ED7CA9D612B}
 		{FE1E17DD-595A-123A-EA4C-AA313BBFB685} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
+		{F834D6F7-1F46-4BCA-9E05-7A1241583A8C} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AB41CB55-35EA-4986-A522-387AB3402E71}

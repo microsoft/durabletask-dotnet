@@ -112,6 +112,10 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
             throw new ArgumentException($"Could not find an orchestration instance ID in the work item's runtime state.", nameof(workItem));
         }
 
+        var activityMessages = new List<TaskMessage>();
+        var timerMessages = new List<TaskMessage>();
+        var orchestratorMessages = new List<TaskMessage>();
+
         // We loop for as long as the orchestrator does a ContinueAsNew
         while (true)
         {
@@ -138,9 +142,9 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
             this.ApplyOrchestratorActions(
                 result,
                 ref workItem.OrchestrationRuntimeState,
-                out List<TaskMessage> activityMessages,
-                out List<TaskMessage> orchestratorMessages,
-                out List<TaskMessage> timerMessages,
+                activityMessages,
+                orchestratorMessages,
+                timerMessages,
                 out OrchestrationState? updatedStatus,
                 out bool continueAsNew);
             if (continueAsNew)
@@ -247,9 +251,9 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
     void ApplyOrchestratorActions(
         OrchestratorExecutionResult result,
         ref OrchestrationRuntimeState runtimeState,
-        out List<TaskMessage> activityMessages, // CA1859: Use concrete types for better performance
-        out List<TaskMessage> orchestratorMessages, // CA1859: Use concrete types for better performance
-        out List<TaskMessage> timerMessages, // CA1859: Use concrete types for better performance
+        List<TaskMessage> activityMessages, // CA1859: Use concrete types for better performance
+        List<TaskMessage> orchestratorMessages, // CA1859: Use concrete types for better performance
+        List<TaskMessage> timerMessages, // CA1859: Use concrete types for better performance
         out OrchestrationState? updatedStatus,
         out bool continueAsNew)
     {
@@ -258,9 +262,6 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
             throw new ArgumentException($"The provided {nameof(OrchestrationRuntimeState)} doesn't contain an instance ID!", nameof(runtimeState));
         }
 
-        List<TaskMessage>? newActivityMessages = null; // CA1859: Use concrete types for better performance
-        List<TaskMessage>? newTimerMessages = null; // CA1859: Use concrete types for better performance
-        List<TaskMessage>? newOrchestratorMessages = null; // CA1859: Use concrete types for better performance
         FailureDetails? failureDetails = null;
         continueAsNew = false;
 
@@ -288,8 +289,7 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                     scheduledEvent.ParentTraceContext ??= new(grpcAction.ParentTraceContext.TraceParent, grpcAction.ParentTraceContext.TraceState);
                 }
 
-                newActivityMessages ??= new List<TaskMessage>();
-                newActivityMessages.Add(new TaskMessage
+                activityMessages.Add(new TaskMessage
                 {
                     Event = scheduledEvent,
                     OrchestrationInstance = runtimeState.OrchestrationInstance,
@@ -301,8 +301,7 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
             {
                 TimerCreatedEvent timerEvent = new(timerAction.Id, timerAction.FireAt);
 
-                newTimerMessages ??= new List<TaskMessage>();
-                newTimerMessages.Add(new TaskMessage
+                timerMessages.Add(new TaskMessage
                 {
                     Event = new TimerFiredEvent(-1, timerAction.FireAt)
                     {
@@ -346,8 +345,7 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                     Tags = subOrchestrationAction.Tags,
                 };
 
-                newOrchestratorMessages ??= new List<TaskMessage>();
-                newOrchestratorMessages.Add(new TaskMessage
+                orchestratorMessages.Add(new TaskMessage
                 {
                     Event = startedEvent,
                     OrchestrationInstance = startedEvent.OrchestrationInstance,
@@ -369,11 +367,15 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
 
                 runtimeState.AddEvent(sendEvent);
 
-                newOrchestratorMessages ??= new List<TaskMessage>();
-                newOrchestratorMessages.Add(new TaskMessage
+                EventRaisedEvent eventRaisedEvent = new(-1, sendEventAction.EventData)
                 {
-                    Event = sendEvent,
-                    OrchestrationInstance = runtimeState.OrchestrationInstance,
+                    Name = sendEventAction.EventName
+                };
+
+                orchestratorMessages.Add(new TaskMessage
+                {
+                    Event = eventRaisedEvent,
+                    OrchestrationInstance = sendEventAction.Instance,
                 });
             }
             else if (action is OrchestrationCompleteOrchestratorAction completeAction)
@@ -408,9 +410,6 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                     }
 
                     runtimeState = newRuntimeState;
-                    activityMessages = new List<TaskMessage>();
-                    orchestratorMessages = new List<TaskMessage>();
-                    timerMessages = new List<TaskMessage>();
                     continueAsNew = true;
                     updatedStatus = null;
                     return;
@@ -457,8 +456,7 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                             completeAction.FailureDetails);
                     }
 
-                    newOrchestratorMessages ??= new List<TaskMessage>();
-                    newOrchestratorMessages.Add(new TaskMessage
+                    orchestratorMessages.Add(new TaskMessage
                     {
                         Event = subOrchestratorCompletedEvent,
                         OrchestrationInstance = runtimeState.ParentInstance.OrchestrationInstance,
@@ -474,10 +472,6 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
         }
 
         runtimeState.AddEvent(new OrchestratorCompletedEvent(-1));
-
-        activityMessages = newActivityMessages ?? new List<TaskMessage>();
-        timerMessages = newTimerMessages ?? new List<TaskMessage>();
-        orchestratorMessages = newOrchestratorMessages ?? new List<TaskMessage>();
 
         updatedStatus = new OrchestrationState
         {

@@ -474,15 +474,8 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
     static bool ImplementsInterface(INamedTypeSymbol sourceType, INamedTypeSymbol targetInterface)
     {
         // Check all interfaces implemented by the source type
-        foreach (INamedTypeSymbol @interface in sourceType.AllInterfaces)
-        {
-            if (SymbolEqualityComparer.Default.Equals(@interface.OriginalDefinition, targetInterface.OriginalDefinition))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return sourceType.AllInterfaces.Any(@interface => 
+            SymbolEqualityComparer.Default.Equals(@interface.OriginalDefinition, targetInterface.OriginalDefinition));
     }
 
     struct ActivityInvocation

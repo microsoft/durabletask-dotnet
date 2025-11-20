@@ -797,6 +797,16 @@ enum WorkerCapability {
     // When set, the service may return work items without any history events as an optimization.
     // It is strongly recommended that all SDKs support this capability.
     WORKER_CAPABILITY_HISTORY_STREAMING = 1;
+
+    // Indicates that the worker supports scheduled tasks.
+    // The service may send schedule-triggered orchestration work items,
+    // and the worker must handle them, including the scheduledTime field.
+    WORKER_CAPABILITY_SCHEDULED_TASKS = 2;
+
+    // Signals that the worker can handle large payloads stored externally (e.g., Blob Storage).
+    // Work items may contain URI references instead of inline data, and the worker must fetch them.
+    // This avoids message size limits and reduces network overhead.
+    WORKER_CAPABILITY_LARGE_PAYLOADS = 3;
 }
 
 message WorkItem {

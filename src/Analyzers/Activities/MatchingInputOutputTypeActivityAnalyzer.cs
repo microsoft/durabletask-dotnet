@@ -111,6 +111,10 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
                     string activityName = constant.Value!.ToString();
 
                     // Try to extract the input argument from the invocation
+                    // Note: Two cases result in inputType being null:
+                    // 1. No input argument provided: CallActivityAsync("activity")
+                    // 2. Explicit null literal: CallActivityAsync("activity", null)
+                    // Both are treated the same - as passing null to the activity parameter
                     ITypeSymbol? inputType = null;
                     IArgumentOperation? inputArgumentParameter = invocationOperation.Arguments.SingleOrDefault(a => a.Parameter?.Name == "input");
                     if (inputArgumentParameter != null && inputArgumentParameter.ArgumentKind != ArgumentKind.DefaultValue)
@@ -353,9 +357,22 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
             return true;
         }
 
-        // One is null, the other isn't = not compatible
+        // One is null, the other isn't
         if (sourceType == null || targetType == null)
         {
+            // Special case: null literals can be passed to nullable parameters
+            // This handles both nullable reference types (string?) and nullable value types (int?)
+            if (sourceType == null && targetType != null)
+            {
+                // Check if target is a nullable reference type (NullableAnnotation.Annotated)
+                // or a nullable value type (Nullable<T>)
+                if (targetType.NullableAnnotation == NullableAnnotation.Annotated ||
+                    targetType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+                {
+                    return true;
+                }
+            }
+            
             return false;
         }
 

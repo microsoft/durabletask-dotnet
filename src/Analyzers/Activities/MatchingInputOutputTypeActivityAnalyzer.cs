@@ -360,14 +360,23 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
             // Check if target is a nullable value type (Nullable<T>)
             if (targetType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
             {
-                 return true;
+                return true;
             }
 
-             // Check if target is a nullable reference type (string?)
+            // Check if target is a nullable reference type (string?)
             if (targetType.NullableAnnotation == NullableAnnotation.Annotated)
             {
                 return true;
             }
+
+            // Not nullable, so null input is incompatible
+            return false;
+        }
+
+        // If targetType is null but sourceType is not, they're incompatible
+        if (targetType == null && sourceType != null)
+        {
+            return false;
         }
 
         // Check if types are exactly equal
@@ -377,7 +386,8 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
         }
 
         // Check if source type can be converted to target type (handles inheritance, interface implementation, etc.)
-        Conversion conversion = compilation.ClassifyConversion(sourceType, targetType);
+        // At this point, both sourceType and targetType are guaranteed to be non-null
+        Conversion conversion = compilation.ClassifyConversion(sourceType!, targetType!);
         if (conversion.IsImplicit || conversion.IsIdentity)
         {
             return true;
@@ -385,7 +395,8 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
 
         // Special handling for collection types since ClassifyConversion doesn't always recognize
         // generic interface implementations (e.g., List<T> to IReadOnlyList<T>)
-        if (IsCollectionTypeCompatible(sourceType, targetType))
+        // At this point, both sourceType and targetType are guaranteed to be non-null
+        if (IsCollectionTypeCompatible(sourceType!, targetType!))
         {
             return true;
         }

@@ -135,7 +135,6 @@ namespace Microsoft.DurableTask
                     return runtimeType != null && runtimeType.IsValueType;
             }
         }
-        ;
 
         if (inputType.StartsWith("(") || inputType.EndsWith('?') || IsValueType(inputType))
         {

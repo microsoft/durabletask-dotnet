@@ -151,7 +151,7 @@ public class ShimDurableTaskClientTests
         };
 
         // act
-        List<OrchestrationMetadata> result = await this.client.GetAllInstancesAsync(query).ToListAsync();
+        List<OrchestrationMetadata> result = await this.client.GetAllInstancesAsync(query).ToListAsync(CancellationToken.None);
 
         // assert
         this.orchestrationClient.VerifyAll();

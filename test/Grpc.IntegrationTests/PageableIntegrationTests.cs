@@ -61,7 +61,7 @@ public class PageableIntegrationTests : IntegrationTestBase
                 nameof(PageableActivityAsync), new PageRequest(continuation))!;
         });
 
-        return await pageable.CountAsync();
+        return await pageable.CountAsync(CancellationToken.None);
     }
 
     record PageRequest(string? Continuation, int? PageSize = null);

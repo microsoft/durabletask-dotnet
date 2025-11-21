@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFrameworks>net6.0;net8.0;net10.0</TargetFrameworks>
     <RootNamespace>Microsoft.DurableTask.Testing</RootNamespace>
     <AssemblyName>Microsoft.DurableTask.InProcessTestHost</AssemblyName>
     <PackageId>Microsoft.DurableTask.InProcessTestHost</PackageId>

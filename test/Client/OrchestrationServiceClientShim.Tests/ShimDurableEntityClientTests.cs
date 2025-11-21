@@ -120,7 +120,7 @@ public class ShimDurableEntityClientTests
         }
 
         ShimDurableEntityClient client = this.CreateEntityClient();
-        List<EntityMetadata> actualEntities = await client.GetAllEntitiesAsync().ToListAsync();
+        List<EntityMetadata> actualEntities = await client.GetAllEntitiesAsync().ToListAsync(CancellationToken.None);
 
         using AssertionScope scope = new();
         actualEntities.Should().HaveCount(entities.Count);
@@ -164,7 +164,7 @@ public class ShimDurableEntityClientTests
         }
 
         ShimDurableEntityClient client = this.CreateEntityClient();
-        List<EntityMetadata> actualEntities = await client.GetAllEntitiesAsync(query).ToListAsync();
+        List<EntityMetadata> actualEntities = await client.GetAllEntitiesAsync(query).ToListAsync(CancellationToken.None);
 
         using AssertionScope scope = new();
         actualEntities.Should().HaveCount(entities.Count);
@@ -207,7 +207,7 @@ public class ShimDurableEntityClientTests
         }
 
         ShimDurableEntityClient client = this.CreateEntityClient();
-        List<EntityMetadata<string>> actualEntities = await client.GetAllEntitiesAsync<string>().ToListAsync();
+        List<EntityMetadata<string>> actualEntities = await client.GetAllEntitiesAsync<string>().ToListAsync(CancellationToken.None);
 
         using AssertionScope scope = new();
         actualEntities.Should().HaveCount(entities.Count);
@@ -251,7 +251,7 @@ public class ShimDurableEntityClientTests
         }
 
         ShimDurableEntityClient client = this.CreateEntityClient();
-        List<EntityMetadata<string>> actualEntities = await client.GetAllEntitiesAsync<string>(query).ToListAsync();
+        List<EntityMetadata<string>> actualEntities = await client.GetAllEntitiesAsync<string>(query).ToListAsync(CancellationToken.None);
 
         using AssertionScope scope = new();
         actualEntities.Should().HaveCount(entities.Count);

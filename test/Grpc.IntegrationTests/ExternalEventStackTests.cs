@@ -127,7 +127,7 @@ public class ExternalEventStackTests : IntegrationTestBase
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         
         // Wait for orchestration to start and cancel first waiter
-        OrchestrationMetadata metadata = await server.Client.WaitForInstanceStartAsync(
+        await server.Client.WaitForInstanceStartAsync(
             instanceId, this.TimeoutToken);
         
         // Send event - should be received by second waiter (stack top), not the cancelled first waiter

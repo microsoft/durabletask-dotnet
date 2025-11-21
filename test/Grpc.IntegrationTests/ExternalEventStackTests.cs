@@ -175,7 +175,7 @@ public class ExternalEventStackTests : IntegrationTestBase
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         
         // Wait for orchestration to start and set up waiters
-        OrchestrationMetadata metadata = await server.Client.WaitForInstanceStartAsync(
+        await server.Client.WaitForInstanceStartAsync(
             instanceId, this.TimeoutToken);
         
         // Send three events - should be received in LIFO order

@@ -274,7 +274,7 @@ public class ShimDurableEntityClientTests
         entity.Should().NotBeNull();
         VerifyEntity(entity!, expected);
         entity!.IncludesState.Should().Be(includeState);
-        
+
         if (includeState)
         {
             entity!.State.Value.Should().Be("\"state\"");
@@ -294,7 +294,7 @@ public class ShimDurableEntityClientTests
         entity.Should().NotBeNull();
         VerifyEntity(entity!, expected);
         entity!.IncludesState.Should().Be(includeState);
-        
+
         if (includeState)
         {
             entity!.State.Should().Be("state");

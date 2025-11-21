@@ -240,7 +240,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         await server.Client.WaitForInstanceStartAsync(originalInstanceId, default);
         await server.Client.RaiseEventAsync(originalInstanceId, "event", default);
         await server.Client.WaitForInstanceCompletionAsync(originalInstanceId, cts.Token);
-        
+
         // Verify the original orchestration completed
         OrchestrationMetadata? originalMetadata = await server.Client.GetInstanceAsync(originalInstanceId, true);
         originalMetadata.Should().NotBeNull();
@@ -261,7 +261,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
 
         // Complete the restarted orchestration
         await server.Client.RaiseEventAsync(restartedInstanceId, "event");
-        
+
         using var completionCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         await server.Client.WaitForInstanceCompletionAsync(restartedInstanceId, completionCts.Token);
 

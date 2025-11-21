@@ -373,7 +373,7 @@ public class ShimDurableTaskClientTests
         // Verify the captured message details
         capturedMessage.Should().NotBeNull();
         capturedMessage!.Event.Should().BeOfType<ExecutionStartedEvent>();
-        
+
         var startedEvent = (ExecutionStartedEvent)capturedMessage.Event;
         startedEvent.Name.Should().Be(orchestratorName);
         startedEvent.Input.Should().Be(serializedInput);

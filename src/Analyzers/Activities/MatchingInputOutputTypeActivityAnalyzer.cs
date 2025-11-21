@@ -111,10 +111,6 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
                     string activityName = constant.Value!.ToString();
 
                     // Try to extract the input argument from the invocation
-                    // Note: Two cases result in inputType being null:
-                    // 1. No input argument provided: CallActivityAsync("activity")
-                    // 2. Explicit null literal: CallActivityAsync("activity", null)
-                    // Both are treated the same - as passing null to the activity parameter
                     ITypeSymbol? inputType = null;
                     IArgumentOperation? inputArgumentParameter = invocationOperation.Arguments.SingleOrDefault(a => a.Parameter?.Name == "input");
                     if (inputArgumentParameter != null && inputArgumentParameter.ArgumentKind != ArgumentKind.DefaultValue)
@@ -351,29 +347,27 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
     /// </summary>
     static bool AreTypesCompatible(Compilation compilation, ITypeSymbol? sourceType, ITypeSymbol? targetType)
     {
-        // Both null = compatible
+        // Both null = compatible (no input/output on both sides)
         if (sourceType == null && targetType == null)
         {
             return true;
         }
 
-        // One is null, the other isn't
-        if (sourceType == null || targetType == null)
+        // Special case: null (no input/output provided) can be passed to explicitly nullable parameters
+        // This handles nullable value types (int?) and nullable reference types (string?)
+        if (sourceType == null && targetType != null)
         {
-            // Special case: null literals can be passed to nullable parameters
-            // This handles both nullable reference types (string?) and nullable value types (int?)
-            if (sourceType == null && targetType != null)
+            // Check if target is a nullable value type (Nullable<T>)
+            if (targetType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
             {
-                // Check if target is a nullable reference type (NullableAnnotation.Annotated)
-                // or a nullable value type (Nullable<T>)
-                if (targetType.NullableAnnotation == NullableAnnotation.Annotated ||
-                    targetType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
-                {
-                    return true;
-                }
+                 return true;
             }
-            
-            return false;
+
+             // Check if target is a nullable reference type (string?)
+            if (targetType.NullableAnnotation == NullableAnnotation.Annotated)
+            {
+                return true;
+            }
         }
 
         // Check if types are exactly equal
@@ -474,7 +468,7 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
     static bool ImplementsInterface(INamedTypeSymbol sourceType, INamedTypeSymbol targetInterface)
     {
         // Check all interfaces implemented by the source type
-        return sourceType.AllInterfaces.Any(@interface => 
+        return sourceType.AllInterfaces.Any(@interface =>
             SymbolEqualityComparer.Default.Equals(@interface.OriginalDefinition, targetInterface.OriginalDefinition));
     }
 

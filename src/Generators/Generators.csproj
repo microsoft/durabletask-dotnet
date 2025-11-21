@@ -9,7 +9,7 @@
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <IncludeShared>false</IncludeShared>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <EnforceExtendedAnalyzerRules>false</EnforceExtendedAnalyzerRules>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
   </PropertyGroup>
 
     <!-- Package info -->

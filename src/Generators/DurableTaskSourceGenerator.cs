@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Text;
 using Microsoft.CodeAnalysis;
@@ -15,7 +16,7 @@ namespace Microsoft.DurableTask.Generators
     /// Generator for DurableTask.
     /// </summary>
     [Generator]
-    public class DurableTaskSourceGenerator : ISourceGenerator
+    public class DurableTaskSourceGenerator : IIncrementalGenerator
     {
         /* Example input:
          * 
@@ -39,32 +40,150 @@ namespace Microsoft.DurableTask.Generators
          */
 
         /// <inheritdoc/>
-        public void Initialize(GeneratorInitializationContext context)
+        public void Initialize(IncrementalGeneratorInitializationContext context)
         {
-            context.RegisterForSyntaxNotifications(() => new DurableTaskSyntaxReceiver());
+            // Create providers for DurableTask attributes
+            IncrementalValuesProvider<DurableTaskTypeInfo> durableTaskAttributes = context.SyntaxProvider
+                .CreateSyntaxProvider(
+                    predicate: static (node, _) => node is AttributeSyntax,
+                    transform: static (ctx, _) => GetDurableTaskTypeInfo(ctx))
+                .Where(static info => info != null)!;
+
+            // Create providers for Durable Functions
+            IncrementalValuesProvider<DurableFunction> durableFunctions = context.SyntaxProvider
+                .CreateSyntaxProvider(
+                    predicate: static (node, _) => node is MethodDeclarationSyntax,
+                    transform: static (ctx, _) => GetDurableFunction(ctx))
+                .Where(static func => func != null)!;
+
+            // Collect all results and check if Durable Functions is referenced
+            IncrementalValueProvider<(Compilation, ImmutableArray<DurableTaskTypeInfo>, ImmutableArray<DurableFunction>)> compilationAndTasks =
+                durableTaskAttributes.Collect()
+                    .Combine(durableFunctions.Collect())
+                    .Combine(context.CompilationProvider)
+                    .Select((x, _) => (x.Right, x.Left.Left, x.Left.Right));
+
+            // Generate the source
+            context.RegisterSourceOutput(compilationAndTasks, static (spc, source) => Execute(spc, source.Item1, source.Item2, source.Item3));
         }
 
-        /// <inheritdoc/>
-        public void Execute(GeneratorExecutionContext context)
+        static DurableTaskTypeInfo? GetDurableTaskTypeInfo(GeneratorSyntaxContext context)
         {
-            // This generator also supports Durable Functions for .NET isolated, but we only generate Functions-specific
-            // code if we find the Durable Functions extension listed in the set of referenced assembly names.
-            bool isDurableFunctions = context.Compilation.ReferencedAssemblyNames.Any(
-                assembly => assembly.Name.Equals("Microsoft.Azure.Functions.Worker.Extensions.DurableTask", StringComparison.OrdinalIgnoreCase));
+            AttributeSyntax attribute = (AttributeSyntax)context.Node;
 
-            // Enumerate all the activities in the project
-            // the generator infrastructure will create a receiver and populate it
-            // we can retrieve the populated instance via the context
-            if (context.SyntaxContextReceiver is not DurableTaskSyntaxReceiver receiver)
+            ITypeSymbol? attributeType = context.SemanticModel.GetTypeInfo(attribute.Name).Type;
+            if (attributeType?.ToString() != "Microsoft.DurableTask.DurableTaskAttribute")
             {
-                // Unexpected receiver came back?
+                return null;
+            }
+
+            if (attribute.Parent is not AttributeListSyntax list || list.Parent is not ClassDeclarationSyntax classDeclaration)
+            {
+                return null;
+            }
+
+            // Verify that the attribute is being used on a non-abstract class
+            if (classDeclaration.Modifiers.Any(SyntaxKind.AbstractKeyword))
+            {
+                return null;
+            }
+
+            if (context.SemanticModel.GetDeclaredSymbol(classDeclaration) is not ITypeSymbol classType)
+            {
+                return null;
+            }
+
+            string className = classType.ToDisplayString();
+            INamedTypeSymbol? taskType = null;
+            bool isActivity = false;
+
+            INamedTypeSymbol? baseType = classType.BaseType;
+            while (baseType != null)
+            {
+                if (baseType.ContainingAssembly.Name == "Microsoft.DurableTask.Abstractions")
+                {
+                    if (baseType.Name == "TaskActivity")
+                    {
+                        taskType = baseType;
+                        isActivity = true;
+                        break;
+                    }
+                    else if (baseType.Name == "TaskOrchestrator")
+                    {
+                        taskType = baseType;
+                        isActivity = false;
+                        break;
+                    }
+                }
+
+                baseType = baseType.BaseType;
+            }
+
+            if (taskType == null || taskType.TypeParameters.Length <= 1)
+            {
+                return null;
+            }
+
+            ITypeSymbol inputType = taskType.TypeArguments.First();
+            ITypeSymbol outputType = taskType.TypeArguments.Last();
+
+            string taskName = classType.Name;
+            if (attribute.ArgumentList?.Arguments.Count > 0)
+            {
+                ExpressionSyntax expression = attribute.ArgumentList.Arguments[0].Expression;
+                taskName = context.SemanticModel.GetConstantValue(expression).ToString();
+            }
+
+            return new DurableTaskTypeInfo(className, taskName, inputType, outputType, isActivity);
+        }
+
+        static DurableFunction? GetDurableFunction(GeneratorSyntaxContext context)
+        {
+            MethodDeclarationSyntax method = (MethodDeclarationSyntax)context.Node;
+
+            if (DurableFunction.TryParse(context.SemanticModel, method, out DurableFunction? function))
+            {
+                return function;
+            }
+
+            return null;
+        }
+
+        static void Execute(
+            SourceProductionContext context,
+            Compilation compilation,
+            ImmutableArray<DurableTaskTypeInfo> allTasks,
+            ImmutableArray<DurableFunction> allFunctions)
+        {
+            if (allTasks.IsDefaultOrEmpty && allFunctions.IsDefaultOrEmpty)
+            {
                 return;
             }
 
-            int found = receiver.Activities.Count + receiver.Orchestrators.Count + receiver.DurableFunctions.Count;
+            // This generator also supports Durable Functions for .NET isolated, but we only generate Functions-specific
+            // code if we find the Durable Functions extension listed in the set of referenced assembly names.
+            bool isDurableFunctions = compilation.ReferencedAssemblyNames.Any(
+                assembly => assembly.Name.Equals("Microsoft.Azure.Functions.Worker.Extensions.DurableTask", StringComparison.OrdinalIgnoreCase));
+
+            // Separate tasks into orchestrators and activities
+            List<DurableTaskTypeInfo> orchestrators = new();
+            List<DurableTaskTypeInfo> activities = new();
+
+            foreach (DurableTaskTypeInfo task in allTasks)
+            {
+                if (task.IsActivity)
+                {
+                    activities.Add(task);
+                }
+                else
+                {
+                    orchestrators.Add(task);
+                }
+            }
+
+            int found = activities.Count + orchestrators.Count + allFunctions.Length;
             if (found == 0)
             {
-                // Didn't find anything
                 return;
             }
 
@@ -92,14 +211,14 @@ namespace Microsoft.DurableTask
             if (isDurableFunctions)
             {
                 // Generate a singleton orchestrator object instance that can be reused for all invocations.
-                foreach (DurableTaskTypeInfo orchestrator in receiver.Orchestrators)
+                foreach (DurableTaskTypeInfo orchestrator in orchestrators)
                 {
                     sourceBuilder.AppendLine($@"
         static readonly ITaskOrchestrator singleton{orchestrator.TaskName} = new {orchestrator.TypeName}();");
                 }
             }
 
-            foreach (DurableTaskTypeInfo orchestrator in receiver.Orchestrators)
+            foreach (DurableTaskTypeInfo orchestrator in orchestrators)
             {
                 if (isDurableFunctions)
                 {
@@ -111,7 +230,7 @@ namespace Microsoft.DurableTask
                 AddSubOrchestratorCallMethod(sourceBuilder, orchestrator);
             }
 
-            foreach (DurableTaskTypeInfo activity in receiver.Activities)
+            foreach (DurableTaskTypeInfo activity in activities)
             {
                 AddActivityCallMethod(sourceBuilder, activity);
 
@@ -123,7 +242,7 @@ namespace Microsoft.DurableTask
             }
 
             // Activity function triggers are supported for code-gen (but not orchestration triggers)
-            IEnumerable<DurableFunction> activityTriggers = receiver.DurableFunctions.Where(
+            IEnumerable<DurableFunction> activityTriggers = allFunctions.Where(
                 df => df.Kind == DurableFunctionKind.Activity);
             foreach (DurableFunction function in activityTriggers)
             {
@@ -132,7 +251,7 @@ namespace Microsoft.DurableTask
 
             if (isDurableFunctions)
             {
-                if (receiver.Activities.Count > 0)
+                if (activities.Count > 0)
                 {
                     // Functions-specific helper class, which is only needed when
                     // using the class-based syntax.
@@ -144,8 +263,8 @@ namespace Microsoft.DurableTask
                 // ASP.NET Core-specific service registration methods
                 AddRegistrationMethodForAllTasks(
                     sourceBuilder,
-                    receiver.Orchestrators,
-                    receiver.Activities);
+                    orchestrators,
+                    activities);
             }
 
             sourceBuilder.AppendLine("    }").AppendLine("}");
@@ -273,124 +392,14 @@ namespace Microsoft.DurableTask
         }}");
         }
 
-        class DurableTaskSyntaxReceiver : ISyntaxContextReceiver
-        {
-            readonly List<DurableTaskTypeInfo> orchestrators = new();
-            readonly List<DurableTaskTypeInfo> activities = new();
-            readonly List<DurableFunction> durableFunctions = new();
-
-            public IReadOnlyList<DurableTaskTypeInfo> Orchestrators => this.orchestrators;
-            public IReadOnlyList<DurableTaskTypeInfo> Activities => this.activities;
-            public IReadOnlyList<DurableFunction> DurableFunctions => this.durableFunctions;
-
-            public void OnVisitSyntaxNode(GeneratorSyntaxContext context)
-            {
-                // Check for Azure Functions syntax
-                if (context.Node is MethodDeclarationSyntax method &&
-                    DurableFunction.TryParse(context.SemanticModel, method, out DurableFunction? function) &&
-                    function != null)
-                {
-                    Debug.WriteLine($"Adding {function.Kind} function '{function.Name}'");
-                    this.durableFunctions.Add(function);
-                    return;
-                }
-
-                // Check for class-based syntax
-                if (context.Node is not AttributeSyntax attribute)
-                {
-                    return;
-                }
-
-                ITypeSymbol? attributeType = context.SemanticModel.GetTypeInfo(attribute.Name).Type;
-                if (attributeType?.ToString() != "Microsoft.DurableTask.DurableTaskAttribute")
-                {
-                    return;
-                }
-
-                if (attribute.Parent is not AttributeListSyntax list || list.Parent is not ClassDeclarationSyntax classDeclaration)
-                {
-                    // TODO: Issue a warning that the [DurableTask] attribute was found in a place it wasn't expected.
-                    return;
-                }
-
-                // Verify that the attribute is being used on a non-abstract class
-                if (classDeclaration.Modifiers.Any(SyntaxKind.AbstractKeyword))
-                {
-                    // TODO: Issue a warning that you can't use [DurableTask] on abstract classes
-                    return;
-                }
-
-                if (context.SemanticModel.GetDeclaredSymbol(classDeclaration) is not ITypeSymbol classType)
-                {
-                    // Invalid type declaration?
-                    return;
-                }
-
-                string className = classType.ToDisplayString();
-
-                List<DurableTaskTypeInfo>? taskList = null;
-                INamedTypeSymbol? taskType = null;
-
-                INamedTypeSymbol? baseType = classType.BaseType;
-                while (baseType != null)
-                {
-                    if (baseType.ContainingAssembly.Name == "Microsoft.DurableTask.Abstractions")
-                    {
-                        if (baseType.Name == "TaskActivity")
-                        {
-                            taskList = this.activities;
-                            taskType = baseType;
-                            break;
-                        }
-                        else if (baseType.Name == "TaskOrchestrator")
-                        {
-                            taskList = this.orchestrators;
-                            taskType = baseType;
-                            break;
-                        }
-                    }
-
-                    baseType = baseType.BaseType;
-                }
-
-                if (taskList == null || taskType == null)
-                {
-                    // TODO: Issue a warning that [DurableTask] can only be used with activity and orchestration-derived classes
-                    return;
-                }
-
-                if (taskType.TypeParameters.Length <= 1)
-                {
-                    // We expect that the base class will always have at least two type parameters
-                    return;
-                }
-
-                ITypeSymbol inputType = taskType.TypeArguments.First();
-                ITypeSymbol outputType = taskType.TypeArguments.Last();
-
-                // By default, the task name is the class name.
-                string taskName = classType.Name; // TODO: What if the class has generic type parameters?
-                if (attribute.ArgumentList?.Arguments.Count > 0)
-                {
-                    ExpressionSyntax expression = attribute.ArgumentList.Arguments[0].Expression;
-                    taskName = context.SemanticModel.GetConstantValue(expression).ToString();
-                }
-
-                taskList.Add(new DurableTaskTypeInfo(
-                    className,
-                    taskName,
-                    inputType,
-                    outputType));
-            }
-        }
-
         class DurableTaskTypeInfo
         {
             public DurableTaskTypeInfo(
                 string taskType,
                 string taskName,
                 ITypeSymbol? inputType,
-                ITypeSymbol? outputType)
+                ITypeSymbol? outputType,
+                bool isActivity)
             {
                 this.TypeName = taskType;
                 this.TaskName = taskName;
@@ -402,6 +411,7 @@ namespace Microsoft.DurableTask
                 }
 
                 this.OutputType = GetRenderedTypeExpression(outputType);
+                this.IsActivity = isActivity;
             }
 
             public string TypeName { get; }
@@ -409,6 +419,7 @@ namespace Microsoft.DurableTask
             public string InputType { get; }
             public string InputParameter { get; }
             public string OutputType { get; }
+            public bool IsActivity { get; }
 
             static string GetRenderedTypeExpression(ITypeSymbol? symbol)
             {

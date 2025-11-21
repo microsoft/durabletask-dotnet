@@ -15,7 +15,7 @@ static class TestHelpers
         string expectedFileName,
         string inputSource,
         string expectedOutputSource,
-        bool isDurableFunctions) where TSourceGenerator : ISourceGenerator, new()
+        bool isDurableFunctions) where TSourceGenerator : IIncrementalGenerator, new()
     {
         CSharpSourceGeneratorVerifier<TSourceGenerator>.Test test = new()
         {
@@ -43,7 +43,7 @@ static class TestHelpers
 
             // Assembly functionsWorkerCore = typeof(FunctionContext).Assembly;
             // test.TestState.AdditionalReferences.Add(functionsWorkerCore);
-            
+
             // Assembly durableExtension = typeof(OrchestrationTriggerAttribute).Assembly;
             // test.TestState.AdditionalReferences.Add(durableExtension);
 
@@ -134,7 +134,8 @@ namespace Microsoft.DurableTask
                     Type? runtimeType = Type.GetType(typeExpression, throwOnError: false);
                     return runtimeType != null && runtimeType.IsValueType;
             }
-        };
+        }
+        ;
 
         if (inputType.StartsWith("(") || inputType.EndsWith('?') || IsValueType(inputType))
         {

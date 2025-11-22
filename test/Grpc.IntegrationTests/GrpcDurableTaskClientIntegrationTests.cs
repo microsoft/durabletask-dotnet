@@ -104,14 +104,14 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         AsyncPageable<OrchestrationMetadata> pageable = server.Client.GetAllInstancesAsync(query);
 
         await ForEachOrchestrationAsync(x => server.Client.WaitForInstanceStartAsync(x, default));
-        List<OrchestrationMetadata> metadata = await pageable.ToListAsync();
+        List<OrchestrationMetadata> metadata = await pageable.ToListAsync(CancellationToken.None);
         metadata.Should().HaveCount(2)
             .And.AllSatisfy(m => AssertMetadata(m, OrchestrationRuntimeStatus.Running))
             .And.NotContain(x => string.Equals(x.InstanceId, notIncluded, StringComparison.OrdinalIgnoreCase));
 
         await ForEachOrchestrationAsync(x => server.Client.RaiseEventAsync(x, "event", default));
         await ForEachOrchestrationAsync(x => server.Client.WaitForInstanceCompletionAsync(x, default));
-        metadata = await pageable.ToListAsync();
+        metadata = await pageable.ToListAsync(CancellationToken.None);
         metadata.Should().HaveCount(2)
             .And.AllSatisfy(m => AssertMetadata(m, OrchestrationRuntimeStatus.Completed))
             .And.NotContain(x => string.Equals(x.InstanceId, notIncluded, StringComparison.OrdinalIgnoreCase));
@@ -130,12 +130,12 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         }
 
         AsyncPageable<OrchestrationMetadata> pageable = server.Client.GetAllInstancesAsync(query);
-        List<Page<OrchestrationMetadata>> pages = await pageable.AsPages(pageSizeHint: 5).ToListAsync();
+        List<Page<OrchestrationMetadata>> pages = await pageable.AsPages(pageSizeHint: 5).ToListAsync(CancellationToken.None);
         pages.Should().HaveCount(5);
         pages.ForEach(p => p.Values.Should().HaveCount(p.ContinuationToken is null ? 1 : 5));
 
         List<Page<OrchestrationMetadata>> resumedPages = await pageable.AsPages(
-            pages[1].ContinuationToken, pageSizeHint: 4).ToListAsync();
+            pages[1].ContinuationToken, pageSizeHint: 4).ToListAsync(CancellationToken.None);
         resumedPages.Should().HaveCount(3);
 
         List<OrchestrationMetadata> left = resumedPages.SelectMany(p => p.Values).ToList();
@@ -145,7 +145,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             cfg => cfg.Including(x => x.InstanceId).Including(x => x.CreatedAt)
                 .Using<DateTimeOffset, DateTimeToleranceComparer>());
 
-        Page<OrchestrationMetadata> page = await pageable.AsPages(pageSizeHint: 10).FirstAsync();
+        Page<OrchestrationMetadata> page = await pageable.AsPages(pageSizeHint: 10).FirstAsync(CancellationToken.None);
         page.Values.Should().HaveCount(10);
         page.ContinuationToken.Should().NotBeNull();
     }
@@ -240,7 +240,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         await server.Client.WaitForInstanceStartAsync(originalInstanceId, default);
         await server.Client.RaiseEventAsync(originalInstanceId, "event", default);
         await server.Client.WaitForInstanceCompletionAsync(originalInstanceId, cts.Token);
-        
+
         // Verify the original orchestration completed
         OrchestrationMetadata? originalMetadata = await server.Client.GetInstanceAsync(originalInstanceId, true);
         originalMetadata.Should().NotBeNull();
@@ -261,7 +261,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
 
         // Complete the restarted orchestration
         await server.Client.RaiseEventAsync(restartedInstanceId, "event");
-        
+
         using var completionCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         await server.Client.WaitForInstanceCompletionAsync(restartedInstanceId, completionCts.Token);
 

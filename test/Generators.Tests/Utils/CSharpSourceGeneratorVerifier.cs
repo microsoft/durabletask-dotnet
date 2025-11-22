@@ -10,17 +10,17 @@ using Microsoft.CodeAnalysis.Testing;
 namespace Microsoft.DurableTask.Generators.Tests.Utils;
 
 // Mostly copy/pasted from the Microsoft Source Generators testing documentation
-public static class CSharpSourceGeneratorVerifier<TSourceGenerator> where TSourceGenerator : ISourceGenerator, new()
+public static class CSharpSourceGeneratorVerifier<TSourceGenerator> where TSourceGenerator : IIncrementalGenerator, new()
 {
     public class Test : CSharpSourceGeneratorTest<TSourceGenerator, DefaultVerifier>
     {
         public Test()
         {
-            // See https://www.nuget.org/packages/Microsoft.NETCore.App.Ref/6.0.0
+            // See https://www.nuget.org/packages/Microsoft.NETCore.App.Ref/8.0.22
             this.ReferenceAssemblies = new ReferenceAssemblies(
-                targetFramework: "net6.0",
-                referenceAssemblyPackage: new PackageIdentity("Microsoft.NETCore.App.Ref", "6.0.0"),
-                referenceAssemblyPath: Path.Combine("ref", "net6.0"));
+                targetFramework: "net8.0",
+                referenceAssemblyPackage: new PackageIdentity("Microsoft.NETCore.App.Ref", "8.0.22"),
+                referenceAssemblyPath: Path.Combine("ref", "net8.0"));
         }
 
         public LanguageVersion LanguageVersion { get; set; } = LanguageVersion.CSharp9;

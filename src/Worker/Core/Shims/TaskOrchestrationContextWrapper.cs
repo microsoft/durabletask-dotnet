@@ -18,7 +18,10 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// </summary>
 sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 {
-    readonly Dictionary<string, Queue<IEventSource>> externalEventSources = new(StringComparer.OrdinalIgnoreCase);
+    // We use a stack (a custom implementation using a single-linked list) to make it easier for users
+    // to abandon external events that they no longer care about. The common case is a Task.WhenAny in a loop.
+    // Events are assigned to the most recent (top of stack) waiter, which naturally avoids issues with cancelled waiters.
+    readonly Dictionary<string, IEventSource> externalEventSources = new(StringComparer.OrdinalIgnoreCase);
     readonly NamedQueue<string> externalEventBuffer = new();
     readonly OrchestrationContext innerContext;
     readonly OrchestrationInvocationContext invocationContext;
@@ -280,29 +283,33 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override Task<T> WaitForExternalEvent<T>(string eventName, CancellationToken cancellationToken = default)
     {
-        // Return immediately if this external event has already arrived.
-        if (this.externalEventBuffer.TryTake(eventName, out string? bufferedEventPayload))
-        {
-            return Task.FromResult(this.DataConverter.Deserialize<T>(bufferedEventPayload));
-        }
-
         // Create a task completion source that will be set when the external event arrives.
         EventTaskCompletionSource<T> eventSource = new();
-        if (this.externalEventSources.TryGetValue(eventName, out Queue<IEventSource>? existing))
+
+        // Set up the stack for listening to external events (LIFO - Last In First Out)
+        // New waiters are added to the top of the stack, so they get events first.
+        // This makes it easier for users to abandon external events they no longer care about.
+        // The common case is a Task.WhenAny in a loop.
+        if (this.externalEventSources.TryGetValue(eventName, out IEventSource? existing))
         {
-            if (existing.Count > 0 && existing.Peek().EventType != typeof(T))
+            if (existing.EventType != typeof(T))
             {
                 throw new ArgumentException("Events with the same name must have the same type argument. Expected"
-                    + $" {existing.Peek().GetType().FullName} but was requested {typeof(T).FullName}.");
+                    + $" {existing.EventType.FullName} but was requested {typeof(T).FullName}.");
             }
 
-            existing.Enqueue(eventSource);
+            // Add new waiter to the top of the stack
+            eventSource.Next = existing;
         }
-        else
+
+        // New waiter becomes the top of the stack
+        this.externalEventSources[eventName] = eventSource;
+
+        // Check the buffer to see if any events came in before the orchestrator was listening
+        if (this.externalEventBuffer.TryTake(eventName, out string? bufferedEvent))
         {
-            Queue<IEventSource> eventSourceQueue = new();
-            eventSourceQueue.Enqueue(eventSource);
-            this.externalEventSources.Add(eventName, eventSourceQueue);
+            // We can complete the event right away, since we already have an event's input
+            this.CompleteExternalEvent(eventName, bufferedEvent);
         }
 
         // TODO: this needs to be tracked and disposed appropriately.
@@ -416,11 +423,23 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <param name="rawEventPayload">The serialized event payload.</param>
     internal void CompleteExternalEvent(string eventName, string rawEventPayload)
     {
-        if (this.externalEventSources.TryGetValue(eventName, out Queue<IEventSource>? waiters))
+        if (this.externalEventSources.TryGetValue(eventName, out IEventSource? waiter))
         {
-            object? value;
+            // Get the waiter at the top of the stack (most recent waiter)
+            // If we're going to raise an event we should remove it from the pending collection
+            // because otherwise WaitForExternalEvent() will always find one with this key and run infinitely.
+            IEventSource? next = waiter.Next;
+            if (next == null)
+            {
+                this.externalEventSources.Remove(eventName);
+            }
+            else
+            {
+                // Next waiter becomes the new top of the stack
+                this.externalEventSources[eventName] = next;
+            }
 
-            IEventSource waiter = waiters.Dequeue();
+            object? value;
             if (waiter.EventType == typeof(OperationResult))
             {
                 // use the framework-defined deserialization for entity responses, not the application-defined data converter,
@@ -430,12 +449,6 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             else
             {
                 value = this.DataConverter.Deserialize(rawEventPayload, waiter.EventType);
-            }
-
-            // Events are completed in FIFO order. Remove the key if the last event was delivered.
-            if (waiters.Count == 0)
-            {
-                this.externalEventSources.Remove(eventName);
             }
 
             waiter.TrySetResult(value);

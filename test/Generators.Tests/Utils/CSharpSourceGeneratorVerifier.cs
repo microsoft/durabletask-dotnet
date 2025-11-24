@@ -1,7 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System;
 using System.Collections.Immutable;
+using System.IO;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Testing;
@@ -16,11 +18,7 @@ public static class CSharpSourceGeneratorVerifier<TSourceGenerator> where TSourc
     {
         public Test()
         {
-            // See https://www.nuget.org/packages/Microsoft.NETCore.App.Ref/8.0.22
-            this.ReferenceAssemblies = new ReferenceAssemblies(
-                targetFramework: "net8.0",
-                referenceAssemblyPackage: new PackageIdentity("Microsoft.NETCore.App.Ref", "8.0.22"),
-                referenceAssemblyPath: Path.Combine("ref", "net8.0"));
+            this.ReferenceAssemblies = CreateReferenceAssembliesForTargetFramework();
         }
 
         public LanguageVersion LanguageVersion { get; set; } = LanguageVersion.CSharp9;
@@ -47,6 +45,14 @@ public static class CSharpSourceGeneratorVerifier<TSourceGenerator> where TSourc
         protected override ParseOptions CreateParseOptions()
         {
             return ((CSharpParseOptions)base.CreateParseOptions()).WithLanguageVersion(this.LanguageVersion);
+        }
+
+        static ReferenceAssemblies CreateReferenceAssembliesForTargetFramework()
+        {
+            return new ReferenceAssemblies(
+                targetFramework: "net10.0",
+                referenceAssemblyPackage: new PackageIdentity("Microsoft.NETCore.App.Ref", "10.0.0"),
+                referenceAssemblyPath: Path.Combine("ref", "net10.0"));
         }
     }
 }

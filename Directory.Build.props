@@ -23,8 +23,10 @@
     <SrcRoot>$(RepoRoot)src/</SrcRoot>
     <BaseOutputPath>$(OutRoot)bin/</BaseOutputPath>
     <BaseIntermediateOutputPath>$(OutRoot)obj/$(MSBuildProjectName)/</BaseIntermediateOutputPath>
-    <IntermediateOutputPath>$(BaseIntermediateOutputPath)$(Configuration)/</IntermediateOutputPath>
-    <SubOutputPath Condition="'$(SubOutputPath)' == ''">$(MSBuildProjectName)/</SubOutputPath>
+    <TargetSpecificSubPath Condition="'$(TargetFramework)' != ''">$([MSBuild]::EnsureTrailingSlash($(TargetFramework)))</TargetSpecificSubPath>
+    <TargetSpecificSubPath Condition="'$(TargetFramework)' == ''"></TargetSpecificSubPath>
+    <IntermediateOutputPath>$(BaseIntermediateOutputPath)$(Configuration)/$(TargetSpecificSubPath)</IntermediateOutputPath>
+    <SubOutputPath Condition="'$(SubOutputPath)' == ''">$(MSBuildProjectName)/$(TargetSpecificSubPath)</SubOutputPath>
     <OutputPath>$(BaseOutputPath)$(Configuration)/$([MSBuild]::EnsureTrailingSlash($(SubOutputPath)))</OutputPath>
     <PackageOutputPath>$(OutRoot)pkg/</PackageOutputPath>
   </PropertyGroup>

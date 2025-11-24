@@ -49,24 +49,10 @@ public static class CSharpSourceGeneratorVerifier<TSourceGenerator> where TSourc
 
         static ReferenceAssemblies CreateReferenceAssembliesForTargetFramework()
         {
-#if NET10_0_OR_GREATER
             return new ReferenceAssemblies(
                 targetFramework: "net10.0",
                 referenceAssemblyPackage: new PackageIdentity("Microsoft.NETCore.App.Ref", "10.0.0"),
                 referenceAssemblyPath: Path.Combine("ref", "net10.0"));
-#elif NET8_0_OR_GREATER
-            return new ReferenceAssemblies(
-                targetFramework: "net8.0",
-                referenceAssemblyPackage: new PackageIdentity("Microsoft.NETCore.App.Ref", "8.0.22"),
-                referenceAssemblyPath: Path.Combine("ref", "net8.0"));
-#elif NET6_0_OR_GREATER
-            return new ReferenceAssemblies(
-                targetFramework: "net6.0",
-                referenceAssemblyPackage: new PackageIdentity("Microsoft.NETCore.App.Ref", "6.0.36"),
-                referenceAssemblyPath: Path.Combine("ref", "net6.0"));
-#else
-            throw new NotSupportedException("Unsupported target framework for generator tests.");
-#endif
         }
     }
 }

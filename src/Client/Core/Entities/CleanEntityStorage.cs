@@ -23,7 +23,17 @@ public readonly record struct CleanEntityStorageRequest
     /// Gets a value indicating whether to remove empty entities. Defaults to true.
     /// </summary>
     /// <remarks>
-    /// An entity is considered empty, and is removed, if it has no state, is not locked.
+    /// <para>
+    /// An entity is considered empty, and is removed, if it has no state, is not locked, and has no pending
+    /// operations in its backlog queue.
+    /// </para>
+    /// <para>
+    /// Additionally, empty entities are only removed if they have not been modified recently. The backend
+    /// enforces a message reorder window (typically 30 seconds) during which entities cannot be removed,
+    /// to ensure proper message ordering. If you need to immediately delete an entity, consider using
+    /// <see cref="DurableTaskClient.PurgeInstanceAsync(string, PurgeInstanceOptions?, CancellationToken)"/>
+    /// with the entity's instance ID instead.
+    /// </para>
     /// </remarks>
     public bool RemoveEmptyEntities { get; init; }
 

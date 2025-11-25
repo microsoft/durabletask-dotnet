@@ -274,6 +274,7 @@ public class ShimDurableEntityClientTests
         entity.Should().NotBeNull();
         VerifyEntity(entity!, expected);
         entity!.IncludesState.Should().Be(includeState);
+        entity!.StateRequested.Should().Be(includeState);
 
         if (includeState)
         {
@@ -294,11 +295,70 @@ public class ShimDurableEntityClientTests
         entity.Should().NotBeNull();
         VerifyEntity(entity!, expected);
         entity!.IncludesState.Should().Be(includeState);
+        entity!.StateRequested.Should().Be(includeState);
 
         if (includeState)
         {
             entity!.State.Should().Be("state");
         }
+    }
+
+    [Fact]
+    public async Task GetEntityAsync_TransientEntity_IsTransientTrue()
+    {
+        // Arrange: Create an entity with no state (transient entity)
+        EntityBackendQueries.EntityMetadata expected = CreateCoreMetadata(0, state: null);
+        this.query.Setup(x => x.GetEntityAsync(expected.EntityId, true, false, default)).ReturnsAsync(expected);
+
+        // Act
+        ShimDurableEntityClient client = this.CreateEntityClient();
+        EntityMetadata? entity = await client.GetEntityAsync(expected.EntityId.ConvertFromCore(), includeState: true);
+
+        // Assert
+        entity.Should().NotBeNull();
+        entity!.StateRequested.Should().BeTrue();
+        entity!.IncludesState.Should().BeFalse();
+        entity!.IsTransient.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetEntityAsyncOfT_TransientEntity_IsTransientTrue()
+    {
+        // Arrange: Create an entity with no state (transient entity)
+        EntityBackendQueries.EntityMetadata expected = CreateCoreMetadata(0, state: null);
+        this.query.Setup(x => x.GetEntityAsync(expected.EntityId, true, false, default)).ReturnsAsync(expected);
+
+        // Act
+        ShimDurableEntityClient client = this.CreateEntityClient();
+        EntityMetadata<string>? entity = await client.GetEntityAsync<string>(
+            expected.EntityId.ConvertFromCore(), includeState: true);
+
+        // Assert
+        entity.Should().NotBeNull();
+        entity!.StateRequested.Should().BeTrue();
+        entity!.IncludesState.Should().BeFalse();
+        entity!.IsTransient.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetEntityAsync_StateNotRequested_CannotDetermineTransient()
+    {
+        // Arrange: Create an entity with no state, but don't request state
+        EntityBackendQueries.EntityMetadata expected = CreateCoreMetadata(0, state: null);
+        this.query.Setup(x => x.GetEntityAsync(expected.EntityId, false, false, default)).ReturnsAsync(expected);
+
+        // Act
+        ShimDurableEntityClient client = this.CreateEntityClient();
+        EntityMetadata? entity = await client.GetEntityAsync(expected.EntityId.ConvertFromCore(), includeState: false);
+
+        // Assert
+        entity.Should().NotBeNull();
+        entity!.StateRequested.Should().BeFalse();
+        entity!.IncludesState.Should().BeFalse();
+
+        // When StateRequested is false, IsTransient should also be false because we can't determine
+        // whether the entity actually has state or not
+        entity!.IsTransient.Should().BeFalse();
     }
 
     [Fact]

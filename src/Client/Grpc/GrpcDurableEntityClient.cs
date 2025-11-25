@@ -223,7 +223,7 @@ class GrpcDurableEntityClient : DurableEntityClient
         bool hasState = metadata.SerializedState != null;
 
         SerializedData? data = (includeState && hasState) ? new(metadata.SerializedState!, this.dataConverter) : null;
-        return new EntityMetadata(entityId, data)
+        return new EntityMetadata(entityId, data, stateRequested: includeState)
         {
             LastModifiedTime = metadata.LastModifiedTime.ToDateTimeOffset(),
             BacklogQueueSize = metadata.BacklogQueueSize,
@@ -240,8 +240,8 @@ class GrpcDurableEntityClient : DurableEntityClient
 
         if (includeState && hasState)
         {
-            T? data = includeState ? this.dataConverter.Deserialize<T>(metadata.SerializedState) : default;
-            return new EntityMetadata<T>(entityId, data)
+            T? data = this.dataConverter.Deserialize<T>(metadata.SerializedState);
+            return new EntityMetadata<T>(entityId, data, stateRequested: true)
             {
                 LastModifiedTime = lastModified,
                 BacklogQueueSize = metadata.BacklogQueueSize,
@@ -250,7 +250,7 @@ class GrpcDurableEntityClient : DurableEntityClient
         }
         else
         {
-            return new EntityMetadata<T>(entityId)
+            return new EntityMetadata<T>(entityId, default, stateRequested: includeState)
             {
                 LastModifiedTime = lastModified,
                 BacklogQueueSize = metadata.BacklogQueueSize,

@@ -137,6 +137,23 @@ public abstract class DurableEntityClient
     /// </param>
     /// <param name="cancellation">The cancellation token to cancel the operation.</param>
     /// <returns>A task that completes when the operation is finished.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method is designed for periodic maintenance and garbage collection of entity storage.
+    /// It identifies and removes entities that are "empty" (have no state, no pending operations, and are not locked).
+    /// </para>
+    /// <para>
+    /// <strong>Important:</strong> Empty entities are only removed if they have not been modified recently.
+    /// The backend enforces a message reorder window (typically 30 seconds) during which recently-modified
+    /// entities cannot be removed, to ensure proper message ordering. If you call this method immediately
+    /// after deleting an entity's state, the entity may not be removed.
+    /// </para>
+    /// <para>
+    /// To immediately and forcefully delete an entity regardless of its state, use
+    /// <see cref="DurableTaskClient.PurgeInstanceAsync(string, PurgeInstanceOptions?, CancellationToken)"/>
+    /// with the entity's instance ID (e.g., <c>@EntityName@EntityKey</c>).
+    /// </para>
+    /// </remarks>
     public abstract Task<CleanEntityStorageResult> CleanEntityStorageAsync(
         CleanEntityStorageRequest? request = null,
         bool continueUntilComplete = true,

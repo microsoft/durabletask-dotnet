@@ -52,23 +52,29 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
 
     /// <inheritdoc/>
     public override AsyncPageable<EntityMetadata> GetAllEntitiesAsync(EntityQuery? filter = null)
-        => this.GetAllEntitiesAsync(this.Convert, filter);
+        => this.GetAllEntitiesAsync((m, s) => this.Convert(m, s), filter);
 
     /// <inheritdoc/>
     public override AsyncPageable<EntityMetadata<T>> GetAllEntitiesAsync<T>(EntityQuery? filter = null)
-        => this.GetAllEntitiesAsync(this.Convert<T>, filter);
+        => this.GetAllEntitiesAsync((m, s) => this.Convert<T>(m, s), filter);
 
     /// <inheritdoc/>
     public override async Task<EntityMetadata?> GetEntityAsync(
         EntityInstanceId id, bool includeState = true, CancellationToken cancellation = default)
-        => this.Convert(await this.Queries.GetEntityAsync(
-            id.ConvertToCore(), includeState, false, cancellation));
+    {
+        EntityBackendQueries.EntityMetadata? metadata = await this.Queries.GetEntityAsync(
+            id.ConvertToCore(), includeState, false, cancellation);
+        return this.Convert(metadata, includeState);
+    }
 
     /// <inheritdoc/>
     public override async Task<EntityMetadata<T>?> GetEntityAsync<T>(
         EntityInstanceId id, bool includeState = true, CancellationToken cancellation = default)
-        => this.Convert<T>(await this.Queries.GetEntityAsync(
-            id.ConvertToCore(), includeState, false, cancellation));
+    {
+        EntityBackendQueries.EntityMetadata? metadata = await this.Queries.GetEntityAsync(
+            id.ConvertToCore(), includeState, false, cancellation);
+        return this.Convert<T>(metadata, includeState);
+    }
 
     /// <inheritdoc/>
     public override async Task SignalEntityAsync(
@@ -101,7 +107,7 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
     }
 
     AsyncPageable<TMetadata> GetAllEntitiesAsync<TMetadata>(
-        Func<EntityBackendQueries.EntityMetadata, TMetadata> select,
+        Func<EntityBackendQueries.EntityMetadata, bool, TMetadata> select,
         EntityQuery? filter)
         where TMetadata : notnull
     {
@@ -128,15 +134,16 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
                 },
                 cancellation);
 
-            return new Page<TMetadata>([.. result.Results.Select(select)], result.ContinuationToken);
+            return new Page<TMetadata>([.. result.Results.Select(m => select(m, includeState))], result.ContinuationToken);
         });
     }
 
-    EntityMetadata<T> Convert<T>(EntityBackendQueries.EntityMetadata metadata)
+    EntityMetadata<T> Convert<T>(EntityBackendQueries.EntityMetadata metadata, bool stateRequested)
     {
         return new(
             metadata.EntityId.ConvertFromCore(),
-            this.Converter.Deserialize<T>(metadata.SerializedState))
+            this.Converter.Deserialize<T>(metadata.SerializedState),
+            stateRequested)
             {
                 LastModifiedTime = metadata.LastModifiedTime,
                 BacklogQueueSize = metadata.BacklogQueueSize,
@@ -144,20 +151,20 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
             };
     }
 
-    EntityMetadata<T>? Convert<T>(EntityBackendQueries.EntityMetadata? metadata)
+    EntityMetadata<T>? Convert<T>(EntityBackendQueries.EntityMetadata? metadata, bool stateRequested)
     {
         if (metadata is null)
         {
             return null;
         }
 
-        return this.Convert<T>(metadata.Value);
+        return this.Convert<T>(metadata.Value, stateRequested);
     }
 
-    EntityMetadata Convert(EntityBackendQueries.EntityMetadata metadata)
+    EntityMetadata Convert(EntityBackendQueries.EntityMetadata metadata, bool stateRequested)
     {
         SerializedData? data = metadata.SerializedState is null ? null : new(metadata.SerializedState, this.Converter);
-        return new(new EntityInstanceId(metadata.EntityId.Name, metadata.EntityId.Key), data)
+        return new(new EntityInstanceId(metadata.EntityId.Name, metadata.EntityId.Key), data, stateRequested)
         {
             LastModifiedTime = metadata.LastModifiedTime,
             BacklogQueueSize = metadata.BacklogQueueSize,
@@ -165,13 +172,13 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
         };
     }
 
-    EntityMetadata? Convert(EntityBackendQueries.EntityMetadata? metadata)
+    EntityMetadata? Convert(EntityBackendQueries.EntityMetadata? metadata, bool stateRequested)
     {
         if (metadata is null)
         {
             return null;
         }
 
-        return this.Convert(metadata.Value);
+        return this.Convert(metadata.Value, stateRequested);
     }
 }

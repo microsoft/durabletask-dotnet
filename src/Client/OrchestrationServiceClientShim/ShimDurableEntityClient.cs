@@ -144,11 +144,11 @@ class ShimDurableEntityClient(string name, ShimDurableTaskClientOptions options)
             metadata.EntityId.ConvertFromCore(),
             this.Converter.Deserialize<T>(metadata.SerializedState),
             stateRequested)
-            {
-                LastModifiedTime = metadata.LastModifiedTime,
-                BacklogQueueSize = metadata.BacklogQueueSize,
-                LockedBy = metadata.LockedBy,
-            };
+        {
+            LastModifiedTime = metadata.LastModifiedTime,
+            BacklogQueueSize = metadata.BacklogQueueSize,
+            LockedBy = metadata.LockedBy,
+        };
     }
 
     EntityMetadata<T>? Convert<T>(EntityBackendQueries.EntityMetadata? metadata, bool stateRequested)

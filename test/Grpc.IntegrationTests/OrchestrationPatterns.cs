@@ -329,7 +329,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
 
         string[] expected = new[] { "9", "8", "7", "6", "5", "4", "3", "2", "1", "0" };
-        Assert.Equal<string>(expected, metadata.ReadOutputAs<string[]>());
+        Assert.Equal((IEnumerable<string>)expected, metadata.ReadOutputAs<string[]>());
     }
 
     [Theory]

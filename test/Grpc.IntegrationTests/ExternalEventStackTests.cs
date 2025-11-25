@@ -127,13 +127,13 @@ public class ExternalEventStackTests : IntegrationTestBase
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         
         // Wait for orchestration to start and cancel first waiter
-        OrchestrationMetadata metadata = await server.Client.WaitForInstanceStartAsync(
+        await server.Client.WaitForInstanceStartAsync(
             instanceId, this.TimeoutToken);
         
         // Send event - should be received by second waiter (stack top), not the cancelled first waiter
         await server.Client.RaiseEventAsync(instanceId, EventName, EventPayload);
 
-        metadata = await server.Client.WaitForInstanceCompletionAsync(
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
 
         Assert.NotNull(metadata);
@@ -175,7 +175,7 @@ public class ExternalEventStackTests : IntegrationTestBase
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
         
         // Wait for orchestration to start and set up waiters
-        OrchestrationMetadata metadata = await server.Client.WaitForInstanceStartAsync(
+        await server.Client.WaitForInstanceStartAsync(
             instanceId, this.TimeoutToken);
         
         // Send three events - should be received in LIFO order
@@ -183,7 +183,7 @@ public class ExternalEventStackTests : IntegrationTestBase
         await server.Client.RaiseEventAsync(instanceId, EventName, "event-2");
         await server.Client.RaiseEventAsync(instanceId, EventName, "event-3");
 
-        metadata = await server.Client.WaitForInstanceCompletionAsync(
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
 
         Assert.NotNull(metadata);

@@ -23,7 +23,7 @@ public class PageableTests
         List<string> expected = CreateSource(15);
         AsyncPageable<string> pageable = CreatePageable(expected, counter);
 
-        List<string> actual = await pageable.ToListAsync();
+        List<string> actual = await pageable.ToListAsync(CancellationToken.None);
         actual.Should().BeEquivalentTo(expected);
         counter.Callbacks.Should().Be(5); // 15 / 3 = 5.
     }
@@ -41,7 +41,7 @@ public class PageableTests
         AsyncPageable<string> pageable = CreatePageable(source, counter);
         List<string> expected = source.Skip(start ?? 0).ToList();
 
-        List<Page<string>> pages = await pageable.AsPages(start?.ToString(), pageSize).ToListAsync();
+        List<Page<string>> pages = await pageable.AsPages(start?.ToString(), pageSize).ToListAsync(CancellationToken.None);
         pages.Should().HaveCount((int)Math.Ceiling((15.0 - (start ?? 0)) / (pageSize ?? 3)));
         pages.SelectMany(x => x.Values).Should().BeEquivalentTo(expected);
         counter.Callbacks.Should().Be(pages.Count);

@@ -75,6 +75,9 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
             IMethodSymbol taskActivityRunAsync = knownSymbols.TaskActivityBase.GetMembers("RunAsync").OfType<IMethodSymbol>().Single();
             INamedTypeSymbol voidSymbol = context.Compilation.GetSpecialType(SpecialType.System_Void);
 
+            // Get common DI types that should not be treated as activity input
+            INamedTypeSymbol? functionContextSymbol = context.Compilation.GetTypeByMetadataName("Microsoft.Azure.Functions.Worker.FunctionContext");
+
             // Search for Activity invocations
             ConcurrentBag<ActivityInvocation> invocations = [];
             context.RegisterOperationAction(
@@ -158,6 +161,12 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
                     if (inputParam == null)
                     {
                         // Azure Functions Activity methods must have an input parameter
+                        return;
+                    }
+
+                    // If the parameter is FunctionContext, skip validation for this activity (it's a DI parameter, not real input)
+                    if (functionContextSymbol != null && SymbolEqualityComparer.Default.Equals(inputParam.Type, functionContextSymbol))
+                    {
                         return;
                     }
 
@@ -306,7 +315,8 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
                         continue;
                     }
 
-                    if (!SymbolEqualityComparer.Default.Equals(invocation.InputType, activity.InputType))
+                    // Check input type compatibility
+                    if (!AreTypesCompatible(ctx.Compilation, invocation.InputType, activity.InputType))
                     {
                         string actual = invocation.InputType?.ToDisplayString(SymbolDisplayFormat.CSharpShortErrorMessageFormat) ?? "none";
                         string expected = activity.InputType?.ToDisplayString(SymbolDisplayFormat.CSharpShortErrorMessageFormat) ?? "none";
@@ -316,7 +326,8 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
                         ctx.ReportDiagnostic(diagnostic);
                     }
 
-                    if (!SymbolEqualityComparer.Default.Equals(invocation.OutputType, activity.OutputType))
+                    // Check output type compatibility
+                    if (!AreTypesCompatible(ctx.Compilation, activity.OutputType, invocation.OutputType))
                     {
                         string actual = invocation.OutputType?.ToDisplayString(SymbolDisplayFormat.CSharpShortErrorMessageFormat) ?? "none";
                         string expected = activity.OutputType?.ToDisplayString(SymbolDisplayFormat.CSharpShortErrorMessageFormat) ?? "none";
@@ -328,6 +339,48 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
                 }
             });
         });
+    }
+
+    /// <summary>
+    /// Checks if the source type is compatible with (can be assigned to) the target type.
+    /// This handles polymorphism, interface implementation, inheritance, and collection type compatibility.
+    /// </summary>
+    static bool AreTypesCompatible(Compilation compilation, ITypeSymbol? sourceType, ITypeSymbol? targetType)
+    {
+        // Both null = compatible (no input/output on both sides)
+        if (sourceType == null && targetType == null)
+        {
+            return true;
+        }
+
+        // Special case: null (no input/output provided) can be passed to explicitly nullable parameters
+        // This handles nullable value types (int?) and nullable reference types (string?)
+        if (sourceType == null && targetType != null)
+        {
+            // Check if target is a nullable value type (Nullable<T>)
+            if (targetType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+            {
+                return true;
+            }
+
+            // Check if target is a nullable reference type (string?)
+            if (targetType.NullableAnnotation == NullableAnnotation.Annotated)
+            {
+                return true;
+            }
+
+            // Not nullable, so null input is incompatible
+            return false;
+        }
+
+        // If targetType is null but sourceType is not, they're incompatible
+        if (targetType == null && sourceType != null)
+        {
+            return false;
+        }
+
+        var conversion = compilation.ClassifyConversion(sourceType!, targetType!);
+        return conversion.IsImplicit || conversion.IsIdentity;
     }
 
     struct ActivityInvocation

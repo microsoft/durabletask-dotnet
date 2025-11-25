@@ -406,6 +406,147 @@ async Task Method(TaskOrchestrationContext context)
         await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
     }
 
+    [Fact]
+    // Verifies that when FunctionContext is marked with [ActivityTrigger], 
+    // calling the activity without input produces NO DURABLE2001/DURABLE2002 warnings.
+    // This fixes the issue where FunctionContext was incorrectly treated as required input.
+    public async Task DurableFunctionActivityWithFunctionContextAsActivityTrigger_CalledWithoutInput()
+    {
+        string code = Wrapper.WrapDurableFunctionOrchestration(@"
+async Task Method(TaskOrchestrationContext context)
+{
+    int num = await context.CallActivityAsync<int>(nameof(GetNumber));
+}
+
+[Function(nameof(GetNumber))]
+int GetNumber([ActivityTrigger] FunctionContext context)
+{
+    return 42;
+}
+");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
+    }
+
+    [Fact]
+    // Verifies that when FunctionContext is marked with [ActivityTrigger],
+    // calling the activity WITH input also produces NO DURABLE2001/DURABLE2002 warnings.
+    // The analyzer completely skips validation for FunctionContext activities.
+    public async Task DurableFunctionActivityWithFunctionContextAsActivityTrigger_CalledWithInput()
+    {
+        string code = Wrapper.WrapDurableFunctionOrchestration(@"
+async Task Method(TaskOrchestrationContext context)
+{
+    int num = await context.CallActivityAsync<int>(nameof(GetNumber), ""someInput"");
+}
+
+[Function(nameof(GetNumber))]
+int GetNumber([ActivityTrigger] FunctionContext context)
+{
+    return 42;
+}
+");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
+    }
+
+    [Fact]
+    // Verifies that polymorphism is supported for input types - NO WARNINGS expected.
+    // A derived type (Exception) should be assignable to a base type (object).
+    // This tests that the analyzer uses type compatibility rather than exact type matching.
+    public async Task DurableFunctionActivityWithPolymorphicInput_DerivedToBase()
+    {
+        string code = Wrapper.WrapDurableFunctionOrchestration(@"
+async Task Method(TaskOrchestrationContext context)
+{
+    Exception ex = new Exception(""error"");
+    await context.CallActivityAsync(nameof(LogError), ex);
+}
+
+[Function(nameof(LogError))]
+void LogError([ActivityTrigger] object error)
+{
+}
+");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
+    }
+
+    [Fact]
+    // Verifies that collection type compatibility works: List<T> → IReadOnlyList<T> - NO WARNINGS expected.
+    // This tests the exact scenario from the issue: passing List<int> to an activity expecting IReadOnlyList<int>.
+    // Uses TaskActivity<> pattern since it works better with generic collection types.
+    public async Task TaskActivityWithCollectionPolymorphism_ListToIReadOnlyList()
+    {
+        string code = Wrapper.WrapTaskOrchestrator(@"
+using System.Collections.Generic;
+
+public class Caller {
+    async Task Method(TaskOrchestrationContext context)
+    {
+        List<int> numbers = new List<int> { 1, 2, 3, 4, 5 };
+        int sum = await context.CallActivityAsync<int>(nameof(SumActivity), numbers);
+    }
+}
+
+public class SumActivity : TaskActivity<IReadOnlyList<int>, int>
+{
+    public override Task<int> RunAsync(TaskActivityContext context, IReadOnlyList<int> numbers)
+    {
+        return Task.FromResult(42);
+    }
+}
+");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
+    }
+
+    [Fact]
+    // Verifies that polymorphism is supported for output types - NO WARNINGS expected.
+    // When an activity returns string but the caller expects object, no warning should occur.
+    // This tests covariance - a more specific return type is acceptable.
+    public async Task DurableFunctionActivityWithPolymorphicOutput_StringToObject()
+    {
+        string code = Wrapper.WrapDurableFunctionOrchestration(@"
+async Task Method(TaskOrchestrationContext context)
+{
+    object result = await context.CallActivityAsync<object>(nameof(GetValue), ""input"");
+}
+
+[Function(nameof(GetValue))]
+string GetValue([ActivityTrigger] string input)
+{
+    return ""hello"";
+}
+");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
+    }
+
+    [Fact]
+    // Verifies that truly incompatible types still produce DURABLE2001 warnings.
+    // Passing string when int is expected should fail - this is not a valid conversion.
+    // This test ensures the analyzer still catches real type mismatches.
+    public async Task DurableFunctionActivityWithIncompatibleTypes_ShouldFail()
+    {
+        string code = Wrapper.WrapDurableFunctionOrchestration(@"
+async Task Method(TaskOrchestrationContext context)
+{
+    await {|#0:context.CallActivityAsync<int>(nameof(GetNumber), ""text"")|};
+}
+
+[Function(nameof(GetNumber))]
+int GetNumber([ActivityTrigger] int value)
+{
+    return value;
+}
+");
+
+        DiagnosticResult expected = BuildInputDiagnostic().WithLocation(0).WithArguments("string", "int", "GetNumber");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+    }
+
 
     static DiagnosticResult BuildInputDiagnostic()
     {

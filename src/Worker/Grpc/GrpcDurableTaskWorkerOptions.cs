@@ -32,6 +32,16 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
     public HashSet<P.WorkerCapability> Capabilities { get; } = new() { P.WorkerCapability.HistoryStreaming };
 
     /// <summary>
+    /// Gets or sets the maximum size of all actions in a complete orchestration work item chunk.
+    /// The default value is 3.9MB. We leave some headroom to account for request size overhead.
+    /// </summary>
+    /// <remarks>
+    /// This value is used to limit the size of the complete orchestration work item chunk request.
+    /// If the response exceeds this limit, it will be automatically split into multiple chunks.
+    /// </remarks>
+    public int MaxCompleteOrchestrationWorkItemSizePerChunk { get; set; } = 4089446; // 3.9MB
+
+    /// <summary>
     /// Gets the internal protocol options. These are used to control backend-dependent features.
     /// </summary>
     internal InternalOptions Internal { get; } = new();

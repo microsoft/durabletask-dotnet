@@ -356,6 +356,9 @@ message OrchestratorResponse {
 
     // Whether or not a history is required to complete the original OrchestratorRequest and none was provided.
     bool requiresHistory = 7;
+
+    // True if this is a partial (chunked) completion. The backend must keep the work item open until the final chunk (isPartial=false).
+    bool isPartial = 8;
 }
 
 message CreateInstanceRequest {

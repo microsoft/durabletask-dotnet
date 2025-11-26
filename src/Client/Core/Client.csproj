@@ -20,4 +20,10 @@ The client is responsible for interacting with orchestrations from outside the w
     <SharedSection Include="DependencyInjection" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.DurableTask.Client.Grpc" Key="$(StrongNamePublicKey)" />
+    <InternalsVisibleTo Include="Microsoft.DurableTask.Client.OrchestrationServiceClientShim" Key="$(StrongNamePublicKey)" />
+    <InternalsVisibleTo Include="Microsoft.DurableTask.Client.Tests" Key="$(StrongNamePublicKey)" />
+  </ItemGroup>
+
 </Project>

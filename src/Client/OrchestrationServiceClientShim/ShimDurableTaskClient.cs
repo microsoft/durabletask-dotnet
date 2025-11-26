@@ -307,8 +307,90 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
         return newInstanceId;
     }
 
+    /// <inheritdoc/>
+    protected override async Task<OrchestrationMetadata?> GetInstancesCoreAsync(
+        string instanceId, GetInstanceOptions options, CancellationToken cancellation = default)
+    {
+        Check.NotNull(options);
+        cancellation.ThrowIfCancellationRequested();
+
+        IList<Core.OrchestrationState> states = await this.Client.GetOrchestrationStateAsync(instanceId, false);
+        if (states is null or { Count: 0 })
+        {
+            return null;
+        }
+
+        Core.OrchestrationState state = states.First();
+        IReadOnlyList<OrchestrationHistoryEvent>? history = null;
+
+        if (options.GetHistory)
+        {
+            history = await this.FetchHistoryAsync(instanceId, state.OrchestrationInstance.ExecutionId, cancellation);
+        }
+
+        return this.ToMetadata(state, options.GetInputsAndOutputs, history);
+    }
+
+    static OrchestrationHistoryEvent? ConvertJsonToHistoryEvent(System.Text.Json.JsonElement jsonEvent)
+    {
+        if (!jsonEvent.TryGetProperty("EventId", out System.Text.Json.JsonElement eventIdElement) ||
+            !jsonEvent.TryGetProperty("EventType", out System.Text.Json.JsonElement eventTypeElement) ||
+            !jsonEvent.TryGetProperty("Timestamp", out System.Text.Json.JsonElement timestampElement))
+        {
+            return null;
+        }
+
+        int eventId = eventIdElement.GetInt32();
+        string eventType = eventTypeElement.GetString() ?? "Unknown";
+        DateTimeOffset timestamp = timestampElement.GetDateTimeOffset();
+
+        var historyEvent = new OrchestrationHistoryEvent(eventId, eventType, timestamp);
+
+        // Extract optional properties based on event type
+        if (jsonEvent.TryGetProperty("Name", out System.Text.Json.JsonElement nameElement))
+        {
+            historyEvent = historyEvent with { Name = nameElement.GetString() };
+        }
+
+        if (jsonEvent.TryGetProperty("Input", out System.Text.Json.JsonElement inputElement))
+        {
+            historyEvent = historyEvent with { Input = inputElement.GetString() };
+        }
+
+        if (jsonEvent.TryGetProperty("Result", out System.Text.Json.JsonElement resultElement))
+        {
+            historyEvent = historyEvent with { Result = resultElement.GetString() };
+        }
+
+        if (jsonEvent.TryGetProperty("TaskScheduledId", out System.Text.Json.JsonElement taskIdElement))
+        {
+            historyEvent = historyEvent with { ScheduledTaskId = taskIdElement.GetInt32() };
+        }
+
+        if (jsonEvent.TryGetProperty("InstanceId", out System.Text.Json.JsonElement instanceIdElement))
+        {
+            historyEvent = historyEvent with { InstanceId = instanceIdElement.GetString() };
+        }
+
+        if (jsonEvent.TryGetProperty("FireAt", out System.Text.Json.JsonElement fireAtElement))
+        {
+            historyEvent = historyEvent with { FireAt = fireAtElement.GetDateTimeOffset() };
+        }
+
+        return historyEvent;
+    }
+
     [return: NotNullIfNotNull("state")]
     OrchestrationMetadata? ToMetadata(Core.OrchestrationState? state, bool getInputsAndOutputs)
+    {
+        return this.ToMetadata(state, getInputsAndOutputs, history: null);
+    }
+
+    [return: NotNullIfNotNull("state")]
+    OrchestrationMetadata? ToMetadata(
+        Core.OrchestrationState? state,
+        bool getInputsAndOutputs,
+        IReadOnlyList<OrchestrationHistoryEvent>? history)
     {
         if (state is null)
         {
@@ -325,7 +407,55 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
             SerializedOutput = state.Output,
             SerializedCustomStatus = state.Status,
             FailureDetails = state.FailureDetails?.ConvertFromCore(),
+            History = history,
+            RequestedHistory = history is not null,
         };
+    }
+
+    async Task<IReadOnlyList<OrchestrationHistoryEvent>> FetchHistoryAsync(
+        string instanceId, string? executionId, CancellationToken cancellation)
+    {
+        cancellation.ThrowIfCancellationRequested();
+
+        try
+        {
+            string historyJson = await this.Client.GetOrchestrationHistoryAsync(instanceId, executionId ?? string.Empty);
+            if (string.IsNullOrEmpty(historyJson))
+            {
+                return [];
+            }
+
+            // The history is returned as a JSON array of history events
+            // We need to deserialize it and convert to OrchestrationHistoryEvent
+            var historyEvents = new List<OrchestrationHistoryEvent>();
+            var jsonEvents = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement[]>(historyJson);
+
+            if (jsonEvents is null)
+            {
+                return [];
+            }
+
+            foreach (System.Text.Json.JsonElement jsonEvent in jsonEvents)
+            {
+                OrchestrationHistoryEvent? historyEvent = ConvertJsonToHistoryEvent(jsonEvent);
+                if (historyEvent is not null)
+                {
+                    historyEvents.Add(historyEvent);
+                }
+            }
+
+            return historyEvents;
+        }
+        catch (NotImplementedException)
+        {
+            // Backend does not support history retrieval
+            return [];
+        }
+        catch (NotSupportedException)
+        {
+            // Backend does not support history retrieval
+            return [];
+        }
     }
 
     T CastClient<T>()

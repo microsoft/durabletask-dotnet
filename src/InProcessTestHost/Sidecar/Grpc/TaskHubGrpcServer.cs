@@ -717,11 +717,12 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                 totalBytes += ev.CalculateSize();
             }
 
-            if (this.supportsHistoryStreaming && totalBytes > (1024))
+            // Always store past events for later StreamInstanceHistory calls (e.g., GetInstanceAsync with GetHistory option)
+            this.streamingPastEvents[instance.InstanceId] = protoPastEvents;
+
+            if (this.supportsHistoryStreaming && totalBytes > 1024)
             {
                 orkRequest.RequiresHistoryStreaming = true;
-                // Store past events to serve via StreamInstanceHistory
-                this.streamingPastEvents[instance.InstanceId] = protoPastEvents;
             }
             else
             {

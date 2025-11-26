@@ -96,6 +96,17 @@ public sealed class OrchestrationMetadata
     public TaskFailureDetails? FailureDetails { get; init; }
 
     /// <summary>
+    /// Gets the orchestration instance's history events as a collection of <see cref="OrchestrationHistoryEvent"/> objects.
+    /// </summary>
+    /// <remarks>
+    /// This property contains data only if the history was explicitly requested when fetching the orchestration metadata
+    /// using the <see cref="DurableTaskClient.GetInstanceAsync(string, GetInstanceOptions, CancellationToken)"/> method
+    /// with <see cref="GetInstanceOptions.GetHistory"/> set to <c>true</c>.
+    /// </remarks>
+    /// <value>The history events or <c>null</c> if history was not requested.</value>
+    public IReadOnlyList<OrchestrationHistoryEvent>? History { get; init; }
+
+    /// <summary>
     /// Gets a value indicating whether the orchestration instance was running at the time this object was fetched.
     /// </summary>
     /// <value><c>true</c> if the orchestration was in a running state; <c>false</c> otherwise.</value>
@@ -114,6 +125,12 @@ public sealed class OrchestrationMetadata
         this.RuntimeStatus == OrchestrationRuntimeStatus.Completed ||
         this.RuntimeStatus == OrchestrationRuntimeStatus.Failed ||
         this.RuntimeStatus == OrchestrationRuntimeStatus.Terminated;
+
+    /// <summary>
+    /// Gets a value indicating whether history was requested when fetching this metadata.
+    /// </summary>
+    [MemberNotNullWhen(true, nameof(History))]
+    internal bool RequestedHistory { get; init; }
 
     [MemberNotNullWhen(true, nameof(DataConverter))]
     bool RequestedInputsAndOutputs => this.DataConverter is not null;

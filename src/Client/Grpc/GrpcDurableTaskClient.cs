@@ -468,6 +468,40 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
     }
 
+    /// <inheritdoc/>
+    protected override async Task<OrchestrationMetadata?> GetInstancesCoreAsync(
+        string instanceId, GetInstanceOptions options, CancellationToken cancellation = default)
+    {
+        Check.NotNull(options);
+        Check.NotEntity(this.options.EnableEntitySupport, instanceId);
+
+        if (string.IsNullOrEmpty(instanceId))
+        {
+            throw new ArgumentNullException(nameof(instanceId));
+        }
+
+        P.GetInstanceResponse response = await this.sidecarClient.GetInstanceAsync(
+            new P.GetInstanceRequest
+            {
+                InstanceId = instanceId,
+                GetInputsAndOutputs = options.GetInputsAndOutputs,
+            },
+            cancellationToken: cancellation);
+
+        if (!response.Exists)
+        {
+            return null;
+        }
+
+        IReadOnlyList<OrchestrationHistoryEvent>? history = null;
+        if (options.GetHistory)
+        {
+            history = await this.FetchHistoryAsync(instanceId, cancellation);
+        }
+
+        return this.CreateMetadata(response.OrchestrationState, options.GetInputsAndOutputs, history);
+    }
+
     static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, out CallInvoker callInvoker)
     {
         if (options.Channel is GrpcChannel c)
@@ -511,6 +545,133 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 #endif
 
+    static OrchestrationHistoryEvent ConvertProtoHistoryEvent(P.HistoryEvent protoEvent)
+    {
+        string eventType = protoEvent.EventTypeCase.ToString();
+        DateTimeOffset timestamp = protoEvent.Timestamp.ToDateTimeOffset();
+        int eventId = protoEvent.EventId;
+
+        var historyEvent = new OrchestrationHistoryEvent(eventId, eventType, timestamp);
+
+        switch (protoEvent.EventTypeCase)
+        {
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionStarted:
+                return historyEvent with
+                {
+                    Name = protoEvent.ExecutionStarted.Name,
+                    Input = protoEvent.ExecutionStarted.Input,
+                    InstanceId = protoEvent.ExecutionStarted.OrchestrationInstance?.InstanceId,
+                };
+
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionCompleted:
+                return historyEvent with
+                {
+                    OrchestrationStatus = (OrchestrationRuntimeStatus)protoEvent.ExecutionCompleted.OrchestrationStatus,
+                    Result = protoEvent.ExecutionCompleted.Result,
+                    FailureDetails = protoEvent.ExecutionCompleted.FailureDetails.ToTaskFailureDetails(),
+                };
+
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated:
+                return historyEvent with
+                {
+                    Input = protoEvent.ExecutionTerminated.Input,
+                };
+
+            case P.HistoryEvent.EventTypeOneofCase.TaskScheduled:
+                return historyEvent with
+                {
+                    Name = protoEvent.TaskScheduled.Name,
+                    Input = protoEvent.TaskScheduled.Input,
+                };
+
+            case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
+                return historyEvent with
+                {
+                    ScheduledTaskId = protoEvent.TaskCompleted.TaskScheduledId,
+                    Result = protoEvent.TaskCompleted.Result,
+                };
+
+            case P.HistoryEvent.EventTypeOneofCase.TaskFailed:
+                return historyEvent with
+                {
+                    ScheduledTaskId = protoEvent.TaskFailed.TaskScheduledId,
+                    FailureDetails = protoEvent.TaskFailed.FailureDetails.ToTaskFailureDetails(),
+                };
+
+            case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated:
+                return historyEvent with
+                {
+                    Name = protoEvent.SubOrchestrationInstanceCreated.Name,
+                    InstanceId = protoEvent.SubOrchestrationInstanceCreated.InstanceId,
+                    Input = protoEvent.SubOrchestrationInstanceCreated.Input,
+                };
+
+            case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted:
+                return historyEvent with
+                {
+                    ScheduledTaskId = protoEvent.SubOrchestrationInstanceCompleted.TaskScheduledId,
+                    Result = protoEvent.SubOrchestrationInstanceCompleted.Result,
+                };
+
+            case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceFailed:
+                return historyEvent with
+                {
+                    ScheduledTaskId = protoEvent.SubOrchestrationInstanceFailed.TaskScheduledId,
+                    FailureDetails = protoEvent.SubOrchestrationInstanceFailed.FailureDetails.ToTaskFailureDetails(),
+                };
+
+            case P.HistoryEvent.EventTypeOneofCase.TimerCreated:
+                return historyEvent with
+                {
+                    FireAt = protoEvent.TimerCreated.FireAt.ToDateTimeOffset(),
+                };
+
+            case P.HistoryEvent.EventTypeOneofCase.TimerFired:
+                return historyEvent with
+                {
+                    ScheduledTaskId = protoEvent.TimerFired.TimerId,
+                    FireAt = protoEvent.TimerFired.FireAt.ToDateTimeOffset(),
+                };
+
+            case P.HistoryEvent.EventTypeOneofCase.EventSent:
+                return historyEvent with
+                {
+                    Name = protoEvent.EventSent.Name,
+                    InstanceId = protoEvent.EventSent.InstanceId,
+                    Input = protoEvent.EventSent.Input,
+                };
+
+            case P.HistoryEvent.EventTypeOneofCase.EventRaised:
+                return historyEvent with
+                {
+                    Name = protoEvent.EventRaised.Name,
+                    Input = protoEvent.EventRaised.Input,
+                };
+
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionSuspended:
+                return historyEvent with
+                {
+                    Input = protoEvent.ExecutionSuspended.Input,
+                };
+
+            case P.HistoryEvent.EventTypeOneofCase.ExecutionResumed:
+                return historyEvent with
+                {
+                    Input = protoEvent.ExecutionResumed.Input,
+                };
+
+            case P.HistoryEvent.EventTypeOneofCase.ContinueAsNew:
+                return historyEvent with
+                {
+                    Input = protoEvent.ContinueAsNew.Input,
+                };
+
+            default:
+                // For other event types, return the basic event without additional properties
+                return historyEvent;
+        }
+    }
+
     async Task<PurgeResult> PurgeInstancesCoreAsync(
         P.PurgeInstancesRequest request, CancellationToken cancellation = default)
     {
@@ -529,6 +690,14 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
     OrchestrationMetadata CreateMetadata(P.OrchestrationState state, bool includeInputsAndOutputs)
     {
+        return this.CreateMetadata(state, includeInputsAndOutputs, history: null);
+    }
+
+    OrchestrationMetadata CreateMetadata(
+        P.OrchestrationState state,
+        bool includeInputsAndOutputs,
+        IReadOnlyList<OrchestrationHistoryEvent>? history)
+    {
         var metadata = new OrchestrationMetadata(state.Name, state.InstanceId)
         {
             CreatedAt = state.CreatedTimestamp.ToDateTimeOffset(),
@@ -540,8 +709,52 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             FailureDetails = state.FailureDetails.ToTaskFailureDetails(),
             DataConverter = includeInputsAndOutputs ? this.DataConverter : null,
             Tags = new Dictionary<string, string>(state.Tags),
+            History = history,
+            RequestedHistory = history is not null,
         };
 
         return metadata;
+    }
+
+    async Task<IReadOnlyList<OrchestrationHistoryEvent>> FetchHistoryAsync(
+        string instanceId, CancellationToken cancellation)
+    {
+        var historyEvents = new List<OrchestrationHistoryEvent>();
+
+        try
+        {
+            P.StreamInstanceHistoryRequest request = new()
+            {
+                InstanceId = instanceId,
+                ForWorkItemProcessing = false,
+            };
+
+            using AsyncServerStreamingCall<P.HistoryChunk> streamingCall =
+                this.sidecarClient.StreamInstanceHistory(request, cancellationToken: cancellation);
+
+            await foreach (P.HistoryChunk chunk in streamingCall.ResponseStream.ReadAllAsync(cancellation))
+            {
+                foreach (P.HistoryEvent protoEvent in chunk.Events)
+                {
+                    OrchestrationHistoryEvent historyEvent = ConvertProtoHistoryEvent(protoEvent);
+                    historyEvents.Add(historyEvent);
+                }
+            }
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The history streaming operation was canceled.", e, cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.NotFound || e.StatusCode == StatusCode.Unimplemented)
+        {
+            // History not available or not supported by this backend
+            this.logger.LogWarning(
+                "Failed to retrieve history for instance '{InstanceId}': {StatusCode}",
+                instanceId,
+                e.StatusCode);
+        }
+
+        return historyEvents;
     }
 }

@@ -288,6 +288,95 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             .WithMessage("*An orchestration with the instanceId non-existent-instance-id was not found*");
     }
 
+    [Fact]
+    public async Task GetInstanceWithHistory_EndToEnd()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartWithActivityAsync();
+
+        // Start and complete an orchestration that calls an activity
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            "OrchestrationWithActivity", input: "testInput");
+
+        await server.Client.WaitForInstanceCompletionAsync(instanceId, this.TimeoutToken);
+
+        // Act - Get instance with history
+        GetInstanceOptions options = new() { GetHistory = true, GetInputsAndOutputs = true };
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, options, this.TimeoutToken);
+
+        // Assert
+        metadata.Should().NotBeNull();
+        metadata!.InstanceId.Should().Be(instanceId);
+        metadata.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+        metadata.History.Should().NotBeNull();
+        metadata.History.Should().NotBeEmpty();
+
+        // Verify the history contains expected event types
+        // Note: The in-process test host stores history as past events during orchestrator execution,
+        // so we verify the events that are available in the stored history (OrchestratorStarted,
+        // ExecutionStarted, TaskScheduled). The full history including completion events would
+        // be available in a real Durable Task Scheduler backend.
+        IReadOnlyList<OrchestrationHistoryEvent> history = metadata.History!;
+        history.Should().Contain(e => e.EventType == "ExecutionStarted");
+        history.Should().Contain(e => e.EventType == "TaskScheduled");
+
+        // Verify the ExecutionStarted event has expected properties
+        OrchestrationHistoryEvent startedEvent = history.First(e => e.EventType == "ExecutionStarted");
+        startedEvent.Name.Should().Be("OrchestrationWithActivity");
+        startedEvent.InstanceId.Should().Be(instanceId);
+        startedEvent.Input.Should().Contain("testInput");
+
+        // Verify the TaskScheduled event has expected properties
+        OrchestrationHistoryEvent taskScheduledEvent = history.First(e => e.EventType == "TaskScheduled");
+        taskScheduledEvent.Name.Should().Be("SayHello");
+    }
+
+    [Fact]
+    public async Task GetInstanceWithoutHistory_HistoryIsNull()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartAsync();
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false);
+
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+        await server.Client.RaiseEventAsync(instanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(instanceId, default);
+
+        // Act - Get instance without history (default behavior)
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, getInputsAndOutputs: false);
+
+        // Assert
+        metadata.Should().NotBeNull();
+        metadata!.InstanceId.Should().Be(instanceId);
+        metadata.History.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetInstanceWithHistory_UsingGetInstanceOptions()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartAsync();
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false);
+
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+        await server.Client.RaiseEventAsync(instanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(instanceId, default);
+
+        // Act - Get instance with GetInputsAndOutputs=true but GetHistory=false
+        GetInstanceOptions options = new() { GetInputsAndOutputs = true, GetHistory = false };
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, options, this.TimeoutToken);
+
+        // Assert
+        metadata.Should().NotBeNull();
+        metadata!.InstanceId.Should().Be(instanceId);
+        metadata.History.Should().BeNull();
+        metadata.SerializedOutput.Should().NotBeNull();
+    }
+
     Task<HostTestLifetime> StartAsync()
     {
         static async Task<string> Orchestration(TaskOrchestrationContext context, bool shouldThrow)
@@ -305,6 +394,29 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         return this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestratorFunc<bool, string>(OrchestrationName, Orchestration));
+        });
+    }
+
+    Task<HostTestLifetime> StartWithActivityAsync()
+    {
+        static async Task<string> OrchestrationWithActivity(TaskOrchestrationContext context, string input)
+        {
+            string result = await context.CallActivityAsync<string>("SayHello", input);
+            return $"Result: {result}";
+        }
+
+        static Task<string> SayHelloActivity(TaskActivityContext context, string name)
+        {
+            return Task.FromResult($"Hello, {name}!");
+        }
+
+        return this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks =>
+            {
+                tasks.AddOrchestratorFunc<string, string>("OrchestrationWithActivity", OrchestrationWithActivity);
+                tasks.AddActivityFunc<string, string>("SayHello", SayHelloActivity);
+            });
         });
     }
 

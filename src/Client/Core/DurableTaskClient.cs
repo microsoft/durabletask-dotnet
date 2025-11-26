@@ -309,6 +309,34 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
         => this.GetInstancesAsync(instanceId, getInputsAndOutputs, cancellation);
 
+    /// <summary>
+    /// Fetches orchestration instance metadata from the configured durable store.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use the <see cref="GetInstanceOptions"/> parameter to control what data is fetched for the orchestration instance.
+    /// </para>
+    /// <para>
+    /// Set <see cref="GetInstanceOptions.GetInputsAndOutputs"/> to <c>true</c> to fetch input and output data.
+    /// Set <see cref="GetInstanceOptions.GetHistory"/> to <c>true</c> to fetch the orchestration's execution history.
+    /// </para>
+    /// <para>
+    /// If your code doesn't require access to inputs, outputs, or history, it's recommended to leave these options
+    /// as <c>false</c> to minimize the network bandwidth, serialization, and memory costs associated with fetching
+    /// the instance metadata.
+    /// </para>
+    /// </remarks>
+    /// <param name="instanceId">The unique ID of the orchestration instance to fetch.</param>
+    /// <param name="options">The options controlling what data to fetch.</param>
+    /// <param name="cancellation">A <see cref="CancellationToken"/> that can be used to cancel the operation.</param>
+    /// <returns>
+    /// A task that completes with the orchestration metadata, or <c>null</c> if no instance with the specified
+    /// <paramref name="instanceId"/> is found.
+    /// </returns>
+    public virtual Task<OrchestrationMetadata?> GetInstanceAsync(
+        string instanceId, GetInstanceOptions options, CancellationToken cancellation = default)
+        => this.GetInstancesCoreAsync(instanceId, options, cancellation);
+
     /// <inheritdoc cref="GetInstancesAsync(string, bool, CancellationToken)"/>
     [EditorBrowsable(EditorBrowsableState.Never)] // use GetInstanceAsync
     public virtual Task<OrchestrationMetadata?> GetInstancesAsync(
@@ -475,4 +503,21 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// </summary>
     /// <returns>A <see cref="ValueTask"/> that completes when the disposal completes.</returns>
     public abstract ValueTask DisposeAsync();
+
+    /// <summary>
+    /// Core implementation for fetching orchestration instance metadata with options.
+    /// </summary>
+    /// <param name="instanceId">The unique ID of the orchestration instance to fetch.</param>
+    /// <param name="options">The options controlling what data to fetch.</param>
+    /// <param name="cancellation">A <see cref="CancellationToken"/> that can be used to cancel the operation.</param>
+    /// <returns>
+    /// A task that completes with the orchestration metadata, or <c>null</c> if no instance with the specified
+    /// <paramref name="instanceId"/> is found.
+    /// </returns>
+    protected virtual Task<OrchestrationMetadata?> GetInstancesCoreAsync(
+        string instanceId, GetInstanceOptions options, CancellationToken cancellation = default)
+    {
+        // Default implementation for backward compatibility - ignores GetHistory option
+        return this.GetInstancesAsync(instanceId, options.GetInputsAndOutputs, cancellation);
+    }
 }

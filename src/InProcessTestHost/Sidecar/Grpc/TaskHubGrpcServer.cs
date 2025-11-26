@@ -471,20 +471,20 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         {
             // Get the original orchestration state
             IList<OrchestrationState> states = await this.client.GetOrchestrationStateAsync(request.InstanceId, false);
-            
+
             if (states == null || states.Count == 0)
             {
                 throw new RpcException(new Status(StatusCode.NotFound, $"An orchestration with the instanceId {request.InstanceId} was not found."));
             }
 
             OrchestrationState state = states[0];
-            
+
             // Check if the state is null
             if (state == null)
             {
                 throw new RpcException(new Status(StatusCode.NotFound, $"An orchestration with the instanceId {request.InstanceId} was not found."));
             }
-            
+
             string newInstanceId = request.RestartWithNewInstanceId ? Guid.NewGuid().ToString("N") : request.InstanceId;
 
             // Create a new orchestration instance

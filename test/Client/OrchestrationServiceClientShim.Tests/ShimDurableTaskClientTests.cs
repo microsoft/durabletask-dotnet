@@ -8,6 +8,7 @@ using DurableTask.Core.Query;
 using FluentAssertions.Specialized;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Converters;
+using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Options;
 using Core = DurableTask.Core;
 using CoreOrchestrationQuery = DurableTask.Core.Query.OrchestrationQuery;
@@ -172,6 +173,24 @@ public class ShimDurableTaskClientTests
         PurgeResult result = await this.client.PurgeInstanceAsync(instanceId);
 
         // assert
+        this.orchestrationClient.VerifyAll();
+        result.PurgedInstanceCount.Should().Be(1);
+        result.IsComplete.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PurgeInstanceMetadata_EntityInstanceId_PurgesEntity()
+    {
+        // Arrange: Entity instance IDs are in the format @entityName@entityKey
+        // Use EntityInstanceId.ToString() to get the proper format for purging
+        EntityInstanceId entityId = new("counter", "mykey");
+        string entityInstanceId = entityId.ToString(); // Returns "@counter@mykey"
+        this.purgeClient.Setup(m => m.PurgeInstanceStateAsync(entityInstanceId)).ReturnsAsync(new Core.PurgeResult(1));
+
+        // Act: PurgeInstanceAsync works for both orchestrations and entities
+        PurgeResult result = await this.client.PurgeInstanceAsync(entityInstanceId);
+
+        // Assert
         this.orchestrationClient.VerifyAll();
         result.PurgedInstanceCount.Should().Be(1);
         result.IsComplete.Should().BeNull();

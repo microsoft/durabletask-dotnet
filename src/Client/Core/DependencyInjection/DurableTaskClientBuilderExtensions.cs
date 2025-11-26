@@ -87,6 +87,14 @@ public static class DurableTaskBuilderExtensions
                 DurableTaskClientOptions input = baseOptions.Get(builder.Name);
                 input.ApplyTo(options);
             });
+
+        // Register the factory configuration for dynamic client creation
+        builder.Services.TryAddSingleton(new DefaultDurableTaskClientFactory.ClientFactoryConfiguration
+        {
+            ClientType = typeof(TTarget),
+            OptionsType = typeof(TOptions),
+        });
+
         return builder;
     }
 

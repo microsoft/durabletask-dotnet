@@ -5,5 +5,6 @@ Commonly used types:
 - `DurableTaskClientOptions`
 - `IDurableTaskClientProvider`
 - `IDurableTaskClientBuilder`
+- `IDurableTaskClientFactory`
 
 For more information, see https://github.com/microsoft/durabletask-dotnet

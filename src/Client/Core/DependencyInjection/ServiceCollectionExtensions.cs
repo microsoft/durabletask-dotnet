@@ -3,6 +3,7 @@
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Microsoft.DurableTask.Client;
@@ -22,6 +23,13 @@ public static class ServiceCollectionExtensions
     {
         Check.NotNull(services);
         services.TryAddSingleton<IDurableTaskClientProvider, DefaultDurableTaskClientProvider>();
+        services.TryAddSingleton<IDurableTaskClientFactory>(sp =>
+        {
+            ILoggerFactory loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+            DefaultDurableTaskClientFactory.ClientFactoryConfiguration? config =
+                sp.GetService<DefaultDurableTaskClientFactory.ClientFactoryConfiguration>();
+            return new DefaultDurableTaskClientFactory(sp, loggerFactory, config);
+        });
         IDurableTaskClientBuilder builder = GetBuilder(services, name ?? Options.DefaultName, out bool added);
         ConditionalConfigureBuilder(services, builder, added);
         return builder;
@@ -51,6 +59,13 @@ public static class ServiceCollectionExtensions
     {
         Check.NotNull(services);
         services.TryAddSingleton<IDurableTaskClientProvider, DefaultDurableTaskClientProvider>();
+        services.TryAddSingleton<IDurableTaskClientFactory>(sp =>
+        {
+            ILoggerFactory loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+            DefaultDurableTaskClientFactory.ClientFactoryConfiguration? config =
+                sp.GetService<DefaultDurableTaskClientFactory.ClientFactoryConfiguration>();
+            return new DefaultDurableTaskClientFactory(sp, loggerFactory, config);
+        });
         IDurableTaskClientBuilder builder = GetBuilder(services, name, out bool added);
         configure.Invoke(builder);
         ConditionalConfigureBuilder(services, builder, added);

@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using DurableTask.Core;
+using DurableTask.Core.Command;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
 using Google.Protobuf.WellKnownTypes;
@@ -30,6 +31,16 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
 
     readonly ConcurrentDictionary<string, TaskCompletionSource<GrpcOrchestratorExecutionResult>> pendingOrchestratorTasks = new(StringComparer.OrdinalIgnoreCase);
     readonly ConcurrentDictionary<string, TaskCompletionSource<ActivityExecutionResult>> pendingActivityTasks = new(StringComparer.OrdinalIgnoreCase);
+    readonly ConcurrentDictionary<string, PartialOrchestratorChunk> partialOrchestratorChunks = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Helper class to accumulate partial orchestrator chunks.
+    /// </summary>
+    sealed class PartialOrchestratorChunk
+    {
+        public TaskCompletionSource<GrpcOrchestratorExecutionResult> TaskCompletionSource { get; set; } = null!;
+        public List<OrchestratorAction> AccumulatedActions { get; } = new();
+    }
 
     readonly ILogger log;
     readonly IOrchestrationService service;
@@ -191,7 +202,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     /// <returns>A create instance response.</returns>
     public override async Task<P.CreateInstanceResponse> StartInstance(P.CreateInstanceRequest request, ServerCallContext context)
     {
-        var instance = new OrchestrationInstance
+        OrchestrationInstance instance = new OrchestrationInstance
         {
             InstanceId = request.InstanceId ?? Guid.NewGuid().ToString("N"),
             ExecutionId = Guid.NewGuid().ToString(),
@@ -471,20 +482,20 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         {
             // Get the original orchestration state
             IList<OrchestrationState> states = await this.client.GetOrchestrationStateAsync(request.InstanceId, false);
-            
+
             if (states == null || states.Count == 0)
             {
                 throw new RpcException(new Status(StatusCode.NotFound, $"An orchestration with the instanceId {request.InstanceId} was not found."));
             }
 
             OrchestrationState state = states[0];
-            
+
             // Check if the state is null
             if (state == null)
             {
                 throw new RpcException(new Status(StatusCode.NotFound, $"An orchestration with the instanceId {request.InstanceId} was not found."));
             }
-            
+
             string newInstanceId = request.RestartWithNewInstanceId ? Guid.NewGuid().ToString("N") : request.InstanceId;
 
             // Create a new orchestration instance
@@ -535,6 +546,51 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     /// <returns>Returns an empty ack back to the remote SDK that we've received the completion.</returns>
     public override Task<P.CompleteTaskResponse> CompleteOrchestratorTask(P.OrchestratorResponse request, ServerCallContext context)
     {
+        if (request.IsPartial)
+        {
+            // This is a partial chunk - accumulate actions but don't complete yet
+            PartialOrchestratorChunk partialChunk = this.partialOrchestratorChunks.GetOrAdd(
+                request.InstanceId,
+                _ =>
+                {
+                    // First chunk - get the TCS and initialize the partial chunk
+                    if (!this.pendingOrchestratorTasks.TryGetValue(request.InstanceId, out TaskCompletionSource<GrpcOrchestratorExecutionResult>? tcs))
+                    {
+                        throw new RpcException(new Status(StatusCode.NotFound, $"Orchestration not found"));
+                    }
+
+                    return new PartialOrchestratorChunk
+                    {
+                        TaskCompletionSource = tcs,
+                    };
+                });
+
+            // Accumulate actions from this chunk
+            partialChunk.AccumulatedActions.AddRange(request.Actions.Select(ProtobufUtils.ToOrchestratorAction));
+
+            return EmptyCompleteTaskResponse;
+        }
+
+        // This is the final chunk (or a single non-chunked response)
+        if (this.partialOrchestratorChunks.TryRemove(request.InstanceId, out PartialOrchestratorChunk? existingPartialChunk))
+        {
+            // We've been accumulating chunks - combine with final chunk
+            existingPartialChunk.AccumulatedActions.AddRange(request.Actions.Select(ProtobufUtils.ToOrchestratorAction));
+
+            GrpcOrchestratorExecutionResult res = new()
+            {
+                Actions = existingPartialChunk.AccumulatedActions,
+                CustomStatus = request.CustomStatus, // Use custom status from final chunk
+            };
+
+            // Remove the TCS from pending tasks and complete it
+            this.pendingOrchestratorTasks.TryRemove(request.InstanceId, out _);
+            existingPartialChunk.TaskCompletionSource.TrySetResult(res);
+
+            return EmptyCompleteTaskResponse;
+        }
+
+        // Single non-chunked response (no partial chunks)
         if (!this.pendingOrchestratorTasks.TryRemove(
             request.InstanceId,
             out TaskCompletionSource<GrpcOrchestratorExecutionResult>? tcs))
@@ -646,6 +702,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         }
     }
 
+    /// <inheritdoc/>
     public override async Task StreamInstanceHistory(P.StreamInstanceHistoryRequest request, IServerStreamWriter<P.HistoryChunk> responseStream, ServerCallContext context)
     {
         if (this.streamingPastEvents.TryGetValue(request.InstanceId, out List<P.HistoryEvent>? pastEvents))
@@ -684,7 +741,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         IEnumerable<HistoryEvent> pastEvents,
         IEnumerable<HistoryEvent> newEvents)
     {
-        var executionStartedEvent = pastEvents.OfType<ExecutionStartedEvent>().FirstOrDefault();
+        ExecutionStartedEvent? executionStartedEvent = pastEvents.OfType<ExecutionStartedEvent>().FirstOrDefault();
 
         P.OrchestrationTraceContext? orchestrationTraceContext = executionStartedEvent?.ParentTraceContext?.SpanId is not null
             ? new P.OrchestrationTraceContext
@@ -701,7 +758,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
 
         try
         {
-            var orkRequest = new P.OrchestratorRequest
+            P.OrchestratorRequest orkRequest = new P.OrchestratorRequest
             {
                 InstanceId = instance.InstanceId,
                 ExecutionId = instance.ExecutionId,
@@ -829,6 +886,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     void RemoveOrchestratorTaskCompletionSource(string instanceId)
     {
         this.pendingOrchestratorTasks.TryRemove(instanceId, out _);
+        this.partialOrchestratorChunks.TryRemove(instanceId, out _);
     }
 
     TaskCompletionSource<ActivityExecutionResult> CreateTaskCompletionSourceForActivity(string instanceId, int taskId)

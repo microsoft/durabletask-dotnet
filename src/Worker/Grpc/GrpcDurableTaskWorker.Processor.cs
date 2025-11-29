@@ -758,10 +758,9 @@ sealed partial class GrpcDurableTaskWorker
                 GetActionsListForLogging(response.Actions));
 
             // Auto-chunk the response if it exceeds the maximum size
-            int maxChunkBytes = this.worker.grpcOptions.MaxCompleteOrchestrationWorkItemSizePerChunk;
             await this.CompleteOrchestratorTaskWithChunkingAsync(
                 response,
-                maxChunkBytes,
+                this.worker.grpcOptions.MaxCompleteOrchestrationWorkItemSizePerChunk,
                 cancellationToken);
         }
 

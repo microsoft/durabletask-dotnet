@@ -51,8 +51,9 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
         });
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+            instanceId, getInputsAndOutputs: true, cts.Token);
 
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
@@ -91,8 +92,9 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
         });
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+            instanceId, getInputsAndOutputs: true, cts.Token);
 
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
@@ -153,8 +155,9 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
         });
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+            instanceId, getInputsAndOutputs: true, cts.Token);
 
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);

@@ -457,7 +457,8 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <exception cref="NotSupportedException">Thrown if this implementation of <see cref="DurableTaskClient"/> does not
     /// support rewinding orchestrations.</exception>
     /// <exception cref="NotImplementedException">Thrown if the backend storage provider does not support rewinding orchestrations.</exception>
-    /// <exception cref="ArgumentException">Thrown if an orchestration with the specified <paramref name="instanceId"/> does not exist.</exception>
+    /// <exception cref="ArgumentException">Thrown if an orchestration with the specified <paramref name="instanceId"/> does not exist,
+    /// or if <paramref name="instanceId"/> is the instance ID of an entity.</exception>
     /// <exception cref="InvalidOperationException">Thrown if a precondition of the operation fails, for example if the specified
     /// orchestration is not in a "Failed" state.</exception>
     /// <exception cref="OperationCanceledException">Thrown if the operation is canceled via the <paramref name="cancellation"/> token.</exception>
@@ -471,12 +472,14 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// Retrieves the history of the specified orchestration instance as a list of <see cref="HistoryEvent"/> objects.
     /// </summary>
     /// <param name="instanceId">The instance ID of the orchestration.</param>
-    /// <param name="executionId">The execution ID of the orchestration. If null, the history for the most recent execution is retrieved.</param>
     /// <param name="cancellation">The cancellation token.</param>
     /// <returns>The list of <see cref="HistoryEvent"/> objects representing the orchestration's history.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="instanceId"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown if an orchestration with the specified <paramref name="instanceId"/> does not exist,
+    /// or if <paramref name="instanceId"/> is the instance ID of an entity.</exception>
+    /// <exception cref="OperationCanceledException">Thrown if the operation is canceled via the <paramref name="cancellation"/> token.</exception>
     public abstract Task<IList<HistoryEvent>> GetOrchestrationHistoryAsync(
         string instanceId,
-        string? executionId = null,
         CancellationToken cancellation = default);
 
     // TODO: Create task hub

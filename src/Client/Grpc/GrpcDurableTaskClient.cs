@@ -472,33 +472,40 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     /// <inheritdoc/>
     public override async Task<IList<HistoryEvent>> GetOrchestrationHistoryAsync(
         string instanceId,
-        string? executionId = null,
         CancellationToken cancellation = default)
     {
+        Check.NotNullOrEmpty(instanceId);
         Check.NotEntity(this.options.EnableEntitySupport, instanceId);
-
-        if (string.IsNullOrEmpty(instanceId))
-        {
-            throw new ArgumentNullException(nameof(instanceId));
-        }
 
         P.StreamInstanceHistoryRequest streamRequest = new()
         {
             InstanceId = instanceId,
-            ExecutionId = executionId,
             ForWorkItemProcessing = false,
         };
 
-        using AsyncServerStreamingCall<P.HistoryChunk> streamResponse =
-            this.sidecarClient.StreamInstanceHistory(streamRequest, cancellationToken: cancellation);
-
-        List<HistoryEvent> pastEvents = [];
-        while (await streamResponse.ResponseStream.MoveNext(cancellation))
+        try
         {
-            pastEvents.AddRange(streamResponse.ResponseStream.Current.Events.Select(DurableTask.ProtoUtils.ConvertHistoryEvent));
-        }
+            using AsyncServerStreamingCall<P.HistoryChunk> streamResponse =
+                this.sidecarClient.StreamInstanceHistory(streamRequest, cancellationToken: cancellation);
 
-        return pastEvents;
+            List<HistoryEvent> pastEvents = [];
+            while (await streamResponse.ResponseStream.MoveNext(cancellation))
+            {
+                pastEvents.AddRange(streamResponse.ResponseStream.Current.Events.Select(DurableTask.ProtoUtils.ConvertHistoryEvent));
+            }
+
+            return pastEvents;
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.NotFound)
+        {
+            throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.", e);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.GetOrchestrationHistoryAsync)} operation was canceled.", e, cancellation);
+        }
+        // should we add a case for an internal error? I can't just throw an "Exception" in that case, it's too generic apparently
     }
 
     static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, out CallInvoker callInvoker)

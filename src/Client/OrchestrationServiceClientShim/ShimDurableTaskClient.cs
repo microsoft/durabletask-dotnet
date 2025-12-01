@@ -311,7 +311,6 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     /// <inheritdoc/>
     public override async Task<IList<HistoryEvent>> GetOrchestrationHistoryAsync(
         string instanceId,
-        string? executionId = null,
         CancellationToken cancellation = default)
     {
         Check.NotEntity(this.options.EnableEntitySupport, instanceId);
@@ -321,7 +320,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
             throw new ArgumentNullException(nameof(instanceId));
         }
 
-        string jsonHistory = await this.Client.GetOrchestrationHistoryAsync(instanceId, executionId);
+        string jsonHistory = await this.Client.GetOrchestrationHistoryAsync(instanceId, executionId: null);
         List<HistoryEvent>? historyEvents = JsonConvert.DeserializeObject<List<HistoryEvent>>(jsonHistory);
         if (historyEvents == null)
         {

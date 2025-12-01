@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc;
 using Xunit.Abstractions;
@@ -159,6 +160,57 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
         Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.Equal(ActivityCount + TimerCount + SubOrchCount, metadata.ReadOutputAs<int>());
+    }
+
+    /// <summary>
+    /// Validates that an InvalidOperationException is thrown when a single orchestrator action
+    /// exceeds the MaxCompleteOrchestrationWorkItemSizePerChunk limit.
+    /// </summary>
+    [Fact]
+    public async Task Autochunk_SingleActionExceedsChunkSize_ThrowsInvalidOperationException()
+    {
+        const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemSizePerChunkBytes; // 1 MB
+        // Create a payload that exceeds the chunk size (1 MB + some overhead)
+        const int PayloadSize = ChunkSize + 100 * 1024; // 1.1 MB payload
+        TaskName orchestratorName = nameof(Autochunk_SingleActionExceedsChunkSize_ThrowsInvalidOperationException);
+        TaskName activityName = "Echo";
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.UseGrpc(opt => opt.MaxCompleteOrchestrationWorkItemSizePerChunk = ChunkSize);
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc(orchestratorName, async ctx =>
+                {
+                    // Attempt to schedule an activity with a payload that exceeds the chunk size
+                    string largePayload = new string('A', PayloadSize);
+                    return await ctx.CallActivityAsync<string>(activityName, largePayload);
+                })
+                .AddActivityFunc<string, string>(activityName, (ctx, input) => Task.FromResult(input)));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        
+        // Wait a bit for the orchestration to process and the exception to be thrown
+        await Task.Delay(TimeSpan.FromSeconds(2), this.TimeoutToken);
+        
+        // The exception is caught and the work item is abandoned, so the orchestration won't complete.
+        // Instead, verify the exception was thrown by checking the logs.
+        IReadOnlyCollection<LogEntry> logs = this.GetLogs();
+        
+        // Find the log entry with the InvalidOperationException
+        LogEntry? errorLog = logs.FirstOrDefault(log =>
+            log.Exception is InvalidOperationException &&
+            log.Exception.Message.Contains("exceeds the", StringComparison.OrdinalIgnoreCase) &&
+            log.Exception.Message.Contains("MB limit", StringComparison.OrdinalIgnoreCase));
+        
+        Assert.NotNull(errorLog);
+        Assert.NotNull(errorLog.Exception);
+        Assert.IsType<InvalidOperationException>(errorLog.Exception);
+        
+        // Verify the error message contains the expected information
+        Assert.Contains("exceeds the", errorLog.Exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("MB limit", errorLog.Exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ScheduleTask", errorLog.Exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 }
 

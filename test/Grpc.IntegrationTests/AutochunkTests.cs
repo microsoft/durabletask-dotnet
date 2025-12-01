@@ -3,6 +3,7 @@
 
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
+using Microsoft.DurableTask.Worker.Grpc;
 using Xunit.Abstractions;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
@@ -20,9 +21,11 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
     [Fact]
     public async Task Autochunk_MultipleChunks_CompletesSuccessfully()
     {
-        const int ActivityCount = 15;
+        // Use minimum allowed chunk size (1 MB) and ensure total payload exceeds it to trigger chunking
+        // 360 activities × 3KB = ~1.05 MB, exceeding 1 MB chunk size while completing within timeout
+        const int ActivityCount = 360;
         const int PayloadSizePerActivity = 3 * 1024; // 3KB per activity
-        const int ChunkSize = 10 * 1024; // 10KB chunks (small to force chunking)
+        const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemSizePerChunkBytes; // 1 MB (minimum allowed)
         TaskName orchestratorName = nameof(Autochunk_MultipleChunks_CompletesSuccessfully);
         TaskName activityName = "Echo";
 
@@ -62,8 +65,11 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
     [Fact]
     public async Task Autochunk_ManyTimers_CompletesSuccessfully()
     {
-        const int TimerCount = 100;
-        const int ChunkSize = 100; // 100B chunks
+        // Use minimum allowed chunk size (1 MB) and use many timers to exceed it
+        // Timers are small, so we need a large number to exceed 1 MB chunk size
+        // Using 10000 timers which should be sufficient to test chunking without being too slow
+        const int TimerCount = 10000;
+        const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemSizePerChunkBytes; // 1 MB (minimum allowed)
         TaskName orchestratorName = nameof(Autochunk_ManyTimers_CompletesSuccessfully);
 
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
@@ -99,11 +105,12 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
     [Fact]
     public async Task Autochunk_MixedActions_CompletesSuccessfully()
     {
-        const int ActivityCount = 8;
-        const int TimerCount = 5;
-        const int SubOrchCount = 3;
+        // Use minimum allowed chunk size (1 MB) and ensure total payload exceeds it to trigger chunking
+        const int ActivityCount = 300; // 300 activities × 2KB = 600KB, plus timers and sub-orchestrations to exceed 1 MB
+        const int TimerCount = 1000; // Additional timers to help exceed chunk size
+        const int SubOrchCount = 50; // Additional sub-orchestrations
         const int PayloadSizePerActivity = 2 * 1024; // 2KB per activity
-        const int ChunkSize = 8 * 1024; // 8KB chunks
+        const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemSizePerChunkBytes; // 1 MB (minimum allowed)
         TaskName orchestratorName = nameof(Autochunk_MixedActions_CompletesSuccessfully);
         TaskName activityName = "Echo";
         TaskName subOrchName = "SubOrch";

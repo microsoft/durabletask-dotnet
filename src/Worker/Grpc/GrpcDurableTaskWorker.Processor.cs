@@ -942,7 +942,7 @@ sealed partial class GrpcDurableTaskWorker
                     {
                         throw new InvalidOperationException(
                             $"A single orchestrator action of type {action.OrchestratorActionTypeCase} with id {action.Id} " +
-                            $"exceeds the {maxChunkBytes / 1024 / 1024}MB limit: {actionSize / 1024 / 1024}MB");
+                            $"exceeds the {maxChunkBytes / 1024.0 / 1024.0:F2}MB limit: {actionSize / 1024.0 / 1024.0:F2}MB");
                     }
                 }
             }

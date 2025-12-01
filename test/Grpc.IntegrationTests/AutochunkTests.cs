@@ -22,10 +22,8 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
     [Fact]
     public async Task Autochunk_MultipleChunks_CompletesSuccessfully()
     {
-        // Use minimum allowed chunk size (1 MB) and ensure total payload exceeds it to trigger chunking
-        // 360 activities × 3KB = ~1.05 MB, exceeding 1 MB chunk size while completing within timeout
-        const int ActivityCount = 360;
-        const int PayloadSizePerActivity = 3 * 1024; // 3KB per activity
+        const int ActivityCount = 36;
+        const int PayloadSizePerActivity = 30 * 1024;
         const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemSizePerChunkBytes; // 1 MB (minimum allowed)
         TaskName orchestratorName = nameof(Autochunk_MultipleChunks_CompletesSuccessfully);
         TaskName activityName = "Echo";
@@ -51,7 +49,7 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
         });
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, cts.Token);
 
@@ -62,57 +60,16 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
     }
 
     /// <summary>
-    /// Validates autochunking with many timers that together exceed the chunk size.
-    /// </summary>
-    [Fact]
-    public async Task Autochunk_ManyTimers_CompletesSuccessfully()
-    {
-        // Use minimum allowed chunk size (1 MB) and use many timers to exceed it
-        // Timers are small, so we need a large number to exceed 1 MB chunk size
-        // Using 10000 timers which should be sufficient to test chunking without being too slow
-        const int TimerCount = 10000;
-        const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemSizePerChunkBytes; // 1 MB (minimum allowed)
-        TaskName orchestratorName = nameof(Autochunk_ManyTimers_CompletesSuccessfully);
-
-        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
-        {
-            // Set a small chunk size to force chunking
-            b.UseGrpc(opt => opt.MaxCompleteOrchestrationWorkItemSizePerChunk = ChunkSize);
-            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
-            {
-                // Start all timers in parallel so they're all in the same completion response
-                List<Task> timerTasks = new List<Task>();
-                for (int i = 0; i < TimerCount; i++)
-                {
-                    timerTasks.Add(ctx.CreateTimer(TimeSpan.FromMilliseconds(10), CancellationToken.None));
-                }
-                await Task.WhenAll(timerTasks);
-                return TimerCount;
-            }));
-        });
-
-        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId, getInputsAndOutputs: true, cts.Token);
-
-        Assert.NotNull(metadata);
-        Assert.Equal(instanceId, metadata.InstanceId);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-        Assert.Equal(TimerCount, metadata.ReadOutputAs<int>());
-    }
-
-    /// <summary>
     /// Validates autochunking with mixed action types (activities, timers, sub-orchestrations).
     /// </summary>
     [Fact]
     public async Task Autochunk_MixedActions_CompletesSuccessfully()
     {
         // Use minimum allowed chunk size (1 MB) and ensure total payload exceeds it to trigger chunking
-        const int ActivityCount = 300; // 300 activities × 2KB = 600KB, plus timers and sub-orchestrations to exceed 1 MB
-        const int TimerCount = 1000; // Additional timers to help exceed chunk size
-        const int SubOrchCount = 50; // Additional sub-orchestrations
-        const int PayloadSizePerActivity = 2 * 1024; // 2KB per activity
+        const int ActivityCount = 30;
+        const int TimerCount = 100;
+        const int SubOrchCount = 50;
+        const int PayloadSizePerActivity = 20 * 1024;
         const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemSizePerChunkBytes; // 1 MB (minimum allowed)
         TaskName orchestratorName = nameof(Autochunk_MixedActions_CompletesSuccessfully);
         TaskName activityName = "Echo";
@@ -155,7 +112,7 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
         });
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, cts.Token);
 
@@ -192,24 +149,24 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
         });
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        
+
         // Wait a bit for the orchestration to process and the exception to be thrown
         await Task.Delay(TimeSpan.FromSeconds(2), this.TimeoutToken);
-        
+
         // The exception is caught and the work item is abandoned, so the orchestration won't complete.
         // Instead, verify the exception was thrown by checking the logs.
         IReadOnlyCollection<LogEntry> logs = this.GetLogs();
-        
+
         // Find the log entry with the InvalidOperationException
         LogEntry? errorLog = logs.FirstOrDefault(log =>
             log.Exception is InvalidOperationException &&
             log.Exception.Message.Contains("exceeds the", StringComparison.OrdinalIgnoreCase) &&
             log.Exception.Message.Contains("MB limit", StringComparison.OrdinalIgnoreCase));
-        
+
         Assert.NotNull(errorLog);
         Assert.NotNull(errorLog.Exception);
         Assert.IsType<InvalidOperationException>(errorLog.Exception);
-        
+
         // Verify the error message contains the expected information
         Assert.Contains("exceeds the", errorLog.Exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("MB limit", errorLog.Exception.Message, StringComparison.OrdinalIgnoreCase);

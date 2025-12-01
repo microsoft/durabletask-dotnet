@@ -38,8 +38,21 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     /// </summary>
     sealed class PartialOrchestratorChunk
     {
+        readonly object lockObject = new();
+
         public TaskCompletionSource<GrpcOrchestratorExecutionResult> TaskCompletionSource { get; set; } = null!;
         public List<OrchestratorAction> AccumulatedActions { get; } = new();
+
+        /// <summary>
+        /// Thread-safely adds actions to the accumulated actions list.
+        /// </summary>
+        public void AddActions(IEnumerable<OrchestratorAction> actions)
+        {
+            lock (this.lockObject)
+            {
+                this.AccumulatedActions.AddRange(actions);
+            }
+        }
     }
 
     readonly ILogger log;
@@ -565,8 +578,8 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                     };
                 });
 
-            // Accumulate actions from this chunk
-            partialChunk.AccumulatedActions.AddRange(request.Actions.Select(ProtobufUtils.ToOrchestratorAction));
+            // Accumulate actions from this chunk (thread-safe)
+            partialChunk.AddActions(request.Actions.Select(ProtobufUtils.ToOrchestratorAction));
 
             return EmptyCompleteTaskResponse;
         }
@@ -574,8 +587,8 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         // This is the final chunk (or a single non-chunked response)
         if (this.partialOrchestratorChunks.TryRemove(request.InstanceId, out PartialOrchestratorChunk? existingPartialChunk))
         {
-            // We've been accumulating chunks - combine with final chunk
-            existingPartialChunk.AccumulatedActions.AddRange(request.Actions.Select(ProtobufUtils.ToOrchestratorAction));
+            // We've been accumulating chunks - combine with final chunk (thread-safe)
+            existingPartialChunk.AddActions(request.Actions.Select(ProtobufUtils.ToOrchestratorAction));
 
             GrpcOrchestratorExecutionResult res = new()
             {

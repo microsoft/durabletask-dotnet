@@ -556,7 +556,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                     // First chunk - get the TCS and initialize the partial chunk
                     if (!this.pendingOrchestratorTasks.TryGetValue(request.InstanceId, out TaskCompletionSource<GrpcOrchestratorExecutionResult>? tcs))
                     {
-                        throw new RpcException(new Status(StatusCode.NotFound, $"Orchestration not found"));
+                        throw new RpcException(new Status(StatusCode.NotFound, $"Orchestration with instance ID '{request.InstanceId}' not found"));
                     }
 
                     return new PartialOrchestratorChunk

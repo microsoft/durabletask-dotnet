@@ -11,6 +11,18 @@ namespace Microsoft.DurableTask.Worker.Grpc;
 public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
 {
     /// <summary>
+    /// The minimum allowed size (in bytes) for complete orchestration work item chunks.
+    /// </summary>
+    public const int MinCompleteOrchestrationWorkItemSizePerChunkBytes = 1 * 1024 * 1024; // 1 MB
+
+    /// <summary>
+    /// The maximum allowed size (in bytes) for complete orchestration work item chunks.
+    /// </summary>
+    public const int MaxCompleteOrchestrationWorkItemSizePerChunkBytes = 4_089_446; // 3.9 MB
+
+    int maxCompleteOrchestrationWorkItemSizePerChunk = MaxCompleteOrchestrationWorkItemSizePerChunkBytes;
+
+    /// <summary>
     /// Gets or sets the address of the gRPC endpoint to connect to. Default is localhost:4001.
     /// </summary>
     public string? Address { get; set; }
@@ -39,7 +51,29 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
     /// This value is used to limit the size of the complete orchestration work item chunk request.
     /// If the response exceeds this limit, it will be automatically split into multiple chunks.
     /// </remarks>
-    public int MaxCompleteOrchestrationWorkItemSizePerChunk { get; set; } = 4089446; // 3.9MB
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when the value is less than 1 MB or greater than 3.9 MB.
+    /// </exception>
+    public int MaxCompleteOrchestrationWorkItemSizePerChunk
+    {
+        get => this.maxCompleteOrchestrationWorkItemSizePerChunk;
+        set
+        {
+            if (value < MinCompleteOrchestrationWorkItemSizePerChunkBytes ||
+                value > MaxCompleteOrchestrationWorkItemSizePerChunkBytes)
+            {
+                string message = $"MaxCompleteOrchestrationWorkItemSizePerChunk must be between " +
+                    $"{MinCompleteOrchestrationWorkItemSizePerChunkBytes} bytes (1 MB) and " +
+                    $"{MaxCompleteOrchestrationWorkItemSizePerChunkBytes} bytes (3.9 MB), inclusive.";
+                throw new ArgumentOutOfRangeException(
+                    nameof(this.MaxCompleteOrchestrationWorkItemSizePerChunk),
+                    value,
+                    message);
+            }
+
+            this.maxCompleteOrchestrationWorkItemSizePerChunk = value;
+        }
+    }
 
     /// <summary>
     /// Gets the internal protocol options. These are used to control backend-dependent features.

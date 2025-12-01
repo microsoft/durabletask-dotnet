@@ -757,7 +757,6 @@ sealed partial class GrpcDurableTaskWorker
                 response.Actions.Count,
                 GetActionsListForLogging(response.Actions));
 
-            // Auto-chunk the response if it exceeds the maximum size
             await this.CompleteOrchestratorTaskWithChunkingAsync(
                 response,
                 this.worker.grpcOptions.MaxCompleteOrchestrationWorkItemSizePerChunk,
@@ -988,7 +987,6 @@ sealed partial class GrpcDurableTaskWorker
                     InstanceId = response.InstanceId,
                     CustomStatus = response.CustomStatus,
                     CompletionToken = response.CompletionToken,
-                    OrchestrationTraceContext = isFirstChunk ? response.OrchestrationTraceContext : null, // Only include trace context in first chunk
                     RequiresHistory = response.RequiresHistory,
                 };
 
@@ -1007,8 +1005,11 @@ sealed partial class GrpcDurableTaskWorker
 
                 if (isFirstChunk)
                 {
+                    chunkedResponse.OrchestrationTraceContext = response.OrchestrationTraceContext;
                     isFirstChunk = false;
-                } else {
+                }
+                else
+                {
                     chunkedResponse.NumEventsProcessed = -1;
                 }
 

@@ -988,7 +988,7 @@ sealed partial class GrpcDurableTaskWorker
                     InstanceId = response.InstanceId,
                     CustomStatus = response.CustomStatus,
                     CompletionToken = response.CompletionToken,
-                    OrchestrationTraceContext = actionsCompletedSoFar == 0 ? response.OrchestrationTraceContext : null, // Only include trace context in first chunk
+                    OrchestrationTraceContext = isFirstChunk ? response.OrchestrationTraceContext : null, // Only include trace context in first chunk
                     RequiresHistory = response.RequiresHistory,
                 };
 

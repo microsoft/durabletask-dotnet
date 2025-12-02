@@ -505,7 +505,11 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             throw new OperationCanceledException(
                 $"The {nameof(this.GetOrchestrationHistoryAsync)} operation was canceled.", e, cancellation);
         }
-        // should we add a case for an internal error? I can't just throw an "Exception" in that case, it's too generic apparently
+        catch (RpcException e) when (e.StatusCode == StatusCode.Internal)
+        {
+            throw new InvalidOperationException(
+                $"An error occurred while retrieving the history for orchestration with instanceId {instanceId}.", e);
+        }
     }
 
     static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, out CallInvoker callInvoker)

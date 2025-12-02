@@ -10,7 +10,6 @@ using DurableTask.Core.Query;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using Newtonsoft.Json;
 using Core = DurableTask.Core;
 using CoreOrchestrationQuery = DurableTask.Core.Query.OrchestrationQuery;
 
@@ -306,29 +305,6 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
 
         await this.Client.CreateTaskOrchestrationAsync(message);
         return newInstanceId;
-    }
-
-    /// <inheritdoc/>
-    public override async Task<IList<HistoryEvent>> GetOrchestrationHistoryAsync(
-        string instanceId,
-        CancellationToken cancellation = default)
-    {
-        Check.NotEntity(this.options.EnableEntitySupport, instanceId);
-
-        if (string.IsNullOrEmpty(instanceId))
-        {
-            throw new ArgumentNullException(nameof(instanceId));
-        }
-
-        string jsonHistory = await this.Client.GetOrchestrationHistoryAsync(instanceId, executionId: null);
-        List<HistoryEvent>? historyEvents = JsonConvert.DeserializeObject<List<HistoryEvent>>(jsonHistory);
-        if (historyEvents == null)
-        {
-            // We don't send a history in this case. Should we throw an exception instead?
-            return [];
-        }
-
-        return historyEvents;
     }
 
     [return: NotNullIfNotNull("state")]

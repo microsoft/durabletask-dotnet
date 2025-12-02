@@ -474,13 +474,17 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <param name="instanceId">The instance ID of the orchestration.</param>
     /// <param name="cancellation">The cancellation token.</param>
     /// <returns>The list of <see cref="HistoryEvent"/> objects representing the orchestration's history.</returns>
+    /// <exception cref="NotSupportedException">Thrown if this implementation of <see cref="DurableTaskClient"/> does not
+    /// support retrieving orchestration history.</exception>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="instanceId"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown if an orchestration with the specified <paramref name="instanceId"/> does not exist,
     /// or if <paramref name="instanceId"/> is the instance ID of an entity.</exception>
     /// <exception cref="OperationCanceledException">Thrown if the operation is canceled via the <paramref name="cancellation"/> token.</exception>
-    public abstract Task<IList<HistoryEvent>> GetOrchestrationHistoryAsync(
+    /// <exception cref="InvalidOperationException">Thrown if an internal error occurs when attempting to retrieve the orchestration history.</exception>
+    public virtual Task<IList<HistoryEvent>> GetOrchestrationHistoryAsync(
         string instanceId,
-        CancellationToken cancellation = default);
+        CancellationToken cancellation = default)
+        => throw new NotSupportedException($"{this.GetType()} does not support retrieving orchestration history.");
 
     // TODO: Create task hub
 

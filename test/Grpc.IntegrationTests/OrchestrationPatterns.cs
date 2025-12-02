@@ -329,7 +329,7 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
 
         string[] expected = new[] { "9", "8", "7", "6", "5", "4", "3", "2", "1", "0" };
-        Assert.Equal<string>(expected, metadata.ReadOutputAs<string[]>());
+        Assert.Equal((IEnumerable<string>)expected, metadata.ReadOutputAs<string[]>());
     }
 
     [Theory]
@@ -414,7 +414,10 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.NotNull(metadata);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
 
-        int[] expected = Enumerable.Range(0, eventCount).ToArray();
+        // With Stack (LIFO) behavior, the most recent waiter receives events first.
+        // So if we create waiters in order [0, 1, 2, 3, 4] and send events [0, 1, 2, 3, 4],
+        // the waiters will receive them in reverse order: [4, 3, 2, 1, 0]
+        int[] expected = Enumerable.Range(0, eventCount).Reverse().ToArray();
         Assert.Equal<int>(expected, metadata.ReadOutputAs<int[]>());
     }
 

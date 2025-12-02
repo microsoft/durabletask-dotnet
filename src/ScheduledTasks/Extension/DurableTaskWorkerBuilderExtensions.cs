@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 using Microsoft.DurableTask.Worker;
+using Microsoft.DurableTask.Worker.Grpc;
+using Microsoft.Extensions.DependencyInjection;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.ScheduledTasks;
 
@@ -20,5 +23,13 @@ public static class DurableTaskWorkerBuilderExtensions
             r.AddEntity<Schedule>();
             r.AddOrchestrator<ExecuteScheduleOperationOrchestrator>();
         });
+
+        // Register the capability for gRPC workers
+        builder.Services
+            .AddOptions<GrpcDurableTaskWorkerOptions>(builder.Name)
+            .PostConfigure(opt =>
+            {
+                opt.Capabilities.Add(P.WorkerCapability.ScheduledTasks);
+            });
     }
 }

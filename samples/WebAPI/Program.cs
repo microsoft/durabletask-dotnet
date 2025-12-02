@@ -42,7 +42,9 @@ builder.Services.AddSingleton<IOrchestrationServiceClient>(orchestrationService)
 builder.Services.AddSingleton<TaskHubGrpcServer>();
 builder.Services.AddGrpc();
 
-// Create the gRPC channel that will connect to the embedded sidecar on the gRPC port
+// Create the gRPC channel that will connect to the embedded sidecar on the gRPC port.
+// Note: GrpcChannel.ForAddress() doesn't establish a connection until a call is made,
+// and the DurableTask worker starts making calls after the host is fully started.
 GrpcChannel grpcChannel = GrpcChannel.ForAddress($"http://localhost:{grpcPort}");
 
 // Add all the generated tasks and configure worker to use the embedded gRPC sidecar

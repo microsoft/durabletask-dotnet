@@ -9,9 +9,19 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Real projects would use package references -->
+    <!--
     <PackageReference Include="Microsoft.DurableTask.Client.Grpc" />
     <PackageReference Include="Microsoft.DurableTask.Worker.Grpc" />
+    -->
     <PackageReference Include="Microsoft.DurableTask.Generators" OutputItemType="Analyzer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Using p2p references so we can show latest changes in samples and to include the InProcessTestHost. -->
+    <ProjectReference Include="$(SrcRoot)Client/Grpc/Client.Grpc.csproj" />
+    <ProjectReference Include="$(SrcRoot)Worker/Grpc/Worker.Grpc.csproj" />
+    <ProjectReference Include="$(SrcRoot)InProcessTestHost/InProcessTestHost.csproj" />
   </ItemGroup>
 
 </Project>

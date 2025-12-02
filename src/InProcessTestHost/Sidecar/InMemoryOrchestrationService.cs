@@ -608,7 +608,11 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
 
             lock (state)
             {
-                historyEvents = state.HistoryEventsJson.Select(e => e!.GetValue<HistoryEvent>()).ToList();
+                historyEvents = state.HistoryEventsJson
+                    .Where(e => e is not null)
+                    .Select(e => e!.GetValue<HistoryEvent>())
+                    .Where(e => e is not null)
+                    .ToList()!;
             }
 
             return true;

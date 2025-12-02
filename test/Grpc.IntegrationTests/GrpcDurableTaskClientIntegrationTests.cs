@@ -2,11 +2,15 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics.CodeAnalysis;
+using DurableTask.Core;
+using DurableTask.Core.History;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
 using Xunit.Abstractions;
+using CoreOrchestrationStatus = DurableTask.Core.OrchestrationStatus;
+using PurgeResult = Microsoft.DurableTask.Client.PurgeResult;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
@@ -285,6 +289,65 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
 
         // Should throw ArgumentException
         await restartAction.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*An orchestration with the instanceId non-existent-instance-id was not found*");
+    }
+
+    [Fact]
+    public async Task GetOrchestrationHistoryAsync_CompletedOrchestration_ReturnsHistoryEvents()
+    {
+        // Arrange
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+        await using HostTestLifetime server = await this.StartAsync();
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false);
+
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+        await server.Client.RaiseEventAsync(instanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(instanceId, cts.Token);
+
+        // Verify orchestration completed
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+        metadata.Should().NotBeNull();
+        metadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+
+        // Act
+        IList<HistoryEvent> history =
+            await server.Client.GetOrchestrationHistoryAsync(instanceId, cts.Token);
+
+        // Assert
+        history.Should().NotBeNull();
+        history.Should().NotBeEmpty();
+
+        // Verify history contains expected event types for a completed orchestration
+        history.Should().Contain(e => e is ExecutionStartedEvent);
+        history.Should().Contain(e => e is ExecutionCompletedEvent);
+        history.Should().Contain(e => e is EventRaisedEvent);
+
+        // Verify ExecutionStartedEvent has correct orchestration name
+        ExecutionStartedEvent? startedEvent = history.OfType<ExecutionStartedEvent>().FirstOrDefault();
+        startedEvent.Should().NotBeNull();
+        startedEvent!.Name.Should().Be(OrchestrationName);
+
+        // Verify ExecutionCompletedEvent indicates completion
+        ExecutionCompletedEvent? completedEvent = history.OfType<ExecutionCompletedEvent>().FirstOrDefault();
+        completedEvent.Should().NotBeNull();
+        completedEvent!.OrchestrationStatus.Should().Be(CoreOrchestrationStatus.Completed);
+    }
+
+    [Fact]
+    public async Task GetOrchestrationHistoryAsync_NonExistentOrchestration_ThrowsArgumentException()
+    {
+        // Arrange
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+        await using HostTestLifetime server = await this.StartAsync();
+
+        // Act
+        Func<Task> getHistoryAction = () =>
+            server.Client.GetOrchestrationHistoryAsync("non-existent-instance-id", cts.Token);
+
+        // Assert
+        await getHistoryAction.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*An orchestration with the instanceId non-existent-instance-id was not found*");
     }
 

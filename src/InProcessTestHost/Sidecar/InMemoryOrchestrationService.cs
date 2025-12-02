@@ -261,6 +261,17 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
     }
 
     /// <summary>
+    /// Tries to get the orchestration history events for the specified instance.
+    /// </summary>
+    /// <param name="instanceId">The instance ID.</param>
+    /// <param name="historyEvents">The history events if found.</param>
+    /// <returns>True if history events were found, false otherwise.</returns>
+    public bool TryGetOrchestrationHistory(string instanceId, [NotNullWhen(true)] out List<HistoryEvent>? historyEvents)
+    {
+        return this.instanceStore.TryGetHistory(instanceId, out historyEvents);
+    }
+
+    /// <summary>
     /// Gets the orchestration state.
     /// </summary>
     /// <param name="instanceId">The instance ID.</param>
@@ -585,6 +596,22 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
 
             statusRecord = state.StatusRecordJson?.GetValue<OrchestrationState>();
             return statusRecord != null;
+        }
+
+        public bool TryGetHistory(string instanceId, [NotNullWhen(true)] out List<HistoryEvent>? historyEvents)
+        {
+            if (!this.store.TryGetValue(instanceId, out SerializedInstanceState? state))
+            {
+                historyEvents = null;
+                return false;
+            }
+
+            lock (state)
+            {
+                historyEvents = state.HistoryEventsJson.Select(e => e!.GetValue<HistoryEvent>()).ToList();
+            }
+
+            return true;
         }
 
         public void SaveState(

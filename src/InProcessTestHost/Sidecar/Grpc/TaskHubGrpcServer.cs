@@ -648,30 +648,46 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
 
     public override async Task StreamInstanceHistory(P.StreamInstanceHistoryRequest request, IServerStreamWriter<P.HistoryChunk> responseStream, ServerCallContext context)
     {
-        if (this.streamingPastEvents.TryGetValue(request.InstanceId, out List<P.HistoryEvent>? pastEvents))
+        List<P.HistoryEvent>? pastEvents = null;
+
+        // First, try to get events from the streaming cache (for in-flight orchestrations)
+        if (this.streamingPastEvents.TryGetValue(request.InstanceId, out pastEvents))
         {
-            const int MaxChunkBytes = 256 * 1024; // 256KB per chunk to simulate chunked streaming
-            int currentSize = 0;
-            P.HistoryChunk chunk = new();
+            // Use the cached streaming events
+        }
+        else if (this.service is InMemoryOrchestrationService inMemoryService &&
+                 inMemoryService.TryGetOrchestrationHistory(request.InstanceId, out List<HistoryEvent>? historyEvents))
+        {
+            // Get history from the instance store (for completed orchestrations)
+            pastEvents = historyEvents.Select(ProtobufUtils.ToHistoryEventProto).ToList();
+        }
+        else
+        {
+            // Instance not found
+            throw new RpcException(new Status(StatusCode.NotFound, $"An orchestration with the instanceId {request.InstanceId} was not found."));
+        }
 
-            foreach (P.HistoryEvent e in pastEvents)
-            {
-                int eventSize = e.CalculateSize();
-                if (currentSize > 0 && currentSize + eventSize > MaxChunkBytes)
-                {
-                    await responseStream.WriteAsync(chunk);
-                    chunk = new P.HistoryChunk();
-                    currentSize = 0;
-                }
+        const int MaxChunkBytes = 256 * 1024; // 256KB per chunk to simulate chunked streaming
+        int currentSize = 0;
+        P.HistoryChunk chunk = new();
 
-                chunk.Events.Add(e);
-                currentSize += eventSize;
-            }
-
-            if (chunk.Events.Count > 0)
+        foreach (P.HistoryEvent e in pastEvents)
+        {
+            int eventSize = e.CalculateSize();
+            if (currentSize > 0 && currentSize + eventSize > MaxChunkBytes)
             {
                 await responseStream.WriteAsync(chunk);
+                chunk = new P.HistoryChunk();
+                currentSize = 0;
             }
+
+            chunk.Events.Add(e);
+            currentSize += eventSize;
+        }
+
+        if (chunk.Events.Count > 0)
+        {
+            await responseStream.WriteAsync(chunk);
         }
     }
 

@@ -10,7 +10,8 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
     {
         Unknown,
         Orchestration,
-        Activity
+        Activity,
+        Entity
     }
 
     public class DurableFunction

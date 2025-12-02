@@ -95,7 +95,7 @@ namespace Microsoft.DurableTask.Generators
 
             string className = classType.ToDisplayString();
             INamedTypeSymbol? taskType = null;
-            bool isActivity = false;
+            DurableTaskKind kind = DurableTaskKind.Orchestrator;
 
             INamedTypeSymbol? baseType = classType.BaseType;
             while (baseType != null)
@@ -105,13 +105,19 @@ namespace Microsoft.DurableTask.Generators
                     if (baseType.Name == "TaskActivity")
                     {
                         taskType = baseType;
-                        isActivity = true;
+                        kind = DurableTaskKind.Activity;
                         break;
                     }
                     else if (baseType.Name == "TaskOrchestrator")
                     {
                         taskType = baseType;
-                        isActivity = false;
+                        kind = DurableTaskKind.Orchestrator;
+                        break;
+                    }
+                    else if (baseType.Name == "TaskEntity")
+                    {
+                        taskType = baseType;
+                        kind = DurableTaskKind.Entity;
                         break;
                     }
                 }
@@ -119,13 +125,31 @@ namespace Microsoft.DurableTask.Generators
                 baseType = baseType.BaseType;
             }
 
-            if (taskType == null || taskType.TypeParameters.Length <= 1)
+            // TaskEntity has 1 type parameter (TState), while TaskActivity and TaskOrchestrator have 2 (TInput, TOutput)
+            if (taskType == null)
             {
                 return null;
             }
 
-            ITypeSymbol inputType = taskType.TypeArguments.First();
-            ITypeSymbol outputType = taskType.TypeArguments.Last();
+            if (kind == DurableTaskKind.Entity)
+            {
+                // Entity only has a single TState type parameter
+                if (taskType.TypeParameters.Length < 1)
+                {
+                    return null;
+                }
+            }
+            else
+            {
+                // Orchestrator and Activity have TInput and TOutput type parameters
+                if (taskType.TypeParameters.Length <= 1)
+                {
+                    return null;
+                }
+            }
+
+            ITypeSymbol? inputType = kind == DurableTaskKind.Entity ? null : taskType.TypeArguments.First();
+            ITypeSymbol? outputType = kind == DurableTaskKind.Entity ? null : taskType.TypeArguments.Last();
 
             string taskName = classType.Name;
             if (attribute.ArgumentList?.Arguments.Count > 0)
@@ -134,7 +158,7 @@ namespace Microsoft.DurableTask.Generators
                 taskName = context.SemanticModel.GetConstantValue(expression).ToString();
             }
 
-            return new DurableTaskTypeInfo(className, taskName, inputType, outputType, isActivity);
+            return new DurableTaskTypeInfo(className, taskName, inputType, outputType, kind);
         }
 
         static DurableFunction? GetDurableFunction(GeneratorSyntaxContext context)
@@ -165,9 +189,10 @@ namespace Microsoft.DurableTask.Generators
             bool isDurableFunctions = compilation.ReferencedAssemblyNames.Any(
                 assembly => assembly.Name.Equals("Microsoft.Azure.Functions.Worker.Extensions.DurableTask", StringComparison.OrdinalIgnoreCase));
 
-            // Separate tasks into orchestrators and activities
+            // Separate tasks into orchestrators, activities, and entities
             List<DurableTaskTypeInfo> orchestrators = new();
             List<DurableTaskTypeInfo> activities = new();
+            List<DurableTaskTypeInfo> entities = new();
 
             foreach (DurableTaskTypeInfo task in allTasks)
             {
@@ -175,13 +200,17 @@ namespace Microsoft.DurableTask.Generators
                 {
                     activities.Add(task);
                 }
+                else if (task.IsEntity)
+                {
+                    entities.Add(task);
+                }
                 else
                 {
                     orchestrators.Add(task);
                 }
             }
 
-            int found = activities.Count + orchestrators.Count + allFunctions.Length;
+            int found = activities.Count + orchestrators.Count + entities.Count + allFunctions.Length;
             if (found == 0)
             {
                 return;
@@ -264,7 +293,8 @@ namespace Microsoft.DurableTask
                 AddRegistrationMethodForAllTasks(
                     sourceBuilder,
                     orchestrators,
-                    activities);
+                    activities,
+                    entities);
             }
 
             sourceBuilder.AppendLine("    }").AppendLine("}");
@@ -368,7 +398,8 @@ namespace Microsoft.DurableTask
         static void AddRegistrationMethodForAllTasks(
             StringBuilder sourceBuilder,
             IEnumerable<DurableTaskTypeInfo> orchestrators,
-            IEnumerable<DurableTaskTypeInfo> activities)
+            IEnumerable<DurableTaskTypeInfo> activities,
+            IEnumerable<DurableTaskTypeInfo> entities)
         {
             // internal so it does not conflict with other projects with this generated file.
             sourceBuilder.Append($@"
@@ -387,9 +418,22 @@ namespace Microsoft.DurableTask
             builder.AddActivity<{taskInfo.TypeName}>();");
             }
 
+            foreach (DurableTaskTypeInfo taskInfo in entities)
+            {
+                sourceBuilder.Append($@"
+            builder.AddEntity<{taskInfo.TypeName}>();");
+            }
+
             sourceBuilder.AppendLine($@"
             return builder;
         }}");
+        }
+
+        enum DurableTaskKind
+        {
+            Orchestrator,
+            Activity,
+            Entity
         }
 
         class DurableTaskTypeInfo
@@ -399,19 +443,30 @@ namespace Microsoft.DurableTask
                 string taskName,
                 ITypeSymbol? inputType,
                 ITypeSymbol? outputType,
-                bool isActivity)
+                DurableTaskKind kind)
             {
                 this.TypeName = taskType;
                 this.TaskName = taskName;
-                this.InputType = GetRenderedTypeExpression(inputType);
-                this.InputParameter = this.InputType + " input";
-                if (this.InputType[this.InputType.Length - 1] == '?')
-                {
-                    this.InputParameter += " = default";
-                }
+                this.Kind = kind;
 
-                this.OutputType = GetRenderedTypeExpression(outputType);
-                this.IsActivity = isActivity;
+                // Entities only have a state type parameter, not input/output
+                if (kind == DurableTaskKind.Entity)
+                {
+                    this.InputType = string.Empty;
+                    this.InputParameter = string.Empty;
+                    this.OutputType = string.Empty;
+                }
+                else
+                {
+                    this.InputType = GetRenderedTypeExpression(inputType);
+                    this.InputParameter = this.InputType + " input";
+                    if (this.InputType[this.InputType.Length - 1] == '?')
+                    {
+                        this.InputParameter += " = default";
+                    }
+
+                    this.OutputType = GetRenderedTypeExpression(outputType);
+                }
             }
 
             public string TypeName { get; }
@@ -419,7 +474,13 @@ namespace Microsoft.DurableTask
             public string InputType { get; }
             public string InputParameter { get; }
             public string OutputType { get; }
-            public bool IsActivity { get; }
+            public DurableTaskKind Kind { get; }
+
+            public bool IsActivity => this.Kind == DurableTaskKind.Activity;
+
+            public bool IsOrchestrator => this.Kind == DurableTaskKind.Orchestrator;
+
+            public bool IsEntity => this.Kind == DurableTaskKind.Entity;
 
             static string GetRenderedTypeExpression(ITypeSymbol? symbol)
             {

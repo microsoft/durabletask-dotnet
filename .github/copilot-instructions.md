@@ -66,3 +66,10 @@ Unit tests should follow these guidelines:
 - Validate that each test actually tests the target behavior, e.g. we should not have tests that create a mock, call the mock and then verify that the mock was called, without the target code being involved. We also shouldn't have tests that test language features, e.g. something that the compiler would catch anyway.
 - Avoid adding excessive comments to tests. Instead favor clear easy to understand code.
 - Follow the patterns in the unit tests in the same project or classes to which new tests are being added.
+
+## Code Review Guidelines
+
+When reviewing code, follow these guidelines:
+
+- Provide all review comments in a single review pass. Avoid scattering feedback across multiple partial reviews; consolidate findings into one coherent review round.
+- Do not generate false-positive or already-resolved comments when new commits are pushed. Only surface issues that still apply after the latest changes, and avoid re-posting comments that have been addressed or are no longer relevant.

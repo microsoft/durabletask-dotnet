@@ -73,3 +73,4 @@ When reviewing code, follow these guidelines:
 
 - Provide all review comments in a single review pass. Avoid scattering feedback across multiple partial reviews; consolidate findings into one coherent review round.
 - Do not generate false-positive or already-resolved comments when new commits are pushed. Only surface issues that still apply after the latest changes, and avoid re-posting comments that have been addressed or are no longer relevant.
+- Do not re-post a review comment if a user has directly responded to it with justification for why the code exists as written. Respect user explanations and avoid redundant feedback on justified code decisions.

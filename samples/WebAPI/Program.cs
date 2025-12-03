@@ -55,10 +55,10 @@ builder.Services.AddDurableTaskWorker(builder =>
 });
 
 // Configure the durable task client to use the embedded gRPC sidecar
-builder.Services.AddDurableTaskClient(b =>
+builder.Services.AddDurableTaskClient(builder =>
 {
-    b.UseGrpc(grpcChannel);
-    b.RegisterDirectly();
+    builder.UseGrpc(grpcChannel);
+    builder.RegisterDirectly();
 });
 
 // Configure the HTTP request pipeline.

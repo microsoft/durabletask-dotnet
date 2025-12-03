@@ -123,16 +123,16 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
     }
 
     /// <summary>
-    /// Validates that an InvalidOperationException is thrown when a single orchestrator action
-    /// exceeds the MaxCompleteOrchestrationWorkItemSizePerChunk limit.
+    /// Validates that when a single orchestrator action exceeds the MaxCompleteOrchestrationWorkItemSizePerChunk limit,
+    /// the orchestration completes with a failed status and proper failure details.
     /// </summary>
     [Fact]
-    public async Task Autochunk_SingleActionExceedsChunkSize_ThrowsInvalidOperationException()
+    public async Task Autochunk_SingleActionExceedsChunkSize_CompletesWithFailedStatus()
     {
         const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemSizePerChunkBytes; // 1 MB
         // Create a payload that exceeds the chunk size (1 MB + some overhead)
         const int PayloadSize = ChunkSize + 100 * 1024; // 1.1 MB payload
-        TaskName orchestratorName = nameof(Autochunk_SingleActionExceedsChunkSize_ThrowsInvalidOperationException);
+        TaskName orchestratorName = nameof(Autochunk_SingleActionExceedsChunkSize_CompletesWithFailedStatus);
         TaskName activityName = "Echo";
 
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
@@ -149,28 +149,17 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
         });
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, cts.Token);
 
-        // Wait a bit for the orchestration to process and the exception to be thrown
-        await Task.Delay(TimeSpan.FromSeconds(2), this.TimeoutToken);
-
-        // The exception is caught and the work item is abandoned, so the orchestration won't complete.
-        // Instead, verify the exception was thrown by checking the logs.
-        IReadOnlyCollection<LogEntry> logs = this.GetLogs();
-
-        // Find the log entry with the InvalidOperationException
-        LogEntry? errorLog = logs.FirstOrDefault(log =>
-            log.Exception is InvalidOperationException &&
-            log.Exception.Message.Contains("exceeds the", StringComparison.OrdinalIgnoreCase) &&
-            log.Exception.Message.Contains("MB limit", StringComparison.OrdinalIgnoreCase));
-
-        Assert.NotNull(errorLog);
-        Assert.NotNull(errorLog.Exception);
-        Assert.IsType<InvalidOperationException>(errorLog.Exception);
-
-        // Verify the error message contains the expected information
-        Assert.Contains("exceeds the", errorLog.Exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("MB limit", errorLog.Exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ScheduleTask", errorLog.Exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+        Assert.NotNull(metadata.FailureDetails);
+        Assert.Contains("exceeds the", metadata.FailureDetails.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("MB limit", metadata.FailureDetails.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(typeof(InvalidOperationException).FullName, metadata.FailureDetails.ErrorType);
     }
 }
 

@@ -932,21 +932,53 @@ sealed partial class GrpcDurableTaskWorker
             CancellationToken cancellationToken)
         {
             // Validate that no single action exceeds the maximum chunk size
-            static void ValidateActionsSize(IEnumerable<P.OrchestratorAction> actions, int maxChunkBytes)
+            static P.TaskFailureDetails? ValidateActionsSize(IEnumerable<P.OrchestratorAction> actions, int maxChunkBytes)
             {
                 foreach (P.OrchestratorAction action in actions)
                 {
                     int actionSize = action.CalculateSize();
                     if (actionSize > maxChunkBytes)
                     {
-                        throw new InvalidOperationException(
-                            $"A single orchestrator action of type {action.OrchestratorActionTypeCase} with id {action.Id} " +
-                            $"exceeds the {maxChunkBytes / 1024.0 / 1024.0:F2}MB limit: {actionSize / 1024.0 / 1024.0:F2}MB");
+                        string errorMessage = $"A single orchestrator action of type {action.OrchestratorActionTypeCase} with id {action.Id} " +
+                            $"exceeds the {maxChunkBytes / 1024.0 / 1024.0:F2}MB limit: {actionSize / 1024.0 / 1024.0:F2}MB";
+
+                        return new P.TaskFailureDetails
+                        {
+                            ErrorType = typeof(InvalidOperationException).FullName,
+                            ErrorMessage = errorMessage,
+                            IsNonRetriable = true,
+                        };
                     }
                 }
+
+                return null;
             }
 
-            ValidateActionsSize(response.Actions, maxChunkBytes);
+            P.TaskFailureDetails? validationFailure = ValidateActionsSize(response.Actions, maxChunkBytes);
+            if (validationFailure != null)
+            {
+                // Complete the orchestration with a failed status and failure details
+                P.OrchestratorResponse failureResponse = new()
+                {
+                    InstanceId = response.InstanceId,
+                    CompletionToken = response.CompletionToken,
+                    OrchestrationTraceContext = response.OrchestrationTraceContext,
+                    Actions =
+                    {
+                        new P.OrchestratorAction
+                        {
+                            CompleteOrchestration = new P.CompleteOrchestrationAction
+                            {
+                                OrchestrationStatus = P.OrchestrationStatus.Failed,
+                                FailureDetails = validationFailure,
+                            },
+                        },
+                    },
+                };
+
+                await this.client.CompleteOrchestratorTaskAsync(failureResponse, cancellationToken: cancellationToken);
+                return;
+            }
 
             // Helper to add an action to the current chunk if it fits
             static bool TryAddAction(

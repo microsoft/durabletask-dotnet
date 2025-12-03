@@ -51,8 +51,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ConsoleApp", "samples\Conso
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NetFxConsoleApp", "samples\NetFxConsoleApp\NetFxConsoleApp.csproj", "{8A0156E6-F033-49AB-AB0C-6698CE1DB24F}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebAPI", "samples\WebAPI\WebAPI.csproj", "{21AF0D71-6D32-483F-B6E8-3B28EE432560}"
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shared", "src\Shared\Shared.csproj", "{57A4C812-B0D9-49E9-9EBE-7E94D3D78ED7}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "misc", "misc\misc.csproj", "{1E135970-60CF-470A-9270-4560BFA0A7DF}"

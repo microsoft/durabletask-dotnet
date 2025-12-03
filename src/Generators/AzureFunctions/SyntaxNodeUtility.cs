@@ -61,6 +61,12 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                         kind = DurableFunctionKind.Activity;
                         return true;
                     }
+
+                    if (attribute.ToString().Equals("EntityTrigger", StringComparison.Ordinal))
+                    {
+                        kind = DurableFunctionKind.Entity;
+                        return true;
+                    }
                 }
             }
 
@@ -125,7 +131,8 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                     {
                         string attributeName = attribute.Name.ToString();
                         if ((kind == DurableFunctionKind.Activity && attributeName == "ActivityTrigger") ||
-                            (kind == DurableFunctionKind.Orchestration && attributeName == "OrchestratorTrigger"))
+                            (kind == DurableFunctionKind.Orchestration && attributeName == "OrchestratorTrigger") ||
+                            (kind == DurableFunctionKind.Entity && attributeName == "EntityTrigger"))
                         {
                             TypeInfo info = model.GetTypeInfo(methodParam.Type);
                             if (info.Type is INamedTypeSymbol named)

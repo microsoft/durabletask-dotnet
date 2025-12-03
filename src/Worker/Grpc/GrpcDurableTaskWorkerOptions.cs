@@ -48,7 +48,8 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
     /// The default value is 3.9MB. We leave some headroom to account for request size overhead.
     /// </summary>
     /// <remarks>
-    /// This value is used to limit the size of the complete orchestration work item chunk request.
+    /// This value is used to limit the size of the complete orchestration work item request.
+    /// If the response exceeds this limit, it will be automatically split into multiple chunks of maximum size OrchestrationWorkItemChunkSizeInBytes
     /// If the response exceeds this limit, it will be automatically split into multiple chunks.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">

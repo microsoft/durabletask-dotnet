@@ -940,7 +940,8 @@ sealed partial class GrpcDurableTaskWorker
                     if (actionSize > maxChunkBytes)
                     {
                         string errorMessage = $"A single orchestrator action of type {action.OrchestratorActionTypeCase} with id {action.Id} " +
-                            $"exceeds the {maxChunkBytes / 1024.0 / 1024.0:F2}MB limit: {actionSize / 1024.0 / 1024.0:F2}MB";
+                            $"exceeds the {maxChunkBytes / 1024.0 / 1024.0:F2}MB limit: {actionSize / 1024.0 / 1024.0:F2}MB. " +
+                            "Enable large-payload externalization to Azure Blob Storage to support oversized actions.";
 
                         return new P.TaskFailureDetails
                         {

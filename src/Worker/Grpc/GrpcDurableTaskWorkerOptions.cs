@@ -49,7 +49,7 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
     /// </summary>
     /// <remarks>
     /// This value is used to limit the size of the complete orchestration work item request.
-    /// If the response exceeds this limit, it will be automatically split into multiple chunks of maximum size OrchestrationWorkItemChunkSizeInBytes
+    /// If the response exceeds this limit, it will be automatically split into multiple chunks of maximum size CompleteOrchestrationWorkItemChunkSizeInBytes
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when the value is less than 1 MB or greater than 3.9 MB.

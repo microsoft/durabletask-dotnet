@@ -1040,11 +1040,11 @@ sealed partial class GrpcDurableTaskWorker
                 if (!isPartial)
                 {
                     allChunksCompleted = true;
-                    chunkedResponse.NumEventsProcessed = null;
                 }
 
                 if (chunkIndex == 0)
                 {
+                    chunkedResponse.NumEventsProcessed = null;
                     chunkedResponse.OrchestrationTraceContext = response.OrchestrationTraceContext;
                 }
 

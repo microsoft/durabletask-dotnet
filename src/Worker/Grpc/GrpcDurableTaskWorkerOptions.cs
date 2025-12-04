@@ -13,14 +13,14 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
     /// <summary>
     /// The minimum allowed size (in bytes) for complete orchestration work item chunks.
     /// </summary>
-    public const int MinCompleteOrchestrationWorkItemSizePerChunkBytes = 1 * 1024 * 1024; // 1 MB
+    public const int MinCompleteOrchestrationWorkItemChunkSizeInBytes = 1 * 1024 * 1024; // 1 MB
 
     /// <summary>
     /// The maximum allowed size (in bytes) for complete orchestration work item chunks.
     /// </summary>
-    public const int MaxCompleteOrchestrationWorkItemSizePerChunkBytes = 4_089_446; // 3.9 MB
+    public const int MaxCompleteOrchestrationWorkItemChunkSizeBytes = 4_089_446; // 3.9 MB
 
-    int maxCompleteOrchestrationWorkItemSizePerChunk = MaxCompleteOrchestrationWorkItemSizePerChunkBytes;
+    int completeOrchestrationWorkItemChunkSizeInBytes = MaxCompleteOrchestrationWorkItemChunkSizeBytes;
 
     /// <summary>
     /// Gets or sets the address of the gRPC endpoint to connect to. Default is localhost:4001.
@@ -48,30 +48,30 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
     /// The default value is 3.9MB. We leave some headroom to account for request size overhead.
     /// </summary>
     /// <remarks>
-    /// This value is used to limit the size of the complete orchestration work item chunk request.
+    /// This value is used to limit the size of the complete orchestration work item request.
     /// If the response exceeds this limit, it will be automatically split into multiple chunks.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when the value is less than 1 MB or greater than 3.9 MB.
     /// </exception>
-    public int MaxCompleteOrchestrationWorkItemSizePerChunk
+    public int CompleteOrchestrationWorkItemChunkSizeInBytes
     {
-        get => this.maxCompleteOrchestrationWorkItemSizePerChunk;
+        get => this.completeOrchestrationWorkItemChunkSizeInBytes;
         set
         {
-            if (value < MinCompleteOrchestrationWorkItemSizePerChunkBytes ||
-                value > MaxCompleteOrchestrationWorkItemSizePerChunkBytes)
+            if (value < MinCompleteOrchestrationWorkItemChunkSizeInBytes ||
+                value > MaxCompleteOrchestrationWorkItemChunkSizeBytes)
             {
-                string message = $"MaxCompleteOrchestrationWorkItemSizePerChunk must be between " +
-                    $"{MinCompleteOrchestrationWorkItemSizePerChunkBytes} bytes (1 MB) and " +
-                    $"{MaxCompleteOrchestrationWorkItemSizePerChunkBytes} bytes (3.9 MB), inclusive.";
+                string message = $"CompleteOrchestrationWorkItemChunkSizeInBytes must be between " +
+                    $"{MinCompleteOrchestrationWorkItemChunkSizeInBytes} bytes (1 MB) and " +
+                    $"{MaxCompleteOrchestrationWorkItemChunkSizeBytes} bytes (3.9 MB), inclusive.";
                 throw new ArgumentOutOfRangeException(
-                    nameof(this.MaxCompleteOrchestrationWorkItemSizePerChunk),
+                    nameof(this.CompleteOrchestrationWorkItemChunkSizeInBytes),
                     value,
                     message);
             }
 
-            this.maxCompleteOrchestrationWorkItemSizePerChunk = value;
+            this.completeOrchestrationWorkItemChunkSizeInBytes = value;
         }
     }
 

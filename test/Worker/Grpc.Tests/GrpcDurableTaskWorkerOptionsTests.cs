@@ -9,93 +9,93 @@ namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 public class GrpcDurableTaskWorkerOptionsTests
 {
     [Fact]
-    public void Default_MaxCompleteOrchestrationWorkItemSizePerChunk_IsWithinRange()
+    public void Default_CompleteOrchestrationWorkItemChunkSizeInBytes_IsWithinRange()
     {
         // Arrange
         var options = new GrpcDurableTaskWorkerOptions();
 
         // Act
-        int value = options.MaxCompleteOrchestrationWorkItemSizePerChunk;
+        int value = options.CompleteOrchestrationWorkItemChunkSizeInBytes;
 
         // Assert
         value.Should().BeGreaterOrEqualTo(
-            GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemSizePerChunkBytes);
+            GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes);
         value.Should().BeLessOrEqualTo(
-            GrpcDurableTaskWorkerOptions.MaxCompleteOrchestrationWorkItemSizePerChunkBytes);
+            GrpcDurableTaskWorkerOptions.MaxCompleteOrchestrationWorkItemChunkSizeBytes);
     }
 
     [Fact]
-    public void Setting_MaxCompleteOrchestrationWorkItemSizePerChunk_BelowMin_Throws()
+    public void Setting_CompleteOrchestrationWorkItemChunkSizeInBytes_BelowMin_Throws()
     {
         // Arrange
         var options = new GrpcDurableTaskWorkerOptions();
-        int belowMin = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemSizePerChunkBytes - 1;
+        int belowMin = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes - 1;
 
         // Act
-        Action act = () => options.MaxCompleteOrchestrationWorkItemSizePerChunk = belowMin;
+        Action act = () => options.CompleteOrchestrationWorkItemChunkSizeInBytes = belowMin;
 
         // Assert
         act.Should()
            .Throw<ArgumentOutOfRangeException>()
-           .WithParameterName(nameof(GrpcDurableTaskWorkerOptions.MaxCompleteOrchestrationWorkItemSizePerChunk));
+           .WithParameterName(nameof(GrpcDurableTaskWorkerOptions.CompleteOrchestrationWorkItemChunkSizeInBytes));
     }
 
     [Fact]
-    public void Setting_MaxCompleteOrchestrationWorkItemSizePerChunk_AboveMax_Throws()
+    public void Setting_CompleteOrchestrationWorkItemChunkSizeInBytes_AboveMax_Throws()
     {
         // Arrange
         var options = new GrpcDurableTaskWorkerOptions();
-        int aboveMax = GrpcDurableTaskWorkerOptions.MaxCompleteOrchestrationWorkItemSizePerChunkBytes + 1;
+        int aboveMax = GrpcDurableTaskWorkerOptions.MaxCompleteOrchestrationWorkItemChunkSizeBytes + 1;
 
         // Act
-        Action act = () => options.MaxCompleteOrchestrationWorkItemSizePerChunk = aboveMax;
+        Action act = () => options.CompleteOrchestrationWorkItemChunkSizeInBytes = aboveMax;
 
         // Assert
         act.Should()
            .Throw<ArgumentOutOfRangeException>()
-           .WithParameterName(nameof(GrpcDurableTaskWorkerOptions.MaxCompleteOrchestrationWorkItemSizePerChunk));
+           .WithParameterName(nameof(GrpcDurableTaskWorkerOptions.CompleteOrchestrationWorkItemChunkSizeInBytes));
     }
 
     [Fact]
-    public void Setting_MaxCompleteOrchestrationWorkItemSizePerChunk_AtMinBoundary_Succeeds()
+    public void Setting_CompleteOrchestrationWorkItemChunkSizeInBytes_AtMinBoundary_Succeeds()
     {
         // Arrange
         var options = new GrpcDurableTaskWorkerOptions();
-        int minValue = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemSizePerChunkBytes;
+        int minValue = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes;
 
         // Act
-        options.MaxCompleteOrchestrationWorkItemSizePerChunk = minValue;
+        options.CompleteOrchestrationWorkItemChunkSizeInBytes = minValue;
 
         // Assert
-        options.MaxCompleteOrchestrationWorkItemSizePerChunk.Should().Be(minValue);
+        options.CompleteOrchestrationWorkItemChunkSizeInBytes.Should().Be(minValue);
     }
 
     [Fact]
-    public void Setting_MaxCompleteOrchestrationWorkItemSizePerChunk_AtMaxBoundary_Succeeds()
+    public void Setting_CompleteOrchestrationWorkItemChunkSizeInBytes_AtMaxBoundary_Succeeds()
     {
         // Arrange
         var options = new GrpcDurableTaskWorkerOptions();
-        int maxValue = GrpcDurableTaskWorkerOptions.MaxCompleteOrchestrationWorkItemSizePerChunkBytes;
+        int maxValue = GrpcDurableTaskWorkerOptions.MaxCompleteOrchestrationWorkItemChunkSizeBytes;
 
         // Act
-        options.MaxCompleteOrchestrationWorkItemSizePerChunk = maxValue;
+        options.CompleteOrchestrationWorkItemChunkSizeInBytes = maxValue;
 
         // Assert
-        options.MaxCompleteOrchestrationWorkItemSizePerChunk.Should().Be(maxValue);
+        options.CompleteOrchestrationWorkItemChunkSizeInBytes.Should().Be(maxValue);
     }
 
     [Fact]
-    public void Setting_MaxCompleteOrchestrationWorkItemSizePerChunk_WithinRange_Succeeds()
+    public void Setting_CompleteOrchestrationWorkItemChunkSizeInBytes_WithinRange_Succeeds()
     {
         // Arrange
         var options = new GrpcDurableTaskWorkerOptions();
         int withinRange = 2 * 1024 * 1024; // 2 MB
 
         // Act
-        options.MaxCompleteOrchestrationWorkItemSizePerChunk = withinRange;
+        options.CompleteOrchestrationWorkItemChunkSizeInBytes = withinRange;
 
         // Assert
-        options.MaxCompleteOrchestrationWorkItemSizePerChunk.Should().Be(withinRange);
+        options.CompleteOrchestrationWorkItemChunkSizeInBytes.Should().Be(withinRange);
     }
 }
 

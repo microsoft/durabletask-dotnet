@@ -359,6 +359,8 @@ message OrchestratorResponse {
 
     // True if this is a partial (chunked) completion. The backend must keep the work item open until the final chunk (isPartial=false).
     bool isPartial = 8;
+
+    google.protobuf.Int32Value chunkIndex = 9;
 }
 
 message CreateInstanceRequest {

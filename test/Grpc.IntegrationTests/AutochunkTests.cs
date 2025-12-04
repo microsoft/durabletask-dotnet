@@ -24,14 +24,14 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
     {
         const int ActivityCount = 36;
         const int PayloadSizePerActivity = 30 * 1024;
-        const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemSizePerChunkBytes; // 1 MB (minimum allowed)
+        const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes; // 1 MB (minimum allowed)
         TaskName orchestratorName = nameof(Autochunk_MultipleChunks_CompletesSuccessfully);
         TaskName activityName = "Echo";
 
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             // Set a small chunk size to force chunking
-            b.UseGrpc(opt => opt.MaxCompleteOrchestrationWorkItemSizePerChunk = ChunkSize);
+            b.UseGrpc(opt => opt.CompleteOrchestrationWorkItemChunkSizeInBytes = ChunkSize);
             b.AddTasks(tasks => tasks
                 .AddOrchestratorFunc(orchestratorName, async ctx =>
                 {
@@ -70,7 +70,7 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
         const int TimerCount = 100;
         const int SubOrchCount = 50;
         const int PayloadSizePerActivity = 20 * 1024;
-        const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemSizePerChunkBytes; // 1 MB (minimum allowed)
+        const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes; // 1 MB (minimum allowed)
         TaskName orchestratorName = nameof(Autochunk_MixedActions_CompletesSuccessfully);
         TaskName activityName = "Echo";
         TaskName subOrchName = "SubOrch";
@@ -78,7 +78,7 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             // Set a small chunk size to force chunking
-            b.UseGrpc(opt => opt.MaxCompleteOrchestrationWorkItemSizePerChunk = ChunkSize);
+            b.UseGrpc(opt => opt.CompleteOrchestrationWorkItemChunkSizeInBytes = ChunkSize);
             b.AddTasks(tasks => tasks
                 .AddOrchestratorFunc(orchestratorName, async ctx =>
                 {
@@ -123,13 +123,13 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
     }
 
     /// <summary>
-    /// Validates that when a single orchestrator action exceeds the MaxCompleteOrchestrationWorkItemSizePerChunk limit,
+    /// Validates that when a single orchestrator action exceeds the CompleteOrchestrationWorkItemChunkSizeInBytes limit,
     /// the orchestration completes with a failed status and proper failure details.
     /// </summary>
     [Fact]
     public async Task Autochunk_SingleActionExceedsChunkSize_CompletesWithFailedStatus()
     {
-        const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemSizePerChunkBytes; // 1 MB
+        const int ChunkSize = GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes; // 1 MB
         // Create a payload that exceeds the chunk size (1 MB + some overhead)
         const int PayloadSize = ChunkSize + 100 * 1024; // 1.1 MB payload
         TaskName orchestratorName = nameof(Autochunk_SingleActionExceedsChunkSize_CompletesWithFailedStatus);
@@ -137,7 +137,7 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
 
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
-            b.UseGrpc(opt => opt.MaxCompleteOrchestrationWorkItemSizePerChunk = ChunkSize);
+            b.UseGrpc(opt => opt.CompleteOrchestrationWorkItemChunkSizeInBytes = ChunkSize);
             b.AddTasks(tasks => tasks
                 .AddOrchestratorFunc(orchestratorName, async ctx =>
                 {
@@ -157,9 +157,7 @@ public class AutochunkTests(ITestOutputHelper output, GrpcSidecarFixture sidecar
         Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
         Assert.NotNull(metadata.FailureDetails);
-        Assert.Contains("exceeds the", metadata.FailureDetails.ErrorMessage, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("MB limit", metadata.FailureDetails.ErrorMessage, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(typeof(InvalidOperationException).FullName, metadata.FailureDetails.ErrorType);
+        Assert.Equal("System.InvalidOperationException: A single orchestrator action of type ScheduleTask with id 0 exceeds the 1.00MB limit: 1.10MB. Enable large-payload externalization to Azure Blob Storage to support oversized actions.", metadata.FailureDetails.ToString());
     }
 }
 

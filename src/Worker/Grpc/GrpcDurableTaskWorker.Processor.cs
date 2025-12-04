@@ -759,7 +759,7 @@ sealed partial class GrpcDurableTaskWorker
 
             await this.CompleteOrchestratorTaskWithChunkingAsync(
                 response,
-                this.worker.grpcOptions.MaxCompleteOrchestrationWorkItemSizePerChunk,
+                this.worker.grpcOptions.CompleteOrchestrationWorkItemChunkSizeInBytes,
                 cancellationToken);
         }
 
@@ -1009,11 +1009,11 @@ sealed partial class GrpcDurableTaskWorker
             }
 
             // Response is too large, split into multiple chunks
-            int actionsCompletedSoFar = 0;
-            bool isFirstChunk = true;
+            int actionsCompletedSoFar = 0, chunkIndex = 0;
             List<P.OrchestratorAction> allActions = response.Actions.ToList();
+            bool allChunksCompleted = false;
 
-            while (actionsCompletedSoFar < allActions.Count)
+            while (!allChunksCompleted)
             {
                 P.OrchestratorResponse chunkedResponse = new()
                 {
@@ -1021,6 +1021,8 @@ sealed partial class GrpcDurableTaskWorker
                     CustomStatus = response.CustomStatus,
                     CompletionToken = response.CompletionToken,
                     RequiresHistory = response.RequiresHistory,
+                    NumEventsProcessed = 0,
+                    ChunkIndex = chunkIndex,
                 };
 
                 int chunkSize = chunkedResponse.CalculateSize();
@@ -1035,16 +1037,18 @@ sealed partial class GrpcDurableTaskWorker
                 // Determine if this is a partial chunk (more actions remaining)
                 bool isPartial = actionsCompletedSoFar < allActions.Count;
                 chunkedResponse.IsPartial = isPartial;
+                if (!isPartial)
+                {
+                    allChunksCompleted = true;
+                    chunkedResponse.NumEventsProcessed = null;
+                }
 
-                if (isFirstChunk)
+                if (chunkIndex == 0)
                 {
                     chunkedResponse.OrchestrationTraceContext = response.OrchestrationTraceContext;
-                    isFirstChunk = false;
                 }
-                else
-                {
-                    chunkedResponse.NumEventsProcessed = -1;
-                }
+
+                chunkIndex++;
 
                 // Send the chunk
                 await this.client.CompleteOrchestratorTaskAsync(chunkedResponse, cancellationToken: cancellationToken);

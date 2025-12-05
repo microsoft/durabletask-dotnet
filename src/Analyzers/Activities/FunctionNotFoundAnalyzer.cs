@@ -3,7 +3,6 @@
 
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -96,11 +95,7 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
                         string? activityName = ExtractFunctionName(invocationOperation, "name", ctx);
                         if (activityName != null)
                         {
-                            activityInvocations.Add(new FunctionInvocation
-                            {
-                                Name = activityName,
-                                InvocationSyntaxNode = invocationOperation.Syntax,
-                            });
+                            activityInvocations.Add(new FunctionInvocation(activityName, invocationOperation.Syntax));
                         }
                     }
 
@@ -110,11 +105,7 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
                         string? orchestratorName = ExtractFunctionName(invocationOperation, "orchestratorName", ctx);
                         if (orchestratorName != null)
                         {
-                            subOrchestrationInvocations.Add(new FunctionInvocation
-                            {
-                                Name = orchestratorName,
-                                InvocationSyntaxNode = invocationOperation.Syntax,
-                            });
+                            subOrchestrationInvocations.Add(new FunctionInvocation(orchestratorName, invocationOperation.Syntax));
                         }
                     }
                 },
@@ -174,8 +165,7 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
                     // Check for TaskActivity<TInput, TOutput> derived classes
                     if (knownSymbols.TaskActivityBase != null && taskActivityRunAsync != null)
                     {
-                        IMethodSymbol? methodOverridingRunAsync = FindOverridingMethod(classSymbol, taskActivityRunAsync);
-                        if (methodOverridingRunAsync != null)
+                        if (ClassOverridesMethod(classSymbol, taskActivityRunAsync))
                         {
                             activityNames.Add(classSymbol.Name);
                         }
@@ -269,8 +259,14 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
             return null;
         }
 
+        SemanticModel? semanticModel = ctx.Operation.SemanticModel;
+        if (semanticModel == null)
+        {
+            return null;
+        }
+
         // extracts the constant value from the argument (e.g.: it can be a nameof, string literal or const field)
-        Optional<object?> constant = ctx.Operation.SemanticModel!.GetConstantValue(nameArgumentOperation.Value.Syntax);
+        Optional<object?> constant = semanticModel.GetConstantValue(nameArgumentOperation.Value.Syntax);
         if (!constant.HasValue)
         {
             // not a constant value, we cannot correlate this invocation to an existent function in compile time
@@ -280,7 +276,7 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
         return constant.Value?.ToString();
     }
 
-    static IMethodSymbol? FindOverridingMethod(INamedTypeSymbol classSymbol, IMethodSymbol methodToFind)
+    static bool ClassOverridesMethod(INamedTypeSymbol classSymbol, IMethodSymbol methodToFind)
     {
         INamedTypeSymbol? baseType = classSymbol;
         while (baseType != null)
@@ -289,20 +285,20 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
             {
                 if (SymbolEqualityComparer.Default.Equals(method.OverriddenMethod?.OriginalDefinition, methodToFind))
                 {
-                    return method.OverriddenMethod;
+                    return true;
                 }
             }
 
             baseType = baseType.BaseType;
         }
 
-        return null;
+        return false;
     }
 
-    struct FunctionInvocation
+    readonly struct FunctionInvocation(string name, SyntaxNode invocationSyntaxNode)
     {
-        public string Name { get; set; }
+        public string Name { get; } = name;
 
-        public SyntaxNode InvocationSyntaxNode { get; set; }
+        public SyntaxNode InvocationSyntaxNode { get; } = invocationSyntaxNode;
     }
 }

@@ -1011,9 +1011,9 @@ sealed partial class GrpcDurableTaskWorker
             // Response is too large, split into multiple chunks
             int actionsCompletedSoFar = 0, chunkIndex = 0;
             List<P.OrchestratorAction> allActions = response.Actions.ToList();
-            bool allChunksCompleted = false;
+            bool isPartial = true;
 
-            while (!allChunksCompleted)
+            while (isPartial)
             {
                 P.OrchestratorResponse chunkedResponse = new()
                 {
@@ -1035,12 +1035,8 @@ sealed partial class GrpcDurableTaskWorker
                 }
 
                 // Determine if this is a partial chunk (more actions remaining)
-                bool isPartial = actionsCompletedSoFar < allActions.Count;
+                isPartial = actionsCompletedSoFar < allActions.Count;
                 chunkedResponse.IsPartial = isPartial;
-                if (!isPartial)
-                {
-                    allChunksCompleted = true;
-                }
 
                 if (chunkIndex == 0)
                 {

@@ -39,11 +39,11 @@ public class DefaultScheduleClientTests
     [Theory]
     [InlineData(null, typeof(ArgumentNullException), "Value cannot be null")]
     [InlineData("", typeof(ArgumentException), "Parameter cannot be an empty string")]
-    public void Constructor_WithInvalidScheduleId_ThrowsCorrectException(string invalidScheduleId, Type expectedExceptionType, string expectedMessage)
+    public void Constructor_WithInvalidScheduleId_ThrowsCorrectException(string? invalidScheduleId, Type expectedExceptionType, string expectedMessage)
     {
         // Act & Assert
         var ex = Assert.Throws(expectedExceptionType, () =>
-            new DefaultScheduleClient(this.durableTaskClient.Object, invalidScheduleId, this.logger));
+            new DefaultScheduleClient(this.durableTaskClient.Object, invalidScheduleId!, this.logger));
 
         Assert.Contains(expectedMessage, ex.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -192,7 +192,8 @@ public class DefaultScheduleClientTests
 
         this.durableTaskClient
             .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId) {
+            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId)
+            {
                 RuntimeStatus = OrchestrationRuntimeStatus.Completed
             });
 
@@ -228,7 +229,8 @@ public class DefaultScheduleClientTests
 
         this.durableTaskClient
             .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId) {
+            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId)
+            {
                 RuntimeStatus = OrchestrationRuntimeStatus.Completed
             });
 
@@ -269,7 +271,8 @@ public class DefaultScheduleClientTests
 
         this.durableTaskClient
             .Setup(c => c.WaitForInstanceCompletionAsync(instanceId, true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId) {
+            .ReturnsAsync(new OrchestrationMetadata(nameof(ExecuteScheduleOperationOrchestrator), instanceId)
+            {
                 RuntimeStatus = OrchestrationRuntimeStatus.Completed
             });
 

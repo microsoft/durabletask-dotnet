@@ -29,13 +29,13 @@ public class ScheduleConfigurationTests
     [InlineData("", "orchestration", typeof(ArgumentException), "Parameter cannot be an empty string or start with the null character")]
     [InlineData("schedule", null, typeof(ArgumentNullException), "Value cannot be null")]
     [InlineData("schedule", "", typeof(ArgumentException), "Parameter cannot be an empty string or start with the null character")]
-    public void Constructor_WithInvalidParameters_ThrowsException(string scheduleId, string orchestrationName, Type expectedExceptionType, string expectedMessage)
+    public void Constructor_WithInvalidParameters_ThrowsException(string? scheduleId, string? orchestrationName, Type expectedExceptionType, string expectedMessage)
     {
         // Arrange
         TimeSpan interval = TimeSpan.FromMinutes(5);
 
         // Act & Assert
-        var ex = Assert.Throws(expectedExceptionType, () => new ScheduleConfiguration(scheduleId, orchestrationName, interval));
+        var ex = Assert.Throws(expectedExceptionType, () => new ScheduleConfiguration(scheduleId!, orchestrationName!, interval));
         Assert.Contains(expectedMessage, ex.Message);
     }
 

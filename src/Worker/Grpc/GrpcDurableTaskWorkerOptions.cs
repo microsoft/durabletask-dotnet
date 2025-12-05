@@ -62,7 +62,7 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
             if (value < MinCompleteOrchestrationWorkItemChunkSizeInBytes ||
                 value > MaxCompleteOrchestrationWorkItemChunkSizeInBytes)
             {
-                string message = $"CompleteOrchestrationWorkItemChunkSizeInBytes must be between " +
+                string message = $"{nameof(CompleteOrchestrationWorkItemChunkSizeInBytes)} must be between " +
                     $"{MinCompleteOrchestrationWorkItemChunkSizeInBytes} bytes (1 MB) and " +
                     $"{MaxCompleteOrchestrationWorkItemChunkSizeInBytes} bytes (3.9 MB), inclusive.";
                 throw new ArgumentOutOfRangeException(

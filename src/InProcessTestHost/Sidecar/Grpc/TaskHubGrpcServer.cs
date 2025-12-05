@@ -715,7 +715,13 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         }
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Streams the instance history for a given orchestration instance to the client in chunked form.
+    /// </summary>
+    /// <param name="request">The history request that identifies the instance.</param>
+    /// <param name="responseStream">The response stream used to write history chunks.</param>
+    /// <param name="context">The server call context for the streaming operation.</param>
+    /// <returns>A task that completes when streaming finishes.</returns>
     public override async Task StreamInstanceHistory(P.StreamInstanceHistoryRequest request, IServerStreamWriter<P.HistoryChunk> responseStream, ServerCallContext context)
     {
         if (this.streamingPastEvents.TryGetValue(request.InstanceId, out List<P.HistoryEvent>? pastEvents))

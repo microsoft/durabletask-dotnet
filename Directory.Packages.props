@@ -22,7 +22,7 @@
 
   <!-- Azure.* Packages -->
   <ItemGroup>
-    <PackageVersion Include="Azure.Identity" Version="1.17.0" />
+    <PackageVersion Include="Azure.Identity" Version="1.17.1" />
     <PackageVersion Include="Azure.Storage.Blobs" Version="12.26.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker" Version="2.2.0" />
   </ItemGroup>

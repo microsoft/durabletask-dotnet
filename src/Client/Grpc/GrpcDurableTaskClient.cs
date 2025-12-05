@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using System.Text;
+using DurableTask.Core.History;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Tracing;
@@ -465,6 +466,49 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         {
             throw new OperationCanceledException(
                 $"The {nameof(this.RewindInstanceAsync)} operation was canceled.", e, cancellation);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override async Task<IList<HistoryEvent>> GetOrchestrationHistoryAsync(
+        string instanceId,
+        CancellationToken cancellation = default)
+    {
+        Check.NotNullOrEmpty(instanceId);
+        Check.NotEntity(this.options.EnableEntitySupport, instanceId);
+
+        P.StreamInstanceHistoryRequest streamRequest = new()
+        {
+            InstanceId = instanceId,
+            ForWorkItemProcessing = false,
+        };
+
+        try
+        {
+            using AsyncServerStreamingCall<P.HistoryChunk> streamResponse =
+                this.sidecarClient.StreamInstanceHistory(streamRequest, cancellationToken: cancellation);
+
+            List<HistoryEvent> pastEvents = [];
+            while (await streamResponse.ResponseStream.MoveNext(cancellation))
+            {
+                pastEvents.AddRange(streamResponse.ResponseStream.Current.Events.Select(DurableTask.ProtoUtils.ConvertHistoryEvent));
+            }
+
+            return pastEvents;
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.NotFound)
+        {
+            throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.", e);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.GetOrchestrationHistoryAsync)} operation was canceled.", e, cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Internal)
+        {
+            throw new InvalidOperationException(
+                $"An error occurred while retrieving the history for orchestration with instanceId {instanceId}.", e);
         }
     }
 

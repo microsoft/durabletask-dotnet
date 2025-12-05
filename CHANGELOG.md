@@ -1,6 +1,6 @@
 ﻿# Changelog
 
-## v1.17.2
+## v1.18.0
 - Add taskentity support to durabletasksourcegenerator by Copilot ([#517](https://github.com/microsoft/durabletask-dotnet/pull/517))
 - Bump azure.identity by dependabot[bot] ([#525](https://github.com/microsoft/durabletask-dotnet/pull/525))
 - Bump google.protobuf by dependabot[bot] ([#529](https://github.com/microsoft/durabletask-dotnet/pull/529))
@@ -13,6 +13,7 @@
 - Update project to target .net 8.0 and .net 10 and upgrade dependencies by Tomer Rosenthal ([#510](https://github.com/microsoft/durabletask-dotnet/pull/510))
 - Support worker features announcement by wangbill ([#502](https://github.com/microsoft/durabletask-dotnet/pull/502))
 - Introduce custom copilot review instructions by halspang ([#503](https://github.com/microsoft/durabletask-dotnet/pull/503))
+- Add API to get orchestration history ([#516](https://github.com/microsoft/durabletask-dotnet/pull/516))
 
 ## v1.17.1
 - Fix Worker Registry and Add Documentation Notes by nytian in [#462](https://github.com/microsoft/durabletask-dotnet/pull/495)

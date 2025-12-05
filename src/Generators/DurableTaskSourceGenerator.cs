@@ -316,6 +316,9 @@ namespace Microsoft.DurableTask
         static void AddOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator)
         {
             sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Schedules a new instance of the <see cref=""{orchestrator.TypeName}""/> orchestrator.
+        /// </summary>
         /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
         public static Task<string> ScheduleNew{orchestrator.TaskName}InstanceAsync(
             this IOrchestrationSubmitter client, {orchestrator.InputParameter}, StartOrchestrationOptions? options = null)
@@ -327,6 +330,9 @@ namespace Microsoft.DurableTask
         static void AddSubOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator)
         {
             sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Calls the <see cref=""{orchestrator.TypeName}""/> sub-orchestrator.
+        /// </summary>
         /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
         public static Task<{orchestrator.OutputType}> Call{orchestrator.TaskName}Async(
             this TaskOrchestrationContext context, {orchestrator.InputParameter}, TaskOptions? options = null)
@@ -338,6 +344,10 @@ namespace Microsoft.DurableTask
         static void AddActivityCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo activity)
         {
             sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Calls the <see cref=""{activity.TypeName}""/> activity.
+        /// </summary>
+        /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
         public static Task<{activity.OutputType}> Call{activity.TaskName}Async(this TaskOrchestrationContext ctx, {activity.InputParameter}, TaskOptions? options = null)
         {{
             return ctx.CallActivityAsync<{activity.OutputType}>(""{activity.TaskName}"", input, options);

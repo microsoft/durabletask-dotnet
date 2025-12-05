@@ -141,6 +141,10 @@ public class MyActivity : TaskActivity<{inputType}, {outputType}>
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
+/// <summary>
+/// Calls the <see cref=""MyActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<{outputType}> CallMyActivityAsync(this TaskOrchestrationContext ctx, {inputType} input, TaskOptions? options = null)
 {{
     return ctx.CallActivityAsync<{outputType}>(""MyActivity"", input, options);
@@ -214,6 +218,9 @@ public static Task<{outputType}> MyOrchestrator([OrchestrationTrigger] TaskOrche
         .ContinueWith(t => ({outputType})(t.Result ?? default({outputType})!), TaskContinuationOptions.ExecuteSynchronously);
 }}
 
+/// <summary>
+/// Schedules a new instance of the <see cref=""MyNS.MyOrchestrator""/> orchestrator.
+/// </summary>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     this IOrchestrationSubmitter client, {expectedInputParameter}, StartOrchestrationOptions? options = null)
@@ -221,6 +228,9 @@ public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     return client.ScheduleNewOrchestrationInstanceAsync(""MyOrchestrator"", input, options);
 }}
 
+/// <summary>
+/// Calls the <see cref=""MyNS.MyOrchestrator""/> sub-orchestrator.
+/// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<{outputType}> CallMyOrchestratorAsync(
     this TaskOrchestrationContext context, {expectedInputParameter}, TaskOptions? options = null)
@@ -291,6 +301,9 @@ public static Task<{outputType}> MyOrchestrator([OrchestrationTrigger] TaskOrche
         .ContinueWith(t => ({outputType})(t.Result ?? default({outputType})!), TaskContinuationOptions.ExecuteSynchronously);
 }}
 
+/// <summary>
+/// Schedules a new instance of the <see cref=""MyNS.MyOrchestrator""/> orchestrator.
+/// </summary>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     this IOrchestrationSubmitter client, {expectedInputParameter}, StartOrchestrationOptions? options = null)
@@ -298,6 +311,9 @@ public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     return client.ScheduleNewOrchestrationInstanceAsync(""MyOrchestrator"", input, options);
 }}
 
+/// <summary>
+/// Calls the <see cref=""MyNS.MyOrchestrator""/> sub-orchestrator.
+/// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<{outputType}> CallMyOrchestratorAsync(
     this TaskOrchestrationContext context, {expectedInputParameter}, TaskOptions? options = null)

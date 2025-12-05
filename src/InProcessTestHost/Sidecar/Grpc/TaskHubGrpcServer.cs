@@ -471,20 +471,20 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         {
             // Get the original orchestration state
             IList<OrchestrationState> states = await this.client.GetOrchestrationStateAsync(request.InstanceId, false);
-            
+
             if (states == null || states.Count == 0)
             {
                 throw new RpcException(new Status(StatusCode.NotFound, $"An orchestration with the instanceId {request.InstanceId} was not found."));
             }
 
             OrchestrationState state = states[0];
-            
+
             // Check if the state is null
             if (state == null)
             {
                 throw new RpcException(new Status(StatusCode.NotFound, $"An orchestration with the instanceId {request.InstanceId} was not found."));
             }
-            
+
             string newInstanceId = request.RestartWithNewInstanceId ? Guid.NewGuid().ToString("N") : request.InstanceId;
 
             // Create a new orchestration instance
@@ -646,6 +646,13 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         }
     }
 
+    /// <summary>
+    /// Streams the instance history for a given orchestration instance to the client in chunked form.
+    /// </summary>
+    /// <param name="request">The history request that identifies the instance.</param>
+    /// <param name="responseStream">The response stream used to write history chunks.</param>
+    /// <param name="context">The server call context for the streaming operation.</param>
+    /// <returns>A task that completes when streaming finishes.</returns>
     public override async Task StreamInstanceHistory(P.StreamInstanceHistoryRequest request, IServerStreamWriter<P.HistoryChunk> responseStream, ServerCallContext context)
     {
         if (this.streamingPastEvents.TryGetValue(request.InstanceId, out List<P.HistoryEvent>? pastEvents))

@@ -1025,11 +1025,11 @@ sealed partial class GrpcDurableTaskWorker
                     ChunkIndex = chunkIndex,
                 };
 
-                int chunkSize = chunkedResponse.CalculateSize();
+                int chunkPayloadSize = 0;
 
                 // Fill the chunk with actions until we reach the size limit
                 while (actionsCompletedSoFar < allActions.Count &&
-                       TryAddAction(chunkedResponse.Actions, allActions[actionsCompletedSoFar], ref chunkSize, maxChunkBytes))
+                       TryAddAction(chunkedResponse.Actions, allActions[actionsCompletedSoFar], ref chunkPayloadSize, maxChunkBytes))
                 {
                     actionsCompletedSoFar++;
                 }

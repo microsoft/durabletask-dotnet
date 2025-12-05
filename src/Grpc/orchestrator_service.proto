@@ -358,6 +358,16 @@ message OrchestratorResponse {
     bool requiresHistory = 7;
 }
 
+// Priority level enum for intuitive priority specification
+enum OrchestrationPriorityLevel {
+    ORCHESTRATION_PRIORITY_LEVEL_UNSPECIFIED = 0;  // Uses instance key (normal priority, FIFO)
+    ORCHESTRATION_PRIORITY_LEVEL_URGENT = 1;       // Highest priority (priority value 0)
+    ORCHESTRATION_PRIORITY_LEVEL_HIGH = 2;         // High priority (priority value 1000)
+    ORCHESTRATION_PRIORITY_LEVEL_NORMAL = 3;       // Normal priority (uses instance key, FIFO)
+    ORCHESTRATION_PRIORITY_LEVEL_LOW = 4;          // Low priority (instance key + 1,000,000)
+    ORCHESTRATION_PRIORITY_LEVEL_BACKGROUND = 5;  // Background priority (instance key + 10,000,000)
+}
+
 message CreateInstanceRequest {
     string instanceId = 1;
     string name = 2;
@@ -369,6 +379,8 @@ message CreateInstanceRequest {
     map<string, string> tags = 8;
     TraceContext parentTraceContext = 9;
     google.protobuf.Timestamp requestTime = 10;
+    google.protobuf.Int64Value priority = 11;  // Optional custom numeric priority. Lower numbers are processed more urgently. Takes precedence over priorityLevel.
+    OrchestrationPriorityLevel priorityLevel = 12;  // Optional priority level for intuitive priority specification. Ignored if priority is set.
 }
 
 message OrchestrationIdReusePolicy {

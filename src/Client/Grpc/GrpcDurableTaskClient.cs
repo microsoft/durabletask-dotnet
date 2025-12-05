@@ -122,6 +122,17 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             request.ScheduledStartTimestamp = Timestamp.FromDateTimeOffset(startAt.Value.ToUniversalTime());
         }
 
+        // Set priority if specified (takes precedence over priorityLevel)
+        if (options?.Priority.HasValue == true)
+        {
+            request.Priority = options.Priority.Value;
+        }
+        // Set priorityLevel if specified and priority is not set
+        else if (options?.PriorityLevel.HasValue == true)
+        {
+            request.PriorityLevel = options.PriorityLevel.Value.ToGrpcPriorityLevel();
+        }
+
         using Activity? newActivity = TraceHelper.StartActivityForNewOrchestration(request);
 
         P.CreateInstanceResponse? result = await this.sidecarClient.StartInstanceAsync(

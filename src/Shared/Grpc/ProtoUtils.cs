@@ -80,7 +80,8 @@ static class ProtoUtils
                 historyEvent = new ExecutionCompletedEvent(
                     proto.EventId,
                     proto.ExecutionCompleted.Result,
-                    proto.ExecutionCompleted.OrchestrationStatus.ToCore());
+                    proto.ExecutionCompleted.OrchestrationStatus.ToCore(),
+                    proto.ExecutionCompleted.FailureDetails.ToCore());
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated:
                 historyEvent = new ExecutionTerminatedEvent(proto.EventId, proto.ExecutionTerminated.Input);

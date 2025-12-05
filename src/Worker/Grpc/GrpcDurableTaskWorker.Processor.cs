@@ -2,11 +2,13 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics;
+using System.Linq;
 using System.Text;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Entities.OperationFormat;
 using DurableTask.Core.History;
+using Google.Protobuf;
 using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Tracing;
@@ -755,7 +757,10 @@ sealed partial class GrpcDurableTaskWorker
                 response.Actions.Count,
                 GetActionsListForLogging(response.Actions));
 
-            await this.client.CompleteOrchestratorTaskAsync(response, cancellationToken: cancellationToken);
+            await this.CompleteOrchestratorTaskWithChunkingAsync(
+                response,
+                this.worker.grpcOptions.CompleteOrchestrationWorkItemChunkSizeInBytes,
+                cancellationToken);
         }
 
         async Task OnRunActivityAsync(P.ActivityRequest request, string completionToken, CancellationToken cancellation)
@@ -913,6 +918,140 @@ sealed partial class GrpcDurableTaskWorker
                 operationInfos?.Take(batchResult.Results?.Count ?? 0));
 
             await this.client.CompleteEntityTaskAsync(response, cancellationToken: cancellation);
+        }
+
+        /// <summary>
+        /// Completes an orchestration task with automatic chunking if the response exceeds the maximum size.
+        /// </summary>
+        /// <param name="response">The orchestrator response to send.</param>
+        /// <param name="maxChunkBytes">The maximum size in bytes for each chunk.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        async Task CompleteOrchestratorTaskWithChunkingAsync(
+            P.OrchestratorResponse response,
+            int maxChunkBytes,
+            CancellationToken cancellationToken)
+        {
+            // Validate that no single action exceeds the maximum chunk size
+            static P.TaskFailureDetails? ValidateActionsSize(IEnumerable<P.OrchestratorAction> actions, int maxChunkBytes)
+            {
+                foreach (P.OrchestratorAction action in actions)
+                {
+                    int actionSize = action.CalculateSize();
+                    if (actionSize > maxChunkBytes)
+                    {
+                        // TODO: large payload doc is not available yet on aka.ms, add doc link to below error message
+                        string errorMessage = $"A single orchestrator action of type {action.OrchestratorActionTypeCase} with id {action.Id} " +
+                            $"exceeds the {maxChunkBytes / 1024.0 / 1024.0:F2}MB limit: {actionSize / 1024.0 / 1024.0:F2}MB. " +
+                            "Enable large-payload externalization to Azure Blob Storage to support oversized actions.";
+                        return new P.TaskFailureDetails
+                        {
+                            ErrorType = typeof(InvalidOperationException).FullName,
+                            ErrorMessage = errorMessage,
+                            IsNonRetriable = true,
+                        };
+                    }
+                }
+
+                return null;
+            }
+
+            P.TaskFailureDetails? validationFailure = ValidateActionsSize(response.Actions, maxChunkBytes);
+            if (validationFailure != null)
+            {
+                // Complete the orchestration with a failed status and failure details
+                P.OrchestratorResponse failureResponse = new()
+                {
+                    InstanceId = response.InstanceId,
+                    CompletionToken = response.CompletionToken,
+                    OrchestrationTraceContext = response.OrchestrationTraceContext,
+                    Actions =
+                    {
+                        new P.OrchestratorAction
+                        {
+                            CompleteOrchestration = new P.CompleteOrchestrationAction
+                            {
+                                OrchestrationStatus = P.OrchestrationStatus.Failed,
+                                FailureDetails = validationFailure,
+                            },
+                        },
+                    },
+                };
+
+                await this.client.CompleteOrchestratorTaskAsync(failureResponse, cancellationToken: cancellationToken);
+                return;
+            }
+
+            // Helper to add an action to the current chunk if it fits
+            static bool TryAddAction(
+                Google.Protobuf.Collections.RepeatedField<P.OrchestratorAction> dest,
+                P.OrchestratorAction action,
+                ref int currentSize,
+                int maxChunkBytes)
+            {
+                int actionSize = action.CalculateSize();
+                if (currentSize + actionSize > maxChunkBytes)
+                {
+                    return false;
+                }
+
+                dest.Add(action);
+                currentSize += actionSize;
+                return true;
+            }
+
+            // Check if the entire response fits in one chunk
+            int totalSize = response.CalculateSize();
+            if (totalSize <= maxChunkBytes)
+            {
+                // Response fits in one chunk, send it directly (isPartial defaults to false)
+                await this.client.CompleteOrchestratorTaskAsync(response, cancellationToken: cancellationToken);
+                return;
+            }
+
+            // Response is too large, split into multiple chunks
+            int actionsCompletedSoFar = 0, chunkIndex = 0;
+            List<P.OrchestratorAction> allActions = response.Actions.ToList();
+            bool isPartial = true;
+
+            while (isPartial)
+            {
+                P.OrchestratorResponse chunkedResponse = new()
+                {
+                    InstanceId = response.InstanceId,
+                    CustomStatus = response.CustomStatus,
+                    CompletionToken = response.CompletionToken,
+                    RequiresHistory = response.RequiresHistory,
+                    NumEventsProcessed = 0,
+                    ChunkIndex = chunkIndex,
+                };
+
+                int chunkPayloadSize = 0;
+
+                // Fill the chunk with actions until we reach the size limit
+                while (actionsCompletedSoFar < allActions.Count &&
+                       TryAddAction(chunkedResponse.Actions, allActions[actionsCompletedSoFar], ref chunkPayloadSize, maxChunkBytes))
+                {
+                    actionsCompletedSoFar++;
+                }
+
+                // Determine if this is a partial chunk (more actions remaining)
+                isPartial = actionsCompletedSoFar < allActions.Count;
+                chunkedResponse.IsPartial = isPartial;
+
+                if (chunkIndex == 0)
+                {
+                    // The first chunk preserves the original response's NumEventsProcessed value (null)
+                    // When this is set to null, backend by default handles all the messages in the workitem.
+                    // For subsequent chunks, we set it to 0 since all messages are already handled in first chunk.
+                    chunkedResponse.NumEventsProcessed = null;
+                    chunkedResponse.OrchestrationTraceContext = response.OrchestrationTraceContext;
+                }
+
+                chunkIndex++;
+
+                // Send the chunk
+                await this.client.CompleteOrchestratorTaskAsync(chunkedResponse, cancellationToken: cancellationToken);
+            }
         }
     }
 }

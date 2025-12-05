@@ -117,15 +117,6 @@ public sealed class BlobPayloadStore : PayloadStore
             throw new ArgumentException("Token container does not match configured container.", nameof(token));
         }
 
-        // Check if the container exists first to avoid 404 warnings from Azure SDK
-        Response<bool> containerExistsResponse = await this.containerClient.ExistsAsync(cancellationToken);
-        if (!containerExistsResponse.Value)
-        {
-            throw new InvalidOperationException(
-                $"The blob container '{container}' does not exist. " +
-                "The payload may have been deleted or the container was never created.");
-        }
-
         BlobClient blob = this.containerClient.GetBlobClient(name);
 
         try
@@ -149,7 +140,7 @@ public sealed class BlobPayloadStore : PayloadStore
         {
             throw new InvalidOperationException(
                 $"The blob '{name}' was not found in container '{container}'. " +
-                "The payload may have been deleted.",
+                "The payload may have been deleted or the container was never created.",
                 ex);
         }
     }

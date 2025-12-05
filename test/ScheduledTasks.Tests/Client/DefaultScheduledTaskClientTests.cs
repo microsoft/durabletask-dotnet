@@ -59,10 +59,10 @@ public class DefaultScheduledTaskClientTests
     [Theory]
     [InlineData(null, typeof(ArgumentNullException), "Value cannot be null")]
     [InlineData("", typeof(ArgumentException), "Parameter cannot be an empty string")]
-    public void GetScheduleClient_WithInvalidId_ThrowsCorrectException(string scheduleId, Type expectedExceptionType, string expectedMessage)
+    public void GetScheduleClient_WithInvalidId_ThrowsCorrectException(string? scheduleId, Type expectedExceptionType, string expectedMessage)
     {
         // Act & Assert
-        var ex = Assert.Throws(expectedExceptionType, () => this.client.GetScheduleClient(scheduleId));
+        var ex = Assert.Throws(expectedExceptionType, () => this.client.GetScheduleClient(scheduleId!));
         Assert.Contains(expectedMessage, ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -100,13 +100,7 @@ public class DefaultScheduledTaskClientTests
         this.durableTaskClient.Verify(
             x => x.ScheduleNewOrchestrationInstanceAsync(
                 It.Is<TaskName>(n => n.Name == nameof(ExecuteScheduleOperationOrchestrator)),
-                It.Is<ScheduleOperationRequest>(r =>
-                    r.EntityId.Name == entityInstanceId.Name &&
-                    r.EntityId.Key == entityInstanceId.Key &&
-                    r.OperationName == nameof(Schedule.CreateSchedule) &&
-                    ((ScheduleCreationOptions)r.Input).ScheduleId == options.ScheduleId &&
-                    ((ScheduleCreationOptions)r.Input).OrchestrationName == options.OrchestrationName &&
-                    ((ScheduleCreationOptions)r.Input).Interval == options.Interval),
+                    It.Is<ScheduleOperationRequest>(r => MatchesCreateScheduleRequest(r, entityInstanceId, options)),
                 default),
             Times.Once);
     }
@@ -293,5 +287,27 @@ public class DefaultScheduledTaskClientTests
         Assert.All(schedules, s => Assert.NotNull(s.ExecutionToken));
         Assert.All(schedules, s => Assert.NotNull(s.LastRunAt));
         Assert.All(schedules, s => Assert.NotNull(s.NextRunAt));
+    }
+
+    static bool MatchesCreateScheduleRequest(ScheduleOperationRequest request, EntityInstanceId expectedEntityId, ScheduleCreationOptions expectedOptions)
+    {
+        if (request.EntityId.Name != expectedEntityId.Name || request.EntityId.Key != expectedEntityId.Key)
+        {
+            return false;
+        }
+
+        if (!string.Equals(request.OperationName, nameof(Schedule.CreateSchedule), StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (request.Input is not ScheduleCreationOptions createOptions)
+        {
+            return false;
+        }
+
+        return createOptions.ScheduleId == expectedOptions.ScheduleId
+            && createOptions.OrchestrationName == expectedOptions.OrchestrationName
+            && createOptions.Interval == expectedOptions.Interval;
     }
 }

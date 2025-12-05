@@ -110,7 +110,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
         DateTimeOffset? startAt = options?.StartAt;
         this.logger.SchedulingOrchestration(
-            request.InstanceId,
+            request.InstanceId ?? string.Empty,
             orchestratorName,
             sizeInBytes: request.Input != null ? Encoding.UTF8.GetByteCount(request.Input) : 0,
             startAt.GetValueOrDefault(DateTimeOffset.UtcNow));

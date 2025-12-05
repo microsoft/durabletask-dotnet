@@ -1044,6 +1044,9 @@ sealed partial class GrpcDurableTaskWorker
 
                 if (chunkIndex == 0)
                 {
+                    // The first chunk preserves the original response's NumEventsProcessed value (null)
+                    // When this is set to null, backend by default handles all the messages in the workitem.
+                    // For subsequent chunks, we set it to 0 since all messages are already handled in first chunk.
                     chunkedResponse.NumEventsProcessed = null;
                     chunkedResponse.OrchestrationTraceContext = response.OrchestrationTraceContext;
                 }

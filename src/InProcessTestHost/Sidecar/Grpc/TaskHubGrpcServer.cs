@@ -593,7 +593,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             GrpcOrchestratorExecutionResult res = new()
             {
                 Actions = existingPartialChunk.AccumulatedActions,
-                CustomStatus = request.CustomStatus, // Use custom status from final chunk
+                CustomStatus = request.CustomStatus,
             };
 
             // Remove the TCS from pending tasks and complete it

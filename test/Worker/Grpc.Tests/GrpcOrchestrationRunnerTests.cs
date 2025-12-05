@@ -39,7 +39,7 @@ public class GrpcOrchestrationRunnerTests
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
             { "IncludePastEvents", Value.ForBool(false) }});
         byte[] requestBytes = orchestratorRequest.ToByteArray();
-        string requestString =  Convert.ToBase64String(requestBytes);
+        string requestString = Convert.ToBase64String(requestBytes);
         string stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
         Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
         Assert.True(response.RequiresHistory);
@@ -327,7 +327,7 @@ public class GrpcOrchestrationRunnerTests
     }
 
     [Fact]
-    public async void Stale_ExtendedSessions_Evicted_Async()
+    public async Task Stale_ExtendedSessions_Evicted_Async()
     {
         using var extendedSessions = new ExtendedSessionsCache();
         int extendedSessionIdleTimeout = 5;

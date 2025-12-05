@@ -11,6 +11,7 @@ using Microsoft.DurableTask.Testing.Sidecar.Grpc;
 using Microsoft.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
@@ -18,7 +19,7 @@ public sealed class GrpcSidecarFixture : IDisposable
 {
     const string ListenHost = "localhost";
 
-    readonly IWebHost host;
+    readonly IHost host;
 
     public GrpcSidecarFixture()
     {
@@ -26,28 +27,32 @@ public sealed class GrpcSidecarFixture : IDisposable
 
         // Use a random port number to allow multiple instances to run in parallel
         string address = $"http://{ListenHost}:{Random.Shared.Next(30000, 40000)}";
-        this.host = new WebHostBuilder()
-            .UseKestrel(options =>
+        this.host = Host.CreateDefaultBuilder()
+            .ConfigureWebHostDefaults(webBuilder =>
             {
-                // Need to force Http2 in Kestrel in unencrypted scenarios
-                // https://docs.microsoft.com/en-us/aspnet/core/grpc/troubleshoot?view=aspnetcore-3.0
-                options.ConfigureEndpointDefaults(listenOptions => listenOptions.Protocols = HttpProtocols.Http2);
-            })
-            .UseUrls(address)
-            .ConfigureServices(services =>
-            {
-                services.AddGrpc();
-                services.AddSingleton<IOrchestrationService>(service);
-                services.AddSingleton<IOrchestrationServiceClient>(service);
-                services.AddSingleton<TaskHubGrpcServer>();
-            })
-            .Configure(app =>
-            {
-                app.UseRouting();
-                app.UseEndpoints(endpoints =>
-                {
-                    endpoints.MapGrpcService<TaskHubGrpcServer>();
-                });
+                webBuilder
+                    .UseKestrel(options =>
+                    {
+                        // Need to force Http2 in Kestrel in unencrypted scenarios
+                        // https://docs.microsoft.com/en-us/aspnet/core/grpc/troubleshoot?view=aspnetcore-3.0
+                        options.ConfigureEndpointDefaults(listenOptions => listenOptions.Protocols = HttpProtocols.Http2);
+                    })
+                    .UseUrls(address)
+                    .ConfigureServices(services =>
+                    {
+                        services.AddGrpc();
+                        services.AddSingleton<IOrchestrationService>(service);
+                        services.AddSingleton<IOrchestrationServiceClient>(service);
+                        services.AddSingleton<TaskHubGrpcServer>();
+                    })
+                    .Configure(app =>
+                    {
+                        app.UseRouting();
+                        app.UseEndpoints(endpoints =>
+                        {
+                            endpoints.MapGrpcService<TaskHubGrpcServer>();
+                        });
+                    });
             })
             .Build();
 

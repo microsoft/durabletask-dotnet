@@ -36,39 +36,39 @@ public class ExternalEventStackTests : IntegrationTestBase
             {
                 // First waiter
                 Task<string> firstWaiter = ctx.WaitForExternalEvent<string>(EventName);
-                
+
                 // Second waiter (newer, should receive event first)
                 Task<string> secondWaiter = ctx.WaitForExternalEvent<string>(EventName);
-                
+
                 // Wait for both events to arrive from external client
                 string secondResult = await secondWaiter; // Should receive first event (stack top)
                 string firstResult = await firstWaiter;   // Should receive second event
-                
+
                 // Return which waiter received which event
                 return $"{firstResult}:{secondResult}";
             }));
         });
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        
+
         // Wait for orchestration to start and set up waiters
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceStartAsync(
-            instanceId, this.TimeoutToken);
-        
+            instanceId, this.TimeoutToken)
+            ?? throw new InvalidOperationException("Orchestration did not start.");
+
         // Send first event - should be received by second waiter (stack top)
         await server.Client.RaiseEventAsync(instanceId, EventName, SecondEventPayload);
-        
+
         // Send second event - should be received by first waiter
         await server.Client.RaiseEventAsync(instanceId, EventName, FirstEventPayload);
 
         metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-
-        Assert.NotNull(metadata);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken)
+            ?? throw new InvalidOperationException("Orchestration did not complete.");
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-        
+
         // Verify the output: second waiter should have received "second-event", first waiter "first-event"
-        string result = metadata.ReadOutputAs<string>();
+        string result = metadata.ReadOutputAs<string>() ?? throw new InvalidOperationException("Missing orchestration output.");
         Assert.Equal($"{FirstEventPayload}:{SecondEventPayload}", result);
     }
 
@@ -110,7 +110,7 @@ public class ExternalEventStackTests : IntegrationTestBase
                 {
                     Task<string> waitForEvent = ctx.WaitForExternalEvent<string>(EventName, cts.Token);
                     Task timeout = ctx.CreateTimer(ctx.CurrentUtcDateTime.AddSeconds(2), CancellationToken.None);
-                    
+
                     Task winner = await Task.WhenAny(waitForEvent, timeout);
                     if (winner == timeout)
                     {
@@ -125,21 +125,20 @@ public class ExternalEventStackTests : IntegrationTestBase
         });
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        
+
         // Wait for orchestration to start and cancel first waiter
         await server.Client.WaitForInstanceStartAsync(
             instanceId, this.TimeoutToken);
-        
+
         // Send event - should be received by second waiter (stack top), not the cancelled first waiter
         await server.Client.RaiseEventAsync(instanceId, EventName, EventPayload);
 
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-
-        Assert.NotNull(metadata);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken)
+            ?? throw new InvalidOperationException("Orchestration did not complete.");
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-        
-        string result = metadata.ReadOutputAs<string>();
+
+        string result = metadata.ReadOutputAs<string>() ?? throw new InvalidOperationException("Missing orchestration output.");
         Assert.Equal(EventPayload, result);
     }
 
@@ -173,24 +172,23 @@ public class ExternalEventStackTests : IntegrationTestBase
         });
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        
+
         // Wait for orchestration to start and set up waiters
         await server.Client.WaitForInstanceStartAsync(
             instanceId, this.TimeoutToken);
-        
+
         // Send three events - should be received in LIFO order
         await server.Client.RaiseEventAsync(instanceId, EventName, "event-1");
         await server.Client.RaiseEventAsync(instanceId, EventName, "event-2");
         await server.Client.RaiseEventAsync(instanceId, EventName, "event-3");
 
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-
-        Assert.NotNull(metadata);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken)
+            ?? throw new InvalidOperationException("Orchestration did not complete.");
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-        
+
         // Verify LIFO order: waiter3 (newest) gets event-1, waiter2 gets event-2, waiter1 gets event-3
-        string result = metadata.ReadOutputAs<string>();
+        string result = metadata.ReadOutputAs<string>() ?? throw new InvalidOperationException("Missing orchestration output.");
         Assert.Equal("event-3,event-2,event-1", result);
     }
 
@@ -215,7 +213,7 @@ public class ExternalEventStackTests : IntegrationTestBase
                 // Now create waiter - should immediately receive the buffered event
                 Task<string> waiter = ctx.WaitForExternalEvent<string>(EventName);
                 Task timeout = ctx.CreateTimer(ctx.CurrentUtcDateTime.AddSeconds(1), CancellationToken.None);
-                
+
                 Task winner = await Task.WhenAny(waiter, timeout);
                 if (winner == timeout)
                 {
@@ -228,17 +226,16 @@ public class ExternalEventStackTests : IntegrationTestBase
         });
 
         string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-        
+
         // Send event before waiter is created
         await server.Client.RaiseEventAsync(instanceId, EventName, EventPayload);
 
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-
-        Assert.NotNull(metadata);
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken)
+            ?? throw new InvalidOperationException("Orchestration did not complete.");
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-        
-        string result = metadata.ReadOutputAs<string>();
+
+        string result = metadata.ReadOutputAs<string>() ?? throw new InvalidOperationException("Missing orchestration output.");
         Assert.Equal(EventPayload, result);
     }
 }

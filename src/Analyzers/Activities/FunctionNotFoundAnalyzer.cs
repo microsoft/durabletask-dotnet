@@ -163,12 +163,10 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
                     }
 
                     // Check for TaskActivity<TInput, TOutput> derived classes
-                    if (knownSymbols.TaskActivityBase != null && taskActivityRunAsync != null)
+                    if (knownSymbols.TaskActivityBase != null && taskActivityRunAsync != null &&
+                        ClassOverridesMethod(classSymbol, taskActivityRunAsync))
                     {
-                        if (ClassOverridesMethod(classSymbol, taskActivityRunAsync))
-                        {
-                            activityNames.Add(classSymbol.Name);
-                        }
+                        activityNames.Add(classSymbol.Name);
                     }
 
                     // Check for ITaskOrchestrator implementations (class-based orchestrators)
@@ -227,25 +225,19 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
                 HashSet<string> definedOrchestrators = new(orchestratorNames);
 
                 // Report diagnostics for activities not found
-                foreach (FunctionInvocation invocation in activityInvocations)
+                foreach (FunctionInvocation invocation in activityInvocations.Where(i => !definedActivities.Contains(i.Name)))
                 {
-                    if (!definedActivities.Contains(invocation.Name))
-                    {
-                        Diagnostic diagnostic = RoslynExtensions.BuildDiagnostic(
-                            ActivityNotFoundRule, invocation.InvocationSyntaxNode, invocation.Name);
-                        ctx.ReportDiagnostic(diagnostic);
-                    }
+                    Diagnostic diagnostic = RoslynExtensions.BuildDiagnostic(
+                        ActivityNotFoundRule, invocation.InvocationSyntaxNode, invocation.Name);
+                    ctx.ReportDiagnostic(diagnostic);
                 }
 
                 // Report diagnostics for sub-orchestrators not found
-                foreach (FunctionInvocation invocation in subOrchestrationInvocations)
+                foreach (FunctionInvocation invocation in subOrchestrationInvocations.Where(i => !definedOrchestrators.Contains(i.Name)))
                 {
-                    if (!definedOrchestrators.Contains(invocation.Name))
-                    {
-                        Diagnostic diagnostic = RoslynExtensions.BuildDiagnostic(
-                            SubOrchestrationNotFoundRule, invocation.InvocationSyntaxNode, invocation.Name);
-                        ctx.ReportDiagnostic(diagnostic);
-                    }
+                    Diagnostic diagnostic = RoslynExtensions.BuildDiagnostic(
+                        SubOrchestrationNotFoundRule, invocation.InvocationSyntaxNode, invocation.Name);
+                    ctx.ReportDiagnostic(diagnostic);
                 }
             });
         });
@@ -281,12 +273,10 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
         INamedTypeSymbol? baseType = classSymbol;
         while (baseType != null)
         {
-            foreach (IMethodSymbol method in baseType.GetMembers().OfType<IMethodSymbol>())
+            if (baseType.GetMembers().OfType<IMethodSymbol>()
+                .Any(method => SymbolEqualityComparer.Default.Equals(method.OverriddenMethod?.OriginalDefinition, methodToFind)))
             {
-                if (SymbolEqualityComparer.Default.Equals(method.OverriddenMethod?.OriginalDefinition, methodToFind))
-                {
-                    return true;
-                }
+                return true;
             }
 
             baseType = baseType.BaseType;

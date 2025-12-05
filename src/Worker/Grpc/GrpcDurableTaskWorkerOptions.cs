@@ -18,9 +18,9 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
     /// <summary>
     /// The maximum allowed size (in bytes) for complete orchestration work item chunks.
     /// </summary>
-    public const int MaxCompleteOrchestrationWorkItemChunkSizeBytes = 4_089_446; // 3.9 MB
+    public const int MaxCompleteOrchestrationWorkItemChunkSizeInBytes = 4_089_446; // 3.9 MB
 
-    int completeOrchestrationWorkItemChunkSizeInBytes = MaxCompleteOrchestrationWorkItemChunkSizeBytes;
+    int completeOrchestrationWorkItemChunkSizeInBytes = MaxCompleteOrchestrationWorkItemChunkSizeInBytes;
 
     /// <summary>
     /// Gets or sets the address of the gRPC endpoint to connect to. Default is localhost:4001.
@@ -60,11 +60,11 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
         set
         {
             if (value < MinCompleteOrchestrationWorkItemChunkSizeInBytes ||
-                value > MaxCompleteOrchestrationWorkItemChunkSizeBytes)
+                value > MaxCompleteOrchestrationWorkItemChunkSizeInBytes)
             {
                 string message = $"CompleteOrchestrationWorkItemChunkSizeInBytes must be between " +
                     $"{MinCompleteOrchestrationWorkItemChunkSizeInBytes} bytes (1 MB) and " +
-                    $"{MaxCompleteOrchestrationWorkItemChunkSizeBytes} bytes (3.9 MB), inclusive.";
+                    $"{MaxCompleteOrchestrationWorkItemChunkSizeInBytes} bytes (3.9 MB), inclusive.";
                 throw new ArgumentOutOfRangeException(
                     nameof(this.CompleteOrchestrationWorkItemChunkSizeInBytes),
                     value,

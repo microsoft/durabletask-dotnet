@@ -21,7 +21,7 @@ public class GrpcDurableTaskWorkerOptionsTests
         value.Should().BeGreaterOrEqualTo(
             GrpcDurableTaskWorkerOptions.MinCompleteOrchestrationWorkItemChunkSizeInBytes);
         value.Should().BeLessOrEqualTo(
-            GrpcDurableTaskWorkerOptions.MaxCompleteOrchestrationWorkItemChunkSizeBytes);
+            GrpcDurableTaskWorkerOptions.MaxCompleteOrchestrationWorkItemChunkSizeInBytes);
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public class GrpcDurableTaskWorkerOptionsTests
     {
         // Arrange
         var options = new GrpcDurableTaskWorkerOptions();
-        int aboveMax = GrpcDurableTaskWorkerOptions.MaxCompleteOrchestrationWorkItemChunkSizeBytes + 1;
+        int aboveMax = GrpcDurableTaskWorkerOptions.MaxCompleteOrchestrationWorkItemChunkSizeInBytes + 1;
 
         // Act
         Action act = () => options.CompleteOrchestrationWorkItemChunkSizeInBytes = aboveMax;
@@ -75,7 +75,7 @@ public class GrpcDurableTaskWorkerOptionsTests
     {
         // Arrange
         var options = new GrpcDurableTaskWorkerOptions();
-        int maxValue = GrpcDurableTaskWorkerOptions.MaxCompleteOrchestrationWorkItemChunkSizeBytes;
+        int maxValue = GrpcDurableTaskWorkerOptions.MaxCompleteOrchestrationWorkItemChunkSizeInBytes;
 
         // Act
         options.CompleteOrchestrationWorkItemChunkSizeInBytes = maxValue;

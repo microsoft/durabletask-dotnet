@@ -22,7 +22,7 @@ namespace Microsoft.DurableTask.Testing;
 /// </summary>
 public sealed class DurableTaskTestHost : IAsyncDisposable
 {
-    readonly IWebHost sidecarHost;
+    readonly IHost sidecarHost;
     readonly IHost workerHost;
     readonly GrpcChannel grpcChannel;
 
@@ -33,7 +33,7 @@ public sealed class DurableTaskTestHost : IAsyncDisposable
     /// <param name="workerHost">The worker host.</param>
     /// <param name="grpcChannel">The gRPC channel.</param>
     /// <param name="client">The durable task client.</param>
-    public DurableTaskTestHost(IWebHost sidecarHost, IHost workerHost, GrpcChannel grpcChannel, DurableTaskClient client)
+    public DurableTaskTestHost(IHost sidecarHost, IHost workerHost, GrpcChannel grpcChannel, DurableTaskClient client)
     {
         this.sidecarHost = sidecarHost;
         this.workerHost = workerHost;
@@ -68,32 +68,37 @@ public sealed class DurableTaskTestHost : IAsyncDisposable
             ? $"http://localhost:{options.Port.Value}"
             : $"http://localhost:{Random.Shared.Next(30000, 40000)}";
 
-        var sidecarHost = new WebHostBuilder()
-            .UseKestrel(kestrelOptions =>
+        IHost sidecarHost = Host.CreateDefaultBuilder()
+            .ConfigureWebHostDefaults(webBuilder =>
             {
-                // Configure for HTTP/2 (required for gRPC)
-                kestrelOptions.ConfigureEndpointDefaults(listenOptions =>
-                    listenOptions.Protocols = HttpProtocols.Http2);
-            })
-            .UseUrls(address)
-            .ConfigureServices(services =>
-            {
-                services.AddGrpc();
-                services.AddSingleton<IOrchestrationService>(orchestrationService);
-                services.AddSingleton<IOrchestrationServiceClient>(orchestrationService);
-                services.AddSingleton<TaskHubGrpcServer>();
-            })
-            .Configure(app =>
-            {
-                app.UseRouting();
-                app.UseEndpoints(endpoints =>
+                webBuilder.UseUrls(address);
+                webBuilder.ConfigureKestrel(kestrelOptions =>
                 {
-                    endpoints.MapGrpcService<TaskHubGrpcServer>();
+                    // Configure for HTTP/2 (required for gRPC)
+                    kestrelOptions.ConfigureEndpointDefaults(listenOptions =>
+                        listenOptions.Protocols = HttpProtocols.Http2);
+                });
+
+                webBuilder.ConfigureServices(services =>
+                {
+                    services.AddGrpc();
+                    services.AddSingleton<IOrchestrationService>(orchestrationService);
+                    services.AddSingleton<IOrchestrationServiceClient>(orchestrationService);
+                    services.AddSingleton<TaskHubGrpcServer>();
+                });
+
+                webBuilder.Configure(app =>
+                {
+                    app.UseRouting();
+                    app.UseEndpoints(endpoints =>
+                    {
+                        endpoints.MapGrpcService<TaskHubGrpcServer>();
+                    });
                 });
             })
             .Build();
 
-        sidecarHost.Start();
+        await sidecarHost.StartAsync(cancellationToken);
         var grpcChannel = GrpcChannel.ForAddress(address);
 
         // Create worker host with user's orchestrators and activities

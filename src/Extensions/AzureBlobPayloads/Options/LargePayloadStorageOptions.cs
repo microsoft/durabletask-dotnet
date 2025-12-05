@@ -63,7 +63,6 @@ public sealed class LargePayloadStorageOptions
     /// Gets or sets the threshold in bytes at which payloads are externalized. Default is 900_000 bytes.
     /// Value must not exceed 1 MiB (1,048,576 bytes).
     /// </summary>
-
     public int ExternalizeThresholdBytes
     {
         get => this.externalizeThresholdBytes;

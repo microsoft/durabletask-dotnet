@@ -1142,9 +1142,11 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         public ValueTask<bool> IsOrchestrationValidAsync(OrchestrationFilterParameters info, CancellationToken cancellationToken = default)
         {
-            return ValueTask.FromResult(
-                !this.NameDenySet.Contains(info.Name)
-                && !this.TagDenyDict.Any(kvp => info.Tags != null && info.Tags.ContainsKey(kvp.Key) && info.Tags[kvp.Key] == kvp.Value));
+            bool nameAllowed = info.Name is string name && !this.NameDenySet.Contains(name);
+            bool tagsAllowed = info.Tags == null
+                || !this.TagDenyDict.Any(kvp => info.Tags.TryGetValue(kvp.Key, out string? value) && value == kvp.Value);
+
+            return ValueTask.FromResult(nameAllowed && tagsAllowed);
         }
     }
 

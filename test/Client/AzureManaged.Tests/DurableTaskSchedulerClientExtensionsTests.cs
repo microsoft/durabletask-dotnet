@@ -95,7 +95,7 @@ public class DurableTaskSchedulerClientExtensionsTests
     [Theory]
     [InlineData(null, "testhub")]
     [InlineData("myaccount.westus3.durabletask.io", null)]
-    public void UseDurableTaskScheduler_WithNullParameters_ShouldThrowOptionsValidationException(string endpoint, string taskHub)
+    public void UseDurableTaskScheduler_WithNullParameters_ShouldThrowOptionsValidationException(string? endpoint, string? taskHub)
     {
         // Arrange
         ServiceCollection services = new ServiceCollection();
@@ -104,7 +104,7 @@ public class DurableTaskSchedulerClientExtensionsTests
         DefaultAzureCredential credential = new DefaultAzureCredential();
 
         // Act
-        mockBuilder.Object.UseDurableTaskScheduler(endpoint, taskHub, credential);
+        mockBuilder.Object.UseDurableTaskScheduler(endpoint!, taskHub!, credential);
         ServiceProvider provider = services.BuildServiceProvider();
 
         // Assert
@@ -157,7 +157,7 @@ public class DurableTaskSchedulerClientExtensionsTests
     [Theory]
     [InlineData("")]
     [InlineData(null)]
-    public void UseDurableTaskScheduler_WithNullOrEmptyConnectionString_ShouldThrowArgumentException(string connectionString)
+    public void UseDurableTaskScheduler_WithNullOrEmptyConnectionString_ShouldThrowArgumentException(string? connectionString)
     {
         // Arrange
         ServiceCollection services = new ServiceCollection();
@@ -165,7 +165,7 @@ public class DurableTaskSchedulerClientExtensionsTests
         mockBuilder.Setup(b => b.Services).Returns(services);
 
         // Act & Assert
-        Action action = () => mockBuilder.Object.UseDurableTaskScheduler(connectionString);
+        Action action = () => mockBuilder.Object.UseDurableTaskScheduler(connectionString!);
         action.Should().Throw<ArgumentNullException>();
     }
 

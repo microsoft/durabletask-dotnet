@@ -343,7 +343,7 @@ public class RunBackgroundTaskLoggingTests
             }
             await Task.Delay(50);
         }
-        Assert.True(false, "Condition not met within timeout");
+        Assert.Fail("Condition not met within timeout");
     }
 
     sealed class TestFixture : IAsyncDisposable

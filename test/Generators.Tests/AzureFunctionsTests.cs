@@ -27,6 +27,10 @@ public class Calculator
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
+/// <summary>
+/// Calls the <see cref=""Calculator.Identity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<int> CallIdentityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<int>(""Identity"", input, options);
@@ -57,6 +61,10 @@ public class Calculator
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
+/// <summary>
+/// Calls the <see cref=""Calculator.IdentityAsync""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<int> CallIdentityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<int>(""Identity"", input, options);
@@ -92,6 +100,10 @@ namespace AzureFunctionsTests
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
+/// <summary>
+/// Calls the <see cref=""AzureFunctionsTests.Calculator.Identity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<AzureFunctionsTests.Input> CallIdentityAsync(this TaskOrchestrationContext ctx, AzureFunctionsTests.Input input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<AzureFunctionsTests.Input>(""Identity"", input, options);

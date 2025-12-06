@@ -270,6 +270,15 @@ namespace Microsoft.DurableTask
                 }
             }
 
+            foreach (DurableTaskTypeInfo entity in entities)
+            {
+                if (isDurableFunctions)
+                {
+                    // Generate the function definition required to trigger entities in Azure Functions
+                    AddEntityFunctionDeclaration(sourceBuilder, entity);
+                }
+            }
+
             // Activity function triggers are supported for code-gen (but not orchestration triggers)
             IEnumerable<DurableFunction> activityTriggers = allFunctions.Where(
                 df => df.Kind == DurableFunctionKind.Activity);
@@ -365,6 +374,17 @@ namespace Microsoft.DurableTask
             TaskActivityContext context = new GeneratedActivityContext(""{activity.TaskName}"", instanceId);
             object? result = await activity.RunAsync(context, input);
             return ({activity.OutputType})result!;
+        }}");
+        }
+
+        static void AddEntityFunctionDeclaration(StringBuilder sourceBuilder, DurableTaskTypeInfo entity)
+        {
+            // Generate the entity trigger function that dispatches to the entity implementation.
+            sourceBuilder.AppendLine($@"
+        [Function(nameof({entity.TaskName}))]
+        public static Task {entity.TaskName}([EntityTrigger] TaskEntityDispatcher dispatcher)
+        {{
+            return dispatcher.DispatchAsync<{entity.TypeName}>();
         }}");
         }
 

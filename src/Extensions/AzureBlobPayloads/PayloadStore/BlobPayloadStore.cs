@@ -2,7 +2,9 @@
 // Licensed under the MIT License.
 
 using System.IO.Compression;
+using System.Net;
 using System.Text;
+using Azure;
 using Azure.Core;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
@@ -117,20 +119,30 @@ public sealed class BlobPayloadStore : PayloadStore
 
         BlobClient blob = this.containerClient.GetBlobClient(name);
 
-        using BlobDownloadStreamingResult result = await blob.DownloadStreamingAsync(cancellationToken: cancellationToken);
-        Stream contentStream = result.Content;
-        bool isGzip = string.Equals(
-            result.Details.ContentEncoding, ContentEncodingGzip, StringComparison.OrdinalIgnoreCase);
-
-        if (isGzip)
+        try
         {
-            using GZipStream decompressed = new(contentStream, CompressionMode.Decompress);
-            using StreamReader reader = new(decompressed, Encoding.UTF8);
-            return await ReadToEndAsync(reader, cancellationToken);
-        }
+            using BlobDownloadStreamingResult result = await blob.DownloadStreamingAsync(cancellationToken: cancellationToken);
+            Stream contentStream = result.Content;
+            bool isGzip = string.Equals(
+                result.Details.ContentEncoding, ContentEncodingGzip, StringComparison.OrdinalIgnoreCase);
 
-        using StreamReader uncompressedReader = new(contentStream, Encoding.UTF8);
-        return await ReadToEndAsync(uncompressedReader, cancellationToken);
+            if (isGzip)
+            {
+                using GZipStream decompressed = new(contentStream, CompressionMode.Decompress);
+                using StreamReader reader = new(decompressed, Encoding.UTF8);
+                return await ReadToEndAsync(reader, cancellationToken);
+            }
+
+            using StreamReader uncompressedReader = new(contentStream, Encoding.UTF8);
+            return await ReadToEndAsync(uncompressedReader, cancellationToken);
+        }
+        catch (RequestFailedException ex) when (ex.Status == (int)HttpStatusCode.NotFound)
+        {
+            throw new InvalidOperationException(
+                $"The blob '{name}' was not found in container '{container}'. " +
+                "The payload may have been deleted or the container was never created.",
+                ex);
+        }
     }
 
     /// <inheritdoc/>

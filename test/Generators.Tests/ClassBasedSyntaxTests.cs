@@ -31,6 +31,9 @@ class MyOrchestrator : TaskOrchestrator<{type}, string>
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
+/// <summary>
+/// Schedules a new instance of the <see cref=""MyOrchestrator""/> orchestrator.
+/// </summary>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     this IOrchestrationSubmitter client, {input}, StartOrchestrationOptions? options = null)
@@ -38,6 +41,9 @@ public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     return client.ScheduleNewOrchestrationInstanceAsync(""MyOrchestrator"", input, options);
 }}
 
+/// <summary>
+/// Calls the <see cref=""MyOrchestrator""/> sub-orchestrator.
+/// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallMyOrchestratorAsync(
     this TaskOrchestrationContext context, {input}, TaskOptions? options = null)
@@ -80,6 +86,9 @@ abstract class MyOrchestratorBase : TaskOrchestrator<int, string>
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
+/// <summary>
+/// Schedules a new instance of the <see cref=""MyOrchestrator""/> orchestrator.
+/// </summary>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     this IOrchestrationSubmitter client, int input, StartOrchestrationOptions? options = null)
@@ -87,6 +96,9 @@ public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     return client.ScheduleNewOrchestrationInstanceAsync(""MyOrchestrator"", input, options);
 }
 
+/// <summary>
+/// Calls the <see cref=""MyOrchestrator""/> sub-orchestrator.
+/// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallMyOrchestratorAsync(
     this TaskOrchestrationContext context, int input, TaskOptions? options = null)
@@ -129,6 +141,10 @@ class MyActivity : TaskActivity<{type}, string>
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
+/// <summary>
+/// Calls the <see cref=""MyActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, {input}, TaskOptions? options = null)
 {{
     return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
@@ -169,6 +185,10 @@ namespace MyNS
         string expectedOutput = TestHelpers.WrapAndFormat(
             generatedClassName: "GeneratedDurableTaskExtensions",
             methodList: @"
+/// <summary>
+/// Calls the <see cref=""MyActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<MyNS.MyClass> CallMyActivityAsync(this TaskOrchestrationContext ctx, MyNS.MyClass input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<MyNS.MyClass>(""MyActivity"", input, options);
@@ -211,6 +231,10 @@ namespace MyNS
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
+/// <summary>
+/// Calls the <see cref=""MyNS.MyActivityImpl""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<MyNS.MyClass> CallMyActivityAsync(this TaskOrchestrationContext ctx, MyNS.MyClass input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<MyNS.MyClass>(""MyActivity"", input, options);
@@ -250,6 +274,10 @@ abstract class MyActivityBase : TaskActivity<int, string>
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
+/// <summary>
+/// Calls the <see cref=""MyActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
@@ -440,6 +468,9 @@ class MyEntity : TaskEntity<int>
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
+/// <summary>
+/// Schedules a new instance of the <see cref=""MyOrchestrator""/> orchestrator.
+/// </summary>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     this IOrchestrationSubmitter client, int input, StartOrchestrationOptions? options = null)
@@ -447,6 +478,9 @@ public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     return client.ScheduleNewOrchestrationInstanceAsync(""MyOrchestrator"", input, options);
 }
 
+/// <summary>
+/// Calls the <see cref=""MyOrchestrator""/> sub-orchestrator.
+/// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallMyOrchestratorAsync(
     this TaskOrchestrationContext context, int input, TaskOptions? options = null)
@@ -454,6 +488,10 @@ public static Task<string> CallMyOrchestratorAsync(
     return context.CallSubOrchestratorAsync<string>(""MyOrchestrator"", input, options);
 }
 
+/// <summary>
+/// Calls the <see cref=""MyActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<string>(""MyActivity"", input, options);

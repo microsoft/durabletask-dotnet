@@ -275,6 +275,19 @@ using Microsoft.Extensions.DependencyInjection;");
                 List<DurableTaskTypeInfo> activitiesInNamespace = tasksInNamespace.Where(t => t.IsActivity).ToList();
                 List<DurableTaskTypeInfo> entitiesInNamespace = tasksInNamespace.Where(t => t.IsEntity).ToList();
 
+                // Check if there's actually any content to generate for this namespace
+                bool hasOrchestratorMethods = orchestratorsInNamespace.Count > 0;
+                bool hasActivityMethods = activitiesInNamespace.Count > 0;
+                bool hasEntityFunctions = isDurableFunctions && entitiesInNamespace.Count > 0;
+                bool hasActivityTriggers = targetNamespace == "Microsoft.DurableTask" && activityTriggers.Any();
+                bool hasRegistrationMethod = !isDurableFunctions && targetNamespace == "Microsoft.DurableTask" && needsRegistrationBlock;
+
+                // Skip this namespace block if there's nothing to generate
+                if (!hasOrchestratorMethods && !hasActivityMethods && !hasEntityFunctions && !hasActivityTriggers && !hasRegistrationMethod)
+                {
+                    continue;
+                }
+
                 sourceBuilder.AppendLine();
                 sourceBuilder.AppendLine($"namespace {targetNamespace}");
                 sourceBuilder.AppendLine("{");
@@ -286,7 +299,8 @@ using Microsoft.Extensions.DependencyInjection;");
                     // Generate a singleton orchestrator object instance that can be reused for all invocations.
                     foreach (DurableTaskTypeInfo orchestrator in orchestratorsInNamespace)
                     {
-                        sourceBuilder.AppendLine($@"        static readonly ITaskOrchestrator singleton{orchestrator.TaskName} = new {orchestrator.TypeName}();");
+                        string simplifiedTypeName = SimplifyTypeNameForNamespace(orchestrator.TypeName, targetNamespace);
+                        sourceBuilder.AppendLine($@"        static readonly ITaskOrchestrator singleton{orchestrator.TaskName} = new {simplifiedTypeName}();");
                     }
                 }
 
@@ -399,6 +413,16 @@ using Microsoft.Extensions.DependencyInjection;");
 
         }
 
+        static string SimplifyTypeNameForNamespace(string fullyQualifiedTypeName, string targetNamespace)
+        {
+            if (fullyQualifiedTypeName.StartsWith(targetNamespace + ".", StringComparison.Ordinal))
+            {
+                return fullyQualifiedTypeName.Substring(targetNamespace.Length + 1);
+            }
+
+            return fullyQualifiedTypeName;
+        }
+
         static void AddOrchestratorFunctionDeclaration(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator, string targetNamespace)
         {
             string inputType = DurableTaskTypeInfo.GetRenderedTypeExpressionForNamespace(orchestrator.InputTypeSymbol, targetNamespace);
@@ -486,13 +510,15 @@ using Microsoft.Extensions.DependencyInjection;");
                 inputParameter += " = default";
             }
 
+            string simplifiedActivityTypeName = SimplifyTypeNameForNamespace(activity.TypeName, targetNamespace);
+
             // GeneratedActivityContext is a generated class that we use for each generated activity trigger definition.
             // Note that the second "instanceId" parameter is populated via the Azure Functions binding context.
             sourceBuilder.AppendLine($@"
         [Function(nameof({activity.TaskName}))]
         public static async Task<{outputType}> {activity.TaskName}([ActivityTrigger] {inputParameter}, string instanceId, FunctionContext executionContext)
         {{
-            ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<{activity.TypeName}>(executionContext.InstanceServices);
+            ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<{simplifiedActivityTypeName}>(executionContext.InstanceServices);
             TaskActivityContext context = new GeneratedActivityContext(""{activity.TaskName}"", instanceId);
             object? result = await activity.RunAsync(context, input);
             return ({outputType})result!;
@@ -501,12 +527,14 @@ using Microsoft.Extensions.DependencyInjection;");
 
         static void AddEntityFunctionDeclaration(StringBuilder sourceBuilder, DurableTaskTypeInfo entity, string targetNamespace)
         {
+            string simplifiedEntityTypeName = SimplifyTypeNameForNamespace(entity.TypeName, targetNamespace);
+
             // Generate the entity trigger function that dispatches to the entity implementation.
             sourceBuilder.AppendLine($@"
         [Function(nameof({entity.TaskName}))]
         public static Task {entity.TaskName}([EntityTrigger] TaskEntityDispatcher dispatcher)
         {{
-            return dispatcher.DispatchAsync<{entity.TypeName}>();
+            return dispatcher.DispatchAsync<{simplifiedEntityTypeName}>();
         }}");
         }
 

@@ -435,8 +435,9 @@ namespace MyNS
 [Function(nameof(MyEntity))]
 public static Task MyEntity([EntityTrigger] TaskEntityDispatcher dispatcher)
 {
-    return dispatcher.DispatchAsync<MyNS.MyEntity>();
+    return dispatcher.DispatchAsync<MyEntity>();
 }",
+            targetNamespace: "MyNS",
             isDurableFunctions: true);
 
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(

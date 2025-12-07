@@ -58,10 +58,16 @@ static class TestHelpers
 
     public static string WrapAndFormat(string generatedClassName, string methodList, bool isDurableFunctions = false)
     {
+        return WrapAndFormat(generatedClassName, methodList, "Microsoft.DurableTask", isDurableFunctions);
+    }
+
+    public static string WrapAndFormat(string generatedClassName, string methodList, string targetNamespace, bool isDurableFunctions = false)
+    {
         string formattedMethodList = IndentLines(spaces: 8, methodList);
         string usings = @"
 using System;
 using System.Threading.Tasks;
+using Microsoft.DurableTask;
 using Microsoft.DurableTask.Internal;";
 
         if (isDurableFunctions)
@@ -76,10 +82,11 @@ using Microsoft.Extensions.DependencyInjection;";
 #nullable enable
 {usings}
 
-namespace Microsoft.DurableTask
+namespace {targetNamespace}
 {{
     public static class {generatedClassName}
     {{
+
         {formattedMethodList.TrimStart()}
     }}
 }}

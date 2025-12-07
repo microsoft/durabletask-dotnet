@@ -198,5 +198,110 @@ public class JsonDataConverterTests
         result.Properties["nested"].Should().BeOfType<string>().And.Be("data");
     }
 
+    [Fact]
+    public void RoundTrip_CustomTypeWithObjectField_PreservesType()
+    {
+        // Arrange - custom type with object field
+        CustomTypeWithObjectField input = new()
+        {
+            Name = "Test",
+            Data = new { Setting = "value", Count = 10 },
+        };
+
+        // Act
+        string serialized = this.converter.Serialize(input)!;
+        CustomTypeWithObjectField? result = this.converter.Deserialize<CustomTypeWithObjectField>(serialized);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.Name.Should().Be("Test");
+        
+        // The object field should be deserialized as Dictionary<string, object>
+        result.Data.Should().BeOfType<Dictionary<string, object>>();
+        Dictionary<string, object> data = (Dictionary<string, object>)result.Data!;
+        data["Setting"].Should().BeOfType<string>().And.Be("value");
+        data["Count"].Should().BeOfType<int>().And.Be(10);
+    }
+
+    [Fact]
+    public void RoundTrip_CustomTypeWithObjectArray_PreservesTypes()
+    {
+        // Arrange
+        CustomTypeWithObjectArray input = new()
+        {
+            Items = new object[] { "string", 42, true, new { Nested = "value" } },
+        };
+
+        // Act
+        string serialized = this.converter.Serialize(input)!;
+        CustomTypeWithObjectArray? result = this.converter.Deserialize<CustomTypeWithObjectArray>(serialized);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.Items.Should().NotBeNull().And.HaveCount(4);
+        result.Items![0].Should().BeOfType<string>().And.Be("string");
+        result.Items[1].Should().BeOfType<int>().And.Be(42);
+        result.Items[2].Should().BeOfType<bool>().And.Be(true);
+        result.Items[3].Should().BeOfType<Dictionary<string, object>>();
+        
+        Dictionary<string, object> nested = (Dictionary<string, object>)result.Items[3];
+        nested["Nested"].Should().BeOfType<string>().And.Be("value");
+    }
+
+    [Fact]
+    public void RoundTrip_DeeplyNestedCustomTypes_PreservesStructure()
+    {
+        // Arrange - simulate complex activity input with multiple levels of nesting
+        ActivityInput input = new()
+        {
+            Metadata = new Dictionary<string, object>
+            {
+                { "ComponentContext", new { Name = "loganalytics", Config = new { Setting = "value" } } },
+                { "PlanResult", new { Success = true, Items = new[] { "item1", "item2" } } },
+            },
+        };
+
+        // Act
+        string serialized = this.converter.Serialize(input)!;
+        ActivityInput? result = this.converter.Deserialize<ActivityInput>(serialized);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.Metadata.Should().HaveCount(2);
+        
+        // Check ComponentContext
+        result.Metadata["ComponentContext"].Should().BeOfType<Dictionary<string, object>>();
+        Dictionary<string, object> component = (Dictionary<string, object>)result.Metadata["ComponentContext"];
+        component["Name"].Should().BeOfType<string>().And.Be("loganalytics");
+        component["Config"].Should().BeOfType<Dictionary<string, object>>();
+        Dictionary<string, object> config = (Dictionary<string, object>)component["Config"];
+        config["Setting"].Should().BeOfType<string>().And.Be("value");
+        
+        // Check PlanResult
+        result.Metadata["PlanResult"].Should().BeOfType<Dictionary<string, object>>();
+        Dictionary<string, object> plan = (Dictionary<string, object>)result.Metadata["PlanResult"];
+        plan["Success"].Should().BeOfType<bool>().And.Be(true);
+        plan["Items"].Should().BeOfType<object[]>();
+        object[] items = (object[])plan["Items"];
+        items[0].Should().BeOfType<string>().And.Be("item1");
+        items[1].Should().BeOfType<string>().And.Be("item2");
+    }
+
     record TestRecord(string Name, int Value, Dictionary<string, object> Properties);
+
+    class CustomTypeWithObjectField
+    {
+        public string Name { get; set; } = "";
+        public object? Data { get; set; }
+    }
+
+    class CustomTypeWithObjectArray
+    {
+        public object[]? Items { get; set; }
+    }
+
+    class ActivityInput
+    {
+        public Dictionary<string, object> Metadata { get; set; } = new();
+    }
 }

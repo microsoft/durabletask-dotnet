@@ -21,6 +21,18 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
     Type? loadedExceptionType;
 
     /// <summary>
+    /// Gets the original exception that caused the task failure, if available.
+    /// </summary>
+    /// <remarks>
+    /// This property provides access to the original exception object, allowing users to inspect
+    /// exception-specific properties and make fine-grained retry decisions. This is particularly
+    /// useful for scenarios like checking SQL transient errors or HTTP API status codes.
+    /// Note: This property may be null if the failure details were deserialized from storage or
+    /// received from a remote source, as exceptions are not serialized.
+    /// </remarks>
+    public Exception? OriginalException { get; init; }
+
+    /// <summary>
     /// Gets a debug-friendly description of the failure information.
     /// </summary>
     /// <returns>A debugger friendly display string.</returns>
@@ -164,7 +176,10 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
                 coreEx.FailureDetails?.ErrorMessage ?? "(unknown)",
                 coreEx.FailureDetails?.StackTrace,
                 FromCoreFailureDetailsRecursive(coreEx.FailureDetails?.InnerFailure) ?? FromExceptionRecursive(coreEx.InnerException),
-                coreEx.FailureDetails?.Properties);
+                coreEx.FailureDetails?.Properties)
+            {
+                OriginalException = exception,
+            };
         }
 
         // might need to udpate this later
@@ -173,7 +188,10 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
             exception.Message,
             exception.StackTrace,
             FromExceptionRecursive(exception.InnerException),
-            null);
+            null)
+        {
+            OriginalException = exception,
+        };
     }
 
     static TaskFailureDetails? FromCoreFailureDetailsRecursive(CoreFailureDetails? coreFailureDetails)

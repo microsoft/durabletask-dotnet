@@ -866,6 +866,82 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.True(activityFailure.IsCausedBy<ArgumentOutOfRangeException>());
     }
 
+    /// <summary>
+    /// Tests that OriginalException property allows access to specific exception properties for retry logic.
+    /// </summary>
+    [Theory]
+    [InlineData(404, 2, OrchestrationRuntimeStatus.Completed)] // 404 is retryable, should succeed after 2 attempts
+    [InlineData(500, 3, OrchestrationRuntimeStatus.Failed)] // 500 is not retryable, should fail immediately
+    public async Task RetryWithOriginalExceptionAccess(int statusCode, int expectedAttempts, OrchestrationRuntimeStatus expectedStatus)
+    {
+        string errorMessage = "API call failed";
+        int actualNumberOfAttempts = 0;
+        bool originalExceptionWasNull = false;
+
+        RetryPolicy retryPolicy = new(
+            maxNumberOfAttempts: 3,
+            firstRetryInterval: TimeSpan.FromMilliseconds(1))
+        {
+            HandleFailure = taskFailureDetails =>
+            {
+                // This demonstrates the use case from the issue: accessing the original exception
+                // to make fine-grained retry decisions based on specific exception properties
+                // The taskFailureDetails.OriginalException is the inner exception (ApiException)
+                // from the DurableTask.Core.Exceptions.TaskFailedException wrapper
+                Console.WriteLine($"ErrorType: {taskFailureDetails.ErrorType}, OriginalException: {taskFailureDetails.OriginalException?.GetType().Name ?? "NULL"}");
+                
+                if (taskFailureDetails.OriginalException == null)
+                {
+                    originalExceptionWasNull = true;
+                    // Fallback to using IsCausedBy for type checking if OriginalException is null
+                    return taskFailureDetails.IsCausedBy<ApiException>();
+                }
+
+                if (taskFailureDetails.OriginalException is ApiException apiException)
+                {
+                    // Only retry on specific status codes (400, 401, 404)
+                    return apiException.StatusCode == 400 || apiException.StatusCode == 401 || apiException.StatusCode == 404;
+                }
+
+                return false;
+            },
+        };
+
+        TaskOptions taskOptions = TaskOptions.FromRetryPolicy(retryPolicy);
+
+        TaskName orchestratorName = "OrchestrationWithApiException";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks =>
+                tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
+                {
+                    await ctx.CallActivityAsync("ApiActivity", options: taskOptions);
+                })
+                .AddActivityFunc("ApiActivity", (TaskActivityContext context) =>
+                {
+                    actualNumberOfAttempts++;
+                    if (actualNumberOfAttempts < 3)
+                    {
+                        throw new ApiException(statusCode, errorMessage);
+                    }
+                }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(expectedStatus, metadata.RuntimeStatus);
+        Assert.Equal(expectedAttempts, actualNumberOfAttempts);
+        // When the OriginalException is available, originalExceptionWasNull should be false
+        if (expectedStatus == OrchestrationRuntimeStatus.Completed)
+        {
+            Assert.False(originalExceptionWasNull, "OriginalException should be available for retry logic");
+        }
+    }
+
     [Serializable]
     class CustomException : Exception
     {
@@ -881,6 +957,28 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
 
 #pragma warning disable SYSLIB0051
         protected CustomException(SerializationInfo info, StreamingContext context)
+            : base(info, context)
+        {
+        }
+#pragma warning restore SYSLIB0051
+    }
+
+    /// <summary>
+    /// Custom API exception with status code to test the use case from the issue.
+    /// </summary>
+    [Serializable]
+    class ApiException : Exception
+    {
+        public ApiException(int statusCode, string message)
+            : base(message)
+        {
+            this.StatusCode = statusCode;
+        }
+
+        public int StatusCode { get; }
+
+#pragma warning disable SYSLIB0051
+        protected ApiException(SerializationInfo info, StreamingContext context)
             : base(info, context)
         {
         }

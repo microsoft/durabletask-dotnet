@@ -521,6 +521,9 @@ public static Task<string> MyOrchestrator([OrchestrationTrigger] TaskOrchestrati
         .ContinueWith(t => (string)(t.Result ?? default(string)!), TaskContinuationOptions.ExecuteSynchronously);
 }}
 
+/// <summary>
+/// Schedules a new instance of the <see cref=""MyNS.MyOrchestrator""/> orchestrator.
+/// </summary>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     this IOrchestrationSubmitter client, int input, StartOrchestrationOptions? options = null)
@@ -528,6 +531,9 @@ public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     return client.ScheduleNewOrchestrationInstanceAsync(""MyOrchestrator"", input, options);
 }}
 
+/// <summary>
+/// Calls the <see cref=""MyNS.MyOrchestrator""/> sub-orchestrator.
+/// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallMyOrchestratorAsync(
     this TaskOrchestrationContext context, int input, TaskOptions? options = null)
@@ -535,6 +541,10 @@ public static Task<string> CallMyOrchestratorAsync(
     return context.CallSubOrchestratorAsync<string>(""MyOrchestrator"", input, options);
 }}
 
+/// <summary>
+/// Calls the <see cref=""MyNS.MyActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {{
     return ctx.CallActivityAsync<string>(""MyActivity"", input, options);

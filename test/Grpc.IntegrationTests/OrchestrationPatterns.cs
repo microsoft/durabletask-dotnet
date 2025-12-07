@@ -1201,9 +1201,9 @@ public class OrchestrationPatterns : IntegrationTestBase
     [Fact]
     public async Task ActivityInput_ComplexTypesInDictionary_PreservesTypes()
     {
-        // This test verifies the fix for: https://github.com/microsoft/durabletask-dotnet/issues/XXX
         // Previously, when passing Dictionary<string, object> to activities, the object values
         // would be deserialized as JsonElement instead of their original types.
+        // This test verifies that complex types are now properly preserved.
         TaskName orchestratorName = "ComplexInputOrchestrator";
         TaskName activityName = "ComplexInputActivity";
         

@@ -205,7 +205,7 @@ namespace MyNS
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
-static readonly ITaskOrchestrator singletonMyOrchestrator = new MyNS.MyOrchestrator();
+static readonly ITaskOrchestrator singletonMyOrchestrator = new MyOrchestrator();
 
 [Function(nameof(MyOrchestrator))]
 public static Task<{outputType}> MyOrchestrator([OrchestrationTrigger] TaskOrchestrationContext context)
@@ -227,6 +227,7 @@ public static Task<{outputType}> CallMyOrchestratorAsync(
 {{
     return context.CallSubOrchestratorAsync<{outputType}>(""MyOrchestrator"", input, options);
 }}",
+            targetNamespace: "MyNS",
             isDurableFunctions: true);
 
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
@@ -282,7 +283,7 @@ namespace MyNS
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
-static readonly ITaskOrchestrator singletonMyOrchestrator = new MyNS.MyOrchestrator();
+static readonly ITaskOrchestrator singletonMyOrchestrator = new MyOrchestrator();
 
 [Function(nameof(MyOrchestrator))]
 public static Task<{outputType}> MyOrchestrator([OrchestrationTrigger] TaskOrchestrationContext context)
@@ -304,6 +305,7 @@ public static Task<{outputType}> CallMyOrchestratorAsync(
 {{
     return context.CallSubOrchestratorAsync<{outputType}>(""MyOrchestrator"", input, options);
 }}",
+            targetNamespace: "MyNS",
             isDurableFunctions: true);
 
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
@@ -344,8 +346,9 @@ namespace MyNS
 [Function(nameof(MyEntity))]
 public static Task MyEntity([EntityTrigger] TaskEntityDispatcher dispatcher)
 {
-    return dispatcher.DispatchAsync<MyNS.MyEntity>();
+    return dispatcher.DispatchAsync<MyEntity>();
 }",
+            targetNamespace: "MyNS",
             isDurableFunctions: true);
 
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
@@ -391,8 +394,9 @@ namespace MyNS
 [Function(nameof(MyEntity))]
 public static Task MyEntity([EntityTrigger] TaskEntityDispatcher dispatcher)
 {
-    return dispatcher.DispatchAsync<MyNS.MyEntity>();
+    return dispatcher.DispatchAsync<MyEntity>();
 }",
+            targetNamespace: "MyNS",
             isDurableFunctions: true);
 
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
@@ -485,7 +489,7 @@ namespace MyNS
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
-static readonly ITaskOrchestrator singletonMyOrchestrator = new MyNS.MyOrchestrator();
+static readonly ITaskOrchestrator singletonMyOrchestrator = new MyOrchestrator();
 
 [Function(nameof(MyOrchestrator))]
 public static Task<string> MyOrchestrator([OrchestrationTrigger] TaskOrchestrationContext context)
@@ -516,7 +520,7 @@ public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx
 [Function(nameof(MyActivity))]
 public static async Task<string> MyActivity([ActivityTrigger] int input, string instanceId, FunctionContext executionContext)
 {{
-    ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<MyNS.MyActivity>(executionContext.InstanceServices);
+    ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<MyActivity>(executionContext.InstanceServices);
     TaskActivityContext context = new GeneratedActivityContext(""MyActivity"", instanceId);
     object? result = await activity.RunAsync(context, input);
     return (string)result!;
@@ -525,9 +529,10 @@ public static async Task<string> MyActivity([ActivityTrigger] int input, string 
 [Function(nameof(MyEntity))]
 public static Task MyEntity([EntityTrigger] TaskEntityDispatcher dispatcher)
 {{
-    return dispatcher.DispatchAsync<MyNS.MyEntity>();
+    return dispatcher.DispatchAsync<MyEntity>();
 }}
 {TestHelpers.DeIndent(DurableTaskSourceGenerator.GetGeneratedActivityContextCode(), spacesToRemove: 8)}",
+            targetNamespace: "MyNS",
             isDurableFunctions: true);
 
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(

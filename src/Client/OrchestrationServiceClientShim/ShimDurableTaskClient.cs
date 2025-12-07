@@ -7,6 +7,7 @@ using System.Globalization;
 using DurableTask.Core;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
+using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -192,7 +193,25 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
             },
         };
 
-        await this.Client.CreateTaskOrchestrationAsync(message);
+        Core.OrchestrationStatus[]? dedupeStatuses = null;
+        if (options?.DedupeStatuses != null && options.DedupeStatuses.Count > 0)
+        {
+            dedupeStatuses = options.DedupeStatuses
+                .Select(s =>
+                {
+                    if (!Enum.TryParse<OrchestrationRuntimeStatus>(s, ignoreCase: true, out var status))
+                    {
+                        var validStatuses = string.Join(", ", StartOrchestrationOptionsExtensions.ValidDedupeStatuses.Select(ts => ts.ToString()));
+                        throw new ArgumentException(
+                            $"Invalid orchestration runtime status for deduplication: '{s}'. Valid statuses for deduplication are: {validStatuses}",
+                            nameof(options.DedupeStatuses));
+                    }
+                    return status.ConvertToCore();
+                })
+                .ToArray();
+        }
+
+        await this.Client.CreateTaskOrchestrationAsync(message, dedupeStatuses);
         return instanceId;
     }
 

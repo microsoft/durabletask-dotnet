@@ -1,10 +1,11 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using DurableTask.Core;
+using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
 using Google.Protobuf.WellKnownTypes;
@@ -202,6 +203,34 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
 
         try
         {
+            // Convert OrchestrationIdReusePolicy to dedupeStatuses
+            // The policy uses "replaceableStatus" - these are statuses that CAN be replaced
+            // dedupeStatuses are statuses that should NOT be replaced (should throw exception)
+            // So dedupeStatuses = all terminal statuses MINUS replaceableStatus
+            OrchestrationStatus[]? dedupeStatuses = null;
+            if (request.OrchestrationIdReusePolicy != null && request.OrchestrationIdReusePolicy.ReplaceableStatus.Count > 0)
+            {
+                var terminalStatuses = new HashSet<OrchestrationStatus>
+                {
+                    OrchestrationStatus.Completed,
+                    OrchestrationStatus.Failed,
+                    OrchestrationStatus.Terminated,
+                    OrchestrationStatus.Canceled,
+                };
+
+                // Remove replaceable statuses from terminal statuses to get dedupe statuses
+                foreach (P.OrchestrationStatus replaceableStatus in request.OrchestrationIdReusePolicy.ReplaceableStatus)
+                {
+                    terminalStatuses.Remove((OrchestrationStatus)replaceableStatus);
+                }
+
+                // Only set dedupeStatuses if there are any statuses that should not be replaced
+                if (terminalStatuses.Count > 0)
+                {
+                    dedupeStatuses = terminalStatuses.ToArray();
+                }
+            }
+
             await this.client.CreateTaskOrchestrationAsync(
                 new TaskMessage
                 {
@@ -216,7 +245,14 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                             : null
                     },
                     OrchestrationInstance = instance,
-                });
+                },
+                dedupeStatuses);
+        }
+        catch (OrchestrationAlreadyExistsException e)
+        {
+            // Convert to gRPC exception
+            this.log.LogWarning(e, "Orchestration with ID {InstanceId} already exists", instance.InstanceId);
+            throw new RpcException(new Status(StatusCode.AlreadyExists, e.Message));
         }
         catch (Exception e)
         {

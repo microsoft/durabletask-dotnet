@@ -77,8 +77,10 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.DependencyInjection;";
         }
 
-        // In Functions mode, don't add a blank line if the method list starts with "static readonly"
-        // (singleton declarations), as the generator doesn't add a blank line in that case
+        // The generator adds a blank line after the opening brace of the class, except when in Functions
+        // mode and the first content is singleton declarations. This logic matches that behavior.
+        // Note: This creates tight coupling between test formatting and generator implementation.
+        // If the generator's blank line logic changes, this will need to be updated as well.
         string blankLineAfterBrace = "";
         if (!isDurableFunctions || !methodList.TrimStart().StartsWith("static readonly"))
         {

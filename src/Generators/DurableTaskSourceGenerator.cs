@@ -67,6 +67,12 @@ namespace Microsoft.DurableTask.Generators
             context.RegisterSourceOutput(compilationAndTasks, static (spc, source) => Execute(spc, source.Item1, source.Item2, source.Item3));
         }
 
+        static string GetNamespaceOrEmpty(INamespaceSymbol namespaceSymbol)
+        {
+            // Return empty string for global namespace, otherwise return the display string
+            return namespaceSymbol.IsGlobalNamespace ? string.Empty : namespaceSymbol.ToDisplayString();
+        }
+
         static DurableTaskTypeInfo? GetDurableTaskTypeInfo(GeneratorSyntaxContext context)
         {
             AttributeSyntax attribute = (AttributeSyntax)context.Node;
@@ -94,12 +100,7 @@ namespace Microsoft.DurableTask.Generators
             }
 
             string className = classType.ToDisplayString();
-            
-            // Get namespace, handling global namespace specially
-            string classNamespace = classType.ContainingNamespace.IsGlobalNamespace
-                ? string.Empty
-                : classType.ContainingNamespace.ToDisplayString();
-            
+            string classNamespace = GetNamespaceOrEmpty(classType.ContainingNamespace);
             INamedTypeSymbol? taskType = null;
             DurableTaskKind kind = DurableTaskKind.Orchestrator;
 
@@ -415,6 +416,12 @@ using Microsoft.Extensions.DependencyInjection;");
 
         static string SimplifyTypeNameForNamespace(string fullyQualifiedTypeName, string targetNamespace)
         {
+            // Don't simplify if target namespace is empty (global namespace)
+            if (string.IsNullOrEmpty(targetNamespace))
+            {
+                return fullyQualifiedTypeName;
+            }
+
             if (fullyQualifiedTypeName.StartsWith(targetNamespace + ".", StringComparison.Ordinal))
             {
                 return fullyQualifiedTypeName.Substring(targetNamespace.Length + 1);
@@ -675,7 +682,7 @@ using Microsoft.Extensions.DependencyInjection;");
                 
                 // Simplify System types
                 if (expression.StartsWith("System.", StringComparison.Ordinal)
-                    && symbol.ContainingNamespace.Name == "System")
+                    && symbol.ContainingNamespace.ToDisplayString() == "System")
                 {
                     expression = expression.Substring("System.".Length);
                 }

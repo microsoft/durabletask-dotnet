@@ -1197,4 +1197,81 @@ public class OrchestrationPatterns : IntegrationTestBase
 
     // TODO: Test for multiple external events with the same name
     // TODO: Test for catching activity exceptions of specific types
+
+    [Fact]
+    public async Task ActivityInput_ComplexTypesInDictionary_PreservesTypes()
+    {
+        // This test verifies the fix for: https://github.com/microsoft/durabletask-dotnet/issues/XXX
+        // Previously, when passing Dictionary<string, object> to activities, the object values
+        // would be deserialized as JsonElement instead of their original types.
+        TaskName orchestratorName = "ComplexInputOrchestrator";
+        TaskName activityName = "ComplexInputActivity";
+        
+        Dictionary<string, object> capturedInput = null!;
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<object?, string>(orchestratorName, async (ctx, _) =>
+                {
+                    Dictionary<string, object> complexInput = new()
+                    {
+                        { "StringValue", "test" },
+                        { "IntValue", 42 },
+                        { "BoolValue", true },
+                        { "NestedObject", new { Name = "TestObject", Id = 123 } },
+                        { "ArrayValue", new object[] { "item1", 2, false } },
+                    };
+
+                    return await ctx.CallActivityAsync<string>(activityName, complexInput);
+                })
+                .AddActivityFunc<Dictionary<string, object>, string>(activityName, (ctx, input) =>
+                {
+                    capturedInput = input;
+                    return Task.FromResult("success");
+                }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.Equal("success", metadata.ReadOutputAs<string>());
+
+        // Verify that the input was correctly deserialized with concrete types, not JsonElement
+        Assert.NotNull(capturedInput);
+        
+        // String should remain a string
+        Assert.IsType<string>(capturedInput["StringValue"]);
+        Assert.Equal("test", capturedInput["StringValue"]);
+
+        // Int should remain an int
+        Assert.IsType<int>(capturedInput["IntValue"]);
+        Assert.Equal(42, capturedInput["IntValue"]);
+
+        // Bool should remain a bool
+        Assert.IsType<bool>(capturedInput["BoolValue"]);
+        Assert.Equal(true, capturedInput["BoolValue"]);
+
+        // Nested object should be a Dictionary<string, object>, not JsonElement
+        Assert.IsType<Dictionary<string, object>>(capturedInput["NestedObject"]);
+        Dictionary<string, object> nestedObject = (Dictionary<string, object>)capturedInput["NestedObject"];
+        Assert.IsType<string>(nestedObject["Name"]);
+        Assert.Equal("TestObject", nestedObject["Name"]);
+        Assert.IsType<int>(nestedObject["Id"]);
+        Assert.Equal(123, nestedObject["Id"]);
+
+        // Array should be object[], not JsonElement
+        Assert.IsType<object[]>(capturedInput["ArrayValue"]);
+        object[] arrayValue = (object[])capturedInput["ArrayValue"];
+        Assert.Equal(3, arrayValue.Length);
+        Assert.IsType<string>(arrayValue[0]);
+        Assert.Equal("item1", arrayValue[0]);
+        Assert.IsType<int>(arrayValue[1]);
+        Assert.Equal(2, arrayValue[1]);
+        Assert.IsType<bool>(arrayValue[2]);
+        Assert.Equal(false, arrayValue[2]);
+    }
 }

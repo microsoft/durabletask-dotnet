@@ -14,6 +14,7 @@ public class JsonDataConverter : DataConverter
     static readonly JsonSerializerOptions DefaultOptions = new()
     {
         IncludeFields = true,
+        Converters = { new ObjectToInferredTypesConverter() },
     };
 
     readonly JsonSerializerOptions? options;

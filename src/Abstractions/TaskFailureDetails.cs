@@ -182,7 +182,7 @@ public record TaskFailureDetails(string ErrorType, string ErrorMessage, string? 
             };
         }
 
-        // might need to udpate this later
+        // might need to update this later
         return new TaskFailureDetails(
             exception.GetType().ToString(),
             exception.Message,

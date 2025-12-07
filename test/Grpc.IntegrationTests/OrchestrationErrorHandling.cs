@@ -974,6 +974,13 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         protected ApiException(SerializationInfo info, StreamingContext context)
             : base(info, context)
         {
+            this.StatusCode = info.GetInt32(nameof(this.StatusCode));
+        }
+
+        public override void GetObjectData(SerializationInfo info, StreamingContext context)
+        {
+            base.GetObjectData(info, context);
+            info.AddValue(nameof(this.StatusCode), this.StatusCode);
         }
 #pragma warning restore SYSLIB0051
     }

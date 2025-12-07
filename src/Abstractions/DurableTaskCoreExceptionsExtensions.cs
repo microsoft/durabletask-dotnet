@@ -54,7 +54,7 @@ static class DurableTaskCoreExceptionsExtensions
             failureDetails.ErrorType,
             failureDetails.ErrorMessage,
             failureDetails.StackTrace,
-            failureDetails.InnerFailure?.ToTaskFailureDetails(actualException),
+            failureDetails.InnerFailure?.ToTaskFailureDetails(actualException?.InnerException),
             failureDetails.Properties)
         {
             OriginalException = actualException,

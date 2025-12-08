@@ -149,12 +149,9 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             // dedupeStatuses are statuses that should NOT be replaced (should throw exception)
             // So we add terminal statuses that are NOT in dedupeStatuses to replaceableStatus
             // This matches the logic in AAPT-DTMB ProtoUtils.Convert
-            foreach (OrchestrationRuntimeStatus terminalStatus in StartOrchestrationOptionsExtensions.ValidDedupeStatuses)
+            foreach (OrchestrationRuntimeStatus terminalStatus in StartOrchestrationOptionsExtensions.ValidDedupeStatuses.Where(ts => !dedupeStatuses.Contains(ts)))
             {
-                if (!dedupeStatuses.Contains(terminalStatus))
-                {
-                    policy.ReplaceableStatus.Add(terminalStatus.ToGrpcStatus());
-                }
+                policy.ReplaceableStatus.Add(terminalStatus.ToGrpcStatus());
             }
 
             // Only set if we have replaceable statuses

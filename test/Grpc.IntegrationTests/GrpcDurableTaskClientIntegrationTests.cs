@@ -318,7 +318,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
 
         string instanceId = "dedup-test-instance";
         
-        // Create first orchestration instance
+        // Schedule and complete first orchestration instance
         string firstInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
             OrchestrationName,
             input: false,

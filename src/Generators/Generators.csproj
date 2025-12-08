@@ -21,7 +21,6 @@
   <PropertyGroup>
     <!-- This file intentionally versions separately from the other packages. -->
     <VersionPrefix>1.0.0</VersionPrefix>
-    <VersionSuffix></VersionSuffix>
   </PropertyGroup>
 
   <ItemGroup>

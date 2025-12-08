@@ -350,8 +350,8 @@ public class ShimDurableTaskClientTests
         // Capture the TaskMessage for verification becasue we will create this message at RestartAsync.
         TaskMessage? capturedMessage = null;
         this.orchestrationClient
-            .Setup(x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>()))
-            .Callback<TaskMessage>(msg => capturedMessage = msg)
+            .Setup(x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>(), It.IsAny<Core.OrchestrationStatus[]?>()))
+            .Callback<TaskMessage, Core.OrchestrationStatus[]?>((msg, _) => capturedMessage = msg)
             .Returns(Task.CompletedTask);
 
         string restartedInstanceId = await this.client.RestartAsync(originalInstanceId, restartWithNewInstanceId);
@@ -367,7 +367,7 @@ public class ShimDurableTaskClientTests
 
         // Verify that CreateTaskOrchestrationAsync was called
         this.orchestrationClient.Verify(
-            x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>()),
+            x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>(), It.IsAny<Core.OrchestrationStatus[]?>()),
             Times.Once);
 
         // Verify the captured message details
@@ -534,7 +534,9 @@ public class ShimDurableTaskClientTests
     {
         // arrange
         this.orchestrationClient.Setup(
-            m => m.CreateTaskOrchestrationAsync(MatchStartExecutionMessage(name, input, options)))
+            m => m.CreateTaskOrchestrationAsync(
+                MatchStartExecutionMessage(name, input, options),
+                It.IsAny<Core.OrchestrationStatus[]?>()))
             .Returns(Task.CompletedTask);
 
         // act
@@ -542,7 +544,9 @@ public class ShimDurableTaskClientTests
 
         // assert
         this.orchestrationClient.Verify(
-            m => m.CreateTaskOrchestrationAsync(MatchStartExecutionMessage(name, input, options)),
+            m => m.CreateTaskOrchestrationAsync(
+                MatchStartExecutionMessage(name, input, options),
+                It.IsAny<Core.OrchestrationStatus[]?>()),
             Times.Once());
 
         if (options?.InstanceId is string str)

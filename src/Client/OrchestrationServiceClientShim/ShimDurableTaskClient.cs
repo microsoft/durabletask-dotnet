@@ -322,7 +322,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
             },
         };
 
-        await this.Client.CreateTaskOrchestrationAsync(message);
+        await this.Client.CreateTaskOrchestrationAsync(message, dedupeStatuses: null);
         return newInstanceId;
     }
 

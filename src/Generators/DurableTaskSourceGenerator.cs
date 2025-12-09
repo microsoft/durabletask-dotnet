@@ -270,6 +270,15 @@ namespace Microsoft.DurableTask
                 }
             }
 
+            foreach (DurableTaskTypeInfo entity in entities)
+            {
+                if (isDurableFunctions)
+                {
+                    // Generate the function definition required to trigger entities in Azure Functions
+                    AddEntityFunctionDeclaration(sourceBuilder, entity);
+                }
+            }
+
             // Activity function triggers are supported for code-gen (but not orchestration triggers)
             IEnumerable<DurableFunction> activityTriggers = allFunctions.Where(
                 df => df.Kind == DurableFunctionKind.Activity);
@@ -316,6 +325,9 @@ namespace Microsoft.DurableTask
         static void AddOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator)
         {
             sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Schedules a new instance of the <see cref=""{orchestrator.TypeName}""/> orchestrator.
+        /// </summary>
         /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
         public static Task<string> ScheduleNew{orchestrator.TaskName}InstanceAsync(
             this IOrchestrationSubmitter client, {orchestrator.InputParameter}, StartOrchestrationOptions? options = null)
@@ -327,6 +339,9 @@ namespace Microsoft.DurableTask
         static void AddSubOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator)
         {
             sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Calls the <see cref=""{orchestrator.TypeName}""/> sub-orchestrator.
+        /// </summary>
         /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
         public static Task<{orchestrator.OutputType}> Call{orchestrator.TaskName}Async(
             this TaskOrchestrationContext context, {orchestrator.InputParameter}, TaskOptions? options = null)
@@ -338,6 +353,10 @@ namespace Microsoft.DurableTask
         static void AddActivityCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo activity)
         {
             sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Calls the <see cref=""{activity.TypeName}""/> activity.
+        /// </summary>
+        /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
         public static Task<{activity.OutputType}> Call{activity.TaskName}Async(this TaskOrchestrationContext ctx, {activity.InputParameter}, TaskOptions? options = null)
         {{
             return ctx.CallActivityAsync<{activity.OutputType}>(""{activity.TaskName}"", input, options);
@@ -347,6 +366,10 @@ namespace Microsoft.DurableTask
         static void AddActivityCallMethod(StringBuilder sourceBuilder, DurableFunction activity)
         {
             sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Calls the <see cref=""{activity.FullTypeName}""/> activity.
+        /// </summary>
+        /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
         public static Task<{activity.ReturnType}> Call{activity.Name}Async(this TaskOrchestrationContext ctx, {activity.Parameter}, TaskOptions? options = null)
         {{
             return ctx.CallActivityAsync<{activity.ReturnType}>(""{activity.Name}"", {activity.Parameter.Name}, options);
@@ -365,6 +388,17 @@ namespace Microsoft.DurableTask
             TaskActivityContext context = new GeneratedActivityContext(""{activity.TaskName}"", instanceId);
             object? result = await activity.RunAsync(context, input);
             return ({activity.OutputType})result!;
+        }}");
+        }
+
+        static void AddEntityFunctionDeclaration(StringBuilder sourceBuilder, DurableTaskTypeInfo entity)
+        {
+            // Generate the entity trigger function that dispatches to the entity implementation.
+            sourceBuilder.AppendLine($@"
+        [Function(nameof({entity.TaskName}))]
+        public static Task {entity.TaskName}([EntityTrigger] TaskEntityDispatcher dispatcher)
+        {{
+            return dispatcher.DispatchAsync<{entity.TypeName}>();
         }}");
         }
 

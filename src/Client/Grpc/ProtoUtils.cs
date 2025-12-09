@@ -40,10 +40,10 @@ public static class ProtoUtils
     /// So replaceableStatus = all terminal statuses MINUS dedupeStatuses.
     /// </remarks>
     public static P.OrchestrationIdReusePolicy? ConvertDedupeStatusesToReusePolicy(
-        IEnumerable<P.OrchestrationStatus> dedupeStatuses)
+        IEnumerable<P.OrchestrationStatus>? dedupeStatuses)
     {
         ImmutableArray<P.OrchestrationStatus> terminalStatuses = GetTerminalStatuses();
-        ImmutableHashSet<P.OrchestrationStatus> dedupeStatusSet = dedupeStatuses.ToImmutableHashSet();
+        ImmutableHashSet<P.OrchestrationStatus> dedupeStatusSet = dedupeStatuses?.ToImmutableHashSet() ?? ImmutableHashSet<P.OrchestrationStatus>.Empty;
 
         P.OrchestrationIdReusePolicy policy = new();
 

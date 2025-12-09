@@ -80,17 +80,12 @@ public static class ProtoUtils
         ImmutableHashSet<P.OrchestrationStatus> replaceableStatusSet = policy.ReplaceableStatus.ToImmutableHashSet();
 
         // Calculate dedupe statuses = terminal statuses - replaceable statuses
-        List<P.OrchestrationStatus> dedupeStatuses = new();
-        foreach (P.OrchestrationStatus terminalStatus in terminalStatuses)
-        {
-            if (!replaceableStatusSet.Contains(terminalStatus))
-            {
-                dedupeStatuses.Add(terminalStatus);
-            }
-        }
+        P.OrchestrationStatus[] dedupeStatuses = terminalStatuses
+            .Where(terminalStatus => !replaceableStatusSet.Contains(terminalStatus))
+            .ToArray();
 
         // Only return if there are dedupe statuses
-        return dedupeStatuses.Count > 0 ? dedupeStatuses.ToArray() : null;
+        return dedupeStatuses.Length > 0 ? dedupeStatuses : null;
     }
 
 #pragma warning disable 0618 // Referencing Obsolete member. This is intention as we are only converting it.

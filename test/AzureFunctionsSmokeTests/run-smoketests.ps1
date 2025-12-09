@@ -123,7 +123,21 @@ try {
     Write-Host "Step 6: Starting Azure Functions container..." -ForegroundColor Green
     
     # Azurite connection string for Docker network
-    $storageConnectionString = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite-smoketest:10000/devstoreaccount1;QueueEndpoint=http://azurite-smoketest:10001/devstoreaccount1;TableEndpoint=http://azurite-smoketest:10002/devstoreaccount1;"
+    # Using the default Azurite development account credentials
+    $accountName = "devstoreaccount1"
+    $accountKey = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+    $blobEndpoint = "http://azurite-smoketest:10000/$accountName"
+    $queueEndpoint = "http://azurite-smoketest:10001/$accountName"
+    $tableEndpoint = "http://azurite-smoketest:10002/$accountName"
+    
+    $storageConnectionString = @(
+        "DefaultEndpointsProtocol=http"
+        "AccountName=$accountName"
+        "AccountKey=$accountKey"
+        "BlobEndpoint=$blobEndpoint"
+        "QueueEndpoint=$queueEndpoint"
+        "TableEndpoint=$tableEndpoint"
+    ) -join ";"
     
     docker run -d `
         --name $ContainerName `
@@ -194,6 +208,8 @@ try {
     Write-Host "Step 8: Polling for orchestration completion..." -ForegroundColor Green
     $startTime = Get-Date
     $completed = $false
+    $consecutiveErrors = 0
+    $maxConsecutiveErrors = 3
     
     while (((Get-Date) - $startTime).TotalSeconds -lt $Timeout) {
         Start-Sleep -Seconds 2
@@ -201,6 +217,9 @@ try {
         try {
             $statusResponse = Invoke-WebRequest -Uri $statusQueryGetUri -UseBasicParsing
             $status = $statusResponse.Content | ConvertFrom-Json
+            
+            # Reset error counter on successful poll
+            $consecutiveErrors = 0
             
             Write-Host "Current status: $($status.runtimeStatus)" -ForegroundColor Yellow
             
@@ -216,7 +235,14 @@ try {
             }
         }
         catch {
-            Write-Host "Error polling status: $_" -ForegroundColor Red
+            $consecutiveErrors++
+            Write-Host "Error polling status (attempt $consecutiveErrors/$maxConsecutiveErrors): $_" -ForegroundColor Red
+            
+            if ($consecutiveErrors -ge $maxConsecutiveErrors) {
+                Write-Host "Container logs:" -ForegroundColor Yellow
+                docker logs $ContainerName
+                throw "Too many consecutive errors polling orchestration status"
+            }
         }
     }
     

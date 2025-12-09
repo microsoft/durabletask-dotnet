@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Collections.Immutable;
+using System.Linq;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Client.Grpc;
@@ -47,12 +48,9 @@ public static class ProtoUtils
         P.OrchestrationIdReusePolicy policy = new();
 
         // Add terminal statuses that are NOT in dedupeStatuses as replaceable
-        foreach (P.OrchestrationStatus terminalStatus in terminalStatuses)
+        foreach (P.OrchestrationStatus terminalStatus in terminalStatuses.Where(status => !dedupeStatusSet.Contains(status)))
         {
-            if (!dedupeStatusSet.Contains(terminalStatus))
-            {
-                policy.ReplaceableStatus.Add(terminalStatus);
-            }
+            policy.ReplaceableStatus.Add(terminalStatus);
         }
 
         // Only return policy if we have replaceable statuses

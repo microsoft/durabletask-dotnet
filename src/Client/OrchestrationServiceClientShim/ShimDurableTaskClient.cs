@@ -201,9 +201,9 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                 {
                     if (!Enum.TryParse<OrchestrationRuntimeStatus>(s, ignoreCase: true, out var status))
                     {
-                        var validStatuses = string.Join(", ", StartOrchestrationOptionsExtensions.ValidDedupeStatuses.Select(ts => ts.ToString()));
+                        var validStatuses = string.Join(", ", Enum.GetNames(typeof(OrchestrationRuntimeStatus)));
                         throw new ArgumentException(
-                            $"Invalid orchestration runtime status for deduplication: '{s}'. Valid statuses for deduplication are: {validStatuses}",
+                            $"Invalid orchestration runtime status: '{s}' for deduplication. Valid values are: {validStatuses}",
                             nameof(options.DedupeStatuses));
                     }
                     return status.ConvertToCore();

@@ -134,9 +134,9 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
                 {
                     if (!System.Enum.TryParse<OrchestrationRuntimeStatus>(s, ignoreCase: true, out OrchestrationRuntimeStatus status))
                     {
-                        string validStatuses = string.Join(", ", StartOrchestrationOptionsExtensions.ValidDedupeStatuses.Select(ts => ts.ToString()));
+                        string validStatuses = string.Join(", ", System.Enum.GetNames(typeof(OrchestrationRuntimeStatus)));
                         throw new ArgumentException(
-                            $"Invalid orchestration runtime status for deduplication: '{s}'. Valid statuses for deduplication are: {validStatuses}",
+                            $"Invalid orchestration runtime status: '{s}' for deduplication. Valid values are: {validStatuses}",
                             nameof(options.DedupeStatuses));
                     }
 
@@ -146,9 +146,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             P.OrchestrationIdReusePolicy policy = new();
 
             // The policy uses "replaceableStatus" - these are statuses that CAN be replaced
-            // dedupeStatuses are statuses that should NOT be replaced (should throw exception)
-            // So we add terminal statuses that are NOT in dedupeStatuses to replaceableStatus
-            // This matches the logic in AAPT-DTMB ProtoUtils.Convert
+            // dedupeStatuses are statuses that should NOT be replaced
             foreach (OrchestrationRuntimeStatus terminalStatus in StartOrchestrationOptionsExtensions.ValidDedupeStatuses.Where(ts => !dedupeStatuses.Contains(ts)))
             {
                 policy.ReplaceableStatus.Add(terminalStatus.ToGrpcStatus());

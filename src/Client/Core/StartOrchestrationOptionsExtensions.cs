@@ -9,8 +9,10 @@ namespace Microsoft.DurableTask.Client;
 public static class StartOrchestrationOptionsExtensions
 {
     /// <summary>
-    /// Gets the terminal orchestration runtime statuses that are valid for deduplication.
-    /// These are the statuses that can be used to prevent replacement of an existing orchestration instance.
+    /// Gets the terminal orchestration runtime statuses commonly used for deduplication.
+    /// These are typically the statuses used to prevent replacement of an existing orchestration instance.
+    /// Note: Any <see cref="OrchestrationRuntimeStatus"/> value can be used for deduplication;
+    /// this collection is provided for convenience and reference only.
     /// </summary>
     public static readonly OrchestrationRuntimeStatus[] ValidDedupeStatuses = new[]
     {

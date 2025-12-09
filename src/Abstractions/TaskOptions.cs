@@ -137,13 +137,9 @@ public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffse
 
     /// <summary>
     /// Gets the orchestration runtime statuses that should be considered for deduplication.
-    /// If an orchestration instance with the same instance ID already exists and is in one of these statuses,
-    /// the creation will throw an exception instead of creating a new instance.
-    /// This enables idempotent orchestration creation.
     /// </summary>
     /// <remarks>
     /// The status names should match the values from <see cref="Microsoft.DurableTask.Client.OrchestrationRuntimeStatus"/> enum
-    /// (e.g., "Completed", "Failed", "Terminated", "Canceled").
     /// For type-safe usage, use extension methods from <see cref="StartOrchestrationOptionsExtensions"/>.
     /// </remarks>
     public IReadOnlyList<string>? DedupeStatuses { get; init; }

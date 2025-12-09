@@ -143,17 +143,11 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
                     return status;
                 }).ToImmutableHashSet();
 
-            P.OrchestrationIdReusePolicy policy = new();
+            // Convert dedupe statuses to protobuf statuses and create reuse policy
+            IEnumerable<P.OrchestrationStatus> dedupeStatusesProto = dedupeStatuses.Select(s => s.ToGrpcStatus());
+            P.OrchestrationIdReusePolicy? policy = ProtoUtils.ConvertDedupeStatusesToReusePolicy(dedupeStatusesProto);
 
-            // The policy uses "replaceableStatus" - these are statuses that CAN be replaced
-            // dedupeStatuses are statuses that should NOT be replaced
-            foreach (OrchestrationRuntimeStatus terminalStatus in StartOrchestrationOptionsExtensions.ValidDedupeStatuses.Where(ts => !dedupeStatuses.Contains(ts)))
-            {
-                policy.ReplaceableStatus.Add(terminalStatus.ToGrpcStatus());
-            }
-
-            // Only set if we have replaceable statuses
-            if (policy.ReplaceableStatus.Count > 0)
+            if (policy != null)
             {
                 request.OrchestrationIdReusePolicy = policy;
             }

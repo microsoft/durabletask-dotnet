@@ -4,12 +4,14 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
+using System.Linq;
 using DurableTask.Core;
 using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
+using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.DurableTask.Testing.Sidecar.Dispatcher;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -208,27 +210,11 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             // dedupeStatuses are statuses that should NOT be replaced (should throw exception)
             // So dedupeStatuses = all terminal statuses MINUS replaceableStatus
             OrchestrationStatus[]? dedupeStatuses = null;
-            if (request.OrchestrationIdReusePolicy != null && request.OrchestrationIdReusePolicy.ReplaceableStatus.Count > 0)
+            P.OrchestrationStatus[]? dedupeStatusesProto = ProtoUtils.ConvertReusePolicyToDedupeStatuses(request.OrchestrationIdReusePolicy);
+            if (dedupeStatusesProto != null)
             {
-                var terminalStatuses = new HashSet<OrchestrationStatus>
-                {
-                    OrchestrationStatus.Completed,
-                    OrchestrationStatus.Failed,
-                    OrchestrationStatus.Terminated,
-                    OrchestrationStatus.Canceled,
-                };
-
-                // Remove replaceable statuses from terminal statuses to get dedupe statuses
-                foreach (P.OrchestrationStatus replaceableStatus in request.OrchestrationIdReusePolicy.ReplaceableStatus)
-                {
-                    terminalStatuses.Remove((OrchestrationStatus)replaceableStatus);
-                }
-
-                // Only set dedupeStatuses if there are any statuses that should not be replaced
-                if (terminalStatuses.Count > 0)
-                {
-                    dedupeStatuses = terminalStatuses.ToArray();
-                }
+                // Convert protobuf statuses to Core.OrchestrationStatus
+                dedupeStatuses = dedupeStatusesProto.Select(s => (OrchestrationStatus)s).ToArray();
             }
 
             await this.client.CreateTaskOrchestrationAsync(

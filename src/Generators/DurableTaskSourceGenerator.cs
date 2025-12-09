@@ -454,6 +454,9 @@ using Microsoft.Extensions.DependencyInjection;");
             }
 
             sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Schedules a new instance of the <see cref=""{orchestrator.TypeName}""/> orchestrator.
+        /// </summary>
         /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
         public static Task<string> ScheduleNew{orchestrator.TaskName}InstanceAsync(
             this IOrchestrationSubmitter client, {inputParameter}, StartOrchestrationOptions? options = null)
@@ -473,6 +476,9 @@ using Microsoft.Extensions.DependencyInjection;");
             }
 
             sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Calls the <see cref=""{orchestrator.TypeName}""/> sub-orchestrator.
+        /// </summary>
         /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
         public static Task<{outputType}> Call{orchestrator.TaskName}Async(
             this TaskOrchestrationContext context, {inputParameter}, TaskOptions? options = null)
@@ -492,7 +498,11 @@ using Microsoft.Extensions.DependencyInjection;");
             }
 
             sourceBuilder.AppendLine($@"
-        public static Task<{outputType}> Call{activity.TaskName}Async(this TaskOrchestrationContext ctx, {inputParameter}, TaskOptions? options = null)
+        /// <summary>
+        /// Calls the <see cref=""{activity.TypeName}""/> activity.
+        /// </summary>
+        /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
+        public static Task<{activity.OutputType}> Call{activity.TaskName}Async(this TaskOrchestrationContext ctx, {activity.InputParameter}, TaskOptions? options = null)
         {{
             return ctx.CallActivityAsync<{outputType}>(""{activity.TaskName}"", input, options);
         }}");
@@ -501,6 +511,10 @@ using Microsoft.Extensions.DependencyInjection;");
         static void AddActivityCallMethod(StringBuilder sourceBuilder, DurableFunction activity)
         {
             sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Calls the <see cref=""{activity.FullTypeName}""/> activity.
+        /// </summary>
+        /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
         public static Task<{activity.ReturnType}> Call{activity.Name}Async(this TaskOrchestrationContext ctx, {activity.Parameter}, TaskOptions? options = null)
         {{
             return ctx.CallActivityAsync<{activity.ReturnType}>(""{activity.Name}"", {activity.Parameter.Name}, options);

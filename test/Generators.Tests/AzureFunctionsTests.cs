@@ -27,6 +27,10 @@ public class Calculator
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
+/// <summary>
+/// Calls the <see cref=""Calculator.Identity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<int> CallIdentityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<int>(""Identity"", input, options);
@@ -57,6 +61,10 @@ public class Calculator
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
+/// <summary>
+/// Calls the <see cref=""Calculator.IdentityAsync""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<int> CallIdentityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<int>(""Identity"", input, options);
@@ -92,6 +100,10 @@ namespace AzureFunctionsTests
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
+/// <summary>
+/// Calls the <see cref=""AzureFunctionsTests.Calculator.Identity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<AzureFunctionsTests.Input> CallIdentityAsync(this TaskOrchestrationContext ctx, AzureFunctionsTests.Input input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<AzureFunctionsTests.Input>(""Identity"", input, options);
@@ -141,6 +153,10 @@ public class MyActivity : TaskActivity<{inputType}, {outputType}>
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
+/// <summary>
+/// Calls the <see cref=""MyActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<{outputType}> CallMyActivityAsync(this TaskOrchestrationContext ctx, {inputType} input, TaskOptions? options = null)
 {{
     return ctx.CallActivityAsync<{outputType}>(""MyActivity"", input, options);
@@ -214,6 +230,9 @@ public static Task<{outputType}> MyOrchestrator([OrchestrationTrigger] TaskOrche
         .ContinueWith(t => ({outputType})(t.Result ?? default({outputType})!), TaskContinuationOptions.ExecuteSynchronously);
 }}
 
+/// <summary>
+/// Schedules a new instance of the <see cref=""MyNS.MyOrchestrator""/> orchestrator.
+/// </summary>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     this IOrchestrationSubmitter client, {expectedInputParameter}, StartOrchestrationOptions? options = null)
@@ -221,6 +240,9 @@ public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     return client.ScheduleNewOrchestrationInstanceAsync(""MyOrchestrator"", input, options);
 }}
 
+/// <summary>
+/// Calls the <see cref=""MyNS.MyOrchestrator""/> sub-orchestrator.
+/// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<{outputType}> CallMyOrchestratorAsync(
     this TaskOrchestrationContext context, {expectedInputParameter}, TaskOptions? options = null)
@@ -292,6 +314,9 @@ public static Task<{outputType}> MyOrchestrator([OrchestrationTrigger] TaskOrche
         .ContinueWith(t => ({outputType})(t.Result ?? default({outputType})!), TaskContinuationOptions.ExecuteSynchronously);
 }}
 
+/// <summary>
+/// Schedules a new instance of the <see cref=""MyNS.MyOrchestrator""/> orchestrator.
+/// </summary>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     this IOrchestrationSubmitter client, {expectedInputParameter}, StartOrchestrationOptions? options = null)
@@ -299,6 +324,9 @@ public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     return client.ScheduleNewOrchestrationInstanceAsync(""MyOrchestrator"", input, options);
 }}
 
+/// <summary>
+/// Calls the <see cref=""MyNS.MyOrchestrator""/> sub-orchestrator.
+/// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<{outputType}> CallMyOrchestratorAsync(
     this TaskOrchestrationContext context, {expectedInputParameter}, TaskOptions? options = null)
@@ -498,6 +526,9 @@ public static Task<string> MyOrchestrator([OrchestrationTrigger] TaskOrchestrati
         .ContinueWith(t => (string)(t.Result ?? default(string)!), TaskContinuationOptions.ExecuteSynchronously);
 }}
 
+/// <summary>
+/// Schedules a new instance of the <see cref=""MyNS.MyOrchestrator""/> orchestrator.
+/// </summary>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     this IOrchestrationSubmitter client, int input, StartOrchestrationOptions? options = null)
@@ -505,6 +536,9 @@ public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
     return client.ScheduleNewOrchestrationInstanceAsync(""MyOrchestrator"", input, options);
 }}
 
+/// <summary>
+/// Calls the <see cref=""MyNS.MyOrchestrator""/> sub-orchestrator.
+/// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallMyOrchestratorAsync(
     this TaskOrchestrationContext context, int input, TaskOptions? options = null)
@@ -512,6 +546,10 @@ public static Task<string> CallMyOrchestratorAsync(
     return context.CallSubOrchestratorAsync<string>(""MyOrchestrator"", input, options);
 }}
 
+/// <summary>
+/// Calls the <see cref=""MyNS.MyActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {{
     return ctx.CallActivityAsync<string>(""MyActivity"", input, options);

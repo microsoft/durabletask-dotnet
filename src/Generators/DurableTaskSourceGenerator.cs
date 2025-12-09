@@ -453,9 +453,11 @@ using Microsoft.Extensions.DependencyInjection;");
                 inputParameter += " = default";
             }
 
+            string simplifiedTypeName = SimplifyTypeNameForNamespace(orchestrator.TypeName, targetNamespace);
+
             sourceBuilder.AppendLine($@"
         /// <summary>
-        /// Schedules a new instance of the <see cref=""{orchestrator.TypeName}""/> orchestrator.
+        /// Schedules a new instance of the <see cref=""{simplifiedTypeName}""/> orchestrator.
         /// </summary>
         /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
         public static Task<string> ScheduleNew{orchestrator.TaskName}InstanceAsync(
@@ -475,9 +477,11 @@ using Microsoft.Extensions.DependencyInjection;");
                 inputParameter += " = default";
             }
 
+            string simplifiedTypeName = SimplifyTypeNameForNamespace(orchestrator.TypeName, targetNamespace);
+
             sourceBuilder.AppendLine($@"
         /// <summary>
-        /// Calls the <see cref=""{orchestrator.TypeName}""/> sub-orchestrator.
+        /// Calls the <see cref=""{simplifiedTypeName}""/> sub-orchestrator.
         /// </summary>
         /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
         public static Task<{outputType}> Call{orchestrator.TaskName}Async(
@@ -497,12 +501,14 @@ using Microsoft.Extensions.DependencyInjection;");
                 inputParameter += " = default";
             }
 
+            string simplifiedTypeName = SimplifyTypeNameForNamespace(activity.TypeName, targetNamespace);
+
             sourceBuilder.AppendLine($@"
         /// <summary>
-        /// Calls the <see cref=""{activity.TypeName}""/> activity.
+        /// Calls the <see cref=""{simplifiedTypeName}""/> activity.
         /// </summary>
         /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
-        public static Task<{activity.OutputType}> Call{activity.TaskName}Async(this TaskOrchestrationContext ctx, {activity.InputParameter}, TaskOptions? options = null)
+        public static Task<{outputType}> Call{activity.TaskName}Async(this TaskOrchestrationContext ctx, {inputParameter}, TaskOptions? options = null)
         {{
             return ctx.CallActivityAsync<{outputType}>(""{activity.TaskName}"", input, options);
         }}");

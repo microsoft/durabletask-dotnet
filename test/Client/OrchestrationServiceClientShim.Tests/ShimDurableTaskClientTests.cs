@@ -347,7 +347,7 @@ public class ShimDurableTaskClientTests
             .Setup(x => x.GetOrchestrationStateAsync(originalInstanceId, false))
             .ReturnsAsync(new List<Core.OrchestrationState> { originalState });
 
-        // Capture the TaskMessage for verification becasue we will create this message at RestartAsync.
+        // Capture the TaskMessage for verification because we will create this message at RestartAsync.
         TaskMessage? capturedMessage = null;
         this.orchestrationClient
             .Setup(x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>(), It.IsAny<Core.OrchestrationStatus[]?>()))

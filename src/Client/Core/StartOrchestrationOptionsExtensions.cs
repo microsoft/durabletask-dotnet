@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Linq;
+
 namespace Microsoft.DurableTask.Client;
 
 /// <summary>
@@ -8,12 +10,6 @@ namespace Microsoft.DurableTask.Client;
 /// </summary>
 public static class StartOrchestrationOptionsExtensions
 {
-    /// <summary>
-    /// Gets the terminal orchestration runtime statuses commonly used for deduplication.
-    /// These are typically the statuses used to prevent replacement of an existing orchestration instance.
-    /// Note: Any <see cref="OrchestrationRuntimeStatus"/> value can be used for deduplication;
-    /// this collection is provided for convenience and reference only.
-    /// </summary>
     public static readonly OrchestrationRuntimeStatus[] ValidDedupeStatuses = new[]
     {
         OrchestrationRuntimeStatus.Completed,

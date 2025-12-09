@@ -139,8 +139,7 @@ public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffse
     /// Gets the orchestration runtime statuses that should be considered for deduplication.
     /// </summary>
     /// <remarks>
-    /// The status names should match the values from <see cref="Microsoft.DurableTask.Client.OrchestrationRuntimeStatus"/> enum
-    /// For type-safe usage, use extension methods from <see cref="StartOrchestrationOptionsExtensions"/>.
+    /// For type-safe usage, use the WithDedupeStatuses extension method.
     /// </remarks>
     public IReadOnlyList<string>? DedupeStatuses { get; init; }
 }

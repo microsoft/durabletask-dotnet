@@ -134,10 +134,8 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
                 {
                     if (!System.Enum.TryParse<OrchestrationRuntimeStatus>(s, ignoreCase: true, out OrchestrationRuntimeStatus status))
                     {
-                        string validStatuses = string.Join(", ", System.Enum.GetNames(typeof(OrchestrationRuntimeStatus)));
                         throw new ArgumentException(
-                            $"Invalid orchestration runtime status: '{s}' for deduplication. Valid values are: {validStatuses}",
-                            nameof(options.DedupeStatuses));
+                            $"Invalid orchestration runtime status: '{s}' for deduplication.");
                     }
 
                     return status;

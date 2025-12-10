@@ -240,7 +240,9 @@ public abstract class TaskOrchestrationContext
         using CancellationTokenSource timerCts = new();
         Task timeoutTask = this.CreateTimer(timeout, timerCts.Token);
 
-        // Create a linked cancellation token source that combines the external cancellation token with a timer cancellation token
+        // Create a linked cancellation token source from the external cancellation token.
+        // This allows us to cancel the event wait either when the external token is cancelled
+        // or when the timeout fires (by calling eventCts.Cancel()).
         using CancellationTokenSource eventCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task<T> externalEventTask = this.WaitForExternalEvent<T>(eventName, eventCts.Token);
 

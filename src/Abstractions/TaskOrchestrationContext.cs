@@ -222,28 +222,9 @@ public abstract class TaskOrchestrationContext
     /// </param>
     /// <param name="timeout">The amount of time to wait before cancelling the external event task.</param>
     /// <inheritdoc cref="WaitForExternalEvent(string, CancellationToken)"/>
-    public async Task<T> WaitForExternalEvent<T>(string eventName, TimeSpan timeout)
+    public Task<T> WaitForExternalEvent<T>(string eventName, TimeSpan timeout)
     {
-        // Timeouts are implemented using durable timers.
-        using CancellationTokenSource timerCts = new();
-        Task timeoutTask = this.CreateTimer(timeout, timerCts.Token);
-
-        using CancellationTokenSource eventCts = new();
-        Task<T> externalEventTask = this.WaitForExternalEvent<T>(eventName, eventCts.Token);
-
-        // Wait for either task to complete and then cancel the one that didn't.
-        Task winner = await Task.WhenAny(timeoutTask, externalEventTask);
-        if (winner == externalEventTask)
-        {
-            timerCts.Cancel();
-        }
-        else
-        {
-            eventCts.Cancel();
-        }
-
-        // This will either return the received value or throw if the task was cancelled.
-        return await externalEventTask;
+        return this.WaitForExternalEvent<T>(eventName, timeout, CancellationToken.None);
     }
 
     /// <param name="eventName">

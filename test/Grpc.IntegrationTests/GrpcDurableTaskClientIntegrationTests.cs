@@ -13,6 +13,8 @@ namespace Microsoft.DurableTask.Grpc.Tests;
 public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
 {
     const string OrchestrationName = "TestOrchestration";
+    const int PollingTimeoutSeconds = 5;
+    const int PollingIntervalMilliseconds = 100;
 
     public DurableTaskGrpcClientIntegrationTests(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
         : base(output, sidecarFixture)
@@ -303,19 +305,9 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         // Act - Suspend the orchestration
         await server.Client.SuspendInstanceAsync(instanceId, "Test suspension", default);
 
-        // Poll for suspended status (up to 5 seconds)
-        OrchestrationMetadata? suspendedMetadata = null;
-        DateTime deadline = DateTime.UtcNow.AddSeconds(5);
-        while (DateTime.UtcNow < deadline)
-        {
-            suspendedMetadata = await server.Client.GetInstanceAsync(instanceId, false);
-            if (suspendedMetadata?.RuntimeStatus == OrchestrationRuntimeStatus.Suspended)
-            {
-                break;
-            }
-
-            await Task.Delay(TimeSpan.FromMilliseconds(100));
-        }
+        // Poll for suspended status
+        OrchestrationMetadata? suspendedMetadata = await this.PollForStatusAsync(
+            server.Client, instanceId, OrchestrationRuntimeStatus.Suspended, default);
 
         // Assert - Verify orchestration is suspended
         suspendedMetadata.Should().NotBeNull();
@@ -325,19 +317,9 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         // Act - Resume the orchestration
         await server.Client.ResumeInstanceAsync(instanceId, "Test resumption", default);
 
-        // Poll for running status (up to 5 seconds)
-        OrchestrationMetadata? resumedMetadata = null;
-        deadline = DateTime.UtcNow.AddSeconds(5);
-        while (DateTime.UtcNow < deadline)
-        {
-            resumedMetadata = await server.Client.GetInstanceAsync(instanceId, false);
-            if (resumedMetadata?.RuntimeStatus == OrchestrationRuntimeStatus.Running)
-            {
-                break;
-            }
-
-            await Task.Delay(TimeSpan.FromMilliseconds(100));
-        }
+        // Poll for running status
+        OrchestrationMetadata? resumedMetadata = await this.PollForStatusAsync(
+            server.Client, instanceId, OrchestrationRuntimeStatus.Running, default);
 
         // Assert - Verify orchestration is running again
         resumedMetadata.Should().NotBeNull();
@@ -367,19 +349,9 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         // Act - Suspend without a reason
         await server.Client.SuspendInstanceAsync(instanceId, cancellation: default);
 
-        // Poll for suspended status (up to 5 seconds)
-        OrchestrationMetadata? suspendedMetadata = null;
-        DateTime deadline = DateTime.UtcNow.AddSeconds(5);
-        while (DateTime.UtcNow < deadline)
-        {
-            suspendedMetadata = await server.Client.GetInstanceAsync(instanceId, false);
-            if (suspendedMetadata?.RuntimeStatus == OrchestrationRuntimeStatus.Suspended)
-            {
-                break;
-            }
-
-            await Task.Delay(TimeSpan.FromMilliseconds(100));
-        }
+        // Poll for suspended status
+        OrchestrationMetadata? suspendedMetadata = await this.PollForStatusAsync(
+            server.Client, instanceId, OrchestrationRuntimeStatus.Suspended, default);
 
         // Assert
         suspendedMetadata.Should().NotBeNull();
@@ -399,34 +371,14 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         await server.Client.SuspendInstanceAsync(instanceId, "Test suspension", default);
 
         // Wait for suspension
-        DateTime deadline = DateTime.UtcNow.AddSeconds(5);
-        while (DateTime.UtcNow < deadline)
-        {
-            OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
-            if (metadata?.RuntimeStatus == OrchestrationRuntimeStatus.Suspended)
-            {
-                break;
-            }
-
-            await Task.Delay(TimeSpan.FromMilliseconds(100));
-        }
+        await this.PollForStatusAsync(server.Client, instanceId, OrchestrationRuntimeStatus.Suspended, default);
 
         // Act - Resume without a reason
         await server.Client.ResumeInstanceAsync(instanceId, cancellation: default);
 
-        // Poll for running status (up to 5 seconds)
-        OrchestrationMetadata? resumedMetadata = null;
-        deadline = DateTime.UtcNow.AddSeconds(5);
-        while (DateTime.UtcNow < deadline)
-        {
-            resumedMetadata = await server.Client.GetInstanceAsync(instanceId, false);
-            if (resumedMetadata?.RuntimeStatus == OrchestrationRuntimeStatus.Running)
-            {
-                break;
-            }
-
-            await Task.Delay(TimeSpan.FromMilliseconds(100));
-        }
+        // Poll for running status
+        OrchestrationMetadata? resumedMetadata = await this.PollForStatusAsync(
+            server.Client, instanceId, OrchestrationRuntimeStatus.Running, default);
 
         // Assert
         resumedMetadata.Should().NotBeNull();
@@ -527,6 +479,27 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         {
             b.AddTasks(tasks => tasks.AddOrchestratorFunc<bool, string>(OrchestrationName, LongRunningOrchestration));
         });
+    }
+
+    async Task<OrchestrationMetadata?> PollForStatusAsync(
+        DurableTaskClient client,
+        string instanceId,
+        OrchestrationRuntimeStatus expectedStatus,
+        CancellationToken cancellation = default)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(PollingTimeoutSeconds);
+        while (DateTime.UtcNow < deadline)
+        {
+            OrchestrationMetadata? metadata = await client.GetInstanceAsync(instanceId, false, cancellation);
+            if (metadata?.RuntimeStatus == expectedStatus)
+            {
+                return metadata;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(PollingIntervalMilliseconds), cancellation);
+        }
+
+        return await client.GetInstanceAsync(instanceId, false, cancellation);
     }
 
     class DateTimeToleranceComparer : IEqualityComparer<DateTimeOffset>

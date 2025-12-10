@@ -203,7 +203,11 @@ namespace Microsoft.DurableTask.Generators
             if (attribute.ArgumentList?.Arguments.Count > 0)
             {
                 ExpressionSyntax expression = attribute.ArgumentList.Arguments[0].Expression;
-                eventName = context.SemanticModel.GetConstantValue(expression).ToString();
+                Optional<object?> constantValue = context.SemanticModel.GetConstantValue(expression);
+                if (constantValue.HasValue && constantValue.Value is string value)
+                {
+                    eventName = value;
+                }
             }
 
             return new DurableEventTypeInfo(typeName, eventName, eventType);

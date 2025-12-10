@@ -183,6 +183,12 @@
   <data name="ThreadTaskOrchestrationAnalyzerTitle" xml:space="preserve">
     <value>Thread and Task calls must be deterministic inside an orchestrator function</value>
   </data>
+  <data name="LoggerOrchestrationAnalyzerMessageFormat" xml:space="preserve">
+    <value>The method '{0}' uses a non-contextual logger that may cause unexpected behavior when invoked from orchestration '{1}'. Use 'context.CreateReplaySafeLogger()' instead.</value>
+  </data>
+  <data name="LoggerOrchestrationAnalyzerTitle" xml:space="preserve">
+    <value>Orchestrations should use replay-safe loggers created from the orchestration context</value>
+  </data>
   <data name="InputArgumentTypeMismatchAnalyzerMessageFormat" xml:space="preserve">
     <value>CallActivityAsync is passing the incorrect type '{0}' instead of '{1}' to the activity function '{2}'</value>
   </data>

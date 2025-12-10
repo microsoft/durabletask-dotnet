@@ -35,15 +35,30 @@ public sealed class DateTimeOrchestrationFixer : OrchestrationContextFixer
         // Gets the name of the TaskOrchestrationContext parameter (e.g. "context" or "ctx")
         string contextParameterName = orchestrationContext.TaskOrchestrationContextSymbol.Name;
 
-        // Check if this is a DateTimeOffset expression
-        bool isDateTimeOffset = dateTimeExpression.Expression.ToString().Contains("DateTimeOffset");
+        // Use semantic analysis to determine if this is a DateTimeOffset expression
+        SemanticModel semanticModel = orchestrationContext.SemanticModel;
+        ITypeSymbol? typeSymbol = semanticModel.GetTypeInfo(dateTimeExpression.Expression).Type;
+        bool isDateTimeOffset = typeSymbol?.ToDisplayString() == "System.DateTimeOffset";
+
         bool isDateTimeToday = dateTimeExpression.Name.ToString() == "Today";
-        string dateTimeTodaySuffix = isDateTimeToday ? ".Date" : string.Empty;
-        string recommendation = $"{contextParameterName}.CurrentUtcDateTime{dateTimeTodaySuffix}";
+
+        // Build the recommendation text
+        string recommendation;
+        if (isDateTimeOffset)
+        {
+            // For DateTimeOffset, we always just cast CurrentUtcDateTime
+            recommendation = $"(DateTimeOffset){contextParameterName}.CurrentUtcDateTime";
+        }
+        else
+        {
+            // For DateTime, we may need to add .Date for Today
+            string dateTimeTodaySuffix = isDateTimeToday ? ".Date" : string.Empty;
+            recommendation = $"{contextParameterName}.CurrentUtcDateTime{dateTimeTodaySuffix}";
+        }
 
         // e.g: "Use 'context.CurrentUtcDateTime' instead of 'DateTime.Now'"
         // e.g: "Use 'context.CurrentUtcDateTime.Date' instead of 'DateTime.Today'"
-        // e.g: "Use 'context.CurrentUtcDateTime' instead of 'DateTimeOffset.Now'"
+        // e.g: "Use '(DateTimeOffset)context.CurrentUtcDateTime' instead of 'DateTimeOffset.Now'"
         string title = string.Format(
             CultureInfo.InvariantCulture,
             Resources.UseInsteadFixerTitle,

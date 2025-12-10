@@ -72,7 +72,13 @@ public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer<DateTi
                     continue;
                 }
 
-                if (property.Name is nameof(DateTime.Now) or nameof(DateTime.UtcNow) or nameof(DateTime.Today))
+                // Check for non-deterministic properties
+                // DateTime has: Now, UtcNow, Today
+                // DateTimeOffset has: Now, UtcNow (but not Today)
+                bool isNonDeterministic = property.Name is nameof(DateTime.Now) or nameof(DateTime.UtcNow) ||
+                                         (isDateTime && property.Name == nameof(DateTime.Today));
+
+                if (isNonDeterministic)
                 {
                     // e.g.: "The method 'Method1' uses 'System.DateTime.Now' that may cause non-deterministic behavior when invoked from orchestration 'MyOrchestrator'"
                     // e.g.: "The method 'Method1' uses 'System.DateTimeOffset.Now' that may cause non-deterministic behavior when invoked from orchestration 'MyOrchestrator'"

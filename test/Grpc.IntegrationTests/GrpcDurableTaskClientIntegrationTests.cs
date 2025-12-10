@@ -288,6 +288,203 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             .WithMessage("*An orchestration with the instanceId non-existent-instance-id was not found*");
     }
 
+    [Fact]
+    public async Task SuspendAndResumeInstance_EndToEnd()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartLongRunningAsync();
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false);
+
+        // Wait for the orchestration to start
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+
+        // Act - Suspend the orchestration
+        await server.Client.SuspendInstanceAsync(instanceId, "Test suspension", default);
+
+        // Poll for suspended status (up to 5 seconds)
+        OrchestrationMetadata? suspendedMetadata = null;
+        DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            suspendedMetadata = await server.Client.GetInstanceAsync(instanceId, false);
+            if (suspendedMetadata?.RuntimeStatus == OrchestrationRuntimeStatus.Suspended)
+            {
+                break;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(100));
+        }
+
+        // Assert - Verify orchestration is suspended
+        suspendedMetadata.Should().NotBeNull();
+        suspendedMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Suspended);
+        suspendedMetadata.InstanceId.Should().Be(instanceId);
+
+        // Act - Resume the orchestration
+        await server.Client.ResumeInstanceAsync(instanceId, "Test resumption", default);
+
+        // Poll for running status (up to 5 seconds)
+        OrchestrationMetadata? resumedMetadata = null;
+        deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            resumedMetadata = await server.Client.GetInstanceAsync(instanceId, false);
+            if (resumedMetadata?.RuntimeStatus == OrchestrationRuntimeStatus.Running)
+            {
+                break;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(100));
+        }
+
+        // Assert - Verify orchestration is running again
+        resumedMetadata.Should().NotBeNull();
+        resumedMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Running);
+
+        // Complete the orchestration
+        await server.Client.RaiseEventAsync(instanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(instanceId, default);
+
+        // Verify the orchestration completed successfully
+        OrchestrationMetadata? completedMetadata = await server.Client.GetInstanceAsync(instanceId, false);
+        completedMetadata.Should().NotBeNull();
+        completedMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+    }
+
+    [Fact]
+    public async Task SuspendInstance_WithoutReason_Succeeds()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartLongRunningAsync();
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false);
+
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+
+        // Act - Suspend without a reason
+        await server.Client.SuspendInstanceAsync(instanceId, cancellation: default);
+
+        // Poll for suspended status (up to 5 seconds)
+        OrchestrationMetadata? suspendedMetadata = null;
+        DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            suspendedMetadata = await server.Client.GetInstanceAsync(instanceId, false);
+            if (suspendedMetadata?.RuntimeStatus == OrchestrationRuntimeStatus.Suspended)
+            {
+                break;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(100));
+        }
+
+        // Assert
+        suspendedMetadata.Should().NotBeNull();
+        suspendedMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Suspended);
+    }
+
+    [Fact]
+    public async Task ResumeInstance_WithoutReason_Succeeds()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartLongRunningAsync();
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false);
+
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+        await server.Client.SuspendInstanceAsync(instanceId, "Test suspension", default);
+
+        // Wait for suspension
+        DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+            if (metadata?.RuntimeStatus == OrchestrationRuntimeStatus.Suspended)
+            {
+                break;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(100));
+        }
+
+        // Act - Resume without a reason
+        await server.Client.ResumeInstanceAsync(instanceId, cancellation: default);
+
+        // Poll for running status (up to 5 seconds)
+        OrchestrationMetadata? resumedMetadata = null;
+        deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            resumedMetadata = await server.Client.GetInstanceAsync(instanceId, false);
+            if (resumedMetadata?.RuntimeStatus == OrchestrationRuntimeStatus.Running)
+            {
+                break;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(100));
+        }
+
+        // Assert
+        resumedMetadata.Should().NotBeNull();
+        resumedMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Running);
+    }
+
+    [Fact]
+    public async Task SuspendInstance_AlreadyCompleted_NoError()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartAsync();
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false);
+
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+        await server.Client.RaiseEventAsync(instanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(instanceId, default);
+
+        // Verify it's completed
+        OrchestrationMetadata? completedMetadata = await server.Client.GetInstanceAsync(instanceId, false);
+        completedMetadata.Should().NotBeNull();
+        completedMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+
+        // Act - Try to suspend a completed orchestration (should not throw)
+        await server.Client.SuspendInstanceAsync(instanceId, "Test suspension", default);
+
+        // Assert - Status should remain completed
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+        metadata.Should().NotBeNull();
+        metadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+    }
+
+    [Fact]
+    public async Task ResumeInstance_NotSuspended_NoError()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartLongRunningAsync();
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false);
+
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+
+        // Verify it's running
+        OrchestrationMetadata? runningMetadata = await server.Client.GetInstanceAsync(instanceId, false);
+        runningMetadata.Should().NotBeNull();
+        runningMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Running);
+
+        // Act - Try to resume an already running orchestration (should not throw)
+        await server.Client.ResumeInstanceAsync(instanceId, "Test resumption", default);
+
+        // Assert - Status should remain running
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+        metadata.Should().NotBeNull();
+        metadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Running);
+    }
+
     Task<HostTestLifetime> StartAsync()
     {
         static async Task<string> Orchestration(TaskOrchestrationContext context, bool shouldThrow)
@@ -305,6 +502,30 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         return this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestratorFunc<bool, string>(OrchestrationName, Orchestration));
+        });
+    }
+
+    Task<HostTestLifetime> StartLongRunningAsync()
+    {
+        static async Task<string> LongRunningOrchestration(TaskOrchestrationContext context, bool shouldThrow)
+        {
+            context.SetCustomStatus("waiting");
+            // Wait for external event or a long timer (5 minutes) to allow suspend/resume operations
+            Task<string> eventTask = context.WaitForExternalEvent<string>("event");
+            Task timerTask = context.CreateTimer(TimeSpan.FromMinutes(5), CancellationToken.None);
+            await Task.WhenAny(eventTask, timerTask);
+            
+            if (shouldThrow)
+            {
+                throw new InvalidOperationException("Orchestration failed");
+            }
+
+            return $"{shouldThrow} -> output";
+        }
+
+        return this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc<bool, string>(OrchestrationName, LongRunningOrchestration));
         });
     }
 

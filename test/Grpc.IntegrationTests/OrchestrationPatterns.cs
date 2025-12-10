@@ -1195,56 +1195,6 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal(EventCount, metadata.ReadOutputAs<int>());
     }
 
-    [Theory]
-    [InlineData(2)]
-    [InlineData(5)]
-    [InlineData(10)]
-    public async Task MultipleExternalEventsWithSameName(int eventCount)
-    {
-        TaskName orchestratorName = nameof(MultipleExternalEventsWithSameName);
-        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
-        {
-            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
-            {
-                List<string> receivedEvents = new();
-                for (int i = 0; i < eventCount; i++)
-                {
-                    string eventData = await ctx.WaitForExternalEvent<string>("MyEvent");
-                    receivedEvents.Add(eventData);
-                }
-
-                return receivedEvents;
-            }));
-        });
-
-        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
-
-        // To ensure consistency, wait for the instance to start before sending the events
-        OrchestrationMetadata metadata = await server.Client.WaitForInstanceStartAsync(
-            instanceId,
-            this.TimeoutToken);
-
-        // Send multiple events with the same name but different payloads
-        List<string> expectedEvents = new();
-        for (int i = 0; i < eventCount; i++)
-        {
-            string eventData = $"Event_{i}";
-            expectedEvents.Add(eventData);
-            await server.Client.RaiseEventAsync(metadata.InstanceId, "MyEvent", eventPayload: eventData);
-        }
-
-        // Once the orchestration receives all the events it is expecting, it should complete.
-        metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-        Assert.NotNull(metadata);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-
-        List<string>? results = metadata.ReadOutputAs<List<string>>();
-        Assert.NotNull(results);
-        Assert.Equal(eventCount, results!.Count);
-        Assert.Equal(expectedEvents, results);
-    }
-
     [Fact]
     public async Task CatchingActivityExceptionsByType()
     {

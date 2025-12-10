@@ -462,9 +462,9 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         static async Task<string> LongRunningOrchestration(TaskOrchestrationContext context, bool shouldThrow)
         {
             context.SetCustomStatus("waiting");
-            // Wait for external event or a long timer (5 minutes) to allow suspend/resume operations
+            // Wait for external event or a timer (30 seconds) to allow suspend/resume operations
             Task<string> eventTask = context.WaitForExternalEvent<string>("event");
-            Task timerTask = context.CreateTimer(TimeSpan.FromMinutes(5), CancellationToken.None);
+            Task timerTask = context.CreateTimer(TimeSpan.FromSeconds(30), CancellationToken.None);
             await Task.WhenAny(eventTask, timerTask);
             
             if (shouldThrow)

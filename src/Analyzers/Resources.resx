@@ -198,4 +198,16 @@
   <data name="UseInsteadFixerTitle" xml:space="preserve">
     <value>Use '{0}' instead of '{1}'</value>
   </data>
+  <data name="ActivityNotFoundAnalyzerMessageFormat" xml:space="preserve">
+    <value>The activity function '{0}' was not found in the current compilation. Ensure the activity is defined and the name matches exactly.</value>
+  </data>
+  <data name="ActivityNotFoundAnalyzerTitle" xml:space="preserve">
+    <value>Activity function not found</value>
+  </data>
+  <data name="SubOrchestrationNotFoundAnalyzerMessageFormat" xml:space="preserve">
+    <value>The sub-orchestration '{0}' was not found in the current compilation. Ensure the orchestrator is defined and the name matches exactly.</value>
+  </data>
+  <data name="SubOrchestrationNotFoundAnalyzerTitle" xml:space="preserve">
+    <value>Sub-orchestration not found</value>
+  </data>
 </root>

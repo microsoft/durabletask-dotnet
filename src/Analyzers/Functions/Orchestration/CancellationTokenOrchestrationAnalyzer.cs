@@ -30,7 +30,8 @@ public class CancellationTokenOrchestrationAnalyzer : OrchestrationAnalyzer<Canc
         MessageFormat,
         AnalyzersCategories.Orchestration,
         DiagnosticSeverity.Warning,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: $"https://learn.microsoft.com/azure/azure-functions/durable/durable-functions-code-constraints?tabs=csharp#{DiagnosticId}");
 
     /// <inheritdoc/>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];

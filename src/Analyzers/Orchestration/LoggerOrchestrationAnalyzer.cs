@@ -128,21 +128,10 @@ public sealed class LoggerOrchestrationAnalyzer : OrchestrationAnalyzer<LoggerOr
                 return true;
             }
 
-            // Check if the type is ILogger<T> by checking if it implements ILogger
+            // Check if the type implements ILogger interface (covers ILogger<T> case)
             if (type is INamedTypeSymbol namedType)
             {
-                // Check all interfaces implemented by the type
                 foreach (INamedTypeSymbol interfaceType in namedType.AllInterfaces)
-                {
-                    if (SymbolEqualityComparer.Default.Equals(interfaceType, this.iLoggerSymbol))
-                    {
-                        return true;
-                    }
-                }
-
-                // Also check if the original definition matches (for generic types like ILogger<T>)
-                INamedTypeSymbol originalDefinition = namedType.OriginalDefinition;
-                foreach (INamedTypeSymbol interfaceType in originalDefinition.AllInterfaces)
                 {
                     if (SymbolEqualityComparer.Default.Equals(interfaceType, this.iLoggerSymbol))
                     {

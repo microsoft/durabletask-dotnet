@@ -26,7 +26,7 @@ public sealed class DateTimeOrchestrationFixer : OrchestrationContextFixer
     /// <inheritdoc/>
     protected override void RegisterCodeFixes(CodeFixContext context, OrchestrationCodeFixContext orchestrationContext)
     {
-        // Parses the syntax node to see if it is a member access expression (e.g. DateTime.Now)
+        // Parses the syntax node to see if it is a member access expression (e.g. DateTime.Now or DateTimeOffset.Now)
         if (orchestrationContext.SyntaxNodeWithDiagnostic is not MemberAccessExpressionSyntax dateTimeExpression)
         {
             return;
@@ -35,12 +35,15 @@ public sealed class DateTimeOrchestrationFixer : OrchestrationContextFixer
         // Gets the name of the TaskOrchestrationContext parameter (e.g. "context" or "ctx")
         string contextParameterName = orchestrationContext.TaskOrchestrationContextSymbol.Name;
 
+        // Check if this is a DateTimeOffset expression
+        bool isDateTimeOffset = dateTimeExpression.Expression.ToString().Contains("DateTimeOffset");
         bool isDateTimeToday = dateTimeExpression.Name.ToString() == "Today";
         string dateTimeTodaySuffix = isDateTimeToday ? ".Date" : string.Empty;
         string recommendation = $"{contextParameterName}.CurrentUtcDateTime{dateTimeTodaySuffix}";
 
         // e.g: "Use 'context.CurrentUtcDateTime' instead of 'DateTime.Now'"
         // e.g: "Use 'context.CurrentUtcDateTime.Date' instead of 'DateTime.Today'"
+        // e.g: "Use 'context.CurrentUtcDateTime' instead of 'DateTimeOffset.Now'"
         string title = string.Format(
             CultureInfo.InvariantCulture,
             Resources.UseInsteadFixerTitle,
@@ -50,15 +53,15 @@ public sealed class DateTimeOrchestrationFixer : OrchestrationContextFixer
         context.RegisterCodeFix(
             CodeAction.Create(
                 title: title,
-                createChangedDocument: c => ReplaceDateTime(context.Document, orchestrationContext.Root, dateTimeExpression, contextParameterName, isDateTimeToday),
+                createChangedDocument: c => ReplaceDateTime(context.Document, orchestrationContext.Root, dateTimeExpression, contextParameterName, isDateTimeToday, isDateTimeOffset),
                 equivalenceKey: title), // This key is used to prevent duplicate code fixes.
             context.Diagnostics);
     }
 
-    static Task<Document> ReplaceDateTime(Document document, SyntaxNode oldRoot, MemberAccessExpressionSyntax incorrectDateTimeSyntax, string contextParameterName, bool isDateTimeToday)
+    static Task<Document> ReplaceDateTime(Document document, SyntaxNode oldRoot, MemberAccessExpressionSyntax incorrectDateTimeSyntax, string contextParameterName, bool isDateTimeToday, bool isDateTimeOffset)
     {
         // Builds a 'context.CurrentUtcDateTime' syntax node
-        MemberAccessExpressionSyntax correctDateTimeSyntax =
+        ExpressionSyntax correctDateTimeSyntax =
             MemberAccessExpression(
                 SyntaxKind.SimpleMemberAccessExpression,
                 IdentifierName(contextParameterName),
@@ -71,6 +74,15 @@ public sealed class DateTimeOrchestrationFixer : OrchestrationContextFixer
                 SyntaxKind.SimpleMemberAccessExpression,
                 correctDateTimeSyntax,
                 IdentifierName("Date"));
+        }
+
+        // If the original expression was DateTimeOffset, we need to cast the DateTime to DateTimeOffset
+        // This is done using a CastExpression: (DateTimeOffset)context.CurrentUtcDateTime
+        if (isDateTimeOffset)
+        {
+            correctDateTimeSyntax = CastExpression(
+                IdentifierName("DateTimeOffset"),
+                correctDateTimeSyntax);
         }
 
         // Replaces the old local declaration with the new local declaration.

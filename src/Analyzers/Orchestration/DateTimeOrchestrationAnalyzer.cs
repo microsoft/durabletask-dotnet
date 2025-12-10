@@ -10,7 +10,7 @@ using static Microsoft.DurableTask.Analyzers.Orchestration.DateTimeOrchestration
 namespace Microsoft.DurableTask.Analyzers.Orchestration;
 
 /// <summary>
-/// Analyzer that reports a warning when a non-deterministic DateTime property is used in an orchestration method.
+/// Analyzer that reports a warning when a non-deterministic DateTime or DateTimeOffset property is used in an orchestration method.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer<DateTimeOrchestrationVisitor>
@@ -35,16 +35,18 @@ public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer<DateTi
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];
 
     /// <summary>
-    /// Visitor that inspects the method body for DateTime properties.
+    /// Visitor that inspects the method body for DateTime and DateTimeOffset properties.
     /// </summary>
     public sealed class DateTimeOrchestrationVisitor : MethodProbeOrchestrationVisitor
     {
         INamedTypeSymbol systemDateTimeSymbol = null!;
+        INamedTypeSymbol? systemDateTimeOffsetSymbol;
 
         /// <inheritdoc/>
         public override bool Initialize()
         {
             this.systemDateTimeSymbol = this.Compilation.GetSpecialType(SpecialType.System_DateTime);
+            this.systemDateTimeOffsetSymbol = this.Compilation.GetTypeByMetadataName("System.DateTimeOffset");
             return true;
         }
 
@@ -61,14 +63,19 @@ public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer<DateTi
             {
                 IPropertySymbol property = operation.Property;
 
-                if (!property.ContainingSymbol.Equals(this.systemDateTimeSymbol, SymbolEqualityComparer.Default))
+                bool isDateTime = property.ContainingSymbol.Equals(this.systemDateTimeSymbol, SymbolEqualityComparer.Default);
+                bool isDateTimeOffset = this.systemDateTimeOffsetSymbol is not null &&
+                                       property.ContainingSymbol.Equals(this.systemDateTimeOffsetSymbol, SymbolEqualityComparer.Default);
+
+                if (!isDateTime && !isDateTimeOffset)
                 {
-                    return;
+                    continue;
                 }
 
                 if (property.Name is nameof(DateTime.Now) or nameof(DateTime.UtcNow) or nameof(DateTime.Today))
                 {
-                    // e.g.: "The method 'Method1' uses 'System.Date.Now' that may cause non-deterministic behavior when invoked from orchestration 'MyOrchestrator'"
+                    // e.g.: "The method 'Method1' uses 'System.DateTime.Now' that may cause non-deterministic behavior when invoked from orchestration 'MyOrchestrator'"
+                    // e.g.: "The method 'Method1' uses 'System.DateTimeOffset.Now' that may cause non-deterministic behavior when invoked from orchestration 'MyOrchestrator'"
                     reportDiagnostic(RoslynExtensions.BuildDiagnostic(Rule, operation.Syntax, methodSymbol.Name, property.ToString(), orchestrationName));
                 }
             }

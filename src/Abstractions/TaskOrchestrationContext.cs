@@ -246,6 +246,38 @@ public abstract class TaskOrchestrationContext
         return await externalEventTask;
     }
 
+    /// <param name="eventName">
+    /// The name of the event to wait for. Event names are case-insensitive. External event names can be reused any
+    /// number of times; they are not required to be unique.
+    /// </param>
+    /// <param name="timeout">The amount of time to wait before cancelling the external event task.</param>
+    /// <param name="cancellationToken">A <c>CancellationToken</c> to use to abort waiting for the event.</param>
+    /// <inheritdoc cref="WaitForExternalEvent(string, CancellationToken)"/>
+    public async Task<T> WaitForExternalEvent<T>(string eventName, TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        // Timeouts are implemented using durable timers.
+        using CancellationTokenSource timerCts = new();
+        Task timeoutTask = this.CreateTimer(timeout, timerCts.Token);
+
+        // Create a linked cancellation token source that combines the external cancellation token with a timer cancellation token
+        using CancellationTokenSource eventCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        Task<T> externalEventTask = this.WaitForExternalEvent<T>(eventName, eventCts.Token);
+
+        // Wait for either task to complete and then cancel the one that didn't.
+        Task winner = await Task.WhenAny(timeoutTask, externalEventTask);
+        if (winner == externalEventTask)
+        {
+            timerCts.Cancel();
+        }
+        else
+        {
+            eventCts.Cancel();
+        }
+
+        // This will either return the received value or throw if the task was cancelled.
+        return await externalEventTask;
+    }
+
     /// <summary>
     /// Raises an external event for the specified orchestration instance.
     /// </summary>

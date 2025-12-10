@@ -62,6 +62,9 @@ public sealed class LoggerOrchestrationAnalyzer : OrchestrationAnalyzer<LoggerOr
                 return;
             }
 
+            // Track which parameters we've already reported on to avoid duplicates
+            HashSet<IParameterSymbol> reportedParameters = new(SymbolEqualityComparer.Default);
+
             // Check for ILogger parameters in the method signature
             foreach (IParameterSymbol parameter in methodSymbol.Parameters)
             {
@@ -72,11 +75,12 @@ public sealed class LoggerOrchestrationAnalyzer : OrchestrationAnalyzer<LoggerOr
                     {
                         SyntaxNode parameterSyntax = parameter.DeclaringSyntaxReferences[0].GetSyntax();
                         reportDiagnostic(RoslynExtensions.BuildDiagnostic(Rule, parameterSyntax, methodSymbol.Name, orchestrationName));
+                        reportedParameters.Add(parameter);
                     }
                 }
             }
 
-            // Check for ILogger field or property references
+            // Check for ILogger field or property references (but not parameter references, as those were already reported)
             foreach (IOperation descendant in methodOperation.Descendants())
             {
                 ITypeSymbol? typeToCheck = null;
@@ -93,6 +97,12 @@ public sealed class LoggerOrchestrationAnalyzer : OrchestrationAnalyzer<LoggerOr
                         syntaxNode = propRef.Syntax;
                         break;
                     case IParameterReferenceOperation paramRef:
+                        // Skip parameter references that we already reported on in the parameter list
+                        if (reportedParameters.Contains(paramRef.Parameter))
+                        {
+                            continue;
+                        }
+
                         typeToCheck = paramRef.Parameter.Type;
                         syntaxNode = paramRef.Syntax;
                         break;
@@ -112,17 +122,36 @@ public sealed class LoggerOrchestrationAnalyzer : OrchestrationAnalyzer<LoggerOr
                 return false;
             }
 
-            // Check if the type is ILogger or ILogger<T>
+            // First check for exact match with ILogger
+            if (SymbolEqualityComparer.Default.Equals(type, this.iLoggerSymbol))
+            {
+                return true;
+            }
+
+            // Check if the type is ILogger<T> by checking if it implements ILogger
             if (type is INamedTypeSymbol namedType)
             {
-                INamedTypeSymbol originalDefinition = namedType.OriginalDefinition;
-                if (SymbolEqualityComparer.Default.Equals(originalDefinition, this.iLoggerSymbol))
+                // Check all interfaces implemented by the type
+                foreach (INamedTypeSymbol interfaceType in namedType.AllInterfaces)
                 {
-                    return true;
+                    if (SymbolEqualityComparer.Default.Equals(interfaceType, this.iLoggerSymbol))
+                    {
+                        return true;
+                    }
+                }
+
+                // Also check if the original definition matches (for generic types like ILogger<T>)
+                INamedTypeSymbol originalDefinition = namedType.OriginalDefinition;
+                foreach (INamedTypeSymbol interfaceType in originalDefinition.AllInterfaces)
+                {
+                    if (SymbolEqualityComparer.Default.Equals(interfaceType, this.iLoggerSymbol))
+                    {
+                        return true;
+                    }
                 }
             }
 
-            return SymbolEqualityComparer.Default.Equals(type, this.iLoggerSymbol);
+            return false;
         }
     }
 }

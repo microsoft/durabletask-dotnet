@@ -22,9 +22,9 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
             // Use the type as-is, preserving the nullability annotation from the source
             string typeExpression = SyntaxNodeUtility.GetRenderedTypeExpression(this.Type, false);
             
-            // Special case: if the type is exactly "object" (not a nullable object), make it nullable
+            // Special case: if the type is exactly System.Object (not a nullable object), make it nullable
             // This is because object parameters are typically nullable in the context of Durable Functions
-            if (typeExpression == "object" && this.Type.NullableAnnotation != NullableAnnotation.Annotated)
+            if (this.Type.SpecialType == SpecialType.System_Object && this.Type.NullableAnnotation != NullableAnnotation.Annotated)
             {
                 typeExpression = "object?";
             }

@@ -74,25 +74,30 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                 returnSymbol = model.Compilation.GetSpecialType(SpecialType.System_Object);
             }
             // Check if it's Task (non-generic)
-            else if (returnTypeSymbol is INamedTypeSymbol namedReturn && 
-                     namedReturn.ContainingNamespace.ToString() == "System.Threading.Tasks" &&
-                     namedReturn.Name == "Task" &&
-                     namedReturn.TypeArguments.Length == 0)
+            else if (returnTypeSymbol is INamedTypeSymbol namedReturn)
             {
-                returnsVoid = true;
-                // For Task with no return, we'll use object as a placeholder since it won't be used
-                returnSymbol = model.Compilation.GetSpecialType(SpecialType.System_Object);
+                INamedTypeSymbol? nonGenericTaskSymbol = model.Compilation.GetTypeByMetadataName("System.Threading.Tasks.Task");
+                if (nonGenericTaskSymbol != null && SymbolEqualityComparer.Default.Equals(namedReturn, nonGenericTaskSymbol))
+                {
+                    returnsVoid = true;
+                    // For Task with no return, we'll use object as a placeholder since it won't be used
+                    returnSymbol = model.Compilation.GetSpecialType(SpecialType.System_Object);
+                }
+                // Check if it's Task<T>
+                else
+                {
+                    INamedTypeSymbol? taskSymbol = model.Compilation.GetTypeByMetadataName("System.Threading.Tasks.Task`1");
+                    returnSymbol = namedReturn;
+                    if (taskSymbol != null && SymbolEqualityComparer.Default.Equals(returnSymbol.OriginalDefinition, taskSymbol))
+                    {
+                        // this is a Task<T> return value, lets pull out the generic.
+                        returnSymbol = (INamedTypeSymbol)returnSymbol.TypeArguments[0];
+                    }
+                }
             }
-            // Check if it's Task<T>
             else
             {
-                INamedTypeSymbol taskSymbol = model.Compilation.GetTypeByMetadataName("System.Threading.Tasks.Task`1")!;
                 returnSymbol = (INamedTypeSymbol)returnTypeSymbol;
-                if (SymbolEqualityComparer.Default.Equals(returnSymbol.OriginalDefinition, taskSymbol))
-                {
-                    // this is a Task<T> return value, lets pull out the generic.
-                    returnSymbol = (INamedTypeSymbol)returnSymbol.TypeArguments[0];
-                }
             }
 
             if (!SyntaxNodeUtility.TryGetParameter(model, method, kind, out TypedParameter? parameter) || parameter == null)

@@ -51,7 +51,11 @@ public sealed class GetInputOrchestrationAnalyzer : OrchestrationAnalyzer<GetInp
 
             foreach (IInvocationOperation operation in methodOperation.Descendants().OfType<IInvocationOperation>())
             {
-                IMethodSymbol method = operation.TargetMethod;
+                IMethodSymbol? method = operation.TargetMethod;
+                if (method == null)
+                {
+                    continue;
+                }
 
                 // Check if this is a call to GetInput<T>() on TaskOrchestrationContext
                 if (method.Name != "GetInput" || !method.IsGenericMethod)

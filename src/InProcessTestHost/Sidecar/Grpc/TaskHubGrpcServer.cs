@@ -1,14 +1,17 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
+using System.Linq;
 using DurableTask.Core;
+using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
+using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.DurableTask.Testing.Sidecar.Dispatcher;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -202,6 +205,18 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
 
         try
         {
+            // Convert OrchestrationIdReusePolicy to dedupeStatuses
+            // The policy uses "replaceableStatus" - these are statuses that CAN be replaced
+            // dedupeStatuses are statuses that should NOT be replaced (should throw exception)
+            // So dedupeStatuses = all terminal statuses MINUS replaceableStatus
+            OrchestrationStatus[]? dedupeStatuses = null;
+            P.OrchestrationStatus[]? dedupeStatusesProto = ProtoUtils.ConvertReusePolicyToDedupeStatuses(request.OrchestrationIdReusePolicy);
+            if (dedupeStatusesProto != null)
+            {
+                // Convert protobuf statuses to Core.OrchestrationStatus
+                dedupeStatuses = dedupeStatusesProto.Select(s => (OrchestrationStatus)s).ToArray();
+            }
+
             await this.client.CreateTaskOrchestrationAsync(
                 new TaskMessage
                 {
@@ -216,7 +231,14 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                             : null
                     },
                     OrchestrationInstance = instance,
-                });
+                },
+                dedupeStatuses);
+        }
+        catch (OrchestrationAlreadyExistsException e)
+        {
+            // Convert to gRPC exception
+            this.log.LogWarning(e, "Orchestration with ID {InstanceId} already exists", instance.InstanceId);
+            throw new RpcException(new Status(StatusCode.AlreadyExists, e.Message));
         }
         catch (Exception e)
         {

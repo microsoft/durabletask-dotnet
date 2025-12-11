@@ -152,6 +152,20 @@ public class DurableTaskWorkerOptions
     public IOrchestrationFilter? OrchestrationFilter { get; set; }
 
     /// <summary>
+    /// Gets options for the Durable Task worker logging.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Logging options control how logging categories are assigned to different components of the worker.
+    /// Starting from a future version, more specific logging categories will be used for better log filtering.
+    /// </para><para>
+    /// To maintain backward compatibility, legacy logging categories are emitted by default alongside the new
+    /// categories. This can be disabled by setting <see cref="LoggingOptions.UseLegacyCategories" /> to false.
+    /// </para>
+    /// </remarks>
+    public LoggingOptions Logging { get; } = new();
+
+    /// <summary>
     /// Gets a value indicating whether <see cref="DataConverter" /> was explicitly set or not.
     /// </summary>
     /// <remarks>
@@ -177,6 +191,7 @@ public class DurableTaskWorkerOptions
             other.EnableEntitySupport = this.EnableEntitySupport;
             other.Versioning = this.Versioning;
             other.OrchestrationFilter = this.OrchestrationFilter;
+            other.Logging.UseLegacyCategories = this.Logging.UseLegacyCategories;
         }
     }
 
@@ -228,5 +243,52 @@ public class DurableTaskWorkerOptions
         /// If the version matching strategy is set to <see cref="VersionMatchStrategy.None"/>, this value has no effect.
         /// </remarks>
         public VersionFailureStrategy FailureStrategy { get; set; } = VersionFailureStrategy.Reject;
+    }
+
+    /// <summary>
+    /// Options for the Durable Task worker logging.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These options control how logging categories are assigned to different components of the worker.
+    /// Starting from a future version, more specific logging categories will be used for better log filtering:
+    /// <list type="bullet">
+    /// <item><description><c>Microsoft.DurableTask.Worker.Grpc</c> for gRPC worker logs (previously <c>Microsoft.DurableTask</c>)</description></item>
+    /// <item><description><c>Microsoft.DurableTask.Worker.*</c> for worker-specific logs</description></item>
+    /// </list>
+    /// </para><para>
+    /// To maintain backward compatibility, legacy logging categories are emitted by default alongside the new
+    /// categories until a future major release. This ensures existing log filters continue to work.
+    /// </para><para>
+    /// <b>Migration Path:</b>
+    /// <list type="number">
+    /// <item><description>Update your log filters to use the new, more specific categories</description></item>
+    /// <item><description>Test your application to ensure logs are captured correctly</description></item>
+    /// <item><description>Once confident, set <see cref="UseLegacyCategories" /> to <c>false</c> to disable legacy category emission</description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public class LoggingOptions
+    {
+        /// <summary>
+        /// Gets or sets a value indicating whether to emit logs using legacy logging categories in addition to new categories.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// When <c>true</c> (default), logs are emitted to both the new specific categories (e.g., <c>Microsoft.DurableTask.Worker.Grpc</c>)
+        /// and the legacy broad categories (e.g., <c>Microsoft.DurableTask</c>). This ensures backward compatibility with existing
+        /// log filters and queries.
+        /// </para><para>
+        /// When <c>false</c>, logs are only emitted to the new specific categories, which provides better log organization
+        /// and filtering capabilities.
+        /// </para><para>
+        /// <b>Default:</b> <c>true</c> (legacy categories are enabled for backward compatibility)
+        /// </para><para>
+        /// <b>Breaking Change Warning:</b> Setting this to <c>false</c> is a breaking change if you have existing log filters,
+        /// queries, or monitoring rules that depend on the legacy category names. Ensure you update those before disabling
+        /// legacy categories.
+        /// </para>
+        /// </remarks>
+        public bool UseLegacyCategories { get; set; } = true;
     }
 }

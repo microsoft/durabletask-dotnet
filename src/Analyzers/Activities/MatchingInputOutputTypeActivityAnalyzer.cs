@@ -40,7 +40,8 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
         AnalyzersCategories.Activity,
         DiagnosticSeverity.Warning,
         customTags: [WellKnownDiagnosticTags.CompilationEnd],
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: $"https://learn.microsoft.com/azure/azure-functions/durable/durable-functions-code-constraints?tabs=csharp#{InputArgumentTypeMismatchDiagnosticId}");
 
     static readonly DiagnosticDescriptor OutputArgumentTypeMismatchRule = new(
         OutputArgumentTypeMismatchDiagnosticId,
@@ -49,7 +50,8 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
         AnalyzersCategories.Activity,
         DiagnosticSeverity.Warning,
         customTags: [WellKnownDiagnosticTags.CompilationEnd],
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: $"https://learn.microsoft.com/azure/azure-functions/durable/durable-functions-code-constraints?tabs=csharp#{OutputArgumentTypeMismatchDiagnosticId}");
 
     /// <inheritdoc/>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [InputArgumentTypeMismatchRule, OutputArgumentTypeMismatchRule];

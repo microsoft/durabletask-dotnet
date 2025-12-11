@@ -39,7 +39,8 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
         AnalyzersCategories.Activity,
         DiagnosticSeverity.Warning,
         customTags: [WellKnownDiagnosticTags.CompilationEnd],
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: $"https://learn.microsoft.com/azure/azure-functions/durable/durable-functions-code-constraints?tabs=csharp#{ActivityNotFoundDiagnosticId}");
 
     static readonly DiagnosticDescriptor SubOrchestrationNotFoundRule = new(
         SubOrchestrationNotFoundDiagnosticId,
@@ -48,7 +49,8 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
         AnalyzersCategories.Orchestration,
         DiagnosticSeverity.Warning,
         customTags: [WellKnownDiagnosticTags.CompilationEnd],
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: $"https://learn.microsoft.com/azure/azure-functions/durable/durable-functions-code-constraints?tabs=csharp#{SubOrchestrationNotFoundDiagnosticId}");
 
     /// <inheritdoc/>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [ActivityNotFoundRule, SubOrchestrationNotFoundRule];

@@ -162,13 +162,6 @@ static class RoslynExtensions
     /// <returns>The Diagnostic based on the symbol location.</returns>
     public static Diagnostic BuildDiagnostic(DiagnosticDescriptor descriptor, ISymbol symbol, params string[] messageArgs)
     {
-        // If the symbol has no syntax references (e.g., symbols from external assemblies),
-        // fall back to using the symbol's location directly.
-        if (symbol.DeclaringSyntaxReferences.IsEmpty)
-        {
-            return Diagnostic.Create(descriptor, symbol.Locations.FirstOrDefault() ?? Location.None, messageArgs);
-        }
-
         return BuildDiagnostic(descriptor, symbol.DeclaringSyntaxReferences.First().GetSyntax(), messageArgs);
     }
 

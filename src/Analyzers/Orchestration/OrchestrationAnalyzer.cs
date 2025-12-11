@@ -141,7 +141,14 @@ public abstract class OrchestrationAnalyzer<TOrchestrationVisitor> : DiagnosticA
                     case IMethodReferenceOperation methodReferenceOperation:
                         // use the method reference as the method symbol
                         methodSymbol = methodReferenceOperation.Method;
-                        methodSyntax = methodReferenceOperation.Method.DeclaringSyntaxReferences.First().GetSyntax();
+
+                        // Only get syntax for methods in the current project (skip external assemblies)
+                        // If IsEmpty (external method), methodSyntax stays null and we skip analysis below
+                        if (!methodReferenceOperation.Method.DeclaringSyntaxReferences.IsEmpty)
+                        {
+                            methodSyntax = methodReferenceOperation.Method.DeclaringSyntaxReferences.First().GetSyntax();
+                        }
+
                         break;
                     default:
                         break;

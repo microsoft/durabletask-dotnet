@@ -115,6 +115,13 @@ static class RoslynExtensions
     /// <returns>The collection of syntax nodes of a given method symbol.</returns>
     public static IEnumerable<MethodDeclarationSyntax> GetSyntaxNodes(this IMethodSymbol methodSymbol)
     {
+        // If the method has no syntax references (e.g., extension methods from external assemblies),
+        // return empty to skip analysis rather than throwing ArgumentException.
+        if (methodSymbol.DeclaringSyntaxReferences.IsEmpty)
+        {
+            return Enumerable.Empty<MethodDeclarationSyntax>();
+        }
+
         return methodSymbol.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).OfType<MethodDeclarationSyntax>();
     }
 

@@ -323,6 +323,13 @@ public class MethodProbeOrchestrationVisitor : OrchestrationVisitor
             IEnumerable<MethodDeclarationSyntax> calleeSyntaxes = calleeMethodSymbol.GetSyntaxNodes();
             foreach (MethodDeclarationSyntax calleeSyntax in calleeSyntaxes)
             {
+                // Check if the syntax tree is part of the current compilation before trying to get its semantic model.
+                // Extension methods from external assemblies won't be in the compilation, so skip them.
+                if (!semanticModel.Compilation.ContainsSyntaxTree(calleeSyntax.SyntaxTree))
+                {
+                    continue;
+                }
+
                 // Since the syntax tree of the callee method might be different from the caller method, we need to get the correct semantic model,
                 // avoiding the exception 'Syntax node is not within syntax tree'.
                 SemanticModel sm = semanticModel.SyntaxTree == calleeSyntax.SyntaxTree ?

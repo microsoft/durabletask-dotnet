@@ -374,6 +374,15 @@ static class ProtoUtils
                         Version = subOrchestrationAction.Version,
                         ParentTraceContext = CreateTraceContext(),
                     };
+
+                    if (subOrchestrationAction.Tags != null)
+                    {
+                        foreach (KeyValuePair<string, string> tag in subOrchestrationAction.Tags)
+                        {
+                            protoAction.CreateSubOrchestration.Tags[tag.Key] = tag.Value;
+                        }
+                    }
+
                     break;
                 case OrchestratorActionType.CreateTimer:
                     var createTimerAction = (CreateTimerOrchestratorAction)action;

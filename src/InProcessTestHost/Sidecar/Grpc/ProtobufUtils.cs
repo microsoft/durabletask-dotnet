@@ -288,7 +288,7 @@ public static class ProtobufUtils
                     ParentTraceContext = a.CreateSubOrchestration.ParentTraceContext is not null
                         ? new DistributedTraceContext(a.CreateSubOrchestration.ParentTraceContext.TraceParent, a.CreateSubOrchestration.ParentTraceContext.TraceState)
                         : null,
-                    Tags = null, // TODO
+                    Tags = a.CreateSubOrchestration.Tags,
                     Version = a.CreateSubOrchestration.Version,
                 };
             case Proto.OrchestratorAction.OrchestratorActionTypeOneofCase.CreateTimer:

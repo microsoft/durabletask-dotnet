@@ -37,6 +37,7 @@ dotnet run --project samples/ExceptionPropertiesSample/ExceptionPropertiesSample
 ```
 
 ```bash
+export DURABLE_TASK_SCHEDULER_CONNECTION_STRING="Endpoint=https://...;TaskHub=...;Authentication=...;"
 dotnet run --project samples/ExceptionPropertiesSample/ExceptionPropertiesSample.csproj
 ```
 

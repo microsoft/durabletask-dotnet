@@ -37,7 +37,7 @@ dotnet run --project ExceptionPropertiesSample
 ```
 
 ```bash
-dotnet run --project ExceptionPropertiesSample
+dotnet run --project samples/ExceptionPropertiesSample/ExceptionPropertiesSample.csproj
 ```
 
 ## Expected Output

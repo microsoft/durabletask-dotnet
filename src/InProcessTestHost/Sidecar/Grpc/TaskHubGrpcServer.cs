@@ -43,6 +43,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     readonly IsConnectedSignal isConnectedSignal = new();
     readonly SemaphoreSlim sendWorkItemLock = new(initialCount: 1);
     readonly ConcurrentDictionary<string, List<P.HistoryEvent>> streamingPastEvents = new(StringComparer.OrdinalIgnoreCase);
+    readonly ConcurrentDictionary<string, HashSet<string>> subOrchestrationChildren = new(StringComparer.OrdinalIgnoreCase);
 
     volatile bool supportsHistoryStreaming;
 
@@ -300,6 +301,22 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             await this.client.ForceTerminateTaskOrchestrationAsync(
                 request.InstanceId,
                 request.Output);
+
+            if (request.Recursive &&
+                this.subOrchestrationChildren.TryGetValue(request.InstanceId, out HashSet<string>? childSet))
+            {
+                foreach (string childId in childSet)
+                {
+                    P.TerminateRequest childRequest = new()
+                    {
+                        InstanceId = childId,
+                        Output = request.Output,
+                        Recursive = true,
+                    };
+
+                    await this.TerminateInstance(childRequest, context);
+                }
+            }
         }
         catch (Exception e)
         {
@@ -574,6 +591,18 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             OrchestrationActivityStartTime = request.OrchestrationTraceContext?.SpanStartTime?.ToDateTimeOffset(),
         };
 
+        if (this.subOrchestrationChildren.TryGetValue(request.InstanceId, out HashSet<string>? children))
+        {
+            foreach (P.OrchestratorAction action in request.Actions)
+            {
+                if (action.OrchestratorActionTypeCase == P.OrchestratorAction.OrchestratorActionTypeOneofCase.CreateSubOrchestration &&
+                    !string.IsNullOrEmpty(action.CreateSubOrchestration.InstanceId))
+                {
+                    children.Add(action.CreateSubOrchestration.InstanceId);
+                }
+            }
+        }
+
         tcs.TrySetResult(result);
 
         return EmptyCompleteTaskResponse;
@@ -730,27 +759,46 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
 
         try
         {
+            List<P.HistoryEvent> protoNewEvents = newEvents.Select(ProtobufUtils.ToHistoryEventProto).ToList();
+            List<P.HistoryEvent> protoPastEvents = pastEvents.Select(ProtobufUtils.ToHistoryEventProto).ToList();
+            List<P.HistoryEvent> allEvents = protoPastEvents.Concat(protoNewEvents).ToList();
+
+            HashSet<string> children = this.subOrchestrationChildren.GetOrAdd(instance.InstanceId, _ => new(StringComparer.OrdinalIgnoreCase));
+            foreach (P.HistoryEvent e in protoNewEvents)
+            {
+                if (e.SubOrchestrationInstanceCreated?.InstanceId is string subId && !string.IsNullOrEmpty(subId))
+                {
+                    children.Add(subId);
+                }
+            }
+
             var orkRequest = new P.OrchestratorRequest
             {
                 InstanceId = instance.InstanceId,
                 ExecutionId = instance.ExecutionId,
-                NewEvents = { newEvents.Select(ProtobufUtils.ToHistoryEventProto) },
+                NewEvents = { protoNewEvents },
                 OrchestrationTraceContext = orchestrationTraceContext,
             };
 
             // Decide whether to stream based on total size of past events (> 1MiB)
-            List<P.HistoryEvent> protoPastEvents = pastEvents.Select(ProtobufUtils.ToHistoryEventProto).ToList();
             int totalBytes = 0;
-            foreach (P.HistoryEvent ev in protoPastEvents)
+            foreach (P.HistoryEvent ev in allEvents)
             {
                 totalBytes += ev.CalculateSize();
             }
 
-            if (this.supportsHistoryStreaming && totalBytes > (1024))
+            this.streamingPastEvents[instance.InstanceId] = allEvents;
+
+            if (this.supportsHistoryStreaming)
             {
-                orkRequest.RequiresHistoryStreaming = true;
-                // Store past events to serve via StreamInstanceHistory
-                this.streamingPastEvents[instance.InstanceId] = protoPastEvents;
+                if (totalBytes > (1024))
+                {
+                    orkRequest.RequiresHistoryStreaming = true;
+                }
+                else
+                {
+                    orkRequest.PastEvents.AddRange(protoPastEvents);
+                }
             }
             else
             {

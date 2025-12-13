@@ -57,8 +57,8 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         if (this.options.EnableEntitySupport)
         {
             this.entityClient = new GrpcDurableEntityClient(this.Name, this.DataConverter, this.sidecarClient, logger);
-        }
     }
+}
 
     /// <inheritdoc/>
     public override DurableEntityClient Entities => this.entityClient
@@ -617,4 +617,5 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
         return metadata;
     }
+
 }

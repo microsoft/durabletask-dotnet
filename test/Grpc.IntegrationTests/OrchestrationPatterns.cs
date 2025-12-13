@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DurableTask.Core.History;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.DurableTask.Worker;
@@ -447,6 +448,66 @@ public class OrchestrationPatterns : IntegrationTestBase
         string? actualQuote = actualOutput.GetProperty("quote").GetString();
         Assert.NotNull(actualQuote);
         Assert.Equal(expectedOutput.quote, actualQuote);
+    }
+
+    [Fact]
+    public async Task Termination_RecursiveStopsSubOrchestrations()
+    {
+        // Arrange
+        TaskName parentName = nameof(Termination_RecursiveStopsSubOrchestrations) + "_Parent";
+        TaskName childName = nameof(Termination_RecursiveStopsSubOrchestrations) + "_Child";
+        string parentInstanceId = "parent-recursive-termination";
+        string childInstanceIdOne = "child-recursive-termination-1";
+        string childInstanceIdTwo = "child-recursive-termination-2";
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc(parentName, async ctx =>
+                {
+                    _ = ctx.CallSubOrchestratorAsync<object>(
+                        childName,
+                        null,
+                        new SubOrchestrationOptions(instanceId: childInstanceIdOne));
+                    _ = ctx.CallSubOrchestratorAsync<object>(
+                        childName,
+                        null,
+                        new SubOrchestrationOptions(instanceId: childInstanceIdTwo));
+
+                    await ctx.CreateTimer(TimeSpan.FromMinutes(1), CancellationToken.None);
+                })
+                .AddOrchestratorFunc(childName, async ctx =>
+                {
+                    await ctx.CreateTimer(TimeSpan.FromMinutes(1), CancellationToken.None);
+                }));
+        });
+
+        await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            parentName,
+            input: null,
+            options: new StartOrchestrationOptions(parentInstanceId));
+
+        await server.Client.WaitForInstanceStartAsync(parentInstanceId, this.TimeoutToken);
+        await server.Client.WaitForInstanceStartAsync(childInstanceIdOne, this.TimeoutToken);
+        await server.Client.WaitForInstanceStartAsync(childInstanceIdTwo, this.TimeoutToken);
+
+        // Act
+        await server.Client.TerminateInstanceAsync(
+            parentInstanceId,
+            new TerminateInstanceOptions(Recursive: true),
+            this.TimeoutToken);
+
+        OrchestrationMetadata parentMetadata =
+            await server.Client.WaitForInstanceCompletionAsync(parentInstanceId, this.TimeoutToken);
+        OrchestrationMetadata childMetadataOne =
+            await server.Client.WaitForInstanceCompletionAsync(childInstanceIdOne, this.TimeoutToken);
+        OrchestrationMetadata childMetadataTwo =
+            await server.Client.WaitForInstanceCompletionAsync(childInstanceIdTwo, this.TimeoutToken);
+
+        // Assert
+        Assert.Equal(OrchestrationRuntimeStatus.Terminated, parentMetadata.RuntimeStatus);
+        Assert.Equal(OrchestrationRuntimeStatus.Terminated, childMetadataOne.RuntimeStatus);
+        Assert.Equal(OrchestrationRuntimeStatus.Terminated, childMetadataTwo.RuntimeStatus);
     }
 
     [Fact]

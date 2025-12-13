@@ -4,9 +4,12 @@
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using FluentAssertions.Execution;
+using Grpc.Core;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
 using Xunit.Abstractions;
+using RpcException = Grpc.Core.RpcException;
+using StatusCode = Grpc.Core.StatusCode;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
@@ -288,6 +291,177 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         // Should throw ArgumentException
         await restartAction.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*An orchestration with the instanceId non-existent-instance-id was not found*");
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_WithDedupeStatuses_ThrowsWhenInstanceExists()
+    {
+        await using HostTestLifetime server = await this.StartAsync();
+
+        string instanceId = "dedup-test-instance";
+        
+        // Schedule and complete first orchestration instance
+        string firstInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: false,
+            new StartOrchestrationOptions(instanceId));
+
+        // Wait for it to complete
+        await server.Client.WaitForInstanceStartAsync(firstInstanceId, default);
+        await server.Client.RaiseEventAsync(firstInstanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(firstInstanceId, default);
+
+        // Verify it's completed
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+        metadata.Should().NotBeNull();
+        metadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+
+        // Try to create another instance with the same ID and dedupe statuses including Completed
+        // This should throw an exception
+        Func<Task> createAction = () => server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: false,
+            new StartOrchestrationOptions(instanceId).WithDedupeStatuses(OrchestrationRuntimeStatus.Completed));
+
+        await createAction.Should().ThrowAsync<RpcException>()
+            .Where(e => e.StatusCode == StatusCode.AlreadyExists);
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_WithDedupeStatuses_AllowsReplacementWhenStatusNotInDedupeList()
+    {
+        await using HostTestLifetime server = await this.StartAsync();
+
+        string instanceId = "dedup-test-instance-replace";
+        
+        // Create first orchestration instance
+        string firstInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: false,
+            new StartOrchestrationOptions(instanceId));
+
+        // Wait for it to complete
+        await server.Client.WaitForInstanceStartAsync(firstInstanceId, default);
+        await server.Client.RaiseEventAsync(firstInstanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(firstInstanceId, default);
+
+        // Verify it's completed
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+        metadata.Should().NotBeNull();
+        metadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+
+        // Try to create another instance with the same ID but dedupe statuses does NOT include Completed
+        // This should succeed (replace the existing instance)
+        string secondInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: false,
+            new StartOrchestrationOptions(instanceId).WithDedupeStatuses(
+                OrchestrationRuntimeStatus.Failed, 
+                OrchestrationRuntimeStatus.Terminated));
+
+        secondInstanceId.Should().Be(instanceId);
+        
+        // Wait for the new instance to start running
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+        
+        // Verify the new instance is running
+        OrchestrationMetadata? newMetadata = await server.Client.GetInstanceAsync(instanceId, false);
+        newMetadata.Should().NotBeNull();
+        newMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Running);
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_WithDedupeStatuses_ThrowsWhenInstanceIsFailed()
+    {
+        await using HostTestLifetime server = await this.StartAsync();
+
+        string instanceId = "dedup-test-instance-failed";
+        
+        // Create first orchestration instance that will fail
+        string firstInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: true, // true means it will throw
+            new StartOrchestrationOptions(instanceId));
+
+        // Wait for it to fail
+        await server.Client.WaitForInstanceStartAsync(firstInstanceId, default);
+        await server.Client.RaiseEventAsync(firstInstanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(firstInstanceId, default);
+
+        // Verify it's failed
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+        metadata.Should().NotBeNull();
+        metadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Failed);
+
+        // Try to create another instance with the same ID and dedupe statuses including Failed
+        // This should throw an exception
+        Func<Task> createAction = () => server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: false,
+            new StartOrchestrationOptions(instanceId).WithDedupeStatuses(OrchestrationRuntimeStatus.Failed));
+
+        await createAction.Should().ThrowAsync<RpcException>()
+            .Where(e => e.StatusCode == StatusCode.AlreadyExists);
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_WithDedupeStatuses_AllowsCreationWhenInstanceDoesNotExist()
+    {
+        await using HostTestLifetime server = await this.StartAsync();
+
+        string instanceId = "dedup-test-instance-new";
+        
+        // Create instance with dedupe statuses - should succeed since instance doesn't exist
+        string createdInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: false,
+            new StartOrchestrationOptions(instanceId).WithDedupeStatuses(
+                OrchestrationRuntimeStatus.Completed, 
+                OrchestrationRuntimeStatus.Failed));
+
+        createdInstanceId.Should().Be(instanceId);
+        
+        // Verify the instance was created
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+        metadata.Should().NotBeNull();
+        metadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Running);
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_WithMultipleDedupeStatuses_ThrowsWhenAnyStatusMatches()
+    {
+        await using HostTestLifetime server = await this.StartAsync();
+
+        string instanceId = "dedup-test-instance-multiple";
+        
+        // Create first orchestration instance
+        string firstInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: false,
+            new StartOrchestrationOptions(instanceId));
+
+        // Wait for it to complete
+        await server.Client.WaitForInstanceStartAsync(firstInstanceId, default);
+        await server.Client.RaiseEventAsync(firstInstanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(firstInstanceId, default);
+
+        // Verify it's completed
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+        metadata.Should().NotBeNull();
+        metadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+
+        // Try to create another instance with multiple dedupe statuses including Completed
+        // This should throw an exception
+        Func<Task> createAction = () => server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: false,
+            new StartOrchestrationOptions(instanceId).WithDedupeStatuses(
+                OrchestrationRuntimeStatus.Completed, 
+                OrchestrationRuntimeStatus.Failed,
+                OrchestrationRuntimeStatus.Terminated));
+
+        await createAction.Should().ThrowAsync<RpcException>()
+            .Where(e => e.StatusCode == StatusCode.AlreadyExists);
     }
 
     [Fact]

@@ -19,7 +19,7 @@ public class ValidationOrchestration : TaskOrchestrator<string, string>
             string result = await context.CallActivityAsync<string>("ValidateInput", input);
             return result;
         }
-        catch (TaskFailedException ex)
+        catch (TaskFailedException)
         {
             // The failure details will include custom properties from IExceptionPropertiesProvider
             // These properties are automatically extracted and included in the TaskFailureDetails

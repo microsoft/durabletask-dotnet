@@ -591,15 +591,15 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             OrchestrationActivityStartTime = request.OrchestrationTraceContext?.SpanStartTime?.ToDateTimeOffset(),
         };
 
-        if (this.subOrchestrationChildren.TryGetValue(request.InstanceId, out HashSet<string>? children))
+        HashSet<string> children = this.subOrchestrationChildren.GetOrAdd(
+            request.InstanceId, _ => new(StringComparer.OrdinalIgnoreCase));
+
+        foreach (P.OrchestratorAction action in request.Actions)
         {
-            foreach (P.OrchestratorAction action in request.Actions)
+            if (action.OrchestratorActionTypeCase == P.OrchestratorAction.OrchestratorActionTypeOneofCase.CreateSubOrchestration &&
+                !string.IsNullOrEmpty(action.CreateSubOrchestration.InstanceId))
             {
-                if (action.OrchestratorActionTypeCase == P.OrchestratorAction.OrchestratorActionTypeOneofCase.CreateSubOrchestration &&
-                    !string.IsNullOrEmpty(action.CreateSubOrchestration.InstanceId))
-                {
-                    children.Add(action.CreateSubOrchestration.InstanceId);
-                }
+                children.Add(action.CreateSubOrchestration.InstanceId);
             }
         }
 

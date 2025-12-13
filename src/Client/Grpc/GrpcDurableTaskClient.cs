@@ -614,7 +614,6 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             DataConverter = includeInputsAndOutputs ? this.DataConverter : null,
             Tags = new Dictionary<string, string>(state.Tags),
         };
-
         return metadata;
     }
 

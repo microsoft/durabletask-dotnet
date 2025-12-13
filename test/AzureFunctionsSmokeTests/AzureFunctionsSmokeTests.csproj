@@ -14,11 +14,22 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Azure Functions packages (external) -->
     <PackageReference Include="Microsoft.Azure.Functions.Worker" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" OutputItemType="Analyzer" />
-    <!-- Reference the source generator project directly for local development -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Local project references for testing code in this repo -->
+    <ProjectReference Include="..\..\src\Abstractions\Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Client\Core\Client.csproj" />
+    <ProjectReference Include="..\..\src\Client\Grpc\Client.Grpc.csproj" />
+    <ProjectReference Include="..\..\src\Worker\Core\Worker.csproj" />
+    <ProjectReference Include="..\..\src\Worker\Grpc\Worker.Grpc.csproj" />
+    <ProjectReference Include="..\..\src\Grpc\Grpc.csproj" />
+    <ProjectReference Include="..\..\src\Analyzers\Analyzers.csproj" OutputItemType="Analyzer" />
     <ProjectReference Include="..\..\src\Generators\Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 

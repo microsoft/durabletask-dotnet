@@ -33,7 +33,7 @@ Set `DURABLE_TASK_SCHEDULER_CONNECTION_STRING` and run the sample.
 
 ```cmd
 set DURABLE_TASK_SCHEDULER_CONNECTION_STRING=Endpoint=https://...;TaskHub=...;Authentication=...;
-dotnet run --project ExceptionPropertiesSample
+dotnet run --project samples/ExceptionPropertiesSample/ExceptionPropertiesSample.csproj
 ```
 
 ```bash

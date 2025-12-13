@@ -5,23 +5,53 @@
 // TaskFailureDetails with custom exception properties for better diagnostics.
 
 using ExceptionPropertiesSample;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.Client.AzureManaged;
 using Microsoft.DurableTask.Worker;
+using Microsoft.DurableTask.Worker.AzureManaged;
 using Microsoft.Extensions.Hosting;
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
+string? schedulerConnectionString = builder.Configuration.GetValue<string>("DURABLE_TASK_SCHEDULER_CONNECTION_STRING");
+bool useScheduler = !string.IsNullOrWhiteSpace(schedulerConnectionString);
+
 // Register the durable task client
-builder.Services.AddDurableTaskClient().UseGrpc();
+if (useScheduler)
+{
+    builder.Services.AddDurableTaskClient(clientBuilder => clientBuilder.UseDurableTaskScheduler(schedulerConnectionString!));
+}
+else
+{
+    builder.Services.AddDurableTaskClient().UseGrpc();
+}
 
 // Register the durable task worker with custom exception properties provider
-builder.Services.AddDurableTaskWorker()
-    .AddTasks(tasks =>
+if (useScheduler)
+{
+    builder.Services.AddDurableTaskWorker(workerBuilder =>
     {
-        tasks.AddOrchestrator<ValidationOrchestration>();
-        tasks.AddActivity<ValidateInputActivity>();
-    })
-    .UseGrpc();
+        workerBuilder.AddTasks(tasks =>
+        {
+            tasks.AddOrchestrator<ValidationOrchestration>();
+            tasks.AddActivity<ValidateInputActivity>();
+        });
+
+        workerBuilder.UseDurableTaskScheduler(schedulerConnectionString!);
+    });
+}
+else
+{
+    builder.Services.AddDurableTaskWorker()
+        .AddTasks(tasks =>
+        {
+            tasks.AddOrchestrator<ValidationOrchestration>();
+            tasks.AddActivity<ValidateInputActivity>();
+        })
+        .UseGrpc();
+}
 
 // Register the custom exception properties provider
 // This will automatically extract custom properties from exceptions and include them in TaskFailureDetails
@@ -37,6 +67,11 @@ DurableTaskClient client = host.Services.GetRequiredService<DurableTaskClient>()
 
 Console.WriteLine("Exception Properties Sample");
 Console.WriteLine("===========================");
+Console.WriteLine();
+
+Console.WriteLine(useScheduler
+    ? "Configured to use Durable Task Scheduler (DTS)."
+    : "Configured to use local gRPC. (Set DURABLE_TASK_SCHEDULER_CONNECTION_STRING to use DTS.)");
 Console.WriteLine();
 
 // Test case 1: Valid input (should succeed)

@@ -22,6 +22,20 @@ When orchestrations or activities throw exceptions, the Durable Task framework c
 
 ## Running the Sample
 
+This sample can run against either:
+
+1. **Durable Task Scheduler (DTS)** (recommended): set the `DURABLE_TASK_SCHEDULER_CONNECTION_STRING` environment variable.
+2. **Local gRPC endpoint**: if the env var is not set, the sample uses the default local gRPC configuration.
+
+### DTS
+
+Set `DURABLE_TASK_SCHEDULER_CONNECTION_STRING` and run the sample.
+
+```cmd
+set DURABLE_TASK_SCHEDULER_CONNECTION_STRING=Endpoint=https://...;TaskHub=...;Authentication=...;
+dotnet run --project ExceptionPropertiesSample
+```
+
 ```bash
 dotnet run --project ExceptionPropertiesSample
 ```

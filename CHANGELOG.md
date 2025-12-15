@@ -1,4 +1,7 @@
-﻿# Changelog
+# Changelog
+
+## v1.18.1
+- Support dedup status when starting orchestration by wangbill ([#542](https://github.com/microsoft/durabletask-dotnet/pull/542))
 
 ## v1.18.0
 - Add taskentity support to durabletasksourcegenerator by Copilot ([#517](https://github.com/microsoft/durabletask-dotnet/pull/517))

@@ -12,8 +12,6 @@
 ---
 
 # Project checklist
-- [ ] Documentation changes are not required
-  - [ ] Otherwise: Documentation PR is ready to merge and referenced in `pending_docs.md`
 - [ ] Release notes are not required for the next release
   - [ ] Otherwise: Notes added to `release_notes.md`
 - [ ] Backport is not required
@@ -47,7 +45,6 @@ AI verification (required if AI was used):
 
 # Testing
 ## Automated tests
-- Command(s):
 - Result: Passed / Failed (link logs if failed)
 
 ## Manual validation (only if runtime/behavior changed)

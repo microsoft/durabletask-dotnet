@@ -1,63 +1,26 @@
-name: Close inactive author feedback issues
-
+name: Close inactive issues
 on:
   schedule:
-    - cron: "0 9 * * *"
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  issues: write
+    - cron: "0 1 * * *"  # run daily
 
 jobs:
-  close-inactive:
+  stale:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+
     steps:
-      - name: Close issues waiting on author feedback
-        uses: actions/github-script@v7
+      - uses: actions/stale@v10
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const label = "Needs Author Feedback";
-            const daysInactive = 7;
-            const cutoff = new Date(Date.now() - daysInactive * 24 * 60 * 60 * 1000);
-
-            const { owner, repo } = context.repo;
-            const issues = await github.paginate(github.rest.issues.listForRepo, {
-              owner,
-              repo,
-              state: "open",
-              labels: label,
-              per_page: 100,
-              sort: "updated",
-              direction: "asc",
-            });
-
-            for (const issue of issues) {
-              if (issue.pull_request) {
-                continue;
-              }
-
-              const updatedAt = new Date(issue.updated_at);
-              if (updatedAt > cutoff) {
-                continue;
-              }
-
-              const body = [
-                "We haven't heard back in 7 days, so we're automatically closing this issue.",
-                "If you still need help, please reply and we can reopen it."
-              ].join("\n\n");
-
-              try {
-                await github.rest.issues.createComment({ owner, repo, issue_number: issue.number, body });
-              } catch (error) {
-                console.warn(`Skipping issue #${issue.number} because of an error while adding the notice: ${error}`);
-                continue;
-              }
-
-              try {
-                await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: "closed" });
-              } catch (error) {
-                console.warn(`Skipping issue #${issue.number} because of an error while processing closure: ${error}`);
-              }
-            }
+          # issues that haven’t updated in 30 days become stale
+          days-before-issue-stale: 30
+          # issues labeled stale will be closed 14 days later
+          days-before-issue-close: 14
+          stale-issue-label: "stale"
+          stale-issue-message: "This issue has gone quiet — please respond!"
+          close-issue-message: "Closing this issue as inactive."
+          # don’t process PRs
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
+          repo-token: ${{ secrets.GITHUB_TOKEN }}

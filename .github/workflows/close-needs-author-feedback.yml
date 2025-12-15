@@ -52,6 +52,6 @@ jobs:
                 await github.rest.issues.createComment({ owner, repo, issue_number: issue.number, body });
                 await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: "closed" });
               } catch (error) {
-                core.warning(`Skipping issue #${issue.number} because of an error while closing: ${error}`);
+                console.warn(`Skipping issue #${issue.number} because of an error while closing: ${error}`);
               }
             }

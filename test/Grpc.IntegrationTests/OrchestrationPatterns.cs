@@ -36,7 +36,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     }
 
     [Fact]
-    public async Task ScheduleOrchesrationWithTags()
+    public async Task ScheduleOrchestrationWithTags()
     {
         TaskName orchestratorName = nameof(EmptyOrchestration);
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
@@ -60,6 +60,52 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.NotNull(metadata.Tags);
+        Assert.Equal(2, metadata.Tags.Count);
+        Assert.Equal("value1", metadata.Tags["tag1"]);
+        Assert.Equal("value2", metadata.Tags["tag2"]);
+    }
+
+    [Fact]
+    public async Task ScheduleSubOrchestrationWithTags()
+    {
+        TaskName orchestratorName = nameof(ScheduleSubOrchestrationWithTags);
+
+        // Schedule a new orchestration instance with tags
+        SubOrchestrationOptions subOrchestrationOptions = new()
+        {
+            InstanceId = "instance_id",
+            Tags = new Dictionary<string, string>
+            {
+                { "tag1", "value1" },
+                { "tag2", "value2" }
+            }
+        };
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc<int, int>(orchestratorName, async (ctx, input) =>
+            {
+                int result = 1;
+                if (input < 2)
+                {
+                    // recursively call this same orchestrator
+                    result += await ctx.CallSubOrchestratorAsync<int>(orchestratorName, input: input + 1, subOrchestrationOptions);
+                }
+
+                return result;
+            }));
+        });
+
+
+        await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 1);
+
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            subOrchestrationOptions.InstanceId, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(subOrchestrationOptions.InstanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.NotNull(metadata.Tags);
         Assert.Equal(2, metadata.Tags.Count);
@@ -1195,6 +1241,101 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal(EventCount, metadata.ReadOutputAs<int>());
     }
 
-    // TODO: Test for multiple external events with the same name
-    // TODO: Test for catching activity exceptions of specific types
+    [Fact]
+    public async Task CatchingActivityExceptionsByType()
+    {
+        TaskName orchestratorName = nameof(CatchingActivityExceptionsByType);
+        TaskName throwInvalidOpActivityName = "ThrowInvalidOp";
+        TaskName throwArgumentActivityName = "ThrowArgument";
+        TaskName successActivityName = "Success";
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc(orchestratorName, async ctx =>
+                {
+                    List<string> results = new();
+
+                    // Test 1: Catch InvalidOperationException
+                    try
+                    {
+                        await ctx.CallActivityAsync(throwInvalidOpActivityName);
+                        results.Add("No exception thrown");
+                    }
+                    catch (TaskFailedException ex) when (ex.FailureDetails?.IsCausedBy<InvalidOperationException>() == true)
+                    {
+                        results.Add("Caught InvalidOperationException");
+                    }
+                    catch (TaskFailedException)
+                    {
+                        results.Add("Caught wrong exception type");
+                    }
+
+                    // Test 2: Catch ArgumentException
+                    try
+                    {
+                        await ctx.CallActivityAsync(throwArgumentActivityName);
+                        results.Add("No exception thrown");
+                    }
+                    catch (TaskFailedException ex) when (ex.FailureDetails?.IsCausedBy<ArgumentException>() == true)
+                    {
+                        results.Add("Caught ArgumentException");
+                    }
+                    catch (TaskFailedException)
+                    {
+                        results.Add("Caught wrong exception type");
+                    }
+
+                    // Test 3: Successful activity should not throw
+                    try
+                    {
+                        string result = await ctx.CallActivityAsync<string>(successActivityName);
+                        results.Add(result);
+                    }
+                    catch (TaskFailedException)
+                    {
+                        results.Add("Unexpected exception");
+                    }
+
+                    // Test 4: Catch with base Exception type
+                    try
+                    {
+                        await ctx.CallActivityAsync(throwInvalidOpActivityName);
+                        results.Add("No exception thrown");
+                    }
+                    catch (TaskFailedException ex) when (ex.FailureDetails?.IsCausedBy<Exception>() == true)
+                    {
+                        results.Add("Caught base Exception");
+                    }
+
+                    return results;
+                })
+                .AddActivityFunc(throwInvalidOpActivityName, (TaskActivityContext ctx) =>
+                {
+                    throw new InvalidOperationException("Invalid operation");
+                })
+                .AddActivityFunc(throwArgumentActivityName, (TaskActivityContext ctx) =>
+                {
+                    throw new ArgumentException("Invalid argument");
+                })
+                .AddActivityFunc<string>(successActivityName, (TaskActivityContext ctx) =>
+                {
+                    return "Success";
+                }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        Assert.NotNull(metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+
+        List<string>? results = metadata.ReadOutputAs<List<string>>();
+        Assert.NotNull(results);
+        Assert.Equal(4, results!.Count);
+        Assert.Equal("Caught InvalidOperationException", results[0]);
+        Assert.Equal("Caught ArgumentException", results[1]);
+        Assert.Equal("Success", results[2]);
+        Assert.Equal("Caught base Exception", results[3]);
+    }
 }

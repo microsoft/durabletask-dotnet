@@ -276,6 +276,7 @@ message CreateSubOrchestrationAction {
     google.protobuf.StringValue version = 3;
     google.protobuf.StringValue input = 4;
     TraceContext parentTraceContext = 5;
+    map<string, string> tags = 6;
 }
 
 message CreateTimerAction {
@@ -356,6 +357,13 @@ message OrchestratorResponse {
 
     // Whether or not a history is required to complete the original OrchestratorRequest and none was provided.
     bool requiresHistory = 7;
+
+    // True if this is a partial (chunked) completion. The backend must keep the work item open until the final chunk (isPartial=false).
+    bool isPartial = 8;
+
+    // Zero-based position of the current chunk within a chunked completion sequence.
+    // This field is omitted for non-chunked completions.
+    google.protobuf.Int32Value chunkIndex = 9;
 }
 
 message CreateInstanceRequest {

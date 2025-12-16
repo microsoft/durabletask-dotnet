@@ -377,6 +377,82 @@ public class Program
     }
 
 
+    [Theory]
+    [InlineData("DateTimeOffset.Now")]
+    [InlineData("DateTimeOffset.UtcNow")]
+    public async Task DurableFunctionOrchestrationUsingDateTimeOffsetNonDeterministicPropertiesHasDiag(string expression)
+    {
+        string code = Wrapper.WrapDurableFunctionOrchestration($@"
+[Function(""Run"")]
+DateTimeOffset Run([OrchestrationTrigger] TaskOrchestrationContext context)
+{{
+    return {{|#0:{expression}|}};
+}}
+");
+
+        string fix = Wrapper.WrapDurableFunctionOrchestration($@"
+[Function(""Run"")]
+DateTimeOffset Run([OrchestrationTrigger] TaskOrchestrationContext context)
+{{
+    return (DateTimeOffset)context.CurrentUtcDateTime;
+}}
+");
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Run", $"System.{expression}", "Run");
+
+        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
+    }
+
+    [Fact]
+    public async Task TaskOrchestratorUsingDateTimeOffsetHasDiag()
+    {
+        string code = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, DateTimeOffset>
+{
+    public override Task<DateTimeOffset> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        return Task.FromResult({|#0:DateTimeOffset.Now|});
+    }
+}
+");
+
+        string fix = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, DateTimeOffset>
+{
+    public override Task<DateTimeOffset> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        return Task.FromResult((DateTimeOffset)context.CurrentUtcDateTime);
+    }
+}
+");
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("RunAsync", "System.DateTimeOffset.Now", "MyOrchestrator");
+
+        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
+    }
+
+    [Fact]
+    public async Task FuncOrchestratorWithDateTimeOffsetHasDiag()
+    {
+        string code = Wrapper.WrapFuncOrchestrator(@"
+tasks.AddOrchestratorFunc(""HelloSequence"", context =>
+{
+    return {|#0:DateTimeOffset.UtcNow|};
+});
+");
+
+        string fix = Wrapper.WrapFuncOrchestrator(@"
+tasks.AddOrchestratorFunc(""HelloSequence"", context =>
+{
+    return (DateTimeOffset)context.CurrentUtcDateTime;
+});
+");
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Main", "System.DateTimeOffset.UtcNow", "HelloSequence");
+
+        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
+    }
+
     static DiagnosticResult BuildDiagnostic()
     {
         return VerifyCS.Diagnostic(DateTimeOrchestrationAnalyzer.DiagnosticId);

@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Text;
 using DurableTask.Core.History;
@@ -91,7 +92,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             version = this.options.DefaultVersion;
         }
 
-        var request = new P.CreateInstanceRequest
+        P.CreateInstanceRequest request = new()
         {
             Name = orchestratorName.Name,
             Version = version,
@@ -120,6 +121,34 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         {
             // Convert timestamps to UTC if not already UTC
             request.ScheduledStartTimestamp = Timestamp.FromDateTimeOffset(startAt.Value.ToUniversalTime());
+        }
+
+        // Set orchestration ID reuse policy for deduplication support
+        // Note: This requires the protobuf to support OrchestrationIdReusePolicy field
+        // If the protobuf doesn't support it yet, this will need to be updated when the protobuf is updated
+        if (options?.DedupeStatuses != null && options.DedupeStatuses.Count > 0)
+        {
+            // Parse and validate all status strings to enum first
+            ImmutableHashSet<OrchestrationRuntimeStatus> dedupeStatuses = options.DedupeStatuses
+                .Select(s =>
+                {
+                    if (!System.Enum.TryParse<OrchestrationRuntimeStatus>(s, ignoreCase: true, out OrchestrationRuntimeStatus status))
+                    {
+                        throw new ArgumentException(
+                            $"Invalid orchestration runtime status: '{s}' for deduplication.");
+                    }
+
+                    return status;
+                }).ToImmutableHashSet();
+
+            // Convert dedupe statuses to protobuf statuses and create reuse policy
+            IEnumerable<P.OrchestrationStatus> dedupeStatusesProto = dedupeStatuses.Select(s => s.ToGrpcStatus());
+            P.OrchestrationIdReusePolicy? policy = ProtoUtils.ConvertDedupeStatusesToReusePolicy(dedupeStatusesProto);
+
+            if (policy != null)
+            {
+                request.OrchestrationIdReusePolicy = policy;
+            }
         }
 
         using Activity? newActivity = TraceHelper.StartActivityForNewOrchestration(request);
@@ -405,7 +434,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         Check.NotNullOrEmpty(instanceId);
         Check.NotEntity(this.options.EnableEntitySupport, instanceId);
 
-        var request = new P.RestartInstanceRequest
+        P.RestartInstanceRequest request = new P.RestartInstanceRequest
         {
             InstanceId = instanceId,
             RestartWithNewInstanceId = restartWithNewInstanceId,
@@ -441,7 +470,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         Check.NotNullOrEmpty(instanceId);
         Check.NotEntity(this.options.EnableEntitySupport, instanceId);
 
-        var request = new P.RewindInstanceRequest
+        P.RewindInstanceRequest request = new P.RewindInstanceRequest
         {
             InstanceId = instanceId,
             Reason = reason,
@@ -573,7 +602,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
     OrchestrationMetadata CreateMetadata(P.OrchestrationState state, bool includeInputsAndOutputs)
     {
-        var metadata = new OrchestrationMetadata(state.Name, state.InstanceId)
+        OrchestrationMetadata metadata = new OrchestrationMetadata(state.Name, state.InstanceId)
         {
             CreatedAt = state.CreatedTimestamp.ToDateTimeOffset(),
             LastUpdatedAt = state.LastUpdatedTimestamp.ToDateTimeOffset(),

@@ -134,4 +134,12 @@ public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffse
     /// Gets the version to associate with the orchestration instance.
     /// </summary>
     public TaskVersion? Version { get; init; }
+
+    /// <summary>
+    /// Gets the orchestration runtime statuses that should be considered for deduplication.
+    /// </summary>
+    /// <remarks>
+    /// For type-safe usage, use the WithDedupeStatuses extension method.
+    /// </remarks>
+    public IReadOnlyList<string>? DedupeStatuses { get; init; }
 }

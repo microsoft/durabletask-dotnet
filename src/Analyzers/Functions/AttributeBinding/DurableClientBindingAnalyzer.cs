@@ -28,7 +28,7 @@ public sealed class DurableClientBindingAnalyzer : MatchingAttributeBindingAnaly
             AnalyzersCategories.AttributeBinding,
             DiagnosticSeverity.Error,
             isEnabledByDefault: true,
-            helpLinkUri: $"https://learn.microsoft.com/azure/azure-functions/durable/durable-functions-code-constraints?tabs=csharp#{DiagnosticId}");
+            helpLinkUri: "https://go.microsoft.com/fwlink/?linkid=2346202");
 
     /// <inheritdoc/>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];

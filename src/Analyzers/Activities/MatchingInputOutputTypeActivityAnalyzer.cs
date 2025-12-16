@@ -41,7 +41,7 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
         DiagnosticSeverity.Warning,
         customTags: [WellKnownDiagnosticTags.CompilationEnd],
         isEnabledByDefault: true,
-        helpLinkUri: $"https://learn.microsoft.com/azure/azure-functions/durable/durable-functions-code-constraints?tabs=csharp#{InputArgumentTypeMismatchDiagnosticId}");
+        helpLinkUri: "https://go.microsoft.com/fwlink/?linkid=2346202");
 
     static readonly DiagnosticDescriptor OutputArgumentTypeMismatchRule = new(
         OutputArgumentTypeMismatchDiagnosticId,
@@ -51,7 +51,7 @@ public class MatchingInputOutputTypeActivityAnalyzer : DiagnosticAnalyzer
         DiagnosticSeverity.Warning,
         customTags: [WellKnownDiagnosticTags.CompilationEnd],
         isEnabledByDefault: true,
-        helpLinkUri: $"https://learn.microsoft.com/azure/azure-functions/durable/durable-functions-code-constraints?tabs=csharp#{OutputArgumentTypeMismatchDiagnosticId}");
+        helpLinkUri: "https://go.microsoft.com/fwlink/?linkid=2346202");
 
     /// <inheritdoc/>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [InputArgumentTypeMismatchRule, OutputArgumentTypeMismatchRule];

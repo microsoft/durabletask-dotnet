@@ -44,8 +44,7 @@ public class DiagnosticDescriptorTests
         {
             Assert.NotNull(diagnostic.HelpLinkUri);
             Assert.NotEmpty(diagnostic.HelpLinkUri);
-            Assert.StartsWith("https://learn.microsoft.com/azure/azure-functions/durable/durable-functions-code-constraints?tabs=csharp#", diagnostic.HelpLinkUri);
-            Assert.EndsWith(diagnostic.Id, diagnostic.HelpLinkUri);
+            Assert.Equal("https://go.microsoft.com/fwlink/?linkid=2346202", diagnostic.HelpLinkUri);
         }
     }
 }

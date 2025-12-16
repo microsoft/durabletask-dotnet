@@ -27,11 +27,14 @@ public abstract class OrchestrationAnalyzer<TOrchestrationVisitor> : DiagnosticA
         {
             KnownTypeSymbols knownSymbols = new(context.Compilation);
 
-            if (knownSymbols.FunctionOrchestrationAttribute == null || knownSymbols.FunctionNameAttribute == null ||
-                knownSymbols.TaskOrchestratorInterface == null ||
-                knownSymbols.DurableTaskRegistry == null)
+            // Check if at least one orchestration type can be detected
+            bool canAnalyzeDurableFunctions = knownSymbols.FunctionOrchestrationAttribute != null && knownSymbols.FunctionNameAttribute != null;
+            bool canAnalyzeTaskOrchestrator = knownSymbols.TaskOrchestratorInterface != null && knownSymbols.TaskOrchestrationContext != null;
+            bool canAnalyzeFuncOrchestrator = knownSymbols.DurableTaskRegistry != null;
+
+            if (!canAnalyzeDurableFunctions && !canAnalyzeTaskOrchestrator && !canAnalyzeFuncOrchestrator)
             {
-                // symbols not available in this compilation, skip analysis
+                // no symbols available in this compilation, skip analysis
                 return;
             }
 
@@ -42,124 +45,133 @@ public abstract class OrchestrationAnalyzer<TOrchestrationVisitor> : DiagnosticA
             }
 
             // look for Durable Functions Orchestrations
-            context.RegisterSyntaxNodeAction(
-                ctx =>
+            if (canAnalyzeDurableFunctions)
             {
-                ctx.CancellationToken.ThrowIfCancellationRequested();
-
-                if (ctx.ContainingSymbol is not IMethodSymbol methodSymbol)
+                context.RegisterSyntaxNodeAction(
+                    ctx =>
                 {
-                    return;
-                }
+                    ctx.CancellationToken.ThrowIfCancellationRequested();
 
-                if (!methodSymbol.ContainsAttributeInAnyMethodArguments(knownSymbols.FunctionOrchestrationAttribute))
-                {
-                    return;
-                }
+                    if (ctx.ContainingSymbol is not IMethodSymbol methodSymbol)
+                    {
+                        return;
+                    }
 
-                if (!methodSymbol.TryGetSingleValueFromAttribute(knownSymbols.FunctionNameAttribute, out string functionName))
-                {
-                    return;
-                }
+                    if (!methodSymbol.ContainsAttributeInAnyMethodArguments(knownSymbols.FunctionOrchestrationAttribute!))
+                    {
+                        return;
+                    }
 
-                var rootMethodSyntax = (MethodDeclarationSyntax)ctx.Node;
+                    if (!methodSymbol.TryGetSingleValueFromAttribute(knownSymbols.FunctionNameAttribute!, out string functionName))
+                    {
+                        return;
+                    }
 
-                visitor.VisitDurableFunction(ctx.SemanticModel, rootMethodSyntax, methodSymbol, functionName, ctx.ReportDiagnostic);
-            },
-                SyntaxKind.MethodDeclaration);
+                    var rootMethodSyntax = (MethodDeclarationSyntax)ctx.Node;
+
+                    visitor.VisitDurableFunction(ctx.SemanticModel, rootMethodSyntax, methodSymbol, functionName, ctx.ReportDiagnostic);
+                },
+                    SyntaxKind.MethodDeclaration);
+            }
 
             // look for ITaskOrchestrator/TaskOrchestrator`2 Orchestrations
-            context.RegisterSyntaxNodeAction(
-                ctx =>
+            if (canAnalyzeTaskOrchestrator)
             {
-                ctx.CancellationToken.ThrowIfCancellationRequested();
-
-                if (ctx.ContainingSymbol is not INamedTypeSymbol classSymbol)
+                context.RegisterSyntaxNodeAction(
+                    ctx =>
                 {
-                    return;
-                }
+                    ctx.CancellationToken.ThrowIfCancellationRequested();
 
-                bool implementsITaskOrchestrator = classSymbol.AllInterfaces.Any(i => i.Equals(knownSymbols.TaskOrchestratorInterface, SymbolEqualityComparer.Default));
-                if (!implementsITaskOrchestrator)
-                {
-                    return;
-                }
-
-                IEnumerable<IMethodSymbol> orchestrationMethods = classSymbol.GetMembers().OfType<IMethodSymbol>()
-                    .Where(m => m.Parameters.Any(p => p.Type.Equals(knownSymbols.TaskOrchestrationContext, SymbolEqualityComparer.Default)));
-
-                string functionName = classSymbol.Name;
-
-                foreach (IMethodSymbol? methodSymbol in orchestrationMethods)
-                {
-                    IEnumerable<MethodDeclarationSyntax> methodSyntaxes = methodSymbol.GetSyntaxNodes();
-                    foreach (MethodDeclarationSyntax rootMethodSyntax in methodSyntaxes)
+                    if (ctx.ContainingSymbol is not INamedTypeSymbol classSymbol)
                     {
-                        visitor.VisitTaskOrchestrator(ctx.SemanticModel, rootMethodSyntax, methodSymbol, functionName, ctx.ReportDiagnostic);
+                        return;
                     }
-                }
-            },
-                SyntaxKind.ClassDeclaration);
+
+                    bool implementsITaskOrchestrator = classSymbol.AllInterfaces.Any(i => i.Equals(knownSymbols.TaskOrchestratorInterface, SymbolEqualityComparer.Default));
+                    if (!implementsITaskOrchestrator)
+                    {
+                        return;
+                    }
+
+                    IEnumerable<IMethodSymbol> orchestrationMethods = classSymbol.GetMembers().OfType<IMethodSymbol>()
+                        .Where(m => m.Parameters.Any(p => p.Type.Equals(knownSymbols.TaskOrchestrationContext, SymbolEqualityComparer.Default)));
+
+                    string functionName = classSymbol.Name;
+
+                    foreach (IMethodSymbol? methodSymbol in orchestrationMethods)
+                    {
+                        IEnumerable<MethodDeclarationSyntax> methodSyntaxes = methodSymbol.GetSyntaxNodes();
+                        foreach (MethodDeclarationSyntax rootMethodSyntax in methodSyntaxes)
+                        {
+                            visitor.VisitTaskOrchestrator(ctx.SemanticModel, rootMethodSyntax, methodSymbol, functionName, ctx.ReportDiagnostic);
+                        }
+                    }
+                },
+                    SyntaxKind.ClassDeclaration);
+            }
 
             // look for OrchestratorFunc Orchestrations
-            context.RegisterOperationAction(
-                ctx =>
+            if (canAnalyzeFuncOrchestrator)
             {
-                if (ctx.Operation is not IInvocationOperation invocation)
+                context.RegisterOperationAction(
+                    ctx =>
                 {
-                    return;
-                }
+                    if (ctx.Operation is not IInvocationOperation invocation)
+                    {
+                        return;
+                    }
 
-                if (!SymbolEqualityComparer.Default.Equals(invocation.Type, knownSymbols.DurableTaskRegistry))
-                {
-                    return;
-                }
+                    if (!SymbolEqualityComparer.Default.Equals(invocation.Type, knownSymbols.DurableTaskRegistry))
+                    {
+                        return;
+                    }
 
-                // there are 8 AddOrchestratorFunc overloads
-                if (invocation.TargetMethod.Name != "AddOrchestratorFunc")
-                {
-                    return;
-                }
+                    // there are 8 AddOrchestratorFunc overloads
+                    if (invocation.TargetMethod.Name != "AddOrchestratorFunc")
+                    {
+                        return;
+                    }
 
-                // all overloads have the parameter 'orchestrator', either as an Action or a Func
-                IArgumentOperation orchestratorArgument = invocation.Arguments.First(a => a.Parameter!.Name == "orchestrator");
-                if (orchestratorArgument.Value is not IDelegateCreationOperation delegateCreationOperation)
-                {
-                    return;
-                }
+                    // all overloads have the parameter 'orchestrator', either as an Action or a Func
+                    IArgumentOperation orchestratorArgument = invocation.Arguments.First(a => a.Parameter!.Name == "orchestrator");
+                    if (orchestratorArgument.Value is not IDelegateCreationOperation delegateCreationOperation)
+                    {
+                        return;
+                    }
 
-                // obtains the method symbol from the delegate creation operation
-                IMethodSymbol? methodSymbol = null;
-                SyntaxNode? methodSyntax = null;
-                switch (delegateCreationOperation.Target)
-                {
-                    case IAnonymousFunctionOperation lambdaOperation:
-                        // use the containing symbol of the lambda (e.g. the class declaring it) as the method symbol
-                        methodSymbol = ctx.ContainingSymbol as IMethodSymbol;
-                        methodSyntax = delegateCreationOperation.Syntax;
-                        break;
-                    case IMethodReferenceOperation methodReferenceOperation:
-                        // use the method reference as the method symbol
-                        methodSymbol = methodReferenceOperation.Method;
-                        methodSyntax = methodReferenceOperation.Method.DeclaringSyntaxReferences.First().GetSyntax();
-                        break;
-                    default:
-                        break;
-                }
+                    // obtains the method symbol from the delegate creation operation
+                    IMethodSymbol? methodSymbol = null;
+                    SyntaxNode? methodSyntax = null;
+                    switch (delegateCreationOperation.Target)
+                    {
+                        case IAnonymousFunctionOperation lambdaOperation:
+                            // use the containing symbol of the lambda (e.g. the class declaring it) as the method symbol
+                            methodSymbol = ctx.ContainingSymbol as IMethodSymbol;
+                            methodSyntax = delegateCreationOperation.Syntax;
+                            break;
+                        case IMethodReferenceOperation methodReferenceOperation:
+                            // use the method reference as the method symbol
+                            methodSymbol = methodReferenceOperation.Method;
+                            methodSyntax = methodReferenceOperation.Method.DeclaringSyntaxReferences.First().GetSyntax();
+                            break;
+                        default:
+                            break;
+                    }
 
-                if (methodSymbol == null || methodSyntax == null)
-                {
-                    return;
-                }
+                    if (methodSymbol == null || methodSyntax == null)
+                    {
+                        return;
+                    }
 
-                // try to get the name of the orchestration from the method call, otherwise use the containing type name
-                IArgumentOperation nameArgument = invocation.Arguments.First(a => a.Parameter!.Name == "name");
-                Optional<object?> name = nameArgument.GetConstantValueFromAttribute(ctx.Operation.SemanticModel!, ctx.CancellationToken);
-                string orchestrationName = name.Value?.ToString() ?? methodSymbol.Name;
+                    // try to get the name of the orchestration from the method call, otherwise use the containing type name
+                    IArgumentOperation nameArgument = invocation.Arguments.First(a => a.Parameter!.Name == "name");
+                    Optional<object?> name = nameArgument.GetConstantValueFromAttribute(ctx.Operation.SemanticModel!, ctx.CancellationToken);
+                    string orchestrationName = name.Value?.ToString() ?? methodSymbol.Name;
 
-                visitor.VisitFuncOrchestrator(ctx.Operation.SemanticModel!, methodSyntax, methodSymbol, orchestrationName, ctx.ReportDiagnostic);
-            },
-                OperationKind.Invocation);
+                    visitor.VisitFuncOrchestrator(ctx.Operation.SemanticModel!, methodSyntax, methodSymbol, orchestrationName, ctx.ReportDiagnostic);
+                },
+                    OperationKind.Invocation);
+            }
         });
     }
 }

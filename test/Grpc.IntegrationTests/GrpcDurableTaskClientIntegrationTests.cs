@@ -638,7 +638,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             context.SetCustomStatus("waiting");
             // Wait for external event or a timer (30 seconds) to allow suspend/resume operations
             Task<string> eventTask = context.WaitForExternalEvent<string>("event");
-            Task timerTask = context.CreateTimer(TimeSpan.FromSeconds(30), CancellationToken.None);
+            Task timerTask = context.CreateTimer(TimeSpan.FromSeconds(30), context.CancellationToken);
             await Task.WhenAny(eventTask, timerTask);
             
             if (shouldThrow)

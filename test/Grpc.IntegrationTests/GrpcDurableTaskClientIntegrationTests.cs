@@ -4,15 +4,20 @@
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using FluentAssertions.Execution;
+using Grpc.Core;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
 using Xunit.Abstractions;
+using RpcException = Grpc.Core.RpcException;
+using StatusCode = Grpc.Core.StatusCode;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
 public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
 {
     const string OrchestrationName = "TestOrchestration";
+    const int PollingTimeoutSeconds = 5;
+    const int PollingIntervalMilliseconds = 100;
 
     public DurableTaskGrpcClientIntegrationTests(ITestOutputHelper output, GrpcSidecarFixture sidecarFixture)
         : base(output, sidecarFixture)
@@ -288,6 +293,324 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             .WithMessage("*An orchestration with the instanceId non-existent-instance-id was not found*");
     }
 
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_WithDedupeStatuses_ThrowsWhenInstanceExists()
+    {
+        await using HostTestLifetime server = await this.StartAsync();
+
+        string instanceId = "dedup-test-instance";
+        
+        // Schedule and complete first orchestration instance
+        string firstInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: false,
+            new StartOrchestrationOptions(instanceId));
+
+        // Wait for it to complete
+        await server.Client.WaitForInstanceStartAsync(firstInstanceId, default);
+        await server.Client.RaiseEventAsync(firstInstanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(firstInstanceId, default);
+
+        // Verify it's completed
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+        metadata.Should().NotBeNull();
+        metadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+
+        // Try to create another instance with the same ID and dedupe statuses including Completed
+        // This should throw an exception
+        Func<Task> createAction = () => server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: false,
+            new StartOrchestrationOptions(instanceId).WithDedupeStatuses(OrchestrationRuntimeStatus.Completed));
+
+        await createAction.Should().ThrowAsync<RpcException>()
+            .Where(e => e.StatusCode == StatusCode.AlreadyExists);
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_WithDedupeStatuses_AllowsReplacementWhenStatusNotInDedupeList()
+    {
+        await using HostTestLifetime server = await this.StartAsync();
+
+        string instanceId = "dedup-test-instance-replace";
+        
+        // Create first orchestration instance
+        string firstInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: false,
+            new StartOrchestrationOptions(instanceId));
+
+        // Wait for it to complete
+        await server.Client.WaitForInstanceStartAsync(firstInstanceId, default);
+        await server.Client.RaiseEventAsync(firstInstanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(firstInstanceId, default);
+
+        // Verify it's completed
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+        metadata.Should().NotBeNull();
+        metadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+
+        // Try to create another instance with the same ID but dedupe statuses does NOT include Completed
+        // This should succeed (replace the existing instance)
+        string secondInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: false,
+            new StartOrchestrationOptions(instanceId).WithDedupeStatuses(
+                OrchestrationRuntimeStatus.Failed, 
+                OrchestrationRuntimeStatus.Terminated));
+
+        secondInstanceId.Should().Be(instanceId);
+        
+        // Wait for the new instance to start running
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+        
+        // Verify the new instance is running
+        OrchestrationMetadata? newMetadata = await server.Client.GetInstanceAsync(instanceId, false);
+        newMetadata.Should().NotBeNull();
+        newMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Running);
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_WithDedupeStatuses_ThrowsWhenInstanceIsFailed()
+    {
+        await using HostTestLifetime server = await this.StartAsync();
+
+        string instanceId = "dedup-test-instance-failed";
+        
+        // Create first orchestration instance that will fail
+        string firstInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: true, // true means it will throw
+            new StartOrchestrationOptions(instanceId));
+
+        // Wait for it to fail
+        await server.Client.WaitForInstanceStartAsync(firstInstanceId, default);
+        await server.Client.RaiseEventAsync(firstInstanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(firstInstanceId, default);
+
+        // Verify it's failed
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+        metadata.Should().NotBeNull();
+        metadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Failed);
+
+        // Try to create another instance with the same ID and dedupe statuses including Failed
+        // This should throw an exception
+        Func<Task> createAction = () => server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: false,
+            new StartOrchestrationOptions(instanceId).WithDedupeStatuses(OrchestrationRuntimeStatus.Failed));
+
+        await createAction.Should().ThrowAsync<RpcException>()
+            .Where(e => e.StatusCode == StatusCode.AlreadyExists);
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_WithDedupeStatuses_AllowsCreationWhenInstanceDoesNotExist()
+    {
+        await using HostTestLifetime server = await this.StartAsync();
+
+        string instanceId = "dedup-test-instance-new";
+        
+        // Create instance with dedupe statuses - should succeed since instance doesn't exist
+        string createdInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: false,
+            new StartOrchestrationOptions(instanceId).WithDedupeStatuses(
+                OrchestrationRuntimeStatus.Completed, 
+                OrchestrationRuntimeStatus.Failed));
+
+        createdInstanceId.Should().Be(instanceId);
+        
+        // Verify the instance was created
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+        metadata.Should().NotBeNull();
+        metadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Running);
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_WithMultipleDedupeStatuses_ThrowsWhenAnyStatusMatches()
+    {
+        await using HostTestLifetime server = await this.StartAsync();
+
+        string instanceId = "dedup-test-instance-multiple";
+        
+        // Create first orchestration instance
+        string firstInstanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: false,
+            new StartOrchestrationOptions(instanceId));
+
+        // Wait for it to complete
+        await server.Client.WaitForInstanceStartAsync(firstInstanceId, default);
+        await server.Client.RaiseEventAsync(firstInstanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(firstInstanceId, default);
+
+        // Verify it's completed
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+        metadata.Should().NotBeNull();
+        metadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+
+        // Try to create another instance with multiple dedupe statuses including Completed
+        // This should throw an exception
+        Func<Task> createAction = () => server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName,
+            input: false,
+            new StartOrchestrationOptions(instanceId).WithDedupeStatuses(
+                OrchestrationRuntimeStatus.Completed, 
+                OrchestrationRuntimeStatus.Failed,
+                OrchestrationRuntimeStatus.Terminated));
+
+        await createAction.Should().ThrowAsync<RpcException>()
+            .Where(e => e.StatusCode == StatusCode.AlreadyExists);
+    }
+
+    [Fact]
+    public async Task SuspendAndResumeInstance_EndToEnd()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartLongRunningAsync();
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false);
+
+        // Wait for the orchestration to start
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+
+        // Act - Suspend the orchestration
+        await server.Client.SuspendInstanceAsync(instanceId, "Test suspension", default);
+
+        // Poll for suspended status
+        OrchestrationMetadata? suspendedMetadata = await this.PollForStatusAsync(
+            server.Client, instanceId, OrchestrationRuntimeStatus.Suspended, default);
+
+        // Assert - Verify orchestration is suspended
+        suspendedMetadata.Should().NotBeNull();
+        suspendedMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Suspended);
+        suspendedMetadata.InstanceId.Should().Be(instanceId);
+
+        // Act - Resume the orchestration
+        await server.Client.ResumeInstanceAsync(instanceId, "Test resumption", default);
+
+        // Poll for running status
+        OrchestrationMetadata? resumedMetadata = await this.PollForStatusAsync(
+            server.Client, instanceId, OrchestrationRuntimeStatus.Running, default);
+
+        // Assert - Verify orchestration is running again
+        resumedMetadata.Should().NotBeNull();
+        resumedMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Running);
+
+        // Complete the orchestration
+        await server.Client.RaiseEventAsync(instanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(instanceId, default);
+
+        // Verify the orchestration completed successfully
+        OrchestrationMetadata? completedMetadata = await server.Client.GetInstanceAsync(instanceId, false);
+        completedMetadata.Should().NotBeNull();
+        completedMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+    }
+
+    [Fact]
+    public async Task SuspendInstance_WithoutReason_Succeeds()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartLongRunningAsync();
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false);
+
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+
+        // Act - Suspend without a reason
+        await server.Client.SuspendInstanceAsync(instanceId, cancellation: default);
+
+        // Poll for suspended status
+        OrchestrationMetadata? suspendedMetadata = await this.PollForStatusAsync(
+            server.Client, instanceId, OrchestrationRuntimeStatus.Suspended, default);
+
+        // Assert
+        suspendedMetadata.Should().NotBeNull();
+        suspendedMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Suspended);
+    }
+
+    [Fact]
+    public async Task ResumeInstance_WithoutReason_Succeeds()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartLongRunningAsync();
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false);
+
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+        await server.Client.SuspendInstanceAsync(instanceId, "Test suspension", default);
+
+        // Wait for suspension
+        await this.PollForStatusAsync(server.Client, instanceId, OrchestrationRuntimeStatus.Suspended, default);
+
+        // Act - Resume without a reason
+        await server.Client.ResumeInstanceAsync(instanceId, cancellation: default);
+
+        // Poll for running status
+        OrchestrationMetadata? resumedMetadata = await this.PollForStatusAsync(
+            server.Client, instanceId, OrchestrationRuntimeStatus.Running, default);
+
+        // Assert
+        resumedMetadata.Should().NotBeNull();
+        resumedMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Running);
+    }
+
+    [Fact]
+    public async Task SuspendInstance_AlreadyCompleted_NoError()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartAsync();
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false);
+
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+        await server.Client.RaiseEventAsync(instanceId, "event", default);
+        await server.Client.WaitForInstanceCompletionAsync(instanceId, default);
+
+        // Verify it's completed
+        OrchestrationMetadata? completedMetadata = await server.Client.GetInstanceAsync(instanceId, false);
+        completedMetadata.Should().NotBeNull();
+        completedMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+
+        // Act - Try to suspend a completed orchestration (should not throw)
+        await server.Client.SuspendInstanceAsync(instanceId, "Test suspension", default);
+
+        // Assert - Status should remain completed
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+        metadata.Should().NotBeNull();
+        metadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Completed);
+    }
+
+    [Fact]
+    public async Task ResumeInstance_NotSuspended_NoError()
+    {
+        // Arrange
+        await using HostTestLifetime server = await this.StartLongRunningAsync();
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            OrchestrationName, input: false);
+
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
+
+        // Verify it's running
+        OrchestrationMetadata? runningMetadata = await server.Client.GetInstanceAsync(instanceId, false);
+        runningMetadata.Should().NotBeNull();
+        runningMetadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Running);
+
+        // Act - Try to resume an already running orchestration (should not throw)
+        await server.Client.ResumeInstanceAsync(instanceId, "Test resumption", default);
+
+        // Assert - Status should remain running
+        OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
+        metadata.Should().NotBeNull();
+        metadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Running);
+    }
+
     Task<HostTestLifetime> StartAsync()
     {
         static async Task<string> Orchestration(TaskOrchestrationContext context, bool shouldThrow)
@@ -306,6 +629,56 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
         {
             b.AddTasks(tasks => tasks.AddOrchestratorFunc<bool, string>(OrchestrationName, Orchestration));
         });
+    }
+
+    Task<HostTestLifetime> StartLongRunningAsync()
+    {
+        static async Task<string> LongRunningOrchestration(TaskOrchestrationContext context, bool shouldThrow)
+        {
+            context.SetCustomStatus("waiting");
+            // Wait for external event or a timer (30 seconds) to allow suspend/resume operations
+            Task<string> eventTask = context.WaitForExternalEvent<string>("event");
+            Task timerTask = context.CreateTimer(TimeSpan.FromSeconds(30), CancellationToken.None);
+            Task completedTask = await Task.WhenAny(eventTask, timerTask);
+
+            if (completedTask == timerTask)
+            {
+                throw new TimeoutException("Timed out waiting for external event 'event'.");
+            }
+            
+            if (shouldThrow)
+            {
+                throw new InvalidOperationException("Orchestration failed");
+            }
+
+            return $"{shouldThrow} -> output";
+        }
+
+        return this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc<bool, string>(OrchestrationName, LongRunningOrchestration));
+        });
+    }
+
+    async Task<OrchestrationMetadata?> PollForStatusAsync(
+        DurableTaskClient client,
+        string instanceId,
+        OrchestrationRuntimeStatus expectedStatus,
+        CancellationToken cancellation = default)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(PollingTimeoutSeconds);
+        while (DateTime.UtcNow < deadline)
+        {
+            OrchestrationMetadata? metadata = await client.GetInstanceAsync(instanceId, false, cancellation);
+            if (metadata?.RuntimeStatus == expectedStatus)
+            {
+                return metadata;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(PollingIntervalMilliseconds), cancellation);
+        }
+
+        return await client.GetInstanceAsync(instanceId, false, cancellation);
     }
 
     class DateTimeToleranceComparer : IEqualityComparer<DateTimeOffset>

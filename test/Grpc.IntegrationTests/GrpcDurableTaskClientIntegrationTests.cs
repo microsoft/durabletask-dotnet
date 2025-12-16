@@ -639,8 +639,12 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             // Wait for external event or a timer (30 seconds) to allow suspend/resume operations
             Task<string> eventTask = context.WaitForExternalEvent<string>("event");
             Task timerTask = context.CreateTimer(TimeSpan.FromSeconds(30), context.CancellationToken);
-            await Task.WhenAny(eventTask, timerTask);
-            
+            Task completedTask = await Task.WhenAny(eventTask, timerTask);
+
+            if (completedTask == timerTask)
+            {
+                throw new TimeoutException("Timed out waiting for external event 'event'.");
+            }
             if (shouldThrow)
             {
                 throw new InvalidOperationException("Orchestration failed");

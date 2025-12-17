@@ -453,6 +453,130 @@ tasks.AddOrchestratorFunc(""HelloSequence"", context =>
         await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
     }
 
+    [Theory]
+    [InlineData("TimeProvider.System.GetUtcNow()")]
+    [InlineData("TimeProvider.System.GetLocalNow()")]
+    public async Task DurableFunctionOrchestrationUsingTimeProviderNonDeterministicMethodsHasDiag(string expression)
+    {
+        string code = Wrapper.WrapDurableFunctionOrchestration($@"
+[Function(""Run"")]
+DateTimeOffset Run([OrchestrationTrigger] TaskOrchestrationContext context)
+{{
+    return {{|#0:{expression}|}};
+}}
+");
+
+        string expectedReplacement = expression.Contains("GetLocalNow")
+            ? "(DateTimeOffset)context.CurrentUtcDateTime.ToLocalTime()"
+            : "(DateTimeOffset)context.CurrentUtcDateTime";
+
+        string fix = Wrapper.WrapDurableFunctionOrchestration($@"
+[Function(""Run"")]
+DateTimeOffset Run([OrchestrationTrigger] TaskOrchestrationContext context)
+{{
+    return {expectedReplacement};
+}}
+");
+
+        // The analyzer reports the method name as "System.TimeProvider.GetUtcNow()" or "System.TimeProvider.GetLocalNow()"
+        string methodName = expression.Contains("GetLocalNow") ? "System.TimeProvider.GetLocalNow()" : "System.TimeProvider.GetUtcNow()";
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Run", methodName, "Run");
+
+        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
+    }
+
+    [Fact]
+    public async Task DurableFunctionOrchestrationUsingTimeProviderGetTimestampHasDiag()
+    {
+        string code = Wrapper.WrapDurableFunctionOrchestration(@"
+[Function(""Run"")]
+long Run([OrchestrationTrigger] TaskOrchestrationContext context)
+{
+    return {|#0:TimeProvider.System.GetTimestamp()|};
+}
+");
+
+        string fix = Wrapper.WrapDurableFunctionOrchestration(@"
+[Function(""Run"")]
+long Run([OrchestrationTrigger] TaskOrchestrationContext context)
+{
+    return context.CurrentUtcDateTime.Ticks;
+}
+");
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Run", "System.TimeProvider.GetTimestamp()", "Run");
+
+        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
+    }
+
+    [Fact]
+    public async Task TaskOrchestratorUsingTimeProviderHasDiag()
+    {
+        string code = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, DateTimeOffset>
+{
+    public override Task<DateTimeOffset> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        return Task.FromResult({|#0:TimeProvider.System.GetUtcNow()|});
+    }
+}
+");
+
+        string fix = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, DateTimeOffset>
+{
+    public override Task<DateTimeOffset> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        return Task.FromResult((DateTimeOffset)context.CurrentUtcDateTime);
+    }
+}
+");
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("RunAsync", "System.TimeProvider.GetUtcNow()", "MyOrchestrator");
+
+        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
+    }
+
+    [Fact]
+    public async Task FuncOrchestratorWithTimeProviderHasDiag()
+    {
+        string code = Wrapper.WrapFuncOrchestrator(@"
+tasks.AddOrchestratorFunc(""HelloSequence"", context =>
+{
+    return {|#0:TimeProvider.System.GetUtcNow()|};
+});
+");
+
+        string fix = Wrapper.WrapFuncOrchestrator(@"
+tasks.AddOrchestratorFunc(""HelloSequence"", context =>
+{
+    return (DateTimeOffset)context.CurrentUtcDateTime;
+});
+");
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Main", "System.TimeProvider.GetUtcNow()", "HelloSequence");
+
+        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
+    }
+
+    [Fact]
+    public async Task DurableFunctionOrchestrationInvokingMethodWithTimeProviderHasDiag()
+    {
+        string code = Wrapper.WrapDurableFunctionOrchestration(@"
+[Function(""Run"")]
+DateTimeOffset Run([OrchestrationTrigger] TaskOrchestrationContext context)
+{
+    return GetTime();
+}
+
+DateTimeOffset GetTime() => {|#0:TimeProvider.System.GetUtcNow()|};
+");
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("GetTime", "System.TimeProvider.GetUtcNow()", "Run");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+    }
+
     static DiagnosticResult BuildDiagnostic()
     {
         return VerifyCS.Diagnostic(DateTimeOrchestrationAnalyzer.DiagnosticId);

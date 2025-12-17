@@ -10,7 +10,7 @@ using static Microsoft.DurableTask.Analyzers.Orchestration.DateTimeOrchestration
 namespace Microsoft.DurableTask.Analyzers.Orchestration;
 
 /// <summary>
-/// Analyzer that reports a warning when a non-deterministic DateTime or DateTimeOffset property is used in an orchestration method.
+/// Analyzer that reports a warning when a non-deterministic DateTime, DateTimeOffset, or TimeProvider method is used in an orchestration method.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer<DateTimeOrchestrationVisitor>
@@ -41,12 +41,14 @@ public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer<DateTi
     {
         INamedTypeSymbol systemDateTimeSymbol = null!;
         INamedTypeSymbol? systemDateTimeOffsetSymbol;
+        INamedTypeSymbol? systemTimeProviderSymbol;
 
         /// <inheritdoc/>
         public override bool Initialize()
         {
             this.systemDateTimeSymbol = this.Compilation.GetSpecialType(SpecialType.System_DateTime);
             this.systemDateTimeOffsetSymbol = this.Compilation.GetTypeByMetadataName("System.DateTimeOffset");
+            this.systemTimeProviderSymbol = this.Compilation.GetTypeByMetadataName("System.TimeProvider");
             return true;
         }
 
@@ -83,6 +85,33 @@ public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer<DateTi
                     // e.g.: "The method 'Method1' uses 'System.DateTime.Now' that may cause non-deterministic behavior when invoked from orchestration 'MyOrchestrator'"
                     // e.g.: "The method 'Method1' uses 'System.DateTimeOffset.Now' that may cause non-deterministic behavior when invoked from orchestration 'MyOrchestrator'"
                     reportDiagnostic(RoslynExtensions.BuildDiagnostic(Rule, operation.Syntax, methodSymbol.Name, property.ToString(), orchestrationName));
+                }
+            }
+
+            // Check for TimeProvider method invocations
+            if (this.systemTimeProviderSymbol is not null)
+            {
+                foreach (IInvocationOperation operation in methodOperation.Descendants().OfType<IInvocationOperation>())
+                {
+                    IMethodSymbol invokedMethod = operation.TargetMethod;
+
+                    // Check if the method is called on TimeProvider type
+                    bool isTimeProvider = invokedMethod.ContainingType.Equals(this.systemTimeProviderSymbol, SymbolEqualityComparer.Default);
+
+                    if (!isTimeProvider)
+                    {
+                        continue;
+                    }
+
+                    // Check for non-deterministic TimeProvider methods: GetUtcNow, GetLocalNow, GetTimestamp
+                    bool isNonDeterministicMethod = invokedMethod.Name is "GetUtcNow" or "GetLocalNow" or "GetTimestamp";
+
+                    if (isNonDeterministicMethod)
+                    {
+                        // e.g.: "The method 'Method1' uses 'System.TimeProvider.GetUtcNow()' that may cause non-deterministic behavior when invoked from orchestration 'MyOrchestrator'"
+                        string timeProviderMethodName = $"{invokedMethod.ContainingType}.{invokedMethod.Name}()";
+                        reportDiagnostic(RoslynExtensions.BuildDiagnostic(Rule, operation.Syntax, methodSymbol.Name, timeProviderMethodName, orchestrationName));
+                    }
                 }
             }
         }

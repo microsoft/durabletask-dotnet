@@ -1,10 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFrameworks>net6.0;net8.0</TargetFrameworks>
     <AzureFunctionsVersion>v4</AzureFunctionsVersion>
     <OutputType>Exe</OutputType>
     <Nullable>enable</Nullable>
+    <!-- Disable SDK's source generation to allow reflection-based discovery of source-generated functions -->
+    <FunctionsEnableExecutorSourceGen>false</FunctionsEnableExecutorSourceGen>
+    <FunctionsEnableWorkerIndexing>false</FunctionsEnableWorkerIndexing>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,10 +15,12 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" OutputItemType="Analyzer" />
-    <PackageReference Include="Microsoft.DurableTask.Generators" OutputItemType="Analyzer" />
+    <!-- Reference the source generator project directly for local development -->
+    <ProjectReference Include="..\..\src\Generators\Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Google.Protobuf" VersionOverride="3.33.2" />
     <None Update="host.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

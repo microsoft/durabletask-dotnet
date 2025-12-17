@@ -80,7 +80,8 @@ static class ProtoUtils
                 historyEvent = new ExecutionCompletedEvent(
                     proto.EventId,
                     proto.ExecutionCompleted.Result,
-                    proto.ExecutionCompleted.OrchestrationStatus.ToCore());
+                    proto.ExecutionCompleted.OrchestrationStatus.ToCore(),
+                    proto.ExecutionCompleted.FailureDetails.ToCore());
                 break;
             case P.HistoryEvent.EventTypeOneofCase.ExecutionTerminated:
                 historyEvent = new ExecutionTerminatedEvent(proto.EventId, proto.ExecutionTerminated.Input);
@@ -373,6 +374,15 @@ static class ProtoUtils
                         Version = subOrchestrationAction.Version,
                         ParentTraceContext = CreateTraceContext(),
                     };
+
+                    if (subOrchestrationAction.Tags != null)
+                    {
+                        foreach (KeyValuePair<string, string> tag in subOrchestrationAction.Tags)
+                        {
+                            protoAction.CreateSubOrchestration.Tags[tag.Key] = tag.Value;
+                        }
+                    }
+
                     break;
                 case OrchestratorActionType.CreateTimer:
                     var createTimerAction = (CreateTimerOrchestratorAction)action;

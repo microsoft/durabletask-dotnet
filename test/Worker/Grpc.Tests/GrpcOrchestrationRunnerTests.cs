@@ -377,7 +377,7 @@ public class GrpcOrchestrationRunnerTests
     }
 
     [Fact]
-    public async void Stale_ExtendedSessions_Evicted_Async()
+    public async Task Stale_ExtendedSessions_Evicted_Async()
     {
         using var extendedSessions = new ExtendedSessionsCache();
         int extendedSessionIdleTimeout = 5;

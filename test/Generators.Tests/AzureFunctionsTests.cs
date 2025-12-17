@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-//using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.DurableTask.Generators.Tests.Utils;
 
 namespace Microsoft.DurableTask.Generators.Tests;
@@ -11,7 +11,7 @@ public class AzureFunctionsTests
     const string GeneratedClassName = "GeneratedDurableTaskExtensions";
     const string GeneratedFileName = $"{GeneratedClassName}.cs";
 
-    [Fact(Skip = "Durable Functions Extension out of date")]
+    [Fact]
     public async Task Activities_SimpleFunctionTrigger()
     {
         string code = @"
@@ -27,6 +27,10 @@ public class Calculator
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
+/// <summary>
+/// Calls the <see cref=""Calculator.Identity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<int> CallIdentityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<int>(""Identity"", input, options);
@@ -40,7 +44,7 @@ public static Task<int> CallIdentityAsync(this TaskOrchestrationContext ctx, int
             isDurableFunctions: true);
     }
 
-    [Fact(Skip = "Durable Functions Extension out of date")]
+    [Fact]
     public async Task Activities_SimpleFunctionTrigger_TaskReturning()
     {
         string code = @"
@@ -57,6 +61,10 @@ public class Calculator
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
+/// <summary>
+/// Calls the <see cref=""Calculator.IdentityAsync""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<int> CallIdentityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<int>(""Identity"", input, options);
@@ -70,7 +78,7 @@ public static Task<int> CallIdentityAsync(this TaskOrchestrationContext ctx, int
             isDurableFunctions: true);
     }
 
-    [Fact(Skip = "Durable Functions Extension out of date")]
+    [Fact]
     public async Task Activities_SimpleFunctionTrigger_CustomType()
     {
         string code = @"
@@ -92,6 +100,10 @@ namespace AzureFunctionsTests
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
+/// <summary>
+/// Calls the <see cref=""AzureFunctionsTests.Calculator.Identity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<AzureFunctionsTests.Input> CallIdentityAsync(this TaskOrchestrationContext ctx, AzureFunctionsTests.Input input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<AzureFunctionsTests.Input>(""Identity"", input, options);
@@ -111,7 +123,7 @@ public static Task<AzureFunctionsTests.Input> CallIdentityAsync(this TaskOrchest
     /// </summary>
     /// <param name="inputType">The activity input type.</param>
     /// <param name="outputType">The activity output type.</param>
-    [Theory(Skip = "Durable Functions Extension out of date")]
+    [Theory]
     [InlineData("int", "string")]
     [InlineData("string", "int")]
     [InlineData("Guid", "TimeSpan")]
@@ -126,23 +138,34 @@ using System.Threading.Tasks;
 using Microsoft.DurableTask;
 
 [DurableTask(nameof(MyActivity))]
-public class MyActivity : TaskActivityBase<{inputType}, {outputType}>
+public class MyActivity : TaskActivity<{inputType}, {outputType}>
 {{
-    protected override {outputType} OnRun(TaskActivityContext context, {inputType} input) => default!;
+    public override Task<{outputType}> RunAsync(TaskActivityContext context, {inputType} input) => Task.FromResult<{outputType}>(default!);
 }}";
+
+        // Build the expected InputParameter format (matches generator logic)
+        string expectedInputParameter = inputType + " input";
+        if (inputType.EndsWith('?'))
+        {
+            expectedInputParameter += " = default";
+        }
 
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
+/// <summary>
+/// Calls the <see cref=""MyActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<{outputType}> CallMyActivityAsync(this TaskOrchestrationContext ctx, {inputType} input, TaskOptions? options = null)
 {{
     return ctx.CallActivityAsync<{outputType}>(""MyActivity"", input, options);
 }}
 
 [Function(nameof(MyActivity))]
-public static async Task<{outputType}> MyActivity([ActivityTrigger] {defaultInputType} input, string instanceId, FunctionContext executionContext)
+public static async Task<{outputType}> MyActivity([ActivityTrigger] {expectedInputParameter}, string instanceId, FunctionContext executionContext)
 {{
-    ITaskActivity activity = ActivatorUtilities.CreateInstance<MyActivity>(executionContext.InstanceServices);
+    ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<MyActivity>(executionContext.InstanceServices);
     TaskActivityContext context = new GeneratedActivityContext(""MyActivity"", instanceId);
     object? result = await activity.RunAsync(context, input);
     return ({outputType})result!;
@@ -164,7 +187,7 @@ public static async Task<{outputType}> MyActivity([ActivityTrigger] {defaultInpu
     /// </summary>
     /// <param name="inputType">The activity input type.</param>
     /// <param name="outputType">The activity output type.</param>
-    [Theory(Skip = "Durable Functions Extension out of date")]
+    [Theory]
     [InlineData("int", "string?")]
     [InlineData("string", "int")]
     [InlineData("(int, int)", "(double, double)")]
@@ -183,11 +206,18 @@ using Microsoft.DurableTask;
 namespace MyNS
 {{
     [DurableTask(nameof(MyOrchestrator))]
-    public class MyOrchestrator : TaskOrchestratorBase<{inputType}, {outputType}>
+    public class MyOrchestrator : TaskOrchestrator<{inputType}, {outputType}>
     {{
-        protected override Task<{outputType}> OnRunAsync(TaskOrchestrationContext ctx, {defaultInputType} input) => throw new NotImplementedException();
+        public override Task<{outputType}> RunAsync(TaskOrchestrationContext ctx, {defaultInputType} input) => throw new NotImplementedException();
     }}
 }}";
+        // Build the expected InputParameter format (matches generator logic)
+        string expectedInputParameter = inputType + " input";
+        if (inputType.EndsWith('?'))
+        {
+            expectedInputParameter += " = default";
+        }
+
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
@@ -200,32 +230,24 @@ public static Task<{outputType}> MyOrchestrator([OrchestrationTrigger] TaskOrche
         .ContinueWith(t => ({outputType})(t.Result ?? default({outputType})!), TaskContinuationOptions.ExecuteSynchronously);
 }}
 
-/// <inheritdoc cref=""DurableTaskClient.ScheduleNewOrchestrationInstanceAsync""/>
+/// <summary>
+/// Schedules a new instance of the <see cref=""MyNS.MyOrchestrator""/> orchestrator.
+/// </summary>
+/// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
-    this DurableTaskClient client,
-    string? instanceId = null,
-    {defaultInputType} input = default,
-    DateTimeOffset? startTime = null)
+    this IOrchestrationSubmitter client, {expectedInputParameter}, StartOrchestrationOptions? options = null)
 {{
-    return client.ScheduleNewOrchestrationInstanceAsync(
-        ""MyOrchestrator"",
-        instanceId,
-        input,
-        startTime);
+    return client.ScheduleNewOrchestrationInstanceAsync(""MyOrchestrator"", input, options);
 }}
 
-/// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync""/>
+/// <summary>
+/// Calls the <see cref=""MyNS.MyOrchestrator""/> sub-orchestrator.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<{outputType}> CallMyOrchestratorAsync(
-    this TaskOrchestrationContext context,
-    string? instanceId = null,
-    {defaultInputType} input = default,
-    TaskOptions? options = null)
+    this TaskOrchestrationContext context, {expectedInputParameter}, TaskOptions? options = null)
 {{
-    return context.CallSubOrchestratorAsync<{outputType}>(
-        ""MyOrchestrator"",
-        instanceId,
-        input,
-        options);
+    return context.CallSubOrchestratorAsync<{outputType}>(""MyOrchestrator"", input, options);
 }}",
             isDurableFunctions: true);
 
@@ -243,7 +265,7 @@ public static Task<{outputType}> CallMyOrchestratorAsync(
     /// </summary>
     /// <param name="inputType">The activity input type.</param>
     /// <param name="outputType">The activity output type.</param>
-    [Theory(Skip = "Durable Functions Extension out of date")]
+    [Theory]
     [InlineData("int", "string?")]
     [InlineData("string", "int")]
     [InlineData("(int, int)", "(double, double)")]
@@ -264,14 +286,21 @@ namespace MyNS
     [DurableTask]
     public class MyOrchestrator : MyOrchestratorBase
     {{
-        protected override Task<{outputType}> OnRunAsync(TaskOrchestrationContext ctx, {defaultInputType} input) => throw new NotImplementedException();
+        public override Task<{outputType}> RunAsync(TaskOrchestrationContext ctx, {defaultInputType} input) => throw new NotImplementedException();
     }}
 
-    public abstract class MyOrchestratorBase : TaskOrchestratorBase<{inputType}, {outputType}>
+    public abstract class MyOrchestratorBase : TaskOrchestrator<{inputType}, {outputType}>
     {{
     }}
 }}";
         // Same output as Orchestrators_ClassBasedSyntax
+        // Build the expected InputParameter format (matches generator logic)
+        string expectedInputParameter = inputType + " input";
+        if (inputType.EndsWith('?'))
+        {
+            expectedInputParameter += " = default";
+        }
+
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
@@ -284,33 +313,258 @@ public static Task<{outputType}> MyOrchestrator([OrchestrationTrigger] TaskOrche
         .ContinueWith(t => ({outputType})(t.Result ?? default({outputType})!), TaskContinuationOptions.ExecuteSynchronously);
 }}
 
-/// <inheritdoc cref=""DurableTaskClient.ScheduleNewOrchestrationInstanceAsync""/>
+/// <summary>
+/// Schedules a new instance of the <see cref=""MyNS.MyOrchestrator""/> orchestrator.
+/// </summary>
+/// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
-    this DurableTaskClient client,
-    string? instanceId = null,
-    {defaultInputType} input = default,
-    DateTimeOffset? startTime = null)
+    this IOrchestrationSubmitter client, {expectedInputParameter}, StartOrchestrationOptions? options = null)
 {{
-    return client.ScheduleNewOrchestrationInstanceAsync(
-        ""MyOrchestrator"",
-        instanceId,
-        input,
-        startTime);
+    return client.ScheduleNewOrchestrationInstanceAsync(""MyOrchestrator"", input, options);
 }}
 
-/// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync""/>
+/// <summary>
+/// Calls the <see cref=""MyNS.MyOrchestrator""/> sub-orchestrator.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<{outputType}> CallMyOrchestratorAsync(
-    this TaskOrchestrationContext context,
-    string? instanceId = null,
-    {defaultInputType} input = default,
-    TaskOptions? options = null)
+    this TaskOrchestrationContext context, {expectedInputParameter}, TaskOptions? options = null)
 {{
-    return context.CallSubOrchestratorAsync<{outputType}>(
-        ""MyOrchestrator"",
-        instanceId,
-        input,
-        options);
+    return context.CallSubOrchestratorAsync<{outputType}>(""MyOrchestrator"", input, options);
 }}",
+            isDurableFunctions: true);
+
+        await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: true);
+    }
+
+    /// <summary>
+    /// Verifies that using the class-based syntax for authoring entities generates
+    /// <see cref="EntityTriggerAttribute"/> function triggers for Azure Functions.
+    /// </summary>
+    /// <param name="stateType">The entity state type.</param>
+    [Theory]
+    [InlineData("int")]
+    [InlineData("string")]
+    public async Task Entities_ClassBasedSyntax(string stateType)
+    {
+        string code = $@"
+#nullable enable
+using System.Threading.Tasks;
+using Microsoft.DurableTask;
+using Microsoft.DurableTask.Entities;
+
+namespace MyNS
+{{
+    [DurableTask(nameof(MyEntity))]
+    public class MyEntity : TaskEntity<{stateType}>
+    {{
+        public {stateType} Get() => this.State;
+    }}
+}}";
+
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            methodList: @"
+[Function(nameof(MyEntity))]
+public static Task MyEntity([EntityTrigger] TaskEntityDispatcher dispatcher)
+{
+    return dispatcher.DispatchAsync<MyNS.MyEntity>();
+}",
+            isDurableFunctions: true);
+
+        await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: true);
+    }
+
+    /// <summary>
+    /// Verifies that using the class-based syntax for authoring entities with inheritance generates
+    /// <see cref="EntityTriggerAttribute"/> function triggers for Azure Functions.
+    /// </summary>
+    /// <param name="stateType">The entity state type.</param>
+    [Theory]
+    [InlineData("int")]
+    [InlineData("string")]
+    public async Task Entities_ClassBasedSyntax_Inheritance(string stateType)
+    {
+        string code = $@"
+#nullable enable
+using System.Threading.Tasks;
+using Microsoft.DurableTask;
+using Microsoft.DurableTask.Entities;
+
+namespace MyNS
+{{
+    [DurableTask]
+    public class MyEntity : MyEntityBase
+    {{
+        public override {stateType} Get() => this.State;
+    }}
+
+    public abstract class MyEntityBase : TaskEntity<{stateType}>
+    {{
+        public abstract {stateType} Get();
+    }}
+}}";
+
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            methodList: @"
+[Function(nameof(MyEntity))]
+public static Task MyEntity([EntityTrigger] TaskEntityDispatcher dispatcher)
+{
+    return dispatcher.DispatchAsync<MyNS.MyEntity>();
+}",
+            isDurableFunctions: true);
+
+        await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: true);
+    }
+
+    /// <summary>
+    /// Verifies that using the class-based syntax for authoring entities with custom state types generates
+    /// <see cref="EntityTriggerAttribute"/> function triggers for Azure Functions.
+    /// </summary>
+    [Fact]
+    public async Task Entities_ClassBasedSyntax_CustomStateType()
+    {
+        string code = @"
+#nullable enable
+using System.Threading.Tasks;
+using Microsoft.DurableTask;
+using Microsoft.DurableTask.Entities;
+
+namespace MyNS
+{
+    public class MyState
+    {
+        public int Value { get; set; }
+    }
+
+    [DurableTask(nameof(MyEntity))]
+    public class MyEntity : TaskEntity<MyState>
+    {
+        public MyState Get() => this.State;
+    }
+}";
+
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            methodList: @"
+[Function(nameof(MyEntity))]
+public static Task MyEntity([EntityTrigger] TaskEntityDispatcher dispatcher)
+{
+    return dispatcher.DispatchAsync<MyNS.MyEntity>();
+}",
+            isDurableFunctions: true);
+
+        await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: true);
+    }
+
+    /// <summary>
+    /// Verifies that using the class-based syntax for authoring a mix of orchestrators, activities,
+    /// and entities generates the appropriate function triggers for Azure Functions.
+    /// </summary>
+    [Fact]
+    public async Task Mixed_OrchestratorActivityEntity_ClassBasedSyntax()
+    {
+        string code = @"
+#nullable enable
+using System;
+using System.Threading.Tasks;
+using Microsoft.DurableTask;
+using Microsoft.DurableTask.Entities;
+
+namespace MyNS
+{
+    [DurableTask(nameof(MyOrchestrator))]
+    public class MyOrchestrator : TaskOrchestrator<int, string>
+    {
+        public override Task<string> RunAsync(TaskOrchestrationContext ctx, int input) => Task.FromResult(string.Empty);
+    }
+
+    [DurableTask(nameof(MyActivity))]
+    public class MyActivity : TaskActivity<int, string>
+    {
+        public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
+    }
+
+    [DurableTask(nameof(MyEntity))]
+    public class MyEntity : TaskEntity<int>
+    {
+        public int Get() => this.State;
+    }
+}";
+
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            methodList: $@"
+static readonly ITaskOrchestrator singletonMyOrchestrator = new MyNS.MyOrchestrator();
+
+[Function(nameof(MyOrchestrator))]
+public static Task<string> MyOrchestrator([OrchestrationTrigger] TaskOrchestrationContext context)
+{{
+    return singletonMyOrchestrator.RunAsync(context, context.GetInput<int>())
+        .ContinueWith(t => (string)(t.Result ?? default(string)!), TaskContinuationOptions.ExecuteSynchronously);
+}}
+
+/// <summary>
+/// Schedules a new instance of the <see cref=""MyNS.MyOrchestrator""/> orchestrator.
+/// </summary>
+/// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
+public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
+    this IOrchestrationSubmitter client, int input, StartOrchestrationOptions? options = null)
+{{
+    return client.ScheduleNewOrchestrationInstanceAsync(""MyOrchestrator"", input, options);
+}}
+
+/// <summary>
+/// Calls the <see cref=""MyNS.MyOrchestrator""/> sub-orchestrator.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
+public static Task<string> CallMyOrchestratorAsync(
+    this TaskOrchestrationContext context, int input, TaskOptions? options = null)
+{{
+    return context.CallSubOrchestratorAsync<string>(""MyOrchestrator"", input, options);
+}}
+
+/// <summary>
+/// Calls the <see cref=""MyNS.MyActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
+public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
+{{
+    return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
+}}
+
+[Function(nameof(MyActivity))]
+public static async Task<string> MyActivity([ActivityTrigger] int input, string instanceId, FunctionContext executionContext)
+{{
+    ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<MyNS.MyActivity>(executionContext.InstanceServices);
+    TaskActivityContext context = new GeneratedActivityContext(""MyActivity"", instanceId);
+    object? result = await activity.RunAsync(context, input);
+    return (string)result!;
+}}
+
+[Function(nameof(MyEntity))]
+public static Task MyEntity([EntityTrigger] TaskEntityDispatcher dispatcher)
+{{
+    return dispatcher.DispatchAsync<MyNS.MyEntity>();
+}}
+{TestHelpers.DeIndent(DurableTaskSourceGenerator.GetGeneratedActivityContextCode(), spacesToRemove: 8)}",
             isDurableFunctions: true);
 
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(

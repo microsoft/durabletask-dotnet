@@ -2,7 +2,9 @@
 // Licensed under the MIT License.
 
 using System.IO.Compression;
+using System.Net;
 using System.Text;
+using Azure;
 using Azure.Core;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
@@ -89,7 +91,7 @@ public sealed class BlobPayloadStore : PayloadStore
             // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
 
             // await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
-            await compressedBlobStream.WriteAsync(payloadBuffer, 0, payloadBuffer.Length, cancellationToken);
+            await WritePayloadAsync(payloadBuffer, compressedBlobStream, cancellationToken);
             await compressedBlobStream.FlushAsync(cancellationToken);
             await blobStream.FlushAsync(cancellationToken);
         }
@@ -99,7 +101,7 @@ public sealed class BlobPayloadStore : PayloadStore
 
             // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
             // await payloadStream.CopyToAsync(blobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
-            await blobStream.WriteAsync(payloadBuffer, 0, payloadBuffer.Length, cancellationToken);
+            await WritePayloadAsync(payloadBuffer, blobStream, cancellationToken);
             await blobStream.FlushAsync(cancellationToken);
         }
 
@@ -117,20 +119,30 @@ public sealed class BlobPayloadStore : PayloadStore
 
         BlobClient blob = this.containerClient.GetBlobClient(name);
 
-        using BlobDownloadStreamingResult result = await blob.DownloadStreamingAsync(cancellationToken: cancellationToken);
-        Stream contentStream = result.Content;
-        bool isGzip = string.Equals(
-            result.Details.ContentEncoding, ContentEncodingGzip, StringComparison.OrdinalIgnoreCase);
-
-        if (isGzip)
+        try
         {
-            using GZipStream decompressed = new(contentStream, CompressionMode.Decompress);
-            using StreamReader reader = new(decompressed, Encoding.UTF8);
-            return await reader.ReadToEndAsync();
-        }
+            using BlobDownloadStreamingResult result = await blob.DownloadStreamingAsync(cancellationToken: cancellationToken);
+            Stream contentStream = result.Content;
+            bool isGzip = string.Equals(
+                result.Details.ContentEncoding, ContentEncodingGzip, StringComparison.OrdinalIgnoreCase);
 
-        using StreamReader uncompressedReader = new(contentStream, Encoding.UTF8);
-        return await uncompressedReader.ReadToEndAsync();
+            if (isGzip)
+            {
+                using GZipStream decompressed = new(contentStream, CompressionMode.Decompress);
+                using StreamReader reader = new(decompressed, Encoding.UTF8);
+                return await ReadToEndAsync(reader, cancellationToken);
+            }
+
+            using StreamReader uncompressedReader = new(contentStream, Encoding.UTF8);
+            return await ReadToEndAsync(uncompressedReader, cancellationToken);
+        }
+        catch (RequestFailedException ex) when (ex.Status == (int)HttpStatusCode.NotFound)
+        {
+            throw new InvalidOperationException(
+                $"The blob '{name}' was not found in container '{container}'. " +
+                "The payload may have been deleted or the container was never created.",
+                ex);
+        }
     }
 
     /// <inheritdoc/>
@@ -142,6 +154,27 @@ public sealed class BlobPayloadStore : PayloadStore
         }
 
         return value.StartsWith(TokenPrefix, StringComparison.Ordinal);
+    }
+
+    static async Task WritePayloadAsync(byte[] payloadBuffer, Stream target, CancellationToken cancellationToken)
+    {
+#if NETSTANDARD2_0
+        await target.WriteAsync(payloadBuffer, 0, payloadBuffer.Length, cancellationToken).ConfigureAwait(false);
+#else
+        await target.WriteAsync(payloadBuffer.AsMemory(0, payloadBuffer.Length), cancellationToken).ConfigureAwait(false);
+#endif
+    }
+
+    static async Task<string> ReadToEndAsync(StreamReader reader, CancellationToken cancellationToken)
+    {
+#if NETSTANDARD2_0
+        cancellationToken.ThrowIfCancellationRequested();
+        return await reader.ReadToEndAsync().ConfigureAwait(false);
+#elif NET8_0_OR_GREATER
+        return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+#else
+        return await reader.ReadToEndAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+#endif
     }
 
     static string EncodeToken(string container, string name) => $"blob:v1:{container}:{name}";

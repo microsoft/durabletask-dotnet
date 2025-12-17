@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Microsoft.DurableTask.Client.Grpc" />
     <PackageReference Include="Microsoft.DurableTask.Worker.Grpc" />

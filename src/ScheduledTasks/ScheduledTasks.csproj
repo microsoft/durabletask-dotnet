@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFrameworks>net6.0;net8.0;net10.0</TargetFrameworks>
     <PackageDescription>Durable Task Scheduled Tasks Client</PackageDescription>
     <EnableStyleCop>true</EnableStyleCop>
     <VersionSuffix>preview.1</VersionSuffix>
@@ -11,6 +11,7 @@
     <ProjectReference Include="../Abstractions/Abstractions.csproj" />
     <ProjectReference Include="../Client/Core/Client.csproj" />
     <ProjectReference Include="../Worker/Core/Worker.csproj" />
+    <ProjectReference Include="../Worker/Grpc/Worker.Grpc.csproj" />
   </ItemGroup>
 
   <ItemGroup>

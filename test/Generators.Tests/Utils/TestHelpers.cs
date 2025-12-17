@@ -3,6 +3,7 @@
 
 using System.Reflection;
 using System.Text;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,7 +16,7 @@ static class TestHelpers
         string expectedFileName,
         string inputSource,
         string expectedOutputSource,
-        bool isDurableFunctions) where TSourceGenerator : ISourceGenerator, new()
+        bool isDurableFunctions) where TSourceGenerator : IIncrementalGenerator, new()
     {
         CSharpSourceGeneratorVerifier<TSourceGenerator>.Test test = new()
         {
@@ -38,14 +39,15 @@ static class TestHelpers
         {
             // Durable Functions code generation is triggered by the presence of the
             // Durable Functions worker extension for .NET Isolated.
-            // Assembly functionsWorkerAbstractions = typeof(TriggerBindingAttribute).Assembly;
-            // test.TestState.AdditionalReferences.Add(functionsWorkerAbstractions);
+            Assembly functionsWorkerAbstractions = typeof(FunctionAttribute).Assembly;
+            test.TestState.AdditionalReferences.Add(functionsWorkerAbstractions);
 
-            // Assembly functionsWorkerCore = typeof(FunctionContext).Assembly;
-            // test.TestState.AdditionalReferences.Add(functionsWorkerCore);
-            
-            // Assembly durableExtension = typeof(OrchestrationTriggerAttribute).Assembly;
-            // test.TestState.AdditionalReferences.Add(durableExtension);
+            Assembly functionsWorkerCore = typeof(FunctionContext).Assembly;
+            test.TestState.AdditionalReferences.Add(functionsWorkerCore);
+
+            // OrchestrationTriggerAttribute and ActivityTriggerAttribute are in the DurableTask extension
+            Assembly durableExtension = typeof(OrchestrationTriggerAttribute).Assembly;
+            test.TestState.AdditionalReferences.Add(durableExtension);
 
             Assembly dependencyInjection = typeof(ActivatorUtilities).Assembly;
             test.TestState.AdditionalReferences.Add(dependencyInjection);
@@ -134,7 +136,7 @@ namespace Microsoft.DurableTask
                     Type? runtimeType = Type.GetType(typeExpression, throwOnError: false);
                     return runtimeType != null && runtimeType.IsValueType;
             }
-        };
+        }
 
         if (inputType.StartsWith("(") || inputType.EndsWith('?') || IsValueType(inputType))
         {

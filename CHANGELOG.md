@@ -1,4 +1,29 @@
-﻿# Changelog
+# Changelog
+
+## v1.18.1
+- Support dedup status when starting orchestration by wangbill ([#542](https://github.com/microsoft/durabletask-dotnet/pull/542))
+- Add 404 exception handling in blobpayloadstore.downloadasync by Copilot ([#534](https://github.com/microsoft/durabletask-dotnet/pull/534))
+- Bump analyzers version to 0.2.0 by Copilot ([#552](https://github.com/microsoft/durabletask-dotnet/pull/552))
+- Add integration tests for exception type handling by Copilot ([#544](https://github.com/microsoft/durabletask-dotnet/pull/544))
+- Add roslyn analyzer to detect calls to non-existent functions (name mismatch) by Copilot ([#530](https://github.com/microsoft/durabletask-dotnet/pull/530))
+- Remove preview suffix by Copilot ([#541](https://github.com/microsoft/durabletask-dotnet/pull/541))
+- Add xml documentation with see cref links to generated code for better ide navigation by Copilot ([#535](https://github.com/microsoft/durabletask-dotnet/pull/535))
+- Add entity source generation support for durable functions by Copilot ([#533](https://github.com/microsoft/durabletask-dotnet/pull/533))
+
+## v1.18.0
+- Add taskentity support to durabletasksourcegenerator by Copilot ([#517](https://github.com/microsoft/durabletask-dotnet/pull/517))
+- Bump azure.identity by dependabot[bot] ([#525](https://github.com/microsoft/durabletask-dotnet/pull/525))
+- Bump google.protobuf by dependabot[bot] ([#529](https://github.com/microsoft/durabletask-dotnet/pull/529))
+- Configure dependabot for dotnet-sdk updates by Tomer Rosenthal ([#524](https://github.com/microsoft/durabletask-dotnet/pull/524))
+- Add code review guidelines to copilot-instructions.md by Copilot ([#522](https://github.com/microsoft/durabletask-dotnet/pull/522))
+- Remove webapi sample by sophiatev ([#520](https://github.com/microsoft/durabletask-dotnet/pull/520))
+- Fix functioncontext check and polymorphic type conversions in activity analyzer by Naiyuan Tian ([#506](https://github.com/microsoft/durabletask-dotnet/pull/506))
+- Align waitforexternalevent waiter picking order to lifo by wangbill ([#509](https://github.com/microsoft/durabletask-dotnet/pull/509))
+- Update project to support .net 6.0 alongside .net 8.0 and .net 10 by Tomer Rosenthal ([#512](https://github.com/microsoft/durabletask-dotnet/pull/512))
+- Update project to target .net 8.0 and .net 10 and upgrade dependencies by Tomer Rosenthal ([#510](https://github.com/microsoft/durabletask-dotnet/pull/510))
+- Support worker features announcement by wangbill ([#502](https://github.com/microsoft/durabletask-dotnet/pull/502))
+- Introduce custom copilot review instructions by halspang ([#503](https://github.com/microsoft/durabletask-dotnet/pull/503))
+- Add API to get orchestration history ([#516](https://github.com/microsoft/durabletask-dotnet/pull/516))
 
 ## v1.17.1
 - Fix Worker Registry and Add Documentation Notes by nytian in [#462](https://github.com/microsoft/durabletask-dotnet/pull/495)

@@ -1,0 +1,21 @@
+{
+  "version": "2.0",
+  "logging": {
+    "logLevel": {
+      "Default": "Information",
+      "DurableTask.AzureStorage": "Warning",
+      "DurableTask.Core": "Warning"
+    },
+    "applicationInsights": {
+      "samplingSettings": {
+        "isEnabled": true,
+        "excludedTypes": "Request"
+      }
+    }
+  },
+  "extensions": {
+    "durableTask": {
+      "hubName": "DotNetIsolatedSmokeTests"
+    }
+  }
+}

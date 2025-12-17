@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <OutputType>Exe</OutputType>
     <AssemblyName>Benchmarks</AssemblyName>
  </PropertyGroup>
@@ -11,10 +11,10 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" />
     <PackageReference Include="Microsoft.CodeAnalysis" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
     <ProjectReference Include="$(SrcRoot)Worker/Core/Worker.csproj" />
     <ProjectReference Include="$(SrcRoot)Analyzers/Analyzers.csproj" />
   </ItemGroup>

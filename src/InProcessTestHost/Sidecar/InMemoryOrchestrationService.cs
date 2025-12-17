@@ -756,8 +756,11 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                             statusRecord.OrchestrationStatus == OrchestrationStatus.Failed ||
                             statusRecord.OrchestrationStatus == OrchestrationStatus.Terminated)
                         {
-                            // Orchestration has already completed - complete the waiter and return
-                            tcs.TrySetResult(statusRecord);
+                            // Orchestration has already completed - complete the waiter and clean it up
+                            if (tcs.TrySetResult(statusRecord))
+                            {
+                                this.waiters.TryRemove(instanceId, out _);
+                            }
                         }
                     }
                 }

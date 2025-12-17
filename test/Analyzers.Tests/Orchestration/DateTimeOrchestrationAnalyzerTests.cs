@@ -453,6 +453,58 @@ tasks.AddOrchestratorFunc(""HelloSequence"", context =>
         await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
     }
 
+    [Fact]
+    public async Task TaskOrchestratorSdkOnlyHasDiag()
+    {
+        // Tests that the analyzer works with SDK-only references (without Azure Functions assemblies)
+        string code = Wrapper.WrapTaskOrchestratorSdkOnly(@"
+public class MyOrchestrator : TaskOrchestrator<string, DateTime>
+{
+    public override Task<DateTime> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        return Task.FromResult({|#0:DateTime.Now|});
+    }
+}
+");
+
+        string fix = Wrapper.WrapTaskOrchestratorSdkOnly(@"
+public class MyOrchestrator : TaskOrchestrator<string, DateTime>
+{
+    public override Task<DateTime> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        return Task.FromResult(context.CurrentUtcDateTime);
+    }
+}
+");
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("RunAsync", "System.DateTime.Now", "MyOrchestrator");
+
+        await VerifyCS.VerifySdkOnlyCodeFixAsync(code, expected, fix);
+    }
+
+    [Fact]
+    public async Task FuncOrchestratorSdkOnlyWithLambdaHasDiag()
+    {
+        // Tests that the analyzer works with SDK-only references (without Azure Functions assemblies)
+        string code = Wrapper.WrapFuncOrchestratorSdkOnly(@"
+tasks.AddOrchestratorFunc(""HelloSequence"", context =>
+{
+    return {|#0:DateTime.Now|};
+});
+");
+
+        string fix = Wrapper.WrapFuncOrchestratorSdkOnly(@"
+tasks.AddOrchestratorFunc(""HelloSequence"", context =>
+{
+    return context.CurrentUtcDateTime;
+});
+");
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Main", "System.DateTime.Now", "HelloSequence");
+
+        await VerifyCS.VerifySdkOnlyCodeFixAsync(code, expected, fix);
+    }
+
     static DiagnosticResult BuildDiagnostic()
     {
         return VerifyCS.Diagnostic(DateTimeOrchestrationAnalyzer.DiagnosticId);

@@ -11,7 +11,7 @@ public static class References
 
     public static ReferenceAssemblies CommonAssemblies => durableAssemblyReferences.Value;
 
-    static ReferenceAssemblies BuildReferenceAssemblies() => ReferenceAssemblies.Net.Net60.AddPackages([
+    static ReferenceAssemblies BuildReferenceAssemblies() => ReferenceAssemblies.Net.Net80.AddPackages([
                 new PackageIdentity("Azure.Storage.Blobs", "12.17.0"),
                 new PackageIdentity("Azure.Storage.Queues", "12.17.0"),
                 new PackageIdentity("Azure.Data.Tables", "12.8.3"),

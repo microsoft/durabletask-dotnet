@@ -26,51 +26,87 @@ public sealed class DateTimeOrchestrationFixer : OrchestrationContextFixer
     /// <inheritdoc/>
     protected override void RegisterCodeFixes(CodeFixContext context, OrchestrationCodeFixContext orchestrationContext)
     {
-        // Parses the syntax node to see if it is a member access expression (e.g. DateTime.Now or DateTimeOffset.Now)
-        if (orchestrationContext.SyntaxNodeWithDiagnostic is not MemberAccessExpressionSyntax dateTimeExpression)
-        {
-            return;
-        }
-
         // Gets the name of the TaskOrchestrationContext parameter (e.g. "context" or "ctx")
         string contextParameterName = orchestrationContext.TaskOrchestrationContextSymbol.Name;
-
-        // Use semantic analysis to determine if this is a DateTimeOffset expression
         SemanticModel semanticModel = orchestrationContext.SemanticModel;
-        ITypeSymbol? typeSymbol = semanticModel.GetTypeInfo(dateTimeExpression.Expression).Type;
-        bool isDateTimeOffset = typeSymbol?.ToDisplayString() == "System.DateTimeOffset";
 
-        bool isDateTimeToday = dateTimeExpression.Name.ToString() == "Today";
-
-        // Build the recommendation text
-        string recommendation;
-        if (isDateTimeOffset)
+        // Handle DateTime/DateTimeOffset property access (e.g. DateTime.Now or DateTimeOffset.Now)
+        if (orchestrationContext.SyntaxNodeWithDiagnostic is MemberAccessExpressionSyntax dateTimeExpression)
         {
-            // For DateTimeOffset, we always just cast CurrentUtcDateTime
-            recommendation = $"(DateTimeOffset){contextParameterName}.CurrentUtcDateTime";
+            // Use semantic analysis to determine if this is a DateTimeOffset expression
+            ITypeSymbol? typeSymbol = semanticModel.GetTypeInfo(dateTimeExpression.Expression).Type;
+            bool isDateTimeOffset = typeSymbol?.ToDisplayString() == "System.DateTimeOffset";
+
+            bool isDateTimeToday = dateTimeExpression.Name.ToString() == "Today";
+
+            // Build the recommendation text
+            string recommendation;
+            if (isDateTimeOffset)
+            {
+                // For DateTimeOffset, we always just cast CurrentUtcDateTime
+                recommendation = $"(DateTimeOffset){contextParameterName}.CurrentUtcDateTime";
+            }
+            else
+            {
+                // For DateTime, we may need to add .Date for Today
+                string dateTimeTodaySuffix = isDateTimeToday ? ".Date" : string.Empty;
+                recommendation = $"{contextParameterName}.CurrentUtcDateTime{dateTimeTodaySuffix}";
+            }
+
+            // e.g: "Use 'context.CurrentUtcDateTime' instead of 'DateTime.Now'"
+            // e.g: "Use 'context.CurrentUtcDateTime.Date' instead of 'DateTime.Today'"
+            // e.g: "Use '(DateTimeOffset)context.CurrentUtcDateTime' instead of 'DateTimeOffset.Now'"
+            string title = string.Format(
+                CultureInfo.InvariantCulture,
+                Resources.UseInsteadFixerTitle,
+                recommendation,
+                dateTimeExpression.ToString());
+
+            context.RegisterCodeFix(
+                CodeAction.Create(
+                    title: title,
+                    createChangedDocument: c => ReplaceDateTime(context.Document, orchestrationContext.Root, dateTimeExpression, contextParameterName, isDateTimeToday, isDateTimeOffset),
+                    equivalenceKey: title), // This key is used to prevent duplicate code fixes.
+                context.Diagnostics);
         }
-        else
+
+        // Handle TimeProvider method invocations (e.g. TimeProvider.System.GetUtcNow())
+        else if (orchestrationContext.SyntaxNodeWithDiagnostic is InvocationExpressionSyntax timeProviderInvocation)
         {
-            // For DateTime, we may need to add .Date for Today
-            string dateTimeTodaySuffix = isDateTimeToday ? ".Date" : string.Empty;
-            recommendation = $"{contextParameterName}.CurrentUtcDateTime{dateTimeTodaySuffix}";
+            // Determine the method being called
+            if (semanticModel.GetSymbolInfo(timeProviderInvocation).Symbol is IMethodSymbol methodSymbol)
+            {
+                string methodName = methodSymbol.Name;
+
+                // Check if the method returns DateTimeOffset
+                bool returnsDateTimeOffset = methodSymbol.ReturnType.ToDisplayString() == "System.DateTimeOffset";
+
+                // Build the recommendation based on the method name
+                string recommendation = methodName switch
+                {
+                    "GetUtcNow" when returnsDateTimeOffset => $"(DateTimeOffset){contextParameterName}.CurrentUtcDateTime",
+                    "GetUtcNow" => $"{contextParameterName}.CurrentUtcDateTime",
+                    "GetLocalNow" when returnsDateTimeOffset => $"(DateTimeOffset){contextParameterName}.CurrentUtcDateTime.ToLocalTime()",
+                    "GetLocalNow" => $"{contextParameterName}.CurrentUtcDateTime.ToLocalTime()",
+                    "GetTimestamp" => $"{contextParameterName}.CurrentUtcDateTime.Ticks",
+                    _ => $"{contextParameterName}.CurrentUtcDateTime",
+                };
+
+                // e.g: "Use 'context.CurrentUtcDateTime' instead of 'TimeProvider.System.GetUtcNow()'"
+                string title = string.Format(
+                    CultureInfo.InvariantCulture,
+                    Resources.UseInsteadFixerTitle,
+                    recommendation,
+                    timeProviderInvocation.ToString());
+
+                context.RegisterCodeFix(
+                    CodeAction.Create(
+                        title: title,
+                        createChangedDocument: c => ReplaceTimeProvider(context.Document, orchestrationContext.Root, timeProviderInvocation, contextParameterName, methodName, returnsDateTimeOffset),
+                        equivalenceKey: title),
+                    context.Diagnostics);
+            }
         }
-
-        // e.g: "Use 'context.CurrentUtcDateTime' instead of 'DateTime.Now'"
-        // e.g: "Use 'context.CurrentUtcDateTime.Date' instead of 'DateTime.Today'"
-        // e.g: "Use '(DateTimeOffset)context.CurrentUtcDateTime' instead of 'DateTimeOffset.Now'"
-        string title = string.Format(
-            CultureInfo.InvariantCulture,
-            Resources.UseInsteadFixerTitle,
-            recommendation,
-            dateTimeExpression.ToString());
-
-        context.RegisterCodeFix(
-            CodeAction.Create(
-                title: title,
-                createChangedDocument: c => ReplaceDateTime(context.Document, orchestrationContext.Root, dateTimeExpression, contextParameterName, isDateTimeToday, isDateTimeOffset),
-                equivalenceKey: title), // This key is used to prevent duplicate code fixes.
-            context.Diagnostics);
     }
 
     static Task<Document> ReplaceDateTime(Document document, SyntaxNode oldRoot, MemberAccessExpressionSyntax incorrectDateTimeSyntax, string contextParameterName, bool isDateTimeToday, bool isDateTimeOffset)
@@ -102,6 +138,51 @@ public sealed class DateTimeOrchestrationFixer : OrchestrationContextFixer
 
         // Replaces the old local declaration with the new local declaration.
         SyntaxNode newRoot = oldRoot.ReplaceNode(incorrectDateTimeSyntax, correctDateTimeSyntax);
+        Document newDocument = document.WithSyntaxRoot(newRoot);
+
+        return Task.FromResult(newDocument);
+    }
+
+    static Task<Document> ReplaceTimeProvider(Document document, SyntaxNode oldRoot, InvocationExpressionSyntax incorrectTimeProviderSyntax, string contextParameterName, string methodName, bool returnsDateTimeOffset)
+    {
+        // Build the correct expression based on the method name
+        ExpressionSyntax correctExpression = methodName switch
+        {
+            "GetUtcNow" => MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                IdentifierName(contextParameterName),
+                IdentifierName("CurrentUtcDateTime")),
+            "GetLocalNow" => InvocationExpression(
+                MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        IdentifierName(contextParameterName),
+                        IdentifierName("CurrentUtcDateTime")),
+                    IdentifierName("ToLocalTime"))),
+            "GetTimestamp" => MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    IdentifierName(contextParameterName),
+                    IdentifierName("CurrentUtcDateTime")),
+                IdentifierName("Ticks")),
+            _ => MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                IdentifierName(contextParameterName),
+                IdentifierName("CurrentUtcDateTime")),
+        };
+
+        // If the method returns DateTimeOffset, we need to cast the DateTime to DateTimeOffset
+        if (returnsDateTimeOffset)
+        {
+            correctExpression = CastExpression(
+                IdentifierName("DateTimeOffset"),
+                correctExpression);
+        }
+
+        // Replaces the old invocation with the new expression
+        SyntaxNode newRoot = oldRoot.ReplaceNode(incorrectTimeProviderSyntax, correctExpression);
         Document newDocument = document.WithSyntaxRoot(newRoot);
 
         return Task.FromResult(newDocument);

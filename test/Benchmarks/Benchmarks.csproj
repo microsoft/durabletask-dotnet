@@ -14,6 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
     <ProjectReference Include="$(SrcRoot)Worker/Core/Worker.csproj" />
     <ProjectReference Include="$(SrcRoot)Analyzers/Analyzers.csproj" />
   </ItemGroup>

@@ -144,7 +144,7 @@ public abstract class OrchestrationAnalyzer<TOrchestrationVisitor> : DiagnosticA
                     SyntaxNode? methodSyntax = null;
                     switch (delegateCreationOperation.Target)
                     {
-                        case IAnonymousFunctionOperation lambdaOperation:
+                        case IAnonymousFunctionOperation _:
                             // use the containing symbol of the lambda (e.g. the class declaring it) as the method symbol
                             methodSymbol = ctx.ContainingSymbol as IMethodSymbol;
                             methodSyntax = delegateCreationOperation.Syntax;

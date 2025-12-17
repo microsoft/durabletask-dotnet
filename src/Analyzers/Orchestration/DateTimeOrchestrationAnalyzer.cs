@@ -35,7 +35,7 @@ public sealed class DateTimeOrchestrationAnalyzer : OrchestrationAnalyzer<DateTi
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];
 
     /// <summary>
-    /// Visitor that inspects the method body for DateTime and DateTimeOffset properties.
+    /// Visitor that inspects the method body for DateTime and DateTimeOffset properties, and TimeProvider method invocations.
     /// </summary>
     public sealed class DateTimeOrchestrationVisitor : MethodProbeOrchestrationVisitor
     {

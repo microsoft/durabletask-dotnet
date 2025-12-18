@@ -172,11 +172,101 @@ public class StateTaskEntityTests
         operation.State.GetState(typeof(TestState)).Should().BeOfType<TestState>().Which.Value.Should().Be(0);
     }
 
+    [Fact]
+    public async Task AsyncInitializeState_Called()
+    {
+        TestEntityOperation operation = new("get0", new TestEntityState(null), default);
+        AsyncInitEntity entity = new();
+
+        object? result = await entity.RunAsync(operation);
+
+        result.Should().BeOfType<int>().Which.Should().Be(42);
+        entity.InitializeAsyncCalled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AsyncInitializeState_WithYield_Succeeds()
+    {
+        TestEntityOperation operation = new("get0", new TestEntityState(null), default);
+        AsyncInitWithYieldEntity entity = new();
+
+        object? result = await entity.RunAsync(operation);
+
+        result.Should().BeOfType<int>().Which.Should().Be(99);
+        entity.InitializeAsyncCalled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AsyncInitializeState_ValueTask_Succeeds()
+    {
+        TestEntityOperation operation = new("get0", new TestEntityState(null), default);
+        AsyncInitValueTaskEntity entity = new();
+
+        object? result = await entity.RunAsync(operation);
+
+        result.Should().BeOfType<int>().Which.Should().Be(77);
+    }
+
+    [Fact]
+    public async Task SyncInitializeState_StillWorks()
+    {
+        TestEntityOperation operation = new("get0", new TestEntityState(null), default);
+        SyncInitEntity entity = new();
+
+        object? result = await entity.RunAsync(operation);
+
+        result.Should().BeOfType<int>().Which.Should().Be(55);
+        entity.SyncInitCalled.Should().BeTrue();
+    }
+
     static TestState State(int value) => new() { Value = value };
 
     class NullStateEntity : TestEntity
     {
         protected override TestState InitializeState(TaskEntityOperation entityOperation) => null!;
+    }
+
+    class AsyncInitEntity : TestEntity
+    {
+        public bool InitializeAsyncCalled { get; private set; }
+
+        protected override async ValueTask<TestState> InitializeStateAsync(TaskEntityOperation entityOperation)
+        {
+            await Task.CompletedTask;
+            this.InitializeAsyncCalled = true;
+            return new TestState { Value = 42 };
+        }
+    }
+
+    class AsyncInitWithYieldEntity : TestEntity
+    {
+        public bool InitializeAsyncCalled { get; private set; }
+
+        protected override async ValueTask<TestState> InitializeStateAsync(TaskEntityOperation entityOperation)
+        {
+            await Task.Yield();
+            this.InitializeAsyncCalled = true;
+            return new TestState { Value = 99 };
+        }
+    }
+
+    class AsyncInitValueTaskEntity : TestEntity
+    {
+        protected override ValueTask<TestState> InitializeStateAsync(TaskEntityOperation entityOperation)
+        {
+            return new ValueTask<TestState>(new TestState { Value = 77 });
+        }
+    }
+
+    class SyncInitEntity : TestEntity
+    {
+        public bool SyncInitCalled { get; private set; }
+
+        protected override TestState InitializeState(TaskEntityOperation entityOperation)
+        {
+            this.SyncInitCalled = true;
+            return new TestState { Value = 55 };
+        }
     }
 
     class TestEntity : TaskEntity<TestState>

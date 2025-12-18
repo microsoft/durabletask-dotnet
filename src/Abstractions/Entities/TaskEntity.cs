@@ -119,25 +119,40 @@ public abstract class TaskEntity<TState> : ITaskEntity
     protected TaskEntityContext Context { get; private set; } = null!;
 
     /// <inheritdoc/>
-    public ValueTask<object?> RunAsync(TaskEntityOperation operation)
+    public async ValueTask<object?> RunAsync(TaskEntityOperation operation)
     {
         Check.NotNull(operation);
         this.Context = operation.Context;
         object? state = operation.State.GetState(typeof(TState));
-        this.State = state is null ? this.InitializeState(operation) : (TState)state;
+        this.State = state is null ? await this.InitializeStateAsync(operation) : (TState)state;
         if (!operation.TryDispatch(this, out object? result, out Type returnType)
             && !this.TryDispatchState(operation, out result, out returnType))
         {
             if (TryDispatchImplicit(operation, out ValueTask<object?> task))
             {
                 // We do not go into UnwrapAsync for implicit tasks
-                return task;
+                return await task;
             }
 
             throw new NotSupportedException($"No suitable method found for entity operation '{operation}'.");
         }
 
-        return TaskEntityHelpers.UnwrapAsync(operation.State, () => this.State, result, returnType);
+        return await TaskEntityHelpers.UnwrapAsync(operation.State, () => this.State, result, returnType);
+    }
+
+    /// <summary>
+    /// Initializes the entity state asynchronously. This is only called when there is no current state for this entity.
+    /// </summary>
+    /// <param name="entityOperation">The entity operation to be executed.</param>
+    /// <returns>A task that resolves to the entity state.</returns>
+    /// <remarks>
+    /// The default implementation calls <see cref="InitializeState"/> for backward compatibility.
+    /// Override this method to perform async initialization operations, such as loading state from a database or
+    /// external storage.
+    /// </remarks>
+    protected virtual ValueTask<TState> InitializeStateAsync(TaskEntityOperation entityOperation)
+    {
+        return new ValueTask<TState>(this.InitializeState(entityOperation));
     }
 
     /// <summary>

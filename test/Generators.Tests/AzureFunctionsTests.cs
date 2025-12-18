@@ -221,7 +221,7 @@ namespace MyNS
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
-static readonly ITaskOrchestrator singletonMyOrchestrator = new MyNS.MyOrchestrator();
+static readonly ITaskOrchestrator singletonMyOrchestrator = new MyOrchestrator();
 
 [Function(nameof(MyOrchestrator))]
 public static Task<{outputType}> MyOrchestrator([OrchestrationTrigger] TaskOrchestrationContext context)
@@ -231,7 +231,7 @@ public static Task<{outputType}> MyOrchestrator([OrchestrationTrigger] TaskOrche
 }}
 
 /// <summary>
-/// Schedules a new instance of the <see cref=""MyNS.MyOrchestrator""/> orchestrator.
+/// Schedules a new instance of the <see cref=""MyOrchestrator""/> orchestrator.
 /// </summary>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
@@ -241,7 +241,7 @@ public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
 }}
 
 /// <summary>
-/// Calls the <see cref=""MyNS.MyOrchestrator""/> sub-orchestrator.
+/// Calls the <see cref=""MyOrchestrator""/> sub-orchestrator.
 /// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<{outputType}> CallMyOrchestratorAsync(
@@ -249,6 +249,7 @@ public static Task<{outputType}> CallMyOrchestratorAsync(
 {{
     return context.CallSubOrchestratorAsync<{outputType}>(""MyOrchestrator"", input, options);
 }}",
+            targetNamespace: "MyNS",
             isDurableFunctions: true);
 
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
@@ -304,7 +305,7 @@ namespace MyNS
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
-static readonly ITaskOrchestrator singletonMyOrchestrator = new MyNS.MyOrchestrator();
+static readonly ITaskOrchestrator singletonMyOrchestrator = new MyOrchestrator();
 
 [Function(nameof(MyOrchestrator))]
 public static Task<{outputType}> MyOrchestrator([OrchestrationTrigger] TaskOrchestrationContext context)
@@ -314,7 +315,7 @@ public static Task<{outputType}> MyOrchestrator([OrchestrationTrigger] TaskOrche
 }}
 
 /// <summary>
-/// Schedules a new instance of the <see cref=""MyNS.MyOrchestrator""/> orchestrator.
+/// Schedules a new instance of the <see cref=""MyOrchestrator""/> orchestrator.
 /// </summary>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
@@ -324,7 +325,7 @@ public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
 }}
 
 /// <summary>
-/// Calls the <see cref=""MyNS.MyOrchestrator""/> sub-orchestrator.
+/// Calls the <see cref=""MyOrchestrator""/> sub-orchestrator.
 /// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<{outputType}> CallMyOrchestratorAsync(
@@ -332,6 +333,7 @@ public static Task<{outputType}> CallMyOrchestratorAsync(
 {{
     return context.CallSubOrchestratorAsync<{outputType}>(""MyOrchestrator"", input, options);
 }}",
+            targetNamespace: "MyNS",
             isDurableFunctions: true);
 
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
@@ -372,8 +374,9 @@ namespace MyNS
 [Function(nameof(MyEntity))]
 public static Task MyEntity([EntityTrigger] TaskEntityDispatcher dispatcher)
 {
-    return dispatcher.DispatchAsync<MyNS.MyEntity>();
+    return dispatcher.DispatchAsync<MyEntity>();
 }",
+            targetNamespace: "MyNS",
             isDurableFunctions: true);
 
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
@@ -419,8 +422,9 @@ namespace MyNS
 [Function(nameof(MyEntity))]
 public static Task MyEntity([EntityTrigger] TaskEntityDispatcher dispatcher)
 {
-    return dispatcher.DispatchAsync<MyNS.MyEntity>();
+    return dispatcher.DispatchAsync<MyEntity>();
 }",
+            targetNamespace: "MyNS",
             isDurableFunctions: true);
 
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
@@ -463,8 +467,9 @@ namespace MyNS
 [Function(nameof(MyEntity))]
 public static Task MyEntity([EntityTrigger] TaskEntityDispatcher dispatcher)
 {
-    return dispatcher.DispatchAsync<MyNS.MyEntity>();
+    return dispatcher.DispatchAsync<MyEntity>();
 }",
+            targetNamespace: "MyNS",
             isDurableFunctions: true);
 
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
@@ -512,7 +517,7 @@ namespace MyNS
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
-static readonly ITaskOrchestrator singletonMyOrchestrator = new MyNS.MyOrchestrator();
+static readonly ITaskOrchestrator singletonMyOrchestrator = new MyOrchestrator();
 
 [Function(nameof(MyOrchestrator))]
 public static Task<string> MyOrchestrator([OrchestrationTrigger] TaskOrchestrationContext context)
@@ -522,7 +527,7 @@ public static Task<string> MyOrchestrator([OrchestrationTrigger] TaskOrchestrati
 }}
 
 /// <summary>
-/// Schedules a new instance of the <see cref=""MyNS.MyOrchestrator""/> orchestrator.
+/// Schedules a new instance of the <see cref=""MyOrchestrator""/> orchestrator.
 /// </summary>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
@@ -532,7 +537,7 @@ public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
 }}
 
 /// <summary>
-/// Calls the <see cref=""MyNS.MyOrchestrator""/> sub-orchestrator.
+/// Calls the <see cref=""MyOrchestrator""/> sub-orchestrator.
 /// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallMyOrchestratorAsync(
@@ -542,7 +547,7 @@ public static Task<string> CallMyOrchestratorAsync(
 }}
 
 /// <summary>
-/// Calls the <see cref=""MyNS.MyActivity""/> activity.
+/// Calls the <see cref=""MyActivity""/> activity.
 /// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
@@ -553,7 +558,7 @@ public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx
 [Function(nameof(MyActivity))]
 public static async Task<string> MyActivity([ActivityTrigger] int input, string instanceId, FunctionContext executionContext)
 {{
-    ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<MyNS.MyActivity>(executionContext.InstanceServices);
+    ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<MyActivity>(executionContext.InstanceServices);
     TaskActivityContext context = new GeneratedActivityContext(""MyActivity"", instanceId);
     object? result = await activity.RunAsync(context, input);
     return (string)result!;
@@ -562,9 +567,10 @@ public static async Task<string> MyActivity([ActivityTrigger] int input, string 
 [Function(nameof(MyEntity))]
 public static Task MyEntity([EntityTrigger] TaskEntityDispatcher dispatcher)
 {{
-    return dispatcher.DispatchAsync<MyNS.MyEntity>();
+    return dispatcher.DispatchAsync<MyEntity>();
 }}
 {TestHelpers.DeIndent(DurableTaskSourceGenerator.GetGeneratedActivityContextCode(), spacesToRemove: 8)}",
+            targetNamespace: "MyNS",
             isDurableFunctions: true);
 
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(

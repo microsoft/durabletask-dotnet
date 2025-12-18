@@ -180,7 +180,7 @@ public class LoggingCategoryTests
         var services = new ServiceCollection().BuildServiceProvider();
 
         // Act - Create worker which will create the logger internally
-        var worker = new GrpcDurableTaskWorker(
+        _ = new GrpcDurableTaskWorker(
             name: "Test",
             factory: factoryMock.Object,
             grpcOptions: new OptionsMonitorStub<GrpcDurableTaskWorkerOptions>(grpcOptions),

@@ -344,6 +344,7 @@ namespace Microsoft.DurableTask
             foreach (DurableEventTypeInfo eventInfo in allEvents)
             {
                 AddEventWaitMethod(sourceBuilder, eventInfo);
+                AddEventSendMethod(sourceBuilder, eventInfo);
             }
 
             if (isDurableFunctions)
@@ -449,6 +450,19 @@ namespace Microsoft.DurableTask
         public static Task<{eventInfo.TypeName}> WaitFor{eventInfo.EventName}Async(this TaskOrchestrationContext context, CancellationToken cancellationToken = default)
         {{
             return context.WaitForExternalEvent<{eventInfo.TypeName}>(""{eventInfo.EventName}"", cancellationToken);
+        }}");
+        }
+
+        static void AddEventSendMethod(StringBuilder sourceBuilder, DurableEventTypeInfo eventInfo)
+        {
+            sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Sends an external event of type <see cref=""{eventInfo.TypeName}""/> to another orchestration instance.
+        /// </summary>
+        /// <inheritdoc cref=""TaskOrchestrationContext.SendEvent(string, string, object)""/>
+        public static void Send{eventInfo.EventName}(this TaskOrchestrationContext context, string instanceId, {eventInfo.TypeName} eventData)
+        {{
+            context.SendEvent(instanceId, ""{eventInfo.EventName}"", eventData);
         }}");
         }
 

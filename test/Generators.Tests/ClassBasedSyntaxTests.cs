@@ -533,6 +533,15 @@ public sealed record ApprovalEvent(bool Approved, string? Approver);";
 public static Task<ApprovalEvent> WaitForApprovalEventAsync(this TaskOrchestrationContext context, CancellationToken cancellationToken = default)
 {
     return context.WaitForExternalEvent<ApprovalEvent>(""ApprovalEvent"", cancellationToken);
+}
+
+/// <summary>
+/// Sends an external event of type <see cref=""ApprovalEvent""/> to another orchestration instance.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.SendEvent(string, string, object)""/>
+public static void SendApprovalEvent(this TaskOrchestrationContext context, string instanceId, ApprovalEvent eventData)
+{
+    context.SendEvent(instanceId, ""ApprovalEvent"", eventData);
 }");
 
         return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
@@ -565,6 +574,15 @@ public class MyEventData
 public static Task<MyEventData> WaitForCustomEventNameAsync(this TaskOrchestrationContext context, CancellationToken cancellationToken = default)
 {
     return context.WaitForExternalEvent<MyEventData>(""CustomEventName"", cancellationToken);
+}
+
+/// <summary>
+/// Sends an external event of type <see cref=""MyEventData""/> to another orchestration instance.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.SendEvent(string, string, object)""/>
+public static void SendCustomEventName(this TaskOrchestrationContext context, string instanceId, MyEventData eventData)
+{
+    context.SendEvent(instanceId, ""CustomEventName"", eventData);
 }");
 
         return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
@@ -598,6 +616,15 @@ namespace MyNS
 public static Task<MyNS.DataReceivedEvent> WaitForDataReceivedEventAsync(this TaskOrchestrationContext context, CancellationToken cancellationToken = default)
 {
     return context.WaitForExternalEvent<MyNS.DataReceivedEvent>(""DataReceivedEvent"", cancellationToken);
+}
+
+/// <summary>
+/// Sends an external event of type <see cref=""MyNS.DataReceivedEvent""/> to another orchestration instance.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.SendEvent(string, string, object)""/>
+public static void SendDataReceivedEvent(this TaskOrchestrationContext context, string instanceId, MyNS.DataReceivedEvent eventData)
+{
+    context.SendEvent(instanceId, ""DataReceivedEvent"", eventData);
 }");
 
         return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(

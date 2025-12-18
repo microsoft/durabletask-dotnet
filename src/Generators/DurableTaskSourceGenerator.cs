@@ -197,7 +197,6 @@ namespace Microsoft.DurableTask.Generators
                 return null;
             }
 
-            string typeName = eventType.ToDisplayString();
             string eventName = eventType.Name;
 
             if (attribute.ArgumentList?.Arguments.Count > 0)
@@ -210,7 +209,7 @@ namespace Microsoft.DurableTask.Generators
                 }
             }
 
-            return new DurableEventTypeInfo(typeName, eventName, eventType);
+            return new DurableEventTypeInfo(eventName, eventType);
         }
 
         static DurableFunction? GetDurableFunction(GeneratorSyntaxContext context)
@@ -359,15 +358,11 @@ namespace Microsoft.DurableTask
             else
             {
                 // ASP.NET Core-specific service registration methods
-                // Only generate if there are actually tasks to register
-                if (orchestrators.Count > 0 || activities.Count > 0 || entities.Count > 0)
-                {
-                    AddRegistrationMethodForAllTasks(
-                        sourceBuilder,
-                        orchestrators,
-                        activities,
-                        entities);
-                }
+                AddRegistrationMethodForAllTasks(
+                    sourceBuilder,
+                    orchestrators,
+                    activities,
+                    entities);
             }
 
             sourceBuilder.AppendLine("    }").AppendLine("}");
@@ -613,7 +608,7 @@ namespace Microsoft.DurableTask
 
         class DurableEventTypeInfo
         {
-            public DurableEventTypeInfo(string typeName, string eventName, ITypeSymbol eventType)
+            public DurableEventTypeInfo(string eventName, ITypeSymbol eventType)
             {
                 this.TypeName = GetRenderedTypeExpression(eventType);
                 this.EventName = eventName;

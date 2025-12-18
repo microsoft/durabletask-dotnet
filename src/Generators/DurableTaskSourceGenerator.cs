@@ -56,15 +56,24 @@ namespace Microsoft.DurableTask.Generators
                     transform: static (ctx, _) => GetDurableFunction(ctx))
                 .Where(static func => func != null)!;
 
+            // Get the project type configuration from MSBuild properties
+            IncrementalValueProvider<string?> projectTypeProvider = context.AnalyzerConfigOptionsProvider
+                .Select(static (provider, _) =>
+                {
+                    provider.GlobalOptions.TryGetValue("build_property.DurableTaskGeneratorProjectType", out string? projectType);
+                    return projectType;
+                });
+
             // Collect all results and check if Durable Functions is referenced
-            IncrementalValueProvider<(Compilation, ImmutableArray<DurableTaskTypeInfo>, ImmutableArray<DurableFunction>)> compilationAndTasks =
+            IncrementalValueProvider<(Compilation, ImmutableArray<DurableTaskTypeInfo>, ImmutableArray<DurableFunction>, string?)> compilationAndTasks =
                 durableTaskAttributes.Collect()
                     .Combine(durableFunctions.Collect())
                     .Combine(context.CompilationProvider)
-                    .Select((x, _) => (x.Right, x.Left.Left, x.Left.Right));
+                    .Combine(projectTypeProvider)
+                    .Select((x, _) => (x.Left.Right, x.Left.Left.Left, x.Left.Left.Right, x.Right));
 
             // Generate the source
-            context.RegisterSourceOutput(compilationAndTasks, static (spc, source) => Execute(spc, source.Item1, source.Item2, source.Item3));
+            context.RegisterSourceOutput(compilationAndTasks, static (spc, source) => Execute(spc, source.Item1, source.Item2, source.Item3, source.Item4));
         }
 
         static DurableTaskTypeInfo? GetDurableTaskTypeInfo(GeneratorSyntaxContext context)
@@ -177,17 +186,16 @@ namespace Microsoft.DurableTask.Generators
             SourceProductionContext context,
             Compilation compilation,
             ImmutableArray<DurableTaskTypeInfo> allTasks,
-            ImmutableArray<DurableFunction> allFunctions)
+            ImmutableArray<DurableFunction> allFunctions,
+            string? projectType)
         {
             if (allTasks.IsDefaultOrEmpty && allFunctions.IsDefaultOrEmpty)
             {
                 return;
             }
 
-            // This generator also supports Durable Functions for .NET isolated, but we only generate Functions-specific
-            // code if we find the Durable Functions extension listed in the set of referenced assembly names.
-            bool isDurableFunctions = compilation.ReferencedAssemblyNames.Any(
-                assembly => assembly.Name.Equals("Microsoft.Azure.Functions.Worker.Extensions.DurableTask", StringComparison.OrdinalIgnoreCase));
+            // Determine if we should generate Durable Functions specific code
+            bool isDurableFunctions = DetermineIsDurableFunctions(compilation, projectType);
 
             // Separate tasks into orchestrators, activities, and entities
             List<DurableTaskTypeInfo> orchestrators = new();
@@ -309,6 +317,34 @@ namespace Microsoft.DurableTask
             sourceBuilder.AppendLine("    }").AppendLine("}");
 
             context.AddSource("GeneratedDurableTaskExtensions.cs", SourceText.From(sourceBuilder.ToString(), Encoding.UTF8, SourceHashAlgorithm.Sha256));
+        }
+
+        static bool DetermineIsDurableFunctions(Compilation compilation, string? projectType)
+        {
+            // Check if the user has explicitly configured the project type
+            if (!string.IsNullOrWhiteSpace(projectType))
+            {
+                // Explicit configuration takes precedence
+                if (projectType!.Equals("DurableFunctions", StringComparison.OrdinalIgnoreCase) ||
+                    projectType.Equals("Functions", StringComparison.OrdinalIgnoreCase) ||
+                    projectType.Equals("AzureFunctions", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+                else if (projectType.Equals("DurableTaskScheduler", StringComparison.OrdinalIgnoreCase) ||
+                         projectType.Equals("Worker", StringComparison.OrdinalIgnoreCase) ||
+                         projectType.Equals("DurableTaskWorker", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+                // If "Auto" or unrecognized value, fall through to auto-detection
+            }
+
+            // Auto-detect based on referenced assemblies
+            // This generator also supports Durable Functions for .NET isolated, but we only generate Functions-specific
+            // code if we find the Durable Functions extension listed in the set of referenced assembly names.
+            return compilation.ReferencedAssemblyNames.Any(
+                assembly => assembly.Name.Equals("Microsoft.Azure.Functions.Worker.Extensions.DurableTask", StringComparison.OrdinalIgnoreCase));
         }
 
         static void AddOrchestratorFunctionDeclaration(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator)

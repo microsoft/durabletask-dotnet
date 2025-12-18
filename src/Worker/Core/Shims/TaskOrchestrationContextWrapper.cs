@@ -235,7 +235,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                         orchestratorName.Name,
                         version,
                         instanceId,
-                        input),
+                        input,
+                        options?.Tags),
                     orchestratorName.Name,
                     handler,
                     default);
@@ -246,7 +247,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                     orchestratorName.Name,
                     version,
                     instanceId,
-                    input);
+                    input,
+                    options?.Tags);
             }
         }
         catch (global::DurableTask.Core.Exceptions.SubOrchestrationFailedException e)

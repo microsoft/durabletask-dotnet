@@ -20,7 +20,6 @@ namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 public class LoggingCategoryTests
 {
     const string NewGrpcCategory = "Microsoft.DurableTask.Worker.Grpc";
-    const string LegacyCategory = "Microsoft.DurableTask";
 
     [Fact]
     public void Worker_UsesLegacyCategories_ByDefault()
@@ -164,37 +163,6 @@ public class LoggingCategoryTests
         scope.Should().NotBeNull();
     }
 
-    [Fact]
-    public void LoggingOptions_UseLegacyCategories_DefaultsToTrue()
-    {
-        // Arrange & Act
-        var options = new DurableTaskWorkerOptions();
-
-        // Assert
-        options.Logging.UseLegacyCategories.Should().BeTrue("backward compatibility is enabled by default");
-    }
-}
-
-sealed class OptionsMonitorStub<T> : IOptionsMonitor<T>
-{
-    readonly T value;
-
-    public OptionsMonitorStub(T value)
-    {
-        this.value = value;
-    }
-
-    public T CurrentValue => this.value;
-
-    public T Get(string? name) => this.value;
-
-    public IDisposable OnChange(Action<T, string?> listener) => NullDisposable.Instance;
-
-    sealed class NullDisposable : IDisposable
-    {
-        public static readonly NullDisposable Instance = new();
-        public void Dispose() { }
-    }
 }
 
 sealed class NullOutput : ITestOutputHelper
@@ -212,7 +180,7 @@ sealed class SimpleLoggerFactory : ILoggerFactory
         this.provider = provider;
     }
 
-    public void AddProvider(ILoggerProvider provider)
+    public void AddProvider(ILoggerProvider loggerProvider)
     {
         // No-op; single provider
     }

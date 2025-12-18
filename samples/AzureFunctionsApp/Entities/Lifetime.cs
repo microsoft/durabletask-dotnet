@@ -75,6 +75,12 @@ public class Lifetime : TaskEntity<MyState>
     protected override MyState InitializeState(TaskEntityOperation operation)
     {
         // This method allows for customizing the default state value for a new entity.
+        // For async initialization (e.g., loading from a database or external storage), override InitializeStateAsync instead:
+        // protected override async ValueTask<MyState> InitializeStateAsync(TaskEntityOperation operation)
+        // {
+        //     var data = await LoadFromDatabaseAsync();
+        //     return new MyState(data.PropA, data.PropB);
+        // }
         return new(Guid.NewGuid().ToString("N"), Random.Shared.Next(0, 1000));
     }
 }

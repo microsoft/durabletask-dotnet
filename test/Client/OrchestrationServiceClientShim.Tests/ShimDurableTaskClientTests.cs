@@ -326,6 +326,195 @@ public class ShimDurableTaskClientTests
         await this.RunScheduleNewOrchestrationInstanceAsync("test", "input", options);
     }
 
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_InvalidDedupeStatus_ThrowsArgumentException()
+    {
+        // Arrange
+        StartOrchestrationOptions options = new()
+        {
+            DedupeStatuses = new[] { "InvalidStatus" },
+        };
+
+        // Act & Assert
+        Func<Task> act = async () => await this.client.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName("TestOrchestration"),
+            input: null,
+            options,
+            default);
+
+        var exception = await act.Should().ThrowAsync<ArgumentException>();
+        exception.Which.Message.Should().Contain("Invalid orchestration runtime status: 'InvalidStatus' for deduplication.");
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_InvalidDedupeStatus_ContainsInvalidStatusInMessage()
+    {
+        // Arrange
+        StartOrchestrationOptions options = new()
+        {
+            DedupeStatuses = new[] { "NonExistentStatus" },
+        };
+
+        // Act & Assert
+        Func<Task> act = async () => await this.client.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName("TestOrchestration"),
+            input: null,
+            options,
+            default);
+
+        var exception = await act.Should().ThrowAsync<ArgumentException>();
+        exception.Which.Message.Should().Contain("'NonExistentStatus'");
+        exception.Which.Message.Should().Contain("for deduplication");
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_MultipleInvalidDedupeStatuses_ThrowsOnFirstInvalid()
+    {
+        // Arrange
+        StartOrchestrationOptions options = new()
+        {
+            DedupeStatuses = new[] { "InvalidStatus1", "InvalidStatus2", "InvalidStatus3" },
+        };
+
+        // Act & Assert
+        Func<Task> act = async () => await this.client.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName("TestOrchestration"),
+            input: null,
+            options,
+            default);
+
+        var exception = await act.Should().ThrowAsync<ArgumentException>();
+        exception.Which.Message.Should().Contain("'InvalidStatus1'");
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_MixedValidAndInvalidStatus_ThrowsArgumentException()
+    {
+        // Arrange
+        StartOrchestrationOptions options = new()
+        {
+            DedupeStatuses = new[] { "Completed", "InvalidStatus", "Failed" },
+        };
+
+        // Act & Assert
+        Func<Task> act = async () => await this.client.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName("TestOrchestration"),
+            input: null,
+            options,
+            default);
+
+        var exception = await act.Should().ThrowAsync<ArgumentException>();
+        exception.Which.Message.Should().Contain("Invalid orchestration runtime status: 'InvalidStatus' for deduplication.");
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_ValidDedupeStatuses_DoesNotThrow()
+    {
+        // Arrange
+        StartOrchestrationOptions options = new()
+        {
+            DedupeStatuses = new[] { "Completed", "Failed" },
+        };
+
+        // Setup the mock to handle the call
+        this.orchestrationClient.Setup(
+            m => m.CreateTaskOrchestrationAsync(
+                It.IsAny<TaskMessage>(),
+                It.IsAny<Core.OrchestrationStatus[]?>()))
+            .Returns(Task.CompletedTask);
+
+        // Act & Assert - Should not throw ArgumentException for invalid status
+        Func<Task> act = async () => await this.client.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName("TestOrchestration"),
+            input: null,
+            options,
+            default);
+
+        await act.Should().NotThrowAsync<ArgumentException>();
+        this.orchestrationClient.VerifyAll();
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_CaseInsensitiveValidStatus_DoesNotThrow()
+    {
+        // Arrange
+        StartOrchestrationOptions options = new()
+        {
+            DedupeStatuses = new[] { "completed", "FAILED", "Terminated" },
+        };
+
+        // Setup the mock to handle the call
+        this.orchestrationClient.Setup(
+            m => m.CreateTaskOrchestrationAsync(
+                It.IsAny<TaskMessage>(),
+                It.IsAny<Core.OrchestrationStatus[]?>()))
+            .Returns(Task.CompletedTask);
+
+        // Act & Assert - Case-insensitive parsing should work
+        Func<Task> act = async () => await this.client.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName("TestOrchestration"),
+            input: null,
+            options,
+            default);
+
+        await act.Should().NotThrowAsync<ArgumentException>();
+        this.orchestrationClient.VerifyAll();
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_EmptyDedupeStatuses_DoesNotThrow()
+    {
+        // Arrange
+        StartOrchestrationOptions options = new()
+        {
+            DedupeStatuses = new List<string>(),
+        };
+
+        // Setup the mock to handle the call
+        this.orchestrationClient.Setup(
+            m => m.CreateTaskOrchestrationAsync(
+                It.IsAny<TaskMessage>(),
+                It.IsAny<Core.OrchestrationStatus[]?>()))
+            .Returns(Task.CompletedTask);
+
+        // Act & Assert
+        Func<Task> act = async () => await this.client.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName("TestOrchestration"),
+            input: null,
+            options,
+            default);
+
+        await act.Should().NotThrowAsync<ArgumentException>();
+        this.orchestrationClient.VerifyAll();
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_NullDedupeStatuses_DoesNotThrow()
+    {
+        // Arrange
+        StartOrchestrationOptions options = new()
+        {
+            DedupeStatuses = null,
+        };
+
+        // Setup the mock to handle the call
+        this.orchestrationClient.Setup(
+            m => m.CreateTaskOrchestrationAsync(
+                It.IsAny<TaskMessage>(),
+                It.IsAny<Core.OrchestrationStatus[]?>()))
+            .Returns(Task.CompletedTask);
+
+        // Act & Assert
+        Func<Task> act = async () => await this.client.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName("TestOrchestration"),
+            input: null,
+            options,
+            default);
+
+        await act.Should().NotThrowAsync<ArgumentException>();
+        this.orchestrationClient.VerifyAll();
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -347,11 +536,11 @@ public class ShimDurableTaskClientTests
             .Setup(x => x.GetOrchestrationStateAsync(originalInstanceId, false))
             .ReturnsAsync(new List<Core.OrchestrationState> { originalState });
 
-        // Capture the TaskMessage for verification becasue we will create this message at RestartAsync.
+        // Capture the TaskMessage for verification because we will create this message at RestartAsync.
         TaskMessage? capturedMessage = null;
         this.orchestrationClient
-            .Setup(x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>()))
-            .Callback<TaskMessage>(msg => capturedMessage = msg)
+            .Setup(x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>(), It.IsAny<Core.OrchestrationStatus[]?>()))
+            .Callback<TaskMessage, Core.OrchestrationStatus[]?>((msg, _) => capturedMessage = msg)
             .Returns(Task.CompletedTask);
 
         string restartedInstanceId = await this.client.RestartAsync(originalInstanceId, restartWithNewInstanceId);
@@ -367,7 +556,7 @@ public class ShimDurableTaskClientTests
 
         // Verify that CreateTaskOrchestrationAsync was called
         this.orchestrationClient.Verify(
-            x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>()),
+            x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>(), It.IsAny<Core.OrchestrationStatus[]?>()),
             Times.Once);
 
         // Verify the captured message details
@@ -534,7 +723,9 @@ public class ShimDurableTaskClientTests
     {
         // arrange
         this.orchestrationClient.Setup(
-            m => m.CreateTaskOrchestrationAsync(MatchStartExecutionMessage(name, input, options)))
+            m => m.CreateTaskOrchestrationAsync(
+                MatchStartExecutionMessage(name, input, options),
+                It.IsAny<Core.OrchestrationStatus[]?>()))
             .Returns(Task.CompletedTask);
 
         // act
@@ -542,7 +733,9 @@ public class ShimDurableTaskClientTests
 
         // assert
         this.orchestrationClient.Verify(
-            m => m.CreateTaskOrchestrationAsync(MatchStartExecutionMessage(name, input, options)),
+            m => m.CreateTaskOrchestrationAsync(
+                MatchStartExecutionMessage(name, input, options),
+                It.IsAny<Core.OrchestrationStatus[]?>()),
             Times.Once());
 
         if (options?.InstanceId is string str)

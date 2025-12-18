@@ -739,6 +739,12 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
 
         public Task<OrchestrationState> WaitForInstanceAsync(string instanceId, CancellationToken cancellationToken)
         {
+            // First, add the waiter before checking completion to avoid a race condition.
+            // This ensures we don't miss a completion notification that happens between
+            // checking the status and adding the waiter.
+            var tcs = this.waiters.GetOrAdd(instanceId, _ => new TaskCompletionSource<OrchestrationState>());
+
+            // Now check if already completed - if so, complete the waiter immediately
             if (this.store.TryGetValue(instanceId, out SerializedInstanceState? state))
             {
                 lock (state)
@@ -750,8 +756,11 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                             statusRecord.OrchestrationStatus == OrchestrationStatus.Failed ||
                             statusRecord.OrchestrationStatus == OrchestrationStatus.Terminated)
                         {
-                            // orchestration has already completed
-                            return Task.FromResult(statusRecord);
+                            // Orchestration has already completed - complete the waiter and clean it up
+                            if (tcs.TrySetResult(statusRecord))
+                            {
+                                this.waiters.TryRemove(instanceId, out _);
+                            }
                         }
                     }
                 }
@@ -759,7 +768,6 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
 
             // Caller will be notified when the instance completes.
             // The ContinueWith is just to enable cancellation: https://stackoverflow.com/a/25652873/2069
-            var tcs = this.waiters.GetOrAdd(instanceId, _ => new TaskCompletionSource<OrchestrationState>());
             return tcs.Task.ContinueWith(t => t.GetAwaiter().GetResult(), cancellationToken);
         }
 

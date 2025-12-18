@@ -69,6 +69,12 @@ namespace Microsoft.DurableTask.Generators
                     .Combine(durableEventAttributes.Collect())
                     .Combine(durableFunctions.Collect())
                     .Combine(context.CompilationProvider)
+                    // Roslyn's IncrementalValueProvider.Combine creates nested tuple pairs: ((Left, Right), Right)
+                    // After multiple .Combine() calls, we unpack the nested structure:
+                    // x.Right                = Compilation
+                    // x.Left.Left.Left       = DurableTaskAttributes (orchestrators, activities, entities)
+                    // x.Left.Left.Right      = DurableEventAttributes (events)
+                    // x.Left.Right           = DurableFunctions (Azure Functions metadata)
                     .Select((x, _) => (x.Right, x.Left.Left.Left, x.Left.Left.Right, x.Left.Right));
 
             // Generate the source

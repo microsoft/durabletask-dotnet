@@ -358,15 +358,11 @@ namespace Microsoft.DurableTask
             else
             {
                 // ASP.NET Core-specific service registration methods
-                // Only generate if there are actually tasks to register
-                if (orchestrators.Count > 0 || activities.Count > 0 || entities.Count > 0)
-                {
-                    AddRegistrationMethodForAllTasks(
-                        sourceBuilder,
-                        orchestrators,
-                        activities,
-                        entities);
-                }
+                AddRegistrationMethodForAllTasks(
+                    sourceBuilder,
+                    orchestrators,
+                    activities,
+                    entities);
             }
 
             sourceBuilder.AppendLine("    }").AppendLine("}");

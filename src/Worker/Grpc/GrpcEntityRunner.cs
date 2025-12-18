@@ -135,7 +135,7 @@ public static class GrpcEntityRunner
 
         if (addToExtendedSessions)
         {
-            extendedSessions.Set(
+            extendedSessions!.Set(
                 request.InstanceId,
                 result.EntityState,
                 new MemoryCacheEntryOptions { SlidingExpiration = TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds) });

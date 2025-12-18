@@ -207,7 +207,7 @@ public static class GrpcOrchestrationRunner
 
                 if (addToExtendedSessions && !executor.IsCompleted)
                 {
-                    extendedSessions.Set<ExtendedSessionState>(
+                    extendedSessions!.Set<ExtendedSessionState>(
                         request.InstanceId,
                         new(runtimeState, shim, executor),
                         new MemoryCacheEntryOptions { SlidingExpiration = TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds) });

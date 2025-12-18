@@ -1,9 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-using System.Collections.Generic;
-using System.Text;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Microsoft.DurableTask.Worker.Grpc;
@@ -19,7 +16,7 @@ static class GrpcInstanceRunnerUtils
     /// </summary>
     /// <remarks>
     /// If any request property is missing or invalid (i.e. the key is misspelled or the value is of the wrong type),
-    /// extended sessions are not enabled and default values are assigned are assigned to the returns.
+    /// extended sessions are not enabled and default values are assigned to the returns.
     /// </remarks>
     /// <param name="properties">
     /// A dictionary containing request properties used to configure extended session behavior.

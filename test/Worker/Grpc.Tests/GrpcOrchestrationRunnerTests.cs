@@ -120,8 +120,7 @@ public class GrpcOrchestrationRunnerTests
             { "ExtendedSessionsIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
         string requestString = Convert.ToBase64String(requestBytes);
-        string responseString = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
-        Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
+        GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
         Assert.False(extendedSessions.IsInitialized);
 
         // Wrong value type for extended session timeout key

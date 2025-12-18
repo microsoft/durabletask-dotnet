@@ -73,8 +73,7 @@ public class GrpcEntityRunnerTests
             { "ExtendedSessionsIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = entityRequest.ToByteArray();
         string requestString = Convert.ToBase64String(requestBytes);
-        string responseString = await GrpcEntityRunner.LoadAndRunAsync(requestString, new SimpleEntity(), extendedSessions);
-        Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
+        await GrpcEntityRunner.LoadAndRunAsync(requestString, new SimpleEntity(), extendedSessions);
         Assert.False(extendedSessions.IsInitialized);
 
         // Wrong value type for extended session timeout key
@@ -373,7 +372,7 @@ public class GrpcEntityRunnerTests
         return entityBatchRequest;
     }
 
-    class SimpleEntity : TaskEntity<int?>
+    sealed class SimpleEntity : TaskEntity<int?>
     {
         public void Set(int value)
         {

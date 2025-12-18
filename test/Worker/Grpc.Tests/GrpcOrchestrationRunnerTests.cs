@@ -59,7 +59,7 @@ public class GrpcOrchestrationRunnerTests
     }
 
     [Fact]
-    public void NullExtendedSessionStored_Means_NeedsExtendedSessionNotUsed()
+    public void NullExtendedSessionStored_Means_ExtendedSessionNotUsed()
     {
         using var extendedSessions = new ExtendedSessionsCache();
         extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).Set<ExtendedSessionState>(

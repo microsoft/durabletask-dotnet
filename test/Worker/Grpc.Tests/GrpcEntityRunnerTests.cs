@@ -33,7 +33,7 @@ public class GrpcEntityRunnerTests
     }
 
     [Fact]
-    public async Task EmptyHistory_Returns_NeedsHistoryInResponse_Async()
+    public async Task EmptyState_Returns_NeedsStateInResponse_Async()
     {
         using var extendedSessions = new ExtendedSessionsCache();
 

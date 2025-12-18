@@ -12,8 +12,8 @@
 
   <ItemGroup>
     <!-- Using p2p references so we can show latest changes in samples. -->
-    <ProjectReference Include="$(SrcRoot)Client/Grpc/Client.Grpc.csproj" />
-    <ProjectReference Include="$(SrcRoot)Worker/Grpc/Worker.Grpc.csproj" />
+    <ProjectReference Include="$(SrcRoot)Client/AzureManaged/Client.AzureManaged.csproj" />
+    <ProjectReference Include="$(SrcRoot)Worker/AzureManaged/Worker.AzureManaged.csproj" />
     
     <!-- Reference the source generator -->
     <ProjectReference Include="$(SrcRoot)Generators/Generators.csproj" 

@@ -6,22 +6,32 @@
 using EventsSample;
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
+using Microsoft.DurableTask.Client.AzureManaged;
 using Microsoft.DurableTask.Worker;
+using Microsoft.DurableTask.Worker.AzureManaged;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
-builder.Services.AddDurableTaskClient().UseGrpc();
-builder.Services.AddDurableTaskWorker()
-    .AddTasks(tasks =>
+string schedulerConnectionString = builder.Configuration.GetValue<string>("DURABLE_TASK_SCHEDULER_CONNECTION_STRING")
+    ?? throw new InvalidOperationException("DURABLE_TASK_SCHEDULER_CONNECTION_STRING is not set.");
+
+builder.Services.AddDurableTaskClient(clientBuilder => clientBuilder.UseDurableTaskScheduler(schedulerConnectionString));
+
+builder.Services.AddDurableTaskWorker(workerBuilder =>
+{
+    workerBuilder.AddTasks(tasks =>
     {
         tasks.AddOrchestrator<ApprovalOrchestrator>();
         tasks.AddActivity<NotifyApprovalRequiredActivity>();
         tasks.AddOrchestrator<DataProcessingOrchestrator>();
         tasks.AddActivity<ProcessDataActivity>();
-    })
-    .UseGrpc();
+    });
+
+    workerBuilder.UseDurableTaskScheduler(schedulerConnectionString);
+});
 
 IHost host = builder.Build();
 await host.StartAsync();

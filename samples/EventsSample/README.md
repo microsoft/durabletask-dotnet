@@ -63,11 +63,16 @@ await client.RaiseEventAsync(
 
 ## Running the Sample
 
-1. Ensure you have the Durable Task sidecar running (if using gRPC mode)
+This sample is configured to use **Durable Task Scheduler (DTS)** (no local gRPC sidecar required).
+
+1. Set the DTS connection string:
+    ```bash
+    export DURABLE_TASK_SCHEDULER_CONNECTION_STRING="..."
+    ```
 2. Run the sample:
-   ```bash
-   dotnet run
-   ```
+    ```bash
+    dotnet run
+    ```
 
 The sample will:
 1. Start an approval workflow and wait for an approval event

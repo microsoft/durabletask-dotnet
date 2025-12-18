@@ -207,6 +207,7 @@ public static class GrpcOrchestrationRunner
 
                 if (addToExtendedSessions && !executor.IsCompleted)
                 {
+                    // addToExtendedSessions can only be set to true if extendedSessions is not null
                     extendedSessions!.Set<ExtendedSessionState>(
                         request.InstanceId,
                         new(runtimeState, shim, executor),

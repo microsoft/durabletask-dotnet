@@ -135,6 +135,7 @@ public static class GrpcEntityRunner
 
         if (addToExtendedSessions)
         {
+            // addToExtendedSessions can only be set to true if extendedSessions is not null
             extendedSessions!.Set(
                 request.InstanceId,
                 result.EntityState,

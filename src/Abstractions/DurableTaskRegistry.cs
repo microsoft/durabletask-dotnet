@@ -32,6 +32,21 @@ public sealed partial class DurableTaskRegistry
         = new Dictionary<TaskName, Func<IServiceProvider, ITaskEntity>>();
 
     /// <summary>
+    /// Gets the types of registered activities.
+    /// </summary>
+    internal HashSet<Type> ActivityTypes { get; } = [];
+
+    /// <summary>
+    /// Gets the types of registered orchestrators.
+    /// </summary>
+    internal HashSet<Type> OrchestratorTypes { get; } = [];
+
+    /// <summary>
+    /// Gets the types of registered entities.
+    /// </summary>
+    internal HashSet<Type> EntityTypes { get; } = [];
+
+    /// <summary>
     /// Registers an activity factory.
     /// </summary>
     /// <param name="name">The name of the activity.</param>

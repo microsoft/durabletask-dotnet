@@ -41,6 +41,7 @@ public sealed partial class DurableTaskRegistry
     public DurableTaskRegistry AddActivity(TaskName name, Type type)
     {
         Check.ConcreteType<ITaskActivity>(type);
+        this.ActivityTypes.Add(type);
         return this.AddActivity(name, sp => (ITaskActivity)ActivatorUtilities.GetServiceOrCreateInstance(sp, type));
     }
 

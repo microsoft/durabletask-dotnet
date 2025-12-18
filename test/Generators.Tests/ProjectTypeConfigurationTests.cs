@@ -11,9 +11,9 @@ public class ProjectTypeConfigurationTests
     const string GeneratedFileName = $"{GeneratedClassName}.cs";
 
     [Fact]
-    public Task ExplicitWorkerMode_WithFunctionsReference_GeneratesWorkerCode()
+    public Task ExplicitStandaloneMode_WithFunctionsReference_GeneratesStandaloneCode()
     {
-        // Test that explicit "Worker" configuration overrides the Functions reference
+        // Test that explicit "Standalone" configuration overrides the Functions reference
         string code = @"
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
@@ -24,7 +24,7 @@ class MyActivity : TaskActivity<int, string>
     public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
 }";
 
-        // Even though we have Functions references, we should get Worker code (AddAllGeneratedTasks)
+        // Even though we have Functions references, we should get Standalone code (AddAllGeneratedTasks)
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
@@ -44,19 +44,19 @@ internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistr
 }",
             isDurableFunctions: false);
 
-        // Pass isDurableFunctions: true to add Functions references, but projectType: "Worker" to override
+        // Pass isDurableFunctions: true to add Functions references, but projectType: "Standalone" to override
         return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
             GeneratedFileName,
             code,
             expectedOutput,
             isDurableFunctions: true,
-            projectType: "Worker");
+            projectType: "Standalone");
     }
 
     [Fact]
-    public Task ExplicitDurableTaskSchedulerMode_WithFunctionsReference_GeneratesWorkerCode()
+    public Task ExplicitStandaloneMode_WithFunctionsReference_OrchestratorTest()
     {
-        // Test that explicit "DurableTaskScheduler" configuration overrides the Functions reference
+        // Test that explicit "Standalone" configuration overrides the Functions reference
         string code = @"
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
@@ -102,13 +102,13 @@ internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistr
             code,
             expectedOutput,
             isDurableFunctions: true,
-            projectType: "DurableTaskScheduler");
+            projectType: "Standalone");
     }
 
     [Fact]
     public Task ExplicitFunctionsMode_WithoutFunctionsReference_GeneratesFunctionsCode()
     {
-        // Test that explicit "DurableFunctions" configuration generates Functions code
+        // Test that explicit "Functions" configuration generates Functions code
         // even without Functions references
         string code = @"
 using System.Threading.Tasks;
@@ -120,7 +120,7 @@ class MyActivity : TaskActivity<int, string>
     public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
 }";
 
-        // With explicit "DurableFunctions", we should get Functions code (Activity trigger function)
+        // With explicit "Functions", we should get Functions code (Activity trigger function)
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
@@ -157,19 +157,19 @@ sealed class GeneratedActivityContext : TaskActivityContext
             isDurableFunctions: true);
 
         // Pass isDurableFunctions: true for expected output, but don't add references
-        // Instead rely on projectType: "DurableFunctions" to force Functions mode
+        // Instead rely on projectType: "Functions" to force Functions mode
         return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
             GeneratedFileName,
             code,
             expectedOutput,
             isDurableFunctions: true,
-            projectType: "DurableFunctions");
+            projectType: "Functions");
     }
 
     [Fact]
-    public Task ExplicitAzureFunctionsMode_WithoutFunctionsReference_GeneratesFunctionsCode()
+    public Task ExplicitFunctionsMode_OrchestratorTest()
     {
-        // Test that "AzureFunctions" is an alternative spelling
+        // Test that "Functions" mode generates orchestrator Functions code
         string code = @"
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
@@ -218,7 +218,7 @@ public static Task<string> CallMyOrchestratorAsync(
             code,
             expectedOutput,
             isDurableFunctions: true,
-            projectType: "AzureFunctions");
+            projectType: "Functions");
     }
 
     [Fact]
@@ -279,7 +279,7 @@ sealed class GeneratedActivityContext : TaskActivityContext
     }
 
     [Fact]
-    public Task AutoMode_WithoutFunctionsReference_GeneratesWorkerCode()
+    public Task AutoMode_WithoutFunctionsReference_GeneratesStandaloneCode()
     {
         // Test that "Auto" mode falls back to auto-detection
         string code = @"
@@ -374,46 +374,5 @@ sealed class GeneratedActivityContext : TaskActivityContext
             expectedOutput,
             isDurableFunctions: true,
             projectType: "UnrecognizedValue");
-    }
-
-    [Fact]
-    public Task DurableTaskWorkerMode_WithFunctionsReference_GeneratesWorkerCode()
-    {
-        // Test that "DurableTaskWorker" is another valid alternative
-        string code = @"
-using System.Threading.Tasks;
-using Microsoft.DurableTask;
-
-[DurableTask(nameof(MyActivity))]
-class MyActivity : TaskActivity<int, string>
-{
-    public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
-}";
-
-        string expectedOutput = TestHelpers.WrapAndFormat(
-            GeneratedClassName,
-            methodList: @"
-/// <summary>
-/// Calls the <see cref=""MyActivity""/> activity.
-/// </summary>
-/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
-public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
-{
-    return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
-}
-
-internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
-{
-    builder.AddActivity<MyActivity>();
-    return builder;
-}",
-            isDurableFunctions: false);
-
-        return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
-            GeneratedFileName,
-            code,
-            expectedOutput,
-            isDurableFunctions: true,
-            projectType: "DurableTaskWorker");
     }
 }

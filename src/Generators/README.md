@@ -16,17 +16,17 @@ In some scenarios, you may want to explicitly control the generator's behavior, 
 
 ```xml
 <PropertyGroup>
-  <DurableTaskGeneratorProjectType>Worker</DurableTaskGeneratorProjectType>
+  <DurableTaskGeneratorProjectType>Standalone</DurableTaskGeneratorProjectType>
 </PropertyGroup>
 ```
 
 #### Supported Values
 
 - `Auto` (default): Automatically detects project type based on referenced assemblies
-- `DurableFunctions`, `Functions`, or `AzureFunctions`: Forces generation of Azure Functions-specific code
-- `Worker`, `DurableTaskScheduler`, or `DurableTaskWorker`: Forces generation of Durable Task Worker code (includes `AddAllGeneratedTasks` method)
+- `Functions`: Forces generation of Azure Functions-specific code
+- `Standalone`: Forces generation of standalone Durable Task Worker code (includes `AddAllGeneratedTasks` method)
 
-#### Example: Force Worker Mode
+#### Example: Force Standalone Mode
 
 If your project has a transitive dependency on Azure Functions packages but you want to use the Durable Task Worker/Scheduler:
 
@@ -34,7 +34,7 @@ If your project has a transitive dependency on Azure Functions packages but you 
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <DurableTaskGeneratorProjectType>Worker</DurableTaskGeneratorProjectType>
+    <DurableTaskGeneratorProjectType>Standalone</DurableTaskGeneratorProjectType>
   </PropertyGroup>
   
   <ItemGroup>

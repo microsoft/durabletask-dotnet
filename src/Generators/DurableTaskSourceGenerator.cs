@@ -325,25 +325,11 @@ namespace Microsoft.DurableTask
             if (!string.IsNullOrWhiteSpace(projectType))
             {
                 // Explicit configuration takes precedence
-                HashSet<string> functionsTypes = new(StringComparer.OrdinalIgnoreCase)
-                {
-                    "DurableFunctions",
-                    "Functions",
-                    "AzureFunctions"
-                };
-
-                HashSet<string> workerTypes = new(StringComparer.OrdinalIgnoreCase)
-                {
-                    "DurableTaskScheduler",
-                    "Worker",
-                    "DurableTaskWorker"
-                };
-
-                if (functionsTypes.Contains(projectType!))
+                if (projectType!.Equals("Functions", StringComparison.OrdinalIgnoreCase))
                 {
                     return true;
                 }
-                else if (workerTypes.Contains(projectType!))
+                else if (projectType.Equals("Standalone", StringComparison.OrdinalIgnoreCase))
                 {
                     return false;
                 }

@@ -1,4 +1,14 @@
-﻿# Changelog
+# Changelog
+
+## v1.18.1
+- Support dedup status when starting orchestration by wangbill ([#542](https://github.com/microsoft/durabletask-dotnet/pull/542))
+- Add 404 exception handling in blobpayloadstore.downloadasync by Copilot ([#534](https://github.com/microsoft/durabletask-dotnet/pull/534))
+- Bump analyzers version to 0.2.0 by Copilot ([#552](https://github.com/microsoft/durabletask-dotnet/pull/552))
+- Add integration tests for exception type handling by Copilot ([#544](https://github.com/microsoft/durabletask-dotnet/pull/544))
+- Add roslyn analyzer to detect calls to non-existent functions (name mismatch) by Copilot ([#530](https://github.com/microsoft/durabletask-dotnet/pull/530))
+- Remove preview suffix by Copilot ([#541](https://github.com/microsoft/durabletask-dotnet/pull/541))
+- Add xml documentation with see cref links to generated code for better ide navigation by Copilot ([#535](https://github.com/microsoft/durabletask-dotnet/pull/535))
+- Add entity source generation support for durable functions by Copilot ([#533](https://github.com/microsoft/durabletask-dotnet/pull/533))
 
 ## v1.18.0
 - Add taskentity support to durabletasksourcegenerator by Copilot ([#517](https://github.com/microsoft/durabletask-dotnet/pull/517))

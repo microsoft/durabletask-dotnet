@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <ProjectReference Include="$(SrcRoot)Abstractions/Abstractions.csproj" />
+    <ProjectReference Include="$(SrcRoot)Client/Core/Client.csproj" />
   </ItemGroup>
 
 </Project>

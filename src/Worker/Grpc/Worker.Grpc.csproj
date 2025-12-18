@@ -13,6 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Google.Protobuf" VersionOverride="3.33.2" />
     <SharedSection Include="Core" />
     <SharedSection Include="DependencyInjection" />
     <SharedSection Include="Grpc" />

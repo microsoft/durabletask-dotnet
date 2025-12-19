@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Collections.Immutable;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
@@ -128,13 +129,8 @@ public sealed class LoggerOrchestrationAnalyzer : OrchestrationAnalyzer<LoggerOr
             // Check if the type implements ILogger interface (covers ILogger<T> case)
             if (type is INamedTypeSymbol namedType)
             {
-                foreach (INamedTypeSymbol interfaceType in namedType.AllInterfaces)
-                {
-                    if (SymbolEqualityComparer.Default.Equals(interfaceType, this.iLoggerSymbol))
-                    {
-                        return true;
-                    }
-                }
+                return namedType.AllInterfaces.Any(interfaceType =>
+                    SymbolEqualityComparer.Default.Equals(interfaceType, this.iLoggerSymbol));
             }
 
             return false;

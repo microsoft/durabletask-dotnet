@@ -12,8 +12,6 @@ namespace Microsoft.DurableTask.Analyzers.Activities;
 
 /// <summary>
 /// Analyzer that detects calls to non-existent activities and sub-orchestrations.
-/// <summary>
-/// Analyzer that detects calls to non-existent activities and sub-orchestrations.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer

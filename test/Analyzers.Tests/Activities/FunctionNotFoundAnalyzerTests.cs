@@ -373,7 +373,7 @@ async Task Method(TaskOrchestrationContext context)
 }
 ");
 
-        // Activity in referenced assembly (simulated via additional source file with different class name)
+        // Activity in a separate source file (simulates cross-assembly scenario)
         string activityCode = @"
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.DurableTask;
@@ -404,7 +404,7 @@ async Task Method(TaskOrchestrationContext context)
 }
 ");
 
-        // Child orchestrator in referenced assembly (simulated via additional source file with different class name)
+        // Child orchestrator in a separate source file (simulates cross-assembly scenario)
         string childOrchestratorCode = @"
 using System.Threading.Tasks;
 using Microsoft.Azure.Functions.Worker;
@@ -439,7 +439,7 @@ public class Caller {
 }
 ");
 
-        // Class-based activity in referenced assembly (simulated via additional source file)
+        // Class-based activity in a separate source file (simulates cross-assembly scenario)
         string activityCode = @"
 using System.Threading.Tasks;
 using Microsoft.DurableTask;

@@ -307,9 +307,11 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
         CancellationToken cancellationToken)
     {
         // Scan all referenced assemblies for activities and orchestrators
+        // Skip system assemblies for performance
         foreach (IAssemblySymbol assembly in compilation.References
             .Select(r => compilation.GetAssemblyOrModuleSymbol(r))
-            .OfType<IAssemblySymbol>())
+            .OfType<IAssemblySymbol>()
+            .Where(a => !IsSystemAssembly(a)))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -322,6 +324,19 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
                 orchestratorNames,
                 cancellationToken);
         }
+    }
+
+    static bool IsSystemAssembly(IAssemblySymbol assembly)
+    {
+        // Skip well-known system assemblies to improve performance
+        string assemblyName = assembly.Name;
+        return assemblyName == "mscorlib" ||
+               assemblyName == "System" ||
+               assemblyName == "netstandard" ||
+               assemblyName.StartsWith("System.", StringComparison.Ordinal) ||
+               assemblyName.StartsWith("Microsoft.CodeAnalysis", StringComparison.Ordinal) ||
+               assemblyName.StartsWith("Microsoft.CSharp", StringComparison.Ordinal) ||
+               assemblyName.StartsWith("Microsoft.VisualBasic", StringComparison.Ordinal);
     }
 
     static void ScanNamespaceForFunctions(

@@ -12,6 +12,8 @@ namespace Microsoft.DurableTask.Analyzers.Activities;
 
 /// <summary>
 /// Analyzer that detects calls to non-existent activities and sub-orchestrations.
+/// <summary>
+/// Analyzer that detects calls to non-existent activities and sub-orchestrations.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
@@ -25,6 +27,22 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
     /// The diagnostic ID for the diagnostic that reports when a sub-orchestration call references a function that doesn't exist.
     /// </summary>
     public const string SubOrchestrationNotFoundDiagnosticId = "DURABLE2004";
+
+    // System assemblies to skip when scanning referenced assemblies for performance
+    static readonly HashSet<string> SystemAssemblyNames =
+    [
+        "mscorlib",
+        "System",
+        "netstandard"
+    ];
+
+    static readonly string[] SystemAssemblyPrefixes =
+    [
+        "System.",
+        "Microsoft.CodeAnalysis",
+        "Microsoft.CSharp",
+        "Microsoft.VisualBasic"
+    ];
 
     static readonly LocalizableString ActivityNotFoundTitle = new LocalizableResourceString(nameof(Resources.ActivityNotFoundAnalyzerTitle), Resources.ResourceManager, typeof(Resources));
     static readonly LocalizableString ActivityNotFoundMessageFormat = new LocalizableResourceString(nameof(Resources.ActivityNotFoundAnalyzerMessageFormat), Resources.ResourceManager, typeof(Resources));
@@ -129,19 +147,13 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
                     }
 
                     // Check for Activity defined via [ActivityTrigger]
-                    if (knownSymbols.ActivityTriggerAttribute != null &&
-                        methodSymbol.ContainsAttributeInAnyMethodArguments(knownSymbols.ActivityTriggerAttribute) &&
-                        knownSymbols.FunctionNameAttribute != null &&
-                        methodSymbol.TryGetSingleValueFromAttribute(knownSymbols.FunctionNameAttribute, out string functionName))
+                    if (IsActivityMethod(methodSymbol, knownSymbols, out string functionName))
                     {
                         activityNames.Add(functionName);
                     }
 
                     // Check for Orchestrator defined via [OrchestrationTrigger]
-                    if (knownSymbols.FunctionOrchestrationAttribute != null &&
-                        methodSymbol.ContainsAttributeInAnyMethodArguments(knownSymbols.FunctionOrchestrationAttribute) &&
-                        knownSymbols.FunctionNameAttribute != null &&
-                        methodSymbol.TryGetSingleValueFromAttribute(knownSymbols.FunctionNameAttribute, out string orchestratorFunctionName))
+                    if (IsOrchestratorMethod(methodSymbol, knownSymbols, out string orchestratorFunctionName))
                     {
                         orchestratorNames.Add(orchestratorFunctionName);
                     }
@@ -173,7 +185,7 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
 
                     // Check for ITaskOrchestrator implementations (class-based orchestrators)
                     if (knownSymbols.TaskOrchestratorInterface != null &&
-                        classSymbol.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, knownSymbols.TaskOrchestratorInterface)))
+                        ImplementsInterface(classSymbol, knownSymbols.TaskOrchestratorInterface))
                     {
                         orchestratorNames.Add(classSymbol.Name);
                     }
@@ -281,6 +293,49 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
         return constant.Value?.ToString();
     }
 
+    static bool IsActivityMethod(IMethodSymbol methodSymbol, KnownTypeSymbols knownSymbols, out string functionName)
+    {
+        functionName = string.Empty;
+
+        if (knownSymbols.ActivityTriggerAttribute == null ||
+            !methodSymbol.ContainsAttributeInAnyMethodArguments(knownSymbols.ActivityTriggerAttribute))
+        {
+            return false;
+        }
+
+        if (knownSymbols.FunctionNameAttribute == null ||
+            !methodSymbol.TryGetSingleValueFromAttribute(knownSymbols.FunctionNameAttribute, out functionName))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    static bool IsOrchestratorMethod(IMethodSymbol methodSymbol, KnownTypeSymbols knownSymbols, out string functionName)
+    {
+        functionName = string.Empty;
+
+        if (knownSymbols.FunctionOrchestrationAttribute == null ||
+            !methodSymbol.ContainsAttributeInAnyMethodArguments(knownSymbols.FunctionOrchestrationAttribute))
+        {
+            return false;
+        }
+
+        if (knownSymbols.FunctionNameAttribute == null ||
+            !methodSymbol.TryGetSingleValueFromAttribute(knownSymbols.FunctionNameAttribute, out functionName))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    static bool ImplementsInterface(INamedTypeSymbol typeSymbol, INamedTypeSymbol interfaceSymbol)
+    {
+        return typeSymbol.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, interfaceSymbol));
+    }
+
     static bool ClassOverridesMethod(INamedTypeSymbol classSymbol, IMethodSymbol methodToFind)
     {
         INamedTypeSymbol? baseType = classSymbol;
@@ -308,14 +363,21 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
     {
         // Scan all referenced assemblies for activities and orchestrators
         // Skip system assemblies for performance
-        foreach (IAssemblySymbol assembly in compilation.References
-            .Select(r => compilation.GetAssemblyOrModuleSymbol(r))
-            .OfType<IAssemblySymbol>()
-            .Where(a => !IsSystemAssembly(a)))
+        foreach (MetadataReference reference in compilation.References)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Get all types in the assembly
+            if (compilation.GetAssemblyOrModuleSymbol(reference) is not IAssemblySymbol assembly)
+            {
+                continue;
+            }
+
+            if (IsSystemAssembly(assembly))
+            {
+                continue;
+            }
+
+            // Scan this assembly
             ScanNamespaceForFunctions(
                 assembly.GlobalNamespace,
                 knownSymbols,
@@ -330,13 +392,21 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
     {
         // Skip well-known system assemblies to improve performance
         string assemblyName = assembly.Name;
-        return assemblyName == "mscorlib" ||
-               assemblyName == "System" ||
-               assemblyName == "netstandard" ||
-               assemblyName.StartsWith("System.", StringComparison.Ordinal) ||
-               assemblyName.StartsWith("Microsoft.CodeAnalysis", StringComparison.Ordinal) ||
-               assemblyName.StartsWith("Microsoft.CSharp", StringComparison.Ordinal) ||
-               assemblyName.StartsWith("Microsoft.VisualBasic", StringComparison.Ordinal);
+
+        if (SystemAssemblyNames.Contains(assemblyName))
+        {
+            return true;
+        }
+
+        foreach (string prefix in SystemAssemblyPrefixes)
+        {
+            if (assemblyName.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     static void ScanNamespaceForFunctions(
@@ -365,7 +435,7 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
 
             // Check for ITaskOrchestrator implementations (class-based orchestrators)
             if (knownSymbols.TaskOrchestratorInterface != null &&
-                typeSymbol.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, knownSymbols.TaskOrchestratorInterface)))
+                ImplementsInterface(typeSymbol, knownSymbols.TaskOrchestratorInterface))
             {
                 orchestratorNames.Add(typeSymbol.Name);
             }
@@ -381,19 +451,13 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
                 }
 
                 // Check for Activity defined via [ActivityTrigger]
-                if (knownSymbols.ActivityTriggerAttribute != null &&
-                    methodSymbol.ContainsAttributeInAnyMethodArguments(knownSymbols.ActivityTriggerAttribute) &&
-                    knownSymbols.FunctionNameAttribute != null &&
-                    methodSymbol.TryGetSingleValueFromAttribute(knownSymbols.FunctionNameAttribute, out string functionName))
+                if (IsActivityMethod(methodSymbol, knownSymbols, out string functionName))
                 {
                     activityNames.Add(functionName);
                 }
 
                 // Check for Orchestrator defined via [OrchestrationTrigger]
-                if (knownSymbols.FunctionOrchestrationAttribute != null &&
-                    methodSymbol.ContainsAttributeInAnyMethodArguments(knownSymbols.FunctionOrchestrationAttribute) &&
-                    knownSymbols.FunctionNameAttribute != null &&
-                    methodSymbol.TryGetSingleValueFromAttribute(knownSymbols.FunctionNameAttribute, out string orchestratorFunctionName))
+                if (IsOrchestratorMethod(methodSymbol, knownSymbols, out string orchestratorFunctionName))
                 {
                     orchestratorNames.Add(orchestratorFunctionName);
                 }

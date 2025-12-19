@@ -5,3 +5,4 @@
 
 Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
+DURABLE0009 | Orchestration | Info | **GetInputOrchestrationAnalyzer**: Suggests using input parameter binding instead of ctx.GetInput<T>() in orchestration methods.

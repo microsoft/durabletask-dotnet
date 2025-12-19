@@ -416,8 +416,10 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
         foreach (AssemblyIdentity referencedAssembly in assembly.Modules.SelectMany(m => m.ReferencedAssemblies))
         {
             string refName = referencedAssembly.Name;
-            if (refName == "Microsoft.DurableTask.Abstractions" ||
-                refName == "Microsoft.DurableTask.Worker" ||
+            // Check for packages that users directly reference when defining activities/orchestrators
+            // Microsoft.DurableTask.Worker: for non-function scenarios (console apps, etc.)
+            // Microsoft.Azure.Functions.Worker.Extensions.DurableTask: for Azure Functions scenarios
+            if (refName == "Microsoft.DurableTask.Worker" ||
                 refName == "Microsoft.Azure.Functions.Worker.Extensions.DurableTask")
             {
                 return true;

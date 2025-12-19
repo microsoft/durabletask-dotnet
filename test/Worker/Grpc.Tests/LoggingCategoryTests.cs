@@ -167,33 +167,9 @@ public class LoggingCategoryTests
     [Fact]
     public void GrpcDurableTaskWorker_UsesDualCategoryLogger_WhenLegacyCategoriesEnabled()
     {
-        // Arrange
-        var logProvider = new TestLogProvider(new NullOutput());
-        var loggerFactory = new SimpleLoggerFactory(logProvider);
-
-        var workerOptions = new DurableTaskWorkerOptions
-        {
-            Logging = { UseLegacyCategories = true }
-        };
-
-        var grpcOptions = new GrpcDurableTaskWorkerOptions();
-        var factoryMock = new Mock<IDurableTaskFactory>(MockBehavior.Strict);
-        var services = new ServiceCollection().BuildServiceProvider();
-
-        // Act - Create worker which will create the logger internally
-        var worker = new GrpcDurableTaskWorker(
-            name: "Test",
-            factory: factoryMock.Object,
-            grpcOptions: new OptionsMonitorStub<GrpcDurableTaskWorkerOptions>(grpcOptions),
-            workerOptions: new OptionsMonitorStub<DurableTaskWorkerOptions>(workerOptions),
-            services: services,
-            loggerFactory: loggerFactory,
-            orchestrationFilter: null,
-            exceptionPropertiesProvider: null);
-
-        // Use reflection to access the private logger field
-        var loggerField = typeof(GrpcDurableTaskWorker).GetField("logger", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        var logger = loggerField?.GetValue(worker);
+        // Arrange & Act
+        var worker = CreateWorkerWithLoggingOptions(useLegacyCategories: true);
+        var logger = GetWorkerLogger(worker);
 
         // Assert - verify the worker uses DualCategoryLogger when legacy categories are enabled
         logger.Should().NotBeNull("worker should have a logger");
@@ -203,21 +179,30 @@ public class LoggingCategoryTests
     [Fact]
     public void GrpcDurableTaskWorker_UsesRegularLogger_WhenLegacyCategoriesDisabled()
     {
-        // Arrange
+        // Arrange & Act
+        var worker = CreateWorkerWithLoggingOptions(useLegacyCategories: false);
+        var logger = GetWorkerLogger(worker);
+
+        // Assert - verify the worker uses a regular logger (not DualCategoryLogger) when legacy categories are disabled
+        logger.Should().NotBeNull("worker should have a logger");
+        logger.Should().NotBeOfType<DualCategoryLogger>("worker should not use DualCategoryLogger when UseLegacyCategories is false");
+    }
+
+    static GrpcDurableTaskWorker CreateWorkerWithLoggingOptions(bool useLegacyCategories)
+    {
         var logProvider = new TestLogProvider(new NullOutput());
         var loggerFactory = new SimpleLoggerFactory(logProvider);
 
         var workerOptions = new DurableTaskWorkerOptions
         {
-            Logging = { UseLegacyCategories = false }
+            Logging = { UseLegacyCategories = useLegacyCategories }
         };
 
         var grpcOptions = new GrpcDurableTaskWorkerOptions();
         var factoryMock = new Mock<IDurableTaskFactory>(MockBehavior.Strict);
         var services = new ServiceCollection().BuildServiceProvider();
 
-        // Act - Create worker which will create the logger internally
-        var worker = new GrpcDurableTaskWorker(
+        return new GrpcDurableTaskWorker(
             name: "Test",
             factory: factoryMock.Object,
             grpcOptions: new OptionsMonitorStub<GrpcDurableTaskWorkerOptions>(grpcOptions),
@@ -226,14 +211,12 @@ public class LoggingCategoryTests
             loggerFactory: loggerFactory,
             orchestrationFilter: null,
             exceptionPropertiesProvider: null);
+    }
 
-        // Use reflection to access the private logger field
+    static object? GetWorkerLogger(GrpcDurableTaskWorker worker)
+    {
         var loggerField = typeof(GrpcDurableTaskWorker).GetField("logger", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        var logger = loggerField?.GetValue(worker);
-
-        // Assert - verify the worker uses a regular logger (not DualCategoryLogger) when legacy categories are disabled
-        logger.Should().NotBeNull("worker should have a logger");
-        logger.Should().NotBeOfType<DualCategoryLogger>("worker should not use DualCategoryLogger when UseLegacyCategories is false");
+        return loggerField?.GetValue(worker);
     }
 
 }

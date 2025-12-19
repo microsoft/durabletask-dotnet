@@ -67,15 +67,14 @@ public sealed class LoggerOrchestrationAnalyzer : OrchestrationAnalyzer<LoggerOr
             HashSet<IParameterSymbol> reportedParameters = new(SymbolEqualityComparer.Default);
 
             // Check for ILogger parameters in the method signature
-            foreach (IParameterSymbol parameter in methodSymbol.Parameters)
+            foreach (IParameterSymbol parameter in methodSymbol.Parameters.Where(
+                         parameter => this.IsILoggerType(parameter.Type) &&
+                                      parameter.DeclaringSyntaxReferences.Length > 0))
             {
-                if (this.IsILoggerType(parameter.Type) && parameter.DeclaringSyntaxReferences.Length > 0)
-                {
-                    // Found an ILogger parameter - report diagnostic at the parameter location
-                    SyntaxNode parameterSyntax = parameter.DeclaringSyntaxReferences[0].GetSyntax();
-                    reportDiagnostic(RoslynExtensions.BuildDiagnostic(Rule, parameterSyntax, methodSymbol.Name, orchestrationName));
-                    reportedParameters.Add(parameter);
-                }
+                // Found an ILogger parameter - report diagnostic at the parameter location
+                SyntaxNode parameterSyntax = parameter.DeclaringSyntaxReferences[0].GetSyntax();
+                reportDiagnostic(RoslynExtensions.BuildDiagnostic(Rule, parameterSyntax, methodSymbol.Name, orchestrationName));
+                reportedParameters.Add(parameter);
             }
 
             // Check for ILogger field or property references (but not parameter references, as those were already reported)

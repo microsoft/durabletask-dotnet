@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace Microsoft.DurableTask.Worker;
+namespace Microsoft.DurableTask.Worker.Grpc;
 
 /// <summary>
 /// A logger wrapper that emits logs to both a primary (new) category and an optional legacy category.
@@ -11,10 +11,9 @@ namespace Microsoft.DurableTask.Worker;
 /// <remarks>
 /// This logger is used to maintain backward compatibility while transitioning to more specific logging categories.
 /// When legacy categories are enabled, log messages are written to both the new specific category
-/// (e.g., "Microsoft.DurableTask.Worker.Grpc" or "Microsoft.DurableTask.Worker.Orchestration")
-/// and the legacy broad category (e.g., "Microsoft.DurableTask").
+/// (e.g., "Microsoft.DurableTask.Worker.Grpc") and the legacy broad category (e.g., "Microsoft.DurableTask").
 /// </remarks>
-internal sealed class DualCategoryLogger : ILogger
+sealed class DualCategoryLogger : ILogger
 {
     readonly ILogger primaryLogger;
     readonly ILogger? legacyLogger;

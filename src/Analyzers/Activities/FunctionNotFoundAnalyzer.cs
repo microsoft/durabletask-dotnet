@@ -222,6 +222,17 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
             // At the end of the compilation, we correlate the invocations with the definitions
             context.RegisterCompilationEndAction(ctx =>
             {
+                ctx.CancellationToken.ThrowIfCancellationRequested();
+
+                // Scan referenced assemblies for activities and orchestrators
+                ScanReferencedAssemblies(
+                    ctx.Compilation,
+                    knownSymbols,
+                    taskActivityRunAsync,
+                    activityNames,
+                    orchestratorNames,
+                    ctx.CancellationToken);
+
                 // Create lookup sets for faster searching
                 HashSet<string> definedActivities = new(activityNames);
                 HashSet<string> definedOrchestrators = new(orchestratorNames);
@@ -285,6 +296,106 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
         }
 
         return false;
+    }
+
+    static void ScanReferencedAssemblies(
+        Compilation compilation,
+        KnownTypeSymbols knownSymbols,
+        IMethodSymbol? taskActivityRunAsync,
+        ConcurrentBag<string> activityNames,
+        ConcurrentBag<string> orchestratorNames,
+        CancellationToken cancellationToken)
+    {
+        // Scan all referenced assemblies for activities and orchestrators
+        foreach (IAssemblySymbol assembly in compilation.References
+            .Select(r => compilation.GetAssemblyOrModuleSymbol(r))
+            .OfType<IAssemblySymbol>())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Get all types in the assembly
+            ScanNamespaceForFunctions(
+                assembly.GlobalNamespace,
+                knownSymbols,
+                taskActivityRunAsync,
+                activityNames,
+                orchestratorNames,
+                cancellationToken);
+        }
+    }
+
+    static void ScanNamespaceForFunctions(
+        INamespaceSymbol namespaceSymbol,
+        KnownTypeSymbols knownSymbols,
+        IMethodSymbol? taskActivityRunAsync,
+        ConcurrentBag<string> activityNames,
+        ConcurrentBag<string> orchestratorNames,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Scan types in this namespace
+        foreach (INamedTypeSymbol typeSymbol in namespaceSymbol.GetTypeMembers())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Check for TaskActivity<TInput, TOutput> derived classes
+            if (knownSymbols.TaskActivityBase != null &&
+                taskActivityRunAsync != null &&
+                !typeSymbol.IsAbstract &&
+                ClassOverridesMethod(typeSymbol, taskActivityRunAsync))
+            {
+                activityNames.Add(typeSymbol.Name);
+            }
+
+            // Check for ITaskOrchestrator implementations (class-based orchestrators)
+            if (knownSymbols.TaskOrchestratorInterface != null &&
+                typeSymbol.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, knownSymbols.TaskOrchestratorInterface)))
+            {
+                orchestratorNames.Add(typeSymbol.Name);
+            }
+
+            // Check methods for [Function] + [ActivityTrigger] or [OrchestrationTrigger]
+            foreach (ISymbol member in typeSymbol.GetMembers())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (member is not IMethodSymbol methodSymbol)
+                {
+                    continue;
+                }
+
+                // Check for Activity defined via [ActivityTrigger]
+                if (knownSymbols.ActivityTriggerAttribute != null &&
+                    methodSymbol.ContainsAttributeInAnyMethodArguments(knownSymbols.ActivityTriggerAttribute) &&
+                    knownSymbols.FunctionNameAttribute != null &&
+                    methodSymbol.TryGetSingleValueFromAttribute(knownSymbols.FunctionNameAttribute, out string functionName))
+                {
+                    activityNames.Add(functionName);
+                }
+
+                // Check for Orchestrator defined via [OrchestrationTrigger]
+                if (knownSymbols.FunctionOrchestrationAttribute != null &&
+                    methodSymbol.ContainsAttributeInAnyMethodArguments(knownSymbols.FunctionOrchestrationAttribute) &&
+                    knownSymbols.FunctionNameAttribute != null &&
+                    methodSymbol.TryGetSingleValueFromAttribute(knownSymbols.FunctionNameAttribute, out string orchestratorFunctionName))
+                {
+                    orchestratorNames.Add(orchestratorFunctionName);
+                }
+            }
+        }
+
+        // Recursively scan nested namespaces
+        foreach (INamespaceSymbol nestedNamespace in namespaceSymbol.GetNamespaceMembers())
+        {
+            ScanNamespaceForFunctions(
+                nestedNamespace,
+                knownSymbols,
+                taskActivityRunAsync,
+                activityNames,
+                orchestratorNames,
+                cancellationToken);
+        }
     }
 
     readonly struct FunctionInvocation(string name, SyntaxNode invocationSyntaxNode)

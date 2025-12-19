@@ -362,6 +362,103 @@ async Task ExistingOrchestrator([OrchestrationTrigger] TaskOrchestrationContext 
         await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
     }
 
+    [Fact]
+    public async Task ActivityInvocationWithActivityDefinedInReferencedAssembly_NoDiagnostic()
+    {
+        // Arrange - Orchestrator in main project
+        string orchestratorCode = Wrapper.WrapDurableFunctionOrchestration(@"
+async Task Method(TaskOrchestrationContext context)
+{
+    await context.CallActivityAsync(""SayHello"", ""Tokyo"");
+}
+");
+
+        // Activity in referenced assembly (simulated via additional source file with different class name)
+        string activityCode = @"
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.DurableTask;
+
+class ActivityFunctions
+{
+    [Function(""SayHello"")]
+    void SayHello([ActivityTrigger] string name)
+    {
+    }
+}
+";
+
+        void configureTest(VerifyCS.Test test) => test.TestState.Sources.Add(activityCode);
+
+        // Act & Assert
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(orchestratorCode, configureTest);
+    }
+
+    [Fact]
+    public async Task SubOrchestrationInvocationWithOrchestratorDefinedInReferencedAssembly_NoDiagnostic()
+    {
+        // Arrange - Parent orchestrator in main project
+        string parentOrchestratorCode = Wrapper.WrapDurableFunctionOrchestration(@"
+async Task Method(TaskOrchestrationContext context)
+{
+    await context.CallSubOrchestratorAsync(""ChildOrchestration"", ""input"");
+}
+");
+
+        // Child orchestrator in referenced assembly (simulated via additional source file with different class name)
+        string childOrchestratorCode = @"
+using System.Threading.Tasks;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.DurableTask;
+
+class ChildOrchestrators
+{
+    [Function(""ChildOrchestration"")]
+    async Task ChildOrchestration([OrchestrationTrigger] TaskOrchestrationContext context)
+    {
+        await Task.CompletedTask;
+    }
+}
+";
+
+        void configureTest(VerifyCS.Test test) => test.TestState.Sources.Add(childOrchestratorCode);
+
+        // Act & Assert
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(parentOrchestratorCode, configureTest);
+    }
+
+    [Fact]
+    public async Task ClassBasedActivityInvocationWithActivityDefinedInReferencedAssembly_NoDiagnostic()
+    {
+        // Arrange - Orchestrator in main project
+        string orchestratorCode = Wrapper.WrapTaskOrchestrator(@"
+public class Caller {
+    async Task Method(TaskOrchestrationContext context)
+    {
+        await context.CallActivityAsync<string>(nameof(MyActivity), ""Tokyo"");
+    }
+}
+");
+
+        // Class-based activity in referenced assembly (simulated via additional source file)
+        string activityCode = @"
+using System.Threading.Tasks;
+using Microsoft.DurableTask;
+
+public class MyActivity : TaskActivity<string, string>
+{
+    public override Task<string> RunAsync(TaskActivityContext context, string cityName)
+    {
+        return Task.FromResult(cityName);
+    }
+}
+";
+
+        void configureTest(VerifyCS.Test test) => test.TestState.Sources.Add(activityCode);
+
+        // Act & Assert
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(orchestratorCode, configureTest);
+    }
+
     static DiagnosticResult BuildActivityNotFoundDiagnostic()
     {
         return VerifyCS.Diagnostic(FunctionNotFoundAnalyzer.ActivityNotFoundDiagnosticId);

@@ -63,7 +63,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         this.invocationContext = Check.NotNull(invocationContext);
         this.Properties = Check.NotNull(properties);
 
-        this.logger = this.CreateReplaySafeLogger("Microsoft.DurableTask");
+        this.logger = this.CreateReplaySafeLogger("Microsoft.DurableTask.Worker.Orchestration");
         this.deserializedInput = deserializedInput;
     }
 
@@ -540,5 +540,31 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         }
 
         return string.Empty;
+    }
+
+    /// <inheritdoc/>
+    public override ILogger CreateReplaySafeLogger(string categoryName)
+    {
+        // For orchestration logs, use dual-category logging if legacy categories are enabled
+        if (categoryName == "Microsoft.DurableTask.Worker.Orchestration" &&
+            this.invocationContext.Options.Logging.UseLegacyCategories)
+        {
+            ILogger primaryLogger = this.LoggerFactory.CreateLogger(categoryName);
+            ILogger legacyLogger = this.LoggerFactory.CreateLogger("Microsoft.DurableTask");
+            ILogger dualLogger = new DualCategoryLogger(primaryLogger, legacyLogger);
+
+            // Wrap the dual logger in a ReplaySafeLogger by calling the base implementation
+            // with a temporary category, then using reflection to replace the inner logger
+            var tempLogger = base.CreateReplaySafeLogger("temp");
+            var loggerField = tempLogger.GetType().GetField(
+                "logger",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            loggerField?.SetValue(tempLogger, dualLogger);
+
+            return tempLogger;
+        }
+
+        // For all other categories, use the default behavior
+        return base.CreateReplaySafeLogger(categoryName);
     }
 }

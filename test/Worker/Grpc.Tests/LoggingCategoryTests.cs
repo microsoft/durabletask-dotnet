@@ -20,6 +20,7 @@ namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 public class LoggingCategoryTests
 {
     const string NewGrpcCategory = "Microsoft.DurableTask.Worker.Grpc";
+    const string LegacyCategory = "Microsoft.DurableTask";
 
     [Fact]
     public void Worker_UsesLegacyCategories_ByDefault()
@@ -195,14 +196,14 @@ public class LoggingCategoryTests
         ILogger testLogger = loggerFactory.CreateLogger(NewGrpcCategory);
         testLogger.LogInformation("Integration test log");
 
-        ILogger legacyLogger = loggerFactory.CreateLogger("Microsoft.DurableTask");
+        ILogger legacyLogger = loggerFactory.CreateLogger(LegacyCategory);
         legacyLogger.LogInformation("Integration test log");
 
         // Assert - verify both categories receive logs
         logProvider.TryGetLogs(NewGrpcCategory, out var newLogs).Should().BeTrue("new category logger should receive logs");
         newLogs.Should().NotBeEmpty("logs should be written to new category");
 
-        logProvider.TryGetLogs("Microsoft.DurableTask", out var legacyLogs).Should().BeTrue("legacy category logger should receive logs");
+        logProvider.TryGetLogs(LegacyCategory, out var legacyLogs).Should().BeTrue("legacy category logger should receive logs");
         legacyLogs.Should().NotBeEmpty("logs should be written to legacy category");
     }
 
@@ -245,7 +246,7 @@ public class LoggingCategoryTests
         // Verify we didn't create a legacy logger (by checking directly)
         // The TestLogProvider uses StartsWith, so we check that no logs exist with exactly the legacy category
         var allLogs = newLogs.ToList();
-        allLogs.Should().NotContain(log => log.Category == "Microsoft.DurableTask", 
+        allLogs.Should().NotContain(log => log.Category == LegacyCategory, 
             "no logs should have exactly the legacy category when disabled");
     }
 

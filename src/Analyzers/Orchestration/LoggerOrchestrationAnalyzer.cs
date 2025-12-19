@@ -68,15 +68,12 @@ public sealed class LoggerOrchestrationAnalyzer : OrchestrationAnalyzer<LoggerOr
             // Check for ILogger parameters in the method signature
             foreach (IParameterSymbol parameter in methodSymbol.Parameters)
             {
-                if (this.IsILoggerType(parameter.Type))
+                if (this.IsILoggerType(parameter.Type) && parameter.DeclaringSyntaxReferences.Length > 0)
                 {
                     // Found an ILogger parameter - report diagnostic at the parameter location
-                    if (parameter.DeclaringSyntaxReferences.Length > 0)
-                    {
-                        SyntaxNode parameterSyntax = parameter.DeclaringSyntaxReferences[0].GetSyntax();
-                        reportDiagnostic(RoslynExtensions.BuildDiagnostic(Rule, parameterSyntax, methodSymbol.Name, orchestrationName));
-                        reportedParameters.Add(parameter);
-                    }
+                    SyntaxNode parameterSyntax = parameter.DeclaringSyntaxReferences[0].GetSyntax();
+                    reportDiagnostic(RoslynExtensions.BuildDiagnostic(Rule, parameterSyntax, methodSymbol.Name, orchestrationName));
+                    reportedParameters.Add(parameter);
                 }
             }
 

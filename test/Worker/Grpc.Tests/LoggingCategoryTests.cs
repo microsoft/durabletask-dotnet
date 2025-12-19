@@ -165,7 +165,7 @@ public class LoggingCategoryTests
     }
 
     [Fact]
-    public void GrpcDurableTaskWorker_EmitsToBothCategories_WhenLegacyCategoriesEnabled()
+    public void GrpcDurableTaskWorker_UsesDualCategoryLogger_WhenLegacyCategoriesEnabled()
     {
         // Arrange
         var logProvider = new TestLogProvider(new NullOutput());
@@ -181,7 +181,7 @@ public class LoggingCategoryTests
         var services = new ServiceCollection().BuildServiceProvider();
 
         // Act - Create worker which will create the logger internally
-        _ = new GrpcDurableTaskWorker(
+        var worker = new GrpcDurableTaskWorker(
             name: "Test",
             factory: factoryMock.Object,
             grpcOptions: new OptionsMonitorStub<GrpcDurableTaskWorkerOptions>(grpcOptions),
@@ -191,24 +191,17 @@ public class LoggingCategoryTests
             orchestrationFilter: null,
             exceptionPropertiesProvider: null);
 
-        // Trigger a log by using the worker's logger (accessed via reflection or by starting the worker)
-        // Since we can't easily access the private logger, we verify that loggers were created
-        ILogger testLogger = loggerFactory.CreateLogger(NewGrpcCategory);
-        testLogger.LogInformation("Integration test log");
+        // Use reflection to access the private logger field
+        var loggerField = typeof(GrpcDurableTaskWorker).GetField("logger", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var logger = loggerField?.GetValue(worker);
 
-        ILogger legacyLogger = loggerFactory.CreateLogger(LegacyCategory);
-        legacyLogger.LogInformation("Integration test log");
-
-        // Assert - verify both categories receive logs
-        logProvider.TryGetLogs(NewGrpcCategory, out var newLogs).Should().BeTrue("new category logger should receive logs");
-        newLogs.Should().NotBeEmpty("logs should be written to new category");
-
-        logProvider.TryGetLogs(LegacyCategory, out var legacyLogs).Should().BeTrue("legacy category logger should receive logs");
-        legacyLogs.Should().NotBeEmpty("logs should be written to legacy category");
+        // Assert - verify the worker uses DualCategoryLogger when legacy categories are enabled
+        logger.Should().NotBeNull("worker should have a logger");
+        logger.Should().BeOfType<DualCategoryLogger>("worker should use DualCategoryLogger when UseLegacyCategories is true");
     }
 
     [Fact]
-    public void GrpcDurableTaskWorker_EmitsToNewCategoryOnly_WhenLegacyCategoriesDisabled()
+    public void GrpcDurableTaskWorker_UsesRegularLogger_WhenLegacyCategoriesDisabled()
     {
         // Arrange
         var logProvider = new TestLogProvider(new NullOutput());
@@ -224,7 +217,7 @@ public class LoggingCategoryTests
         var services = new ServiceCollection().BuildServiceProvider();
 
         // Act - Create worker which will create the logger internally
-        _ = new GrpcDurableTaskWorker(
+        var worker = new GrpcDurableTaskWorker(
             name: "Test",
             factory: factoryMock.Object,
             grpcOptions: new OptionsMonitorStub<GrpcDurableTaskWorkerOptions>(grpcOptions),
@@ -234,20 +227,13 @@ public class LoggingCategoryTests
             orchestrationFilter: null,
             exceptionPropertiesProvider: null);
 
-        // Trigger a log only to the new category
-        ILogger testLogger = loggerFactory.CreateLogger(NewGrpcCategory);
-        testLogger.LogInformation("Integration test log");
+        // Use reflection to access the private logger field
+        var loggerField = typeof(GrpcDurableTaskWorker).GetField("logger", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var logger = loggerField?.GetValue(worker);
 
-        // Assert - verify logs appear only in new category
-        logProvider.TryGetLogs(NewGrpcCategory, out var newLogs).Should().BeTrue("new category logger should receive logs");
-        newLogs.Should().NotBeEmpty("logs should be written to new category");
-        newLogs.Should().AllSatisfy(log => log.Category.Should().Be(NewGrpcCategory, "all logs should be in new category"));
-
-        // Verify we didn't create a legacy logger (by checking directly)
-        // The TestLogProvider uses StartsWith, so we check that no logs exist with exactly the legacy category
-        var allLogs = newLogs.ToList();
-        allLogs.Should().NotContain(log => log.Category == LegacyCategory, 
-            "no logs should have exactly the legacy category when disabled");
+        // Assert - verify the worker uses a regular logger (not DualCategoryLogger) when legacy categories are disabled
+        logger.Should().NotBeNull("worker should have a logger");
+        logger.Should().NotBeOfType<DualCategoryLogger>("worker should not use DualCategoryLogger when UseLegacyCategories is false");
     }
 
 }

@@ -14,7 +14,7 @@ namespace Microsoft.DurableTask.Worker;
 /// (e.g., "Microsoft.DurableTask.Worker.Grpc" or "Microsoft.DurableTask.Worker.Orchestration")
 /// and the legacy broad category (e.g., "Microsoft.DurableTask").
 /// </remarks>
-public sealed class DualCategoryLogger : ILogger
+internal sealed class DualCategoryLogger : ILogger
 {
     readonly ILogger primaryLogger;
     readonly ILogger? legacyLogger;

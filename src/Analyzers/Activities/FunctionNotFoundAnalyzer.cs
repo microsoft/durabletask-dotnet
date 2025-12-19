@@ -360,7 +360,7 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
         CancellationToken cancellationToken)
     {
         // Scan all referenced assemblies for activities and orchestrators
-        // Skip system assemblies and assemblies without Durable symbols for performance
+        // Skip system assemblies for performance
         foreach (MetadataReference reference in compilation.References)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -375,12 +375,7 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
                 continue;
             }
 
-            if (!ShouldScanAssembly(assembly, knownSymbols))
-            {
-                continue;
-            }
-
-            // Scan this assembly
+            // Scan this assembly - if it doesn't contain Durable functions, nothing will be added
             ScanNamespaceForFunctions(
                 assembly.GlobalNamespace,
                 knownSymbols,
@@ -406,81 +401,6 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
             return true;
         }
 
-        return false;
-    }
-
-    static bool ShouldScanAssembly(IAssemblySymbol assembly, KnownTypeSymbols knownSymbols)
-    {
-        // Check if assembly contains any Durable Task symbols using semantic lookup
-        // This is more robust than checking assembly references
-        return ContainsDurableSymbols(assembly.GlobalNamespace, knownSymbols);
-    }
-
-    static bool ContainsDurableSymbols(INamespaceSymbol namespaceSymbol, KnownTypeSymbols knownSymbols)
-    {
-        // Check types in this namespace for Durable Task symbols
-        foreach (INamedTypeSymbol typeSymbol in namespaceSymbol.GetTypeMembers())
-        {
-            // Check if type derives from TaskActivity
-            if (knownSymbols.TaskActivityBase != null && DerivesFrom(typeSymbol, knownSymbols.TaskActivityBase))
-            {
-                return true;
-            }
-
-            // Check if type implements ITaskOrchestrator
-            if (knownSymbols.TaskOrchestratorInterface != null && 
-                ImplementsInterface(typeSymbol, knownSymbols.TaskOrchestratorInterface))
-            {
-                return true;
-            }
-
-            // Check methods for Durable Task attributes
-            foreach (ISymbol member in typeSymbol.GetMembers())
-            {
-                if (member is not IMethodSymbol methodSymbol)
-                {
-                    continue;
-                }
-
-                // Check for ActivityTrigger attribute
-                if (knownSymbols.ActivityTriggerAttribute != null &&
-                    methodSymbol.ContainsAttributeInAnyMethodArguments(knownSymbols.ActivityTriggerAttribute))
-                {
-                    return true;
-                }
-
-                // Check for OrchestrationTrigger attribute
-                if (knownSymbols.FunctionOrchestrationAttribute != null &&
-                    methodSymbol.ContainsAttributeInAnyMethodArguments(knownSymbols.FunctionOrchestrationAttribute))
-                {
-                    return true;
-                }
-            }
-        }
-
-        // Recursively check nested namespaces
-        foreach (INamespaceSymbol nestedNamespace in namespaceSymbol.GetNamespaceMembers())
-        {
-            if (ContainsDurableSymbols(nestedNamespace, knownSymbols))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    static bool DerivesFrom(INamedTypeSymbol typeSymbol, INamedTypeSymbol baseType)
-    {
-        INamedTypeSymbol? current = typeSymbol.BaseType;
-        while (current != null)
-        {
-            if (SymbolEqualityComparer.Default.Equals(current.OriginalDefinition, baseType))
-            {
-                return true;
-            }
-            current = current.BaseType;
-        }
         return false;
     }
 

@@ -28,6 +28,15 @@ public sealed class GrpcSidecarFixture : IDisposable
         // Use a random port number to allow multiple instances to run in parallel
         string address = $"http://{ListenHost}:{Random.Shared.Next(30000, 40000)}";
         this.host = Host.CreateDefaultBuilder()
+            .ConfigureLogging(logging =>
+            {
+                // Reduce logging verbosity to make test output more readable and organized.
+                // Filter out noisy ASP.NET Core and gRPC infrastructure logs while keeping
+                // important DurableTask sidecar logs for debugging.
+                logging.SetMinimumLevel(LogLevel.Warning);
+                logging.AddFilter("Microsoft.DurableTask.Sidecar", LogLevel.Information);
+                logging.AddFilter("Microsoft.Hosting.Lifetime", LogLevel.Information);
+            })
             .ConfigureWebHostDefaults(webBuilder =>
             {
                 webBuilder

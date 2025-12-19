@@ -18,7 +18,7 @@ public sealed class LoggerOrchestrationAnalyzer : OrchestrationAnalyzer<LoggerOr
     /// <summary>
     /// Diagnostic ID supported for the analyzer.
     /// </summary>
-    public const string DiagnosticId = "DURABLE0009";
+    public const string DiagnosticId = "DURABLE0010";
 
     static readonly LocalizableString Title = new LocalizableResourceString(nameof(Resources.LoggerOrchestrationAnalyzerTitle), Resources.ResourceManager, typeof(Resources));
     static readonly LocalizableString MessageFormat = new LocalizableResourceString(nameof(Resources.LoggerOrchestrationAnalyzerMessageFormat), Resources.ResourceManager, typeof(Resources));

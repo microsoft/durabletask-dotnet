@@ -360,7 +360,7 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
         CancellationToken cancellationToken)
     {
         // Scan all referenced assemblies for activities and orchestrators
-        // Skip system assemblies for performance
+        // Skip system assemblies and assemblies without Durable Task references for performance
         foreach (MetadataReference reference in compilation.References)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -371,6 +371,11 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
             }
 
             if (IsSystemAssembly(assembly))
+            {
+                continue;
+            }
+
+            if (!ShouldScanAssembly(assembly))
             {
                 continue;
             }
@@ -399,6 +404,24 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
         if (SystemAssemblyPrefixes.Any(prefix => assemblyName.StartsWith(prefix, StringComparison.Ordinal)))
         {
             return true;
+        }
+
+        return false;
+    }
+
+    static bool ShouldScanAssembly(IAssemblySymbol assembly)
+    {
+        // Only scan assemblies that reference Durable Task types
+        // This filters out transitive dependencies that don't contain activities/orchestrators
+        foreach (AssemblyIdentity referencedAssembly in assembly.Modules.SelectMany(m => m.ReferencedAssemblies))
+        {
+            string refName = referencedAssembly.Name;
+            if (refName == "Microsoft.DurableTask.Abstractions" ||
+                refName == "Microsoft.DurableTask.Worker" ||
+                refName == "Microsoft.Azure.Functions.Worker.Extensions.DurableTask")
+            {
+                return true;
+            }
         }
 
         return false;

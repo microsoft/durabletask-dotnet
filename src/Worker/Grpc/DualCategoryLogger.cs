@@ -86,8 +86,35 @@ sealed class DualCategoryLogger : ILogger
 
         public void Dispose()
         {
-            this.first.Dispose();
-            this.second.Dispose();
+            Exception? firstException = null;
+
+            try
+            {
+                this.first.Dispose();
+            }
+            catch (Exception ex)
+            {
+                firstException = ex;
+            }
+
+            try
+            {
+                this.second.Dispose();
+            }
+            catch (Exception ex)
+            {
+                if (firstException is null)
+                {
+                    throw;
+                }
+
+                throw new AggregateException(firstException, ex);
+            }
+
+            if (firstException is not null)
+            {
+                throw firstException;
+            }
         }
     }
 }

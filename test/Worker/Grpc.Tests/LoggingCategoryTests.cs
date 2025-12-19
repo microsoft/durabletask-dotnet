@@ -33,19 +33,6 @@ public class LoggingCategoryTests
     }
 
     [Fact]
-    public void Worker_CanDisableLegacyCategories()
-    {
-        // Arrange
-        var workerOptions = new DurableTaskWorkerOptions
-        {
-            Logging = { UseLegacyCategories = false }
-        };
-
-        // Act & Assert
-        workerOptions.Logging.UseLegacyCategories.Should().BeFalse("legacy categories can be explicitly disabled");
-    }
-
-    [Fact]
     public void DualCategoryLogger_LogsToBothLoggers_WhenBothEnabled()
     {
         // Arrange

@@ -246,28 +246,8 @@ public class DurableTaskWorkerOptions
     }
 
     /// <summary>
-    /// Options for the Durable Task worker logging.
+    /// Options for configuring Durable Task worker logging behavior.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// These options control how logging categories are assigned to different components of the worker.
-    /// Starting from a future version, more specific logging categories will be used for better log filtering:
-    /// <list type="bullet">
-    /// <item><description><c>Microsoft.DurableTask.Worker.Grpc</c> for gRPC worker logs (previously <c>Microsoft.DurableTask</c>)</description></item>
-    /// <item><description><c>Microsoft.DurableTask.Worker.*</c> for worker-specific logs</description></item>
-    /// </list>
-    /// </para><para>
-    /// To maintain backward compatibility, legacy logging categories are emitted by default alongside the new
-    /// categories until a future major release. This ensures existing log filters continue to work.
-    /// </para><para>
-    /// <b>Migration Path:</b>
-    /// <list type="number">
-    /// <item><description>Update your log filters to use the new, more specific categories</description></item>
-    /// <item><description>Test your application to ensure logs are captured correctly</description></item>
-    /// <item><description>Once confident, set <see cref="UseLegacyCategories" /> to <c>false</c> to disable legacy category emission</description></item>
-    /// </list>
-    /// </para>
-    /// </remarks>
     public class LoggingOptions
     {
         /// <summary>
@@ -275,15 +255,30 @@ public class DurableTaskWorkerOptions
         /// </summary>
         /// <remarks>
         /// <para>
+        /// Starting from a future version, more specific logging categories will be used for better log filtering:
+        /// <list type="bullet">
+        /// <item><description><c>Microsoft.DurableTask.Worker.Grpc</c> for gRPC worker logs (previously <c>Microsoft.DurableTask</c>)</description></item>
+        /// <item><description><c>Microsoft.DurableTask.Worker.*</c> for worker-specific logs</description></item>
+        /// </list>
+        /// </para>
+        /// <para>
         /// When <c>true</c> (default), logs are emitted to both the new specific categories (e.g., <c>Microsoft.DurableTask.Worker.Grpc</c>)
         /// and the legacy broad categories (e.g., <c>Microsoft.DurableTask</c>). This ensures backward compatibility with existing
         /// log filters and queries.
-        /// </para><para>
+        /// </para>
+        /// <para>
         /// When <c>false</c>, logs are only emitted to the new specific categories, which provides better log organization
         /// and filtering capabilities.
-        /// </para><para>
-        /// <b>Default:</b> <c>true</c> (legacy categories are enabled for backward compatibility)
-        /// </para><para>
+        /// </para>
+        /// <para>
+        /// <b>Migration Path:</b>
+        /// <list type="number">
+        /// <item><description>Update your log filters to use the new, more specific categories</description></item>
+        /// <item><description>Test your application to ensure logs are captured correctly</description></item>
+        /// <item><description>Once confident, set this property to <c>false</c> to disable legacy category emission</description></item>
+        /// </list>
+        /// </para>
+        /// <para>
         /// <b>Breaking Change Warning:</b> Setting this to <c>false</c> is a breaking change if you have existing log filters,
         /// queries, or monitoring rules that depend on the legacy category names. Ensure you update those before disabling
         /// legacy categories.

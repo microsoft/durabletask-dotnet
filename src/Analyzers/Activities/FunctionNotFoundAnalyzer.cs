@@ -396,12 +396,9 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
             return true;
         }
 
-        foreach (string prefix in SystemAssemblyPrefixes)
+        if (SystemAssemblyPrefixes.Any(prefix => assemblyName.StartsWith(prefix, StringComparison.Ordinal)))
         {
-            if (assemblyName.StartsWith(prefix, StringComparison.Ordinal))
-            {
-                return true;
-            }
+            return true;
         }
 
         return false;

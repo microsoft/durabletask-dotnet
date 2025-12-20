@@ -99,6 +99,7 @@ using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 ";
     }
 

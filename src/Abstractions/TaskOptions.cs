@@ -125,7 +125,6 @@ public record SubOrchestrationOptions : TaskOptions
     public SubOrchestrationOptions(SubOrchestrationOptions options)
         : base(options)
     {
-        Check.NotNull(options);
         this.InstanceId = options.InstanceId;
         this.Version = options.Version;
     }

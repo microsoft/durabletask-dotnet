@@ -230,6 +230,25 @@ namespace Microsoft.DurableTask.Generators
             return null;
         }
 
+        /// <summary>
+        /// Determines if code generation should be skipped for Durable Functions scenarios.
+        /// Returns true if only entities exist, since entities don't generate extension methods
+        /// and Durable Functions handles their registration natively.
+        /// </summary>
+        static bool ShouldSkipGenerationForDurableFunctions(
+            bool isDurableFunctions,
+            List<DurableTaskTypeInfo> orchestrators,
+            List<DurableTaskTypeInfo> activities,
+            ImmutableArray<DurableEventTypeInfo> allEvents,
+            ImmutableArray<DurableFunction> allFunctions)
+        {
+            return isDurableFunctions &&
+                orchestrators.Count == 0 &&
+                activities.Count == 0 &&
+                allEvents.Length == 0 &&
+                allFunctions.Length == 0;
+        }
+
         static void Execute(
             SourceProductionContext context,
             Compilation compilation,
@@ -277,14 +296,10 @@ namespace Microsoft.DurableTask.Generators
             // With Durable Functions' native support for class-based invocations (PR #3229),
             // we no longer generate [Function] definitions for class-based tasks.
             // If we have ONLY entities (no orchestrators, no activities, no events, no method-based functions),
-            // then there's nothing to generate for Durable Functions scenarios.
-            if (isDurableFunctions &&
-                orchestrators.Count == 0 &&
-                activities.Count == 0 &&
-                allEvents.Length == 0 &&
-                allFunctions.Length == 0)
+            // then there's nothing to generate for Durable Functions scenarios since entities don't have
+            // extension methods.
+            if (ShouldSkipGenerationForDurableFunctions(isDurableFunctions, orchestrators, activities, allEvents, allFunctions))
             {
-                // Only entities remain, and entities don't generate extension methods
                 return;
             }
 
@@ -312,8 +327,10 @@ namespace Microsoft.DurableTask
     {");
 
             // Note: With Durable Functions' native support for class-based invocations (PR #3229),
-            // we no longer generate [Function] definitions for class-based tasks to avoid duplicates.
-            // The Durable Functions runtime now handles this automatically.
+            // we no longer generate [Function] attribute definitions for class-based orchestrators,
+            // activities, and entities (i.e., classes that implement ITaskOrchestrator, ITaskActivity,
+            // or ITaskEntity and are decorated with [DurableTask] attribute). The Durable Functions
+            // runtime now handles function registration for these types automatically.
             // We continue to generate extension methods for type-safe invocation.
 
             foreach (DurableTaskTypeInfo orchestrator in orchestrators)
@@ -344,8 +361,10 @@ namespace Microsoft.DurableTask
                 AddEventSendMethod(sourceBuilder, eventInfo);
             }
 
-            // Note: GeneratedActivityContext is no longer needed since Durable Functions
-            // now natively handles class-based invocations without source generation.
+            // Note: The GeneratedActivityContext class and AddGeneratedActivityContextClass method
+            // are no longer needed for Durable Functions since the runtime now natively handles
+            // class-based invocations. These helper methods remain in the codebase but are not
+            // called in Durable Functions scenarios.
             
             if (!isDurableFunctions)
             {

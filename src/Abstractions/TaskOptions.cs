@@ -31,6 +31,17 @@ public record TaskOptions
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="TaskOptions"/> class by copying from another instance.
+    /// </summary>
+    /// <param name="options">The task options to copy from.</param>
+    public TaskOptions(TaskOptions options)
+    {
+        Check.NotNull(options);
+        this.Retry = options.Retry;
+        this.Tags = options.Tags;
+    }
+
+    /// <summary>
     /// Gets the task retry options.
     /// </summary>
     public TaskRetryOptions? Retry { get; init; }
@@ -96,10 +107,27 @@ public record SubOrchestrationOptions : TaskOptions
         : base(options)
     {
         this.InstanceId = instanceId;
-        if (instanceId is null && options is SubOrchestrationOptions derived)
+        if (options is SubOrchestrationOptions derived)
         {
-            this.InstanceId = derived.InstanceId;
+            if (instanceId is null)
+            {
+                this.InstanceId = derived.InstanceId;
+            }
+
+            this.Version = derived.Version;
         }
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SubOrchestrationOptions"/> class by copying from another instance.
+    /// </summary>
+    /// <param name="options">The sub-orchestration options to copy from.</param>
+    public SubOrchestrationOptions(SubOrchestrationOptions options)
+        : base(options)
+    {
+        Check.NotNull(options);
+        this.InstanceId = options.InstanceId;
+        this.Version = options.Version;
     }
 
     /// <summary>
@@ -116,15 +144,49 @@ public record SubOrchestrationOptions : TaskOptions
 /// <summary>
 /// Options for submitting new orchestrations via the client.
 /// </summary>
-/// <param name="InstanceId">
-/// The unique ID of the orchestration instance to schedule. If not specified, a new GUID value is used.
-/// </param>
-/// <param name="StartAt">
-/// The time when the orchestration instance should start executing. If not specified or if a date-time in the past
-/// is specified, the orchestration instance will be scheduled immediately.
-/// </param>
-public record StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null)
+public record StartOrchestrationOptions
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StartOrchestrationOptions"/> class.
+    /// </summary>
+    /// <param name="instanceId">
+    /// The unique ID of the orchestration instance to schedule. If not specified, a new GUID value is used.
+    /// </param>
+    /// <param name="startAt">
+    /// The time when the orchestration instance should start executing. If not specified or if a date-time in the past
+    /// is specified, the orchestration instance will be scheduled immediately.
+    /// </param>
+    public StartOrchestrationOptions(string? instanceId = null, DateTimeOffset? startAt = null)
+    {
+        this.InstanceId = instanceId;
+        this.StartAt = startAt;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StartOrchestrationOptions"/> class by copying from another instance.
+    /// </summary>
+    /// <param name="options">The start orchestration options to copy from.</param>
+    public StartOrchestrationOptions(StartOrchestrationOptions options)
+    {
+        Check.NotNull(options);
+        this.InstanceId = options.InstanceId;
+        this.StartAt = options.StartAt;
+        this.Tags = options.Tags;
+        this.Version = options.Version;
+        this.DedupeStatuses = options.DedupeStatuses;
+    }
+
+    /// <summary>
+    /// Gets the unique ID of the orchestration instance to schedule. If not specified, a new GUID value is used.
+    /// </summary>
+    public string? InstanceId { get; init; }
+
+    /// <summary>
+    /// Gets the time when the orchestration instance should start executing. If not specified or if a date-time in the past
+    /// is specified, the orchestration instance will be scheduled immediately.
+    /// </summary>
+    public DateTimeOffset? StartAt { get; init; }
+
     /// <summary>
     /// Gets the tags to associate with the orchestration instance.
     /// </summary>

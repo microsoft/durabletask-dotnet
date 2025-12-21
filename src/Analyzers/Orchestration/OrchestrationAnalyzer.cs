@@ -330,8 +330,15 @@ public class MethodProbeOrchestrationVisitor : OrchestrationVisitor
             {
                 // Since the syntax tree of the callee method might be different from the caller method, we need to get the correct semantic model,
                 // avoiding the exception 'Syntax node is not within syntax tree'.
+                // We also need to check if the syntax tree is part of the compilation to avoid 'SyntaxTree is not part of the compilation' exception.
+                if (!this.Compilation.ContainsSyntaxTree(calleeSyntax.SyntaxTree))
+                {
+                    // Skip this syntax tree if it's not part of the compilation (e.g., from external assemblies)
+                    continue;
+                }
+
                 SemanticModel sm = semanticModel.SyntaxTree == calleeSyntax.SyntaxTree ?
-                    semanticModel : semanticModel.Compilation.GetSemanticModel(calleeSyntax.SyntaxTree);
+                    semanticModel : this.Compilation.GetSemanticModel(calleeSyntax.SyntaxTree);
 
                 this.FindInvokedMethods(sm, calleeSyntax, calleeMethodSymbol, rootOrchestration, reportDiagnostic);
             }

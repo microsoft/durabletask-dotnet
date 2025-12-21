@@ -125,6 +125,7 @@ public record SubOrchestrationOptions : TaskOptions
     public SubOrchestrationOptions(SubOrchestrationOptions options)
         : base(options)
     {
+        Check.NotNull(options);
         this.InstanceId = options.InstanceId;
         this.Version = options.Version;
     }
@@ -148,17 +149,19 @@ public record StartOrchestrationOptions
     /// <summary>
     /// Initializes a new instance of the <see cref="StartOrchestrationOptions"/> class.
     /// </summary>
-    /// <param name="instanceId">
+    /// <param name="InstanceId">
     /// The unique ID of the orchestration instance to schedule. If not specified, a new GUID value is used.
     /// </param>
-    /// <param name="startAt">
+    /// <param name="StartAt">
     /// The time when the orchestration instance should start executing. If not specified or if a date-time in the past
     /// is specified, the orchestration instance will be scheduled immediately.
     /// </param>
-    public StartOrchestrationOptions(string? instanceId = null, DateTimeOffset? startAt = null)
+#pragma warning disable SA1313 // Parameter names should begin with lower-case letter - using PascalCase to maintain backward compatibility with positional record syntax
+    public StartOrchestrationOptions(string? InstanceId = null, DateTimeOffset? StartAt = null)
+#pragma warning restore SA1313
     {
-        this.InstanceId = instanceId;
-        this.StartAt = startAt;
+        this.InstanceId = InstanceId;
+        this.StartAt = StartAt;
     }
 
     /// <summary>

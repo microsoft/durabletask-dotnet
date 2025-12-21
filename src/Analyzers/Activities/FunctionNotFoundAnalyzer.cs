@@ -37,7 +37,7 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
         ActivityNotFoundTitle,
         ActivityNotFoundMessageFormat,
         AnalyzersCategories.Activity,
-        DiagnosticSeverity.Warning,
+        DiagnosticSeverity.Info,
         customTags: [WellKnownDiagnosticTags.CompilationEnd],
         isEnabledByDefault: true,
         helpLinkUri: "https://go.microsoft.com/fwlink/?linkid=2346202");
@@ -47,7 +47,7 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
         SubOrchestrationNotFoundTitle,
         SubOrchestrationNotFoundMessageFormat,
         AnalyzersCategories.Orchestration,
-        DiagnosticSeverity.Warning,
+        DiagnosticSeverity.Info,
         customTags: [WellKnownDiagnosticTags.CompilationEnd],
         isEnabledByDefault: true,
         helpLinkUri: "https://go.microsoft.com/fwlink/?linkid=2346202");

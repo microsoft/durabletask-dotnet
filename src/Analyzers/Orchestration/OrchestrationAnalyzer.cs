@@ -333,7 +333,7 @@ public class MethodProbeOrchestrationVisitor : OrchestrationVisitor
                 // We also need to check if the syntax tree is part of the compilation to avoid 'SyntaxTree is not part of the compilation' exception.
                 if (!this.Compilation.ContainsSyntaxTree(calleeSyntax.SyntaxTree))
                 {
-                    // Skip this syntax tree if it's not part of the compilation (e.g., from external assemblies)
+                    // Skip this syntax tree if it's not part of the current compilation context (e.g., from referenced projects or source generators)
                     continue;
                 }
 

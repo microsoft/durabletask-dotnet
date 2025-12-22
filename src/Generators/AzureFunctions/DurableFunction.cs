@@ -29,7 +29,7 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
             string name,
             DurableFunctionKind kind,
             TypedParameter parameter,
-            ITypeSymbol returnType,
+            ITypeSymbol? returnType,
             bool returnsVoid,
             HashSet<string> requiredNamespaces)
         {
@@ -38,7 +38,7 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
             this.Name = name;
             this.Kind = kind;
             this.Parameter = parameter;
-            this.ReturnType = SyntaxNodeUtility.GetRenderedTypeExpression(returnType, false);
+            this.ReturnType = returnType != null ? SyntaxNodeUtility.GetRenderedTypeExpression(returnType, false) : string.Empty;
             this.ReturnsVoid = returnsVoid;
         }
 
@@ -63,7 +63,7 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
             }
 
             ITypeSymbol? returnTypeSymbol = model.GetTypeInfo(returnType).Type;
-            if (returnTypeSymbol == null)
+            if (returnTypeSymbol == null || returnTypeSymbol.TypeKind == TypeKind.Error)
             {
                 function = null;
                 return false;
@@ -144,11 +144,7 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
 
             requiredNamespaces!.UnionWith(GetRequiredGlobalNamespaces());
 
-            // For void returns, pass a dummy object type since the constructor needs an ITypeSymbol
-            // but the ReturnsVoid flag will ensure it's not actually used for code generation
-            ITypeSymbol returnTypeForConstructor = returnSymbol ?? model.Compilation.GetSpecialType(SpecialType.System_Object);
-
-            function = new DurableFunction(fullTypeName!, name, kind, parameter, returnTypeForConstructor, returnsVoid, requiredNamespaces);
+            function = new DurableFunction(fullTypeName!, name, kind, parameter, returnSymbol, returnsVoid, requiredNamespaces);
             return true;
         }
 

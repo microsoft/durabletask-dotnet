@@ -146,7 +146,7 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
 
             // For void returns, pass a dummy object type since the constructor needs an ITypeSymbol
             // but the ReturnsVoid flag will ensure it's not actually used for code generation
-            ITypeSymbol returnTypeForConstructor = returnSymbol ?? (ITypeSymbol)model.Compilation.GetSpecialType(SpecialType.System_Object);
+            ITypeSymbol returnTypeForConstructor = returnSymbol ?? model.Compilation.GetSpecialType(SpecialType.System_Object);
 
             function = new DurableFunction(fullTypeName!, name, kind, parameter, returnTypeForConstructor, returnsVoid, requiredNamespaces);
             return true;

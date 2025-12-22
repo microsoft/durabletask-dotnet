@@ -168,6 +168,96 @@ public partial class DurableTaskRegistryTests
         => RunAddOrchestratorTest(
             r => r.AddOrchestratorFunc(nameof(TestOrchestrator), (TaskOrchestrationContext ctx) => { }));
 
+    [Fact]
+    public void AddOrchestrator_FuncNoName1_Success()
+        => RunAddOrchestratorTest(
+            r => r.AddOrchestratorFunc<string, string>(NamedOrchestratorFunc1),
+            nameof(NamedOrchestratorFunc1));
+
+    [Fact]
+    public void AddOrchestrator_FuncNoName2_Success()
+        => RunAddOrchestratorTest(
+            r => r.AddOrchestratorFunc<string, string>(NamedOrchestratorFunc2),
+            nameof(NamedOrchestratorFunc2));
+
+    [Fact]
+    public void AddOrchestrator_FuncNoName3_Success()
+        => RunAddOrchestratorTest(
+            r => r.AddOrchestratorFunc<string>(NamedOrchestratorFunc3),
+            nameof(NamedOrchestratorFunc3));
+
+    [Fact]
+    public void AddOrchestrator_FuncNoName4_Success()
+        => RunAddOrchestratorTest(
+            r => r.AddOrchestratorFunc<string>(NamedOrchestratorFunc4),
+            nameof(NamedOrchestratorFunc4));
+
+    [Fact]
+    public void AddOrchestrator_FuncNoName5_Success()
+        => RunAddOrchestratorTest(
+            r => r.AddOrchestratorFunc(NamedOrchestratorFunc5),
+            nameof(NamedOrchestratorFunc5));
+
+    [Fact]
+    public void AddOrchestrator_FuncNoName6_Success()
+        => RunAddOrchestratorTest(
+            r => r.AddOrchestratorFunc<string>(NamedOrchestratorFunc6),
+            nameof(NamedOrchestratorFunc6));
+
+    [Fact]
+    public void AddOrchestrator_ActionNoName1_Success()
+        => RunAddOrchestratorTest(
+            r => r.AddOrchestratorFunc<string>(NamedOrchestratorAction1),
+            nameof(NamedOrchestratorAction1));
+
+    [Fact]
+    public void AddOrchestrator_ActionNoName2_Success()
+        => RunAddOrchestratorTest(
+            r => r.AddOrchestratorFunc(NamedOrchestratorAction2),
+            nameof(NamedOrchestratorAction2));
+
+    [Fact]
+    public void AddOrchestrator_FuncNoName_WithAttribute_Success()
+        => RunAddOrchestratorTest(
+            r => r.AddOrchestratorFunc(AttributedOrchestratorFunc),
+            "CustomOrchestratorName");
+
+    [Fact]
+    public void AddOrchestrator_FuncNoName_Lambda_Throws()
+    {
+        DurableTaskRegistry registry = new();
+        Action act = () => registry.AddOrchestratorFunc((TaskOrchestrationContext ctx) => Task.CompletedTask);
+        act.Should().ThrowExactly<ArgumentException>();
+    }
+
+    [Fact]
+    public void AddOrchestrator_FuncNoName_LambdaWithInput_Throws()
+    {
+        DurableTaskRegistry registry = new();
+        Action act = () => registry.AddOrchestratorFunc<string, string>(
+            (TaskOrchestrationContext ctx, string input) => Task.FromResult(input));
+        act.Should().ThrowExactly<ArgumentException>();
+    }
+
+    static Task<string> NamedOrchestratorFunc1(TaskOrchestrationContext ctx, string input) => Task.FromResult(input);
+
+    static string NamedOrchestratorFunc2(TaskOrchestrationContext ctx, string input) => input;
+
+    static Task NamedOrchestratorFunc3(TaskOrchestrationContext ctx, string input) => Task.CompletedTask;
+
+    static Task<string> NamedOrchestratorFunc4(TaskOrchestrationContext ctx) => Task.FromResult(string.Empty);
+
+    static Task NamedOrchestratorFunc5(TaskOrchestrationContext ctx) => Task.CompletedTask;
+
+    static string NamedOrchestratorFunc6(TaskOrchestrationContext ctx) => string.Empty;
+
+    static void NamedOrchestratorAction1(TaskOrchestrationContext ctx, string input) { }
+
+    static void NamedOrchestratorAction2(TaskOrchestrationContext ctx) { }
+
+    [DurableTask("CustomOrchestratorName")]
+    static Task AttributedOrchestratorFunc(TaskOrchestrationContext ctx) => Task.CompletedTask;
+
     static ITaskOrchestrator RunAddOrchestratorTest(Action<DurableTaskRegistry> callback)
     {
         DurableTaskRegistry registry = new();
@@ -176,6 +266,19 @@ public partial class DurableTaskRegistryTests
 
         bool found = factory.TryCreateOrchestrator(
             nameof(TestOrchestrator), Mock.Of<IServiceProvider>(), out ITaskOrchestrator? actual);
+        found.Should().BeTrue();
+        actual.Should().NotBeNull();
+        return actual!;
+    }
+
+    static ITaskOrchestrator RunAddOrchestratorTest(Action<DurableTaskRegistry> callback, string expectedName)
+    {
+        DurableTaskRegistry registry = new();
+        callback(registry);
+        IDurableTaskFactory factory = registry.BuildFactory();
+
+        bool found = factory.TryCreateOrchestrator(
+            expectedName, Mock.Of<IServiceProvider>(), out ITaskOrchestrator? actual);
         found.Should().BeTrue();
         actual.Should().NotBeNull();
         return actual!;

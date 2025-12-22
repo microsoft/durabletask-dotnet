@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Microsoft.DurableTask;
@@ -21,7 +22,17 @@ public sealed partial class DurableTaskRegistry
         ITaskActivity singleton
         TaskName ITaskActivity singleton
 
-      by func/action:
+      by func/action (with explicit name):
+        Func{Context, Input, Task{Output}}
+        Func{Context, Input, Task}
+        Func{Context, Input, Output}
+        Func{Context, Task{Output}}
+        Func{Context, Task}
+        Func{Context, Output}
+        Action{Context, TInput}
+        Action{Context}
+
+      by func/action (name inferred from method or [DurableTask] attribute):
         Func{Context, Input, Task{Output}}
         Func{Context, Input, Task}
         Func{Context, Input, Output}
@@ -218,5 +229,168 @@ public sealed partial class DurableTaskRegistry
             activity(context);
             return CompletedNullTask;
         });
+    }
+
+    /// <summary>
+    /// Registers an activity factory, where the implementation is <paramref name="activity" />.
+    /// The name is inferred from a <see cref="DurableTaskAttribute"/> on the method, or the method name.
+    /// </summary>
+    /// <typeparam name="TInput">The activity input type.</typeparam>
+    /// <typeparam name="TOutput">The activity output type.</typeparam>
+    /// <param name="activity">The activity implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    public DurableTaskRegistry AddActivityFunc<TInput, TOutput>(
+        Func<TaskActivityContext, TInput, Task<TOutput>> activity)
+    {
+        Check.NotNull(activity);
+        return this.AddActivityFunc(GetActivityNameFromDelegate(activity), activity);
+    }
+
+    /// <summary>
+    /// Registers an activity factory, where the implementation is <paramref name="activity" />.
+    /// The name is inferred from a <see cref="DurableTaskAttribute"/> on the method, or the method name.
+    /// </summary>
+    /// <typeparam name="TInput">The activity input type.</typeparam>
+    /// <typeparam name="TOutput">The activity output type.</typeparam>
+    /// <param name="activity">The activity implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    public DurableTaskRegistry AddActivityFunc<TInput, TOutput>(
+        Func<TaskActivityContext, TInput, TOutput> activity)
+    {
+        Check.NotNull(activity);
+        return this.AddActivityFunc(GetActivityNameFromDelegate(activity), activity);
+    }
+
+    /// <summary>
+    /// Registers an activity factory, where the implementation is <paramref name="activity" />.
+    /// The name is inferred from a <see cref="DurableTaskAttribute"/> on the method, or the method name.
+    /// </summary>
+    /// <typeparam name="TInput">The activity input type.</typeparam>
+    /// <param name="activity">The activity implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    public DurableTaskRegistry AddActivityFunc<TInput>(Func<TaskActivityContext, TInput, Task> activity)
+    {
+        Check.NotNull(activity);
+        return this.AddActivityFunc(GetActivityNameFromDelegate(activity), activity);
+    }
+
+    /// <summary>
+    /// Registers an activity factory, where the implementation is <paramref name="activity" />.
+    /// The name is inferred from a <see cref="DurableTaskAttribute"/> on the method, or the method name.
+    /// </summary>
+    /// <typeparam name="TOutput">The activity output type.</typeparam>
+    /// <param name="activity">The activity implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    public DurableTaskRegistry AddActivityFunc<TOutput>(Func<TaskActivityContext, Task<TOutput>> activity)
+    {
+        Check.NotNull(activity);
+        return this.AddActivityFunc(GetActivityNameFromDelegate(activity), activity);
+    }
+
+    /// <summary>
+    /// Registers an activity factory, where the implementation is <paramref name="activity" />.
+    /// The name is inferred from a <see cref="DurableTaskAttribute"/> on the method, or the method name.
+    /// </summary>
+    /// <param name="activity">The activity implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    public DurableTaskRegistry AddActivityFunc(Func<TaskActivityContext, Task> activity)
+    {
+        Check.NotNull(activity);
+        return this.AddActivityFunc(GetActivityNameFromDelegate(activity), activity);
+    }
+
+    /// <summary>
+    /// Registers an activity factory, where the implementation is <paramref name="activity" />.
+    /// The name is inferred from a <see cref="DurableTaskAttribute"/> on the method, or the method name.
+    /// </summary>
+    /// <typeparam name="TOutput">The activity output type.</typeparam>
+    /// <param name="activity">The activity implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    public DurableTaskRegistry AddActivityFunc<TOutput>(Func<TaskActivityContext, TOutput> activity)
+    {
+        Check.NotNull(activity);
+        return this.AddActivityFunc(GetActivityNameFromDelegate(activity), activity);
+    }
+
+    /// <summary>
+    /// Registers an activity factory, where the implementation is <paramref name="activity" />.
+    /// The name is inferred from a <see cref="DurableTaskAttribute"/> on the method, or the method name.
+    /// </summary>
+    /// <typeparam name="TInput">The activity input type.</typeparam>
+    /// <param name="activity">The activity implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    public DurableTaskRegistry AddActivityFunc<TInput>(Action<TaskActivityContext, TInput> activity)
+    {
+        Check.NotNull(activity);
+        return this.AddActivityFunc(GetActivityNameFromDelegate(activity), activity);
+    }
+
+    /// <summary>
+    /// Registers an activity factory, where the implementation is <paramref name="activity" />.
+    /// The name is inferred from a <see cref="DurableTaskAttribute"/> on the method, or the method name.
+    /// </summary>
+    /// <param name="activity">The activity implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    public DurableTaskRegistry AddActivityFunc(Action<TaskActivityContext> activity)
+    {
+        Check.NotNull(activity);
+        return this.AddActivityFunc(GetActivityNameFromDelegate(activity), activity);
+    }
+
+    /// <summary>
+    /// Gets the task name from a delegate by checking for a <see cref="DurableTaskAttribute"/>
+    /// or falling back to the method name.
+    /// </summary>
+    /// <param name="delegate">The delegate to extract the name from.</param>
+    /// <returns>The task name.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    static TaskName GetActivityNameFromDelegate(Delegate @delegate)
+    {
+        MethodInfo method = @delegate.Method;
+
+        // Check for DurableTaskAttribute on the method
+        DurableTaskAttribute? attribute = method.GetCustomAttribute<DurableTaskAttribute>();
+        if (attribute?.Name.Name is not null and not "")
+        {
+            return attribute.Name;
+        }
+
+        // Fall back to method name
+        string? methodName = method.Name;
+        if (string.IsNullOrEmpty(methodName) || methodName.StartsWith("<", StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "Cannot infer activity name from the delegate. The delegate must either have a " +
+                "[DurableTask] attribute with a name, or be a named method (not a lambda or anonymous delegate).",
+                nameof(@delegate));
+        }
+
+        return new TaskName(methodName);
     }
 }

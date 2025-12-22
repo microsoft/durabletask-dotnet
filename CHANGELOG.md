@@ -1,6 +1,7 @@
 # Changelog
 
 ## v1.18.2
+- Add copy constructors to TaskOptions and sub-classes by halspang ([#587](https://github.com/microsoft/durabletask-dotnet/pull/587))
 - Change FunctionNotFound analyzer severity to Info for cross-assembly scenarios by Copilot ([#584](https://github.com/microsoft/durabletask-dotnet/pull/584))
 - Add Roslyn analyzer for non-contextual logger usage in orchestrations (DURABLE0010) by Copilot ([#553](https://github.com/microsoft/durabletask-dotnet/pull/553))
 - Add specific logging categories for Worker.Grpc and orchestration logs with backward-compatible opt-in by Copilot ([#583](https://github.com/microsoft/durabletask-dotnet/pull/583))

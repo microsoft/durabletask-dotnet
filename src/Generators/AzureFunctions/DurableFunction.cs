@@ -62,16 +62,21 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                 return false;
             }
 
-            ITypeSymbol returnTypeSymbol = model.GetTypeInfo(returnType).Type!;
+            ITypeSymbol? returnTypeSymbol = model.GetTypeInfo(returnType).Type;
+            if (returnTypeSymbol == null)
+            {
+                function = null;
+                return false;
+            }
+
             bool returnsVoid = false;
-            INamedTypeSymbol returnSymbol;
+            INamedTypeSymbol? returnSymbol = null;
 
             // Check if it's a void return type
             if (returnTypeSymbol.SpecialType == SpecialType.System_Void)
             {
                 returnsVoid = true;
-                // For void, we'll use object as a placeholder since it won't be used
-                returnSymbol = model.Compilation.GetSpecialType(SpecialType.System_Object);
+                // returnSymbol is left as null since void has no type to track
             }
             // Check if it's Task (non-generic)
             else if (returnTypeSymbol is INamedTypeSymbol namedReturn)
@@ -80,8 +85,7 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                 if (nonGenericTaskSymbol != null && SymbolEqualityComparer.Default.Equals(namedReturn, nonGenericTaskSymbol))
                 {
                     returnsVoid = true;
-                    // For Task with no return, we'll use object as a placeholder since it won't be used
-                    returnSymbol = model.Compilation.GetSpecialType(SpecialType.System_Object);
+                    // returnSymbol is left as null since Task (non-generic) has no return type to track
                 }
                 // Check if it's Task<T>
                 else
@@ -91,13 +95,21 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                     if (taskSymbol != null && SymbolEqualityComparer.Default.Equals(returnSymbol.OriginalDefinition, taskSymbol))
                     {
                         // this is a Task<T> return value, lets pull out the generic.
-                        returnSymbol = (INamedTypeSymbol)returnSymbol.TypeArguments[0];
+                        ITypeSymbol typeArg = returnSymbol.TypeArguments[0];
+                        if (typeArg is not INamedTypeSymbol namedTypeArg)
+                        {
+                            function = null;
+                            return false;
+                        }
+                        returnSymbol = namedTypeArg;
                     }
                 }
             }
             else
             {
-                returnSymbol = (INamedTypeSymbol)returnTypeSymbol;
+                // returnTypeSymbol is not INamedTypeSymbol, which is unexpected
+                function = null;
+                return false;
             }
 
             if (!SyntaxNodeUtility.TryGetParameter(model, method, kind, out TypedParameter? parameter) || parameter == null)
@@ -112,11 +124,17 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                 return false;
             }
 
+            // Build list of types used for namespace resolution
             List<INamedTypeSymbol> usedTypes = new()
             {
-                returnSymbol,
                 parameter.Type
             };
+
+            // Only include return type if it's not void
+            if (returnSymbol != null)
+            {
+                usedTypes.Add(returnSymbol);
+            }
 
             if (!SyntaxNodeUtility.TryGetRequiredNamespaces(usedTypes, out HashSet<string>? requiredNamespaces))
             {
@@ -126,7 +144,11 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
 
             requiredNamespaces!.UnionWith(GetRequiredGlobalNamespaces());
 
-            function = new DurableFunction(fullTypeName!, name, kind, parameter, returnSymbol, returnsVoid, requiredNamespaces);
+            // For void returns, pass a dummy object type since the constructor needs an ITypeSymbol
+            // but the ReturnsVoid flag will ensure it's not actually used for code generation
+            ITypeSymbol returnTypeForConstructor = returnSymbol ?? (ITypeSymbol)model.Compilation.GetSpecialType(SpecialType.System_Object);
+
+            function = new DurableFunction(fullTypeName!, name, kind, parameter, returnTypeForConstructor, returnsVoid, requiredNamespaces);
             return true;
         }
 

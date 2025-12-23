@@ -1456,4 +1456,54 @@ public class OrchestrationPatterns : IntegrationTestBase
         string? result = metadata.ReadOutputAs<string>();
         Assert.Equal("Timeout occurred", result);
     }
+
+    [Fact]
+    public async Task WaitForExternalEvent_WithTimeoutAndCancellationToken_ExternalCancellationWins()
+    {
+        const string EventName = "TestEvent";
+        TaskName orchestratorName = nameof(WaitForExternalEvent_WithTimeoutAndCancellationToken_ExternalCancellationWins);
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
+            {
+                using CancellationTokenSource cts = new();
+                
+                // Create a timer that will fire and trigger cancellation
+                Task cancelTrigger = ctx.CreateTimer(TimeSpan.FromMilliseconds(100), CancellationToken.None);
+                
+                // Wait for external event with a long timeout
+                Task<string> eventTask = ctx.WaitForExternalEvent<string>(EventName, TimeSpan.FromDays(7), cts.Token);
+                
+                // Wait for either the cancel trigger or the event
+                Task winner = await Task.WhenAny(cancelTrigger, eventTask);
+                
+                if (winner == cancelTrigger)
+                {
+                    // Cancel the external cancellation token
+                    cts.Cancel();
+                }
+                
+                try
+                {
+                    string result = await eventTask;
+                    return $"Event: {result}";
+                }
+                catch (OperationCanceledException)
+                {
+                    return "External cancellation occurred";
+                }
+            }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        Assert.NotNull(metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+
+        string? result = metadata.ReadOutputAs<string>();
+        Assert.Equal("External cancellation occurred", result);
+    }
 }

@@ -17,9 +17,12 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" OutputItemType="Analyzer" />
     <!-- Reference the source generator project directly for local development -->
     <ProjectReference Include="..\..\src\Generators\Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <!-- Reference Abstractions for latest DurableEventAttribute -->
+    <ProjectReference Include="..\..\src\Abstractions\Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Google.Protobuf" VersionOverride="3.33.2" />
     <None Update="host.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

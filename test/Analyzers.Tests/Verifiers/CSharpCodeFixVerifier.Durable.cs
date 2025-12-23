@@ -1,4 +1,7 @@
-﻿using Microsoft.CodeAnalysis.CodeFixes;
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Testing;
 
@@ -19,7 +22,7 @@ public static partial class CSharpCodeFixVerifier<TAnalyzer, TCodeFix>
         await RunAsync(expected, new Test()
         {
             TestCode = source,
-        }, configureTest);
+        }, References.CommonAssemblies, configureTest);
     }
 
     public static Task VerifyDurableTaskCodeFixAsync(
@@ -36,12 +39,59 @@ public static partial class CSharpCodeFixVerifier<TAnalyzer, TCodeFix>
             TestCode = source,
             FixedCode = fixedSource,
         },
-        configureTest);
+        References.CommonAssemblies, configureTest);
     }
 
-    static async Task RunAsync(DiagnosticResult[] expected, Test test, Action<Test>? configureTest = null)
+    /// <summary>
+    /// Runs analyzer test with SDK-only references (without Azure Functions assemblies).
+    /// Used to test orchestration detection in non-function scenarios.
+    /// </summary>
+    public static Task VerifySdkOnlyAnalyzerAsync(string source, params DiagnosticResult[] expected)
     {
-        test.ReferenceAssemblies = References.CommonAssemblies;
+        return VerifySdkOnlyAnalyzerAsync(source, null, expected);
+    }
+
+    /// <summary>
+    /// Runs analyzer test with SDK-only references (without Azure Functions assemblies).
+    /// Used to test orchestration detection in non-function scenarios.
+    /// </summary>
+    public static async Task VerifySdkOnlyAnalyzerAsync(
+        string source, Action<Test>? configureTest = null, params DiagnosticResult[] expected)
+    {
+        await RunAsync(expected, new Test()
+        {
+            TestCode = source,
+        }, References.SdkOnlyAssemblies, configureTest);
+    }
+
+    /// <summary>
+    /// Runs code fix test with SDK-only references (without Azure Functions assemblies).
+    /// Used to test orchestration detection in non-function scenarios.
+    /// </summary>
+    public static Task VerifySdkOnlyCodeFixAsync(
+        string source, DiagnosticResult expected, string fixedSource, Action<Test>? configureTest = null)
+    {
+        return VerifySdkOnlyCodeFixAsync(source, [expected], fixedSource, configureTest);
+    }
+
+    /// <summary>
+    /// Runs code fix test with SDK-only references (without Azure Functions assemblies).
+    /// Used to test orchestration detection in non-function scenarios.
+    /// </summary>
+    public static async Task VerifySdkOnlyCodeFixAsync(
+        string source, DiagnosticResult[] expected, string fixedSource, Action<Test>? configureTest = null)
+    {
+        await RunAsync(expected, new Test()
+        {
+            TestCode = source,
+            FixedCode = fixedSource,
+        },
+        References.SdkOnlyAssemblies, configureTest);
+    }
+
+    static async Task RunAsync(DiagnosticResult[] expected, Test test, ReferenceAssemblies referenceAssemblies, Action<Test>? configureTest = null)
+    {
+        test.ReferenceAssemblies = referenceAssemblies;
         test.ExpectedDiagnostics.AddRange(expected);
 
         configureTest?.Invoke(test);

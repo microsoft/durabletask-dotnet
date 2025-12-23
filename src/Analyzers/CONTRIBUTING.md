@@ -43,6 +43,190 @@ The following resources are useful to start developing Roslyn Analyzers and unde
 - [Roslyn analyzers and code-aware library for ImmutableArrays](https://learn.microsoft.com/en-us/visualstudio/extensibility/roslyn-analyzers-and-code-aware-library-for-immutablearrays?view=vs-2022)
 - [Roslyn code samples](https://github.com/dotnet/roslyn/blob/main/docs/analyzers/Analyzer%20Samples.md)
 
+### Orchestration Analysis and Method Probing
+
+Many of the orchestration analyzers need to understand which methods in a codebase are orchestration entry points and which methods are invoked by orchestrations (directly or indirectly). This section documents how orchestrations are discovered and how method call chains are analyzed.
+
+#### How Orchestrations Are Discovered
+
+The `OrchestrationAnalyzer<TOrchestrationVisitor>` base class provides a unified framework for discovering orchestrations across three different patterns:
+
+##### 1. Durable Functions Orchestrations
+
+Durable Functions orchestrations are discovered by looking for methods with the following characteristics:
+- The method has a parameter decorated with `[OrchestrationTrigger]` attribute from `Microsoft.Azure.Functions.Worker` namespace
+- The method or class has a `[Function]` attribute with a function name
+
+**Example:**
+```cs
+[Function("MyOrchestrator")]
+public async Task Run([OrchestrationTrigger] TaskOrchestrationContext context)
+{
+    // orchestration logic
+}
+```
+
+The analyzer registers a `SyntaxNodeAction` for `SyntaxKind.MethodDeclaration` and checks if the method symbol contains the `OrchestrationTriggerAttribute` in any of its parameters.
+
+##### 2. TaskOrchestrator Orchestrations
+
+TaskOrchestrator orchestrations are discovered by looking for classes that:
+- Implement the `ITaskOrchestrator` interface, or
+- Inherit from the `TaskOrchestrator<TInput, TOutput>` base class
+
+**Example:**
+```cs
+public class MyOrchestrator : TaskOrchestrator<string, string>
+{
+    public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        // orchestration logic
+    }
+}
+```
+
+The analyzer registers a `SyntaxNodeAction` for `SyntaxKind.ClassDeclaration` and checks if the class implements `ITaskOrchestrator`. It then looks for methods that have a `TaskOrchestrationContext` parameter.
+
+##### 3. Func Orchestrations
+
+Func orchestrations are discovered by looking for calls to `DurableTaskRegistry.AddOrchestratorFunc()` extension methods where an orchestration is registered as a lambda or method reference.
+
+**Example:**
+```cs
+tasks.AddOrchestratorFunc("HelloSequence", context =>
+{
+    // orchestration logic
+    return "Hello";
+});
+```
+
+The analyzer registers an `OperationAction` for `OperationKind.Invocation` and checks if:
+- The invocation returns a `DurableTaskRegistry` type
+- The method name is `AddOrchestratorFunc`
+- The `orchestrator` parameter is a delegate (lambda or method reference)
+
+#### How Method Probing Works
+
+The `MethodProbeOrchestrationVisitor` class implements recursive method call analysis to detect violations in methods invoked by orchestrations. This is crucial because non-deterministic code can exist not just in the orchestration entry point, but also in helper methods called by the orchestration.
+
+##### Probing Algorithm
+
+1. **Entry Point**: When an orchestration is discovered, the visitor starts analyzing from the orchestration's root method.
+
+2. **Recursive Traversal**: For each method:
+   - The method is added to a dictionary that tracks which orchestrations invoke it
+   - All `InvocationExpressionSyntax` nodes within the method body are examined
+   - For each invocation, the target method is identified via semantic analysis
+   - The target method is recursively analyzed with the same orchestration name
+
+3. **Cycle Detection**: The analyzer maintains a `ConcurrentDictionary<IMethodSymbol, ConcurrentBag<string>>` that maps methods to the orchestrations that invoke them. Before analyzing a method for a specific orchestration, it checks if that combination has already been processed to prevent infinite recursion.
+
+4. **Cross-Tree Analysis**: When a called method is defined in a different syntax tree (e.g., in another file or partial class), the analyzer obtains the correct `SemanticModel` for that syntax tree to continue analysis.
+
+##### Probing Capabilities
+
+The method probing can follow:
+- **Direct method calls**: `Helper()` where `Helper` is a concrete method
+- **Static methods**: `MyClass.StaticHelper()`
+- **Instance methods**: `myInstance.Method()`
+- **Method chains**: Calls through multiple levels (`Method1()` → `Method2()` → `Method3()`)
+- **Async methods**: Methods returning `Task` or `ValueTask`
+- **Lambda expressions**: Inline lambdas and local functions within orchestrations
+- **Method references**: Delegates created from method references
+- **Partial classes**: Methods defined across multiple files via partial class declarations
+- **Recursive methods**: Protected against infinite loops via cycle detection
+
+##### Probing Limitations
+
+The method probing **cannot** follow method calls in the following scenarios:
+
+1. **Interface Method Calls**: When calling a method through an interface reference, the analyzer cannot determine which implementation will be invoked at runtime.
+
+   ```cs
+   // Will NOT be analyzed
+   IHelper helper = GetHelper(); // implementation unknown
+   helper.DoSomething(); // analyzer cannot follow this call
+   ```
+
+2. **Abstract Method Calls**: Similar to interfaces, abstract method implementations are not known at analysis time.
+
+   ```cs
+   // Will NOT be analyzed
+   abstract class Base {
+       public abstract void DoWork();
+   }
+   // Analyzer cannot determine which derived class implementation is used
+   ```
+
+3. **Virtual Method Overrides**: When a virtual method is overridden, the analyzer can only see the base implementation, not runtime overrides.
+
+   ```cs
+   // May not analyze the correct override
+   Base instance = new Derived();
+   instance.VirtualMethod(); // analyzer sees Base.VirtualMethod, not Derived.VirtualMethod
+   ```
+
+4. **External Library Methods**: Methods from external assemblies or NuGet packages where source code is not available cannot be analyzed.
+
+   ```cs
+   // Will NOT be analyzed
+   externalLibrary.Process(); // source not available
+   ```
+
+5. **Reflection-Based Invocations**: Methods invoked via reflection cannot be traced by static analysis.
+
+   ```cs
+   // Will NOT be analyzed
+   typeof(MyClass).GetMethod("DoWork").Invoke(obj, null);
+   ```
+
+6. **Dependency Injection**: When methods are invoked on instances resolved via DI containers, the concrete type is not known at analysis time.
+
+   ```cs
+   // Will NOT be analyzed if injected
+   public MyOrchestrator(IService service) 
+   {
+       service.Process(); // analyzer cannot determine concrete type
+   }
+   ```
+
+##### Diagnostic Messages
+
+When a violation is detected in a helper method, the diagnostic message explicitly indicates:
+- The **method** where the violation occurs
+- The **specific violation** (e.g., `System.DateTime.Now`)
+- The **orchestration** that invokes the method
+
+**Example diagnostic:**
+```
+"The method 'HelperMethod' uses 'System.DateTime.Now' that may cause non-deterministic behavior when invoked from orchestration 'MyOrchestrator'"
+```
+
+This makes it clear that the issue is not with `HelperMethod` itself, but with its invocation from an orchestration context.
+
+##### Consistency Across Analyzers
+
+All orchestration analyzers that extend `OrchestrationAnalyzer<TOrchestrationVisitor>` should use the same method probing behavior by deriving their visitor from `MethodProbeOrchestrationVisitor`. This ensures consistent behavior across all orchestration-related diagnostics.
+
+**Example Implementation:**
+```cs
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class MyOrchestrationAnalyzer : OrchestrationAnalyzer<MyOrchestrationVisitor>
+{
+    // Analyzer implementation
+    
+    public sealed class MyOrchestrationVisitor : MethodProbeOrchestrationVisitor
+    {
+        protected override void VisitMethod(SemanticModel semanticModel, SyntaxNode methodSyntax, 
+            IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
+        {
+            // Inspect the method for violations
+            // This will be called for the orchestration entry point and all methods it invokes
+        }
+    }
+}
+```
+
 ## Unit Testing
 
 There is a [test project](../../test/Analyzers.Tests/) that contains several unit tests for Durable Task analyzers.

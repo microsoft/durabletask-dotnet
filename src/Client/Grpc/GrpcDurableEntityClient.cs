@@ -283,6 +283,11 @@ class GrpcDurableEntityClient : DurableEntityClient
             };
     }
 
+    /// <summary>
+    /// Iterates transient entity metadata and purges empty entities to fully clean storage.
+    /// </summary>
+    /// <param name="cancellation">The cancellation token.</param>
+    /// <returns>The number of entities removed.</returns>
     async Task<int> PurgeTransientEntitiesAsync(CancellationToken cancellation)
     {
         int removed = 0;
@@ -329,6 +334,11 @@ class GrpcDurableEntityClient : DurableEntityClient
         return removed;
     }
 
+    /// <summary>
+    /// Determines whether an entity is transient and contains no persisted state or locks.
+    /// </summary>
+    /// <param name="entity">The entity metadata.</param>
+    /// <returns><c>true</c> when the entity is empty and transient; otherwise, <c>false</c>.</returns>
     static bool IsEmptyTransientEntity(P.EntityMetadata entity) =>
         string.IsNullOrEmpty(entity.SerializedState) && string.IsNullOrEmpty(entity.LockedBy);
 }

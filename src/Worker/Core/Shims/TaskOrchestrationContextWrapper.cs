@@ -143,19 +143,27 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         try
         {
             IDictionary<string, string> tags = ImmutableDictionary<string, string>.Empty;
+            CancellationToken cancellationToken = default;
             if (options is TaskOptions callActivityOptions)
             {
                 if (callActivityOptions.Tags is not null)
                 {
                     tags = callActivityOptions.Tags;
                 }
+
+                cancellationToken = callActivityOptions.CancellationToken;
             }
 
-            // TODO: Cancellation (https://github.com/microsoft/durabletask-dotnet/issues/7)
+            // If cancellation was requested before starting, return a cancelled task immediately
+            if (cancellationToken.IsCancellationRequested)
+            {
+                throw new TaskCanceledException("The task was cancelled before it could be scheduled.");
+            }
+
 #pragma warning disable 0618
             if (options?.Retry?.Policy is RetryPolicy policy)
             {
-                return await this.innerContext.ScheduleTask<T>(
+                Task<T> activityTask = this.innerContext.ScheduleTask<T>(
                     name.Name,
                     this.innerContext.Version,
                     options: ScheduleTaskOptions.CreateBuilder()
@@ -163,6 +171,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                         .WithTags(tags)
                         .Build(),
                     parameters: input);
+
+                return await this.WaitForTaskWithCancellation(activityTask, cancellationToken);
             }
             else if (options?.Retry?.Handler is AsyncRetryHandler handler)
             {
@@ -176,17 +186,19 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                         parameters: input),
                     name.Name,
                     handler,
-                    default);
+                    cancellationToken);
             }
             else
             {
-                return await this.innerContext.ScheduleTask<T>(
+                Task<T> activityTask = this.innerContext.ScheduleTask<T>(
                     name.Name,
                     this.innerContext.Version,
                     options: ScheduleTaskOptions.CreateBuilder()
                         .WithTags(tags)
                         .Build(),
                     parameters: input);
+
+                return await this.WaitForTaskWithCancellation(activityTask, cancellationToken);
             }
         }
         catch (global::DurableTask.Core.Exceptions.TaskFailedException e)
@@ -217,16 +229,26 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             throw new InvalidOperationException(errorMsg);
         }
 
+        CancellationToken cancellationToken = options?.CancellationToken ?? default;
+
+        // If cancellation was requested before starting, return a cancelled task immediately
+        if (cancellationToken.IsCancellationRequested)
+        {
+            throw new TaskCanceledException("The sub-orchestrator was cancelled before it could be scheduled.");
+        }
+
         try
         {
             if (options?.Retry?.Policy is RetryPolicy policy)
             {
-                return await this.innerContext.CreateSubOrchestrationInstanceWithRetry<TResult>(
+                Task<TResult> subOrchestratorTask = this.innerContext.CreateSubOrchestrationInstanceWithRetry<TResult>(
                     orchestratorName.Name,
                     version,
                     instanceId,
                     policy.ToDurableTaskCoreRetryOptions(),
                     input);
+
+                return await this.WaitForTaskWithCancellation(subOrchestratorTask, cancellationToken);
             }
             else if (options?.Retry?.Handler is AsyncRetryHandler handler)
             {
@@ -239,16 +261,18 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                         options?.Tags),
                     orchestratorName.Name,
                     handler,
-                    default);
+                    cancellationToken);
             }
             else
             {
-                return await this.innerContext.CreateSubOrchestrationInstance<TResult>(
+                Task<TResult> subOrchestratorTask = this.innerContext.CreateSubOrchestrationInstance<TResult>(
                     orchestratorName.Name,
                     version,
                     instanceId,
                     input,
                     options?.Tags);
+
+                return await this.WaitForTaskWithCancellation(subOrchestratorTask, cancellationToken);
             }
         }
         catch (global::DurableTask.Core.Exceptions.SubOrchestrationFailedException e)
@@ -522,6 +546,40 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                 }
             }
         }
+    }
+
+    async Task<T> WaitForTaskWithCancellation<T>(Task<T> task, CancellationToken cancellationToken)
+    {
+        // If no cancellation token provided or it can't be cancelled, just await the task
+        if (!cancellationToken.CanBeCanceled)
+        {
+            return await task;
+        }
+
+        // If the task is already completed, return immediately without setting up cancellation infrastructure
+        if (task.IsCompleted)
+        {
+            return await task;
+        }
+
+        // Create a cancellation task that completes when the token is cancelled
+        TaskCompletionSource<T> cancellationTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        using CancellationTokenRegistration registration = cancellationToken.Register(() =>
+        {
+            cancellationTcs.TrySetCanceled(cancellationToken);
+        });
+
+        // Wait for either the task to complete or cancellation
+        Task<T> completedTask = await Task.WhenAny(task, cancellationTcs.Task);
+
+        // If cancellation won, throw TaskCanceledException
+        if (completedTask == cancellationTcs.Task)
+        {
+            throw new TaskCanceledException("The task was cancelled.");
+        }
+
+        // Otherwise return the result of the completed task
+        return await task;
     }
 
     // The default version can come from two different places depending on the context of the invocation.

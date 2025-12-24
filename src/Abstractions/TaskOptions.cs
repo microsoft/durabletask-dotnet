@@ -39,6 +39,7 @@ public record TaskOptions
         Check.NotNull(options);
         this.Retry = options.Retry;
         this.Tags = options.Tags;
+        this.CancellationToken = options.CancellationToken;
     }
 
     /// <summary>
@@ -50,6 +51,67 @@ public record TaskOptions
     /// Gets the tags to associate with the task.
     /// </summary>
     public IDictionary<string, string>? Tags { get; init; }
+
+    /// <summary>
+    /// Gets the cancellation token that can be used to cancel the task.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When provided, the cancellation token can be used to cancel activities, sub-orchestrators, and retry logic.
+    /// Cancellation is cooperative, meaning the task will not be cancelled immediately, but rather at the next
+    /// opportunity when the orchestrator checks the token status.
+    /// </para>
+    /// <para>
+    /// For activities, if the token is cancelled before the activity completes, the activity will not be scheduled
+    /// or, if already running, the result will be ignored and a <see cref="TaskCanceledException"/> will be thrown.
+    /// </para>
+    /// <para>
+    /// For sub-orchestrators, if the token is cancelled before the sub-orchestrator completes, the result will be
+    /// ignored and a <see cref="TaskCanceledException"/> will be thrown. Note that cancelling the parent's token
+    /// does not terminate the sub-orchestrator instance.
+    /// </para>
+    /// <para>
+    /// For retry handlers, the cancellation token is passed to the retry handler via the <see cref="RetryContext"/>,
+    /// allowing the handler to check for cancellation and stop retrying if needed.
+    /// </para>
+    /// <example>
+    /// Example of cancelling an activity after a timeout:
+    /// <code>
+    /// using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+    /// TaskOptions options = new TaskOptions { CancellationToken = cts.Token };
+    ///
+    /// try
+    /// {
+    ///     string result = await context.CallActivityAsync&lt;string&gt;("MyActivity", "input", options);
+    /// }
+    /// catch (TaskCanceledException)
+    /// {
+    ///     // Handle cancellation
+    /// }
+    /// </code>
+    /// </example>
+    /// <example>
+    /// Example of using cancellation with retry logic:
+    /// <code>
+    /// using CancellationTokenSource cts = new CancellationTokenSource();
+    /// TaskOptions options = new TaskOptions
+    /// {
+    ///     Retry = TaskOptions.FromRetryHandler(retryContext =>
+    ///     {
+    ///         if (retryContext.CancellationToken.IsCancellationRequested)
+    ///         {
+    ///             return false; // Stop retrying
+    ///         }
+    ///         return retryContext.LastAttemptNumber &lt; 3;
+    ///     }),
+    ///     CancellationToken = cts.Token
+    /// };
+    ///
+    /// await context.CallActivityAsync("MyActivity", "input", options);
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public CancellationToken CancellationToken { get; init; }
 
     /// <summary>
     /// Returns a new <see cref="TaskOptions" /> from the provided <see cref="RetryPolicy" />.

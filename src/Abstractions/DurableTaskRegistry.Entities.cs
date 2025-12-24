@@ -22,6 +22,7 @@ public partial class DurableTaskRegistry
     {
         // TODO: Compile a constructor expression for performance.
         Check.ConcreteType<ITaskEntity>(type);
+        this.EntityTypes.Add(type);
         return this.AddEntity(name, sp => (ITaskEntity)ActivatorUtilities.CreateInstance(sp, type));
     }
 

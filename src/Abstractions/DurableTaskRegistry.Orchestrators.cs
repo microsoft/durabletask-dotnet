@@ -40,6 +40,7 @@ public partial class DurableTaskRegistry
     {
         // TODO: Compile a constructor expression for performance.
         Check.ConcreteType<ITaskOrchestrator>(type);
+        this.OrchestratorTypes.Add(type);
         return this.AddOrchestrator(name, () => (ITaskOrchestrator)Activator.CreateInstance(type));
     }
 

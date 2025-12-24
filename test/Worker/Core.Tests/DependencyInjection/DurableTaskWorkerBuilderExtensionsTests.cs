@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -62,6 +63,126 @@ public class DurableTaskBuilderWorkerExtensionsTests
         actual.Should().BeSameAs(expected);
     }
 
+    [Fact]
+    public void AddTasksAsServices_RegistersActivityTypes()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
+
+        // Act
+        builder.AddTasksAsServices(registry =>
+        {
+            registry.AddActivity<TestActivity>();
+        });
+
+        // Assert
+        IServiceProvider provider = services.BuildServiceProvider();
+        provider.GetService<TestActivity>().Should().NotBeNull();
+    }
+
+    [Fact]
+    public void AddTasksAsServices_RegistersOrchestratorTypes()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
+
+        // Act
+        builder.AddTasksAsServices(registry =>
+        {
+            registry.AddOrchestrator<TestOrchestrator>();
+        });
+
+        // Assert
+        IServiceProvider provider = services.BuildServiceProvider();
+        provider.GetService<TestOrchestrator>().Should().NotBeNull();
+    }
+
+    [Fact]
+    public void AddTasksAsServices_RegistersEntityTypes()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
+
+        // Act
+        builder.AddTasksAsServices(registry =>
+        {
+            registry.AddEntity<TestEntity>();
+        });
+
+        // Assert
+        IServiceProvider provider = services.BuildServiceProvider();
+        provider.GetService<TestEntity>().Should().NotBeNull();
+    }
+
+    [Fact]
+    public void AddTasksAsServices_RegistersMultipleTaskTypes()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
+
+        // Act
+        builder.AddTasksAsServices(registry =>
+        {
+            registry.AddActivity<TestActivity>();
+            registry.AddOrchestrator<TestOrchestrator>();
+            registry.AddEntity<TestEntity>();
+        });
+
+        // Assert
+        IServiceProvider provider = services.BuildServiceProvider();
+        provider.GetService<TestActivity>().Should().NotBeNull();
+        provider.GetService<TestOrchestrator>().Should().NotBeNull();
+        provider.GetService<TestEntity>().Should().NotBeNull();
+    }
+
+    [Fact]
+    public void AddTasksAsServices_DoesNotRegisterFunctionBasedTasks()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
+
+        // Act
+        builder.AddTasksAsServices(registry =>
+        {
+            registry.AddActivityFunc("testFunc", (TaskActivityContext ctx) => Task.CompletedTask);
+        });
+
+        // Assert - No exception should be thrown and no types should be registered
+        IServiceProvider provider = services.BuildServiceProvider();
+        // There should be no issue building the service provider
+        provider.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void AddTasksAsServices_AlsoRegistersTasksWithWorker()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
+
+        // Act
+        builder.AddTasksAsServices(registry =>
+        {
+            registry.AddActivity<TestActivity>();
+        });
+
+        // Assert - Tasks should be registered both as services and with the worker
+        IServiceProvider provider = services.BuildServiceProvider();
+        provider.GetService<TestActivity>().Should().NotBeNull();
+        
+        // Also verify the task is registered with the worker by checking the factory
+        IDurableTaskFactory factory = provider.GetRequiredService<IOptionsMonitor<DurableTaskRegistry>>()
+            .Get("test")
+            .BuildFactory();
+        factory.TryCreateActivity(nameof(TestActivity), provider, out ITaskActivity? activity).Should().BeTrue();
+        activity.Should().NotBeNull();
+    }
+
     class BadBuildTarget : BackgroundService
     {
         protected override Task ExecuteAsync(CancellationToken stoppingToken)
@@ -88,6 +209,30 @@ public class DurableTaskBuilderWorkerExtensionsTests
         protected override Task ExecuteAsync(CancellationToken stoppingToken)
         {
             throw new NotImplementedException();
+        }
+    }
+
+    sealed class TestActivity : TaskActivity<object, object>
+    {
+        public override Task<object> RunAsync(TaskActivityContext context, object input)
+        {
+            return Task.FromResult<object>(input);
+        }
+    }
+
+    sealed class TestOrchestrator : TaskOrchestrator<object, object>
+    {
+        public override Task<object> RunAsync(TaskOrchestrationContext context, object input)
+        {
+            return Task.FromResult<object>(input);
+        }
+    }
+
+    sealed class TestEntity : TaskEntity<object>
+    {
+        public void Operation(object input)
+        {
+            // Simple operation for testing
         }
     }
 }

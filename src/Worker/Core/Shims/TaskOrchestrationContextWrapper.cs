@@ -556,8 +556,14 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             return await task;
         }
 
+        // If the task is already completed, return immediately without setting up cancellation infrastructure
+        if (task.IsCompleted)
+        {
+            return await task;
+        }
+
         // Create a cancellation task that completes when the token is cancelled
-        TaskCompletionSource<T> cancellationTcs = new();
+        TaskCompletionSource<T> cancellationTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         using CancellationTokenRegistration registration = cancellationToken.Register(() =>
         {
             cancellationTcs.TrySetCanceled(cancellationToken);

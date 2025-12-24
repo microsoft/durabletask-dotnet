@@ -45,7 +45,11 @@ public sealed class EnvironmentOrchestrationAnalyzer : OrchestrationAnalyzer<Env
         /// <inheritdoc/>
         public override bool Initialize()
         {
-            return this.KnownTypeSymbols.Environment != null;
+            return this.KnownTypeSymbols.Environment != null
+                || this.KnownTypeSymbols.IConfiguration != null
+                || this.KnownTypeSymbols.IOptions != null
+                || this.KnownTypeSymbols.IOptionsSnapshot != null
+                || this.KnownTypeSymbols.IOptionsMonitor != null;
         }
 
         /// <inheritdoc/>
@@ -57,19 +61,106 @@ public sealed class EnvironmentOrchestrationAnalyzer : OrchestrationAnalyzer<Env
                 return;
             }
 
-            foreach (IInvocationOperation invocation in methodOperation.Descendants().OfType<IInvocationOperation>())
+            foreach (IOperation operation in methodOperation.Descendants())
             {
-                IMethodSymbol targetMethod = invocation.TargetMethod;
+                this.CheckOperationForEnvironmentVariableAccess(operation, methodSymbol, orchestrationName, reportDiagnostic);
+            }
+        }
 
-                if (targetMethod.ContainingType.Equals(this.KnownTypeSymbols.Environment, SymbolEqualityComparer.Default) &&
-                    targetMethod.Name is nameof(Environment.GetEnvironmentVariable) or nameof(Environment.GetEnvironmentVariables) or nameof(Environment.ExpandEnvironmentVariables))
+        void CheckOperationForEnvironmentVariableAccess(IOperation operation, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
+        {
+            switch (operation)
+            {
+                case IInvocationOperation invocation when this.IsEnvironmentInvocation(invocation.TargetMethod):
+                    this.Report(operation, invocation.TargetMethod.ToDisplayString(SymbolDisplayFormat.CSharpShortErrorMessageFormat), methodSymbol, orchestrationName, reportDiagnostic);
+                    break;
+                case IInvocationOperation invocation when this.IsConfigurationOrOptionsInvocation(invocation):
+                    this.Report(operation, invocation.TargetMethod.ToDisplayString(SymbolDisplayFormat.CSharpShortErrorMessageFormat), methodSymbol, orchestrationName, reportDiagnostic);
+                    break;
+                case IPropertyReferenceOperation propertyReference when this.IsConfigurationOrOptionsPropertyReference(propertyReference):
+                    this.Report(operation, propertyReference.Property.ToDisplayString(SymbolDisplayFormat.CSharpShortErrorMessageFormat), methodSymbol, orchestrationName, reportDiagnostic);
+                    break;
+            }
+        }
+
+        void Report(IOperation operation, string memberName, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
+        {
+            reportDiagnostic(RoslynExtensions.BuildDiagnostic(Rule, operation, methodSymbol.Name, memberName, orchestrationName));
+        }
+
+        bool IsEnvironmentInvocation(IMethodSymbol targetMethod)
+        {
+            return this.KnownTypeSymbols.Environment != null &&
+                   targetMethod.ContainingType.Equals(this.KnownTypeSymbols.Environment, SymbolEqualityComparer.Default) &&
+                   targetMethod.Name is nameof(Environment.GetEnvironmentVariable) or nameof(Environment.GetEnvironmentVariables) or nameof(Environment.ExpandEnvironmentVariables);
+        }
+
+        bool IsConfigurationOrOptionsInvocation(IInvocationOperation invocation)
+        {
+            if (this.IsConfigurationOrOptionsType(invocation.Instance?.Type))
+            {
+                return true;
+            }
+
+            if (invocation.TargetMethod.IsExtensionMethod)
+            {
+                ITypeSymbol? receiverType = invocation.TargetMethod.ReducedFrom?.Parameters.FirstOrDefault()?.Type ?? invocation.TargetMethod.Parameters.FirstOrDefault()?.Type;
+                if (this.IsConfigurationOrOptionsType(receiverType))
                 {
-                    string invocationName = targetMethod.ToDisplayString(SymbolDisplayFormat.CSharpShortErrorMessageFormat);
-
-                    // e.g.: "The method 'Method1' uses environment variables through 'Environment.GetEnvironmentVariable()' that may cause non-deterministic behavior when invoked from orchestration 'MyOrchestrator'"
-                    reportDiagnostic(RoslynExtensions.BuildDiagnostic(Rule, invocation, methodSymbol.Name, invocationName, orchestrationName));
+                    return true;
                 }
             }
+
+            return false;
+        }
+
+        bool IsConfigurationOrOptionsPropertyReference(IPropertyReferenceOperation propertyReference)
+        {
+            if (this.IsConfigurationOrOptionsType(propertyReference.Instance?.Type))
+            {
+                return true;
+            }
+
+            return this.IsConfigurationOrOptionsType(propertyReference.Property.ContainingType);
+        }
+
+        bool IsConfigurationOrOptionsType(ITypeSymbol? type)
+        {
+            if (type is null)
+            {
+                return false;
+            }
+
+            if (this.IsConfigurationType(type))
+            {
+                return true;
+            }
+
+            if (type is INamedTypeSymbol namedType && this.IsOptionsType(namedType))
+            {
+                return true;
+            }
+
+            return type.AllInterfaces.Any(this.IsConfigurationType) ||
+                   (type is INamedTypeSymbol typeSymbol && typeSymbol.AllInterfaces.Any(this.IsOptionsType));
+        }
+
+        bool IsConfigurationType(ITypeSymbol type)
+        {
+            return this.KnownTypeSymbols.IConfiguration != null &&
+                   SymbolEqualityComparer.Default.Equals(type, this.KnownTypeSymbols.IConfiguration);
+        }
+
+        bool IsOptionsType(INamedTypeSymbol type)
+        {
+            return this.IsOptionsType(type, this.KnownTypeSymbols.IOptions)
+                   || this.IsOptionsType(type, this.KnownTypeSymbols.IOptionsSnapshot)
+                   || this.IsOptionsType(type, this.KnownTypeSymbols.IOptionsMonitor);
+        }
+
+        bool IsOptionsType(INamedTypeSymbol type, INamedTypeSymbol? optionsSymbol)
+        {
+            return optionsSymbol != null && SymbolEqualityComparer.Default.Equals(type.OriginalDefinition, optionsSymbol);
         }
     }
 }

@@ -154,8 +154,11 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                 cancellationToken = callActivityOptions.CancellationToken;
             }
 
-            // Check if cancellation was requested before starting the activity
-            cancellationToken.ThrowIfCancellationRequested();
+            // If cancellation was requested before starting, return a cancelled task immediately
+            if (cancellationToken.IsCancellationRequested)
+            {
+                throw new TaskCanceledException("The task was cancelled before it could be scheduled.");
+            }
 
 #pragma warning disable 0618
             if (options?.Retry?.Policy is RetryPolicy policy)
@@ -228,8 +231,11 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
         CancellationToken cancellationToken = options?.CancellationToken ?? default;
 
-        // Check if cancellation was requested before starting the sub-orchestrator
-        cancellationToken.ThrowIfCancellationRequested();
+        // If cancellation was requested before starting, return a cancelled task immediately
+        if (cancellationToken.IsCancellationRequested)
+        {
+            throw new TaskCanceledException("The sub-orchestrator was cancelled before it could be scheduled.");
+        }
 
         try
         {

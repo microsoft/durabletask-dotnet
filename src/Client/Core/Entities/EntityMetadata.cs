@@ -11,12 +11,8 @@ namespace Microsoft.DurableTask.Client.Entities;
 /// Represents entity metadata.
 /// </summary>
 /// <typeparam name="TState">The type of state held by the metadata.</typeparam>
-/// <remarks>
-/// Initializes a new instance of the <see cref="EntityMetadata{TState}"/> class.
-/// </remarks>
-/// <param name="id">The ID of the entity.</param>
 [JsonConverter(typeof(EntityMetadataConverter))]
-public class EntityMetadata<TState>(EntityInstanceId id)
+public class EntityMetadata<TState>
 {
     readonly TState? state;
 
@@ -25,17 +21,39 @@ public class EntityMetadata<TState>(EntityInstanceId id)
     /// </summary>
     /// <param name="id">The ID of the entity.</param>
     /// <param name="state">The state of the entity.</param>
-    public EntityMetadata(EntityInstanceId id, TState? state)
-        : this(id)
+    /// <param name="includesState">
+    /// A value indicating whether the entity state was included in the response, even when the state is <see langword="null"/>.
+    /// </param>
+    public EntityMetadata(EntityInstanceId id, TState? state, bool includesState)
     {
-        this.IncludesState = state is not null;
+        this.Id = Check.NotDefault(id);
+        this.IncludesState = includesState;
         this.state = state;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="EntityMetadata{TState}"/> class.
+    /// </summary>
+    /// <param name="id">The ID of the entity.</param>
+    /// <param name="state">The state of the entity.</param>
+    public EntityMetadata(EntityInstanceId id, TState? state)
+        : this(id, state, state is not null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="EntityMetadata{TState}"/> class.
+    /// </summary>
+    /// <param name="id">The ID of the entity.</param>
+    public EntityMetadata(EntityInstanceId id)
+        : this(id, default, false)
+    {
     }
 
     /// <summary>
     /// Gets the ID for this entity.
     /// </summary>
-    public EntityInstanceId Id { get; } = Check.NotDefault(id);
+    public EntityInstanceId Id { get; }
 
     /// <summary>
     /// Gets the time the entity was last modified.
@@ -60,7 +78,7 @@ public class EntityMetadata<TState>(EntityInstanceId id)
     /// </remarks>
     [MemberNotNullWhen(true, nameof(State))]
     [MemberNotNullWhen(true, nameof(state))]
-    public bool IncludesState { get; } = false;
+    public bool IncludesState { get; }
 
     /// <summary>
     /// Gets the state for this entity.
@@ -90,13 +108,29 @@ public class EntityMetadata<TState>(EntityInstanceId id)
 /// <summary>
 /// Represents the metadata for a durable entity instance.
 /// </summary>
-/// <remarks>
-/// Initializes a new instance of the <see cref="EntityMetadata"/> class.
-/// </remarks>
-/// <param name="id">The ID of the entity.</param>
-/// <param name="state">The state of this entity.</param>
 [JsonConverter(typeof(EntityMetadataConverter))]
-public sealed class EntityMetadata(EntityInstanceId id, SerializedData? state = null)
-    : EntityMetadata<SerializedData>(id, state)
+public sealed class EntityMetadata : EntityMetadata<SerializedData>
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="EntityMetadata"/> class.
+    /// </summary>
+    /// <param name="id">The ID of the entity.</param>
+    /// <param name="state">The state of this entity.</param>
+    public EntityMetadata(EntityInstanceId id, SerializedData? state = null)
+        : base(id, state)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="EntityMetadata"/> class.
+    /// </summary>
+    /// <param name="id">The ID of the entity.</param>
+    /// <param name="state">The state of this entity.</param>
+    /// <param name="includesState">
+    /// A value indicating whether the entity state was included in the response, even when the state is <see langword="null"/>.
+    /// </param>
+    public EntityMetadata(EntityInstanceId id, SerializedData? state, bool includesState)
+        : base(id, state, includesState)
+    {
+    }
 }

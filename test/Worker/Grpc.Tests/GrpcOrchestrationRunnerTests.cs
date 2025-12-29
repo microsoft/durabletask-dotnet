@@ -40,7 +40,7 @@ public class GrpcOrchestrationRunnerTests
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
             { "IncludeState", Value.ForBool(false) }});
         byte[] requestBytes = orchestratorRequest.ToByteArray();
-        string requestString =  Convert.ToBase64String(requestBytes);
+        string requestString = Convert.ToBase64String(requestBytes);
         string responseString = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
         Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
         Assert.True(response.RequiresHistory);
@@ -223,7 +223,7 @@ public class GrpcOrchestrationRunnerTests
     /// even when it needs one to fulfill the request. This would need to be checked on whatever side is calling this SDK. 
     /// </summary>
     [Fact]
-    public void MalformedPastEventsParameter_Means_NoHistoryRequired()
+    public void MalformedIncludeStateParameter_Means_NoHistoryRequired()
     {
         using var extendedSessions = new ExtendedSessionsCache();
         var historyEvent = new Protobuf.HistoryEvent

@@ -42,7 +42,7 @@ public class GrpcEntityRunnerTests
         entityRequest.Properties.Add(new MapField<string, Value>() {
             { "IncludeState", Value.ForBool(false) }});
         byte[] requestBytes = entityRequest.ToByteArray();
-        string requestString =  Convert.ToBase64String(requestBytes);
+        string requestString = Convert.ToBase64String(requestBytes);
         string responseString = await GrpcEntityRunner.LoadAndRunAsync(requestString, new SimpleEntity(), extendedSessions);
         Protobuf.EntityBatchResult response = Protobuf.EntityBatchResult.Parser.ParseFrom(Convert.FromBase64String(responseString));
         Assert.True(response.RequiresState);

@@ -79,14 +79,7 @@ public class ExportInstanceHistoryActivity(
 
             // Stream all history events
             this.logger.LogInformation("Streaming history events for instance {InstanceId}", instanceId);
-            List<HistoryEvent> historyEvents = new();
-            await foreach (HistoryEvent historyEvent in this.client.StreamInstanceHistoryAsync(
-                instanceId,
-                executionId: null, // Use latest execution
-                cancellation: CancellationToken.None))
-            {
-                historyEvents.Add(historyEvent);
-            }
+            List<HistoryEvent> historyEvents = this.client.GetOrchestrationHistoryAsync(instanceId, CancellationToken.None);
 
             this.logger.LogInformation(
                 "Retrieved {EventCount} history events for instance {InstanceId}",

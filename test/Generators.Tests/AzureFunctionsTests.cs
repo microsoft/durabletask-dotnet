@@ -117,6 +117,79 @@ public static Task<AzureFunctionsTests.Input> CallIdentityAsync(this TaskOrchest
             isDurableFunctions: true);
     }
 
+    [Fact]
+    public async Task Activities_SimpleFunctionTrigger_VoidReturn()
+    {
+        string code = @"
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.DurableTask;
+
+public class Activities
+{
+    [Function(nameof(FlakeyActivity))]
+    public static void FlakeyActivity([ActivityTrigger] object _)
+    {
+        throw new System.ApplicationException(""Kah-BOOOOM!!!"");
+    }
+}";
+
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            methodList: @"
+/// <summary>
+/// Calls the <see cref=""Activities.FlakeyActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
+public static Task CallFlakeyActivityAsync(this TaskOrchestrationContext ctx, object? _, TaskOptions? options = null)
+{
+    return ctx.CallActivityAsync(""FlakeyActivity"", _, options);
+}",
+            isDurableFunctions: true);
+
+        await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: true);
+    }
+
+    [Fact]
+    public async Task Activities_SimpleFunctionTrigger_TaskReturn()
+    {
+        string code = @"
+using System.Threading.Tasks;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.DurableTask;
+
+public class Activities
+{
+    [Function(nameof(FlakeyActivity))]
+    public static Task FlakeyActivity([ActivityTrigger] object _)
+    {
+        throw new System.ApplicationException(""Kah-BOOOOM!!!"");
+    }
+}";
+
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            methodList: @"
+/// <summary>
+/// Calls the <see cref=""Activities.FlakeyActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
+public static Task CallFlakeyActivityAsync(this TaskOrchestrationContext ctx, object? _, TaskOptions? options = null)
+{
+    return ctx.CallActivityAsync(""FlakeyActivity"", _, options);
+}",
+            isDurableFunctions: true);
+
+        await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: true);
+    }
+
     /// <summary>
     /// Verifies that using the class-based activity syntax generates a <see cref="TaskOrchestrationContext"/>
     /// extension method as well as an <see cref="ActivityTriggerAttribute"/> function definition.

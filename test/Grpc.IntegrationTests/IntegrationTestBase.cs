@@ -95,8 +95,11 @@ public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposabl
 
     protected IReadOnlyCollection<LogEntry> GetLogs()
     {
-        // NOTE: Renaming the log category is a breaking change!
-        const string ExpectedCategoryName = "Microsoft.DurableTask";
+        // Use the specific Worker.Grpc category to get gRPC worker logs.
+        // TryGetLogs uses StartsWith matching, so "Microsoft.DurableTask" would match both
+        // the legacy category AND "Microsoft.DurableTask.Worker.Grpc", causing duplicate entries
+        // when dual-category logging is enabled.
+        const string ExpectedCategoryName = "Microsoft.DurableTask.Worker.Grpc";
         bool foundCategory = this.logProvider.TryGetLogs(ExpectedCategoryName, out IReadOnlyCollection<LogEntry> logs);
         Assert.True(foundCategory);
         return logs;

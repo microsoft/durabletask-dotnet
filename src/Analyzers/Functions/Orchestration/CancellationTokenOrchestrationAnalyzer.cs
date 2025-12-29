@@ -30,7 +30,8 @@ public class CancellationTokenOrchestrationAnalyzer : OrchestrationAnalyzer<Canc
         MessageFormat,
         AnalyzersCategories.Orchestration,
         DiagnosticSeverity.Warning,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: "https://go.microsoft.com/fwlink/?linkid=2346202");
 
     /// <inheritdoc/>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];

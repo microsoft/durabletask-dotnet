@@ -98,7 +98,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
     [Theory]
     [InlineData(null, "testhub")]
     [InlineData("myaccount.westus3.durabletask.io", null)]
-    public void UseDurableTaskScheduler_WithNullParameters_ShouldThrowOptionsValidationException(string endpoint, string taskHub)
+    public void UseDurableTaskScheduler_WithNullParameters_ShouldThrowOptionsValidationException(string? endpoint, string? taskHub)
     {
         // Arrange
         ServiceCollection services = new ServiceCollection();
@@ -107,13 +107,13 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         DefaultAzureCredential credential = new DefaultAzureCredential();
 
         // Act
-        mockBuilder.Object.UseDurableTaskScheduler(endpoint, taskHub, credential);
+        mockBuilder.Object.UseDurableTaskScheduler(endpoint!, taskHub!, credential);
         ServiceProvider provider = services.BuildServiceProvider();
 
         // Assert
         var action = () => provider.GetRequiredService<IOptions<DurableTaskSchedulerWorkerOptions>>().Value;
         action.Should().Throw<OptionsValidationException>()
-            .WithMessage(endpoint == null 
+            .WithMessage(endpoint == null
                 ? "DataAnnotation validation failed for 'DurableTaskSchedulerWorkerOptions' members: 'EndpointAddress' with the error: 'Endpoint address is required'."
                 : "DataAnnotation validation failed for 'DurableTaskSchedulerWorkerOptions' members: 'TaskHubName' with the error: 'Task hub name is required'.");
     }
@@ -161,7 +161,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
     [Theory]
     [InlineData("")]
     [InlineData(null)]
-    public void UseDurableTaskScheduler_WithNullOrEmptyConnectionString_ShouldThrowArgumentException(string connectionString)
+    public void UseDurableTaskScheduler_WithNullOrEmptyConnectionString_ShouldThrowArgumentException(string? connectionString)
     {
         // Arrange
         ServiceCollection services = new ServiceCollection();
@@ -169,7 +169,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         mockBuilder.Setup(b => b.Services).Returns(services);
 
         // Act & Assert
-        Action action = () => mockBuilder.Object.UseDurableTaskScheduler(connectionString);
+        Action action = () => mockBuilder.Object.UseDurableTaskScheduler(connectionString!);
         action.Should().Throw<ArgumentNullException>();
     }
 

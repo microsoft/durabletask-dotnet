@@ -406,7 +406,6 @@ async Task Method(TaskOrchestrationContext context)
         await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
     }
 
-
     static DiagnosticResult BuildInputDiagnostic()
     {
         return VerifyCS.Diagnostic(MatchingInputOutputTypeActivityAnalyzer.InputArgumentTypeMismatchDiagnosticId);

@@ -8,9 +8,10 @@ namespace Microsoft.DurableTask;
 /// </summary>
 /// <remarks>
 /// This attribute is meant to be used on class definitions that derive from
-/// <see cref="TaskOrchestrator{TInput, TOutput}"/> or <see cref="TaskActivity{TInput, TOutput}"/>.
+/// <see cref="TaskOrchestrator{TInput, TOutput}"/>, <see cref="TaskActivity{TInput, TOutput}"/>,
+/// or TaskEntity{TState} from the Microsoft.DurableTask.Entities namespace.
 /// It is used specifically by build-time source generators to generate type-safe methods for invoking
-/// orchestrations or activities.
+/// orchestrations, activities, or registering entities.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class DurableTaskAttribute : Attribute

@@ -1,6 +1,15 @@
 ﻿; Shipped analyzer releases
 ; https://github.com/dotnet/roslyn/blob/main/src/RoslynAnalyzers/Microsoft.CodeAnalysis.Analyzers/ReleaseTrackingAnalyzers.Help.md
 
+## Release 0.2.0
+
+### New Rules
+
+Rule ID | Category | Severity | Notes
+--------|----------|----------|-------
+DURABLE2003 | Activity | Info | **FunctionNotFoundAnalyzer**: Reports when an activity function call references a name that does not match any defined activity in the compilation. If the function is defined in another assembly, this diagnostic can be safely ignored. Static resolution across referenced assemblies is not supported.
+DURABLE2004 | Orchestration | Info | **FunctionNotFoundAnalyzer**: Reports when a sub-orchestration call references a name that does not match any defined orchestrator in the compilation. If the function is defined in another assembly, this diagnostic can be safely ignored. Static resolution across referenced assemblies is not supported.
+
 ## Release 0.1.0
 
 ### New Rules

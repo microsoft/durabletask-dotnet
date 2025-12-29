@@ -36,7 +36,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     }
 
     [Fact]
-    public async Task ScheduleOrchesrationWithTags()
+    public async Task ScheduleOrchestrationWithTags()
     {
         TaskName orchestratorName = nameof(EmptyOrchestration);
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
@@ -60,6 +60,52 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.NotNull(metadata.Tags);
+        Assert.Equal(2, metadata.Tags.Count);
+        Assert.Equal("value1", metadata.Tags["tag1"]);
+        Assert.Equal("value2", metadata.Tags["tag2"]);
+    }
+
+    [Fact]
+    public async Task ScheduleSubOrchestrationWithTags()
+    {
+        TaskName orchestratorName = nameof(ScheduleSubOrchestrationWithTags);
+
+        // Schedule a new orchestration instance with tags
+        SubOrchestrationOptions subOrchestrationOptions = new()
+        {
+            InstanceId = "instance_id",
+            Tags = new Dictionary<string, string>
+            {
+                { "tag1", "value1" },
+                { "tag2", "value2" }
+            }
+        };
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc<int, int>(orchestratorName, async (ctx, input) =>
+            {
+                int result = 1;
+                if (input < 2)
+                {
+                    // recursively call this same orchestrator
+                    result += await ctx.CallSubOrchestratorAsync<int>(orchestratorName, input: input + 1, subOrchestrationOptions);
+                }
+
+                return result;
+            }));
+        });
+
+
+        await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 1);
+
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            subOrchestrationOptions.InstanceId, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(subOrchestrationOptions.InstanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.NotNull(metadata.Tags);
         Assert.Equal(2, metadata.Tags.Count);
@@ -414,7 +460,10 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.NotNull(metadata);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
 
-        int[] expected = Enumerable.Range(0, eventCount).ToArray();
+        // With Stack (LIFO) behavior, the most recent waiter receives events first.
+        // So if we create waiters in order [0, 1, 2, 3, 4] and send events [0, 1, 2, 3, 4],
+        // the waiters will receive them in reverse order: [4, 3, 2, 1, 0]
+        int[] expected = Enumerable.Range(0, eventCount).Reverse().ToArray();
         Assert.Equal<int>(expected, metadata.ReadOutputAs<int[]>());
     }
 
@@ -1139,9 +1188,11 @@ public class OrchestrationPatterns : IntegrationTestBase
 
         public ValueTask<bool> IsOrchestrationValidAsync(OrchestrationFilterParameters info, CancellationToken cancellationToken = default)
         {
-            return ValueTask.FromResult(
-                !this.NameDenySet.Contains(info.Name)
-                && !this.TagDenyDict.Any(kvp => info.Tags != null && info.Tags.ContainsKey(kvp.Key) && info.Tags[kvp.Key] == kvp.Value));
+            bool nameAllowed = info.Name is string name && !this.NameDenySet.Contains(name);
+            bool tagsAllowed = info.Tags == null
+                || !this.TagDenyDict.Any(kvp => info.Tags.TryGetValue(kvp.Key, out string? value) && value == kvp.Value);
+
+            return ValueTask.FromResult(nameAllowed && tagsAllowed);
         }
     }
 
@@ -1190,6 +1241,269 @@ public class OrchestrationPatterns : IntegrationTestBase
         Assert.Equal(EventCount, metadata.ReadOutputAs<int>());
     }
 
-    // TODO: Test for multiple external events with the same name
-    // TODO: Test for catching activity exceptions of specific types
+    [Fact]
+    public async Task CatchingActivityExceptionsByType()
+    {
+        TaskName orchestratorName = nameof(CatchingActivityExceptionsByType);
+        TaskName throwInvalidOpActivityName = "ThrowInvalidOp";
+        TaskName throwArgumentActivityName = "ThrowArgument";
+        TaskName successActivityName = "Success";
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc(orchestratorName, async ctx =>
+                {
+                    List<string> results = new();
+
+                    // Test 1: Catch InvalidOperationException
+                    try
+                    {
+                        await ctx.CallActivityAsync(throwInvalidOpActivityName);
+                        results.Add("No exception thrown");
+                    }
+                    catch (TaskFailedException ex) when (ex.FailureDetails?.IsCausedBy<InvalidOperationException>() == true)
+                    {
+                        results.Add("Caught InvalidOperationException");
+                    }
+                    catch (TaskFailedException)
+                    {
+                        results.Add("Caught wrong exception type");
+                    }
+
+                    // Test 2: Catch ArgumentException
+                    try
+                    {
+                        await ctx.CallActivityAsync(throwArgumentActivityName);
+                        results.Add("No exception thrown");
+                    }
+                    catch (TaskFailedException ex) when (ex.FailureDetails?.IsCausedBy<ArgumentException>() == true)
+                    {
+                        results.Add("Caught ArgumentException");
+                    }
+                    catch (TaskFailedException)
+                    {
+                        results.Add("Caught wrong exception type");
+                    }
+
+                    // Test 3: Successful activity should not throw
+                    try
+                    {
+                        string result = await ctx.CallActivityAsync<string>(successActivityName);
+                        results.Add(result);
+                    }
+                    catch (TaskFailedException)
+                    {
+                        results.Add("Unexpected exception");
+                    }
+
+                    // Test 4: Catch with base Exception type
+                    try
+                    {
+                        await ctx.CallActivityAsync(throwInvalidOpActivityName);
+                        results.Add("No exception thrown");
+                    }
+                    catch (TaskFailedException ex) when (ex.FailureDetails?.IsCausedBy<Exception>() == true)
+                    {
+                        results.Add("Caught base Exception");
+                    }
+
+                    return results;
+                })
+                .AddActivityFunc(throwInvalidOpActivityName, (TaskActivityContext ctx) =>
+                {
+                    throw new InvalidOperationException("Invalid operation");
+                })
+                .AddActivityFunc(throwArgumentActivityName, (TaskActivityContext ctx) =>
+                {
+                    throw new ArgumentException("Invalid argument");
+                })
+                .AddActivityFunc<string>(successActivityName, (TaskActivityContext ctx) =>
+                {
+                    return "Success";
+                }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        Assert.NotNull(metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+
+        List<string>? results = metadata.ReadOutputAs<List<string>>();
+        Assert.NotNull(results);
+        Assert.Equal(4, results!.Count);
+        Assert.Equal("Caught InvalidOperationException", results[0]);
+        Assert.Equal("Caught ArgumentException", results[1]);
+        Assert.Equal("Success", results[2]);
+        Assert.Equal("Caught base Exception", results[3]);
+    }
+
+    [Fact]
+    public async Task WaitForExternalEvent_WithTimeoutAndCancellationToken_EventWins()
+    {
+        const string EventName = "TestEvent";
+        const string EventPayload = "test-payload";
+        TaskName orchestratorName = nameof(WaitForExternalEvent_WithTimeoutAndCancellationToken_EventWins);
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
+            {
+                using CancellationTokenSource cts = new();
+                Task<string> eventTask = ctx.WaitForExternalEvent<string>(EventName, TimeSpan.FromDays(7), cts.Token);
+                string result = await eventTask;
+                return result;
+            }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        await server.Client.WaitForInstanceStartAsync(instanceId, this.TimeoutToken);
+
+        // Send event - should complete the wait
+        await server.Client.RaiseEventAsync(instanceId, EventName, EventPayload);
+
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        Assert.NotNull(metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+
+        string? result = metadata.ReadOutputAs<string>();
+        Assert.Equal(EventPayload, result);
+    }
+
+    [Fact]
+    public async Task WaitForExternalEvent_WithTimeoutAndCancellationToken_CancellationWins()
+    {
+        TaskName orchestratorName = nameof(WaitForExternalEvent_WithTimeoutAndCancellationToken_CancellationWins);
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
+            {
+                using CancellationTokenSource cts = new();
+                
+                // Create two event waiters with cancellation tokens
+                Task<string> event1Task = ctx.WaitForExternalEvent<string>("Event1", TimeSpan.FromDays(7), cts.Token);
+                
+                using CancellationTokenSource cts2 = new();
+                Task<string> event2Task = ctx.WaitForExternalEvent<string>("Event2", TimeSpan.FromDays(7), cts2.Token);
+
+                // Wait for any to complete
+                Task winner = await Task.WhenAny(event1Task, event2Task);
+                
+                // Cancel the other one
+                if (winner == event1Task)
+                {
+                    cts2.Cancel();
+                    return $"Event1: {await event1Task}";
+                }
+                else
+                {
+                    cts.Cancel();
+                    return $"Event2: {await event2Task}";
+                }
+            }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        await server.Client.WaitForInstanceStartAsync(instanceId, this.TimeoutToken);
+
+        // Send Event1 - should complete and cancel Event2
+        await server.Client.RaiseEventAsync(instanceId, "Event1", "first-event");
+
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        Assert.NotNull(metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+
+        string? result = metadata.ReadOutputAs<string>();
+        Assert.Equal("Event1: first-event", result);
+    }
+
+    [Fact]
+    public async Task WaitForExternalEvent_WithTimeoutAndCancellationToken_TimeoutWins()
+    {
+        const string EventName = "TestEvent";
+        TaskName orchestratorName = nameof(WaitForExternalEvent_WithTimeoutAndCancellationToken_TimeoutWins);
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
+            {
+                using CancellationTokenSource cts = new();
+                Task<string> eventTask = ctx.WaitForExternalEvent<string>(EventName, TimeSpan.FromMilliseconds(500), cts.Token);
+                
+                try
+                {
+                    string result = await eventTask;
+                    return $"Event: {result}";
+                }
+                catch (OperationCanceledException)
+                {
+                    return "Timeout occurred";
+                }
+            }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        Assert.NotNull(metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+
+        string? result = metadata.ReadOutputAs<string>();
+        Assert.Equal("Timeout occurred", result);
+    }
+
+    [Fact]
+    public async Task WaitForExternalEvent_WithTimeoutAndCancellationToken_ExternalCancellationWins()
+    {
+        const string EventName = "TestEvent";
+        TaskName orchestratorName = nameof(WaitForExternalEvent_WithTimeoutAndCancellationToken_ExternalCancellationWins);
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc(orchestratorName, async ctx =>
+            {
+                using CancellationTokenSource cts = new();
+                
+                // Create a timer that will fire and trigger cancellation
+                Task cancelTrigger = ctx.CreateTimer(TimeSpan.FromMilliseconds(100), CancellationToken.None);
+                
+                // Wait for external event with a long timeout
+                Task<string> eventTask = ctx.WaitForExternalEvent<string>(EventName, TimeSpan.FromDays(7), cts.Token);
+                
+                // Wait for either the cancel trigger or the event
+                Task winner = await Task.WhenAny(cancelTrigger, eventTask);
+                
+                if (winner == cancelTrigger)
+                {
+                    // Cancel the external cancellation token
+                    cts.Cancel();
+                }
+                
+                try
+                {
+                    string result = await eventTask;
+                    return $"Event: {result}";
+                }
+                catch (OperationCanceledException)
+                {
+                    return "External cancellation occurred";
+                }
+            }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        Assert.NotNull(metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+
+        string? result = metadata.ReadOutputAs<string>();
+        Assert.Equal("External cancellation occurred", result);
+    }
 }

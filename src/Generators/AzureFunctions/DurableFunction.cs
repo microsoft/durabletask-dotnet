@@ -10,7 +10,8 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
     {
         Unknown,
         Orchestration,
-        Activity
+        Activity,
+        Entity
     }
 
     public class DurableFunction
@@ -21,13 +22,15 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
         public DurableFunctionKind Kind { get; }
         public TypedParameter Parameter { get; }
         public string ReturnType { get; }
+        public bool ReturnsVoid { get; }
 
         public DurableFunction(
             string fullTypeName,
             string name,
             DurableFunctionKind kind,
             TypedParameter parameter,
-            ITypeSymbol returnType,
+            ITypeSymbol? returnType,
+            bool returnsVoid,
             HashSet<string> requiredNamespaces)
         {
             this.FullTypeName = fullTypeName;
@@ -35,7 +38,8 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
             this.Name = name;
             this.Kind = kind;
             this.Parameter = parameter;
-            this.ReturnType = SyntaxNodeUtility.GetRenderedTypeExpression(returnType, false);
+            this.ReturnType = returnType != null ? SyntaxNodeUtility.GetRenderedTypeExpression(returnType, false) : string.Empty;
+            this.ReturnsVoid = returnsVoid;
         }
 
         public static bool TryParse(SemanticModel model, MethodDeclarationSyntax method, out DurableFunction? function)
@@ -58,12 +62,54 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                 return false;
             }
 
-            INamedTypeSymbol taskSymbol = model.Compilation.GetTypeByMetadataName("System.Threading.Tasks.Task`1")!;
-            INamedTypeSymbol returnSymbol = (INamedTypeSymbol)model.GetTypeInfo(returnType).Type!;
-            if (SymbolEqualityComparer.Default.Equals(returnSymbol.OriginalDefinition, taskSymbol))
+            ITypeSymbol? returnTypeSymbol = model.GetTypeInfo(returnType).Type;
+            if (returnTypeSymbol == null || returnTypeSymbol.TypeKind == TypeKind.Error)
             {
-                // this is a Task<T> return value, lets pull out the generic.
-                returnSymbol = (INamedTypeSymbol)returnSymbol.TypeArguments[0];
+                function = null;
+                return false;
+            }
+
+            bool returnsVoid = false;
+            INamedTypeSymbol? returnSymbol = null;
+
+            // Check if it's a void return type
+            if (returnTypeSymbol.SpecialType == SpecialType.System_Void)
+            {
+                returnsVoid = true;
+                // returnSymbol is left as null since void has no type to track
+            }
+            // Check if it's Task (non-generic)
+            else if (returnTypeSymbol is INamedTypeSymbol namedReturn)
+            {
+                INamedTypeSymbol? nonGenericTaskSymbol = model.Compilation.GetTypeByMetadataName("System.Threading.Tasks.Task");
+                if (nonGenericTaskSymbol != null && SymbolEqualityComparer.Default.Equals(namedReturn, nonGenericTaskSymbol))
+                {
+                    returnsVoid = true;
+                    // returnSymbol is left as null since Task (non-generic) has no return type to track
+                }
+                // Check if it's Task<T>
+                else
+                {
+                    INamedTypeSymbol? taskSymbol = model.Compilation.GetTypeByMetadataName("System.Threading.Tasks.Task`1");
+                    returnSymbol = namedReturn;
+                    if (taskSymbol != null && SymbolEqualityComparer.Default.Equals(returnSymbol.OriginalDefinition, taskSymbol))
+                    {
+                        // this is a Task<T> return value, lets pull out the generic.
+                        ITypeSymbol typeArg = returnSymbol.TypeArguments[0];
+                        if (typeArg is not INamedTypeSymbol namedTypeArg)
+                        {
+                            function = null;
+                            return false;
+                        }
+                        returnSymbol = namedTypeArg;
+                    }
+                }
+            }
+            else
+            {
+                // returnTypeSymbol is not INamedTypeSymbol, which is unexpected
+                function = null;
+                return false;
             }
 
             if (!SyntaxNodeUtility.TryGetParameter(model, method, kind, out TypedParameter? parameter) || parameter == null)
@@ -78,11 +124,17 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
                 return false;
             }
 
+            // Build list of types used for namespace resolution
             List<INamedTypeSymbol> usedTypes = new()
             {
-                returnSymbol,
                 parameter.Type
             };
+
+            // Only include return type if it's not void
+            if (returnSymbol != null)
+            {
+                usedTypes.Add(returnSymbol);
+            }
 
             if (!SyntaxNodeUtility.TryGetRequiredNamespaces(usedTypes, out HashSet<string>? requiredNamespaces))
             {
@@ -92,7 +144,7 @@ namespace Microsoft.DurableTask.Generators.AzureFunctions
 
             requiredNamespaces!.UnionWith(GetRequiredGlobalNamespaces());
 
-            function = new DurableFunction(fullTypeName!, name, kind, parameter, returnSymbol, requiredNamespaces);
+            function = new DurableFunction(fullTypeName!, name, kind, parameter, returnSymbol, returnsVoid, requiredNamespaces);
             return true;
         }
 

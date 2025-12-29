@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.ComponentModel;
@@ -486,7 +486,6 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         CancellationToken cancellation = default)
         => throw new NotSupportedException($"{this.GetType()} does not support retrieving orchestration history.");
 
-    
     /// <summary>
     /// Lists orchestration instance IDs filtered by completed time.
     /// </summary>
@@ -504,11 +503,10 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         int pageSize = OrchestrationQuery.DefaultPageSize,
         string? lastInstanceKey = null,
         CancellationToken cancellation = default)
-
     {
         throw new NotSupportedException($"{this.GetType()} does not support listing orchestration instance IDs by completed time.");
     }
-
+    
     // TODO: Create task hub
 
     // TODO: Delete task hub

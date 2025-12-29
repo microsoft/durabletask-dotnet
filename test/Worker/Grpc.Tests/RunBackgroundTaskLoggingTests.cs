@@ -20,7 +20,7 @@ namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 
 public class RunBackgroundTaskLoggingTests
 {
-    const string Category = "Microsoft.DurableTask";
+    const string Category = "Microsoft.DurableTask.Worker.Grpc";
 
     [Fact]
     public async Task Logs_Abandoning_And_Abandoned_For_Orchestrator()
@@ -343,7 +343,7 @@ public class RunBackgroundTaskLoggingTests
             }
             await Task.Delay(50);
         }
-        Assert.True(false, "Condition not met within timeout");
+        Assert.Fail("Condition not met within timeout");
     }
 
     sealed class TestFixture : IAsyncDisposable

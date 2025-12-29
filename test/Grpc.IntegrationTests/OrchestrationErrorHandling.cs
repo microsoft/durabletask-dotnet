@@ -262,8 +262,8 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
     [Theory]
     [InlineData(10, typeof(ApplicationException), false, int.MaxValue, 2, 1, OrchestrationRuntimeStatus.Failed)] // 1 attempt since retry timeout expired.
     [InlineData(2, typeof(ApplicationException), false, int.MaxValue, null, 1, OrchestrationRuntimeStatus.Failed)] // 1 attempt since handler specifies no retry.
-    [InlineData(2, typeof(CustomException),true, int.MaxValue, null, 2, OrchestrationRuntimeStatus.Failed)] // 2 attempts, custom exception type
-    [InlineData(10, typeof(XunitException),true, 4, null, 5, OrchestrationRuntimeStatus.Completed)] // 10 attempts, 3rd party exception type
+    [InlineData(2, typeof(CustomException), true, int.MaxValue, null, 2, OrchestrationRuntimeStatus.Failed)] // 2 attempts, custom exception type
+    [InlineData(10, typeof(XunitException), true, 4, null, 5, OrchestrationRuntimeStatus.Completed)] // 10 attempts, 3rd party exception type
     public async Task RetryActivityFailuresCustomLogicAndPolicy(
         int maxNumberOfAttempts,
         Type exceptionType,
@@ -665,7 +665,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         {
             // Register the custom exception properties provider
             b.Services.AddSingleton<IExceptionPropertiesProvider, TestExceptionPropertiesProvider>();
-            
+
             b.AddTasks(tasks => tasks
                 .AddOrchestratorFunc(orchestratorName, MyOrchestrationImpl)
                 .AddActivityFunc(activityName, MyActivityImpl));
@@ -753,7 +753,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         {
             // Register the custom exception properties provider
             b.Services.AddSingleton<IExceptionPropertiesProvider, TestExceptionPropertiesProvider>();
-            
+
             b.AddTasks(tasks => tasks
                 .AddOrchestratorFunc(orchestratorName, MyOrchestrationImpl));
         });
@@ -814,7 +814,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         {
             // Register the custom exception properties provider
             b.Services.AddSingleton<IExceptionPropertiesProvider, TestExceptionPropertiesProvider>();
-            
+
             b.AddTasks(tasks => tasks
                 .AddOrchestratorFunc(parentOrchestratorName, ParentOrchestrationImpl)
                 .AddOrchestratorFunc(subOrchestratorName, SubOrchestrationImpl)
@@ -831,7 +831,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
 
         Assert.NotNull(metadata.FailureDetails);
         TaskFailureDetails failureDetails = metadata.FailureDetails!;
-        
+
         // The parent orchestration failed due to a TaskFailedException from the sub-orchestration
         Assert.Equal(typeof(TaskFailedException).FullName, failureDetails.ErrorType);
         Assert.Contains(subOrchestratorName, failureDetails.ErrorMessage);
@@ -879,10 +879,12 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         {
         }
 
+#pragma warning disable SYSLIB0051
         protected CustomException(SerializationInfo info, StreamingContext context)
             : base(info, context)
         {
         }
+#pragma warning restore SYSLIB0051
     }
 
     /// <summary>
@@ -891,7 +893,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
     [Serializable]
     class BusinessValidationException : Exception
     {
-        public BusinessValidationException(string message, 
+        public BusinessValidationException(string message,
             string stringProperty,
             int intProperty,
             long longProperty,
@@ -917,10 +919,12 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         public IList<object?>? ListProperty { get; }
         public object? NullProperty { get; }
 
+#pragma warning disable SYSLIB0051
         protected BusinessValidationException(SerializationInfo info, StreamingContext context)
             : base(info, context)
         {
         }
+#pragma warning restore SYSLIB0051
     }
 
     // Set a custom exception provider.

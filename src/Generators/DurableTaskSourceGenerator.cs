@@ -49,6 +49,13 @@ namespace Microsoft.DurableTask.Generators
                     transform: static (ctx, _) => GetDurableTaskTypeInfo(ctx))
                 .Where(static info => info != null)!;
 
+            // Create providers for DurableEvent attributes
+            IncrementalValuesProvider<DurableEventTypeInfo> durableEventAttributes = context.SyntaxProvider
+                .CreateSyntaxProvider(
+                    predicate: static (node, _) => node is AttributeSyntax,
+                    transform: static (ctx, _) => GetDurableEventTypeInfo(ctx))
+                .Where(static info => info != null)!;
+
             // Create providers for Durable Functions
             IncrementalValuesProvider<DurableFunction> durableFunctions = context.SyntaxProvider
                 .CreateSyntaxProvider(
@@ -57,14 +64,21 @@ namespace Microsoft.DurableTask.Generators
                 .Where(static func => func != null)!;
 
             // Collect all results and check if Durable Functions is referenced
-            IncrementalValueProvider<(Compilation, ImmutableArray<DurableTaskTypeInfo>, ImmutableArray<DurableFunction>)> compilationAndTasks =
+            IncrementalValueProvider<(Compilation, ImmutableArray<DurableTaskTypeInfo>, ImmutableArray<DurableEventTypeInfo>, ImmutableArray<DurableFunction>)> compilationAndTasks =
                 durableTaskAttributes.Collect()
+                    .Combine(durableEventAttributes.Collect())
                     .Combine(durableFunctions.Collect())
                     .Combine(context.CompilationProvider)
-                    .Select((x, _) => (x.Right, x.Left.Left, x.Left.Right));
+                    // Roslyn's IncrementalValueProvider.Combine creates nested tuple pairs: ((Left, Right), Right)
+                    // After multiple .Combine() calls, we unpack the nested structure:
+                    // x.Right                = Compilation
+                    // x.Left.Left.Left       = DurableTaskAttributes (orchestrators, activities, entities)
+                    // x.Left.Left.Right      = DurableEventAttributes (events)
+                    // x.Left.Right           = DurableFunctions (Azure Functions metadata)
+                    .Select((x, _) => (x.Right, x.Left.Left.Left, x.Left.Left.Right, x.Left.Right));
 
             // Generate the source
-            context.RegisterSourceOutput(compilationAndTasks, static (spc, source) => Execute(spc, source.Item1, source.Item2, source.Item3));
+            context.RegisterSourceOutput(compilationAndTasks, static (spc, source) => Execute(spc, source.Item1, source.Item2, source.Item3, source.Item4));
         }
 
         static DurableTaskTypeInfo? GetDurableTaskTypeInfo(GeneratorSyntaxContext context)
@@ -95,7 +109,7 @@ namespace Microsoft.DurableTask.Generators
 
             string className = classType.ToDisplayString();
             INamedTypeSymbol? taskType = null;
-            bool isActivity = false;
+            DurableTaskKind kind = DurableTaskKind.Orchestrator;
 
             INamedTypeSymbol? baseType = classType.BaseType;
             while (baseType != null)
@@ -105,13 +119,19 @@ namespace Microsoft.DurableTask.Generators
                     if (baseType.Name == "TaskActivity")
                     {
                         taskType = baseType;
-                        isActivity = true;
+                        kind = DurableTaskKind.Activity;
                         break;
                     }
                     else if (baseType.Name == "TaskOrchestrator")
                     {
                         taskType = baseType;
-                        isActivity = false;
+                        kind = DurableTaskKind.Orchestrator;
+                        break;
+                    }
+                    else if (baseType.Name == "TaskEntity")
+                    {
+                        taskType = baseType;
+                        kind = DurableTaskKind.Entity;
                         break;
                     }
                 }
@@ -119,13 +139,31 @@ namespace Microsoft.DurableTask.Generators
                 baseType = baseType.BaseType;
             }
 
-            if (taskType == null || taskType.TypeParameters.Length <= 1)
+            // TaskEntity has 1 type parameter (TState), while TaskActivity and TaskOrchestrator have 2 (TInput, TOutput)
+            if (taskType == null)
             {
                 return null;
             }
 
-            ITypeSymbol inputType = taskType.TypeArguments.First();
-            ITypeSymbol outputType = taskType.TypeArguments.Last();
+            if (kind == DurableTaskKind.Entity)
+            {
+                // Entity only has a single TState type parameter
+                if (taskType.TypeParameters.Length < 1)
+                {
+                    return null;
+                }
+            }
+            else
+            {
+                // Orchestrator and Activity have TInput and TOutput type parameters
+                if (taskType.TypeParameters.Length <= 1)
+                {
+                    return null;
+                }
+            }
+
+            ITypeSymbol? inputType = kind == DurableTaskKind.Entity ? null : taskType.TypeArguments.First();
+            ITypeSymbol? outputType = kind == DurableTaskKind.Entity ? null : taskType.TypeArguments.Last();
 
             string taskName = classType.Name;
             if (attribute.ArgumentList?.Arguments.Count > 0)
@@ -134,7 +172,50 @@ namespace Microsoft.DurableTask.Generators
                 taskName = context.SemanticModel.GetConstantValue(expression).ToString();
             }
 
-            return new DurableTaskTypeInfo(className, taskName, inputType, outputType, isActivity);
+            return new DurableTaskTypeInfo(className, taskName, inputType, outputType, kind);
+        }
+
+        static DurableEventTypeInfo? GetDurableEventTypeInfo(GeneratorSyntaxContext context)
+        {
+            AttributeSyntax attribute = (AttributeSyntax)context.Node;
+
+            ITypeSymbol? attributeType = context.SemanticModel.GetTypeInfo(attribute.Name).Type;
+            if (attributeType?.ToString() != "Microsoft.DurableTask.DurableEventAttribute")
+            {
+                return null;
+            }
+
+            // DurableEventAttribute can be applied to both class and struct (record)
+            TypeDeclarationSyntax? typeDeclaration = attribute.Parent?.Parent as TypeDeclarationSyntax;
+            if (typeDeclaration == null)
+            {
+                return null;
+            }
+
+            // Verify that the attribute is being used on a non-abstract type
+            if (typeDeclaration.Modifiers.Any(SyntaxKind.AbstractKeyword))
+            {
+                return null;
+            }
+
+            if (context.SemanticModel.GetDeclaredSymbol(typeDeclaration) is not ITypeSymbol eventType)
+            {
+                return null;
+            }
+
+            string eventName = eventType.Name;
+
+            if (attribute.ArgumentList?.Arguments.Count > 0)
+            {
+                ExpressionSyntax expression = attribute.ArgumentList.Arguments[0].Expression;
+                Optional<object?> constantValue = context.SemanticModel.GetConstantValue(expression);
+                if (constantValue.HasValue && constantValue.Value is string value)
+                {
+                    eventName = value;
+                }
+            }
+
+            return new DurableEventTypeInfo(eventName, eventType);
         }
 
         static DurableFunction? GetDurableFunction(GeneratorSyntaxContext context)
@@ -153,9 +234,10 @@ namespace Microsoft.DurableTask.Generators
             SourceProductionContext context,
             Compilation compilation,
             ImmutableArray<DurableTaskTypeInfo> allTasks,
+            ImmutableArray<DurableEventTypeInfo> allEvents,
             ImmutableArray<DurableFunction> allFunctions)
         {
-            if (allTasks.IsDefaultOrEmpty && allFunctions.IsDefaultOrEmpty)
+            if (allTasks.IsDefaultOrEmpty && allEvents.IsDefaultOrEmpty && allFunctions.IsDefaultOrEmpty)
             {
                 return;
             }
@@ -165,9 +247,10 @@ namespace Microsoft.DurableTask.Generators
             bool isDurableFunctions = compilation.ReferencedAssemblyNames.Any(
                 assembly => assembly.Name.Equals("Microsoft.Azure.Functions.Worker.Extensions.DurableTask", StringComparison.OrdinalIgnoreCase));
 
-            // Separate tasks into orchestrators and activities
+            // Separate tasks into orchestrators, activities, and entities
             List<DurableTaskTypeInfo> orchestrators = new();
             List<DurableTaskTypeInfo> activities = new();
+            List<DurableTaskTypeInfo> entities = new();
 
             foreach (DurableTaskTypeInfo task in allTasks)
             {
@@ -175,13 +258,17 @@ namespace Microsoft.DurableTask.Generators
                 {
                     activities.Add(task);
                 }
+                else if (task.IsEntity)
+                {
+                    entities.Add(task);
+                }
                 else
                 {
                     orchestrators.Add(task);
                 }
             }
 
-            int found = activities.Count + orchestrators.Count + allFunctions.Length;
+            int found = activities.Count + orchestrators.Count + entities.Count + allEvents.Length + allFunctions.Length;
             if (found == 0)
             {
                 return;
@@ -192,6 +279,7 @@ namespace Microsoft.DurableTask.Generators
 #nullable enable
 
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.DurableTask.Internal;");
 
@@ -241,12 +329,28 @@ namespace Microsoft.DurableTask
                 }
             }
 
+            foreach (DurableTaskTypeInfo entity in entities)
+            {
+                if (isDurableFunctions)
+                {
+                    // Generate the function definition required to trigger entities in Azure Functions
+                    AddEntityFunctionDeclaration(sourceBuilder, entity);
+                }
+            }
+
             // Activity function triggers are supported for code-gen (but not orchestration triggers)
             IEnumerable<DurableFunction> activityTriggers = allFunctions.Where(
                 df => df.Kind == DurableFunctionKind.Activity);
             foreach (DurableFunction function in activityTriggers)
             {
                 AddActivityCallMethod(sourceBuilder, function);
+            }
+
+            // Generate WaitFor{EventName}Async methods for each event type
+            foreach (DurableEventTypeInfo eventInfo in allEvents)
+            {
+                AddEventWaitMethod(sourceBuilder, eventInfo);
+                AddEventSendMethod(sourceBuilder, eventInfo);
             }
 
             if (isDurableFunctions)
@@ -261,10 +365,15 @@ namespace Microsoft.DurableTask
             else
             {
                 // ASP.NET Core-specific service registration methods
-                AddRegistrationMethodForAllTasks(
-                    sourceBuilder,
-                    orchestrators,
-                    activities);
+                // Only generate if there are actually tasks to register
+                if (orchestrators.Count > 0 || activities.Count > 0 || entities.Count > 0)
+                {
+                    AddRegistrationMethodForAllTasks(
+                        sourceBuilder,
+                        orchestrators,
+                        activities,
+                        entities);   
+                }
             }
 
             sourceBuilder.AppendLine("    }").AppendLine("}");
@@ -286,6 +395,9 @@ namespace Microsoft.DurableTask
         static void AddOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator)
         {
             sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Schedules a new instance of the <see cref=""{orchestrator.TypeName}""/> orchestrator.
+        /// </summary>
         /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
         public static Task<string> ScheduleNew{orchestrator.TaskName}InstanceAsync(
             this IOrchestrationSubmitter client, {orchestrator.InputParameter}, StartOrchestrationOptions? options = null)
@@ -297,6 +409,9 @@ namespace Microsoft.DurableTask
         static void AddSubOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator)
         {
             sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Calls the <see cref=""{orchestrator.TypeName}""/> sub-orchestrator.
+        /// </summary>
         /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
         public static Task<{orchestrator.OutputType}> Call{orchestrator.TaskName}Async(
             this TaskOrchestrationContext context, {orchestrator.InputParameter}, TaskOptions? options = null)
@@ -308,6 +423,10 @@ namespace Microsoft.DurableTask
         static void AddActivityCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo activity)
         {
             sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Calls the <see cref=""{activity.TypeName}""/> activity.
+        /// </summary>
+        /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
         public static Task<{activity.OutputType}> Call{activity.TaskName}Async(this TaskOrchestrationContext ctx, {activity.InputParameter}, TaskOptions? options = null)
         {{
             return ctx.CallActivityAsync<{activity.OutputType}>(""{activity.TaskName}"", input, options);
@@ -316,10 +435,55 @@ namespace Microsoft.DurableTask
 
         static void AddActivityCallMethod(StringBuilder sourceBuilder, DurableFunction activity)
         {
-            sourceBuilder.AppendLine($@"
+            if (activity.ReturnsVoid)
+            {
+                sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Calls the <see cref=""{activity.FullTypeName}""/> activity.
+        /// </summary>
+        /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
+        public static Task Call{activity.Name}Async(this TaskOrchestrationContext ctx, {activity.Parameter}, TaskOptions? options = null)
+        {{
+            return ctx.CallActivityAsync(""{activity.Name}"", {activity.Parameter.Name}, options);
+        }}");
+            }
+            else
+            {
+                sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Calls the <see cref=""{activity.FullTypeName}""/> activity.
+        /// </summary>
+        /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
         public static Task<{activity.ReturnType}> Call{activity.Name}Async(this TaskOrchestrationContext ctx, {activity.Parameter}, TaskOptions? options = null)
         {{
             return ctx.CallActivityAsync<{activity.ReturnType}>(""{activity.Name}"", {activity.Parameter.Name}, options);
+        }}");
+            }
+        }
+
+        static void AddEventWaitMethod(StringBuilder sourceBuilder, DurableEventTypeInfo eventInfo)
+        {
+            sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Waits for an external event of type <see cref=""{eventInfo.TypeName}""/>.
+        /// </summary>
+        /// <inheritdoc cref=""TaskOrchestrationContext.WaitForExternalEvent{{T}}(string, CancellationToken)""/>
+        public static Task<{eventInfo.TypeName}> WaitFor{eventInfo.EventName}Async(this TaskOrchestrationContext context, CancellationToken cancellationToken = default)
+        {{
+            return context.WaitForExternalEvent<{eventInfo.TypeName}>(""{eventInfo.EventName}"", cancellationToken);
+        }}");
+        }
+
+        static void AddEventSendMethod(StringBuilder sourceBuilder, DurableEventTypeInfo eventInfo)
+        {
+            sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Sends an external event of type <see cref=""{eventInfo.TypeName}""/> to another orchestration instance.
+        /// </summary>
+        /// <inheritdoc cref=""TaskOrchestrationContext.SendEvent(string, string, object)""/>
+        public static void Send{eventInfo.EventName}(this TaskOrchestrationContext context, string instanceId, {eventInfo.TypeName} eventData)
+        {{
+            context.SendEvent(instanceId, ""{eventInfo.EventName}"", eventData);
         }}");
         }
 
@@ -335,6 +499,17 @@ namespace Microsoft.DurableTask
             TaskActivityContext context = new GeneratedActivityContext(""{activity.TaskName}"", instanceId);
             object? result = await activity.RunAsync(context, input);
             return ({activity.OutputType})result!;
+        }}");
+        }
+
+        static void AddEntityFunctionDeclaration(StringBuilder sourceBuilder, DurableTaskTypeInfo entity)
+        {
+            // Generate the entity trigger function that dispatches to the entity implementation.
+            sourceBuilder.AppendLine($@"
+        [Function(nameof({entity.TaskName}))]
+        public static Task {entity.TaskName}([EntityTrigger] TaskEntityDispatcher dispatcher)
+        {{
+            return dispatcher.DispatchAsync<{entity.TypeName}>();
         }}");
         }
 
@@ -368,7 +543,8 @@ namespace Microsoft.DurableTask
         static void AddRegistrationMethodForAllTasks(
             StringBuilder sourceBuilder,
             IEnumerable<DurableTaskTypeInfo> orchestrators,
-            IEnumerable<DurableTaskTypeInfo> activities)
+            IEnumerable<DurableTaskTypeInfo> activities,
+            IEnumerable<DurableTaskTypeInfo> entities)
         {
             // internal so it does not conflict with other projects with this generated file.
             sourceBuilder.Append($@"
@@ -387,9 +563,22 @@ namespace Microsoft.DurableTask
             builder.AddActivity<{taskInfo.TypeName}>();");
             }
 
+            foreach (DurableTaskTypeInfo taskInfo in entities)
+            {
+                sourceBuilder.Append($@"
+            builder.AddEntity<{taskInfo.TypeName}>();");
+            }
+
             sourceBuilder.AppendLine($@"
             return builder;
         }}");
+        }
+
+        enum DurableTaskKind
+        {
+            Orchestrator,
+            Activity,
+            Entity
         }
 
         class DurableTaskTypeInfo
@@ -399,19 +588,30 @@ namespace Microsoft.DurableTask
                 string taskName,
                 ITypeSymbol? inputType,
                 ITypeSymbol? outputType,
-                bool isActivity)
+                DurableTaskKind kind)
             {
                 this.TypeName = taskType;
                 this.TaskName = taskName;
-                this.InputType = GetRenderedTypeExpression(inputType);
-                this.InputParameter = this.InputType + " input";
-                if (this.InputType[this.InputType.Length - 1] == '?')
-                {
-                    this.InputParameter += " = default";
-                }
+                this.Kind = kind;
 
-                this.OutputType = GetRenderedTypeExpression(outputType);
-                this.IsActivity = isActivity;
+                // Entities only have a state type parameter, not input/output
+                if (kind == DurableTaskKind.Entity)
+                {
+                    this.InputType = string.Empty;
+                    this.InputParameter = string.Empty;
+                    this.OutputType = string.Empty;
+                }
+                else
+                {
+                    this.InputType = GetRenderedTypeExpression(inputType);
+                    this.InputParameter = this.InputType + " input";
+                    if (this.InputType[this.InputType.Length - 1] == '?')
+                    {
+                        this.InputParameter += " = default";
+                    }
+
+                    this.OutputType = GetRenderedTypeExpression(outputType);
+                }
             }
 
             public string TypeName { get; }
@@ -419,7 +619,42 @@ namespace Microsoft.DurableTask
             public string InputType { get; }
             public string InputParameter { get; }
             public string OutputType { get; }
-            public bool IsActivity { get; }
+            public DurableTaskKind Kind { get; }
+
+            public bool IsActivity => this.Kind == DurableTaskKind.Activity;
+
+            public bool IsOrchestrator => this.Kind == DurableTaskKind.Orchestrator;
+
+            public bool IsEntity => this.Kind == DurableTaskKind.Entity;
+
+            static string GetRenderedTypeExpression(ITypeSymbol? symbol)
+            {
+                if (symbol == null)
+                {
+                    return "object";
+                }
+
+                string expression = symbol.ToString();
+                if (expression.StartsWith("System.", StringComparison.Ordinal)
+                    && symbol.ContainingNamespace.Name == "System")
+                {
+                    expression = expression.Substring("System.".Length);
+                }
+
+                return expression;
+            }
+        }
+
+        class DurableEventTypeInfo
+        {
+            public DurableEventTypeInfo(string eventName, ITypeSymbol eventType)
+            {
+                this.TypeName = GetRenderedTypeExpression(eventType);
+                this.EventName = eventName;
+            }
+
+            public string TypeName { get; }
+            public string EventName { get; }
 
             static string GetRenderedTypeExpression(ITypeSymbol? symbol)
             {

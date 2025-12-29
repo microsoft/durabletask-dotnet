@@ -487,15 +487,30 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         => throw new NotSupportedException($"{this.GetType()} does not support retrieving orchestration history.");
 
     /// <summary>
-    /// Lists orchestration instance IDs filtered by completed time.
+    /// Lists orchestration instance IDs that match the specified runtime status
+    /// and completed time range, using key-based pagination.
     /// </summary>
-    /// <param name="runtimeStatus">The runtime statuses to filter by.</param>
-    /// <param name="completedTimeFrom">The start time for completed time filter (inclusive).</param>
-    /// <param name="completedTimeTo">The end time for completed time filter (inclusive).</param>
-    /// <param name="pageSize">The page size for pagination.</param>
-    /// <param name="lastInstanceKey">The last fetched instance key.</param>
-    /// <param name="cancellation">The cancellation token.</param>
-    /// <returns>A page of instance IDs with continuation token.</returns>
+    /// <param name="runtimeStatus">
+    /// Optional set of runtime statuses to filter by. If null, all statuses are included.
+    /// </param>
+    /// <param name="completedTimeFrom">
+    /// Inclusive lower bound of the orchestration completed time filter.
+    /// </param>
+    /// <param name="completedTimeTo">
+    /// Inclusive upper bound of the orchestration completed time filter.
+    /// </param>
+    /// <param name="pageSize">
+    /// Maximum number of instance IDs to return in a single page.
+    /// </param>
+    /// <param name="lastInstanceKey">
+    /// Continuation key from the previous page. If null, listing starts from the beginning.
+    /// </param>
+    /// <param name="cancellation">
+    /// Token used to cancel the asynchronous operation.
+    /// </param>
+    /// <returns>
+    /// A page of orchestration instance IDs along with a continuation token, if more results are available.
+    /// </returns>
     public virtual Task<Page<string>> ListInstanceIdsAsync(
         IEnumerable<OrchestrationRuntimeStatus>? runtimeStatus = null,
         DateTimeOffset? completedTimeFrom = null,
@@ -504,7 +519,8 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         string? lastInstanceKey = null,
         CancellationToken cancellation = default)
     {
-        throw new NotSupportedException($"{this.GetType()} does not support listing orchestration instance IDs by completed time.");
+        throw new NotSupportedException(
+            $"{this.GetType()} does not support listing orchestration instance IDs filtered by completed time.");
     }
     
     // TODO: Create task hub

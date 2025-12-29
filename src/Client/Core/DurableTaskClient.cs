@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 using System.ComponentModel;
+using DurableTask.Core.History;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Internal;
-using DurableTask.Core.History;
 
 namespace Microsoft.DurableTask.Client;
 
@@ -457,7 +457,8 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <exception cref="NotSupportedException">Thrown if this implementation of <see cref="DurableTaskClient"/> does not
     /// support rewinding orchestrations.</exception>
     /// <exception cref="NotImplementedException">Thrown if the backend storage provider does not support rewinding orchestrations.</exception>
-    /// <exception cref="ArgumentException">Thrown if an orchestration with the specified <paramref name="instanceId"/> does not exist.</exception>
+    /// <exception cref="ArgumentException">Thrown if an orchestration with the specified <paramref name="instanceId"/> does not exist,
+    /// or if <paramref name="instanceId"/> is the instance ID of an entity.</exception>
     /// <exception cref="InvalidOperationException">Thrown if a precondition of the operation fails, for example if the specified
     /// orchestration is not in a "Failed" state.</exception>
     /// <exception cref="OperationCanceledException">Thrown if the operation is canceled via the <paramref name="cancellation"/> token.</exception>
@@ -468,50 +469,22 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         => throw new NotSupportedException($"{this.GetType()} does not support orchestration rewind.");
 
     /// <summary>
-    /// Lists orchestration instance IDs filtered by completed time.
+    /// Retrieves the history of the specified orchestration instance as a list of <see cref="HistoryEvent"/> objects.
     /// </summary>
-    /// <param name="runtimeStatus">The runtime statuses to filter by.</param>
-    /// <param name="completedTimeFrom">The start time for completed time filter (inclusive).</param>
-    /// <param name="completedTimeTo">The end time for completed time filter (inclusive).</param>
-    /// <param name="pageSize">The page size for pagination.</param>
-    /// <param name="lastInstanceKey">The last fetched instance key.</param>
+    /// <param name="instanceId">The instance ID of the orchestration.</param>
     /// <param name="cancellation">The cancellation token.</param>
-    /// <returns>A page of instance IDs with continuation token.</returns>
-    public virtual Task<Page<string>> ListInstanceIdsAsync(
-        IEnumerable<OrchestrationRuntimeStatus>? runtimeStatus = null,
-        DateTimeOffset? completedTimeFrom = null,
-        DateTimeOffset? completedTimeTo = null,
-        int pageSize = OrchestrationQuery.DefaultPageSize,
-        string? lastInstanceKey = null,
-        CancellationToken cancellation = default)
-    {
-        throw new NotSupportedException($"{this.GetType()} does not support listing orchestration instance IDs by completed time.");
-    }
-
-    /// <summary>
-    /// Streams the execution history events for an orchestration instance.
-    /// </summary>
-    /// <remarks>
-    /// This method returns an async enumerable that yields history events as they are retrieved from the backend.
-    /// The history events are returned in chronological order and include all events that occurred during the
-    /// orchestration instance's execution.
-    /// </remarks>
-    /// <param name="instanceId">The instance ID of the orchestration to stream history for.</param>
-    /// <param name="executionId">The optional execution ID. If null, the latest execution will be used.</param>
-    /// <param name="cancellation">
-    /// A <see cref="CancellationToken"/> that can be used to cancel the streaming operation.
-    /// </param>
-    /// <returns>An async enumerable of <see cref="HistoryEvent"/> objects.</returns>
-    /// <exception cref="ArgumentException">Thrown if an orchestration with the specified <paramref name="instanceId"/> does not exist.</exception>
+    /// <returns>The list of <see cref="HistoryEvent"/> objects representing the orchestration's history.</returns>
+    /// <exception cref="NotSupportedException">Thrown if this implementation of <see cref="DurableTaskClient"/> does not
+    /// support retrieving orchestration history.</exception>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="instanceId"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown if an orchestration with the specified <paramref name="instanceId"/> does not exist,
+    /// or if <paramref name="instanceId"/> is the instance ID of an entity.</exception>
     /// <exception cref="OperationCanceledException">Thrown if the operation is canceled via the <paramref name="cancellation"/> token.</exception>
-    public virtual IAsyncEnumerable<HistoryEvent> StreamInstanceHistoryAsync(
+    /// <exception cref="InvalidOperationException">Thrown if an internal error occurs when attempting to retrieve the orchestration history.</exception>
+    public virtual Task<IList<HistoryEvent>> GetOrchestrationHistoryAsync(
         string instanceId,
-        string? executionId = null,
         CancellationToken cancellation = default)
-
-    {
-        throw new NotSupportedException($"{this.GetType()} does not support streaming instance history.");
-    }
+        => throw new NotSupportedException($"{this.GetType()} does not support retrieving orchestration history.");
 
     // TODO: Create task hub
 

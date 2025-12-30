@@ -81,7 +81,6 @@ DELETE {{baseUrl}}/export-jobs/export-job-continuous-123jk
 #   - "Completed": Exports only completed orchestrations
 #   - "Failed": Exports only failed orchestrations
 #   - "Terminated": Exports only terminated orchestrations
-#   - "ContinuedAsNew": Exports only continued-as-new orchestrations
 # - Dates are in ISO 8601 format (YYYY-MM-DDThh:mm:ssZ)
 # - You can use the REST Client extension in VS Code to execute these requests
 # - The @name directive allows referencing the response in subsequent requests

@@ -110,10 +110,10 @@ public class ExportJobCreationOptionsTests
     }
 
     [Fact]
-    public void Constructor_BatchMode_WithDefaultCompletedTimeFrom_ThrowsArgumentException()
+    public void Constructor_BatchMode_WithNullCompletedTimeFrom_ThrowsArgumentException()
     {
         // Arrange
-        DateTimeOffset from = default;
+        DateTimeOffset? from = null;
         DateTimeOffset to = DateTimeOffset.UtcNow;
         ExportDestination destination = new("test-container");
 
@@ -194,35 +194,42 @@ public class ExportJobCreationOptionsTests
     {
         // Arrange
         ExportDestination destination = new("test-container");
+        DateTimeOffset before = DateTimeOffset.UtcNow;
 
         // Act
         var options = new ExportJobCreationOptions(
             ExportMode.Continuous,
-            default,
+            null,
             null,
             destination);
+
+        DateTimeOffset after = DateTimeOffset.UtcNow;
 
         // Assert
         options.Should().NotBeNull();
         options.Mode.Should().Be(ExportMode.Continuous);
-        options.CompletedTimeFrom.Should().Be(default);
+        options.CompletedTimeFrom.Should().BeOnOrAfter(before);
+        options.CompletedTimeFrom.Should().BeOnOrBefore(after);
         options.CompletedTimeTo.Should().BeNull();
         options.Destination.Should().Be(destination);
     }
 
     [Fact]
-    public void Constructor_ContinuousMode_WithCompletedTimeFrom_ThrowsArgumentException()
+    public void Constructor_ContinuousMode_WithCompletedTimeFrom_CreatesInstance()
     {
         // Arrange
         DateTimeOffset from = DateTimeOffset.UtcNow.AddDays(-1);
         ExportDestination destination = new("test-container");
 
         // Act
-        Action act = () => new ExportJobCreationOptions(ExportMode.Continuous, from, null, destination);
+        var options = new ExportJobCreationOptions(ExportMode.Continuous, from, null, destination);
 
         // Assert
-        act.Should().Throw<ArgumentException>()
-            .WithMessage("*CompletedTimeFrom is not allowed for Continuous export mode*");
+        options.Should().NotBeNull();
+        options.Mode.Should().Be(ExportMode.Continuous);
+        options.CompletedTimeFrom.Should().Be(from);
+        options.CompletedTimeTo.Should().BeNull();
+        options.Destination.Should().Be(destination);
     }
 
     [Fact]
@@ -233,7 +240,7 @@ public class ExportJobCreationOptionsTests
         ExportDestination destination = new("test-container");
 
         // Act
-        Action act = () => new ExportJobCreationOptions(ExportMode.Continuous, default, to, destination);
+        Action act = () => new ExportJobCreationOptions(ExportMode.Continuous, null, to, destination);
 
         // Assert
         act.Should().Throw<ArgumentException>()
@@ -348,7 +355,6 @@ public class ExportJobCreationOptionsTests
             OrchestrationRuntimeStatus.Completed,
             OrchestrationRuntimeStatus.Failed,
             OrchestrationRuntimeStatus.Terminated,
-            OrchestrationRuntimeStatus.ContinuedAsNew,
         };
 
         // Act
@@ -385,11 +391,10 @@ public class ExportJobCreationOptionsTests
 
         // Assert
         options.RuntimeStatus.Should().NotBeNull();
-        options.RuntimeStatus.Should().HaveCount(4);
+        options.RuntimeStatus.Should().HaveCount(3);
         options.RuntimeStatus.Should().Contain(OrchestrationRuntimeStatus.Completed);
         options.RuntimeStatus.Should().Contain(OrchestrationRuntimeStatus.Failed);
         options.RuntimeStatus.Should().Contain(OrchestrationRuntimeStatus.Terminated);
-        options.RuntimeStatus.Should().Contain(OrchestrationRuntimeStatus.ContinuedAsNew);
     }
 
     [Fact]
@@ -413,7 +418,7 @@ public class ExportJobCreationOptionsTests
 
         // Assert
         options.RuntimeStatus.Should().NotBeNull();
-        options.RuntimeStatus.Should().HaveCount(4);
+        options.RuntimeStatus.Should().HaveCount(3);
     }
 
     [Fact]

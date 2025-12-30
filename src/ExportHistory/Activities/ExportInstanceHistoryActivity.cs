@@ -303,7 +303,7 @@ public sealed class ExportResult
     public string InstanceId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets a value indicating whether gets or sets whether the export was successful.
+    /// Gets or sets a value indicating whether the export was successful.
     /// </summary>
     public bool Success { get; set; }
 

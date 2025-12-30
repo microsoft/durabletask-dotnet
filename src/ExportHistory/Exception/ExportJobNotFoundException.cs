@@ -4,7 +4,7 @@
 namespace Microsoft.DurableTask.ExportHistory;
 
 /// <summary>
-/// Exception thrown when attempting to access a schedule that does not exist.
+/// Exception thrown when attempting to access an export job that does not exist.
 /// </summary>
 public class ExportJobNotFoundException : InvalidOperationException
 {

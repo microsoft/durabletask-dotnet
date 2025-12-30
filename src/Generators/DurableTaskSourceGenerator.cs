@@ -390,6 +390,18 @@ namespace Microsoft.DurableTask
             context.AddSource("GeneratedDurableTaskExtensions.cs", SourceText.From(sourceBuilder.ToString(), Encoding.UTF8, SourceHashAlgorithm.Sha256));
         }
 
+        /// <summary>
+        /// Determines whether the current project should be treated as an Azure Functions-based Durable Functions project.
+        /// </summary>
+        /// <param name="compilation">The Roslyn compilation for the project, used to inspect referenced assemblies.</param>
+        /// <param name="allFunctions">The collection of discovered Durable Functions triggers in the project.</param>
+        /// <param name="projectType">
+        /// An optional project type hint. When set to <c>"Functions"</c> or <c>"Standalone"</c>, this value takes precedence
+        /// over automatic detection. Any other value (including <c>"Auto"</c>) falls back to auto-detection.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> if the project is determined to be a Durable Functions (Azure Functions) project; otherwise, <c>false</c>.
+        /// </returns>
         static bool DetermineIsDurableFunctions(Compilation compilation, ImmutableArray<DurableFunction> allFunctions, string? projectType)
         {
             // Check if the user has explicitly configured the project type

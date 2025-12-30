@@ -27,7 +27,8 @@ public sealed class OrchestrationTriggerBindingAnalyzer : MatchingAttributeBindi
             MessageFormat,
             AnalyzersCategories.AttributeBinding,
             DiagnosticSeverity.Error,
-            isEnabledByDefault: true);
+            isEnabledByDefault: true,
+            helpLinkUri: "https://go.microsoft.com/fwlink/?linkid=2346202");
 
     /// <inheritdoc/>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];

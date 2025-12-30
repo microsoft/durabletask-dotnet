@@ -37,18 +37,20 @@ public sealed class FunctionNotFoundAnalyzer : DiagnosticAnalyzer
         ActivityNotFoundTitle,
         ActivityNotFoundMessageFormat,
         AnalyzersCategories.Activity,
-        DiagnosticSeverity.Warning,
+        DiagnosticSeverity.Info,
         customTags: [WellKnownDiagnosticTags.CompilationEnd],
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: "https://go.microsoft.com/fwlink/?linkid=2346202");
 
     static readonly DiagnosticDescriptor SubOrchestrationNotFoundRule = new(
         SubOrchestrationNotFoundDiagnosticId,
         SubOrchestrationNotFoundTitle,
         SubOrchestrationNotFoundMessageFormat,
         AnalyzersCategories.Orchestration,
-        DiagnosticSeverity.Warning,
+        DiagnosticSeverity.Info,
         customTags: [WellKnownDiagnosticTags.CompilationEnd],
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        helpLinkUri: "https://go.microsoft.com/fwlink/?linkid=2346202");
 
     /// <inheritdoc/>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [ActivityNotFoundRule, SubOrchestrationNotFoundRule];

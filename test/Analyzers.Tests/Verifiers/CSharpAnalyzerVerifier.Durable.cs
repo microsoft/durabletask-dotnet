@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -22,6 +22,25 @@ public static partial class CSharpAnalyzerVerifier<TAnalyzer>
         {
             TestCode = source,
             ReferenceAssemblies = References.CommonAssemblies,
+        };
+
+        test.ExpectedDiagnostics.AddRange(expected);
+
+        configureTest?.Invoke(test);
+
+        await test.RunAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Runs analyzer test with SDK-only references (without Azure Functions assemblies).
+    /// Used to test orchestration detection in non-function scenarios.
+    /// </summary>
+    public static async Task VerifySdkOnlyAnalyzerAsync(string source, Action<Test>? configureTest = null, params DiagnosticResult[] expected)
+    {
+        Test test = new()
+        {
+            TestCode = source,
+            ReferenceAssemblies = References.SdkOnlyAssemblies,
         };
 
         test.ExpectedDiagnostics.AddRange(expected);

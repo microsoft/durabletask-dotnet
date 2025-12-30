@@ -24,6 +24,10 @@ public sealed partial class KnownTypeSymbols
     INamedTypeSymbol? environment;
     INamedTypeSymbol? httpClient;
     INamedTypeSymbol? iLogger;
+    INamedTypeSymbol? iConfiguration;
+    INamedTypeSymbol? iOptions;
+    INamedTypeSymbol? iOptionsSnapshot;
+    INamedTypeSymbol? iOptionsMonitor;
 
     /// <summary>
     /// Gets a Guid type symbol.
@@ -81,4 +85,24 @@ public sealed partial class KnownTypeSymbols
     /// Gets an ILogger type symbol.
     /// </summary>
     public INamedTypeSymbol? ILogger => this.GetOrResolveFullyQualifiedType("Microsoft.Extensions.Logging.ILogger", ref this.iLogger);
+
+    /// <summary>
+    /// Gets an IConfiguration type symbol.
+    /// </summary>
+    public INamedTypeSymbol? IConfiguration => this.GetOrResolveFullyQualifiedType("Microsoft.Extensions.Configuration.IConfiguration", ref this.iConfiguration);
+
+    /// <summary>
+    /// Gets an IOptions type symbol.
+    /// </summary>
+    public INamedTypeSymbol? IOptions => this.GetOrResolveFullyQualifiedType("Microsoft.Extensions.Options.IOptions`1", ref this.iOptions);
+
+    /// <summary>
+    /// Gets an IOptionsSnapshot type symbol.
+    /// </summary>
+    public INamedTypeSymbol? IOptionsSnapshot => this.GetOrResolveFullyQualifiedType("Microsoft.Extensions.Options.IOptionsSnapshot`1", ref this.iOptionsSnapshot);
+
+    /// <summary>
+    /// Gets an IOptionsMonitor type symbol.
+    /// </summary>
+    public INamedTypeSymbol? IOptionsMonitor => this.GetOrResolveFullyQualifiedType("Microsoft.Extensions.Options.IOptionsMonitor`1", ref this.iOptionsMonitor);
 }

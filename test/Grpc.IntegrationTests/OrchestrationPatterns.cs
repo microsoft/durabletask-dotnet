@@ -114,6 +114,68 @@ public class OrchestrationPatterns : IntegrationTestBase
     }
 
     [Fact]
+    public async Task ScheduleSubOrchestrationWithTagsAndRetryPolicy()
+    {
+        TaskName orchestratorName = nameof(ScheduleSubOrchestrationWithTags);
+
+        // Schedule a new orchestration instance with tags
+        SubOrchestrationOptions subOrchestrationOptions = new()
+        {
+            InstanceId = "instance_id",
+            Tags = new Dictionary<string, string>
+            {
+                { "tag1", "value1" },
+                { "tag2", "value2" }
+            },
+            Retry = new RetryPolicy(maxNumberOfAttempts: 2, firstRetryInterval: TimeSpan.FromSeconds(3))
+        };
+
+        int failCounter = 0;
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc<int, int>(orchestratorName, async (ctx, input) =>
+            {
+                if (failCounter < 1 && input == 2)
+                {
+                    failCounter++;
+                    throw new Exception("Simulated failure");
+                }
+
+                int result = 1;
+                if (input < 2)
+                {
+                    // recursively call this same orchestrator
+                    result += await ctx.CallSubOrchestratorAsync<int>(orchestratorName, input: input + 1, subOrchestrationOptions);
+                }
+
+                return result;
+            }));
+        });
+
+        // Confirm the first attempt failed
+        await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 1);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            subOrchestrationOptions.InstanceId, this.TimeoutToken);
+        Assert.NotNull(metadata);
+        Assert.Equal(subOrchestrationOptions.InstanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
+
+        // Give some time for the retry to happen
+        Thread.Sleep(5000);
+
+        // Confirm the second attempt succeeded
+        metadata = await server.Client.WaitForInstanceCompletionAsync(
+            subOrchestrationOptions.InstanceId, this.TimeoutToken);
+        Assert.NotNull(metadata);
+        Assert.Equal(subOrchestrationOptions.InstanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.NotNull(metadata.Tags);
+        Assert.Equal(2, metadata.Tags.Count);
+        Assert.Equal("value1", metadata.Tags["tag1"]);
+        Assert.Equal("value2", metadata.Tags["tag2"]);
+    }
+
+    [Fact]
     public async Task SingleTimer()
     {
         TaskName orchestratorName = nameof(SingleTimer);

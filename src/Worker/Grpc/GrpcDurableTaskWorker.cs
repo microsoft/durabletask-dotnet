@@ -45,7 +45,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         this.workerOptions = Check.NotNull(workerOptions).Get(name);
         this.services = Check.NotNull(services);
         this.loggerFactory = Check.NotNull(loggerFactory);
-        this.logger = loggerFactory.CreateLogger("Microsoft.DurableTask"); // TODO: use better category name.
+        this.logger = CreateLogger(loggerFactory, this.workerOptions);
         this.orchestrationFilter = orchestrationFilter;
         this.ExceptionPropertiesProvider = exceptionPropertiesProvider;
     }
@@ -102,5 +102,20 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         callInvoker = c.CreateCallInvoker();
         address = c.Target;
         return new AsyncDisposable(() => new(c.ShutdownAsync()));
+    }
+
+    static ILogger CreateLogger(ILoggerFactory loggerFactory, DurableTaskWorkerOptions options)
+    {
+        // Use the new, more specific category name for gRPC worker logs
+        ILogger primaryLogger = loggerFactory.CreateLogger("Microsoft.DurableTask.Worker.Grpc");
+
+        // If legacy categories are enabled, also emit logs to the old broad category
+        if (options.Logging.UseLegacyCategories)
+        {
+            ILogger legacyLogger = loggerFactory.CreateLogger("Microsoft.DurableTask");
+            return new DualCategoryLogger(primaryLogger, legacyLogger);
+        }
+
+        return primaryLogger;
     }
 }

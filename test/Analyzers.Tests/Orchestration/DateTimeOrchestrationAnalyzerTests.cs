@@ -453,128 +453,56 @@ tasks.AddOrchestratorFunc(""HelloSequence"", context =>
         await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
     }
 
-    [Theory]
-    [InlineData("TimeProvider.System.GetUtcNow()")]
-    [InlineData("TimeProvider.System.GetLocalNow()")]
-    public async Task DurableFunctionOrchestrationUsingTimeProviderNonDeterministicMethodsHasDiag(string expression)
+    [Fact]
+    public async Task TaskOrchestratorSdkOnlyHasDiag()
     {
-        string code = Wrapper.WrapDurableFunctionOrchestration($@"
-[Function(""Run"")]
-DateTimeOffset Run([OrchestrationTrigger] TaskOrchestrationContext context)
-{{
-    return {{|#0:{expression}|}};
-}}
+        // Tests that the analyzer works with SDK-only references (without Azure Functions assemblies)
+        string code = Wrapper.WrapTaskOrchestratorSdkOnly(@"
+public class MyOrchestrator : TaskOrchestrator<string, DateTime>
+{
+    public override Task<DateTime> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        return Task.FromResult({|#0:DateTime.Now|});
+    }
+}
 ");
 
-        string expectedReplacement = expression.Contains("GetLocalNow")
-            ? "(DateTimeOffset)context.CurrentUtcDateTime.ToLocalTime()"
-            : "(DateTimeOffset)context.CurrentUtcDateTime";
-
-        string fix = Wrapper.WrapDurableFunctionOrchestration($@"
-[Function(""Run"")]
-DateTimeOffset Run([OrchestrationTrigger] TaskOrchestrationContext context)
-{{
-    return {expectedReplacement};
-}}
+        string fix = Wrapper.WrapTaskOrchestratorSdkOnly(@"
+public class MyOrchestrator : TaskOrchestrator<string, DateTime>
+{
+    public override Task<DateTime> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        return Task.FromResult(context.CurrentUtcDateTime);
+    }
+}
 ");
 
-        // The analyzer reports the method name as "System.TimeProvider.GetUtcNow()" or "System.TimeProvider.GetLocalNow()"
-        string methodName = expression.Contains("GetLocalNow") ? "System.TimeProvider.GetLocalNow()" : "System.TimeProvider.GetUtcNow()";
-        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Run", methodName, "Run");
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("RunAsync", "System.DateTime.Now", "MyOrchestrator");
 
-        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
+        await VerifyCS.VerifySdkOnlyCodeFixAsync(code, expected, fix);
     }
 
     [Fact]
-    public async Task DurableFunctionOrchestrationUsingTimeProviderGetTimestampHasDiag()
+    public async Task FuncOrchestratorSdkOnlyWithLambdaHasDiag()
     {
-        string code = Wrapper.WrapDurableFunctionOrchestration(@"
-[Function(""Run"")]
-long Run([OrchestrationTrigger] TaskOrchestrationContext context)
-{
-    return {|#0:TimeProvider.System.GetTimestamp()|};
-}
-");
-
-        string fix = Wrapper.WrapDurableFunctionOrchestration(@"
-[Function(""Run"")]
-long Run([OrchestrationTrigger] TaskOrchestrationContext context)
-{
-    return context.CurrentUtcDateTime.Ticks;
-}
-");
-
-        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Run", "System.TimeProvider.GetTimestamp()", "Run");
-
-        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
-    }
-
-    [Fact]
-    public async Task TaskOrchestratorUsingTimeProviderHasDiag()
-    {
-        string code = Wrapper.WrapTaskOrchestrator(@"
-public class MyOrchestrator : TaskOrchestrator<string, DateTimeOffset>
-{
-    public override Task<DateTimeOffset> RunAsync(TaskOrchestrationContext context, string input)
-    {
-        return Task.FromResult({|#0:TimeProvider.System.GetUtcNow()|});
-    }
-}
-");
-
-        string fix = Wrapper.WrapTaskOrchestrator(@"
-public class MyOrchestrator : TaskOrchestrator<string, DateTimeOffset>
-{
-    public override Task<DateTimeOffset> RunAsync(TaskOrchestrationContext context, string input)
-    {
-        return Task.FromResult((DateTimeOffset)context.CurrentUtcDateTime);
-    }
-}
-");
-
-        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("RunAsync", "System.TimeProvider.GetUtcNow()", "MyOrchestrator");
-
-        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
-    }
-
-    [Fact]
-    public async Task FuncOrchestratorWithTimeProviderHasDiag()
-    {
-        string code = Wrapper.WrapFuncOrchestrator(@"
+        // Tests that the analyzer works with SDK-only references (without Azure Functions assemblies)
+        string code = Wrapper.WrapFuncOrchestratorSdkOnly(@"
 tasks.AddOrchestratorFunc(""HelloSequence"", context =>
 {
-    return {|#0:TimeProvider.System.GetUtcNow()|};
+    return {|#0:DateTime.Now|};
 });
 ");
 
-        string fix = Wrapper.WrapFuncOrchestrator(@"
+        string fix = Wrapper.WrapFuncOrchestratorSdkOnly(@"
 tasks.AddOrchestratorFunc(""HelloSequence"", context =>
 {
-    return (DateTimeOffset)context.CurrentUtcDateTime;
+    return context.CurrentUtcDateTime;
 });
 ");
 
-        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Main", "System.TimeProvider.GetUtcNow()", "HelloSequence");
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Main", "System.DateTime.Now", "HelloSequence");
 
-        await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
-    }
-
-    [Fact]
-    public async Task DurableFunctionOrchestrationInvokingMethodWithTimeProviderHasDiag()
-    {
-        string code = Wrapper.WrapDurableFunctionOrchestration(@"
-[Function(""Run"")]
-DateTimeOffset Run([OrchestrationTrigger] TaskOrchestrationContext context)
-{
-    return GetTime();
-}
-
-DateTimeOffset GetTime() => {|#0:TimeProvider.System.GetUtcNow()|};
-");
-
-        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("GetTime", "System.TimeProvider.GetUtcNow()", "Run");
-
-        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+        await VerifyCS.VerifySdkOnlyCodeFixAsync(code, expected, fix);
     }
 
     static DiagnosticResult BuildDiagnostic()

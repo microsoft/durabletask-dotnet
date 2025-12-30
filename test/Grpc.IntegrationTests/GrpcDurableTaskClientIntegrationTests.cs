@@ -420,8 +420,11 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
                 OrchestrationRuntimeStatus.Failed));
 
         createdInstanceId.Should().Be(instanceId);
+
+        // Wait for the instance to start before checking status
+        await server.Client.WaitForInstanceStartAsync(instanceId, default);
         
-        // Verify the instance was created
+        // Verify the instance was created and is running
         OrchestrationMetadata? metadata = await server.Client.GetInstanceAsync(instanceId, false);
         metadata.Should().NotBeNull();
         metadata!.RuntimeStatus.Should().Be(OrchestrationRuntimeStatus.Running);

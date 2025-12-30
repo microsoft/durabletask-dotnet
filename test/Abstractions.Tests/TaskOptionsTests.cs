@@ -148,4 +148,98 @@ public class TaskOptionsTests
             result.DedupeStatuses.Should().Contain(status.ToString());
         }
     }
+
+    [Fact]
+    public void TaskOptions_CopyConstructor_CopiesAllProperties()
+    {
+        // Arrange
+        RetryPolicy policy = new(3, TimeSpan.FromSeconds(1));
+        TaskRetryOptions retry = new(policy);
+        Dictionary<string, string> tags = new() { { "key1", "value1" }, { "key2", "value2" } };
+        TaskOptions original = new(retry, tags);
+
+        // Act
+        TaskOptions copy = new(original);
+
+        // Assert
+        copy.Retry.Should().Be(original.Retry);
+        copy.Tags.Should().BeSameAs(original.Tags);
+    }
+
+    [Fact]
+    public void SubOrchestrationOptions_CopyConstructor_CopiesAllProperties()
+    {
+        // Arrange
+        RetryPolicy policy = new(3, TimeSpan.FromSeconds(1));
+        TaskRetryOptions retry = new(policy);
+        Dictionary<string, string> tags = new() { { "key1", "value1" }, { "key2", "value2" } };
+        string instanceId = Guid.NewGuid().ToString();
+        TaskVersion version = new("1.0");
+        SubOrchestrationOptions original = new(retry, instanceId)
+        {
+            Tags = tags,
+            Version = version,
+        };
+
+        // Act
+        SubOrchestrationOptions copy = new(original);
+
+        // Assert
+        copy.Retry.Should().Be(original.Retry);
+        copy.Tags.Should().BeSameAs(original.Tags);
+        copy.InstanceId.Should().Be(original.InstanceId);
+        copy.Version.Should().Be(original.Version);
+    }
+
+    [Fact]
+    public void SubOrchestrationOptions_CopyFromTaskOptions_CopiesVersionWhenSourceIsSubOrchestration()
+    {
+        // Arrange
+        RetryPolicy policy = new(3, TimeSpan.FromSeconds(1));
+        TaskRetryOptions retry = new(policy);
+        Dictionary<string, string> tags = new() { { "key1", "value1" } };
+        string instanceId = Guid.NewGuid().ToString();
+        TaskVersion version = new("1.0");
+        SubOrchestrationOptions original = new(retry, instanceId)
+        {
+            Tags = tags,
+            Version = version,
+        };
+
+        // Act
+        SubOrchestrationOptions copy = new(original as TaskOptions);
+
+        // Assert
+        copy.Retry.Should().Be(original.Retry);
+        copy.Tags.Should().BeSameAs(original.Tags);
+        copy.InstanceId.Should().Be(original.InstanceId);
+        copy.Version.Should().Be(original.Version);
+    }
+
+    [Fact]
+    public void StartOrchestrationOptions_CopyConstructor_CopiesAllProperties()
+    {
+        // Arrange
+        string instanceId = Guid.NewGuid().ToString();
+        DateTimeOffset startAt = DateTimeOffset.UtcNow.AddHours(1);
+        Dictionary<string, string> tags = new() { { "key1", "value1" }, { "key2", "value2" } };
+        TaskVersion version = new("1.0");
+        List<string> dedupeStatuses = new() { "Completed", "Failed" };
+        StartOrchestrationOptions original = new(instanceId, startAt)
+        {
+            Tags = tags,
+            Version = version,
+            DedupeStatuses = dedupeStatuses,
+        };
+
+        // Act
+        StartOrchestrationOptions copy = new(original);
+
+        // Assert
+        copy.InstanceId.Should().Be(original.InstanceId);
+        copy.StartAt.Should().Be(original.StartAt);
+        copy.Tags.Should().BeSameAs(original.Tags);
+        copy.Version.Should().Be(original.Version);
+        copy.DedupeStatuses.Should().BeSameAs(original.DedupeStatuses);
+    }
 }

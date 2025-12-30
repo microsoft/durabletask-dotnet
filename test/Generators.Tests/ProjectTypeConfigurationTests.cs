@@ -375,4 +375,102 @@ sealed class GeneratedActivityContext : TaskActivityContext
             isDurableFunctions: true,
             projectType: "UnrecognizedValue");
     }
+
+    [Fact]
+    public Task NullProjectType_WithoutFunctionsReference_GeneratesStandaloneCode()
+    {
+        // Test that null projectType (default) falls back to auto-detection
+        string code = @"
+using System.Threading.Tasks;
+using Microsoft.DurableTask;
+
+[DurableTask(nameof(MyActivity))]
+class MyActivity : TaskActivity<int, string>
+{
+    public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
+}";
+
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            methodList: @"
+/// <summary>
+/// Calls the <see cref=""MyActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
+public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
+{
+    return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
+}
+
+internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
+{
+    builder.AddActivity<MyActivity>();
+    return builder;
+}",
+            isDurableFunctions: false);
+
+        return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: false,
+            projectType: null);
+    }
+
+    [Fact]
+    public Task NullProjectType_WithFunctionsReference_GeneratesFunctionsCode()
+    {
+        // Test that null projectType (default) with Functions reference falls back to auto-detection
+        string code = @"
+using System.Threading.Tasks;
+using Microsoft.DurableTask;
+
+[DurableTask(nameof(MyActivity))]
+class MyActivity : TaskActivity<int, string>
+{
+    public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
+}";
+
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            methodList: @"
+/// <summary>
+/// Calls the <see cref=""MyActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
+public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
+{
+    return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
+}
+
+[Function(nameof(MyActivity))]
+public static async Task<string> MyActivity([ActivityTrigger] int input, string instanceId, FunctionContext executionContext)
+{
+    ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<MyActivity>(executionContext.InstanceServices);
+    TaskActivityContext context = new GeneratedActivityContext(""MyActivity"", instanceId);
+    object? result = await activity.RunAsync(context, input);
+    return (string)result!;
+}
+
+sealed class GeneratedActivityContext : TaskActivityContext
+{
+    public GeneratedActivityContext(TaskName name, string instanceId)
+    {
+        this.Name = name;
+        this.InstanceId = instanceId;
+    }
+
+    public override TaskName Name { get; }
+
+    public override string InstanceId { get; }
+}",
+            isDurableFunctions: true);
+
+        return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: true,
+            projectType: null);
+    }
 }

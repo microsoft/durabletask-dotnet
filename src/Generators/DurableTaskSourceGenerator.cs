@@ -254,7 +254,7 @@ namespace Microsoft.DurableTask.Generators
             }
 
             // Determine if we should generate Durable Functions specific code
-            bool isDurableFunctions = DetermineIsDurableFunctions(compilation, projectType);
+            bool isDurableFunctions = DetermineIsDurableFunctions(compilation, allFunctions, projectType);
 
             // Separate tasks into orchestrators, activities, and entities
             List<DurableTaskTypeInfo> orchestrators = new();
@@ -390,7 +390,7 @@ namespace Microsoft.DurableTask
             context.AddSource("GeneratedDurableTaskExtensions.cs", SourceText.From(sourceBuilder.ToString(), Encoding.UTF8, SourceHashAlgorithm.Sha256));
         }
 
-        static bool DetermineIsDurableFunctions(Compilation compilation, string? projectType)
+        static bool DetermineIsDurableFunctions(Compilation compilation, ImmutableArray<DurableFunction> allFunctions, string? projectType)
         {
             // Check if the user has explicitly configured the project type
             if (!string.IsNullOrWhiteSpace(projectType))
@@ -407,9 +407,16 @@ namespace Microsoft.DurableTask
                 // If "Auto" or unrecognized value, fall through to auto-detection
             }
 
-            // Auto-detect based on referenced assemblies
-            // This generator also supports Durable Functions for .NET isolated, but we only generate Functions-specific
-            // code if we find the Durable Functions extension listed in the set of referenced assembly names.
+            // Auto-detect based on the presence of Azure Functions trigger attributes
+            // If we found any methods with OrchestrationTrigger, ActivityTrigger, or EntityTrigger attributes,
+            // then this is a Durable Functions project
+            if (!allFunctions.IsDefaultOrEmpty)
+            {
+                return true;
+            }
+
+            // Fallback: check if Durable Functions assembly is referenced
+            // This handles edge cases where the project references the assembly but hasn't defined triggers yet
             return compilation.ReferencedAssemblyNames.Any(
                 assembly => assembly.Name.Equals("Microsoft.Azure.Functions.Worker.Extensions.DurableTask", StringComparison.OrdinalIgnoreCase));
         }

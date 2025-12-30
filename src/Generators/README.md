@@ -8,11 +8,20 @@ The `Microsoft.DurableTask.Generators` package provides source generators that a
 
 ### Project Type Detection
 
-By default, the generator automatically determines whether to generate Azure Functions-specific code or Durable Task Worker code based on project references. If your project references `Microsoft.Azure.Functions.Worker.Extensions.DurableTask`, it generates Functions-specific code. Otherwise, it generates code for the Durable Task Worker (including the Durable Task Scheduler).
+The generator uses intelligent automatic detection to determine the project type:
 
-### Explicit Project Type Configuration
+1. **Primary Detection**: Checks for Azure Functions trigger attributes (`OrchestrationTrigger`, `ActivityTrigger`, `EntityTrigger`) in your code
+   - If any methods use these trigger attributes, it generates Azure Functions-specific code
+   - Otherwise, it generates standalone Durable Task Worker code
 
-In some scenarios, you may want to explicitly control the generator's behavior, such as when you have transitive dependencies on Functions packages but are building a Durable Task Worker application. You can configure this using the `DurableTaskGeneratorProjectType` MSBuild property in your `.csproj` file:
+2. **Fallback Detection**: If no trigger attributes are found, checks if `Microsoft.Azure.Functions.Worker.Extensions.DurableTask` is referenced
+   - This handles projects that reference the Functions package but haven't defined triggers yet
+
+This automatic detection solves the common issue where transitive dependencies on Functions packages would incorrectly trigger Functions mode even when not using Azure Functions.
+
+### Explicit Project Type Configuration (Optional)
+
+In rare scenarios where you need to override the automatic detection, you can explicitly configure the project type using the `DurableTaskGeneratorProjectType` MSBuild property in your `.csproj` file:
 
 ```xml
 <PropertyGroup>
@@ -22,13 +31,11 @@ In some scenarios, you may want to explicitly control the generator's behavior, 
 
 #### Supported Values
 
-- `Auto` (default): Automatically detects project type based on referenced assemblies
+- `Auto` (default): Automatically detects project type using the intelligent detection described above
 - `Functions`: Forces generation of Azure Functions-specific code
 - `Standalone`: Forces generation of standalone Durable Task Worker code (includes `AddAllGeneratedTasks` method)
 
 #### Example: Force Standalone Mode
-
-If your project has a transitive dependency on Azure Functions packages but you want to use the Durable Task Worker/Scheduler:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk.Web">
@@ -44,7 +51,7 @@ If your project has a transitive dependency on Azure Functions packages but you 
 </Project>
 ```
 
-With this configuration, the generator will produce the `AddAllGeneratedTasks` extension method for worker registration:
+With standalone mode, the generator produces the `AddAllGeneratedTasks` extension method for worker registration:
 
 ```csharp
 builder.Services.AddDurableTaskWorker(builder =>

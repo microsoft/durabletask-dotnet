@@ -49,6 +49,13 @@ namespace Microsoft.DurableTask.Generators
                     transform: static (ctx, _) => GetDurableTaskTypeInfo(ctx))
                 .Where(static info => info != null)!;
 
+            // Create providers for DurableEvent attributes
+            IncrementalValuesProvider<DurableEventTypeInfo> durableEventAttributes = context.SyntaxProvider
+                .CreateSyntaxProvider(
+                    predicate: static (node, _) => node is AttributeSyntax,
+                    transform: static (ctx, _) => GetDurableEventTypeInfo(ctx))
+                .Where(static info => info != null)!;
+
             // Create providers for Durable Functions
             IncrementalValuesProvider<DurableFunction> durableFunctions = context.SyntaxProvider
                 .CreateSyntaxProvider(
@@ -65,15 +72,23 @@ namespace Microsoft.DurableTask.Generators
                 });
 
             // Collect all results and check if Durable Functions is referenced
-            IncrementalValueProvider<(Compilation, ImmutableArray<DurableTaskTypeInfo>, ImmutableArray<DurableFunction>, string?)> compilationAndTasks =
+            IncrementalValueProvider<(Compilation, ImmutableArray<DurableTaskTypeInfo>, ImmutableArray<DurableEventTypeInfo>, ImmutableArray<DurableFunction>, string?)> compilationAndTasks =
                 durableTaskAttributes.Collect()
+                    .Combine(durableEventAttributes.Collect())
                     .Combine(durableFunctions.Collect())
                     .Combine(context.CompilationProvider)
                     .Combine(projectTypeProvider)
-                    .Select((x, _) => (x.Left.Right, x.Left.Left.Left, x.Left.Left.Right, x.Right));
+                    // Roslyn's IncrementalValueProvider.Combine creates nested tuple pairs: ((Left, Right), Right)
+                    // After multiple .Combine() calls, we unpack the nested structure:
+                    // x.Right                     = projectType (string?)
+                    // x.Left.Right                = Compilation
+                    // x.Left.Left.Left.Left       = DurableTaskAttributes (orchestrators, activities, entities)
+                    // x.Left.Left.Left.Right      = DurableEventAttributes (events)
+                    // x.Left.Left.Right           = DurableFunctions (Azure Functions metadata)
+                    .Select((x, _) => (x.Left.Right, x.Left.Left.Left.Left, x.Left.Left.Left.Right, x.Left.Left.Right, x.Right));
 
             // Generate the source
-            context.RegisterSourceOutput(compilationAndTasks, static (spc, source) => Execute(spc, source.Item1, source.Item2, source.Item3, source.Item4));
+            context.RegisterSourceOutput(compilationAndTasks, static (spc, source) => Execute(spc, source.Item1, source.Item2, source.Item3, source.Item4, source.Item5));
         }
 
         static DurableTaskTypeInfo? GetDurableTaskTypeInfo(GeneratorSyntaxContext context)
@@ -170,6 +185,49 @@ namespace Microsoft.DurableTask.Generators
             return new DurableTaskTypeInfo(className, taskName, inputType, outputType, kind);
         }
 
+        static DurableEventTypeInfo? GetDurableEventTypeInfo(GeneratorSyntaxContext context)
+        {
+            AttributeSyntax attribute = (AttributeSyntax)context.Node;
+
+            ITypeSymbol? attributeType = context.SemanticModel.GetTypeInfo(attribute.Name).Type;
+            if (attributeType?.ToString() != "Microsoft.DurableTask.DurableEventAttribute")
+            {
+                return null;
+            }
+
+            // DurableEventAttribute can be applied to both class and struct (record)
+            TypeDeclarationSyntax? typeDeclaration = attribute.Parent?.Parent as TypeDeclarationSyntax;
+            if (typeDeclaration == null)
+            {
+                return null;
+            }
+
+            // Verify that the attribute is being used on a non-abstract type
+            if (typeDeclaration.Modifiers.Any(SyntaxKind.AbstractKeyword))
+            {
+                return null;
+            }
+
+            if (context.SemanticModel.GetDeclaredSymbol(typeDeclaration) is not ITypeSymbol eventType)
+            {
+                return null;
+            }
+
+            string eventName = eventType.Name;
+
+            if (attribute.ArgumentList?.Arguments.Count > 0)
+            {
+                ExpressionSyntax expression = attribute.ArgumentList.Arguments[0].Expression;
+                Optional<object?> constantValue = context.SemanticModel.GetConstantValue(expression);
+                if (constantValue.HasValue && constantValue.Value is string value)
+                {
+                    eventName = value;
+                }
+            }
+
+            return new DurableEventTypeInfo(eventName, eventType);
+        }
+
         static DurableFunction? GetDurableFunction(GeneratorSyntaxContext context)
         {
             MethodDeclarationSyntax method = (MethodDeclarationSyntax)context.Node;
@@ -186,10 +244,11 @@ namespace Microsoft.DurableTask.Generators
             SourceProductionContext context,
             Compilation compilation,
             ImmutableArray<DurableTaskTypeInfo> allTasks,
+            ImmutableArray<DurableEventTypeInfo> allEvents,
             ImmutableArray<DurableFunction> allFunctions,
             string? projectType)
         {
-            if (allTasks.IsDefaultOrEmpty && allFunctions.IsDefaultOrEmpty)
+            if (allTasks.IsDefaultOrEmpty && allEvents.IsDefaultOrEmpty && allFunctions.IsDefaultOrEmpty)
             {
                 return;
             }
@@ -547,6 +606,35 @@ namespace Microsoft.DurableTask
             public bool IsOrchestrator => this.Kind == DurableTaskKind.Orchestrator;
 
             public bool IsEntity => this.Kind == DurableTaskKind.Entity;
+
+            static string GetRenderedTypeExpression(ITypeSymbol? symbol)
+            {
+                if (symbol == null)
+                {
+                    return "object";
+                }
+
+                string expression = symbol.ToString();
+                if (expression.StartsWith("System.", StringComparison.Ordinal)
+                    && symbol.ContainingNamespace.Name == "System")
+                {
+                    expression = expression.Substring("System.".Length);
+                }
+
+                return expression;
+            }
+        }
+
+        class DurableEventTypeInfo
+        {
+            public DurableEventTypeInfo(string eventName, ITypeSymbol eventType)
+            {
+                this.TypeName = GetRenderedTypeExpression(eventType);
+                this.EventName = eventName;
+            }
+
+            public string TypeName { get; }
+            public string EventName { get; }
 
             static string GetRenderedTypeExpression(ITypeSymbol? symbol)
             {

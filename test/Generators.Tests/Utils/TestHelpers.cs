@@ -86,6 +86,7 @@ static class TestHelpers
         string formattedMethodList = IndentLines(spaces: 8, methodList);
         string usings = @"
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.DurableTask.Internal;";
 

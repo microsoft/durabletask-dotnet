@@ -277,7 +277,7 @@ namespace Microsoft.DurableTask.Generators
                 }
             }
 
-            int found = activities.Count + orchestrators.Count + entities.Count + allFunctions.Length;
+            int found = activities.Count + orchestrators.Count + entities.Count + allEvents.Length + allFunctions.Length;
             if (found == 0)
             {
                 return;
@@ -288,6 +288,7 @@ namespace Microsoft.DurableTask.Generators
 #nullable enable
 
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.DurableTask.Internal;");
 
@@ -354,6 +355,13 @@ namespace Microsoft.DurableTask
                 AddActivityCallMethod(sourceBuilder, function);
             }
 
+            // Generate WaitFor{EventName}Async methods for each event type
+            foreach (DurableEventTypeInfo eventInfo in allEvents)
+            {
+                AddEventWaitMethod(sourceBuilder, eventInfo);
+                AddEventSendMethod(sourceBuilder, eventInfo);
+            }
+
             if (isDurableFunctions)
             {
                 if (activities.Count > 0)
@@ -366,11 +374,15 @@ namespace Microsoft.DurableTask
             else
             {
                 // ASP.NET Core-specific service registration methods
-                AddRegistrationMethodForAllTasks(
-                    sourceBuilder,
-                    orchestrators,
-                    activities,
-                    entities);
+                // Only generate if there are actually tasks to register
+                if (orchestrators.Count > 0 || activities.Count > 0 || entities.Count > 0)
+                {
+                    AddRegistrationMethodForAllTasks(
+                        sourceBuilder,
+                        orchestrators,
+                        activities,
+                        entities);   
+                }
             }
 
             sourceBuilder.AppendLine("    }").AppendLine("}");
@@ -456,7 +468,21 @@ namespace Microsoft.DurableTask
 
         static void AddActivityCallMethod(StringBuilder sourceBuilder, DurableFunction activity)
         {
-            sourceBuilder.AppendLine($@"
+            if (activity.ReturnsVoid)
+            {
+                sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Calls the <see cref=""{activity.FullTypeName}""/> activity.
+        /// </summary>
+        /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
+        public static Task Call{activity.Name}Async(this TaskOrchestrationContext ctx, {activity.Parameter}, TaskOptions? options = null)
+        {{
+            return ctx.CallActivityAsync(""{activity.Name}"", {activity.Parameter.Name}, options);
+        }}");
+            }
+            else
+            {
+                sourceBuilder.AppendLine($@"
         /// <summary>
         /// Calls the <see cref=""{activity.FullTypeName}""/> activity.
         /// </summary>
@@ -464,6 +490,33 @@ namespace Microsoft.DurableTask
         public static Task<{activity.ReturnType}> Call{activity.Name}Async(this TaskOrchestrationContext ctx, {activity.Parameter}, TaskOptions? options = null)
         {{
             return ctx.CallActivityAsync<{activity.ReturnType}>(""{activity.Name}"", {activity.Parameter.Name}, options);
+        }}");
+            }
+        }
+
+        static void AddEventWaitMethod(StringBuilder sourceBuilder, DurableEventTypeInfo eventInfo)
+        {
+            sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Waits for an external event of type <see cref=""{eventInfo.TypeName}""/>.
+        /// </summary>
+        /// <inheritdoc cref=""TaskOrchestrationContext.WaitForExternalEvent{{T}}(string, CancellationToken)""/>
+        public static Task<{eventInfo.TypeName}> WaitFor{eventInfo.EventName}Async(this TaskOrchestrationContext context, CancellationToken cancellationToken = default)
+        {{
+            return context.WaitForExternalEvent<{eventInfo.TypeName}>(""{eventInfo.EventName}"", cancellationToken);
+        }}");
+        }
+
+        static void AddEventSendMethod(StringBuilder sourceBuilder, DurableEventTypeInfo eventInfo)
+        {
+            sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Sends an external event of type <see cref=""{eventInfo.TypeName}""/> to another orchestration instance.
+        /// </summary>
+        /// <inheritdoc cref=""TaskOrchestrationContext.SendEvent(string, string, object)""/>
+        public static void Send{eventInfo.EventName}(this TaskOrchestrationContext context, string instanceId, {eventInfo.TypeName} eventData)
+        {{
+            context.SendEvent(instanceId, ""{eventInfo.EventName}"", eventData);
         }}");
         }
 

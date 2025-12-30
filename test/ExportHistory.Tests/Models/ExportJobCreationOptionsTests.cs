@@ -423,7 +423,7 @@ public class ExportJobCreationOptionsTests
         DateTimeOffset from = DateTimeOffset.UtcNow.AddDays(-1);
         DateTimeOffset to = DateTimeOffset.UtcNow;
         ExportDestination destination = new("test-container");
-        ExportFormat format = new("json", "2.0");
+        ExportFormat format = new(ExportFormatKind.Json, "2.0");
 
         // Act
         var options = new ExportJobCreationOptions(

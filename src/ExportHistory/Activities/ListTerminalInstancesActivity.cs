@@ -37,7 +37,6 @@ public class ListTerminalInstancesActivity(
 
         try
         {
-            // Try to use ListInstanceIds endpoint first (available in gRPC client)
             Page<string> page = await this.client.ListInstanceIdsAsync(
                     runtimeStatus: input.RuntimeStatus,
                     completedTimeFrom: input.CompletedTimeFrom,

@@ -82,24 +82,6 @@ public sealed class DateTimeOrchestrationFixer : OrchestrationContextFixer
         {
             string methodName = methodSymbol.Name;
 
-            // Check if this is one of the TimeProvider methods we handle
-            // The diagnostic was already reported by the analyzer, so we know it's valid
-            if (methodName is not ("GetUtcNow" or "GetLocalNow" or "GetTimestamp"))
-            {
-                return;
-            }
-
-            // Optionally verify it's actually TimeProvider if the symbol is available
-            if (orchestrationContext.KnownTypeSymbols.TimeProvider != null)
-            {
-                bool isTimeProviderType = methodSymbol.ContainingType.Equals(orchestrationContext.KnownTypeSymbols.TimeProvider, SymbolEqualityComparer.Default);
-                if (!isTimeProviderType)
-                {
-                    // This might be a different type with the same method name
-                    return;
-                }
-            }
-
             // Check if the method returns DateTimeOffset
             bool returnsDateTimeOffset = methodSymbol.ReturnType.ToDisplayString() == "System.DateTimeOffset";
 

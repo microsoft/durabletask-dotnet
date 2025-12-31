@@ -473,4 +473,42 @@ sealed class GeneratedActivityContext : TaskActivityContext
             isDurableFunctions: true,
             projectType: null);
     }
+
+    [Fact]
+    public Task AutoDetect_WithTriggerAttributes_GeneratesFunctionsCode()
+    {
+        // Test that presence of Azure Functions trigger attributes auto-detects as Functions project
+        // This validates the allFunctions.IsDefaultOrEmpty check in DetermineIsDurableFunctions
+        string code = @"
+using System.Threading.Tasks;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.DurableTask;
+
+public class MyFunctions
+{
+    [Function(nameof(MyActivity))]
+    public int MyActivity([ActivityTrigger] int input) => input;
+}";
+
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            methodList: @"
+/// <summary>
+/// Calls the <see cref=""MyFunctions.MyActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
+public static Task<int> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
+{
+    return ctx.CallActivityAsync<int>(""MyActivity"", input, options);
+}",
+            isDurableFunctions: true);
+
+        // No explicit projectType - should auto-detect based on [ActivityTrigger] attribute
+        return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: true,
+            projectType: null);
+    }
 }

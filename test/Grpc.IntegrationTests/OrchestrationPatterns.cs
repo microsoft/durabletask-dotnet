@@ -117,7 +117,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     {
         TaskName orchestratorName = nameof(ScheduleSubOrchestrationWithTagsAndRetryPolicy);
 
-        // Schedule a new orchestration instance with tags
+        // Schedule a new orchestration instance with tags and a retry policy
         SubOrchestrationOptions subOrchestrationOptions = new()
         {
             InstanceId = "instance_id",

@@ -115,7 +115,7 @@ public class OrchestrationPatterns : IntegrationTestBase
     [Fact]
     public async Task ScheduleSubOrchestrationWithTagsAndRetryPolicy()
     {
-        TaskName orchestratorName = nameof(ScheduleSubOrchestrationWithTags);
+        TaskName orchestratorName = nameof(ScheduleSubOrchestrationWithTagsAndRetryPolicy);
 
         // Schedule a new orchestration instance with tags
         SubOrchestrationOptions subOrchestrationOptions = new()

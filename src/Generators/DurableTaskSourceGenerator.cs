@@ -435,7 +435,21 @@ namespace Microsoft.DurableTask
 
         static void AddActivityCallMethod(StringBuilder sourceBuilder, DurableFunction activity)
         {
-            sourceBuilder.AppendLine($@"
+            if (activity.ReturnsVoid)
+            {
+                sourceBuilder.AppendLine($@"
+        /// <summary>
+        /// Calls the <see cref=""{activity.FullTypeName}""/> activity.
+        /// </summary>
+        /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
+        public static Task Call{activity.Name}Async(this TaskOrchestrationContext ctx, {activity.Parameter}, TaskOptions? options = null)
+        {{
+            return ctx.CallActivityAsync(""{activity.Name}"", {activity.Parameter.Name}, options);
+        }}");
+            }
+            else
+            {
+                sourceBuilder.AppendLine($@"
         /// <summary>
         /// Calls the <see cref=""{activity.FullTypeName}""/> activity.
         /// </summary>
@@ -444,6 +458,7 @@ namespace Microsoft.DurableTask
         {{
             return ctx.CallActivityAsync<{activity.ReturnType}>(""{activity.Name}"", {activity.Parameter.Name}, options);
         }}");
+            }
         }
 
         static void AddEventWaitMethod(StringBuilder sourceBuilder, DurableEventTypeInfo eventInfo)

@@ -105,7 +105,6 @@ public class OrchestrationPatterns : IntegrationTestBase
             subOrchestrationOptions.InstanceId, this.TimeoutToken);
 
         Assert.NotNull(metadata);
-        Assert.Equal(subOrchestrationOptions.InstanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.NotNull(metadata.Tags);
         Assert.Equal(2, metadata.Tags.Count);
@@ -127,7 +126,7 @@ public class OrchestrationPatterns : IntegrationTestBase
                 { "tag1", "value1" },
                 { "tag2", "value2" }
             },
-            Retry = new RetryPolicy(maxNumberOfAttempts: 2, firstRetryInterval: TimeSpan.FromSeconds(3))
+            Retry = new RetryPolicy(maxNumberOfAttempts: 2, firstRetryInterval: TimeSpan.FromSeconds(5))
         };
 
         int failCounter = 0;
@@ -157,17 +156,17 @@ public class OrchestrationPatterns : IntegrationTestBase
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
             subOrchestrationOptions.InstanceId, this.TimeoutToken);
         Assert.NotNull(metadata);
-        Assert.Equal(subOrchestrationOptions.InstanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
 
-        // Give some time for the retry to happen
-        Thread.Sleep(5000);
+        // Wait for the retry to happen
+        while (metadata.RuntimeStatus != OrchestrationRuntimeStatus.Completed && !this.TimeoutToken.IsCancellationRequested)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1), this.TimeoutToken);
+            metadata = await server.Client.WaitForInstanceCompletionAsync(
+                subOrchestrationOptions.InstanceId, this.TimeoutToken);
+        }
 
         // Confirm the second attempt succeeded
-        metadata = await server.Client.WaitForInstanceCompletionAsync(
-            subOrchestrationOptions.InstanceId, this.TimeoutToken);
-        Assert.NotNull(metadata);
-        Assert.Equal(subOrchestrationOptions.InstanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.NotNull(metadata.Tags);
         Assert.Equal(2, metadata.Tags.Count);

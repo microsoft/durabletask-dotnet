@@ -4,6 +4,7 @@
 using System.Collections.Immutable;
 using System.Composition;
 using System.Globalization;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
@@ -68,13 +69,36 @@ public sealed class DateTimeOrchestrationFixer : OrchestrationContextFixer
                     createChangedDocument: c => ReplaceDateTime(context.Document, orchestrationContext.Root, dateTimeExpression, contextParameterName, isDateTimeToday, isDateTimeOffset),
                     equivalenceKey: title), // This key is used to prevent duplicate code fixes.
                 context.Diagnostics);
+            return;
         }
 
         // Handle TimeProvider method invocations (e.g. TimeProvider.System.GetUtcNow())
-        else if (orchestrationContext.SyntaxNodeWithDiagnostic is InvocationExpressionSyntax timeProviderInvocation &&
-                 semanticModel.GetSymbolInfo(timeProviderInvocation).Symbol is IMethodSymbol methodSymbol)
+        // The node might be the invocation itself or a child node, so we need to find the InvocationExpressionSyntax
+        InvocationExpressionSyntax? timeProviderInvocation = orchestrationContext.SyntaxNodeWithDiagnostic as InvocationExpressionSyntax
+            ?? orchestrationContext.SyntaxNodeWithDiagnostic.AncestorsAndSelf().OfType<InvocationExpressionSyntax>().FirstOrDefault();
+
+        if (timeProviderInvocation != null &&
+            semanticModel.GetSymbolInfo(timeProviderInvocation).Symbol is IMethodSymbol methodSymbol)
         {
             string methodName = methodSymbol.Name;
+
+            // Check if this is one of the TimeProvider methods we handle
+            // The diagnostic was already reported by the analyzer, so we know it's valid
+            if (methodName is not ("GetUtcNow" or "GetLocalNow" or "GetTimestamp"))
+            {
+                return;
+            }
+
+            // Optionally verify it's actually TimeProvider if the symbol is available
+            if (orchestrationContext.KnownTypeSymbols.TimeProvider != null)
+            {
+                bool isTimeProviderType = methodSymbol.ContainingType.Equals(orchestrationContext.KnownTypeSymbols.TimeProvider, SymbolEqualityComparer.Default);
+                if (!isTimeProviderType)
+                {
+                    // This might be a different type with the same method name
+                    return;
+                }
+            }
 
             // Check if the method returns DateTimeOffset
             bool returnsDateTimeOffset = methodSymbol.ReturnType.ToDisplayString() == "System.DateTimeOffset";

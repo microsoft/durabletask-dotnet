@@ -60,7 +60,7 @@ public sealed class DateTimeOrchestrationFixer : OrchestrationContextFixer
                 CultureInfo.InvariantCulture,
                 Resources.UseInsteadFixerTitle,
                 recommendation,
-                dateTimeExpression.ToString());
+                dateTimeExpression);
 
             context.RegisterCodeFix(
                 CodeAction.Create(
@@ -71,41 +71,38 @@ public sealed class DateTimeOrchestrationFixer : OrchestrationContextFixer
         }
 
         // Handle TimeProvider method invocations (e.g. TimeProvider.System.GetUtcNow())
-        else if (orchestrationContext.SyntaxNodeWithDiagnostic is InvocationExpressionSyntax timeProviderInvocation)
+        else if (orchestrationContext.SyntaxNodeWithDiagnostic is InvocationExpressionSyntax timeProviderInvocation &&
+                 semanticModel.GetSymbolInfo(timeProviderInvocation).Symbol is IMethodSymbol methodSymbol)
         {
-            // Determine the method being called
-            if (semanticModel.GetSymbolInfo(timeProviderInvocation).Symbol is IMethodSymbol methodSymbol)
+            string methodName = methodSymbol.Name;
+
+            // Check if the method returns DateTimeOffset
+            bool returnsDateTimeOffset = methodSymbol.ReturnType.ToDisplayString() == "System.DateTimeOffset";
+
+            // Build the recommendation based on the method name
+            string recommendation = methodName switch
             {
-                string methodName = methodSymbol.Name;
+                "GetUtcNow" when returnsDateTimeOffset => $"(DateTimeOffset){contextParameterName}.CurrentUtcDateTime",
+                "GetUtcNow" => $"{contextParameterName}.CurrentUtcDateTime",
+                "GetLocalNow" when returnsDateTimeOffset => $"(DateTimeOffset){contextParameterName}.CurrentUtcDateTime.ToLocalTime()",
+                "GetLocalNow" => $"{contextParameterName}.CurrentUtcDateTime.ToLocalTime()",
+                "GetTimestamp" => $"{contextParameterName}.CurrentUtcDateTime.Ticks",
+                _ => $"{contextParameterName}.CurrentUtcDateTime",
+            };
 
-                // Check if the method returns DateTimeOffset
-                bool returnsDateTimeOffset = methodSymbol.ReturnType.ToDisplayString() == "System.DateTimeOffset";
+            // e.g: "Use 'context.CurrentUtcDateTime' instead of 'TimeProvider.System.GetUtcNow()'"
+            string title = string.Format(
+                CultureInfo.InvariantCulture,
+                Resources.UseInsteadFixerTitle,
+                recommendation,
+                timeProviderInvocation);
 
-                // Build the recommendation based on the method name
-                string recommendation = methodName switch
-                {
-                    "GetUtcNow" when returnsDateTimeOffset => $"(DateTimeOffset){contextParameterName}.CurrentUtcDateTime",
-                    "GetUtcNow" => $"{contextParameterName}.CurrentUtcDateTime",
-                    "GetLocalNow" when returnsDateTimeOffset => $"(DateTimeOffset){contextParameterName}.CurrentUtcDateTime.ToLocalTime()",
-                    "GetLocalNow" => $"{contextParameterName}.CurrentUtcDateTime.ToLocalTime()",
-                    "GetTimestamp" => $"{contextParameterName}.CurrentUtcDateTime.Ticks",
-                    _ => $"{contextParameterName}.CurrentUtcDateTime",
-                };
-
-                // e.g: "Use 'context.CurrentUtcDateTime' instead of 'TimeProvider.System.GetUtcNow()'"
-                string title = string.Format(
-                    CultureInfo.InvariantCulture,
-                    Resources.UseInsteadFixerTitle,
-                    recommendation,
-                    timeProviderInvocation.ToString());
-
-                context.RegisterCodeFix(
-                    CodeAction.Create(
-                        title: title,
-                        createChangedDocument: c => ReplaceTimeProvider(context.Document, orchestrationContext.Root, timeProviderInvocation, contextParameterName, methodName, returnsDateTimeOffset),
-                        equivalenceKey: title),
-                    context.Diagnostics);
-            }
+            context.RegisterCodeFix(
+                CodeAction.Create(
+                    title: title,
+                    createChangedDocument: c => ReplaceTimeProvider(context.Document, orchestrationContext.Root, timeProviderInvocation, contextParameterName, methodName, returnsDateTimeOffset),
+                    equivalenceKey: title),
+                context.Diagnostics);
         }
     }
 

@@ -222,13 +222,28 @@ public abstract class TaskOrchestrationContext
     /// </param>
     /// <param name="timeout">The amount of time to wait before cancelling the external event task.</param>
     /// <inheritdoc cref="WaitForExternalEvent(string, CancellationToken)"/>
-    public async Task<T> WaitForExternalEvent<T>(string eventName, TimeSpan timeout)
+    public Task<T> WaitForExternalEvent<T>(string eventName, TimeSpan timeout)
+    {
+        return this.WaitForExternalEvent<T>(eventName, timeout, CancellationToken.None);
+    }
+
+    /// <param name="eventName">
+    /// The name of the event to wait for. Event names are case-insensitive. External event names can be reused any
+    /// number of times; they are not required to be unique.
+    /// </param>
+    /// <param name="timeout">The amount of time to wait before cancelling the external event task.</param>
+    /// <param name="cancellationToken">A <c>CancellationToken</c> to use to abort waiting for the event.</param>
+    /// <inheritdoc cref="WaitForExternalEvent(string, CancellationToken)"/>
+    public async Task<T> WaitForExternalEvent<T>(string eventName, TimeSpan timeout, CancellationToken cancellationToken)
     {
         // Timeouts are implemented using durable timers.
         using CancellationTokenSource timerCts = new();
         Task timeoutTask = this.CreateTimer(timeout, timerCts.Token);
 
-        using CancellationTokenSource eventCts = new();
+        // Create a linked cancellation token source from the external cancellation token.
+        // This allows us to cancel the event wait either when the external token is cancelled
+        // or when the timeout fires (by calling eventCts.Cancel()).
+        using CancellationTokenSource eventCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task<T> externalEventTask = this.WaitForExternalEvent<T>(eventName, eventCts.Token);
 
         // Wait for either task to complete and then cancel the one that didn't.

@@ -34,17 +34,17 @@ public sealed partial class DurableTaskRegistry
     /// <summary>
     /// Gets the types of registered activities.
     /// </summary>
-    internal HashSet<Type> ActivityTypes { get; } = new HashSet<Type>();
+    internal HashSet<Type> ActivityTypes { get; } = new();
 
     /// <summary>
     /// Gets the types of registered orchestrators.
     /// </summary>
-    internal HashSet<Type> OrchestratorTypes { get; } = new HashSet<Type>();
+    internal HashSet<Type> OrchestratorTypes { get; } = new();
 
     /// <summary>
     /// Gets the types of registered entities.
     /// </summary>
-    internal HashSet<Type> EntityTypes { get; } = new HashSet<Type>();
+    internal HashSet<Type> EntityTypes { get; } = new();
 
     /// <summary>
     /// Registers an activity factory.

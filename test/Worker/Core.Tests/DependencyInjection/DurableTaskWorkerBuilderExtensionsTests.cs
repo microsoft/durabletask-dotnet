@@ -159,6 +159,27 @@ public class DurableTaskBuilderWorkerExtensionsTests
     }
 
     [Fact]
+    public void AddTasksAsServices_DoesNotRegisterSingletonInstances()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
+        TestActivity singletonActivity = new();
+
+        // Act
+        builder.AddTasksAsServices(registry =>
+        {
+            registry.AddActivity(singletonActivity);
+        });
+
+        // Assert - Singleton instances should not be registered in DI
+        IServiceProvider provider = services.BuildServiceProvider();
+        // Verify that TestActivity is not registered as a service
+        // (it's only registered as a singleton instance with the worker)
+        provider.GetService<TestActivity>().Should().BeNull();
+    }
+
+    [Fact]
     public void AddTasksAsServices_AlsoRegistersTasksWithWorker()
     {
         // Arrange

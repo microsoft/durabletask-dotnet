@@ -43,12 +43,12 @@ namespace Microsoft.DurableTask.Generators
         /// <summary>
         /// Diagnostic ID for invalid task names.
         /// </summary>
-        const string InvalidTaskNameDiagnosticId = "DURABLE1001";
+        const string InvalidTaskNameDiagnosticId = "DURABLE3001";
 
         /// <summary>
         /// Diagnostic ID for invalid event names.
         /// </summary>
-        const string InvalidEventNameDiagnosticId = "DURABLE1002";
+        const string InvalidEventNameDiagnosticId = "DURABLE3002";
 
         static readonly DiagnosticDescriptor InvalidTaskNameRule = new(
             InvalidTaskNameDiagnosticId,

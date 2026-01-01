@@ -34,7 +34,7 @@ class MyActivity : TaskActivity<int, string>
 }}";
 
         // The test framework automatically verifies that the expected diagnostic is reported
-        DiagnosticResult expected = new DiagnosticResult("DURABLE1001", DiagnosticSeverity.Error)
+        DiagnosticResult expected = new DiagnosticResult("DURABLE3001", DiagnosticSeverity.Error)
             .WithSpan("/0/Test0.cs", 5, 14, 5, 14 + invalidName.Length + 2)
             .WithArguments(invalidName);
 
@@ -71,7 +71,7 @@ class MyOrchestrator : TaskOrchestrator<int, string>
     public override Task<string> RunAsync(TaskOrchestrationContext ctx, int input) => Task.FromResult(string.Empty);
 }}";
 
-        DiagnosticResult expected = new DiagnosticResult("DURABLE1001", DiagnosticSeverity.Error)
+        DiagnosticResult expected = new DiagnosticResult("DURABLE3001", DiagnosticSeverity.Error)
             .WithSpan("/0/Test0.cs", 5, 14, 5, 14 + invalidName.Length + 2)
             .WithArguments(invalidName);
 
@@ -104,7 +104,7 @@ using Microsoft.DurableTask;
 [DurableEvent(""{invalidName}"")]
 public sealed record MyEvent(bool Approved);";
 
-        DiagnosticResult expected = new DiagnosticResult("DURABLE1002", DiagnosticSeverity.Error)
+        DiagnosticResult expected = new DiagnosticResult("DURABLE3002", DiagnosticSeverity.Error)
             .WithSpan("/0/Test0.cs", 5, 15, 5, 15 + invalidName.Length + 2)
             .WithArguments(invalidName);
 
@@ -215,7 +215,7 @@ class MyActivity : TaskActivity<int, string>
     public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
 }";
 
-        DiagnosticResult expected = new DiagnosticResult("DURABLE1001", DiagnosticSeverity.Error)
+        DiagnosticResult expected = new DiagnosticResult("DURABLE3001", DiagnosticSeverity.Error)
             .WithSpan("/0/Test0.cs", 5, 14, 5, 23)
             .WithArguments("Foo.Bar");
 

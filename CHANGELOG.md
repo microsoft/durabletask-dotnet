@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.18.2
+- Add copy constructors to TaskOptions and sub-classes by halspang ([#587](https://github.com/microsoft/durabletask-dotnet/pull/587))
+- Change FunctionNotFound analyzer severity to Info for cross-assembly scenarios by Copilot ([#584](https://github.com/microsoft/durabletask-dotnet/pull/584))
+- Add Roslyn analyzer for non-contextual logger usage in orchestrations (DURABLE0010) by Copilot ([#553](https://github.com/microsoft/durabletask-dotnet/pull/553))
+- Add specific logging categories for Worker.Grpc and orchestration logs with backward-compatible opt-in by Copilot ([#583](https://github.com/microsoft/durabletask-dotnet/pull/583))
+- Fix flaky integration test race condition in dedup status check by Copilot ([#579](https://github.com/microsoft/durabletask-dotnet/pull/579))
+- Add analyzer to suggest input parameter binding over GetInput() by Copilot ([#550](https://github.com/microsoft/durabletask-dotnet/pull/550))
+- Add strongly-typed external events with DurableEventAttribute by Copilot ([#549](https://github.com/microsoft/durabletask-dotnet/pull/549))
+- Fix orchestration analyzer to detect non-function orchestrations correctly by Copilot ([#572](https://github.com/microsoft/durabletask-dotnet/pull/572))
+- Fix race condition in WaitForInstanceAsync causing intermittent test failures by Copilot ([#574](https://github.com/microsoft/durabletask-dotnet/pull/574))
+- Add HelpLinkUri to Roslyn analyzer diagnostics by Copilot ([#548](https://github.com/microsoft/durabletask-dotnet/pull/548))
+- Add DateTimeOffset.Now and DateTimeOffset.UtcNow detection to Roslyn analyzer by Copilot ([#547](https://github.com/microsoft/durabletask-dotnet/pull/547))
+- Bump Google.Protobuf from 3.33.1 to 3.33.2 by dependabot[bot] ([#569](https://github.com/microsoft/durabletask-dotnet/pull/569))
+- Add integration test coverage for Suspend/Resume operations by Copilot ([#546](https://github.com/microsoft/durabletask-dotnet/pull/546))
+- Bump coverlet.collector from 6.0.2 to 6.0.4 by dependabot[bot] ([#527](https://github.com/microsoft/durabletask-dotnet/pull/527))
+- Bump FluentAssertions from 6.12.1 to 6.12.2 by dependabot[bot] ([#528](https://github.com/microsoft/durabletask-dotnet/pull/528))
+- Add Azure Functions smoke tests with Docker CI automation by Copilot ([#545](https://github.com/microsoft/durabletask-dotnet/pull/545))
+- Bump dotnet-sdk from 10.0.100 to 10.0.101 by dependabot[bot] ([#568](https://github.com/microsoft/durabletask-dotnet/pull/568))
+- Add scheduled auto-closure for stale "Needs Author Feedback" issues by Copilot ([#566](https://github.com/microsoft/durabletask-dotnet/pull/566))
+
 ## v1.18.1
 - Support dedup status when starting orchestration by wangbill ([#542](https://github.com/microsoft/durabletask-dotnet/pull/542))
 - Add 404 exception handling in blobpayloadstore.downloadasync by Copilot ([#534](https://github.com/microsoft/durabletask-dotnet/pull/534))

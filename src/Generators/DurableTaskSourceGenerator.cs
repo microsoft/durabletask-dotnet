@@ -4,6 +4,7 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Text;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -344,14 +345,9 @@ namespace Microsoft.DurableTask.Generators
             }
 
             // Filter out events with invalid names
-            List<DurableEventTypeInfo> validEvents = new();
-            foreach (DurableEventTypeInfo eventInfo in allEvents)
-            {
-                if (IsValidCSharpIdentifier(eventInfo.EventName))
-                {
-                    validEvents.Add(eventInfo);
-                }
-            }
+            List<DurableEventTypeInfo> validEvents = allEvents
+                .Where(eventInfo => IsValidCSharpIdentifier(eventInfo.EventName))
+                .ToList();
 
             int found = activities.Count + orchestrators.Count + entities.Count + validEvents.Count + allFunctions.Length;
             if (found == 0)

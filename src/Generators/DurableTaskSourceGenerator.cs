@@ -290,25 +290,25 @@ namespace Microsoft.DurableTask.Generators
             }
 
             // Validate task names and report diagnostics for invalid identifiers
-            foreach (DurableTaskTypeInfo task in allTasks)
+            IEnumerable<DurableTaskTypeInfo> invalidTasks = allTasks
+                .Where(task => !IsValidCSharpIdentifier(task.TaskName));
+
+            foreach (DurableTaskTypeInfo task in invalidTasks)
             {
-                if (!IsValidCSharpIdentifier(task.TaskName))
-                {
-                    Location location = task.TaskNameLocation ?? Location.None;
-                    Diagnostic diagnostic = Diagnostic.Create(InvalidTaskNameRule, location, task.TaskName);
-                    context.ReportDiagnostic(diagnostic);
-                }
+                Location location = task.TaskNameLocation ?? Location.None;
+                Diagnostic diagnostic = Diagnostic.Create(InvalidTaskNameRule, location, task.TaskName);
+                context.ReportDiagnostic(diagnostic);
             }
 
             // Validate event names and report diagnostics for invalid identifiers
-            foreach (DurableEventTypeInfo eventInfo in allEvents)
+            IEnumerable<DurableEventTypeInfo> invalidEvents = allEvents
+                .Where(eventInfo => !IsValidCSharpIdentifier(eventInfo.EventName));
+
+            foreach (DurableEventTypeInfo eventInfo in invalidEvents)
             {
-                if (!IsValidCSharpIdentifier(eventInfo.EventName))
-                {
-                    Location location = eventInfo.EventNameLocation ?? Location.None;
-                    Diagnostic diagnostic = Diagnostic.Create(InvalidEventNameRule, location, eventInfo.EventName);
-                    context.ReportDiagnostic(diagnostic);
-                }
+                Location location = eventInfo.EventNameLocation ?? Location.None;
+                Diagnostic diagnostic = Diagnostic.Create(InvalidEventNameRule, location, eventInfo.EventName);
+                context.ReportDiagnostic(diagnostic);
             }
 
             // This generator also supports Durable Functions for .NET isolated, but we only generate Functions-specific

@@ -322,14 +322,11 @@ namespace Microsoft.DurableTask.Generators
             List<DurableTaskTypeInfo> activities = new();
             List<DurableTaskTypeInfo> entities = new();
 
-            foreach (DurableTaskTypeInfo task in allTasks)
-            {
-                // Skip tasks with invalid names
-                if (!IsValidCSharpIdentifier(task.TaskName))
-                {
-                    continue;
-                }
+            IEnumerable<DurableTaskTypeInfo> validTasks = allTasks
+                .Where(task => IsValidCSharpIdentifier(task.TaskName));
 
+            foreach (DurableTaskTypeInfo task in validTasks)
+            {
                 if (task.IsActivity)
                 {
                     activities.Add(task);

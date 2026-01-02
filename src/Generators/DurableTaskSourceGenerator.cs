@@ -326,12 +326,14 @@ namespace Microsoft.DurableTask
     public static class GeneratedDurableTaskExtensions
     {");
 
-            // Note: With Durable Functions' native support for class-based invocations (PR #3229),
-            // we no longer generate [Function] attribute definitions for class-based orchestrators,
-            // activities, and entities (i.e., classes that implement ITaskOrchestrator, ITaskActivity,
-            // or ITaskEntity and are decorated with [DurableTask] attribute). The Durable Functions
-            // runtime now handles function registration for these types automatically.
-            // We continue to generate extension methods for type-safe invocation.
+            // Note: When targeting Azure Functions (Durable Functions scenarios) with native support
+            // for class-based invocations (PR #3229), we no longer generate [Function] attribute
+            // definitions for class-based orchestrators, activities, and entities (i.e., classes that
+            // implement ITaskOrchestrator, ITaskActivity, or ITaskEntity and are decorated with the
+            // [DurableTask] attribute). The Durable Functions runtime now handles function registration
+            // for these types automatically in those scenarios. For non-Durable Functions scenarios
+            // (for example, ASP.NET Core using the Durable Task Scheduler), this behavior remains
+            // unchanged. We continue to generate extension methods for type-safe invocation.
 
             foreach (DurableTaskTypeInfo orchestrator in orchestrators)
             {

@@ -232,17 +232,17 @@ namespace Microsoft.DurableTask.Generators
 
         /// <summary>
         /// Determines if code generation should be skipped for Durable Functions scenarios.
-        /// Returns true if only entities exist, since entities don't generate extension methods
-        /// and Durable Functions handles their registration natively.
+        /// Returns true if only entities exist and the runtime supports native class-based invocation,
+        /// since entities don't generate extension methods and the runtime handles their registration.
         /// </summary>
         static bool ShouldSkipGenerationForDurableFunctions(
-            bool isDurableFunctions,
+            bool supportsNativeClassBasedInvocation,
             List<DurableTaskTypeInfo> orchestrators,
             List<DurableTaskTypeInfo> activities,
             ImmutableArray<DurableEventTypeInfo> allEvents,
             ImmutableArray<DurableFunction> allFunctions)
         {
-            return isDurableFunctions &&
+            return supportsNativeClassBasedInvocation &&
                 orchestrators.Count == 0 &&
                 activities.Count == 0 &&
                 allEvents.Length == 0 &&
@@ -265,6 +265,24 @@ namespace Microsoft.DurableTask.Generators
             // code if we find the Durable Functions extension listed in the set of referenced assembly names.
             bool isDurableFunctions = compilation.ReferencedAssemblyNames.Any(
                 assembly => assembly.Name.Equals("Microsoft.Azure.Functions.Worker.Extensions.DurableTask", StringComparison.OrdinalIgnoreCase));
+
+            // Check if the Durable Functions extension version supports native class-based invocation.
+            // This feature was introduced in PR #3229: https://github.com/Azure/azure-functions-durable-extension/pull/3229
+            // For the isolated worker extension (Microsoft.Azure.Functions.Worker.Extensions.DurableTask),
+            // we use version 1.1.0 as a conservative threshold. This should be adjusted based on the actual
+            // version where native class-based invocation support was added to the isolated worker extension.
+            // TODO: Confirm the correct version threshold with the Durable Functions team.
+            bool supportsNativeClassBasedInvocation = false;
+            if (isDurableFunctions)
+            {
+                var durableFunctionsAssembly = compilation.ReferencedAssemblyNames.FirstOrDefault(
+                    assembly => assembly.Name.Equals("Microsoft.Azure.Functions.Worker.Extensions.DurableTask", StringComparison.OrdinalIgnoreCase));
+                
+                if (durableFunctionsAssembly != null && durableFunctionsAssembly.Version >= new Version(1, 1, 0))
+                {
+                    supportsNativeClassBasedInvocation = true;
+                }
+            }
 
             // Separate tasks into orchestrators, activities, and entities
             List<DurableTaskTypeInfo> orchestrators = new();
@@ -293,12 +311,12 @@ namespace Microsoft.DurableTask.Generators
                 return;
             }
 
-            // With Durable Functions' native support for class-based invocations (PR #3229),
-            // we no longer generate [Function] definitions for class-based tasks.
-            // If we have ONLY entities (no orchestrators, no activities, no events, no method-based functions),
-            // then there's nothing to generate for Durable Functions scenarios since entities don't have
-            // extension methods.
-            if (ShouldSkipGenerationForDurableFunctions(isDurableFunctions, orchestrators, activities, allEvents, allFunctions))
+            // With Durable Functions' native support for class-based invocations (PR #3229, v3.8.0+),
+            // we no longer generate [Function] definitions for class-based tasks when the runtime
+            // supports native invocation. If we have ONLY entities (no orchestrators, no activities,
+            // no events, no method-based functions), then there's nothing to generate for those
+            // scenarios since entities don't have extension methods.
+            if (ShouldSkipGenerationForDurableFunctions(supportsNativeClassBasedInvocation, orchestrators, activities, allEvents, allFunctions))
             {
                 return;
             }
@@ -326,17 +344,36 @@ namespace Microsoft.DurableTask
     public static class GeneratedDurableTaskExtensions
     {");
 
+            // Generate singleton orchestrator instances for older Durable Functions versions
+            // that don't have native class-based invocation support
+            if (isDurableFunctions && !supportsNativeClassBasedInvocation)
+            {
+                foreach (DurableTaskTypeInfo orchestrator in orchestrators)
+                {
+                    sourceBuilder.AppendLine($@"
+        static readonly ITaskOrchestrator singleton{orchestrator.TaskName} = new {orchestrator.TypeName}();");
+                }
+            }
+
             // Note: When targeting Azure Functions (Durable Functions scenarios) with native support
-            // for class-based invocations (PR #3229), we no longer generate [Function] attribute
+            // for class-based invocations (PR #3229, v3.8.0+), we no longer generate [Function] attribute
             // definitions for class-based orchestrators, activities, and entities (i.e., classes that
             // implement ITaskOrchestrator, ITaskActivity, or ITaskEntity and are decorated with the
-            // [DurableTask] attribute). The Durable Functions runtime now handles function registration
-            // for these types automatically in those scenarios. For non-Durable Functions scenarios
-            // (for example, ASP.NET Core using the Durable Task Scheduler), this behavior remains
-            // unchanged. We continue to generate extension methods for type-safe invocation.
+            // [DurableTask] attribute). The Durable Functions runtime handles function registration
+            // for these types automatically in those scenarios. For older versions of Durable Functions
+            // (prior to v3.8.0) or non-Durable Functions scenarios (for example, ASP.NET Core using
+            // the Durable Task Scheduler), we continue to generate [Function] definitions.
+            // We always generate extension methods for type-safe invocation.
 
             foreach (DurableTaskTypeInfo orchestrator in orchestrators)
             {
+                // Only generate [Function] definitions for Durable Functions if the runtime doesn't
+                // support native class-based invocation (versions prior to v3.8.0)
+                if (isDurableFunctions && !supportsNativeClassBasedInvocation)
+                {
+                    AddOrchestratorFunctionDeclaration(sourceBuilder, orchestrator);
+                }
+
                 AddOrchestratorCallMethod(sourceBuilder, orchestrator);
                 AddSubOrchestratorCallMethod(sourceBuilder, orchestrator);
             }
@@ -344,9 +381,24 @@ namespace Microsoft.DurableTask
             foreach (DurableTaskTypeInfo activity in activities)
             {
                 AddActivityCallMethod(sourceBuilder, activity);
+
+                // Only generate [Function] definitions for Durable Functions if the runtime doesn't
+                // support native class-based invocation (versions prior to v3.8.0)
+                if (isDurableFunctions && !supportsNativeClassBasedInvocation)
+                {
+                    AddActivityFunctionDeclaration(sourceBuilder, activity);
+                }
             }
 
-            // Entities don't have extension methods, so no generation needed for them
+            foreach (DurableTaskTypeInfo entity in entities)
+            {
+                // Only generate [Function] definitions for Durable Functions if the runtime doesn't
+                // support native class-based invocation (versions prior to v3.8.0)
+                if (isDurableFunctions && !supportsNativeClassBasedInvocation)
+                {
+                    AddEntityFunctionDeclaration(sourceBuilder, entity);
+                }
+            }
 
             // Activity function triggers are supported for code-gen (but not orchestration triggers)
             IEnumerable<DurableFunction> activityTriggers = allFunctions.Where(
@@ -363,12 +415,19 @@ namespace Microsoft.DurableTask
                 AddEventSendMethod(sourceBuilder, eventInfo);
             }
 
-            // Note: The GeneratedActivityContext class and AddGeneratedActivityContextClass method
-            // are no longer needed for Durable Functions since the runtime now natively handles
-            // class-based invocations. These helper methods remain in the codebase but are not
-            // called in Durable Functions scenarios.
-            
-            if (!isDurableFunctions)
+            // Note: The GeneratedActivityContext class is only needed for older versions of
+            // Durable Functions (prior to v3.8.0) that don't have native class-based invocation support.
+            // For v3.8.0+, the runtime handles class-based invocations natively.
+            if (isDurableFunctions && !supportsNativeClassBasedInvocation)
+            {
+                if (activities.Count > 0)
+                {
+                    // Functions-specific helper class, which is only needed when
+                    // using the class-based syntax with older Durable Functions versions.
+                    AddGeneratedActivityContextClass(sourceBuilder);
+                }
+            }
+            else if (!isDurableFunctions)
             {
                 // ASP.NET Core-specific service registration methods
                 // Only generate if there are actually tasks to register

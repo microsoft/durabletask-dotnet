@@ -13,6 +13,7 @@ The smoke tests ensure that:
 ## Structure
 
 - **HelloCitiesOrchestration.cs** - Simple orchestration that calls multiple activities
+- **SourceGeneratorScenarios.cs** - Class-based orchestration, activity, entity, and event coverage for source generator validation
 - **Program.cs** - Azure Functions host entry point
 - **host.json** - Azure Functions host configuration
 - **local.settings.json** - Local development settings
@@ -42,7 +43,7 @@ The script will:
 4. Start the Azure Functions app in a Docker container
 5. Trigger the HelloCities orchestration via HTTP
 6. Poll for orchestration completion
-7. Validate the result
+7. Trigger the source generator orchestration and validate generated activity/entity/event/sub-orchestrator behaviors
 8. Clean up all containers
 
 ### Parameters

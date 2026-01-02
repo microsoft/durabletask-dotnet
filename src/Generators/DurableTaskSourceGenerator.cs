@@ -269,16 +269,14 @@ namespace Microsoft.DurableTask.Generators
             // Check if the Durable Functions extension version supports native class-based invocation.
             // This feature was introduced in PR #3229: https://github.com/Azure/azure-functions-durable-extension/pull/3229
             // For the isolated worker extension (Microsoft.Azure.Functions.Worker.Extensions.DurableTask),
-            // we use version 1.1.0 as a conservative threshold. This should be adjusted based on the actual
-            // version where native class-based invocation support was added to the isolated worker extension.
-            // TODO: Confirm the correct version threshold with the Durable Functions team.
+            // native class-based invocation support was added in version 1.11.0.
             bool supportsNativeClassBasedInvocation = false;
             if (isDurableFunctions)
             {
                 var durableFunctionsAssembly = compilation.ReferencedAssemblyNames.FirstOrDefault(
                     assembly => assembly.Name.Equals("Microsoft.Azure.Functions.Worker.Extensions.DurableTask", StringComparison.OrdinalIgnoreCase));
                 
-                if (durableFunctionsAssembly != null && durableFunctionsAssembly.Version >= new Version(1, 1, 0))
+                if (durableFunctionsAssembly != null && durableFunctionsAssembly.Version >= new Version(1, 11, 0))
                 {
                     supportsNativeClassBasedInvocation = true;
                 }

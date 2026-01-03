@@ -44,7 +44,7 @@ The script will:
 5. Trigger the HelloCities orchestration via HTTP
 6. Poll for orchestration completion
 7. Trigger the source generator orchestration and validate generated activity/entity/event/sub-orchestrator behaviors
-8. Clean up all containers
+9. Clean up all containers
 
 ### Parameters
 

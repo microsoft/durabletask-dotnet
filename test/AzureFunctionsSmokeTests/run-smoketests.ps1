@@ -306,10 +306,10 @@ try {
                 if (-not $greeting) { $greeting = $output.Greeting }
 
                 $greetingLength = $output.greetingLength
-                if (-not $greetingLength) { $greetingLength = $output.GreetingLength }
+                if ($null -eq $greetingLength) { $greetingLength = $output.GreetingLength }
                 
                 $counterTotal = $output.counterTotal
-                if (-not $counterTotal) { $counterTotal = $output.CounterTotal }
+                if ($null -eq $counterTotal) { $counterTotal = $output.CounterTotal }
                 
                 $childMessage = $output.childMessage
                 if (-not $childMessage) { $childMessage = $output.ChildMessage }
@@ -321,7 +321,7 @@ try {
                     throw "Unexpected greeting from generated activity: $greeting"
                 }
 
-                if (-not $greetingLength) {
+                if ($null -eq $greetingLength) {
                     throw "Greeting length was not populated correctly: $greetingLength"
                 }
 

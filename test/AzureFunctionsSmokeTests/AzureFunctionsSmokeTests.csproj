@@ -2,7 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <TopLevelNamespace>AzureFunctionsSmokeTests</TopLevelNamespace>
     <RootNamespace>AzureFunctionsSmokeTests</RootNamespace>
     <AssemblyName>AzureFunctionsSmokeTests</AssemblyName>
     <AzureFunctionsVersion>v4</AzureFunctionsVersion>

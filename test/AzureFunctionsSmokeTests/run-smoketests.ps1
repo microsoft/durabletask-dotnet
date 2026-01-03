@@ -327,7 +327,7 @@ try {
 
                 $greetingLengthValue = [int]$greetingLength
 
-                if (-not $counterTotal) {
+                if ($null -eq $counterTotal) {
                     throw "Entity counter total was not populated correctly: $counterTotal"
                 }
 

@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.DurableTask.Client;
@@ -126,7 +127,7 @@ public class OrchestrationPatterns : IntegrationTestBase
                 { "tag1", "value1" },
                 { "tag2", "value2" }
             },
-            Retry = new RetryPolicy(maxNumberOfAttempts: 2, firstRetryInterval: TimeSpan.FromSeconds(5))
+            Retry = new RetryPolicy(maxNumberOfAttempts: 2, firstRetryInterval: TimeSpan.FromSeconds(15))
         };
 
         int failCounter = 0;
@@ -150,20 +151,21 @@ public class OrchestrationPatterns : IntegrationTestBase
                 return result;
             }));
         });
+        CancellationTokenSource timeoutTokenSource = new(TimeSpan.FromMinutes(1));
 
         // Confirm the first attempt failed
         await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 1);
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            subOrchestrationOptions.InstanceId, this.TimeoutToken);
+            subOrchestrationOptions.InstanceId, timeoutTokenSource.Token);
         Assert.NotNull(metadata);
         Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
 
         // Wait for the retry to happen
-        while (metadata.RuntimeStatus != OrchestrationRuntimeStatus.Completed && !this.TimeoutToken.IsCancellationRequested)
+        while (metadata.RuntimeStatus != OrchestrationRuntimeStatus.Completed && !timeoutTokenSource.Token.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromSeconds(1), this.TimeoutToken);
+            await Task.Delay(TimeSpan.FromSeconds(1), timeoutTokenSource.Token);
             metadata = await server.Client.WaitForInstanceCompletionAsync(
-                subOrchestrationOptions.InstanceId, this.TimeoutToken);
+                subOrchestrationOptions.InstanceId, timeoutTokenSource.Token);
         }
 
         // Confirm the second attempt succeeded

@@ -127,14 +127,19 @@ public class OrchestrationPatterns : IntegrationTestBase
                 { "tag1", "value1" },
                 { "tag2", "value2" }
             },
-            Retry = new RetryPolicy(maxNumberOfAttempts: 2, firstRetryInterval: TimeSpan.FromSeconds(15))
+            Retry = new RetryPolicy(maxNumberOfAttempts: 2, firstRetryInterval: TimeSpan.FromMilliseconds(500))
         };
 
         int failCounter = 0;
+        int invocationCounter = 0;
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks.AddOrchestratorFunc<int, int>(orchestratorName, async (ctx, input) =>
             {
+                if (!ctx.IsReplaying)
+                {
+                    invocationCounter++;
+                }
                 if (failCounter < 1 && input == 2)
                 {
                     failCounter++;
@@ -151,29 +156,21 @@ public class OrchestrationPatterns : IntegrationTestBase
                 return result;
             }));
         });
-        using CancellationTokenSource timeoutTokenSource = new(TimeSpan.FromMinutes(1));
 
-        // Confirm the first attempt failed
         await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 1);
+
+        // Confirm the orchestration eventually succeeded after some delay for the retry to complete
+        await Task.Delay(TimeSpan.FromSeconds(3));
         OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            subOrchestrationOptions.InstanceId, timeoutTokenSource.Token);
+            subOrchestrationOptions.InstanceId, this.TimeoutToken);
         Assert.NotNull(metadata);
-        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
-
-        // Wait for the retry to happen
-        while (metadata.RuntimeStatus != OrchestrationRuntimeStatus.Completed && !timeoutTokenSource.Token.IsCancellationRequested)
-        {
-            await Task.Delay(TimeSpan.FromSeconds(1), timeoutTokenSource.Token);
-            metadata = await server.Client.WaitForInstanceCompletionAsync(
-                subOrchestrationOptions.InstanceId, timeoutTokenSource.Token);
-        }
-
-        // Confirm the second attempt succeeded
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.NotNull(metadata.Tags);
         Assert.Equal(2, metadata.Tags.Count);
         Assert.Equal("value1", metadata.Tags["tag1"]);
         Assert.Equal("value2", metadata.Tags["tag2"]);
+        // 3 invocations - one for the parent orchestration, one for the first suborchestration attempt, one for the final suborchestration attempt
+        Assert.Equal(3, invocationCounter);
     }
 
     [Fact]

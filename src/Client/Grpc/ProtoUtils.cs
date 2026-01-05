@@ -13,6 +13,42 @@ namespace Microsoft.DurableTask.Client.Grpc;
 public static class ProtoUtils
 {
     /// <summary>
+    /// Converts a public CreateOrchestrationAction to a protobuf CreateOrchestrationAction.
+    /// </summary>
+    /// <param name="action">The public action.</param>
+    /// <returns>A protobuf CreateOrchestrationAction.</returns>
+    internal static P.CreateOrchestrationAction ConvertToProtoAction(
+        Microsoft.DurableTask.Client.CreateOrchestrationAction action)
+        => action switch
+        {
+            Microsoft.DurableTask.Client.CreateOrchestrationAction.Error => P.CreateOrchestrationAction.Error,
+            Microsoft.DurableTask.Client.CreateOrchestrationAction.Ignore => P.CreateOrchestrationAction.Ignore,
+            Microsoft.DurableTask.Client.CreateOrchestrationAction.Terminate => P.CreateOrchestrationAction.Terminate,
+            _ => throw new ArgumentOutOfRangeException(nameof(action), "Unexpected value"),
+        };
+
+#pragma warning disable 0618 // Referencing Obsolete member. This is intention as we are only converting it.
+    /// <summary>
+    /// Converts <see cref="OrchestrationRuntimeStatus" /> to <see cref="P.OrchestrationStatus" />.
+    /// </summary>
+    /// <param name="status">The orchestration status.</param>
+    /// <returns>A <see cref="P.OrchestrationStatus" />.</returns>
+    internal static P.OrchestrationStatus ToGrpcStatus(this OrchestrationRuntimeStatus status)
+        => status switch
+        {
+            OrchestrationRuntimeStatus.Canceled => P.OrchestrationStatus.Canceled,
+            OrchestrationRuntimeStatus.Completed => P.OrchestrationStatus.Completed,
+            OrchestrationRuntimeStatus.ContinuedAsNew => P.OrchestrationStatus.ContinuedAsNew,
+            OrchestrationRuntimeStatus.Failed => P.OrchestrationStatus.Failed,
+            OrchestrationRuntimeStatus.Pending => P.OrchestrationStatus.Pending,
+            OrchestrationRuntimeStatus.Running => P.OrchestrationStatus.Running,
+            OrchestrationRuntimeStatus.Terminated => P.OrchestrationStatus.Terminated,
+            OrchestrationRuntimeStatus.Suspended => P.OrchestrationStatus.Suspended,
+            _ => throw new ArgumentOutOfRangeException(nameof(status), "Unexpected value"),
+        };
+#pragma warning restore 0618 // Referencing Obsolete member.
+
+    /// <summary>
     /// Gets the terminal orchestration statuses that are commonly used for deduplication.
     /// These are the statuses that can be used in OrchestrationIdReusePolicy.
     /// </summary>
@@ -60,21 +96,6 @@ public static class ProtoUtils
         // Only return policy if we have operation statuses
         return policy.OperationStatus.Count > 0 ? policy : null;
     }
-
-    /// <summary>
-    /// Converts a public CreateOrchestrationAction to a protobuf CreateOrchestrationAction.
-    /// </summary>
-    /// <param name="action">The public action.</param>
-    /// <returns>A protobuf CreateOrchestrationAction.</returns>
-    internal static P.CreateOrchestrationAction ConvertToProtoAction(
-        Microsoft.DurableTask.Client.CreateOrchestrationAction action)
-        => action switch
-        {
-            Microsoft.DurableTask.Client.CreateOrchestrationAction.Error => P.CreateOrchestrationAction.Error,
-            Microsoft.DurableTask.Client.CreateOrchestrationAction.Ignore => P.CreateOrchestrationAction.Ignore,
-            Microsoft.DurableTask.Client.CreateOrchestrationAction.Terminate => P.CreateOrchestrationAction.Terminate,
-            _ => throw new ArgumentOutOfRangeException(nameof(action), "Unexpected value"),
-        };
 
     /// <summary>
     /// Converts a public OrchestrationIdReusePolicy to a protobuf OrchestrationIdReusePolicy.
@@ -132,25 +153,4 @@ public static class ProtoUtils
         // Only return if there are dedupe statuses
         return dedupeStatuses.Length > 0 ? dedupeStatuses : null;
     }
-
-#pragma warning disable 0618 // Referencing Obsolete member. This is intention as we are only converting it.
-    /// <summary>
-    /// Converts <see cref="OrchestrationRuntimeStatus" /> to <see cref="P.OrchestrationStatus" />.
-    /// </summary>
-    /// <param name="status">The orchestration status.</param>
-    /// <returns>A <see cref="P.OrchestrationStatus" />.</returns>
-    internal static P.OrchestrationStatus ToGrpcStatus(this OrchestrationRuntimeStatus status)
-        => status switch
-        {
-            OrchestrationRuntimeStatus.Canceled => P.OrchestrationStatus.Canceled,
-            OrchestrationRuntimeStatus.Completed => P.OrchestrationStatus.Completed,
-            OrchestrationRuntimeStatus.ContinuedAsNew => P.OrchestrationStatus.ContinuedAsNew,
-            OrchestrationRuntimeStatus.Failed => P.OrchestrationStatus.Failed,
-            OrchestrationRuntimeStatus.Pending => P.OrchestrationStatus.Pending,
-            OrchestrationRuntimeStatus.Running => P.OrchestrationStatus.Running,
-            OrchestrationRuntimeStatus.Terminated => P.OrchestrationStatus.Terminated,
-            OrchestrationRuntimeStatus.Suspended => P.OrchestrationStatus.Suspended,
-            _ => throw new ArgumentOutOfRangeException(nameof(status), "Unexpected value"),
-        };
-#pragma warning restore 0618 // Referencing Obsolete member.
 }

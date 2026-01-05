@@ -19,8 +19,8 @@ namespace AzureFunctionsApp.Entities;
 /// </summary>
 
 /// <summary>
-/// Entity proxy interface for the shopping cart entity.
-/// Defines the operations that can be performed on a shopping cart.
+/// Entity proxy interface for the shopping cart entity (orchestration use).
+/// Defines the operations that can be performed on a shopping cart from orchestrations.
 /// </summary>
 public interface IShoppingCartProxy : IEntityProxy
 {
@@ -46,6 +46,24 @@ public interface IShoppingCartProxy : IEntityProxy
 
     /// <summary>
     /// Clears all items from the cart.
+    /// </summary>
+    Task Clear();
+}
+
+/// <summary>
+/// Client-side proxy interface for the shopping cart entity.
+/// Client operations are fire-and-forget (cannot return results).
+/// </summary>
+public interface IShoppingCartClientProxy : IEntityProxy
+{
+    /// <summary>
+    /// Signals the entity to add an item to the shopping cart.
+    /// </summary>
+    /// <param name="item">The item to add.</param>
+    Task AddItem(CartItem item);
+
+    /// <summary>
+    /// Signals the entity to clear all items from the cart.
     /// </summary>
     Task Clear();
 }
@@ -224,7 +242,7 @@ public static class ShoppingCartApis
 
         // Use strongly-typed proxy for client-side entity invocation
         EntityInstanceId entityId = new(nameof(ShoppingCart), cartId);
-        IShoppingCartProxy cart = client.Entities.CreateProxy<IShoppingCartProxy>(entityId);
+        IShoppingCartClientProxy cart = client.Entities.CreateProxy<IShoppingCartClientProxy>(entityId);
 
         // Signal the entity to add the item (fire-and-forget)
         await cart.AddItem(new CartItem(itemId, name, price, quantity));
@@ -277,7 +295,7 @@ public static class ShoppingCartApis
         string cartId)
     {
         EntityInstanceId entityId = new(nameof(ShoppingCart), cartId);
-        IShoppingCartProxy cart = client.Entities.CreateProxy<IShoppingCartProxy>(entityId);
+        IShoppingCartClientProxy cart = client.Entities.CreateProxy<IShoppingCartClientProxy>(entityId);
 
         // Signal the entity to clear the cart
         await cart.Clear();

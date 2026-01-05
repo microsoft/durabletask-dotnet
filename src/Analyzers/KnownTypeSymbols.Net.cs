@@ -23,6 +23,7 @@ public sealed partial class KnownTypeSymbols
     INamedTypeSymbol? cancellationToken;
     INamedTypeSymbol? environment;
     INamedTypeSymbol? httpClient;
+    INamedTypeSymbol? timeProvider;
     INamedTypeSymbol? iLogger;
 
     /// <summary>
@@ -81,4 +82,9 @@ public sealed partial class KnownTypeSymbols
     /// Gets an ILogger type symbol.
     /// </summary>
     public INamedTypeSymbol? ILogger => this.GetOrResolveFullyQualifiedType("Microsoft.Extensions.Logging.ILogger", ref this.iLogger);
+
+    /// <summary>
+    /// Gets a TimeProvider type symbol.
+    /// </summary>
+    public INamedTypeSymbol? TimeProvider => this.GetOrResolveFullyQualifiedType("System.TimeProvider", ref this.timeProvider);
 }

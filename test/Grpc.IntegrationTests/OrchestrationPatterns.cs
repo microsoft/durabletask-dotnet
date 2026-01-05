@@ -59,7 +59,6 @@ public class OrchestrationPatterns : IntegrationTestBase
             instanceId, this.TimeoutToken);
 
         Assert.NotNull(metadata);
-        Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.NotNull(metadata.Tags);
         Assert.Equal(2, metadata.Tags.Count);

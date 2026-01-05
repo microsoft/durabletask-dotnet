@@ -151,7 +151,7 @@ public class OrchestrationPatterns : IntegrationTestBase
                 return result;
             }));
         });
-        CancellationTokenSource timeoutTokenSource = new(TimeSpan.FromMinutes(1));
+        using CancellationTokenSource timeoutTokenSource = new(TimeSpan.FromMinutes(1));
 
         // Confirm the first attempt failed
         await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 1);

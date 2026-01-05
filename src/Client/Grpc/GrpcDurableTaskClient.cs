@@ -123,11 +123,20 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             request.ScheduledStartTimestamp = Timestamp.FromDateTimeOffset(startAt.Value.ToUniversalTime());
         }
 
-        // Set orchestration ID reuse policy for deduplication support
-        // Note: This requires the protobuf to support OrchestrationIdReusePolicy field
-        // If the protobuf doesn't support it yet, this will need to be updated when the protobuf is updated
-        if (options?.DedupeStatuses != null && options.DedupeStatuses.Count > 0)
+        // Set orchestration ID reuse policy
+        // Priority: IdReusePolicy > DedupeStatuses
+        if (options?.IdReusePolicy is OrchestrationIdReusePolicy idReusePolicy)
         {
+            // Use the new explicit ID reuse policy
+            P.OrchestrationIdReusePolicy? policy = ProtoUtils.ConvertToProtoReusePolicy(idReusePolicy);
+            if (policy != null)
+            {
+                request.OrchestrationIdReusePolicy = policy;
+            }
+        }
+        else if (options?.DedupeStatuses != null && options.DedupeStatuses.Count > 0)
+        {
+            // Fall back to legacy dedupe statuses for backward compatibility
             // Parse and validate all status strings to enum first
             ImmutableHashSet<OrchestrationRuntimeStatus> dedupeStatuses = options.DedupeStatuses
                 .Select(s =>

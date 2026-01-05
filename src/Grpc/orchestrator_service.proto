@@ -55,6 +55,12 @@ enum OrchestrationStatus {
     ORCHESTRATION_STATUS_SUSPENDED = 7;
 }
 
+enum CreateOrchestrationAction {
+    CREATE_ORCHESTRATION_ACTION_ERROR = 0;
+    CREATE_ORCHESTRATION_ACTION_IGNORE = 1;
+    CREATE_ORCHESTRATION_ACTION_TERMINATE = 2;
+}
+
 message ParentInstanceInfo {
     int32 taskScheduledId = 1;
     google.protobuf.StringValue name = 2;
@@ -380,8 +386,8 @@ message CreateInstanceRequest {
 }
 
 message OrchestrationIdReusePolicy {
-    repeated OrchestrationStatus replaceableStatus = 1;
-    reserved 2;
+    repeated OrchestrationStatus operationStatus = 1;
+    CreateOrchestrationAction action = 2;
 }
 
 message CreateInstanceResponse {

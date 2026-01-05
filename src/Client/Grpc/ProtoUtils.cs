@@ -30,14 +30,15 @@ public static class ProtoUtils
 
     /// <summary>
     /// Converts dedupe statuses (statuses that should NOT be replaced) to an OrchestrationIdReusePolicy
-    /// with replaceable statuses (statuses that CAN be replaced).
+    /// with TERMINATE action for terminal statuses that CAN be replaced.
     /// </summary>
     /// <param name="dedupeStatuses">The orchestration statuses that should NOT be replaced. These are statuses for which an exception should be thrown if an orchestration already exists.</param>
-    /// <returns>An OrchestrationIdReusePolicy with replaceable statuses set, or null if all terminal statuses are dedupe statuses.</returns>
+    /// <returns>An OrchestrationIdReusePolicy with TERMINATE action and operation statuses set, or null if all terminal statuses are dedupe statuses.</returns>
     /// <remarks>
-    /// The policy uses "replaceableStatus" - these are statuses that CAN be replaced.
-    /// dedupeStatuses are statuses that should NOT be replaced.
-    /// So replaceableStatus = all terminal statuses MINUS dedupeStatuses.
+    /// This method maintains backward compatibility by converting dedupe statuses to the new policy format.
+    /// The policy will have action = TERMINATE and operationStatus = terminal statuses that can be replaced.
+    /// dedupeStatuses are statuses that should NOT be replaced (ERROR action).
+    /// So operationStatus = all terminal statuses MINUS dedupeStatuses.
     /// </remarks>
     public static P.OrchestrationIdReusePolicy? ConvertDedupeStatusesToReusePolicy(
         IEnumerable<P.OrchestrationStatus>? dedupeStatuses)
@@ -45,43 +46,87 @@ public static class ProtoUtils
         ImmutableArray<P.OrchestrationStatus> terminalStatuses = GetTerminalStatuses();
         ImmutableHashSet<P.OrchestrationStatus> dedupeStatusSet = dedupeStatuses?.ToImmutableHashSet() ?? ImmutableHashSet<P.OrchestrationStatus>.Empty;
 
-        P.OrchestrationIdReusePolicy policy = new();
+        P.OrchestrationIdReusePolicy policy = new()
+        {
+            Action = P.CreateOrchestrationAction.Terminate,
+        };
 
-        // Add terminal statuses that are NOT in dedupeStatuses as replaceable
+        // Add terminal statuses that are NOT in dedupeStatuses to operation status (these can be terminated and replaced)
         foreach (P.OrchestrationStatus terminalStatus in terminalStatuses.Where(status => !dedupeStatusSet.Contains(status)))
         {
-            policy.ReplaceableStatus.Add(terminalStatus);
+            policy.OperationStatus.Add(terminalStatus);
         }
 
-        // Only return policy if we have replaceable statuses
-        return policy.ReplaceableStatus.Count > 0 ? policy : null;
+        // Only return policy if we have operation statuses
+        return policy.OperationStatus.Count > 0 ? policy : null;
     }
 
     /// <summary>
-    /// Converts an OrchestrationIdReusePolicy with replaceable statuses to dedupe statuses
-    /// (statuses that should NOT be replaced).
+    /// Converts a public CreateOrchestrationAction to a protobuf CreateOrchestrationAction.
     /// </summary>
-    /// <param name="policy">The OrchestrationIdReusePolicy containing replaceable statuses.</param>
-    /// <returns>An array of orchestration statuses that should NOT be replaced, or null if all terminal statuses are replaceable.</returns>
+    /// <param name="action">The public action.</param>
+    /// <returns>A protobuf CreateOrchestrationAction.</returns>
+    internal static P.CreateOrchestrationAction ConvertToProtoAction(
+        Microsoft.DurableTask.Client.CreateOrchestrationAction action)
+        => action switch
+        {
+            Microsoft.DurableTask.Client.CreateOrchestrationAction.Error => P.CreateOrchestrationAction.Error,
+            Microsoft.DurableTask.Client.CreateOrchestrationAction.Ignore => P.CreateOrchestrationAction.Ignore,
+            Microsoft.DurableTask.Client.CreateOrchestrationAction.Terminate => P.CreateOrchestrationAction.Terminate,
+            _ => throw new ArgumentOutOfRangeException(nameof(action), "Unexpected value"),
+        };
+
+    /// <summary>
+    /// Converts a public OrchestrationIdReusePolicy to a protobuf OrchestrationIdReusePolicy.
+    /// </summary>
+    /// <param name="policy">The public orchestration ID reuse policy.</param>
+    /// <returns>A protobuf OrchestrationIdReusePolicy.</returns>
+    public static P.OrchestrationIdReusePolicy? ConvertToProtoReusePolicy(
+        Microsoft.DurableTask.Client.OrchestrationIdReusePolicy? policy)
+    {
+        if (policy == null)
+        {
+            return null;
+        }
+
+        P.OrchestrationIdReusePolicy protoPolicy = new()
+        {
+            Action = ConvertToProtoAction(policy.Action),
+        };
+
+        foreach (OrchestrationRuntimeStatus status in policy.OperationStatuses)
+        {
+            protoPolicy.OperationStatus.Add(status.ToGrpcStatus());
+        }
+
+        return protoPolicy;
+    }
+
+    /// <summary>
+    /// Converts an OrchestrationIdReusePolicy to dedupe statuses (statuses that should NOT be replaced).
+    /// </summary>
+    /// <param name="policy">The OrchestrationIdReusePolicy containing action and operation statuses.</param>
+    /// <returns>An array of orchestration statuses that should NOT be replaced, or null if all terminal statuses can be replaced.</returns>
     /// <remarks>
-    /// The policy uses "replaceableStatus" - these are statuses that CAN be replaced.
-    /// dedupeStatuses are statuses that should NOT be replaced (should throw exception).
-    /// So dedupeStatuses = all terminal statuses MINUS replaceableStatus.
+    /// This method maintains backward compatibility by converting the new policy format to dedupe statuses.
+    /// For TERMINATE action: dedupeStatuses = all terminal statuses MINUS operationStatus.
+    /// For ERROR or IGNORE action: the behavior depends on the action semantics.
     /// </remarks>
     public static P.OrchestrationStatus[]? ConvertReusePolicyToDedupeStatuses(
         P.OrchestrationIdReusePolicy? policy)
     {
-        if (policy == null || policy.ReplaceableStatus.Count == 0)
+        if (policy == null || policy.OperationStatus.Count == 0)
         {
             return null;
         }
 
         ImmutableArray<P.OrchestrationStatus> terminalStatuses = GetTerminalStatuses();
-        ImmutableHashSet<P.OrchestrationStatus> replaceableStatusSet = policy.ReplaceableStatus.ToImmutableHashSet();
+        ImmutableHashSet<P.OrchestrationStatus> operationStatusSet = policy.OperationStatus.ToImmutableHashSet();
 
-        // Calculate dedupe statuses = terminal statuses - replaceable statuses
+        // For TERMINATE action: dedupe statuses = terminal statuses - operation status
+        // For other actions, the conversion may not be straightforward
         P.OrchestrationStatus[] dedupeStatuses = terminalStatuses
-            .Where(terminalStatus => !replaceableStatusSet.Contains(terminalStatus))
+            .Where(terminalStatus => !operationStatusSet.Contains(terminalStatus))
             .ToArray();
 
         // Only return if there are dedupe statuses

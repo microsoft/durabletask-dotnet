@@ -253,6 +253,123 @@ try {
     }
     
     Write-Host ""
+    
+    # Step 9: Trigger source generator orchestration
+    Write-Host "Step 9: Triggering source generator orchestration..." -ForegroundColor Green
+    $generatorStartUrl = "http://localhost:$Port/api/GeneratedOrchestration_HttpStart"
+    
+    try {
+        $generatorStartResponse = Invoke-WebRequest -Uri $generatorStartUrl -Method Post -UseBasicParsing
+        if ($generatorStartResponse.StatusCode -ne 202) {
+            throw "Unexpected status code: $($generatorStartResponse.StatusCode)"
+        }
+    }
+    catch {
+        Write-Host "Failed to trigger source generator orchestration. Error: $_" -ForegroundColor Red
+        Write-Host "Container logs:" -ForegroundColor Yellow
+        docker logs $ContainerName
+        throw
+    }
+    
+    $generatorResponse = $generatorStartResponse.Content | ConvertFrom-Json
+    $generatorStatusQuery = $generatorResponse.statusQueryGetUri
+    $generatorInstanceId = $generatorResponse.id
+    
+    Write-Host "Source generator orchestration started with instance ID: $generatorInstanceId" -ForegroundColor Green
+    Write-Host "Status query URI: $generatorStatusQuery" -ForegroundColor Cyan
+    Write-Host ""
+
+    # Step 10: Poll for completion and validate source generator output
+    Write-Host "Step 10: Polling for source generator orchestration completion..." -ForegroundColor Green
+    $generatorStartTime = Get-Date
+    $generatorCompleted = $false
+    $generatorConsecutiveErrors = 0
+    
+    while (((Get-Date) - $generatorStartTime).TotalSeconds -lt $Timeout) {
+        Start-Sleep -Seconds 2
+        
+        try {
+            $generatorStatusResponse = Invoke-WebRequest -Uri $generatorStatusQuery -UseBasicParsing
+            $generatorStatus = $generatorStatusResponse.Content | ConvertFrom-Json
+            $generatorConsecutiveErrors = 0
+            
+            Write-Host "Current status: $($generatorStatus.runtimeStatus)" -ForegroundColor Yellow
+            
+            if ($generatorStatus.runtimeStatus -eq "Completed") {
+                $generatorCompleted = $true
+                $output = $generatorStatus.output
+                Write-Host ""
+                Write-Host "Source generator orchestration completed successfully!" -ForegroundColor Green
+                Write-Host "Output: $output" -ForegroundColor Cyan
+                
+                $greeting = $output.greeting
+                if (-not $greeting) { $greeting = $output.Greeting }
+
+                $greetingLength = $output.greetingLength
+                if ($null -eq $greetingLength) { $greetingLength = $output.GreetingLength }
+                
+                $counterTotal = $output.counterTotal
+                if ($null -eq $counterTotal) { $counterTotal = $output.CounterTotal }
+                
+                $childMessage = $output.childMessage
+                if (-not $childMessage) { $childMessage = $output.ChildMessage }
+                
+                $eventMessage = $output.eventMessage
+                if (-not $eventMessage) { $eventMessage = $output.EventMessage }
+
+                if ($greeting -ne "Hello, SourceGen!") {
+                    throw "Unexpected greeting from generated activity: $greeting"
+                }
+
+                if ($null -eq $greetingLength) {
+                    throw "Greeting length was not populated correctly: $greetingLength"
+                }
+
+                $greetingLengthValue = [int]$greetingLength
+
+                if ($null -eq $counterTotal) {
+                    throw "Entity counter total was not populated correctly: $counterTotal"
+                }
+
+                $counterTotalValue = [int]$counterTotal
+
+                if ($counterTotalValue -ne $greetingLengthValue) {
+                    throw "Entity counter total $counterTotalValue does not match greeting length $greetingLengthValue"
+                }
+
+                if (-not $childMessage -or ($childMessage -notlike "Child processed *")) {
+                    throw "Unexpected child orchestration response: $childMessage"
+                }
+
+                if (-not $eventMessage -or ($eventMessage -notlike "Processed*")) {
+                    throw "Unexpected durable event message: $eventMessage"
+                }
+
+                break
+            }
+            elseif ($generatorStatus.runtimeStatus -eq "Failed" -or $generatorStatus.runtimeStatus -eq "Terminated") {
+                throw "Orchestration ended with status: $($generatorStatus.runtimeStatus)"
+            }
+        }
+        catch {
+            $generatorConsecutiveErrors++
+            Write-Host "Error polling generator orchestration (attempt $generatorConsecutiveErrors/3): $_" -ForegroundColor Red
+            
+            if ($generatorConsecutiveErrors -ge 3) {
+                Write-Host "Container logs:" -ForegroundColor Yellow
+                docker logs $ContainerName
+                throw "Too many consecutive errors polling source generator orchestration status"
+            }
+        }
+    }
+    
+    if (-not $generatorCompleted) {
+        Write-Host "Container logs:" -ForegroundColor Yellow
+        docker logs $ContainerName
+        throw "Source generator orchestration did not complete within timeout period"
+    }
+
+    Write-Host ""
     Write-Host "=== Smoke test completed successfully! ===" -ForegroundColor Green
 }
 finally {

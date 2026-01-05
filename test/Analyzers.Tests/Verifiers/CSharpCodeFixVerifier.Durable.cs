@@ -1,7 +1,4 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-using Microsoft.CodeAnalysis.CodeFixes;
+﻿using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Testing;
 
@@ -87,6 +84,53 @@ public static partial class CSharpCodeFixVerifier<TAnalyzer, TCodeFix>
             FixedCode = fixedSource,
         },
         References.SdkOnlyAssemblies, configureTest);
+    }
+
+    /// <summary>
+    /// Runs analyzer test with .NET 8.0 references for testing APIs only available in .NET 8+.
+    /// Used for TimeProvider and other .NET 8+ specific tests.
+    /// </summary>
+    public static Task VerifyNet80AnalyzerAsync(string source, params DiagnosticResult[] expected)
+    {
+        return VerifyNet80AnalyzerAsync(source, null, expected);
+    }
+
+    /// <summary>
+    /// Runs analyzer test with .NET 8.0 references for testing APIs only available in .NET 8+.
+    /// Used for TimeProvider and other .NET 8+ specific tests.
+    /// </summary>
+    public static async Task VerifyNet80AnalyzerAsync(
+        string source, Action<Test>? configureTest = null, params DiagnosticResult[] expected)
+    {
+        await RunAsync(expected, new Test()
+        {
+            TestCode = source,
+        }, References.Net80Assemblies, configureTest);
+    }
+
+    /// <summary>
+    /// Runs code fix test with .NET 8.0 references for testing APIs only available in .NET 8+.
+    /// Used for TimeProvider and other .NET 8+ specific tests.
+    /// </summary>
+    public static Task VerifyNet80CodeFixAsync(
+        string source, DiagnosticResult expected, string fixedSource, Action<Test>? configureTest = null)
+    {
+        return VerifyNet80CodeFixAsync(source, [expected], fixedSource, configureTest);
+    }
+
+    /// <summary>
+    /// Runs code fix test with .NET 8.0 references for testing APIs only available in .NET 8+.
+    /// Used for TimeProvider and other .NET 8+ specific tests.
+    /// </summary>
+    public static async Task VerifyNet80CodeFixAsync(
+        string source, DiagnosticResult[] expected, string fixedSource, Action<Test>? configureTest = null)
+    {
+        await RunAsync(expected, new Test()
+        {
+            TestCode = source,
+            FixedCode = fixedSource,
+        },
+        References.Net80Assemblies, configureTest);
     }
 
     static async Task RunAsync(DiagnosticResult[] expected, Test test, ReferenceAssemblies referenceAssemblies, Action<Test>? configureTest = null)

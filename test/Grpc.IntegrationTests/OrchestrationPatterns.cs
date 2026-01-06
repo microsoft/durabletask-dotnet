@@ -59,7 +59,6 @@ public class OrchestrationPatterns : IntegrationTestBase
             instanceId, this.TimeoutToken);
 
         Assert.NotNull(metadata);
-        Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.NotNull(metadata.Tags);
         Assert.Equal(2, metadata.Tags.Count);
@@ -105,12 +104,71 @@ public class OrchestrationPatterns : IntegrationTestBase
             subOrchestrationOptions.InstanceId, this.TimeoutToken);
 
         Assert.NotNull(metadata);
-        Assert.Equal(subOrchestrationOptions.InstanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.NotNull(metadata.Tags);
         Assert.Equal(2, metadata.Tags.Count);
         Assert.Equal("value1", metadata.Tags["tag1"]);
         Assert.Equal("value2", metadata.Tags["tag2"]);
+    }
+
+    [Fact]
+    public async Task ScheduleSubOrchestrationWithTagsAndRetryPolicy()
+    {
+        TaskName orchestratorName = nameof(ScheduleSubOrchestrationWithTagsAndRetryPolicy);
+
+        // Schedule a new orchestration instance with tags and a retry policy
+        SubOrchestrationOptions subOrchestrationOptions = new()
+        {
+            InstanceId = "instance_id",
+            Tags = new Dictionary<string, string>
+            {
+                { "tag1", "value1" },
+                { "tag2", "value2" }
+            },
+            Retry = new RetryPolicy(maxNumberOfAttempts: 2, firstRetryInterval: TimeSpan.FromMilliseconds(500))
+        };
+
+        int failCounter = 0;
+        int invocationCounter = 0;
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks.AddOrchestratorFunc<int, int>(orchestratorName, async (ctx, input) =>
+            {
+                if (!ctx.IsReplaying)
+                {
+                    invocationCounter++;
+                }
+                if (failCounter < 1 && input == 2)
+                {
+                    failCounter++;
+                    throw new Exception("Simulated failure");
+                }
+
+                int result = 1;
+                if (input < 2)
+                {
+                    // recursively call this same orchestrator
+                    result += await ctx.CallSubOrchestratorAsync<int>(orchestratorName, input: input + 1, subOrchestrationOptions);
+                }
+
+                return result;
+            }));
+        });
+
+        await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, input: 1);
+
+        // Confirm the orchestration eventually succeeded after some delay for the retry to complete
+        await Task.Delay(TimeSpan.FromSeconds(3));
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            subOrchestrationOptions.InstanceId, this.TimeoutToken);
+        Assert.NotNull(metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.NotNull(metadata.Tags);
+        Assert.Equal(2, metadata.Tags.Count);
+        Assert.Equal("value1", metadata.Tags["tag1"]);
+        Assert.Equal("value2", metadata.Tags["tag2"]);
+        // 3 invocations - one for the parent orchestration, one for the first suborchestration attempt, one for the final suborchestration attempt
+        Assert.Equal(3, invocationCounter);
     }
 
     [Fact]

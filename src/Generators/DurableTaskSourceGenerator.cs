@@ -312,14 +312,11 @@ namespace Microsoft.DurableTask.Generators
             }
 
             // Validate event names and report diagnostics for invalid identifiers
-            foreach (DurableEventTypeInfo eventInfo in allEvents)
+            foreach (DurableEventTypeInfo eventInfo in allEvents.Where(e => !IsValidCSharpIdentifier(e.EventName)))
             {
-                if (!IsValidCSharpIdentifier(eventInfo.EventName))
-                {
-                    Location location = eventInfo.EventNameLocation ?? Location.None;
-                    Diagnostic diagnostic = Diagnostic.Create(InvalidEventNameRule, location, eventInfo.EventName);
-                    context.ReportDiagnostic(diagnostic);
-                }
+                Location location = eventInfo.EventNameLocation ?? Location.None;
+                Diagnostic diagnostic = Diagnostic.Create(InvalidEventNameRule, location, eventInfo.EventName);
+                context.ReportDiagnostic(diagnostic);
             }
 
             // Determine if we should generate Durable Functions specific code

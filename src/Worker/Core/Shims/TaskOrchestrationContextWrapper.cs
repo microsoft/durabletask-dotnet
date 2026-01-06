@@ -226,7 +226,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                     version,
                     instanceId,
                     policy.ToDurableTaskCoreRetryOptions(),
-                    input);
+                    input,
+                    options.Tags);
             }
             else if (options?.Retry?.Handler is AsyncRetryHandler handler)
             {

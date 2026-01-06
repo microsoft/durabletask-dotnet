@@ -90,22 +90,32 @@ namespace Microsoft.DurableTask.Generators
                     transform: static (ctx, _) => GetDurableFunction(ctx))
                 .Where(static func => func != null)!;
 
+            // Get the project type configuration from MSBuild properties
+            IncrementalValueProvider<string?> projectTypeProvider = context.AnalyzerConfigOptionsProvider
+                .Select(static (provider, _) =>
+                {
+                    provider.GlobalOptions.TryGetValue("build_property.DurableTaskGeneratorProjectType", out string? projectType);
+                    return projectType;
+                });
+
             // Collect all results and check if Durable Functions is referenced
-            IncrementalValueProvider<(Compilation, ImmutableArray<DurableTaskTypeInfo>, ImmutableArray<DurableEventTypeInfo>, ImmutableArray<DurableFunction>)> compilationAndTasks =
+            IncrementalValueProvider<(Compilation, ImmutableArray<DurableTaskTypeInfo>, ImmutableArray<DurableEventTypeInfo>, ImmutableArray<DurableFunction>, string?)> compilationAndTasks =
                 durableTaskAttributes.Collect()
                     .Combine(durableEventAttributes.Collect())
                     .Combine(durableFunctions.Collect())
                     .Combine(context.CompilationProvider)
+                    .Combine(projectTypeProvider)
                     // Roslyn's IncrementalValueProvider.Combine creates nested tuple pairs: ((Left, Right), Right)
                     // After multiple .Combine() calls, we unpack the nested structure:
-                    // x.Right                = Compilation
-                    // x.Left.Left.Left       = DurableTaskAttributes (orchestrators, activities, entities)
-                    // x.Left.Left.Right      = DurableEventAttributes (events)
-                    // x.Left.Right           = DurableFunctions (Azure Functions metadata)
-                    .Select((x, _) => (x.Right, x.Left.Left.Left, x.Left.Left.Right, x.Left.Right));
+                    // x.Right                     = projectType (string?)
+                    // x.Left.Right                = Compilation
+                    // x.Left.Left.Left.Left       = DurableTaskAttributes (orchestrators, activities, entities)
+                    // x.Left.Left.Left.Right      = DurableEventAttributes (events)
+                    // x.Left.Left.Right           = DurableFunctions (Azure Functions metadata)
+                    .Select((x, _) => (x.Left.Right, x.Left.Left.Left.Left, x.Left.Left.Left.Right, x.Left.Left.Right, x.Right));
 
             // Generate the source
-            context.RegisterSourceOutput(compilationAndTasks, static (spc, source) => Execute(spc, source.Item1, source.Item2, source.Item3, source.Item4));
+            context.RegisterSourceOutput(compilationAndTasks, static (spc, source) => Execute(spc, source.Item1, source.Item2, source.Item3, source.Item4, source.Item5));
         }
 
         static DurableTaskTypeInfo? GetDurableTaskTypeInfo(GeneratorSyntaxContext context)
@@ -282,7 +292,8 @@ namespace Microsoft.DurableTask.Generators
             Compilation compilation,
             ImmutableArray<DurableTaskTypeInfo> allTasks,
             ImmutableArray<DurableEventTypeInfo> allEvents,
-            ImmutableArray<DurableFunction> allFunctions)
+            ImmutableArray<DurableFunction> allFunctions,
+            string? projectType)
         {
             if (allTasks.IsDefaultOrEmpty && allEvents.IsDefaultOrEmpty && allFunctions.IsDefaultOrEmpty)
             {
@@ -311,10 +322,8 @@ namespace Microsoft.DurableTask.Generators
                 }
             }
 
-            // This generator also supports Durable Functions for .NET isolated, but we only generate Functions-specific
-            // code if we find the Durable Functions extension listed in the set of referenced assembly names.
-            bool isDurableFunctions = compilation.ReferencedAssemblyNames.Any(
-                assembly => assembly.Name.Equals("Microsoft.Azure.Functions.Worker.Extensions.DurableTask", StringComparison.OrdinalIgnoreCase));
+            // Determine if we should generate Durable Functions specific code
+            bool isDurableFunctions = DetermineIsDurableFunctions(compilation, allFunctions, projectType);
 
             // Separate tasks into orchestrators, activities, and entities
             // Skip tasks with invalid names to avoid generating invalid code
@@ -457,6 +466,49 @@ namespace Microsoft.DurableTask
             sourceBuilder.AppendLine("    }").AppendLine("}");
 
             context.AddSource("GeneratedDurableTaskExtensions.cs", SourceText.From(sourceBuilder.ToString(), Encoding.UTF8, SourceHashAlgorithm.Sha256));
+        }
+
+        /// <summary>
+        /// Determines whether the current project should be treated as an Azure Functions-based Durable Functions project.
+        /// </summary>
+        /// <param name="compilation">The Roslyn compilation for the project, used to inspect referenced assemblies.</param>
+        /// <param name="allFunctions">The collection of discovered Durable Functions triggers in the project.</param>
+        /// <param name="projectType">
+        /// An optional project type hint. When set to <c>"Functions"</c> or <c>"Standalone"</c>, this value takes precedence
+        /// over automatic detection. Any other value (including <c>"Auto"</c>) falls back to auto-detection.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> if the project is determined to be a Durable Functions (Azure Functions) project; otherwise, <c>false</c>.
+        /// </returns>
+        static bool DetermineIsDurableFunctions(Compilation compilation, ImmutableArray<DurableFunction> allFunctions, string? projectType)
+        {
+            // Check if the user has explicitly configured the project type
+            if (!string.IsNullOrWhiteSpace(projectType))
+            {
+                // Explicit configuration takes precedence
+                if (projectType!.Equals("Functions", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+                else if (projectType.Equals("Standalone", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+                // If "Auto" or unrecognized value, fall through to auto-detection
+            }
+
+            // Auto-detect based on the presence of Azure Functions trigger attributes
+            // If we found any methods with OrchestrationTrigger, ActivityTrigger, or EntityTrigger attributes,
+            // then this is a Durable Functions project
+            if (!allFunctions.IsDefaultOrEmpty)
+            {
+                return true;
+            }
+
+            // Fallback: check if Durable Functions assembly is referenced
+            // This handles edge cases where the project references the assembly but hasn't defined triggers yet
+            return compilation.ReferencedAssemblyNames.Any(
+                assembly => assembly.Name.Equals("Microsoft.Azure.Functions.Worker.Extensions.DurableTask", StringComparison.OrdinalIgnoreCase));
         }
 
         static void AddOrchestratorFunctionDeclaration(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator)

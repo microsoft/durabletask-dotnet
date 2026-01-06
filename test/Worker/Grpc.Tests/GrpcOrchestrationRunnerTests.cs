@@ -4,6 +4,7 @@
 using Google.Protobuf;
 using Google.Protobuf.Collections;
 using Google.Protobuf.WellKnownTypes;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 
@@ -37,11 +38,11 @@ public class GrpcOrchestrationRunnerTests
         // No history and without extended sessions enabled
         Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([]);
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) }});
+            { "IncludeState", Value.ForBool(false) }});
         byte[] requestBytes = orchestratorRequest.ToByteArray();
         string requestString = Convert.ToBase64String(requestBytes);
-        string stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
-        Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
+        string responseString = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
+        Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
         Assert.True(response.RequiresHistory);
         Assert.False(extendedSessions.IsInitialized);
 
@@ -51,10 +52,59 @@ public class GrpcOrchestrationRunnerTests
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = orchestratorRequest.ToByteArray();
         requestString = Convert.ToBase64String(requestBytes);
-        stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
-        response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
+        responseString = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
+        response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
         Assert.True(response.RequiresHistory);
         Assert.True(extendedSessions.IsInitialized);
+    }
+
+    [Fact]
+    public void NullExtendedSessionStored_Means_ExtendedSessionNotUsed()
+    {
+        using var extendedSessions = new ExtendedSessionsCache();
+        extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).Set<ExtendedSessionState>(
+            TestInstanceId,
+            null!,
+            new MemoryCacheEntryOptions { SlidingExpiration = TimeSpan.FromSeconds(DefaultExtendedSessionIdleTimeoutInSeconds) });
+
+        // No history, so response indicates that a history is required
+        Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([]);
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludeState", Value.ForBool(false) },
+            { "IsExtendedSession", Value.ForBool(true) },
+            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
+        byte[] requestBytes = orchestratorRequest.ToByteArray();
+        string requestString = Convert.ToBase64String(requestBytes);
+        string responseString = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
+        Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
+        Assert.True(response.RequiresHistory);
+
+        // History provided so the request can be fulfilled and an extended session is stored
+        var historyEvent = new Protobuf.HistoryEvent
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new Protobuf.ExecutionStartedEvent()
+            {
+                OrchestrationInstance = new Protobuf.OrchestrationInstance
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+            }
+        };
+        orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludeState", Value.ForBool(true) },
+            { "IsExtendedSession", Value.ForBool(true) },
+            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
+        requestBytes = orchestratorRequest.ToByteArray();
+        requestString = Convert.ToBase64String(requestBytes);
+        responseString = GrpcOrchestrationRunner.LoadAndRun(requestString, new CallSubOrchestrationOrchestrator(), extendedSessions);
+        response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
+        Assert.False(response.RequiresHistory);
+        Assert.True(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out object? extendedSession));
+        Assert.NotNull(extendedSession);
     }
 
     [Fact]
@@ -65,19 +115,18 @@ public class GrpcOrchestrationRunnerTests
 
         // Misspelled extended session timeout key
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionsIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
         string requestString = Convert.ToBase64String(requestBytes);
-        string stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
-        Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
+        GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
         Assert.False(extendedSessions.IsInitialized);
 
         // Wrong value type for extended session timeout key
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForString("hi") } });
         requestBytes = orchestratorRequest.ToByteArray();
@@ -88,7 +137,7 @@ public class GrpcOrchestrationRunnerTests
         // Invalid number for extended session timeout key (must be > 0)
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(0) } });
         requestBytes = orchestratorRequest.ToByteArray();
@@ -99,7 +148,7 @@ public class GrpcOrchestrationRunnerTests
         // Invalid number for extended session timeout key (must be > 0)
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(-1) } });
         requestBytes = orchestratorRequest.ToByteArray();
@@ -110,7 +159,7 @@ public class GrpcOrchestrationRunnerTests
         // No extended session timeout key
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) } });
         requestBytes = orchestratorRequest.ToByteArray();
         requestString = Convert.ToBase64String(requestBytes);
@@ -120,7 +169,7 @@ public class GrpcOrchestrationRunnerTests
         // Misspelled extended session key
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "isExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = orchestratorRequest.ToByteArray();
@@ -131,7 +180,7 @@ public class GrpcOrchestrationRunnerTests
         // Wrong value type for extended session key
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForNumber(1) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = orchestratorRequest.ToByteArray();
@@ -142,7 +191,7 @@ public class GrpcOrchestrationRunnerTests
         // No extended session key
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = orchestratorRequest.ToByteArray();
         requestString = Convert.ToBase64String(requestBytes);
@@ -157,7 +206,7 @@ public class GrpcOrchestrationRunnerTests
         Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([]);
 
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(false) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
@@ -168,13 +217,13 @@ public class GrpcOrchestrationRunnerTests
     }
 
     /// <summary>
-    /// These tests verify that a malformed/nonexistent "IncludePastEvents" parameter means that the worker will attempt to 
+    /// These tests verify that a malformed/nonexistent "IncludeState" parameter means that the worker will attempt to 
     /// fulfill the orchestration request and not request a history for it. However, it is of course very undesirable that a 
-    /// history is not attached to the request, but no history is requested by the worker due to a malformed "IncludePastEvents" parameter
+    /// history is not attached to the request, but no history is requested by the worker due to a malformed "IncludeState" parameter
     /// even when it needs one to fulfill the request. This would need to be checked on whatever side is calling this SDK. 
     /// </summary>
     [Fact]
-    public void MalformedPastEventsParameter_Means_NoHistoryRequired()
+    public void MalformedIncludeStateParameter_Means_NoHistoryRequired()
     {
         using var extendedSessions = new ExtendedSessionsCache();
         var historyEvent = new Protobuf.HistoryEvent
@@ -194,25 +243,25 @@ public class GrpcOrchestrationRunnerTests
 
         // Misspelled include past events key
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "INcludePastEvents", Value.ForBool(false) },
+            { "IncludeSTate", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(false) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
         string requestString = Convert.ToBase64String(requestBytes);
-        string stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
-        Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
+        string responseString = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
+        Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
         Assert.False(response.RequiresHistory);
 
         // Wrong value type for include past events key
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForString("no") },
+            { "IncludeState", Value.ForString("no") },
             { "IsExtendedSession", Value.ForBool(false) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = orchestratorRequest.ToByteArray();
         requestString = Convert.ToBase64String(requestBytes);
-        stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
-        response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
+        responseString = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
+        response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
         Assert.False(response.RequiresHistory);
 
         // No include past events key
@@ -222,8 +271,8 @@ public class GrpcOrchestrationRunnerTests
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = orchestratorRequest.ToByteArray();
         requestString = Convert.ToBase64String(requestBytes);
-        stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
-        response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
+        responseString = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), extendedSessions);
+        response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
         Assert.False(response.RequiresHistory);
     }
 
@@ -246,7 +295,7 @@ public class GrpcOrchestrationRunnerTests
         };
         Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
@@ -275,7 +324,7 @@ public class GrpcOrchestrationRunnerTests
         };
         Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
@@ -304,7 +353,7 @@ public class GrpcOrchestrationRunnerTests
         };
         Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
@@ -316,7 +365,7 @@ public class GrpcOrchestrationRunnerTests
         // Now set the extended session flag to false for this instance
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(false) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         requestBytes = orchestratorRequest.ToByteArray();
@@ -346,7 +395,7 @@ public class GrpcOrchestrationRunnerTests
         };
         Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(extendedSessionIdleTimeout) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
@@ -362,13 +411,13 @@ public class GrpcOrchestrationRunnerTests
         // Now that the entry was evicted from the cache, the orchestration runner needs an orchestration history to complete the request
         orchestratorRequest.Properties.Clear();
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(false) },
+            { "IncludeState", Value.ForBool(false) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(extendedSessionIdleTimeout) } });
         requestBytes = orchestratorRequest.ToByteArray();
         requestString = Convert.ToBase64String(requestBytes);
-        string stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new CallSubOrchestrationOrchestrator(), extendedSessions);
-        Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
+        string responseString = GrpcOrchestrationRunner.LoadAndRun(requestString, new CallSubOrchestrationOrchestrator(), extendedSessions);
+        Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
         Assert.True(response.RequiresHistory);
     }
 
@@ -376,7 +425,6 @@ public class GrpcOrchestrationRunnerTests
     public void PastEventIncluded_Means_ExtendedSession_Evicted()
     {
         using var extendedSessions = new ExtendedSessionsCache();
-        int extendedSessionIdleTimeout = 5;
         var historyEvent = new Protobuf.HistoryEvent
         {
             EventId = -1,
@@ -392,19 +440,19 @@ public class GrpcOrchestrationRunnerTests
         };
         Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
-            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(extendedSessionIdleTimeout) } });
+            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
         string requestString = Convert.ToBase64String(requestBytes);
         GrpcOrchestrationRunner.LoadAndRun(requestString, new CallSubOrchestrationOrchestrator(), extendedSessions);
         Assert.True(extendedSessions.IsInitialized);
-        Assert.True(extendedSessions.GetOrInitializeCache(extendedSessionIdleTimeout).TryGetValue(TestInstanceId, out object? extendedSession));
+        Assert.True(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out object? extendedSession));
 
         // Now we will retry the same exact request. If the extended session is not evicted, then the request will fail due to duplicate ExecutionStarted events being detected
-        // If the extended session is evicted because IncludePastEvents is true, then the request will succeed and a new extended session will be stored
+        // If the extended session is evicted because IncludeState is true, then the request will succeed and a new extended session will be stored
         GrpcOrchestrationRunner.LoadAndRun(requestString, new CallSubOrchestrationOrchestrator(), extendedSessions);
-        Assert.True(extendedSessions.GetOrInitializeCache(extendedSessionIdleTimeout).TryGetValue(TestInstanceId, out extendedSession));
+        Assert.True(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out extendedSession));
     }
 
     [Fact]
@@ -428,13 +476,13 @@ public class GrpcOrchestrationRunnerTests
         // Set up the parameters as if extended sessions are enabled, but do not pass an extended session cache to the request.
         // The request should still be successful.
         orchestratorRequest.Properties.Add(new MapField<string, Value>() {
-            { "IncludePastEvents", Value.ForBool(true) },
+            { "IncludeState", Value.ForBool(true) },
             { "IsExtendedSession", Value.ForBool(true) },
             { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
         byte[] requestBytes = orchestratorRequest.ToByteArray();
         string requestString = Convert.ToBase64String(requestBytes);
-        string stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator());
-        Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
+        string responseString = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator());
+        Protobuf.OrchestratorResponse response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
         Assert.Single(response.Actions);
         Assert.NotNull(response.Actions[0].CompleteOrchestration);
         Assert.Equal(Protobuf.OrchestrationStatus.Completed, response.Actions[0].CompleteOrchestration.OrchestrationStatus);
@@ -443,8 +491,8 @@ public class GrpcOrchestrationRunnerTests
         orchestratorRequest.Properties.Clear();
         requestBytes = orchestratorRequest.ToByteArray();
         requestString = Convert.ToBase64String(requestBytes);
-        stringResponse = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator());
-        response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(stringResponse));
+        responseString = GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator());
+        response = Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
         Assert.Single(response.Actions);
         Assert.NotNull(response.Actions[0].CompleteOrchestration);
         Assert.Equal(Protobuf.OrchestrationStatus.Completed, response.Actions[0].CompleteOrchestration.OrchestrationStatus);

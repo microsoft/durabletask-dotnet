@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.19.0
+- Extended sessions for entities in .net isolated by sophiatev ([#507](https://github.com/microsoft/durabletask-dotnet/pull/507))
+- Adding the ability to specify tags and a retry policy for suborchestrations by sophiatev ([#603](https://github.com/microsoft/durabletask-dotnet/pull/603))
+- Improve durabletask source generator detection and add optional project type configuration by Copilot ([#575](https://github.com/microsoft/durabletask-dotnet/pull/575))
+- Add timeprovider support to orchestration analyzer by Copilot ([#573](https://github.com/microsoft/durabletask-dotnet/pull/573))
+- Expand azure functions smoke tests to cover source generator scenarios by Copilot ([#604](https://github.com/microsoft/durabletask-dotnet/pull/604))
+- Fix "syntaxtree is not part of the compilation" exception in orchestration analyzers by Copilot ([#588](https://github.com/microsoft/durabletask-dotnet/pull/588))
+- Add waitforexternalevent overload with timeout and cancellation token by Copilot ([#555](https://github.com/microsoft/durabletask-dotnet/pull/555))
+- Fix source generator for void-returning activity functions by Copilot ([#554](https://github.com/microsoft/durabletask-dotnet/pull/554))
+
 ## v1.18.2
 - Add copy constructors to TaskOptions and sub-classes by halspang ([#587](https://github.com/microsoft/durabletask-dotnet/pull/587))
 - Change FunctionNotFound analyzer severity to Info for cross-assembly scenarios by Copilot ([#584](https://github.com/microsoft/durabletask-dotnet/pull/584))

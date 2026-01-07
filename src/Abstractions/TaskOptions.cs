@@ -57,31 +57,44 @@ public record TaskOptions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// When provided, the cancellation token can be used to cancel activities, sub-orchestrators, and retry logic.
-    /// Cancellation is cooperative, meaning the task will not be cancelled immediately, but rather at the next
-    /// opportunity when the orchestrator checks the token status.
+    /// The cancellation token provides cooperative cancellation for activities, sub-orchestrators, and retry logic.
+    /// Due to the durable orchestrator execution model, cancellation only occurs at specific points when the
+    /// orchestrator code is executing.
     /// </para>
     /// <para>
-    /// For activities, if the token is cancelled before the activity completes, the activity will not be scheduled
-    /// or, if already running, the result will be ignored and a <see cref="TaskCanceledException"/> will be thrown.
+    /// <strong>Cancellation behavior:</strong>
     /// </para>
     /// <para>
-    /// For sub-orchestrators, if the token is cancelled before the sub-orchestrator completes, the result will be
-    /// ignored and a <see cref="TaskCanceledException"/> will be thrown. Note that cancelling the parent's token
-    /// does not terminate the sub-orchestrator instance.
+    /// 1. <strong>Pre-scheduling check:</strong> If the token is cancelled before calling
+    /// <c>CallActivityAsync</c> or <c>CallSubOrchestratorAsync</c>, a <see cref="TaskCanceledException"/> is thrown
+    /// immediately without scheduling the task.
     /// </para>
     /// <para>
-    /// For retry handlers, the cancellation token is passed to the retry handler via the <see cref="RetryContext"/>,
-    /// allowing the handler to check for cancellation and stop retrying if needed.
+    /// 2. <strong>Retry handlers:</strong> The cancellation token is passed to custom retry handlers via
+    /// <see cref="RetryContext"/>, allowing them to check for cancellation and stop retrying between attempts.
+    /// </para>
+    /// <para>
+    /// <strong>Important limitation:</strong> Once an activity or sub-orchestrator is scheduled, the orchestrator
+    /// yields execution and waits for the task to complete. During this yield period, the orchestrator code is not
+    /// running, so it cannot respond to cancellation requests. Cancelling the token while waiting will not wake up
+    /// the orchestrator or cancel the waiting task. This is a fundamental limitation of the durable orchestrator
+    /// execution model.
+    /// </para>
+    /// <para>
+    /// Note: Cancelling a parent orchestrator's token does not terminate sub-orchestrator instances that have
+    /// already been scheduled.
     /// </para>
     /// <example>
-    /// Example of cancelling an activity after a timeout:
+    /// Example of pre-scheduling cancellation:
     /// <code>
-    /// using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+    /// using CancellationTokenSource cts = new CancellationTokenSource();
+    /// cts.Cancel(); // Cancel before scheduling
+    ///
     /// TaskOptions options = new TaskOptions { CancellationToken = cts.Token };
     ///
     /// try
     /// {
+    ///     // This will throw TaskCanceledException without scheduling the activity
     ///     string result = await context.CallActivityAsync&lt;string&gt;("MyActivity", "input", options);
     /// }
     /// catch (TaskCanceledException)

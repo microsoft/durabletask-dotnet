@@ -329,4 +329,75 @@ public class CancellationTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.Equal(0, attemptCount);
         Assert.Contains("Cancelled before scheduling", metadata.SerializedOutput);
     }
+
+    /// <summary>
+    /// Tests that when calling multiple activities in a loop with a cancellation token,
+    /// the loop exits after cancellation instead of continuing to call remaining activities.
+    /// This is the main use case for pre-scheduling cancellation checks.
+    /// </summary>
+    [Fact]
+    public async Task MultipleActivitiesInLoopWithCancellation()
+    {
+        TaskName orchestratorName = nameof(MultipleActivitiesInLoopWithCancellation);
+        TaskName activityName = "ProcessItem";
+
+        int activitiesInvoked = 0;
+        int totalItems = 10;
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc(orchestratorName, async ctx =>
+                {
+                    using CancellationTokenSource cts = new();
+                    TaskOptions options = new() { CancellationToken = cts.Token };
+
+                    List<string> results = new();
+
+                    for (int i = 0; i < totalItems; i++)
+                    {
+                        // Cancel after processing 3 items
+                        if (i == 3)
+                        {
+                            cts.Cancel();
+                        }
+
+                        try
+                        {
+                            string result = await ctx.CallActivityAsync<string>(activityName, i, options);
+                            results.Add(result);
+                        }
+                        catch (TaskCanceledException)
+                        {
+                            // Pre-scheduling check caught cancellation - exit loop
+                            results.Add($"Cancelled at item {i}");
+                            break;
+                        }
+                    }
+
+                    return $"Processed {results.Count} items: [{string.Join(", ", results)}]";
+                })
+                .AddActivityFunc<int, string>(activityName, (TaskActivityContext ctx, int item) =>
+                {
+                    Interlocked.Increment(ref activitiesInvoked);
+                    return $"Item {item}";
+                }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        
+        // Should have processed 3 items (0, 1, 2) before cancellation at item 3
+        Assert.Equal(3, activitiesInvoked);
+        Assert.Contains("Processed 4 items", metadata.SerializedOutput); // 3 successful + 1 cancellation message
+        Assert.Contains("Cancelled at item 3", metadata.SerializedOutput);
+        Assert.Contains("Item 0", metadata.SerializedOutput);
+        Assert.Contains("Item 1", metadata.SerializedOutput);
+        Assert.Contains("Item 2", metadata.SerializedOutput);
+    }
 }

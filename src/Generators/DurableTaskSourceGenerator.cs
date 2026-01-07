@@ -3,6 +3,7 @@
 
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -39,6 +40,32 @@ namespace Microsoft.DurableTask.Generators
          * }
          */
 
+        /// <summary>
+        /// Diagnostic ID for invalid task names.
+        /// </summary>
+        const string InvalidTaskNameDiagnosticId = "DURABLE3001";
+
+        /// <summary>
+        /// Diagnostic ID for invalid event names.
+        /// </summary>
+        const string InvalidEventNameDiagnosticId = "DURABLE3002";
+
+        static readonly DiagnosticDescriptor InvalidTaskNameRule = new(
+            InvalidTaskNameDiagnosticId,
+            title: "Invalid task name",
+            messageFormat: "The task name '{0}' is not a valid C# identifier. Task names must start with a letter or underscore and contain only letters, digits, and underscores.",
+            category: "DurableTask.Design",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        static readonly DiagnosticDescriptor InvalidEventNameRule = new(
+            InvalidEventNameDiagnosticId,
+            title: "Invalid event name",
+            messageFormat: "The event name '{0}' is not a valid C# identifier. Event names must start with a letter or underscore and contain only letters, digits, and underscores.",
+            category: "DurableTask.Design",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
         /// <inheritdoc/>
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
@@ -63,22 +90,32 @@ namespace Microsoft.DurableTask.Generators
                     transform: static (ctx, _) => GetDurableFunction(ctx))
                 .Where(static func => func != null)!;
 
+            // Get the project type configuration from MSBuild properties
+            IncrementalValueProvider<string?> projectTypeProvider = context.AnalyzerConfigOptionsProvider
+                .Select(static (provider, _) =>
+                {
+                    provider.GlobalOptions.TryGetValue("build_property.DurableTaskGeneratorProjectType", out string? projectType);
+                    return projectType;
+                });
+
             // Collect all results and check if Durable Functions is referenced
-            IncrementalValueProvider<(Compilation, ImmutableArray<DurableTaskTypeInfo>, ImmutableArray<DurableEventTypeInfo>, ImmutableArray<DurableFunction>)> compilationAndTasks =
+            IncrementalValueProvider<(Compilation, ImmutableArray<DurableTaskTypeInfo>, ImmutableArray<DurableEventTypeInfo>, ImmutableArray<DurableFunction>, string?)> compilationAndTasks =
                 durableTaskAttributes.Collect()
                     .Combine(durableEventAttributes.Collect())
                     .Combine(durableFunctions.Collect())
                     .Combine(context.CompilationProvider)
+                    .Combine(projectTypeProvider)
                     // Roslyn's IncrementalValueProvider.Combine creates nested tuple pairs: ((Left, Right), Right)
                     // After multiple .Combine() calls, we unpack the nested structure:
-                    // x.Right                = Compilation
-                    // x.Left.Left.Left       = DurableTaskAttributes (orchestrators, activities, entities)
-                    // x.Left.Left.Right      = DurableEventAttributes (events)
-                    // x.Left.Right           = DurableFunctions (Azure Functions metadata)
-                    .Select((x, _) => (x.Right, x.Left.Left.Left, x.Left.Left.Right, x.Left.Right));
+                    // x.Right                     = projectType (string?)
+                    // x.Left.Right                = Compilation
+                    // x.Left.Left.Left.Left       = DurableTaskAttributes (orchestrators, activities, entities)
+                    // x.Left.Left.Left.Right      = DurableEventAttributes (events)
+                    // x.Left.Left.Right           = DurableFunctions (Azure Functions metadata)
+                    .Select((x, _) => (x.Left.Right, x.Left.Left.Left.Left, x.Left.Left.Left.Right, x.Left.Left.Right, x.Right));
 
             // Generate the source
-            context.RegisterSourceOutput(compilationAndTasks, static (spc, source) => Execute(spc, source.Item1, source.Item2, source.Item3, source.Item4));
+            context.RegisterSourceOutput(compilationAndTasks, static (spc, source) => Execute(spc, source.Item1, source.Item2, source.Item3, source.Item4, source.Item5));
         }
 
         static DurableTaskTypeInfo? GetDurableTaskTypeInfo(GeneratorSyntaxContext context)
@@ -166,13 +203,15 @@ namespace Microsoft.DurableTask.Generators
             ITypeSymbol? outputType = kind == DurableTaskKind.Entity ? null : taskType.TypeArguments.Last();
 
             string taskName = classType.Name;
+            Location? taskNameLocation = null;
             if (attribute.ArgumentList?.Arguments.Count > 0)
             {
                 ExpressionSyntax expression = attribute.ArgumentList.Arguments[0].Expression;
                 taskName = context.SemanticModel.GetConstantValue(expression).ToString();
+                taskNameLocation = expression.GetLocation();
             }
 
-            return new DurableTaskTypeInfo(className, taskName, inputType, outputType, kind);
+            return new DurableTaskTypeInfo(className, taskName, inputType, outputType, kind, taskNameLocation);
         }
 
         static DurableEventTypeInfo? GetDurableEventTypeInfo(GeneratorSyntaxContext context)
@@ -204,6 +243,7 @@ namespace Microsoft.DurableTask.Generators
             }
 
             string eventName = eventType.Name;
+            Location? eventNameLocation = null;
 
             if (attribute.ArgumentList?.Arguments.Count > 0)
             {
@@ -212,10 +252,11 @@ namespace Microsoft.DurableTask.Generators
                 if (constantValue.HasValue && constantValue.Value is string value)
                 {
                     eventName = value;
+                    eventNameLocation = expression.GetLocation();
                 }
             }
 
-            return new DurableEventTypeInfo(eventName, eventType);
+            return new DurableEventTypeInfo(eventName, eventType, eventNameLocation);
         }
 
         static DurableFunction? GetDurableFunction(GeneratorSyntaxContext context)
@@ -230,29 +271,67 @@ namespace Microsoft.DurableTask.Generators
             return null;
         }
 
+        /// <summary>
+        /// Checks if a name is a valid C# identifier.
+        /// </summary>
+        /// <param name="name">The name to validate.</param>
+        /// <returns>True if the name is a valid C# identifier, false otherwise.</returns>
+        static bool IsValidCSharpIdentifier(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                return false;
+            }
+
+            // Use Roslyn's built-in identifier validation
+            return SyntaxFacts.IsValidIdentifier(name);
+        }
+
         static void Execute(
             SourceProductionContext context,
             Compilation compilation,
             ImmutableArray<DurableTaskTypeInfo> allTasks,
             ImmutableArray<DurableEventTypeInfo> allEvents,
-            ImmutableArray<DurableFunction> allFunctions)
+            ImmutableArray<DurableFunction> allFunctions,
+            string? projectType)
         {
             if (allTasks.IsDefaultOrEmpty && allEvents.IsDefaultOrEmpty && allFunctions.IsDefaultOrEmpty)
             {
                 return;
             }
 
-            // This generator also supports Durable Functions for .NET isolated, but we only generate Functions-specific
-            // code if we find the Durable Functions extension listed in the set of referenced assembly names.
-            bool isDurableFunctions = compilation.ReferencedAssemblyNames.Any(
-                assembly => assembly.Name.Equals("Microsoft.Azure.Functions.Worker.Extensions.DurableTask", StringComparison.OrdinalIgnoreCase));
+            // Validate task names and report diagnostics for invalid identifiers
+            foreach (DurableTaskTypeInfo task in allTasks)
+            {
+                if (!IsValidCSharpIdentifier(task.TaskName))
+                {
+                    Location location = task.TaskNameLocation ?? Location.None;
+                    Diagnostic diagnostic = Diagnostic.Create(InvalidTaskNameRule, location, task.TaskName);
+                    context.ReportDiagnostic(diagnostic);
+                }
+            }
+
+            // Validate event names and report diagnostics for invalid identifiers
+            foreach (DurableEventTypeInfo eventInfo in allEvents.Where(e => !IsValidCSharpIdentifier(e.EventName)))
+            {
+                Location location = eventInfo.EventNameLocation ?? Location.None;
+                Diagnostic diagnostic = Diagnostic.Create(InvalidEventNameRule, location, eventInfo.EventName);
+                context.ReportDiagnostic(diagnostic);
+            }
+
+            // Determine if we should generate Durable Functions specific code
+            bool isDurableFunctions = DetermineIsDurableFunctions(compilation, allFunctions, projectType);
 
             // Separate tasks into orchestrators, activities, and entities
+            // Skip tasks with invalid names to avoid generating invalid code
             List<DurableTaskTypeInfo> orchestrators = new();
             List<DurableTaskTypeInfo> activities = new();
             List<DurableTaskTypeInfo> entities = new();
 
-            foreach (DurableTaskTypeInfo task in allTasks)
+            IEnumerable<DurableTaskTypeInfo> validTasks = allTasks
+                .Where(task => IsValidCSharpIdentifier(task.TaskName));
+
+            foreach (DurableTaskTypeInfo task in validTasks)
             {
                 if (task.IsActivity)
                 {
@@ -268,7 +347,12 @@ namespace Microsoft.DurableTask.Generators
                 }
             }
 
-            int found = activities.Count + orchestrators.Count + entities.Count + allEvents.Length + allFunctions.Length;
+            // Filter out events with invalid names
+            List<DurableEventTypeInfo> validEvents = allEvents
+                .Where(eventInfo => IsValidCSharpIdentifier(eventInfo.EventName))
+                .ToList();
+
+            int found = activities.Count + orchestrators.Count + entities.Count + validEvents.Count + allFunctions.Length;
             if (found == 0)
             {
                 return;
@@ -347,7 +431,7 @@ namespace Microsoft.DurableTask
             }
 
             // Generate WaitFor{EventName}Async methods for each event type
-            foreach (DurableEventTypeInfo eventInfo in allEvents)
+            foreach (DurableEventTypeInfo eventInfo in validEvents)
             {
                 AddEventWaitMethod(sourceBuilder, eventInfo);
                 AddEventSendMethod(sourceBuilder, eventInfo);
@@ -379,6 +463,49 @@ namespace Microsoft.DurableTask
             sourceBuilder.AppendLine("    }").AppendLine("}");
 
             context.AddSource("GeneratedDurableTaskExtensions.cs", SourceText.From(sourceBuilder.ToString(), Encoding.UTF8, SourceHashAlgorithm.Sha256));
+        }
+
+        /// <summary>
+        /// Determines whether the current project should be treated as an Azure Functions-based Durable Functions project.
+        /// </summary>
+        /// <param name="compilation">The Roslyn compilation for the project, used to inspect referenced assemblies.</param>
+        /// <param name="allFunctions">The collection of discovered Durable Functions triggers in the project.</param>
+        /// <param name="projectType">
+        /// An optional project type hint. When set to <c>"Functions"</c> or <c>"Standalone"</c>, this value takes precedence
+        /// over automatic detection. Any other value (including <c>"Auto"</c>) falls back to auto-detection.
+        /// </param>
+        /// <returns>
+        /// <c>true</c> if the project is determined to be a Durable Functions (Azure Functions) project; otherwise, <c>false</c>.
+        /// </returns>
+        static bool DetermineIsDurableFunctions(Compilation compilation, ImmutableArray<DurableFunction> allFunctions, string? projectType)
+        {
+            // Check if the user has explicitly configured the project type
+            if (!string.IsNullOrWhiteSpace(projectType))
+            {
+                // Explicit configuration takes precedence
+                if (projectType!.Equals("Functions", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+                else if (projectType.Equals("Standalone", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+                // If "Auto" or unrecognized value, fall through to auto-detection
+            }
+
+            // Auto-detect based on the presence of Azure Functions trigger attributes
+            // If we found any methods with OrchestrationTrigger, ActivityTrigger, or EntityTrigger attributes,
+            // then this is a Durable Functions project
+            if (!allFunctions.IsDefaultOrEmpty)
+            {
+                return true;
+            }
+
+            // Fallback: check if Durable Functions assembly is referenced
+            // This handles edge cases where the project references the assembly but hasn't defined triggers yet
+            return compilation.ReferencedAssemblyNames.Any(
+                assembly => assembly.Name.Equals("Microsoft.Azure.Functions.Worker.Extensions.DurableTask", StringComparison.OrdinalIgnoreCase));
         }
 
         static void AddOrchestratorFunctionDeclaration(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator)
@@ -588,11 +715,13 @@ namespace Microsoft.DurableTask
                 string taskName,
                 ITypeSymbol? inputType,
                 ITypeSymbol? outputType,
-                DurableTaskKind kind)
+                DurableTaskKind kind,
+                Location? taskNameLocation = null)
             {
                 this.TypeName = taskType;
                 this.TaskName = taskName;
                 this.Kind = kind;
+                this.TaskNameLocation = taskNameLocation;
 
                 // Entities only have a state type parameter, not input/output
                 if (kind == DurableTaskKind.Entity)
@@ -620,6 +749,7 @@ namespace Microsoft.DurableTask
             public string InputParameter { get; }
             public string OutputType { get; }
             public DurableTaskKind Kind { get; }
+            public Location? TaskNameLocation { get; }
 
             public bool IsActivity => this.Kind == DurableTaskKind.Activity;
 
@@ -647,14 +777,16 @@ namespace Microsoft.DurableTask
 
         class DurableEventTypeInfo
         {
-            public DurableEventTypeInfo(string eventName, ITypeSymbol eventType)
+            public DurableEventTypeInfo(string eventName, ITypeSymbol eventType, Location? eventNameLocation = null)
             {
                 this.TypeName = GetRenderedTypeExpression(eventType);
                 this.EventName = eventName;
+                this.EventNameLocation = eventNameLocation;
             }
 
             public string TypeName { get; }
             public string EventName { get; }
+            public Location? EventNameLocation { get; }
 
             static string GetRenderedTypeExpression(ITypeSymbol? symbol)
             {

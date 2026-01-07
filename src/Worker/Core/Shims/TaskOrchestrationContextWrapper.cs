@@ -246,7 +246,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                     version,
                     instanceId,
                     policy.ToDurableTaskCoreRetryOptions(),
-                    input);
+                    input，
+                    options.Tags);
 
                 return await this.WaitForTaskWithCancellation(subOrchestratorTask, cancellationToken);
             }

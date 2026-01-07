@@ -96,7 +96,7 @@ public record TaskOptions
     /// using CancellationTokenSource cts = new CancellationTokenSource();
     /// TaskOptions options = new TaskOptions
     /// {
-    ///     Retry = TaskOptions.FromRetryHandler(retryContext =>
+    ///     Retry = TaskRetryOptions.FromRetryHandler(retryContext =>
     ///     {
     ///         if (retryContext.CancellationToken.IsCancellationRequested)
     ///         {

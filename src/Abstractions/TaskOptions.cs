@@ -39,6 +39,7 @@ public record TaskOptions
         Check.NotNull(options);
         this.Retry = options.Retry;
         this.Tags = options.Tags;
+        this.CancellationToken = options.CancellationToken;
     }
 
     /// <summary>
@@ -50,6 +51,80 @@ public record TaskOptions
     /// Gets the tags to associate with the task.
     /// </summary>
     public IDictionary<string, string>? Tags { get; init; }
+
+    /// <summary>
+    /// Gets the cancellation token that can be used to cancel the task.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The cancellation token provides cooperative cancellation for activities, sub-orchestrators, and retry logic.
+    /// Due to the durable orchestrator execution model, cancellation only occurs at specific points when the
+    /// orchestrator code is executing.
+    /// </para>
+    /// <para>
+    /// <strong>Cancellation behavior:</strong>
+    /// </para>
+    /// <para>
+    /// 1. <strong>Pre-scheduling check:</strong> If the token is cancelled before calling
+    /// <c>CallActivityAsync</c> or <c>CallSubOrchestratorAsync</c>, a <see cref="TaskCanceledException"/> is thrown
+    /// immediately without scheduling the task.
+    /// </para>
+    /// <para>
+    /// 2. <strong>Retry handlers:</strong> The cancellation token is passed to custom retry handlers via
+    /// <see cref="RetryContext"/>, allowing them to check for cancellation and stop retrying between attempts.
+    /// </para>
+    /// <para>
+    /// <strong>Important limitation:</strong> Once an activity or sub-orchestrator is scheduled, the orchestrator
+    /// yields execution and waits for the task to complete. During this yield period, the orchestrator code is not
+    /// running, so it cannot respond to cancellation requests. Cancelling the token while waiting will not wake up
+    /// the orchestrator or cancel the waiting task. This is a fundamental limitation of the durable orchestrator
+    /// execution model.
+    /// </para>
+    /// <para>
+    /// Note: Cancelling a parent orchestrator's token does not terminate sub-orchestrator instances that have
+    /// already been scheduled.
+    /// </para>
+    /// <example>
+    /// Example of pre-scheduling cancellation:
+    /// <code>
+    /// using CancellationTokenSource cts = new CancellationTokenSource();
+    /// cts.Cancel(); // Cancel before scheduling
+    ///
+    /// TaskOptions options = new TaskOptions { CancellationToken = cts.Token };
+    ///
+    /// try
+    /// {
+    ///     // This will throw TaskCanceledException without scheduling the activity
+    ///     string result = await context.CallActivityAsync&lt;string&gt;("MyActivity", "input", options);
+    /// }
+    /// catch (TaskCanceledException)
+    /// {
+    ///     // Handle cancellation
+    /// }
+    /// </code>
+    /// </example>
+    /// <example>
+    /// Example of using cancellation with retry logic:
+    /// <code>
+    /// using CancellationTokenSource cts = new CancellationTokenSource();
+    /// TaskOptions options = new TaskOptions
+    /// {
+    ///     Retry = TaskRetryOptions.FromRetryHandler(retryContext =>
+    ///     {
+    ///         if (retryContext.CancellationToken.IsCancellationRequested)
+    ///         {
+    ///             return false; // Stop retrying
+    ///         }
+    ///         return retryContext.LastAttemptNumber &lt; 3;
+    ///     }),
+    ///     CancellationToken = cts.Token
+    /// };
+    ///
+    /// await context.CallActivityAsync("MyActivity", "input", options);
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public CancellationToken CancellationToken { get; init; }
 
     /// <summary>
     /// Returns a new <see cref="TaskOptions" /> from the provided <see cref="RetryPolicy" />.

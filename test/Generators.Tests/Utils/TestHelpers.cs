@@ -15,7 +15,7 @@ static class TestHelpers
     public static Task RunTestAsync<TSourceGenerator>(
         string expectedFileName,
         string inputSource,
-        string expectedOutputSource,
+        string? expectedOutputSource,
         bool isDurableFunctions) where TSourceGenerator : IIncrementalGenerator, new()
     {
         return RunTestAsync<TSourceGenerator>(
@@ -38,10 +38,6 @@ static class TestHelpers
             TestState =
             {
                 Sources = { inputSource },
-                GeneratedSources =
-                {
-                    (typeof(TSourceGenerator), expectedFileName, SourceText.From(expectedOutputSource, Encoding.UTF8, SourceHashAlgorithm.Sha256)),
-                },
                 AdditionalReferences =
                 {
                     // Durable Task SDK
@@ -49,6 +45,13 @@ static class TestHelpers
                 },
             },
         };
+
+        // Only add generated source if expectedOutputSource is not null
+        if (expectedOutputSource != null)
+        {
+            test.TestState.GeneratedSources.Add(
+                (typeof(TSourceGenerator), expectedFileName, SourceText.From(expectedOutputSource, Encoding.UTF8, SourceHashAlgorithm.Sha256)));
+        }
 
         if (isDurableFunctions)
         {

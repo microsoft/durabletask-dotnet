@@ -13,14 +13,14 @@ public class ExportJobStatusTests
     {
         // Assert
         Enum.GetValues<ExportJobStatus>().Should().HaveCount(4);
-        Enum.GetValues<ExportJobStatus>().Should().Contain(ExportJobStatus.Uninitialized);
+        Enum.GetValues<ExportJobStatus>().Should().Contain(ExportJobStatus.Pending);
         Enum.GetValues<ExportJobStatus>().Should().Contain(ExportJobStatus.Active);
         Enum.GetValues<ExportJobStatus>().Should().Contain(ExportJobStatus.Failed);
         Enum.GetValues<ExportJobStatus>().Should().Contain(ExportJobStatus.Completed);
     }
 
     [Theory]
-    [InlineData(ExportJobStatus.Uninitialized)]
+    [InlineData(ExportJobStatus.Pending)]
     [InlineData(ExportJobStatus.Active)]
     [InlineData(ExportJobStatus.Failed)]
     [InlineData(ExportJobStatus.Completed)]

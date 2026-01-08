@@ -56,7 +56,7 @@ public class ExportJobInvalidTransitionExceptionTests
     }
 
     [Theory]
-    [InlineData(ExportJobStatus.Uninitialized, ExportJobStatus.Active)]
+    [InlineData(ExportJobStatus.Pending, ExportJobStatus.Active)]
     [InlineData(ExportJobStatus.Active, ExportJobStatus.Completed)]
     [InlineData(ExportJobStatus.Active, ExportJobStatus.Failed)]
     [InlineData(ExportJobStatus.Failed, ExportJobStatus.Active)]

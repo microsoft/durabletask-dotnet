@@ -17,7 +17,7 @@ public class ExportJobDescriptionTests
         // Assert
         description.Should().NotBeNull();
         description.JobId.Should().BeEmpty();
-        description.Status.Should().Be(ExportJobStatus.Uninitialized);
+        description.Status.Should().Be(ExportJobStatus.Pending);
         description.CreatedAt.Should().BeNull();
         description.LastModifiedAt.Should().BeNull();
         description.Config.Should().BeNull();

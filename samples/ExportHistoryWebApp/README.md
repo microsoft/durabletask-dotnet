@@ -79,7 +79,7 @@ Returns an `ExportJobDescription` if the job exists.
 
 Optional query parameters:
 
-- `status`: `Active`, `Failed`, `Completed`
+- `status`: `Pending`, `Active`, `Failed`, `Completed`
 - `jobIdPrefix`
 - `createdFrom`, `createdTo`
 - `pageSize`, `continuationToken`

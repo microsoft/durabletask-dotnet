@@ -9,9 +9,9 @@ namespace Microsoft.DurableTask.ExportHistory;
 public enum ExportJobStatus
 {
     /// <summary>
-    /// Export history job has not been created.
+    /// Export history job has been created but is not yet active.
     /// </summary>
-    Uninitialized,
+    Pending,
 
     /// <summary>
     /// Export history job is active and running.

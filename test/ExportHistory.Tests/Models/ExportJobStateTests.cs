@@ -16,7 +16,7 @@ public class ExportJobStateTests
 
         // Assert
         state.Should().NotBeNull();
-        state.Status.Should().Be(ExportJobStatus.Uninitialized);
+        state.Status.Should().Be(ExportJobStatus.Pending);
         state.Config.Should().BeNull();
         state.Checkpoint.Should().BeNull();
         state.CreatedAt.Should().BeNull();

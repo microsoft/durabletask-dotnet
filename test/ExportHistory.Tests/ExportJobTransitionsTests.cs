@@ -9,7 +9,7 @@ namespace Microsoft.DurableTask.ExportHistory.Tests;
 public class ExportJobTransitionsTests
 {
     [Theory]
-    [InlineData(ExportJobStatus.Uninitialized, ExportJobStatus.Active, true)]
+    [InlineData(ExportJobStatus.Pending, ExportJobStatus.Active, true)]
     [InlineData(ExportJobStatus.Failed, ExportJobStatus.Active, true)]
     [InlineData(ExportJobStatus.Completed, ExportJobStatus.Active, true)]
     [InlineData(ExportJobStatus.Active, ExportJobStatus.Active, false)]
@@ -29,7 +29,7 @@ public class ExportJobTransitionsTests
 
     [Theory]
     [InlineData(ExportJobStatus.Active, ExportJobStatus.Completed, true)]
-    [InlineData(ExportJobStatus.Uninitialized, ExportJobStatus.Completed, false)]
+    [InlineData(ExportJobStatus.Pending, ExportJobStatus.Completed, false)]
     [InlineData(ExportJobStatus.Failed, ExportJobStatus.Completed, false)]
     [InlineData(ExportJobStatus.Completed, ExportJobStatus.Completed, false)]
     public void IsValidTransition_MarkAsCompleted_ValidatesCorrectly(
@@ -46,7 +46,7 @@ public class ExportJobTransitionsTests
 
     [Theory]
     [InlineData(ExportJobStatus.Active, ExportJobStatus.Failed, true)]
-    [InlineData(ExportJobStatus.Uninitialized, ExportJobStatus.Failed, false)]
+    [InlineData(ExportJobStatus.Pending, ExportJobStatus.Failed, false)]
     [InlineData(ExportJobStatus.Failed, ExportJobStatus.Failed, false)]
     [InlineData(ExportJobStatus.Completed, ExportJobStatus.Failed, false)]
     public void IsValidTransition_MarkAsFailed_ValidatesCorrectly(
@@ -84,10 +84,10 @@ public class ExportJobTransitionsTests
         // Arrange
         ExportJobStatus from = operationName switch
         {
-            "Create" => ExportJobStatus.Uninitialized,
+            "Create" => ExportJobStatus.Pending,
             "MarkAsCompleted" => ExportJobStatus.Active,
             "MarkAsFailed" => ExportJobStatus.Active,
-            _ => ExportJobStatus.Uninitialized,
+            _ => ExportJobStatus.Pending,
         };
 
         ExportJobStatus to = operationName switch

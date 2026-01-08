@@ -21,7 +21,7 @@ static class ExportJobTransitions
         {
             nameof(ExportJob.Create) => from switch
             {
-                ExportJobStatus.Uninitialized when targetState == ExportJobStatus.Active => true,
+                ExportJobStatus.Pending when targetState == ExportJobStatus.Active => true,
                 ExportJobStatus.Failed when targetState == ExportJobStatus.Active => true,
                 ExportJobStatus.Completed when targetState == ExportJobStatus.Active => true,
                 _ => false,

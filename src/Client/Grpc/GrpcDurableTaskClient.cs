@@ -354,6 +354,53 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
+    public override async Task<Page<string>> ListInstanceIdsAsync(
+        IEnumerable<OrchestrationRuntimeStatus>? runtimeStatus = null,
+        DateTimeOffset? completedTimeFrom = null,
+        DateTimeOffset? completedTimeTo = null,
+        int pageSize = OrchestrationQuery.DefaultPageSize,
+        string? lastInstanceKey = null,
+        CancellationToken cancellation = default)
+    {
+        Check.NotEntity(this.options.EnableEntitySupport, null);
+
+        P.ListInstanceIdsRequest request = new()
+        {
+            PageSize = pageSize,
+            LastInstanceKey = lastInstanceKey ?? string.Empty,
+        };
+
+        if (runtimeStatus != null)
+        {
+            request.RuntimeStatus.AddRange(runtimeStatus.Select(x => x.ToGrpcStatus()));
+        }
+
+        if (completedTimeFrom.HasValue)
+        {
+            request.CompletedTimeFrom = completedTimeFrom.Value.ToTimestamp();
+        }
+
+        if (completedTimeTo.HasValue)
+        {
+            request.CompletedTimeTo = completedTimeTo.Value.ToTimestamp();
+        }
+
+        try
+        {
+            P.ListInstanceIdsResponse response = await this.sidecarClient.ListInstanceIdsAsync(
+                request,
+                cancellationToken: cancellation);
+
+            return new Page<string>(response.InstanceIds.ToList(), response.LastInstanceKey);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.ListInstanceIdsAsync)} operation was canceled.", e, cancellation);
+        }
+    }
+
+    /// <inheritdoc/>
     public override async Task<OrchestrationMetadata> WaitForInstanceCompletionAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {

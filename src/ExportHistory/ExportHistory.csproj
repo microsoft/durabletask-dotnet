@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net6.0;net8.0;net10.0</TargetFrameworks>
+    <PackageDescription>Durable Task Export History</PackageDescription>
+    <EnableStyleCop>true</EnableStyleCop>
+    <VersionSuffix>preview.1</VersionSuffix>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.Storage.Blobs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Abstractions/Abstractions.csproj" />
+    <ProjectReference Include="../Client/Core/Client.csproj" />
+    <ProjectReference Include="../Client/Grpc/Client.Grpc.csproj" />
+    <ProjectReference Include="../Worker/Core/Worker.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <SharedSection Include="Core" />
+  </ItemGroup>
+
+</Project>
+

@@ -131,32 +131,16 @@ public static class GrpcOrchestrationRunner
                 pair => ProtoUtils.ConvertValueToObject(pair.Value));
 
         OrchestratorExecutionResult? result = null;
-        MemoryCache? extendedSessions = null;
 
-        // If any of the request parameters are malformed, we assume the default - extended sessions are not enabled and the orchestration history is attached
         bool addToExtendedSessions = false;
         bool requiresHistory = false;
-        bool pastEventsIncluded = true;
-        bool isExtendedSession = false;
-        double extendedSessionIdleTimeoutInSeconds = 0;
-
-        // Only attempt to initialize the extended sessions cache if all the parameters are correctly specified
-        if (properties.TryGetValue("ExtendedSessionIdleTimeoutInSeconds", out object? extendedSessionIdleTimeoutObj)
-            && extendedSessionIdleTimeoutObj is double extendedSessionIdleTimeout
-            && extendedSessionIdleTimeout > 0
-            && properties.TryGetValue("IsExtendedSession", out object? extendedSessionObj)
-            && extendedSessionObj is bool extendedSession)
-        {
-            extendedSessionIdleTimeoutInSeconds = extendedSessionIdleTimeout;
-            isExtendedSession = extendedSession;
-            extendedSessions = extendedSessionsCache?.GetOrInitializeCache(extendedSessionIdleTimeoutInSeconds);
-        }
-
-        if (properties.TryGetValue("IncludePastEvents", out object? includePastEventsObj)
-            && includePastEventsObj is bool includePastEvents)
-        {
-            pastEventsIncluded = includePastEvents;
-        }
+        GrpcInstanceRunnerUtils.ParseRequestPropertiesAndInitializeCache(
+            properties,
+            extendedSessionsCache,
+            out double extendedSessionIdleTimeoutInSeconds,
+            out bool isExtendedSession,
+            out bool pastEventsIncluded,
+            out MemoryCache? extendedSessions);
 
         if (isExtendedSession && extendedSessions != null)
         {
@@ -223,7 +207,8 @@ public static class GrpcOrchestrationRunner
 
                 if (addToExtendedSessions && !executor.IsCompleted)
                 {
-                    extendedSessions.Set<ExtendedSessionState>(
+                    // addToExtendedSessions can only be set to true if extendedSessions is not null
+                    extendedSessions!.Set<ExtendedSessionState>(
                         request.InstanceId,
                         new(runtimeState, shim, executor),
                         new MemoryCacheEntryOptions { SlidingExpiration = TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds) });

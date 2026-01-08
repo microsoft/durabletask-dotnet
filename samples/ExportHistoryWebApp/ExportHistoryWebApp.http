@@ -1,5 +1,5 @@
 ### Variables
-@baseUrl = http://localhost:5010
+@baseUrl = http://localhost:5009
 @jobId = export-job-12345
 
 ### Create a new batch export job
@@ -13,7 +13,7 @@ Content-Type: application/json
   "completedTimeFrom": "2025-10-01T00:00:00Z",
   "completedTimeTo": "2025-11-06T23:59:59Z",
   "container": "export-history",
-  # "prefix": "exports/",
+  "prefix": "batch-exports/",
   "maxInstancesPerBatch": 1,
   "runtimeStatus": []
 }
@@ -26,10 +26,10 @@ Content-Type: application/json
 {
     "jobId": "export-job-continuous-123",
     "mode": "Continuous",
+    "completedTimeFrom": "2025-10-01T00:00:00Z",
     "container": "export-history",
-    # "prefix": "continuous-exports/",
+    "prefix": "continuous-exports/",
     "maxInstancesPerBatch": 1000
-    # "runtimeStatus": ["asdasd"]
 }
 
 ### Create an export job with default storage (no container specified)
@@ -69,7 +69,7 @@ GET {{baseUrl}}/export-jobs/list?status=Completed&jobIdPrefix=export-job-&pageSi
 # DELETE {{baseUrl}}/export-jobs/{{jobId}}
 
 # Delete a continuous export job
-DELETE {{baseUrl}}/export-jobs/export-job-continuous-123jk
+DELETE {{baseUrl}}/export-jobs/export-job-continuous-123
 
 ### Tips:
 # - Replace the baseUrl variable if your application runs on a different port

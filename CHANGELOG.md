@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.19.1
+- Throw an `InvalidOperationException` for purge requests on running orchestrations by sophiatev ([#611](https://github.com/microsoft/durabletask-dotnet/pull/611))
+- Validate c# identifiers in durabletask source generator by Copilot ([#578](https://github.com/microsoft/durabletask-dotnet/pull/578))
+- Document orchestration discovery and method probing behavior in analyzers by Copilot ([#594](https://github.com/microsoft/durabletask-dotnet/pull/594))
+
 ## v1.19.0
 - Extended sessions for entities in .net isolated by sophiatev ([#507](https://github.com/microsoft/durabletask-dotnet/pull/507))
 - Adding the ability to specify tags and a retry policy for suborchestrations by sophiatev ([#603](https://github.com/microsoft/durabletask-dotnet/pull/603))

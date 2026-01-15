@@ -10,6 +10,7 @@ using DurableTask.Core.History;
 using Microsoft.DurableTask.Abstractions;
 using Microsoft.DurableTask.Entities;
 using Microsoft.DurableTask.Tracing;
+using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -255,6 +256,7 @@ sealed partial class GrpcDurableTaskWorker
                     MaxConcurrentEntityWorkItems =
                         workerOptions.Concurrency.MaximumConcurrentEntityWorkItems,
                     Capabilities = { this.worker.grpcOptions.Capabilities },
+                    WorkItemFilters = this.worker?.workItemFilters?.ToGrpcWorkItemFilters(),
                 },
                 cancellationToken: cancellation);
         }

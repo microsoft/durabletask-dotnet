@@ -137,4 +137,32 @@ public static class DurableTaskWorkerBuilderExtensions
         builder.Services.AddSingleton(filter);
         return builder;
     }
+
+    /// <summary>
+    /// Adds <see cref="DurableTaskWorkerWorkItemFilters"/> to the specified <see cref="IDurableTaskWorkerBuilder"/>.
+    /// </summary>
+    /// <param name="builder">The builder to set the builder target for.</param>
+    /// <param name="workItemFilters">The instance of a <see cref="DurableTaskWorkerWorkItemFilters"/> to use.</param>
+    /// <returns>The same <see cref="IDurableTaskWorkerBuilder"/> instance, allowing for method chaining.</returns>
+    /// <remarks>If this is called without specified filters, the filters will be constructed from the registered orchestrations, activities, and entities.</remarks>
+    public static IDurableTaskWorkerBuilder UseWorkItemFilters(this IDurableTaskWorkerBuilder builder, DurableTaskWorkerWorkItemFilters? workItemFilters = null)
+    {
+        Check.NotNull(builder);
+        if (workItemFilters != null)
+        {
+            builder.Services.AddSingleton(workItemFilters);
+        }
+        else
+        {
+            // Auto-generate the filters from registered orchestrations, activities, and entitites.
+            builder.Services.AddSingleton(provider =>
+            {
+                DurableTaskRegistry registry = provider.GetRequiredService<IOptionsMonitor<DurableTaskRegistry>>().Get(builder.Name);
+                DurableTaskWorkerOptions? options = provider.GetOptions<DurableTaskWorkerOptions>(builder.Name);
+                return new DurableTaskWorkerWorkItemFilters(registry, options);
+            });
+        }
+
+        return builder;
+    }
 }

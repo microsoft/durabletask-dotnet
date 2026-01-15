@@ -258,7 +258,7 @@ sealed partial class GrpcDurableTaskWorker
                     MaxConcurrentEntityWorkItems =
                         workerOptions.Concurrency.MaximumConcurrentEntityWorkItems,
                     Capabilities = { this.worker.grpcOptions.Capabilities },
-                    WorkItemFilters = this.worker?.workItemFilters?.ToGrpcWorkItemFilters(),
+                    WorkItemFilters = this.worker.workItemFilters?.ToGrpcWorkItemFilters(),
                 },
                 cancellationToken: cancellation);
         }

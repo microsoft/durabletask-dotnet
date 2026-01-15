@@ -154,12 +154,12 @@ public static class DurableTaskWorkerBuilderExtensions
         }
         else
         {
-            // Auto-generate the filters from registered orchestrations, activities, and entitites.
+            // Auto-generate the filters from registered orchestrations, activities, and entities.
             builder.Services.AddSingleton(provider =>
             {
                 DurableTaskRegistry registry = provider.GetRequiredService<IOptionsMonitor<DurableTaskRegistry>>().Get(builder.Name);
                 DurableTaskWorkerOptions? options = provider.GetOptions<DurableTaskWorkerOptions>(builder.Name);
-                return new DurableTaskWorkerWorkItemFilters(registry, options);
+                return DurableTaskWorkerWorkItemFilters.FromDurableTaskRegistry(registry, options);
             });
         }
 

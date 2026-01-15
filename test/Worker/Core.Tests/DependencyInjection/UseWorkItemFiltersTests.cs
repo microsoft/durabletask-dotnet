@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Entities;
-using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Microsoft.DurableTask.Worker.Tests;
@@ -29,7 +28,7 @@ public class UseWorkItemFiltersTests
         ServiceCollection services = new();
         DefaultDurableTaskWorkerBuilder builder = new("test", services);
         DurableTaskRegistry registry = new();
-        DurableTaskWorkerWorkItemFilters filters = new(registry, null);
+        DurableTaskWorkerWorkItemFilters filters = DurableTaskWorkerWorkItemFilters.FromDurableTaskRegistry(registry, null);
 
         // Act
         builder.UseWorkItemFilters(filters);

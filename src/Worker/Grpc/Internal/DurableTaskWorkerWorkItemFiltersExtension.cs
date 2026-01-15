@@ -8,7 +8,7 @@ namespace Microsoft.DurableTask.Worker.Grpc.Internal;
 /// <summary>
 /// Extension for <see cref="DurableTaskWorkerWorkItemFilters"/> to convert to gRPC types.
 /// </summary>
-public static class DurableTaskWorkerWorkItemFiltersExtensions
+public static class DurableTaskWorkerWorkItemFiltersExtension
 {
     /// <summary>
     /// Converts a <see cref="DurableTaskWorkerWorkItemFilters"/> to a gRPC <see cref="P.WorkItemFilters"/>.
@@ -17,6 +17,7 @@ public static class DurableTaskWorkerWorkItemFiltersExtensions
     /// <returns>A gRPC <see cref="P.WorkItemFilters"/>.</returns>
     public static P.WorkItemFilters ToGrpcWorkItemFilters(this DurableTaskWorkerWorkItemFilters workItemFilter)
     {
+        Check.NotNull(workItemFilter);
         var grpcWorkItemFilters = new P.WorkItemFilters();
         foreach (var orchestrationFilter in workItemFilter.Orchestrations)
         {
@@ -30,21 +31,21 @@ public static class DurableTaskWorkerWorkItemFiltersExtensions
 
         foreach (var activityFilter in workItemFilter.Activities)
         {
-            var grpcActivityAction = new P.ActivityFilter
+            var grpcActivityFilter = new P.ActivityFilter
             {
                 Name = activityFilter.Name,
             };
-            grpcActivityAction.Versions.AddRange(activityFilter.Versions);
-            grpcWorkItemFilters.Activities.Add(grpcActivityAction);
+            grpcActivityFilter.Versions.AddRange(activityFilter.Versions);
+            grpcWorkItemFilters.Activities.Add(grpcActivityFilter);
         }
 
         foreach (var entityFilter in workItemFilter.Entities)
         {
-            var grpcEntityAction = new P.EntityFilter
+            var grpcEntityFilter = new P.EntityFilter
             {
                 Name = entityFilter.Name,
             };
-            grpcWorkItemFilters.Entities.Add(grpcEntityAction);
+            grpcWorkItemFilters.Entities.Add(grpcEntityFilter);
         }
 
         return grpcWorkItemFilters;

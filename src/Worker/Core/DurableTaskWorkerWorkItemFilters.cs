@@ -11,75 +11,48 @@ namespace Microsoft.DurableTask.Worker;
 public class DurableTaskWorkerWorkItemFilters
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="DurableTaskWorkerWorkItemFilters"/> class.
-    /// </summary>
-    public DurableTaskWorkerWorkItemFilters()
-    {
-        this.Orchestrations = [];
-        this.Activities = [];
-        this.Entities = [];
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="DurableTaskWorkerWorkItemFilters"/> class.
-    /// </summary>
-    /// <param name="registry"><see cref="DurableTaskRegistry"/> to construct the filter from.</param>
-    /// <param name="workerOptions"><see cref="DurableTaskWorkerOptions"/> that optionally provides versioning information.</param>
-    internal DurableTaskWorkerWorkItemFilters(DurableTaskRegistry registry, DurableTaskWorkerOptions? workerOptions)
-    {
-        List<OrchestrationFilter> orchestrationActions = new();
-        foreach (var orchestration in registry.Orchestrators)
-        {
-            orchestrationActions.Add(new OrchestrationFilter
-            {
-                Name = orchestration.Key,
-
-                // TODO: Support multiple orchestration versions, for now, utilize the Worker's version.
-                Versions = workerOptions?.Versioning != null ? [workerOptions.Versioning.DefaultVersion] : [],
-            });
-        }
-
-        this.Orchestrations = orchestrationActions;
-        List<ActivityFilter> activityActions = new();
-        foreach (var activity in registry.Activities)
-        {
-            activityActions.Add(new ActivityFilter
-            {
-                Name = activity.Key,
-
-                // TODO: Support multiple activity versions, for now, utilize the Worker's version.
-                Versions = workerOptions?.Versioning != null ? [workerOptions.Versioning.DefaultVersion] : [],
-            });
-        }
-
-        this.Activities = activityActions;
-        List<EntityFilter> entityActions = new();
-        foreach (var entity in registry.Entities)
-        {
-            entityActions.Add(new EntityFilter
-            {
-                // Entity names are normalized to lowercase in the backend.
-                Name = entity.Key.ToString().ToLowerInvariant(),
-            });
-        }
-
-        this.Entities = entityActions;
-    }
-
-    /// <summary>
     /// Gets or initializes the orchestration filters.
     /// </summary>
-    public IReadOnlyList<OrchestrationFilter> Orchestrations { get; init; }
+    public IReadOnlyList<OrchestrationFilter> Orchestrations { get; init; } = [];
 
     /// <summary>
     /// Gets or initializes the activity filters.
     /// </summary>
-    public IReadOnlyList<ActivityFilter> Activities { get; init; }
+    public IReadOnlyList<ActivityFilter> Activities { get; init; } = [];
 
     /// <summary>
     /// Gets or initializes the entity filters.
     /// </summary>
-    public IReadOnlyList<EntityFilter> Entities { get; init; }
+    public IReadOnlyList<EntityFilter> Entities { get; init; } = [];
+
+    /// <summary>
+    /// Creates a new instance of the <see cref="DurableTaskWorkerWorkItemFilters"/> class.
+    /// </summary>
+    /// <param name="registry"><see cref="DurableTaskRegistry"/> to construct the filter from.</param>
+    /// <param name="workerOptions"><see cref="DurableTaskWorkerOptions"/> that optionally provides versioning information.</param>
+    /// <returns>A new instance of <see cref="DurableTaskWorkerWorkItemFilters"/> constructed from the provided registry.</returns>
+    internal static DurableTaskWorkerWorkItemFilters FromDurableTaskRegistry(DurableTaskRegistry registry, DurableTaskWorkerOptions? workerOptions)
+    {
+        // TODO: Support multiple versions per orchestration/activity. For now, grab the worker version from the options.
+        return new DurableTaskWorkerWorkItemFilters
+        {
+            Orchestrations = registry.Orchestrators.Select(orchestration => new OrchestrationFilter
+            {
+                Name = orchestration.Key,
+                Versions = workerOptions?.Versioning != null ? [workerOptions.Versioning.DefaultVersion] : [],
+            }).ToList(),
+            Activities = registry.Activities.Select(activity => new ActivityFilter
+            {
+                Name = activity.Key,
+                Versions = workerOptions?.Versioning != null ? [workerOptions.Versioning.DefaultVersion] : [],
+            }).ToList(),
+            Entities = registry.Entities.Select(entity => new EntityFilter
+            {
+                // Entity names are normalized to lowercase in the backend.
+                Name = entity.Key.ToString().ToLowerInvariant(),
+            }).ToList(),
+        };
+    }
 
     /// <summary>
     /// Struct specifying an orchestration filter.
@@ -94,7 +67,7 @@ public class DurableTaskWorkerWorkItemFilters
         /// <summary>
         /// Gets or initializes the versions of the orchestration to filter.
         /// </summary>
-        public List<string> Versions { get; init; }
+        public IReadOnlyList<string> Versions { get; init; }
     }
 
     /// <summary>
@@ -110,7 +83,7 @@ public class DurableTaskWorkerWorkItemFilters
         /// <summary>
         /// Gets or initializes the versions of the activity to filter.
         /// </summary>
-        public List<string> Versions { get; init; }
+        public IReadOnlyList<string> Versions { get; init; }
     }
 
     /// <summary>

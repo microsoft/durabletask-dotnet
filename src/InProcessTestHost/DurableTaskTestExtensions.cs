@@ -185,7 +185,7 @@ internal sealed class InMemoryGrpcSidecarHost : IHostedService, IAsyncDisposable
     {
         if (this.inMemorySidecarHost != null)
         {
-            this.inMemorySidecarHost.Dispose();
+            await this.inMemorySidecarHost.DisposeAsync();
         }
     }
 }

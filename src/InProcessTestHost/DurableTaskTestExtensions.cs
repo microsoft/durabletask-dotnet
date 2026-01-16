@@ -112,12 +112,12 @@ public class InMemoryDurableTaskOptions
 /// <summary>
 /// Internal hosted service that runs the gRPC sidecar within the user's host.
 /// </summary>
-internal sealed class InMemoryGrpcSidecarHost : IHostedService, IAsyncDisposable
+sealed class InMemoryGrpcSidecarHost : IHostedService, IAsyncDisposable
 {
-    private readonly string address;
-    private readonly InMemoryOrchestrationService orchestrationService;
-    private readonly ILoggerFactory? loggerFactory;
-    private IHost? inMemorySidecarHost;
+    readonly string address;
+    readonly InMemoryOrchestrationService orchestrationService;
+    readonly ILoggerFactory? loggerFactory;
+    IHost? inMemorySidecarHost;
 
     public InMemoryGrpcSidecarHost(
         string address,
@@ -185,7 +185,8 @@ internal sealed class InMemoryGrpcSidecarHost : IHostedService, IAsyncDisposable
     {
         if (this.inMemorySidecarHost != null)
         {
-            await this.inMemorySidecarHost.DisposeAsync();
+            await this.inMemorySidecarHost.StopAsync();
+            this.inMemorySidecarHost.Dispose();
         }
     }
 }

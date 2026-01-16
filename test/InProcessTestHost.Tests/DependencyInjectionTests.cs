@@ -182,7 +182,7 @@ public class DependencyInjectionTests
     public class CounterService : ICounterService
     {
         private int count;
-        public int Increment() => ++count;
+        public int Increment() => ++this.count;
     }
 
     #endregion

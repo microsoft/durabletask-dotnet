@@ -5,7 +5,7 @@
     <RootNamespace>Microsoft.DurableTask.Testing</RootNamespace>
     <AssemblyName>Microsoft.DurableTask.InProcessTestHost</AssemblyName>
     <PackageId>Microsoft.DurableTask.InProcessTestHost</PackageId>
-    <Version>0.1.0-preview.1</Version>
+    <Version>0.2.0-preview.1</Version>
     
     <!-- Suppress CA1848: Use LoggerMessage delegates for high-performance logging scenarios -->
     <NoWarn>$(NoWarn);CA1848</NoWarn>

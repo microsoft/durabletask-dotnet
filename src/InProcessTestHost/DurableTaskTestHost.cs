@@ -47,6 +47,12 @@ public sealed class DurableTaskTestHost : IAsyncDisposable
     public DurableTaskClient Client { get; }
 
     /// <summary>
+    /// Gets the service provider from the worker host.
+    /// Use this to resolve services registered via <see cref="DurableTaskTestHostOptions.ConfigureServices"/>.
+    /// </summary>
+    public IServiceProvider Services => this.workerHost.Services;
+
+    /// <summary>
     /// Starts a new in-process test host with the specified orchestrators and activities.
     /// </summary>
     /// <param name="registry">Action to configure the task registry by adding orchestrators and activities.</param>
@@ -113,6 +119,10 @@ public sealed class DurableTaskTestHost : IAsyncDisposable
             })
             .ConfigureServices(services =>
             {
+                // Allow user to register their own services FIRST
+                // This ensures their services are available when activities are resolved
+                options.ConfigureServices?.Invoke(services);
+
                 // Register worker that connects to our in-process sidecar
                 services.AddDurableTaskWorker(builder =>
                 {
@@ -170,4 +180,10 @@ public class DurableTaskTestHostOptions
     /// Null by default.
     /// </summary>
     public ILoggerFactory? LoggerFactory { get; set; }
+
+    /// <summary>
+    /// Gets or sets an optional callback to configure additional services in the worker host's DI container.
+    /// Use this to register services that your activities and orchestrators depend on.
+    /// </summary>
+    public Action<IServiceCollection>? ConfigureServices { get; set; }
 }

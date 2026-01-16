@@ -185,33 +185,5 @@ public class DurableTaskTestHostOptions
     /// Gets or sets an optional callback to configure additional services in the worker host's DI container.
     /// Use this to register services that your activities and orchestrators depend on.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This callback is invoked during worker host construction, allowing you to register
-    /// any services your orchestrations and activities need. Activities can then receive
-    /// these services via constructor injection.
-    /// </para>
-    /// <example>
-    /// <code>
-    /// var options = new DurableTaskTestHostOptions
-    /// {
-    ///     ConfigureServices = services =>
-    ///     {
-    ///         services.AddSingleton&lt;IMyService, MyService&gt;();
-    ///         services.AddScoped&lt;IRepository, Repository&gt;();
-    ///         services.AddHttpClient();
-    ///     }
-    /// };
-    /// 
-    /// await using var host = await DurableTaskTestHost.StartAsync(
-    ///     registry =>
-    ///     {
-    ///         registry.AddOrchestrator&lt;MyOrchestrator&gt;();
-    ///         registry.AddActivity&lt;MyActivity&gt;(); // Can now inject IMyService, IRepository, etc.
-    ///     },
-    ///     options);
-    /// </code>
-    /// </example>
-    /// </remarks>
     public Action<IServiceCollection>? ConfigureServices { get; set; }
 }

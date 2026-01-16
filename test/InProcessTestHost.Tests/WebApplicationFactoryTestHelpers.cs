@@ -79,13 +79,13 @@ public interface IUserService
 
 public class UserService : IUserService
 {
-    readonly IUserRepository repo;
+    readonly IUserRepository userRepository;
 
-    public UserService(IUserRepository repo) => this.repo = repo;
+    public UserService(IUserRepository userRepository) => this.userRepository = userRepository;
 
     public UserDto? GetUser(int id)
     {
-        var u = this.repo.GetById(id);
+        var u = this.userRepository.GetById(id);
         return u == null ? null : new UserDto { Id = u.Id, Name = u.Name, Email = u.Email };
     }
 }
@@ -98,19 +98,19 @@ public interface IOrderService
 
 public class OrderService : IOrderService
 {
-    readonly IOrderRepository repo;
+    readonly IOrderRepository orderRepository;
 
-    public OrderService(IOrderRepository repo) => this.repo = repo;
+    public OrderService(IOrderRepository orderRepository) => this.orderRepository = orderRepository;
 
-    public Order? GetOrder(int id) => this.repo.GetById(id);
+    public Order? GetOrder(int id) => this.orderRepository.GetById(id);
 
     public void UpdateStatus(int id, string status)
     {
-        var order = this.repo.GetById(id);
+        var order = this.orderRepository.GetById(id);
         if (order != null)
         {
             order.Status = status;
-            this.repo.Update(order);
+            this.orderRepository.Update(order);
         }
     }
 }

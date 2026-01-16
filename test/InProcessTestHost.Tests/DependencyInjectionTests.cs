@@ -178,8 +178,8 @@ public class DependencyInjectionTests
 
     public class CounterService : ICounterService
     {
-        private int _count;
-        public int Increment() => ++_count;
+        private int count;
+        public int Increment() => ++count;
     }
 
     #endregion
@@ -218,16 +218,16 @@ public class DependencyInjectionTests
     /// </summary>
     public class GreetingActivity : TaskActivity<string, string>
     {
-        private readonly IGreetingService _greetingService;
+        private readonly IGreetingService greetingService;
 
         public GreetingActivity(IGreetingService greetingService)
         {
-            _greetingService = greetingService;
+            this.greetingService = greetingService;
         }
 
         public override Task<string> RunAsync(TaskActivityContext context, string name)
         {
-            return Task.FromResult(_greetingService.Greet(name));
+            return Task.FromResult(this.greetingService.Greet(name));
         }
     }
 
@@ -253,31 +253,31 @@ public class DependencyInjectionTests
 
     public class AddActivity : TaskActivity<CalculatorInput, int>
     {
-        private readonly ICalculatorService _calculator;
+        private readonly ICalculatorService calculator;
 
         public AddActivity(ICalculatorService calculator)
         {
-            _calculator = calculator;
+            this.calculator = calculator;
         }
 
         public override Task<int> RunAsync(TaskActivityContext context, CalculatorInput input)
         {
-            return Task.FromResult(_calculator.Add(input.A, input.B));
+            return Task.FromResult(this.calculator.Add(input.A, input.B));
         }
     }
 
     public class MultiplyActivity : TaskActivity<CalculatorInput, int>
     {
-        private readonly ICalculatorService _calculator;
+        private readonly ICalculatorService calculator;
 
         public MultiplyActivity(ICalculatorService calculator)
         {
-            _calculator = calculator;
+            this.calculator = calculator;
         }
 
         public override Task<int> RunAsync(TaskActivityContext context, CalculatorInput input)
         {
-            return Task.FromResult(_calculator.Multiply(input.A, input.B));
+            return Task.FromResult(this.calculator.Multiply(input.A, input.B));
         }
     }
 
@@ -298,16 +298,16 @@ public class DependencyInjectionTests
 
     public class CountingActivity : TaskActivity<object?, int>
     {
-        private readonly ICounterService _counter;
+        private readonly ICounterService counter;
 
         public CountingActivity(ICounterService counter)
         {
-            _counter = counter;
+            this.counter = counter;
         }
 
         public override Task<int> RunAsync(TaskActivityContext context, object? input)
         {
-            return Task.FromResult(_counter.Increment());
+            return Task.FromResult(this.counter.Increment());
         }
     }
 

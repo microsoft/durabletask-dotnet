@@ -1,6 +1,8 @@
 # DurableTaskTestHost - Testing Durable Orchestrations In-Process
 
-Test your durable task orchestrations and activities **in-process** without requiring any external backend.
+`DurableTaskTestHost` is a simple API for testing your durable task orchestrations and activities **in-process** without requiring any external backend.
+
+Supports both **class-based** and **function-based** syntax.
 
 ## Quick Start
 
@@ -60,7 +62,7 @@ await using var host = await DurableTaskTestHost.StartAsync(
     {
         ConfigureServices = services =>
         {
-            // Register services required by your orchetrator or activity funtion
+            // Register services required by your orchestrator or activity function
             services.AddSingleton<IMyService, MyService>();
             services.AddSingleton<IUserRepository, InMemoryUserRepository>();
             services.AddLogging();

@@ -22,13 +22,11 @@ namespace Microsoft.DurableTask.Testing;
 /// Extension methods for integrating in-memory durable task testing with your existing DI container,
 /// such as WebApplicationFactory.
 /// </summary>
-/// These extensions allow you to inject the <see cref="InMemoryOrchestrationService"/> into your
-/// existing test host so that your orchestrations and activities can resolve services from DI container.
 public static class DurableTaskTestExtensions
 {
     /// <summary>
     /// These extensions allow you to inject the <see cref="InMemoryOrchestrationService"/> into your
-   /// existing test host so that your orchestrations and activities can resolve services from DI container.
+    /// existing test host so that your orchestrations and activities can resolve services from your DI container.
     /// </summary>
     /// <param name="services">The service collection (from your WebApplicationFactory or host).</param>
     /// <param name="configureTasks">Action to register orchestrators and activities.</param>
@@ -114,12 +112,12 @@ public class InMemoryDurableTaskOptions
 /// <summary>
 /// Internal hosted service that runs the gRPC sidecar within the user's host.
 /// </summary>
-internal class InMemoryGrpcSidecarHost : IHostedService, IAsyncDisposable
+internal sealed class InMemoryGrpcSidecarHost : IHostedService, IAsyncDisposable
 {
     private readonly string address;
     private readonly InMemoryOrchestrationService orchestrationService;
     private readonly ILoggerFactory? loggerFactory;
-    private IHost? sidecarHost;
+    private IHost? inMemorySidecarHost;
 
     public InMemoryGrpcSidecarHost(
         string address,
@@ -134,7 +132,7 @@ internal class InMemoryGrpcSidecarHost : IHostedService, IAsyncDisposable
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         // Build and start the gRPC sidecar
-        this.sidecarHost = Host.CreateDefaultBuilder()
+        this.inMemorySidecarHost = Host.CreateDefaultBuilder()
             .ConfigureLogging(logging =>
             {
                 logging.ClearProviders();
@@ -172,22 +170,22 @@ internal class InMemoryGrpcSidecarHost : IHostedService, IAsyncDisposable
             })
             .Build();
 
-        await this.sidecarHost.StartAsync(cancellationToken);
+        await this.inMemorySidecarHost.StartAsync(cancellationToken);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (this.sidecarHost != null)
+        if (this.inMemorySidecarHost != null)
         {
-            await this.sidecarHost.StopAsync(cancellationToken);
+            await this.inMemorySidecarHost.StopAsync(cancellationToken);
         }
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (this.sidecarHost != null)
+        if (this.inMemorySidecarHost != null)
         {
-            this.sidecarHost.Dispose();
+            this.inMemorySidecarHost.Dispose();
         }
     }
 }

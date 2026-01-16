@@ -394,10 +394,16 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override Task<PurgeResult> PurgeInstanceAsync(
         string instanceId, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
+        Check.NotNullOrEmpty(instanceId);
         bool recursive = options?.Recursive ?? false;
         this.logger.PurgingInstanceMetadata(instanceId);
 
-        P.PurgeInstancesRequest request = new() { InstanceId = instanceId, Recursive = recursive };
+        P.PurgeInstancesRequest request = new()
+        {
+            InstanceId = instanceId,
+            Recursive = recursive,
+            IsOrchestration = !this.options.EnableEntitySupport || instanceId[0] != '@',
+        };
         return this.PurgeInstancesCoreAsync(request, cancellation);
     }
 
@@ -597,6 +603,14 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         {
             throw new OperationCanceledException(
                 $"The {nameof(this.PurgeAllInstancesAsync)} operation was canceled.", e, cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.FailedPrecondition)
+        {
+            throw new InvalidOperationException(e.Status.Detail);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
+        {
+            throw new NotImplementedException(e.Status.Detail);
         }
     }
 

@@ -1,0 +1,88 @@
+### Variables
+@baseUrl = http://localhost:5009
+@jobId = export-job-12345
+
+### Create a new batch export job
+# @name createBatchExportJob
+POST {{baseUrl}}/export-jobs
+Content-Type: application/json
+
+{
+  "jobId": "{{jobId}}",
+  "mode": "Batch",
+  "completedTimeFrom": "2025-10-01T00:00:00Z",
+  "completedTimeTo": "2025-11-06T23:59:59Z",
+  "container": "export-history",
+  "prefix": "batch-exports/",
+  "maxInstancesPerBatch": 1,
+  "runtimeStatus": []
+}
+
+### Create a new continuous export job
+# @name createContinuousExportJob
+POST {{baseUrl}}/export-jobs
+Content-Type: application/json
+
+{
+    "jobId": "export-job-continuous-123",
+    "mode": "Continuous",
+    "completedTimeFrom": "2025-10-01T00:00:00Z",
+    "container": "export-history",
+    "prefix": "continuous-exports/",
+    "maxInstancesPerBatch": 1000
+}
+
+### Create an export job with default storage (no container specified)
+# @name createExportJobWithDefaultStorage
+POST {{baseUrl}}/export-jobs
+Content-Type: application/json
+{
+    "jobId": "export-job-default-storage",
+    "mode": "Batch",
+    "completedTimeFrom": "2024-01-01T00:00:00Z",
+    "completedTimeTo": "2024-12-31T23:59:59Z",
+    "maxInstancesPerBatch": 100
+}
+
+### Get a specific export job by ID
+# Note: This endpoint can be used to verify the export job was created and check its status
+# The ID in the URL should match the jobId used in create request
+GET {{baseUrl}}/export-jobs/{{jobId}}
+
+### List all export jobs
+GET {{baseUrl}}/export-jobs/list
+
+### List export jobs with filters
+### Filter by status
+GET {{baseUrl}}/export-jobs/list?status=Active
+
+### Filter by job ID prefix
+GET {{baseUrl}}/export-jobs/list?jobIdPrefix=export-job-
+
+### Filter by creation time range
+GET {{baseUrl}}/export-jobs/list?createdFrom=2024-01-01T00:00:00Z&createdTo=2024-12-31T23:59:59Z
+
+### Combined filters
+GET {{baseUrl}}/export-jobs/list?status=Completed&jobIdPrefix=export-job-&pageSize=50
+
+### Delete an export job
+# DELETE {{baseUrl}}/export-jobs/{{jobId}}
+
+# Delete a continuous export job
+DELETE {{baseUrl}}/export-jobs/export-job-continuous-123
+
+### Tips:
+# - Replace the baseUrl variable if your application runs on a different port
+# - The jobId variable can be changed to test different export job instances
+# - Export modes:
+#   - "Batch": Exports all instances within a time range (requires completedTimeTo)
+#   - "Continuous": Continuously exports instances from a start time (completedTimeTo must be null)
+# - Runtime status filters (valid values):
+#   - "Completed": Exports only completed orchestrations
+#   - "Failed": Exports only failed orchestrations
+#   - "Terminated": Exports only terminated orchestrations
+# - Dates are in ISO 8601 format (YYYY-MM-DDThh:mm:ssZ)
+# - You can use the REST Client extension in VS Code to execute these requests
+# - The @name directive allows referencing the response in subsequent requests
+# - Export jobs run asynchronously; use GET to check the status after creation
+

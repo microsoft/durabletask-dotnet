@@ -564,10 +564,11 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             using AsyncServerStreamingCall<P.HistoryChunk> streamResponse =
                 this.sidecarClient.StreamInstanceHistory(streamRequest, cancellationToken: cancellation);
 
+            Microsoft.DurableTask.ProtoUtils.EntityConversionState conversionState = new(insertMissingEntityUnlocks: false);
             List<HistoryEvent> pastEvents = [];
             while (await streamResponse.ResponseStream.MoveNext(cancellation))
             {
-                pastEvents.AddRange(streamResponse.ResponseStream.Current.Events.Select(DurableTask.ProtoUtils.ConvertHistoryEvent));
+                pastEvents.AddRange(streamResponse.ResponseStream.Current.Events.Select(conversionState.ConvertFromProto));
             }
 
             return pastEvents;

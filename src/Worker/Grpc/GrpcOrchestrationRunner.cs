@@ -124,7 +124,7 @@ public static class GrpcOrchestrationRunner
         P.OrchestratorRequest request = P.OrchestratorRequest.Parser.Base64Decode<P.OrchestratorRequest>(
             encodedOrchestratorRequest);
 
-        Microsoft.DurableTask.ProtoUtils.EntityConversionState? entityConversionState = new(insertMissingEntityUnlocks: false);
+        ProtoUtils.EntityConversionState entityConversionState = new(insertMissingEntityUnlocks: false);
 
         Func<P.HistoryEvent, HistoryEvent> converter = entityConversionState.ConvertFromProto;
 
@@ -132,7 +132,7 @@ public static class GrpcOrchestrationRunner
         IEnumerable<HistoryEvent> newEvents = request.NewEvents.Select(converter);
         Dictionary<string, object?> properties = request.Properties.ToDictionary(
                 pair => pair.Key,
-                pair => Microsoft.DurableTask.ProtoUtils.ConvertValueToObject(pair.Value));
+                pair => ProtoUtils.ConvertValueToObject(pair.Value));
 
         OrchestratorExecutionResult? result = null;
 

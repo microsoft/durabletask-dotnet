@@ -1,3 +1,4 @@
+using DurableTask.Core.History;
 using ExportHistoryTests.Scenarios;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.ExportHistory;
@@ -31,7 +32,8 @@ public sealed record ExportScenarioResult(
     ExportHistoryContinuousScenario? ContinuousScenario,
     bool RequiresManualCleanup,
     ExportHistoryJobClient JobClient,
-    IReadOnlyList<string> InstanceIdsToPurge)
+    IReadOnlyList<string> InstanceIdsToPurge,
+    IReadOnlyDictionary<string, IList<HistoryEvent>> ExpectedHistoryByInstanceId)
 {
     public bool IsBatch => this.Mode == ExportMode.Batch;
 }

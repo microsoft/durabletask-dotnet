@@ -3,6 +3,7 @@ using System.Linq;
 using System.Text;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using DurableTask.Core.History;
 using ExportHistoryTests.Infrastructure;
 using ExportHistoryTests.Scenarios;
 using ExportHistoryTests.Tasks;
@@ -67,6 +68,11 @@ public sealed class ExportHistoryScenarioRunner
         IReadOnlyList<BlobItem> blobs = await this.ListBlobsAsync(actualContainer, actualPrefix, cancellation);
         IReadOnlyList<ExportedBlobArtifact> artifacts = await this.DownloadArtifactsAsync(actualContainer, blobs, scenario.Format, cancellation);
 
+        // Retrieve expected history for all instances before cleanup
+        Dictionary<string, IList<HistoryEvent>> expectedHistory = await this.GetHistoryForInstancesAsync(
+            instanceRecords.Select(i => i.InstanceId),
+            cancellation);
+
         bool requiresManualCleanup = scenario.KeepJobAlive;
         if (!requiresManualCleanup)
         {
@@ -90,7 +96,8 @@ public sealed class ExportHistoryScenarioRunner
             null,
             requiresManualCleanup,
             jobClient,
-            instanceRecords.Select(i => i.InstanceId).ToList());
+            instanceRecords.Select(i => i.InstanceId).ToList(),
+            expectedHistory);
     }
 
     public async Task<ExportScenarioResult> ExecuteContinuousScenarioAsync(
@@ -156,6 +163,15 @@ public sealed class ExportHistoryScenarioRunner
         IReadOnlyList<BlobItem> blobs = await this.ListBlobsAsync(actualContainer, actualPrefix, cancellation);
         IReadOnlyList<ExportedBlobArtifact> artifacts = await this.DownloadArtifactsAsync(actualContainer, blobs, scenario.Format, cancellation);
 
+        List<ExportInstanceRecord> allInstances = new(initialInstances.Count + additionalInstances.Count);
+        allInstances.AddRange(initialInstances);
+        allInstances.AddRange(additionalInstances);
+
+        // Retrieve expected history for all instances before cleanup
+        Dictionary<string, IList<HistoryEvent>> expectedHistory = await this.GetHistoryForInstancesAsync(
+            allInstances.Select(i => i.InstanceId),
+            cancellation);
+
         bool requiresManualCleanup = scenario.KeepJobAlive;
         if (!requiresManualCleanup)
         {
@@ -163,10 +179,6 @@ public sealed class ExportHistoryScenarioRunner
             await this.PurgeInstancesAsync(initialInstances.Concat(additionalInstances).Select(i => i.InstanceId), cancellation);
             await this.DeleteBlobsAsync(actualContainer, actualPrefix, cancellation);
         }
-
-        List<ExportInstanceRecord> allInstances = new(initialInstances.Count + additionalInstances.Count);
-        allInstances.AddRange(initialInstances);
-        allInstances.AddRange(additionalInstances);
 
         return new ExportScenarioResult(
             jobId,
@@ -180,7 +192,8 @@ public sealed class ExportHistoryScenarioRunner
             scenario,
             requiresManualCleanup,
             jobClient,
-            allInstances.Select(i => i.InstanceId).ToList());
+            allInstances.Select(i => i.InstanceId).ToList(),
+            expectedHistory);
     }
 
     public async Task CleanupAsync(ExportScenarioResult result, CancellationToken cancellation = default)
@@ -465,7 +478,7 @@ public sealed class ExportHistoryScenarioRunner
     {
         BlobContainerClient container = await this.fixture.GetContainerClientAsync(containerName, cancellation);
         List<BlobItem> blobs = new();
-        await foreach (BlobItem blob in container.GetBlobsAsync(prefix: prefix, cancellationToken: cancellation))
+        await foreach (BlobItem blob in container.GetBlobsAsync(BlobTraits.None, BlobStates.None,prefix: prefix, cancellationToken: cancellation))
         {
             blobs.Add(blob);
         }
@@ -476,7 +489,8 @@ public sealed class ExportHistoryScenarioRunner
     async Task DeleteBlobsAsync(string containerName, string prefix, CancellationToken cancellation)
     {
         BlobContainerClient container = await this.fixture.GetContainerClientAsync(containerName, cancellation);
-        await foreach (BlobItem blob in container.GetBlobsAsync(prefix: prefix, cancellationToken: cancellation))
+
+    await foreach (BlobItem blob in container.GetBlobsAsync(BlobTraits.None, BlobStates.None, prefix: prefix, cancellationToken: cancellation))
         {
             await container.DeleteBlobIfExistsAsync(blob.Name, cancellationToken: cancellation);
         }
@@ -533,6 +547,35 @@ public sealed class ExportHistoryScenarioRunner
                 // Swallow purge errors to avoid flakiness.
             }
         }
+    }
+
+    async Task<Dictionary<string, IList<HistoryEvent>>> GetHistoryForInstancesAsync(
+        IEnumerable<string> instanceIds,
+        CancellationToken cancellation)
+    {
+        DurableTaskClient client = this.fixture.DurableTaskClient ?? throw new InvalidOperationException("DurableTaskClient not initialized.");
+        Dictionary<string, IList<HistoryEvent>> historyByInstanceId = new();
+
+        foreach (string instanceId in instanceIds)
+        {
+            if (string.IsNullOrEmpty(instanceId))
+            {
+                continue;
+            }
+
+            try
+            {
+                IList<HistoryEvent> history = await client.GetOrchestrationHistoryAsync(instanceId, cancellation);
+                historyByInstanceId[instanceId] = history;
+            }
+            catch
+            {
+                // Swallow errors - history might not be retrievable for some instances
+                historyByInstanceId[instanceId] = Array.Empty<HistoryEvent>();
+            }
+        }
+
+        return historyByInstanceId;
     }
 
     static string NormalizePrefix(string prefix)

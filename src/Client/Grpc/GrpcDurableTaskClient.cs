@@ -124,12 +124,9 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
 
         // Set orchestration ID reuse policy for deduplication support
-        // Note: This requires the protobuf to support OrchestrationIdReusePolicy field
-        // If the protobuf doesn't support it yet, this will need to be updated when the protobuf is updated
-        if (options?.DedupeStatuses != null && options.DedupeStatuses.Count > 0)
-        {
-            // Parse and validate all status strings to enum first
-            ImmutableHashSet<OrchestrationRuntimeStatus> dedupeStatuses = options.DedupeStatuses
+        ImmutableHashSet<OrchestrationRuntimeStatus> dedupeStatuses = options?.DedupeStatuses is null
+            ? []
+            : [.. options.DedupeStatuses
                 .Select(s =>
                 {
                     if (!System.Enum.TryParse<OrchestrationRuntimeStatus>(s, ignoreCase: true, out OrchestrationRuntimeStatus status))
@@ -139,16 +136,15 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
                     }
 
                     return status;
-                }).ToImmutableHashSet();
+                })];
 
-            // Convert dedupe statuses to protobuf statuses and create reuse policy
-            IEnumerable<P.OrchestrationStatus> dedupeStatusesProto = dedupeStatuses.Select(s => s.ToGrpcStatus());
-            P.OrchestrationIdReusePolicy? policy = ProtoUtils.ConvertDedupeStatusesToReusePolicy(dedupeStatusesProto);
+        // Convert dedupe statuses to protobuf statuses and create reuse policy
+        IEnumerable<P.OrchestrationStatus> dedupeStatusesProto = dedupeStatuses.Select(s => s.ToGrpcStatus());
+        P.OrchestrationIdReusePolicy? policy = ProtoUtils.ConvertDedupeStatusesToReusePolicy(dedupeStatusesProto);
 
-            if (policy != null)
-            {
-                request.OrchestrationIdReusePolicy = policy;
-            }
+        if (policy != null)
+        {
+            request.OrchestrationIdReusePolicy = policy;
         }
 
         using Activity? newActivity = TraceHelper.StartActivityForNewOrchestration(request);

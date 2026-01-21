@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Reflection;
 using Microsoft.DurableTask.Entities;
 
 namespace Microsoft.DurableTask;
@@ -111,5 +112,39 @@ public sealed partial class DurableTaskRegistry
 
         this.Entities.Add(name, factory);
         return this;
+    }
+
+    /// <summary>
+    /// Gets the task name from a delegate by checking for a <see cref="DurableTaskAttribute"/>
+    /// or falling back to the method name.
+    /// </summary>
+    /// <param name="delegate">The delegate to extract the name from.</param>
+    /// <returns>The task name.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    static TaskName GetTaskNameFromDelegate(Delegate @delegate)
+    {
+        MethodInfo method = @delegate.Method;
+
+        // Check for DurableTaskAttribute on the method
+        DurableTaskAttribute? attribute = method.GetCustomAttribute<DurableTaskAttribute>();
+        string attributeName = attribute?.Name.Name ?? string.Empty;
+        if (!string.IsNullOrEmpty(attributeName))
+        {
+            return new TaskName(attributeName);
+        }
+
+        // Fall back to method name
+        string? methodName = method.Name;
+        if (string.IsNullOrEmpty(methodName) || methodName.StartsWith("<", StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "Cannot infer task name from the delegate. The delegate must either have a " +
+                "[DurableTask] attribute with a name, or be a named method (not a lambda or anonymous delegate).",
+                nameof(@delegate));
+        }
+
+        return new TaskName(methodName);
     }
 }

@@ -11,7 +11,7 @@ namespace Microsoft.DurableTask;
 /// <see cref="TaskOrchestrator{TInput, TOutput}"/>, <see cref="TaskActivity{TInput, TOutput}"/>,
 /// or TaskEntity{TState} from the Microsoft.DurableTask.Entities namespace.
 /// It can also be applied to methods used with <see cref="DurableTaskRegistry.AddOrchestratorFunc{TInput, TOutput}(System.Func{TaskOrchestrationContext, TInput, System.Threading.Tasks.Task{TOutput}})"/>
-/// or similar overloads to specify a custom name for the orchestrator.
+/// or similar overloads to specify a custom name for the orchestrator or activity.
 /// It is used specifically by build-time source generators to generate type-safe methods for invoking
 /// orchestrations, activities, or registering entities.
 /// </remarks>

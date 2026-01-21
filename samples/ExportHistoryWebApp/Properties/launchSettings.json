@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/launchsettings.json",
+  "iisSettings": {
+    "windowsAuthentication": false,
+    "anonymousAuthentication": true,
+    "iisExpress": {
+      "applicationUrl": "http://localhost:47698",
+      "sslPort": 44372
+    }
+  },
+  "profiles": {
+    "http": {
+      "commandName": "Project",
+      "applicationUrl": "http://localhost:5009",
+      "dotnetRunMessages": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "DURABLE_TASK_CONNECTION_STRING": "<your-connection-string>",
+        "EXPORT_HISTORY_STORAGE_CONNECTION_STRING": "<your-storage-connection-string>",
+        "EXPORT_HISTORY_CONTAINER_NAME": "export-history",
+        "EXPORT_HISTORY_PREFIX": ""
+      }
+    }
+  }
+}
+

@@ -140,12 +140,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
         // Convert dedupe statuses to protobuf statuses and create reuse policy
         IEnumerable<P.OrchestrationStatus> dedupeStatusesProto = dedupeStatuses.Select(s => s.ToGrpcStatus());
-        P.OrchestrationIdReusePolicy? policy = ProtoUtils.ConvertDedupeStatusesToReusePolicy(dedupeStatusesProto);
-
-        if (policy != null)
-        {
-            request.OrchestrationIdReusePolicy = policy;
-        }
+        request.OrchestrationIdReusePolicy = ProtoUtils.ConvertDedupeStatusesToReusePolicy(dedupeStatusesProto);
 
         using Activity? newActivity = TraceHelper.StartActivityForNewOrchestration(request);
 

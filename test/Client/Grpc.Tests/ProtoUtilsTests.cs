@@ -29,7 +29,7 @@ public class ProtoUtilsTests
     }
 
     [Fact]
-    public void GetTerminalStatuses_ReturnsImmutableArray()
+    public void GetAllStatuses_ReturnsImmutableArray()
     {
         // Act
         ImmutableArray<P.OrchestrationStatus> allStatuses = ProtoUtils.GetAllStatuses();
@@ -40,7 +40,7 @@ public class ProtoUtilsTests
     }
 
     [Fact]
-    public void ConvertDedupeStatusesToReusePolicy_EmptyArray_ReturnsPolicyWithAllTerminalStatuses()
+    public void ConvertDedupeStatusesToReusePolicy_EmptyArray_ReturnsPolicyWithAllStatuses()
     {
         // Arrange
         var dedupeStatuses = Array.Empty<P.OrchestrationStatus>();
@@ -55,7 +55,7 @@ public class ProtoUtilsTests
     }
 
     [Fact]
-    public void ConvertDedupeStatusesToReusePolicy_AllStatuses_ReturnsNull()
+    public void ConvertDedupeStatusesToReusePolicy_AllStatuses_ReturnsPolicyWithNoReplaceableStatuses()
     {
         // Arrange
         ImmutableArray<P.OrchestrationStatus> allStatuses = ProtoUtils.GetAllStatuses();
@@ -78,7 +78,7 @@ public class ProtoUtilsTests
         P.OrchestrationIdReusePolicy result = ProtoUtils.ConvertDedupeStatusesToReusePolicy(dedupeStatuses);
 
         // Assert
-        // When no dedupe statuses, all terminal statuses should be replaceable
+        // When no dedupe statuses, all statuses should be replaceable
         result.Should().NotBeNull();
         result!.ReplaceableStatus.Should().HaveCount(7);
         result.ReplaceableStatus.Should().Contain(P.OrchestrationStatus.Completed);
@@ -113,7 +113,6 @@ public class ProtoUtilsTests
         result.ReplaceableStatus.Should().Contain(P.OrchestrationStatus.Pending);
         result.ReplaceableStatus.Should().Contain(P.OrchestrationStatus.Suspended);
         result.ReplaceableStatus.Should().NotContain(P.OrchestrationStatus.Running);
-
 
     }
 
@@ -363,7 +362,7 @@ public class ProtoUtilsTests
         P.OrchestrationStatus[]? convertedBack = ProtoUtils.ConvertReusePolicyToDedupeStatuses(policy);
 
         // Assert
-        // Empty dedupe statuses -> all terminal statuses are replaceable -> policy with all statuses
+        // Empty dedupe statuses -> all statuses are replaceable -> policy with all statuses
         // Policy with all statuses -> no dedupe statuses -> null
         policy.Should().NotBeNull();
         convertedBack.Should().BeNull();

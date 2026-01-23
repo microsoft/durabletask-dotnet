@@ -7,6 +7,7 @@ using System.Globalization;
 using DurableTask.Core;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
+using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -121,6 +122,21 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
         string instanceId, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
         Check.NotNullOrEmpty(instanceId);
+        OrchestrationMetadata? orchestrationState = await this.GetInstanceAsync(instanceId, cancellation);
+
+        // The orchestration doesn't exist, nothing to purge
+        if (orchestrationState == null)
+        {
+            return new PurgeResult(0);
+        }
+
+        bool isEntity = this.options.EnableEntitySupport && instanceId[0] == '@';
+        if (!isEntity && !orchestrationState.IsCompleted)
+        {
+            throw new InvalidOperationException($"Only orchestrations in a terminal state can be purged, " +
+                $"but the orchestration with instance ID {instanceId} has status {orchestrationState.RuntimeStatus}");
+        }
+
         cancellation.ThrowIfCancellationRequested();
 
         // TODO: Support recursive purge of sub-orchestrations
@@ -192,7 +208,23 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
             },
         };
 
-        await this.Client.CreateTaskOrchestrationAsync(message);
+        Core.OrchestrationStatus[]? dedupeStatuses = null;
+        if (options?.DedupeStatuses != null && options.DedupeStatuses.Count > 0)
+        {
+            dedupeStatuses = options.DedupeStatuses
+                .Select(s =>
+                {
+                    if (!Enum.TryParse<OrchestrationRuntimeStatus>(s, ignoreCase: true, out var status))
+                    {
+                        throw new ArgumentException(
+                            $"Invalid orchestration runtime status: '{s}' for deduplication.");
+                    }
+                    return status.ConvertToCore();
+                })
+                .ToArray();
+        }
+
+        await this.Client.CreateTaskOrchestrationAsync(message, dedupeStatuses);
         return instanceId;
     }
 
@@ -303,7 +335,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
             },
         };
 
-        await this.Client.CreateTaskOrchestrationAsync(message);
+        await this.Client.CreateTaskOrchestrationAsync(message, dedupeStatuses: null);
         return newInstanceId;
     }
 

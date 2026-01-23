@@ -18,7 +18,7 @@ public class StockPriceOrchestrator : TaskOrchestrator<string, string>
 
             logger.LogInformation("Current price for {symbol} is ${price:F2}", symbol, currentPrice);
 
-            return $"Stock {symbol} price: ${currentPrice:F2} at {DateTime.UtcNow}";
+            return $"Stock {symbol} price: ${currentPrice:F2} at {context.CurrentUtcDateTime}";
         }
         catch (Exception ex)
         {

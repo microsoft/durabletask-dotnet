@@ -226,7 +226,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                     version,
                     instanceId,
                     policy.ToDurableTaskCoreRetryOptions(),
-                    input);
+                    input,
+                    options.Tags);
             }
             else if (options?.Retry?.Handler is AsyncRetryHandler handler)
             {
@@ -235,7 +236,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                         orchestratorName.Name,
                         version,
                         instanceId,
-                        input),
+                        input,
+                        options?.Tags),
                     orchestratorName.Name,
                     handler,
                     default);
@@ -246,7 +248,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                     orchestratorName.Name,
                     version,
                     instanceId,
-                    input);
+                    input,
+                    options?.Tags);
             }
         }
         catch (global::DurableTask.Core.Exceptions.SubOrchestrationFailedException e)

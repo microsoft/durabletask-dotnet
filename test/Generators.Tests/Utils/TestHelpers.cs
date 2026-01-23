@@ -18,6 +18,21 @@ static class TestHelpers
         string expectedOutputSource,
         bool isDurableFunctions) where TSourceGenerator : IIncrementalGenerator, new()
     {
+        return RunTestAsync<TSourceGenerator>(
+            expectedFileName,
+            inputSource,
+            expectedOutputSource,
+            isDurableFunctions,
+            projectType: null);
+    }
+
+    public static Task RunTestAsync<TSourceGenerator>(
+        string expectedFileName,
+        string inputSource,
+        string expectedOutputSource,
+        bool isDurableFunctions,
+        string? projectType) where TSourceGenerator : IIncrementalGenerator, new()
+    {
         CSharpSourceGeneratorVerifier<TSourceGenerator>.Test test = new()
         {
             TestState =
@@ -53,6 +68,16 @@ static class TestHelpers
             test.TestState.AdditionalReferences.Add(dependencyInjection);
         }
 
+        // Set the project type configuration if specified
+        if (projectType != null)
+        {
+            test.TestState.AnalyzerConfigFiles.Add(
+                ("/.globalconfig", $"""
+                is_global = true
+                build_property.DurableTaskGeneratorProjectType = {projectType}
+                """));
+        }
+
         return test.RunAsync();
     }
 
@@ -61,6 +86,7 @@ static class TestHelpers
         string formattedMethodList = IndentLines(spaces: 8, methodList);
         string usings = @"
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.DurableTask.Internal;";
 

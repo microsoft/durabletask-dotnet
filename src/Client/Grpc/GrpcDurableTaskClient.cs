@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Text;
 using DurableTask.Core.History;
@@ -91,7 +92,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             version = this.options.DefaultVersion;
         }
 
-        var request = new P.CreateInstanceRequest
+        P.CreateInstanceRequest request = new()
         {
             Name = orchestratorName.Name,
             Version = version,
@@ -120,6 +121,34 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         {
             // Convert timestamps to UTC if not already UTC
             request.ScheduledStartTimestamp = Timestamp.FromDateTimeOffset(startAt.Value.ToUniversalTime());
+        }
+
+        // Set orchestration ID reuse policy for deduplication support
+        // Note: This requires the protobuf to support OrchestrationIdReusePolicy field
+        // If the protobuf doesn't support it yet, this will need to be updated when the protobuf is updated
+        if (options?.DedupeStatuses != null && options.DedupeStatuses.Count > 0)
+        {
+            // Parse and validate all status strings to enum first
+            ImmutableHashSet<OrchestrationRuntimeStatus> dedupeStatuses = options.DedupeStatuses
+                .Select(s =>
+                {
+                    if (!System.Enum.TryParse<OrchestrationRuntimeStatus>(s, ignoreCase: true, out OrchestrationRuntimeStatus status))
+                    {
+                        throw new ArgumentException(
+                            $"Invalid orchestration runtime status: '{s}' for deduplication.");
+                    }
+
+                    return status;
+                }).ToImmutableHashSet();
+
+            // Convert dedupe statuses to protobuf statuses and create reuse policy
+            IEnumerable<P.OrchestrationStatus> dedupeStatusesProto = dedupeStatuses.Select(s => s.ToGrpcStatus());
+            P.OrchestrationIdReusePolicy? policy = ProtoUtils.ConvertDedupeStatusesToReusePolicy(dedupeStatusesProto);
+
+            if (policy != null)
+            {
+                request.OrchestrationIdReusePolicy = policy;
+            }
         }
 
         using Activity? newActivity = TraceHelper.StartActivityForNewOrchestration(request);
@@ -325,6 +354,53 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
+    public override async Task<Page<string>> ListInstanceIdsAsync(
+        IEnumerable<OrchestrationRuntimeStatus>? runtimeStatus = null,
+        DateTimeOffset? completedTimeFrom = null,
+        DateTimeOffset? completedTimeTo = null,
+        int pageSize = OrchestrationQuery.DefaultPageSize,
+        string? lastInstanceKey = null,
+        CancellationToken cancellation = default)
+    {
+        Check.NotEntity(this.options.EnableEntitySupport, null);
+
+        P.ListInstanceIdsRequest request = new()
+        {
+            PageSize = pageSize,
+            LastInstanceKey = lastInstanceKey ?? string.Empty,
+        };
+
+        if (runtimeStatus != null)
+        {
+            request.RuntimeStatus.AddRange(runtimeStatus.Select(x => x.ToGrpcStatus()));
+        }
+
+        if (completedTimeFrom.HasValue)
+        {
+            request.CompletedTimeFrom = completedTimeFrom.Value.ToTimestamp();
+        }
+
+        if (completedTimeTo.HasValue)
+        {
+            request.CompletedTimeTo = completedTimeTo.Value.ToTimestamp();
+        }
+
+        try
+        {
+            P.ListInstanceIdsResponse response = await this.sidecarClient.ListInstanceIdsAsync(
+                request,
+                cancellationToken: cancellation);
+
+            return new Page<string>(response.InstanceIds.ToList(), response.LastInstanceKey);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.ListInstanceIdsAsync)} operation was canceled.", e, cancellation);
+        }
+    }
+
+    /// <inheritdoc/>
     public override async Task<OrchestrationMetadata> WaitForInstanceCompletionAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {
@@ -365,10 +441,16 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override Task<PurgeResult> PurgeInstanceAsync(
         string instanceId, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
+        Check.NotNullOrEmpty(instanceId);
         bool recursive = options?.Recursive ?? false;
         this.logger.PurgingInstanceMetadata(instanceId);
 
-        P.PurgeInstancesRequest request = new() { InstanceId = instanceId, Recursive = recursive };
+        P.PurgeInstancesRequest request = new()
+        {
+            InstanceId = instanceId,
+            Recursive = recursive,
+            IsOrchestration = !this.options.EnableEntitySupport || instanceId[0] != '@',
+        };
         return this.PurgeInstancesCoreAsync(request, cancellation);
     }
 
@@ -405,7 +487,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         Check.NotNullOrEmpty(instanceId);
         Check.NotEntity(this.options.EnableEntitySupport, instanceId);
 
-        var request = new P.RestartInstanceRequest
+        P.RestartInstanceRequest request = new P.RestartInstanceRequest
         {
             InstanceId = instanceId,
             RestartWithNewInstanceId = restartWithNewInstanceId,
@@ -441,7 +523,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         Check.NotNullOrEmpty(instanceId);
         Check.NotEntity(this.options.EnableEntitySupport, instanceId);
 
-        var request = new P.RewindInstanceRequest
+        P.RewindInstanceRequest request = new P.RewindInstanceRequest
         {
             InstanceId = instanceId,
             Reason = reason,
@@ -488,10 +570,11 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             using AsyncServerStreamingCall<P.HistoryChunk> streamResponse =
                 this.sidecarClient.StreamInstanceHistory(streamRequest, cancellationToken: cancellation);
 
+            Microsoft.DurableTask.ProtoUtils.EntityConversionState conversionState = new(insertMissingEntityUnlocks: false);
             List<HistoryEvent> pastEvents = [];
             while (await streamResponse.ResponseStream.MoveNext(cancellation))
             {
-                pastEvents.AddRange(streamResponse.ResponseStream.Current.Events.Select(DurableTask.ProtoUtils.ConvertHistoryEvent));
+                pastEvents.AddRange(streamResponse.ResponseStream.Current.Events.Select(conversionState.ConvertFromProto));
             }
 
             return pastEvents;
@@ -569,11 +652,19 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             throw new OperationCanceledException(
                 $"The {nameof(this.PurgeAllInstancesAsync)} operation was canceled.", e, cancellation);
         }
+        catch (RpcException e) when (e.StatusCode == StatusCode.FailedPrecondition)
+        {
+            throw new InvalidOperationException(e.Status.Detail);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
+        {
+            throw new NotImplementedException(e.Status.Detail);
+        }
     }
 
     OrchestrationMetadata CreateMetadata(P.OrchestrationState state, bool includeInputsAndOutputs)
     {
-        var metadata = new OrchestrationMetadata(state.Name, state.InstanceId)
+        OrchestrationMetadata metadata = new OrchestrationMetadata(state.Name, state.InstanceId)
         {
             CreatedAt = state.CreatedTimestamp.ToDateTimeOffset(),
             LastUpdatedAt = state.LastUpdatedTimestamp.ToDateTimeOffset(),

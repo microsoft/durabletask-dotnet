@@ -165,7 +165,9 @@ public class ShimDurableTaskClientTests
     public async Task PurgeInstanceMetadata()
     {
         // arrange
-        string instanceId = Guid.NewGuid().ToString();
+        List<Core.OrchestrationState> states = [CreateState("input", "output")];
+        string instanceId = states.First().OrchestrationInstance.InstanceId;
+        this.orchestrationClient.Setup(m => m.GetOrchestrationStateAsync(instanceId, false)).ReturnsAsync(states);
         this.purgeClient.Setup(m => m.PurgeInstanceStateAsync(instanceId)).ReturnsAsync(new Core.PurgeResult(1));
 
         // act

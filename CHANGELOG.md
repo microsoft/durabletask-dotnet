@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.20.0
+- Partial orchestration workitem completion support (merge after next dts dp release) by wangbill ([#514](https://github.com/microsoft/durabletask-dotnet/pull/514))
+- Export history job by wangbill ([#494](https://github.com/microsoft/durabletask-dotnet/pull/494))
+- Add dependency injection support to durabletasktesthost by Naiyuan Tian ([#613](https://github.com/microsoft/durabletask-dotnet/pull/613))
+
 ## v1.19.1
 - Throw an `InvalidOperationException` for purge requests on running orchestrations by sophiatev ([#611](https://github.com/microsoft/durabletask-dotnet/pull/611))
 - Validate c# identifiers in durabletask source generator by Copilot ([#578](https://github.com/microsoft/durabletask-dotnet/pull/578))

@@ -64,7 +64,8 @@ public static class ProtoUtils
     /// Converts an OrchestrationIdReusePolicy with replaceable statuses to dedupe statuses
     /// (statuses that should NOT be replaced).
     /// </summary>
-    /// <param name="policy">The OrchestrationIdReusePolicy containing replaceable statuses.</param>
+    /// <param name="policy">The OrchestrationIdReusePolicy containing replaceable statuses. If this parameter is null,
+    /// then all statuses are considered replaceable.</param>
     /// <returns>An array of orchestration statuses that should NOT be replaced, or null if all statuses are replaceable.</returns>
     /// <remarks>
     /// The policy uses "replaceableStatus" - these are statuses that CAN be replaced.
@@ -72,8 +73,13 @@ public static class ProtoUtils
     /// So dedupeStatuses = all statuses MINUS replaceableStatus.
     /// </remarks>
     public static P.OrchestrationStatus[]? ConvertReusePolicyToDedupeStatuses(
-        P.OrchestrationIdReusePolicy policy)
+        P.OrchestrationIdReusePolicy? policy)
     {
+        if (policy == null)
+        {
+            return null;
+        }
+
         ImmutableArray<P.OrchestrationStatus> allStatuses = GetAllStatuses();
         ImmutableHashSet<P.OrchestrationStatus> replaceableStatusSet = policy.ReplaceableStatus.ToImmutableHashSet();
 

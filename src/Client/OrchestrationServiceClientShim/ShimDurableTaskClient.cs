@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using DurableTask.Core;
+using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
 using Microsoft.DurableTask.Client;
@@ -224,6 +225,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                 .ToArray();
         }
 
+        await this.TerminateTaskOrchestrationWithReusableRunningStatusAndWaitAsync(instanceId, dedupeStatuses, cancellation);
         await this.Client.CreateTaskOrchestrationAsync(message, dedupeStatuses);
         return instanceId;
     }
@@ -384,5 +386,54 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
         };
 
         return this.Client.SendTaskOrchestrationMessageAsync(message);
+    }
+
+    async Task TerminateTaskOrchestrationWithReusableRunningStatusAndWaitAsync(
+            string instanceId,
+            OrchestrationStatus[]? dedupeStatuses,
+            CancellationToken cancellation)
+    {
+        var runningStatuses = new List<OrchestrationStatus>()
+            {
+                OrchestrationStatus.Running,
+                OrchestrationStatus.Pending,
+                OrchestrationStatus.Suspended,
+            };
+
+        // At least one running status is reusable, so determine if an orchestration already exists with this status and terminate it if so
+        if (dedupeStatuses == null || runningStatuses.Any(status => !dedupeStatuses.Contains(status)))
+        {
+            OrchestrationMetadata? metadata = await this.GetInstancesAsync(instanceId, getInputsAndOutputs: false, cancellation);
+
+            if (metadata != null)
+            {
+                OrchestrationStatus orchestestrationStatus = metadata.RuntimeStatus.ConvertToCore();
+                if (dedupeStatuses?.Contains(orchestestrationStatus) == true)
+                {
+                    throw new OrchestrationAlreadyExistsException($"An orchestration with instance ID '{instanceId}' and status " +
+                        $"'{metadata.RuntimeStatus}' already exists");
+                }
+
+                if (runningStatuses.Contains(orchestestrationStatus))
+                {
+                    // Check for cancellation before attempting to terminate the orchestration
+                    cancellation.ThrowIfCancellationRequested();
+
+                    string terminationReason = $"A new instance creation request has been issued for instance {instanceId} which " +
+                        $"currently has status {metadata.RuntimeStatus}. Since the dedupe statuses of the creation request, " +
+                        $"{(dedupeStatuses == null ? "[]" : string.Join(", ", dedupeStatuses))}, do not contain the orchestration's status, " +
+                        $"the orchestration has been terminated and a new instance with the same instance ID will be created.";
+
+                    await this.TerminateInstanceAsync(instanceId, terminationReason, cancellation);
+
+                    while (metadata != null && metadata.RuntimeStatus != OrchestrationRuntimeStatus.Terminated)
+                    {
+                        cancellation.ThrowIfCancellationRequested();
+                        await Task.Delay(TimeSpan.FromSeconds(1), cancellation);
+                        metadata = await this.GetInstancesAsync(instanceId, getInputsAndOutputs: false, cancellation);
+                    }
+                }
+            }
+        }
     }
 }

@@ -23,6 +23,8 @@
 
   <ItemGroup>
     <PackageReference Include="Google.Protobuf" VersionOverride="3.33.2" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" VersionOverride="10.0.2" />
+  <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" VersionOverride="10.0.2" />
     <None Update="host.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

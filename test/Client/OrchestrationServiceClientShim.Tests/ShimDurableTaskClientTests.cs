@@ -1,14 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using DotNext;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
-using FluentAssertions.Specialized;
-using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Converters;
 using Microsoft.Extensions.Options;

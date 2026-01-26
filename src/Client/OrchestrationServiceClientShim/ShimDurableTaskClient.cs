@@ -407,14 +407,14 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
 
             if (metadata != null)
             {
-                OrchestrationStatus orchestestrationStatus = metadata.RuntimeStatus.ConvertToCore();
-                if (dedupeStatuses?.Contains(orchestestrationStatus) == true)
+                OrchestrationStatus orchestrationStatus = metadata.RuntimeStatus.ConvertToCore();
+                if (dedupeStatuses?.Contains(orchestrationStatus) == true)
                 {
                     throw new OrchestrationAlreadyExistsException($"An orchestration with instance ID '{instanceId}' and status " +
                         $"'{metadata.RuntimeStatus}' already exists");
                 }
 
-                if (runningStatuses.Contains(orchestestrationStatus))
+                if (runningStatuses.Contains(orchestrationStatus))
                 {
                     // Check for cancellation before attempting to terminate the orchestration
                     cancellation.ThrowIfCancellationRequested();
@@ -426,7 +426,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
 
                     await this.TerminateInstanceAsync(instanceId, terminationReason, cancellation);
 
-                    while (metadata != null && metadata.RuntimeStatus != OrchestrationRuntimeStatus.Terminated)
+                    while (metadata != null && !metadata.IsCompleted)
                     {
                         cancellation.ThrowIfCancellationRequested();
                         await Task.Delay(TimeSpan.FromSeconds(1), cancellation);

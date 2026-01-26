@@ -20,7 +20,6 @@ public static class ProtoUtils
     public static ImmutableArray<P.OrchestrationStatus> GetAllStatuses()
     {
 #pragma warning disable CS0618 // Type or member is obsolete - Canceled is intentionally included for compatibility
-        // compatibility with what?
         return ImmutableArray.Create(
             P.OrchestrationStatus.Completed,
             P.OrchestrationStatus.Failed,

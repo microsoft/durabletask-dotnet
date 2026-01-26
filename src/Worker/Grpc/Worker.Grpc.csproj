@@ -14,6 +14,8 @@
 
   <ItemGroup>
     <PackageReference Include="Google.Protobuf" VersionOverride="3.33.2" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" VersionOverride="10.0.2" />
+  <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" VersionOverride="10.0.2" />
     <SharedSection Include="Core" />
     <SharedSection Include="DependencyInjection" />
     <SharedSection Include="Grpc" />

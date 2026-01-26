@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" VersionOverride="10.0.2" />
+  <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Microsoft.DurableTask.Client.Grpc" />
     <PackageReference Include="Microsoft.DurableTask.Worker.Grpc" />

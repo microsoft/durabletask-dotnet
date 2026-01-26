@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" VersionOverride="10.0.2" />
     <SharedSection Include="Core" />
     <SharedSection Include="DependencyInjection" />
     <SharedSection Include="Grpc" />

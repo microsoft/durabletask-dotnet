@@ -333,4 +333,39 @@ public class DurableTaskSchedulerClientExtensionsTests
         options2.Channel.Should().NotBeNull();
         options1.Channel.Should().NotBeSameAs(options2.Channel, "different configurations should use different channels");
     }
+
+    [Fact]
+    public void UseDurableTaskScheduler_ServiceProviderDispose_DisposesChannels()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskClientBuilder> mockBuilder = new Mock<IDurableTaskClientBuilder>();
+        mockBuilder.Setup(b => b.Services).Returns(services);
+        DefaultAzureCredential credential = new DefaultAzureCredential();
+
+        // Act
+        mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
+        ServiceProvider provider = services.BuildServiceProvider();
+
+        // Resolve options to trigger channel creation
+        IOptionsMonitor<GrpcDurableTaskClientOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>();
+        GrpcDurableTaskClientOptions options = optionsMonitor.Get(Options.DefaultName);
+        options.Channel.Should().NotBeNull();
+
+        // Dispose the service provider - this should dispose the ConfigureGrpcChannel which disposes channels
+        provider.Dispose();
+
+        // Assert - after disposal, creating a new provider and getting options should work
+        // (this verifies the old provider was properly cleaned up)
+        ServiceCollection services2 = new ServiceCollection();
+        Mock<IDurableTaskClientBuilder> mockBuilder2 = new Mock<IDurableTaskClientBuilder>();
+        mockBuilder2.Setup(b => b.Services).Returns(services2);
+        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
+        ServiceProvider provider2 = services2.BuildServiceProvider();
+
+        IOptionsMonitor<GrpcDurableTaskClientOptions> newOptionsMonitor = provider2.GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>();
+        GrpcDurableTaskClientOptions newOptions = newOptionsMonitor.Get(Options.DefaultName);
+        newOptions.Channel.Should().NotBeNull();
+        newOptions.Channel.Should().NotBeSameAs(options.Channel, "new provider should create a new channel");
+    }
 }

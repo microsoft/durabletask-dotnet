@@ -4,6 +4,7 @@
 using Azure.Core;
 using Azure.Identity;
 using FluentAssertions;
+using Grpc.Net.Client;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -253,7 +254,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
     }
 
     [Fact]
-    public void UseDurableTaskScheduler_ServiceProviderDispose_DisposesChannels()
+    public async Task UseDurableTaskScheduler_ServiceProviderDispose_DisposesChannels()
     {
         // Arrange
         ServiceCollection services = new ServiceCollection();
@@ -269,22 +270,50 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         IOptionsMonitor<GrpcDurableTaskWorkerOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>();
         GrpcDurableTaskWorkerOptions options = optionsMonitor.Get(Options.DefaultName);
         options.Channel.Should().NotBeNull();
+        GrpcChannel channel = options.Channel!;
 
         // Dispose the service provider - this should dispose the ConfigureGrpcChannel which disposes channels
-        provider.Dispose();
+        await provider.DisposeAsync();
 
-        // Assert - after disposal, creating a new provider and getting options should work
-        // (this verifies the old provider was properly cleaned up)
+        // Assert - verify the channel was disposed by checking it throws ObjectDisposedException
+        Action action = () => channel.CreateCallInvoker();
+        action.Should().Throw<ObjectDisposedException>("channel should be disposed after provider disposal");
+
+        // Also verify that creating a new provider and getting options still works
         ServiceCollection services2 = new ServiceCollection();
         Mock<IDurableTaskWorkerBuilder> mockBuilder2 = new Mock<IDurableTaskWorkerBuilder>();
         mockBuilder2.Setup(b => b.Services).Returns(services2);
         mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
-        ServiceProvider provider2 = services2.BuildServiceProvider();
+        await using ServiceProvider provider2 = services2.BuildServiceProvider();
 
         IOptionsMonitor<GrpcDurableTaskWorkerOptions> newOptionsMonitor = provider2.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>();
         GrpcDurableTaskWorkerOptions newOptions = newOptionsMonitor.Get(Options.DefaultName);
         newOptions.Channel.Should().NotBeNull();
-        newOptions.Channel.Should().NotBeSameAs(options.Channel, "new provider should create a new channel");
+        newOptions.Channel.Should().NotBeSameAs(channel, "new provider should create a new channel");
+    }
+
+    [Fact]
+    public async Task UseDurableTaskScheduler_ConfigureAfterDispose_ThrowsObjectDisposedException()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new Mock<IDurableTaskWorkerBuilder>();
+        mockBuilder.Setup(b => b.Services).Returns(services);
+        DefaultAzureCredential credential = new DefaultAzureCredential();
+
+        // Act
+        mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
+        ServiceProvider provider = services.BuildServiceProvider();
+
+        // Resolve options monitor before disposal
+        IOptionsMonitor<GrpcDurableTaskWorkerOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>();
+
+        // Dispose the service provider
+        await provider.DisposeAsync();
+
+        // Assert - attempting to get options after disposal should throw
+        Action action = () => optionsMonitor.Get(Options.DefaultName);
+        action.Should().Throw<ObjectDisposedException>("configuring options after disposal should throw");
     }
 }
 

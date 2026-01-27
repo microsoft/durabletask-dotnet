@@ -106,11 +106,11 @@ public static class DurableTaskSchedulerWorkerExtensions
     /// using the provided Durable Task Scheduler options.
     /// Channels are cached per configuration key and disposed when the service provider is disposed.
     /// </summary>
-    sealed class ConfigureGrpcChannel : IConfigureNamedOptions<GrpcDurableTaskWorkerOptions>, IDisposable
+    sealed class ConfigureGrpcChannel : IConfigureNamedOptions<GrpcDurableTaskWorkerOptions>, IAsyncDisposable
     {
         readonly IOptionsMonitor<DurableTaskSchedulerWorkerOptions> schedulerOptions;
         readonly ConcurrentDictionary<string, Lazy<GrpcChannel>> channels = new();
-        volatile bool disposed;
+        int disposed;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ConfigureGrpcChannel"/> class.
@@ -135,9 +135,9 @@ public static class DurableTaskSchedulerWorkerExtensions
         public void Configure(string? name, GrpcDurableTaskWorkerOptions options)
         {
 #if NET7_0_OR_GREATER
-            ObjectDisposedException.ThrowIf(this.disposed, this);
+            ObjectDisposedException.ThrowIf(this.disposed == 1, this);
 #else
-            if (this.disposed)
+            if (this.disposed == 1)
             {
                 throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
             }
@@ -157,41 +157,50 @@ public static class DurableTaskSchedulerWorkerExtensions
         }
 
         /// <inheritdoc/>
-        public void Dispose()
+        public async ValueTask DisposeAsync()
         {
-            if (this.disposed)
+            if (Interlocked.Exchange(ref this.disposed, 1) == 1)
             {
                 return;
             }
 
-            this.disposed = true;
-
+            List<Exception>? exceptions = null;
             foreach (Lazy<GrpcChannel> channel in this.channels.Values.Where(lazy => lazy.IsValueCreated))
             {
-                DisposeChannel(channel.Value);
+                try
+                {
+                    await DisposeChannelAsync(channel.Value).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    exceptions ??= new List<Exception>();
+                    exceptions.Add(ex);
+                }
             }
 
             this.channels.Clear();
+            GC.SuppressFinalize(this);
+
+            if (exceptions is { Count: > 0 })
+            {
+                throw new AggregateException(exceptions);
+            }
         }
 
-        static void DisposeChannel(GrpcChannel channel)
+        static async Task DisposeChannelAsync(GrpcChannel channel)
         {
             // ShutdownAsync is the graceful way to close a gRPC channel.
-            // Fire-and-forget but ensure the channel is eventually disposed.
-            _ = Task.Run(async () =>
+            using (channel)
             {
-                using (channel)
+                try
                 {
-                    try
-                    {
-                        await channel.ShutdownAsync();
-                    }
-                    catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
-                    {
-                        // Ignore expected shutdown/disposal errors
-                    }
+                    await channel.ShutdownAsync().ConfigureAwait(false);
                 }
-            });
+                catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+                {
+                    // Ignore expected shutdown/disposal errors
+                }
+            }
         }
     }
 }

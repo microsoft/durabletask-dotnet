@@ -404,9 +404,9 @@ public class GrpcChannelCacheTests
         for (int i = 0; i < 5; i++)
         {
             string key = $"key{i}";
-            GrpcChannel channel = cache.GetOrCreate(key, () =>
+            cache.GetOrCreate(key, () =>
             {
-                var c = GrpcChannel.ForAddress(TestEndpoint);
+                GrpcChannel c = GrpcChannel.ForAddress(TestEndpoint);
                 createdChannels.Add(c);
                 return c;
             });

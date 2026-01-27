@@ -40,21 +40,26 @@ sealed class GrpcChannelCache : IDisposable
             return existingChannel;
         }
 
-        // Slow path: create new channel with synchronization to avoid creating multiple channels
+        // Create channel outside lock to avoid potential deadlock if factory calls back into cache
+        GrpcChannel newChannel = channelFactory();
+
         lock (this.syncLock)
         {
             if (this.disposed)
             {
+                // Cache was disposed while we were creating the channel - dispose and throw
+                DisposeChannelAsync(newChannel);
                 throw new ObjectDisposedException(nameof(GrpcChannelCache));
             }
 
-            // Double-check after acquiring lock
+            // Check if another thread added a channel while we were creating ours
             if (this.channels.TryGetValue(key, out existingChannel))
             {
+                // Dispose our duplicate and return the existing one
+                DisposeChannelAsync(newChannel);
                 return existingChannel;
             }
 
-            GrpcChannel newChannel = channelFactory();
             this.channels[key] = newChannel;
             return newChannel;
         }
@@ -85,13 +90,11 @@ sealed class GrpcChannelCache : IDisposable
                 throw new ObjectDisposedException(nameof(GrpcChannelCache));
             }
 
-            if (this.channels.TryGetValue(key, out oldChannel))
+            // Only replace if it's actually a different channel
+            if (this.channels.TryGetValue(key, out oldChannel) &&
+                ReferenceEquals(oldChannel, newChannel))
             {
-                // Only replace if it's actually a different channel
-                if (ReferenceEquals(oldChannel, newChannel))
-                {
-                    return;
-                }
+                return;
             }
 
             this.channels[key] = newChannel;
@@ -156,17 +159,16 @@ sealed class GrpcChannelCache : IDisposable
         // We fire-and-forget but ensure the channel is eventually disposed
         _ = Task.Run(async () =>
         {
-            try
+            using (channel)
             {
-                await channel.ShutdownAsync();
-            }
-            catch
-            {
-                // Ignore shutdown errors during disposal
-            }
-            finally
-            {
-                channel.Dispose();
+                try
+                {
+                    await channel.ShutdownAsync();
+                }
+                catch (Exception)
+                {
+                    // Ignore shutdown errors during disposal
+                }
             }
         });
     }

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Collections.Concurrent;
+using System.Linq;
 using Azure.Core;
 using Grpc.Net.Client;
 using Microsoft.DurableTask.Client.Grpc;
@@ -162,12 +163,9 @@ public static class DurableTaskSchedulerClientExtensions
 
             this.disposed = true;
 
-            foreach (KeyValuePair<string, Lazy<GrpcChannel>> kvp in this.channels)
+            foreach (Lazy<GrpcChannel> channel in this.channels.Values.Where(lazy => lazy.IsValueCreated))
             {
-                if (kvp.Value.IsValueCreated)
-                {
-                    DisposeChannel(kvp.Value.Value);
-                }
+                DisposeChannel(channel.Value);
             }
 
             this.channels.Clear();
@@ -185,9 +183,9 @@ public static class DurableTaskSchedulerClientExtensions
                     {
                         await channel.ShutdownAsync();
                     }
-                    catch (Exception)
+                    catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
                     {
-                        // Ignore shutdown errors during disposal
+                        // Ignore expected shutdown/disposal errors
                     }
                 }
             });

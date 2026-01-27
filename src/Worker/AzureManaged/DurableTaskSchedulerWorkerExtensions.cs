@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Azure.Core;
+using Grpc.Net.Client;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.DependencyInjection;
@@ -93,6 +94,10 @@ public static class DurableTaskSchedulerWorkerExtensions
                options.EnableEntitySupport = true;
            });
 
+        // Register the channel cache as a singleton to ensure channels are reused
+        // and properly disposed when the service provider is disposed.
+        builder.Services.TryAddSingleton<GrpcChannelCache>();
+
         builder.Services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IConfigureOptions<GrpcDurableTaskWorkerOptions>, ConfigureGrpcChannel>());
         builder.UseGrpc(_ => { });
@@ -103,7 +108,10 @@ public static class DurableTaskSchedulerWorkerExtensions
     /// using the provided Durable Task Scheduler options.
     /// </summary>
     /// <param name="schedulerOptions">Monitor for accessing the current scheduler options configuration.</param>
-    class ConfigureGrpcChannel(IOptionsMonitor<DurableTaskSchedulerWorkerOptions> schedulerOptions) :
+    /// <param name="channelCache">Cache for gRPC channels to ensure reuse and proper disposal.</param>
+    class ConfigureGrpcChannel(
+        IOptionsMonitor<DurableTaskSchedulerWorkerOptions> schedulerOptions,
+        GrpcChannelCache channelCache) :
         IConfigureNamedOptions<GrpcDurableTaskWorkerOptions>
     {
         /// <summary>
@@ -119,8 +127,14 @@ public static class DurableTaskSchedulerWorkerExtensions
         /// <param name="options">The options instance to configure.</param>
         public void Configure(string? name, GrpcDurableTaskWorkerOptions options)
         {
-            DurableTaskSchedulerWorkerOptions source = schedulerOptions.Get(name ?? Options.DefaultName);
-            options.Channel = source.CreateChannel();
+            string optionsName = name ?? Options.DefaultName;
+            DurableTaskSchedulerWorkerOptions source = schedulerOptions.Get(optionsName);
+
+            // Create a cache key based on the options name, endpoint, and task hub.
+            // This ensures channels are reused for the same configuration
+            // but separate channels are created for different configurations.
+            string cacheKey = $"worker:{optionsName}:{source.EndpointAddress}:{source.TaskHubName}";
+            options.Channel = channelCache.GetOrCreate(cacheKey, () => source.CreateChannel());
             options.ConfigureForAzureManaged();
         }
     }

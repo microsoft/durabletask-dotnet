@@ -198,4 +198,58 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         options.ResourceId.Should().Be("https://durabletask.io");
         options.AllowInsecureCredentials.Should().BeFalse();
     }
+
+    [Fact]
+    public void UseDurableTaskScheduler_SameConfiguration_ReusesSameChannel()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new Mock<IDurableTaskWorkerBuilder>();
+        mockBuilder.Setup(b => b.Services).Returns(services);
+        DefaultAzureCredential credential = new DefaultAzureCredential();
+
+        // Act
+        mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
+        ServiceProvider provider = services.BuildServiceProvider();
+
+        // Resolve options multiple times to trigger channel configuration
+        IOptionsMonitor<GrpcDurableTaskWorkerOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>();
+        GrpcDurableTaskWorkerOptions options1 = optionsMonitor.Get(Options.DefaultName);
+        GrpcDurableTaskWorkerOptions options2 = optionsMonitor.Get(Options.DefaultName);
+
+        // Assert
+        options1.Channel.Should().NotBeNull();
+        options2.Channel.Should().NotBeNull();
+        options1.Channel.Should().BeSameAs(options2.Channel, "same configuration should reuse the same channel");
+    }
+
+    [Fact]
+    public void UseDurableTaskScheduler_DifferentNamedOptions_UsesSeparateChannels()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder1 = new Mock<IDurableTaskWorkerBuilder>();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder2 = new Mock<IDurableTaskWorkerBuilder>();
+        mockBuilder1.Setup(b => b.Services).Returns(services);
+        mockBuilder1.Setup(b => b.Name).Returns("worker1");
+        mockBuilder2.Setup(b => b.Services).Returns(services);
+        mockBuilder2.Setup(b => b.Name).Returns("worker2");
+        DefaultAzureCredential credential = new DefaultAzureCredential();
+
+        // Act - configure two different named workers with different endpoints
+        mockBuilder1.Object.UseDurableTaskScheduler("endpoint1.westus3.durabletask.io", ValidTaskHub, credential);
+        mockBuilder2.Object.UseDurableTaskScheduler("endpoint2.westus3.durabletask.io", ValidTaskHub, credential);
+        ServiceProvider provider = services.BuildServiceProvider();
+
+        // Resolve options for both named workers
+        IOptionsMonitor<GrpcDurableTaskWorkerOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>();
+        GrpcDurableTaskWorkerOptions options1 = optionsMonitor.Get("worker1");
+        GrpcDurableTaskWorkerOptions options2 = optionsMonitor.Get("worker2");
+
+        // Assert
+        options1.Channel.Should().NotBeNull();
+        options2.Channel.Should().NotBeNull();
+        options1.Channel.Should().NotBeSameAs(options2.Channel, "different configurations should use different channels");
+    }
 }
+

@@ -15,7 +15,9 @@ public static class StartOrchestrationOptionsExtensions
         OrchestrationRuntimeStatus.Completed,
         OrchestrationRuntimeStatus.Failed,
         OrchestrationRuntimeStatus.Terminated,
-        OrchestrationRuntimeStatus.Canceled,
+        OrchestrationRuntimeStatus.Pending,
+        OrchestrationRuntimeStatus.Running,
+        OrchestrationRuntimeStatus.Suspended,
     };
 
     /// <summary>

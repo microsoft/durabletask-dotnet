@@ -173,7 +173,7 @@ public static class DurableTaskSchedulerWorkerExtensions
                 {
                     await DisposeChannelAsync(channel.Value).ConfigureAwait(false);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException and not ObjectDisposedException)
                 {
                     exceptions ??= new List<Exception>();
                     exceptions.Add(ex);

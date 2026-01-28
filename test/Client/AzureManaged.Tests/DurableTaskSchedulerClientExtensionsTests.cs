@@ -5,6 +5,7 @@ using Azure.Core;
 using Azure.Identity;
 using FluentAssertions;
 using Grpc.Core;
+using Grpc.Net.Client;
 using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -279,5 +280,261 @@ public class DurableTaskSchedulerClientExtensionsTests
             clientOptions.RetryOptions.BackoffMultiplier.Should().Be(2.0);
             clientOptions.RetryOptions.RetryableStatusCodes.Should().Contain(StatusCode.Unknown);
         }
+    }
+
+    [Fact]
+    public async Task UseDurableTaskScheduler_SameConfiguration_ReusesSameChannel()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskClientBuilder> mockBuilder = new Mock<IDurableTaskClientBuilder>();
+        mockBuilder.Setup(b => b.Services).Returns(services);
+        DefaultAzureCredential credential = new DefaultAzureCredential();
+
+        // Act
+        mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Resolve options multiple times to trigger channel configuration
+        IOptionsFactory<GrpcDurableTaskClientOptions> optionsFactory = provider.GetRequiredService<IOptionsFactory<GrpcDurableTaskClientOptions>>();
+        GrpcDurableTaskClientOptions options1 = optionsFactory.Create(Options.DefaultName);
+        GrpcDurableTaskClientOptions options2 = optionsFactory.Create(Options.DefaultName);
+
+        // Assert
+        options1.Channel.Should().NotBeNull();
+        options2.Channel.Should().NotBeNull();
+        options1.Channel.Should().BeSameAs(options2.Channel, "same configuration should reuse the same channel");
+    }
+
+    [Fact]
+    public async Task UseDurableTaskScheduler_DifferentNamedOptions_UsesSeparateChannels()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskClientBuilder> mockBuilder1 = new Mock<IDurableTaskClientBuilder>();
+        Mock<IDurableTaskClientBuilder> mockBuilder2 = new Mock<IDurableTaskClientBuilder>();
+        mockBuilder1.Setup(b => b.Services).Returns(services);
+        mockBuilder1.Setup(b => b.Name).Returns("client1");
+        mockBuilder2.Setup(b => b.Services).Returns(services);
+        mockBuilder2.Setup(b => b.Name).Returns("client2");
+        DefaultAzureCredential credential = new DefaultAzureCredential();
+
+        // Act - configure two different named clients with the SAME endpoint and task hub
+        // This validates that the options name is included in the cache key
+        mockBuilder1.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
+        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Resolve options for both named clients
+        IOptionsMonitor<GrpcDurableTaskClientOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>();
+        GrpcDurableTaskClientOptions options1 = optionsMonitor.Get("client1");
+        GrpcDurableTaskClientOptions options2 = optionsMonitor.Get("client2");
+
+        // Assert
+        options1.Channel.Should().NotBeNull();
+        options2.Channel.Should().NotBeNull();
+        options1.Channel.Should().NotBeSameAs(options2.Channel, "different named options should use different channels even with same configuration");
+    }
+
+    [Fact]
+    public async Task UseDurableTaskScheduler_ServiceProviderDispose_DisposesChannels()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskClientBuilder> mockBuilder = new Mock<IDurableTaskClientBuilder>();
+        mockBuilder.Setup(b => b.Services).Returns(services);
+        DefaultAzureCredential credential = new DefaultAzureCredential();
+
+        // Act
+        mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
+        ServiceProvider provider = services.BuildServiceProvider();
+
+        // Resolve options to trigger channel creation
+        IOptionsMonitor<GrpcDurableTaskClientOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>();
+        GrpcDurableTaskClientOptions options = optionsMonitor.Get(Options.DefaultName);
+        options.Channel.Should().NotBeNull();
+        GrpcChannel channel = options.Channel!;
+
+        // Dispose the service provider - this should dispose the ConfigureGrpcChannel which disposes channels
+        await provider.DisposeAsync();
+
+        // Assert - verify the channel was disposed by checking it throws ObjectDisposedException
+        Action action = () => channel.CreateCallInvoker();
+        action.Should().Throw<ObjectDisposedException>("channel should be disposed after provider disposal");
+
+        // Also verify that creating a new provider and getting options still works
+        ServiceCollection services2 = new ServiceCollection();
+        Mock<IDurableTaskClientBuilder> mockBuilder2 = new Mock<IDurableTaskClientBuilder>();
+        mockBuilder2.Setup(b => b.Services).Returns(services2);
+        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
+        await using ServiceProvider provider2 = services2.BuildServiceProvider();
+
+        IOptionsMonitor<GrpcDurableTaskClientOptions> newOptionsMonitor = provider2.GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>();
+        GrpcDurableTaskClientOptions newOptions = newOptionsMonitor.Get(Options.DefaultName);
+        newOptions.Channel.Should().NotBeNull();
+        newOptions.Channel.Should().NotBeSameAs(channel, "new provider should create a new channel");
+    }
+
+    [Fact]
+    public async Task UseDurableTaskScheduler_ConfigureAfterDispose_ThrowsObjectDisposedException()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskClientBuilder> mockBuilder = new Mock<IDurableTaskClientBuilder>();
+        mockBuilder.Setup(b => b.Services).Returns(services);
+        DefaultAzureCredential credential = new DefaultAzureCredential();
+
+        // Act
+        mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
+        ServiceProvider provider = services.BuildServiceProvider();
+
+        // Resolve options monitor before disposal
+        IOptionsMonitor<GrpcDurableTaskClientOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>();
+
+        // Dispose the service provider
+        await provider.DisposeAsync();
+
+        // Assert - attempting to get options after disposal should throw
+        Action action = () => optionsMonitor.Get(Options.DefaultName);
+        action.Should().Throw<ObjectDisposedException>("configuring options after disposal should throw");
+    }
+
+    [Fact]
+    public async Task UseDurableTaskScheduler_DifferentResourceId_UsesSeparateChannels()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskClientBuilder> mockBuilder1 = new Mock<IDurableTaskClientBuilder>();
+        Mock<IDurableTaskClientBuilder> mockBuilder2 = new Mock<IDurableTaskClientBuilder>();
+        mockBuilder1.Setup(b => b.Services).Returns(services);
+        mockBuilder1.Setup(b => b.Name).Returns("client1");
+        mockBuilder2.Setup(b => b.Services).Returns(services);
+        mockBuilder2.Setup(b => b.Name).Returns("client2");
+        DefaultAzureCredential credential = new DefaultAzureCredential();
+
+        // Act - configure two clients with the same endpoint/taskhub but different ResourceId
+        mockBuilder1.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        {
+            options.ResourceId = "https://durabletask.io";
+        });
+        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        {
+            options.ResourceId = "https://custom.durabletask.io";
+        });
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Resolve options for both named clients
+        IOptionsMonitor<GrpcDurableTaskClientOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>();
+        GrpcDurableTaskClientOptions options1 = optionsMonitor.Get("client1");
+        GrpcDurableTaskClientOptions options2 = optionsMonitor.Get("client2");
+
+        // Assert
+        options1.Channel.Should().NotBeNull();
+        options2.Channel.Should().NotBeNull();
+        options1.Channel.Should().NotBeSameAs(options2.Channel, "different ResourceId should use different channels");
+    }
+
+    [Fact]
+    public async Task UseDurableTaskScheduler_DifferentCredentialType_UsesSeparateChannels()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskClientBuilder> mockBuilder1 = new Mock<IDurableTaskClientBuilder>();
+        Mock<IDurableTaskClientBuilder> mockBuilder2 = new Mock<IDurableTaskClientBuilder>();
+        mockBuilder1.Setup(b => b.Services).Returns(services);
+        mockBuilder1.Setup(b => b.Name).Returns("client1");
+        mockBuilder2.Setup(b => b.Services).Returns(services);
+        mockBuilder2.Setup(b => b.Name).Returns("client2");
+
+        // Act - configure two clients with the same endpoint/taskhub but different credential types
+        mockBuilder1.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, new DefaultAzureCredential());
+        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, new AzureCliCredential());
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Resolve options for both named clients
+        IOptionsMonitor<GrpcDurableTaskClientOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>();
+        GrpcDurableTaskClientOptions options1 = optionsMonitor.Get("client1");
+        GrpcDurableTaskClientOptions options2 = optionsMonitor.Get("client2");
+
+        // Assert
+        options1.Channel.Should().NotBeNull();
+        options2.Channel.Should().NotBeNull();
+        options1.Channel.Should().NotBeSameAs(options2.Channel, "different credential type should use different channels");
+    }
+
+    [Fact]
+    public async Task UseDurableTaskScheduler_DifferentAllowInsecureCredentials_UsesSeparateChannels()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskClientBuilder> mockBuilder1 = new Mock<IDurableTaskClientBuilder>();
+        Mock<IDurableTaskClientBuilder> mockBuilder2 = new Mock<IDurableTaskClientBuilder>();
+        mockBuilder1.Setup(b => b.Services).Returns(services);
+        mockBuilder1.Setup(b => b.Name).Returns("client1");
+        mockBuilder2.Setup(b => b.Services).Returns(services);
+        mockBuilder2.Setup(b => b.Name).Returns("client2");
+        DefaultAzureCredential credential = new DefaultAzureCredential();
+
+        // Act - configure two clients with the same endpoint/taskhub but different AllowInsecureCredentials
+        mockBuilder1.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        {
+            options.AllowInsecureCredentials = false;
+        });
+        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        {
+            options.AllowInsecureCredentials = true;
+        });
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Resolve options for both named clients
+        IOptionsMonitor<GrpcDurableTaskClientOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>();
+        GrpcDurableTaskClientOptions options1 = optionsMonitor.Get("client1");
+        GrpcDurableTaskClientOptions options2 = optionsMonitor.Get("client2");
+
+        // Assert
+        options1.Channel.Should().NotBeNull();
+        options2.Channel.Should().NotBeNull();
+        options1.Channel.Should().NotBeSameAs(options2.Channel, "different AllowInsecureCredentials should use different channels");
+    }
+
+    [Fact]
+    public async Task UseDurableTaskScheduler_DifferentRetryOptions_UsesSeparateChannels()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskClientBuilder> mockBuilder1 = new Mock<IDurableTaskClientBuilder>();
+        Mock<IDurableTaskClientBuilder> mockBuilder2 = new Mock<IDurableTaskClientBuilder>();
+        mockBuilder1.Setup(b => b.Services).Returns(services);
+        mockBuilder1.Setup(b => b.Name).Returns("client1");
+        mockBuilder2.Setup(b => b.Services).Returns(services);
+        mockBuilder2.Setup(b => b.Name).Returns("client2");
+        DefaultAzureCredential credential = new DefaultAzureCredential();
+
+        // Act - configure two clients with the same endpoint/taskhub but different RetryOptions
+        mockBuilder1.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        {
+            options.RetryOptions = new DurableTaskSchedulerClientOptions.ClientRetryOptions
+            {
+                MaxRetries = 3
+            };
+        });
+        mockBuilder2.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options => 
+        {
+            options.RetryOptions = new DurableTaskSchedulerClientOptions.ClientRetryOptions
+            {
+                MaxRetries = 5
+            };
+        });
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Resolve options for both named clients
+        IOptionsMonitor<GrpcDurableTaskClientOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>();
+        GrpcDurableTaskClientOptions options1 = optionsMonitor.Get("client1");
+        GrpcDurableTaskClientOptions options2 = optionsMonitor.Get("client2");
+
+        // Assert
+        options1.Channel.Should().NotBeNull();
+        options2.Channel.Should().NotBeNull();
+        options1.Channel.Should().NotBeSameAs(options2.Channel, "different RetryOptions should use different channels");
     }
 }

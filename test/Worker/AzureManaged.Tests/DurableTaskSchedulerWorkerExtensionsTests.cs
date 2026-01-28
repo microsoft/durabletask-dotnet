@@ -237,10 +237,10 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         mockBuilder2.Setup(b => b.Name).Returns("worker2");
         DefaultAzureCredential credential = new DefaultAzureCredential();
 
-        // Act - configure two different named workers with different endpoints
-        mockBuilder1.Object.UseDurableTaskScheduler("endpoint1.westus3.durabletask.io", ValidTaskHub, credential);
-        mockBuilder2.Object.UseDurableTaskScheduler("endpoint2.westus3.durabletask.io", ValidTaskHub, credential);
-        ServiceProvider provider = services.BuildServiceProvider();
+        // Act - configure two different named workers with the same endpoint and task hub
+        mockBuilder1.Object.UseDurableTaskScheduler("endpoint.westus3.durabletask.io", ValidTaskHub, credential);
+        mockBuilder2.Object.UseDurableTaskScheduler("endpoint.westus3.durabletask.io", ValidTaskHub, credential);
+        using ServiceProvider provider = services.BuildServiceProvider();
 
         // Resolve options for both named workers
         IOptionsMonitor<GrpcDurableTaskWorkerOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>();

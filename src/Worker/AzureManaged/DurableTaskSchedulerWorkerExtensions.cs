@@ -149,7 +149,8 @@ public static class DurableTaskSchedulerWorkerExtensions
             // Create a cache key based on the options name, endpoint, and task hub.
             // This ensures channels are reused for the same configuration
             // but separate channels are created for different configurations.
-            string cacheKey = $"{optionsName}:{source.EndpointAddress}:{source.TaskHubName}";
+            // Use a delimiter character (\u001F) that will not appear in typical endpoint URIs.
+            string cacheKey = $"{optionsName}\u001F{source.EndpointAddress}\u001F{source.TaskHubName}";
             options.Channel = this.channels.GetOrAdd(
                 cacheKey,
                 _ => new Lazy<GrpcChannel>(source.CreateChannel)).Value;

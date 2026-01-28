@@ -293,12 +293,12 @@ public class DurableTaskSchedulerClientExtensionsTests
 
         // Act
         mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
-        ServiceProvider provider = services.BuildServiceProvider();
+        using ServiceProvider provider = services.BuildServiceProvider();
 
         // Resolve options multiple times to trigger channel configuration
-        IOptionsMonitor<GrpcDurableTaskClientOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>();
-        GrpcDurableTaskClientOptions options1 = optionsMonitor.Get(Options.DefaultName);
-        GrpcDurableTaskClientOptions options2 = optionsMonitor.Get(Options.DefaultName);
+        IOptionsFactory<GrpcDurableTaskClientOptions> optionsFactory = provider.GetRequiredService<IOptionsFactory<GrpcDurableTaskClientOptions>>();
+        GrpcDurableTaskClientOptions options1 = optionsFactory.Create(Options.DefaultName);
+        GrpcDurableTaskClientOptions options2 = optionsFactory.Create(Options.DefaultName);
 
         // Assert
         options1.Channel.Should().NotBeNull();

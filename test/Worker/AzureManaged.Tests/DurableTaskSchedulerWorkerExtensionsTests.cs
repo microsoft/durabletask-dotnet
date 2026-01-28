@@ -19,7 +19,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
     const string ValidTaskHub = "testhub";
 
     [Fact]
-    public void UseDurableTaskScheduler_WithEndpointAndCredential_ShouldConfigureCorrectly()
+    public async Task UseDurableTaskScheduler_WithEndpointAndCredential_ShouldConfigureCorrectly()
     {
         // Arrange
         ServiceCollection services = new ServiceCollection();
@@ -31,7 +31,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
 
         // Assert
-        ServiceProvider provider = services.BuildServiceProvider();
+        await using ServiceProvider provider = services.BuildServiceProvider();
         IOptions<GrpcDurableTaskWorkerOptions>? options = provider.GetService<IOptions<GrpcDurableTaskWorkerOptions>>();
         options.Should().NotBeNull();
 
@@ -45,7 +45,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
     }
 
     [Fact]
-    public void UseDurableTaskScheduler_WithConnectionString_ShouldConfigureCorrectly()
+    public async Task UseDurableTaskScheduler_WithConnectionString_ShouldConfigureCorrectly()
     {
         // Arrange
         ServiceCollection services = new ServiceCollection();
@@ -57,7 +57,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         mockBuilder.Object.UseDurableTaskScheduler(connectionString);
 
         // Assert
-        ServiceProvider provider = services.BuildServiceProvider();
+        await using ServiceProvider provider = services.BuildServiceProvider();
         IOptions<GrpcDurableTaskWorkerOptions>? options = provider.GetService<IOptions<GrpcDurableTaskWorkerOptions>>();
         options.Should().NotBeNull();
 
@@ -71,7 +71,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
     }
 
     [Fact]
-    public void UseDurableTaskScheduler_WithLocalhostConnectionString_ShouldConfigureCorrectly()
+    public async Task UseDurableTaskScheduler_WithLocalhostConnectionString_ShouldConfigureCorrectly()
     {
         // Arrange
         ServiceCollection services = new();
@@ -83,7 +83,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         mockBuilder.Object.UseDurableTaskScheduler(connectionString);
 
         // Assert
-        ServiceProvider provider = services.BuildServiceProvider();
+        await using ServiceProvider provider = services.BuildServiceProvider();
         IOptions<GrpcDurableTaskWorkerOptions>? options = provider.GetService<IOptions<GrpcDurableTaskWorkerOptions>>();
         options.Should().NotBeNull();
 
@@ -99,7 +99,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
     [Theory]
     [InlineData(null, "testhub")]
     [InlineData("myaccount.westus3.durabletask.io", null)]
-    public void UseDurableTaskScheduler_WithNullParameters_ShouldThrowOptionsValidationException(string? endpoint, string? taskHub)
+    public async Task UseDurableTaskScheduler_WithNullParameters_ShouldThrowOptionsValidationException(string? endpoint, string? taskHub)
     {
         // Arrange
         ServiceCollection services = new ServiceCollection();
@@ -109,7 +109,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
 
         // Act
         mockBuilder.Object.UseDurableTaskScheduler(endpoint!, taskHub!, credential);
-        ServiceProvider provider = services.BuildServiceProvider();
+        await using ServiceProvider provider = services.BuildServiceProvider();
 
         // Assert
         var action = () => provider.GetRequiredService<IOptions<DurableTaskSchedulerWorkerOptions>>().Value;
@@ -120,7 +120,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
     }
 
     [Fact]
-    public void UseDurableTaskScheduler_WithNullCredential_ShouldSucceed()
+    public async Task UseDurableTaskScheduler_WithNullCredential_ShouldSucceed()
     {
         // Arrange
         ServiceCollection services = new ServiceCollection();
@@ -133,7 +133,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         action.Should().NotThrow();
 
         // Validate the configured options
-        ServiceProvider provider = services.BuildServiceProvider();
+        await using ServiceProvider provider = services.BuildServiceProvider();
         var workerOptions = provider.GetRequiredService<IOptions<DurableTaskSchedulerWorkerOptions>>().Value;
         workerOptions.EndpointAddress.Should().Be(ValidEndpoint);
         workerOptions.TaskHubName.Should().Be(ValidTaskHub);
@@ -175,7 +175,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
     }
 
     [Fact]
-    public void UseDurableTaskScheduler_WithNamedOptions_ShouldConfigureCorrectly()
+    public async Task UseDurableTaskScheduler_WithNamedOptions_ShouldConfigureCorrectly()
     {
         // Arrange
         ServiceCollection services = new ServiceCollection();
@@ -188,7 +188,7 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
 
         // Assert
-        ServiceProvider provider = services.BuildServiceProvider();
+        await using ServiceProvider provider = services.BuildServiceProvider();
         IOptionsMonitor<DurableTaskSchedulerWorkerOptions>? optionsMonitor = provider.GetService<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>();
         optionsMonitor.Should().NotBeNull();
         DurableTaskSchedulerWorkerOptions options = optionsMonitor!.Get("CustomName");
@@ -264,16 +264,16 @@ public class DurableTaskSchedulerWorkerExtensionsTests
 
         // Act
         mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
-        ServiceProvider provider = services.BuildServiceProvider();
-
-        // Resolve options to trigger channel creation
-        IOptionsMonitor<GrpcDurableTaskWorkerOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>();
-        GrpcDurableTaskWorkerOptions options = optionsMonitor.Get(Options.DefaultName);
-        options.Channel.Should().NotBeNull();
-        GrpcChannel channel = options.Channel!;
-
-        // Dispose the service provider - this should dispose the ConfigureGrpcChannel which disposes channels
-        await provider.DisposeAsync();
+        
+        GrpcChannel channel;
+        await using (ServiceProvider provider = services.BuildServiceProvider())
+        {
+            // Resolve options to trigger channel creation
+            IOptionsMonitor<GrpcDurableTaskWorkerOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>();
+            GrpcDurableTaskWorkerOptions options = optionsMonitor.Get(Options.DefaultName);
+            options.Channel.Should().NotBeNull();
+            channel = options.Channel!;
+        }
 
         // Assert - verify the channel was disposed by checking it throws ObjectDisposedException
         Action action = () => channel.CreateCallInvoker();
@@ -303,13 +303,13 @@ public class DurableTaskSchedulerWorkerExtensionsTests
 
         // Act
         mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
-        ServiceProvider provider = services.BuildServiceProvider();
-
-        // Resolve options monitor before disposal
-        IOptionsMonitor<GrpcDurableTaskWorkerOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>();
-
-        // Dispose the service provider
-        await provider.DisposeAsync();
+        
+        IOptionsMonitor<GrpcDurableTaskWorkerOptions> optionsMonitor;
+        await using (ServiceProvider provider = services.BuildServiceProvider())
+        {
+            // Resolve options monitor before disposal
+            optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>();
+        }
 
         // Assert - attempting to get options after disposal should throw
         Action action = () => optionsMonitor.Get(Options.DefaultName);

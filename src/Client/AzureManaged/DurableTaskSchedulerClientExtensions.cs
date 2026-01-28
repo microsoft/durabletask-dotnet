@@ -144,10 +144,15 @@ public static class DurableTaskSchedulerClientExtensions
             string optionsName = name ?? Options.DefaultName;
             DurableTaskSchedulerClientOptions source = this.schedulerOptions.Get(optionsName);
 
-            // Create a cache key based on the options name, endpoint, and task hub.
+            // Create a cache key that includes all properties that affect CreateChannel behavior.
             // This ensures channels are reused for the same configuration
-            // but separate channels are created for different configurations.
-            string cacheKey = $"{optionsName}:{source.EndpointAddress}:{source.TaskHubName}";
+            // but separate channels are created when any relevant property changes.
+            // Use a delimiter character (\u001F) that will not appear in typical endpoint URIs.
+            string credentialType = source.Credential?.GetType().FullName ?? "null";
+            string retryOptionsKey = source.RetryOptions != null
+                ? $"{source.RetryOptions.MaxRetries}|{source.RetryOptions.InitialBackoffMs}|{source.RetryOptions.MaxBackoffMs}|{source.RetryOptions.BackoffMultiplier}|{(source.RetryOptions.RetryableStatusCodes != null ? string.Join(",", source.RetryOptions.RetryableStatusCodes) : string.Empty)}"
+                : "null";
+            string cacheKey = $"{optionsName}\u001F{source.EndpointAddress}\u001F{source.TaskHubName}\u001F{source.ResourceId}\u001F{credentialType}\u001F{source.AllowInsecureCredentials}\u001F{retryOptionsKey}";
             options.Channel = this.channels.GetOrAdd(
                 cacheKey,
                 _ => new Lazy<GrpcChannel>(source.CreateChannel)).Value;

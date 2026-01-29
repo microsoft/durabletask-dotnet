@@ -184,7 +184,7 @@ public class ProtoUtilsTests
     }
 
     [Fact]
-    public void ConvertReusePolicyToDedupeStatuses_AllStatusesReplaceable_ReturnsNull()
+    public void ConvertReusePolicyToDedupeStatuses_AllStatusesReplaceable_ReturnsEmpty()
     {
         // Arrange
         var policy = new P.OrchestrationIdReusePolicy();
@@ -193,6 +193,20 @@ public class ProtoUtilsTests
         {
             policy.ReplaceableStatus.Add(status);
         }
+
+        // Act
+        P.OrchestrationStatus[] result = ProtoUtils.ConvertReusePolicyToDedupeStatuses(policy);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ConvertReusePolicyToDedupeStatuses_NullPolicy_ReturnsNull()
+    {
+        // Arrange
+        P.OrchestrationIdReusePolicy? policy = null;
 
         // Act
         P.OrchestrationStatus[]? result = ProtoUtils.ConvertReusePolicyToDedupeStatuses(policy);
@@ -340,19 +354,20 @@ public class ProtoUtilsTests
 
         // Act
         P.OrchestrationStatus[]? dedupeStatuses = ProtoUtils.ConvertReusePolicyToDedupeStatuses(policy);
-        P.OrchestrationIdReusePolicy convertedBack = ProtoUtils.ConvertDedupeStatusesToReusePolicy(dedupeStatuses);
+        dedupeStatuses.Should().NotBeNull();
+        P.OrchestrationIdReusePolicy convertedBack = ProtoUtils.ConvertDedupeStatusesToReusePolicy(dedupeStatuses!);
 
         // Assert
-        // Policy with all statuses -> no dedupe statuses -> null
-        // null dedupe statuses -> all are replaceable -> policy with all statuses
-        dedupeStatuses.Should().BeNull();
+        // Policy with all statuses -> no dedupe statuses
+        // no dedupe statuses -> all are replaceable -> policy with all statuses
+        dedupeStatuses.Should().BeEmpty();
         convertedBack.Should().NotBeNull();
         convertedBack!.ReplaceableStatus.Should().HaveCount(7);
         convertedBack.ReplaceableStatus.Should().BeEquivalentTo(policy.ReplaceableStatus);
     }
 
     [Fact]
-    public void ConvertDedupeStatusesToReusePolicy_EmptyArray_ThenConvertBack_ReturnsNull()
+    public void ConvertDedupeStatusesToReusePolicy_EmptyArray_ThenConvertBack_ReturnsEmpty()
     {
         // Arrange
         var dedupeStatuses = Array.Empty<P.OrchestrationStatus>();
@@ -363,9 +378,11 @@ public class ProtoUtilsTests
 
         // Assert
         // Empty dedupe statuses -> all statuses are replaceable -> policy with all statuses
-        // Policy with all statuses -> no dedupe statuses -> null
+        // Policy with all statuses -> no dedupe statuses
         policy.Should().NotBeNull();
-        convertedBack.Should().BeNull();
+        policy.ReplaceableStatus.Should().HaveCount(7);
+        convertedBack.Should().NotBeNull();
+        convertedBack.Should().BeEmpty();
     }
 
     [Fact]

@@ -43,10 +43,10 @@ public static class ProtoUtils
     /// So replaceableStatus = all statuses MINUS dedupeStatuses.
     /// </remarks>
     public static P.OrchestrationIdReusePolicy ConvertDedupeStatusesToReusePolicy(
-        IEnumerable<P.OrchestrationStatus>? dedupeStatuses)
+        IEnumerable<P.OrchestrationStatus> dedupeStatuses)
     {
         ImmutableArray<P.OrchestrationStatus> statuses = GetAllStatuses();
-        ImmutableHashSet<P.OrchestrationStatus> dedupeStatusSet = dedupeStatuses?.ToImmutableHashSet() ?? ImmutableHashSet<P.OrchestrationStatus>.Empty;
+        ImmutableHashSet<P.OrchestrationStatus> dedupeStatusSet = [.. dedupeStatuses];
 
         P.OrchestrationIdReusePolicy policy = new();
 
@@ -87,8 +87,7 @@ public static class ProtoUtils
             .Where(status => !replaceableStatusSet.Contains(status))
             .ToArray();
 
-        // Only return if there are dedupe statuses
-        return dedupeStatuses.Length > 0 ? dedupeStatuses : null;
+        return dedupeStatuses;
     }
 
 #pragma warning disable 0618 // Referencing Obsolete member. This is intention as we are only converting it.

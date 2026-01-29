@@ -122,6 +122,21 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
         string instanceId, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
         Check.NotNullOrEmpty(instanceId);
+        OrchestrationMetadata? orchestrationState = await this.GetInstanceAsync(instanceId, cancellation);
+
+        // The orchestration doesn't exist, nothing to purge
+        if (orchestrationState == null)
+        {
+            return new PurgeResult(0);
+        }
+
+        bool isEntity = this.options.EnableEntitySupport && instanceId[0] == '@';
+        if (!isEntity && !orchestrationState.IsCompleted)
+        {
+            throw new InvalidOperationException($"Only orchestrations in a terminal state can be purged, " +
+                $"but the orchestration with instance ID {instanceId} has status {orchestrationState.RuntimeStatus}");
+        }
+
         cancellation.ThrowIfCancellationRequested();
 
         // TODO: Support recursive purge of sub-orchestrations

@@ -354,6 +354,53 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
+    public override async Task<Page<string>> ListInstanceIdsAsync(
+        IEnumerable<OrchestrationRuntimeStatus>? runtimeStatus = null,
+        DateTimeOffset? completedTimeFrom = null,
+        DateTimeOffset? completedTimeTo = null,
+        int pageSize = OrchestrationQuery.DefaultPageSize,
+        string? lastInstanceKey = null,
+        CancellationToken cancellation = default)
+    {
+        Check.NotEntity(this.options.EnableEntitySupport, null);
+
+        P.ListInstanceIdsRequest request = new()
+        {
+            PageSize = pageSize,
+            LastInstanceKey = lastInstanceKey ?? string.Empty,
+        };
+
+        if (runtimeStatus != null)
+        {
+            request.RuntimeStatus.AddRange(runtimeStatus.Select(x => x.ToGrpcStatus()));
+        }
+
+        if (completedTimeFrom.HasValue)
+        {
+            request.CompletedTimeFrom = completedTimeFrom.Value.ToTimestamp();
+        }
+
+        if (completedTimeTo.HasValue)
+        {
+            request.CompletedTimeTo = completedTimeTo.Value.ToTimestamp();
+        }
+
+        try
+        {
+            P.ListInstanceIdsResponse response = await this.sidecarClient.ListInstanceIdsAsync(
+                request,
+                cancellationToken: cancellation);
+
+            return new Page<string>(response.InstanceIds.ToList(), response.LastInstanceKey);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.ListInstanceIdsAsync)} operation was canceled.", e, cancellation);
+        }
+    }
+
+    /// <inheritdoc/>
     public override async Task<OrchestrationMetadata> WaitForInstanceCompletionAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {
@@ -394,10 +441,16 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override Task<PurgeResult> PurgeInstanceAsync(
         string instanceId, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
+        Check.NotNullOrEmpty(instanceId);
         bool recursive = options?.Recursive ?? false;
         this.logger.PurgingInstanceMetadata(instanceId);
 
-        P.PurgeInstancesRequest request = new() { InstanceId = instanceId, Recursive = recursive };
+        P.PurgeInstancesRequest request = new()
+        {
+            InstanceId = instanceId,
+            Recursive = recursive,
+            IsOrchestration = !this.options.EnableEntitySupport || instanceId[0] != '@',
+        };
         return this.PurgeInstancesCoreAsync(request, cancellation);
     }
 
@@ -517,10 +570,11 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             using AsyncServerStreamingCall<P.HistoryChunk> streamResponse =
                 this.sidecarClient.StreamInstanceHistory(streamRequest, cancellationToken: cancellation);
 
+            Microsoft.DurableTask.ProtoUtils.EntityConversionState conversionState = new(insertMissingEntityUnlocks: false);
             List<HistoryEvent> pastEvents = [];
             while (await streamResponse.ResponseStream.MoveNext(cancellation))
             {
-                pastEvents.AddRange(streamResponse.ResponseStream.Current.Events.Select(DurableTask.ProtoUtils.ConvertHistoryEvent));
+                pastEvents.AddRange(streamResponse.ResponseStream.Current.Events.Select(conversionState.ConvertFromProto));
             }
 
             return pastEvents;
@@ -597,6 +651,14 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         {
             throw new OperationCanceledException(
                 $"The {nameof(this.PurgeAllInstancesAsync)} operation was canceled.", e, cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.FailedPrecondition)
+        {
+            throw new InvalidOperationException(e.Status.Detail);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
+        {
+            throw new NotImplementedException(e.Status.Detail);
         }
     }
 

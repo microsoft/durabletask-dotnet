@@ -347,16 +347,15 @@ public class DurableTaskSchedulerClientExtensionsTests
 
         // Act
         mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
-        ServiceProvider provider = services.BuildServiceProvider();
-
-        // Resolve options to trigger channel creation
-        IOptionsMonitor<GrpcDurableTaskClientOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>();
-        GrpcDurableTaskClientOptions options = optionsMonitor.Get(Options.DefaultName);
-        options.Channel.Should().NotBeNull();
-        GrpcChannel channel = options.Channel!;
-
-        // Dispose the service provider - this should dispose the ConfigureGrpcChannel which disposes channels
-        await provider.DisposeAsync();
+        GrpcChannel channel;
+        await using (ServiceProvider provider = services.BuildServiceProvider())
+        {
+            // Resolve options to trigger channel creation
+            IOptionsMonitor<GrpcDurableTaskClientOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>();
+            GrpcDurableTaskClientOptions options = optionsMonitor.Get(Options.DefaultName);
+            options.Channel.Should().NotBeNull();
+            channel = options.Channel!;
+        }
 
         // Assert - verify the channel was disposed by checking it throws ObjectDisposedException
         Action action = () => channel.CreateCallInvoker();

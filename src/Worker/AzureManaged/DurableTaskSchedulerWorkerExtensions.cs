@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Linq;
 using Azure.Core;
 using Grpc.Net.Client;
@@ -172,10 +173,16 @@ public static class DurableTaskSchedulerWorkerExtensions
                 {
                     await DisposeChannelAsync(channel.Value).ConfigureAwait(false);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Swallow all disposal exceptions - disposal should be best-effort to ensure
+                    // Swallow disposal exceptions - disposal should be best-effort to ensure
                     // all channels get a chance to dispose and app shutdown is not blocked.
+                    if (ex is not OperationCanceledException and not ObjectDisposedException)
+                    {
+                        Trace.TraceError(
+                            "Unexpected exception while disposing gRPC channel in DurableTaskSchedulerWorkerExtensions.DisposeAsync: {0}",
+                            ex);
+                    }
                 }
             }
 

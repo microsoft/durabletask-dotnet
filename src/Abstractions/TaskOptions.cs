@@ -176,6 +176,7 @@ public record StartOrchestrationOptions
         this.Tags = options.Tags;
         this.Version = options.Version;
         this.DedupeStatuses = options.DedupeStatuses;
+        this.IdReusePolicy = options.IdReusePolicy;
     }
 
     /// <summary>
@@ -204,6 +205,16 @@ public record StartOrchestrationOptions
     /// </summary>
     /// <remarks>
     /// For type-safe usage, use the WithDedupeStatuses extension method.
+    /// This property is mutually exclusive with IdReusePolicy. If both are set, IdReusePolicy takes precedence.
     /// </remarks>
     public IReadOnlyList<string>? DedupeStatuses { get; init; }
+
+    /// <summary>
+    /// Gets the orchestration ID reuse policy.
+    /// </summary>
+    /// <remarks>
+    /// This is an internal property. For type-safe usage, use the WithIdReusePolicy extension method.
+    /// This property takes precedence over DedupeStatuses if both are set.
+    /// </remarks>
+    public object? IdReusePolicy { get; init; }
 }

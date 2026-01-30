@@ -163,6 +163,96 @@ public partial class DurableTaskRegistryTests
         => RunAddActivityTest(
             r => r.AddActivityFunc(nameof(TestActivity), (TaskActivityContext ctx) => { }));
 
+    [Fact]
+    public void AddActivity_FuncNoName1_Success()
+        => RunAddActivityTest(
+            r => r.AddActivityFunc<string, string>(NamedActivityFunc1),
+            nameof(NamedActivityFunc1));
+
+    [Fact]
+    public void AddActivity_FuncNoName2_Success()
+        => RunAddActivityTest(
+            r => r.AddActivityFunc<string, string>(NamedActivityFunc2),
+            nameof(NamedActivityFunc2));
+
+    [Fact]
+    public void AddActivity_FuncNoName3_Success()
+        => RunAddActivityTest(
+            r => r.AddActivityFunc<string>(NamedActivityFunc3),
+            nameof(NamedActivityFunc3));
+
+    [Fact]
+    public void AddActivity_FuncNoName4_Success()
+        => RunAddActivityTest(
+            r => r.AddActivityFunc<string>(NamedActivityFunc4),
+            nameof(NamedActivityFunc4));
+
+    [Fact]
+    public void AddActivity_FuncNoName5_Success()
+        => RunAddActivityTest(
+            r => r.AddActivityFunc(NamedActivityFunc5),
+            nameof(NamedActivityFunc5));
+
+    [Fact]
+    public void AddActivity_FuncNoName6_Success()
+        => RunAddActivityTest(
+            r => r.AddActivityFunc<string>(NamedActivityFunc6),
+            nameof(NamedActivityFunc6));
+
+    [Fact]
+    public void AddActivity_ActionNoName1_Success()
+        => RunAddActivityTest(
+            r => r.AddActivityFunc<string>(NamedActivityAction1),
+            nameof(NamedActivityAction1));
+
+    [Fact]
+    public void AddActivity_ActionNoName2_Success()
+        => RunAddActivityTest(
+            r => r.AddActivityFunc(NamedActivityAction2),
+            nameof(NamedActivityAction2));
+
+    [Fact]
+    public void AddActivity_FuncNoName_WithAttribute_Success()
+        => RunAddActivityTest(
+            r => r.AddActivityFunc(AttributedActivityFunc),
+            "CustomActivityName");
+
+    [Fact]
+    public void AddActivity_FuncNoName_Lambda_Throws()
+    {
+        DurableTaskRegistry registry = new();
+        Action act = () => registry.AddActivityFunc((TaskActivityContext ctx) => Task.CompletedTask);
+        act.Should().ThrowExactly<ArgumentException>();
+    }
+
+    [Fact]
+    public void AddActivity_FuncNoName_LambdaWithInput_Throws()
+    {
+        DurableTaskRegistry registry = new();
+        Action act = () => registry.AddActivityFunc<string, string>(
+            (TaskActivityContext ctx, string input) => Task.FromResult(input));
+        act.Should().ThrowExactly<ArgumentException>();
+    }
+
+    static Task<string> NamedActivityFunc1(TaskActivityContext ctx, string input) => Task.FromResult(input);
+
+    static string NamedActivityFunc2(TaskActivityContext ctx, string input) => input;
+
+    static Task NamedActivityFunc3(TaskActivityContext ctx, string input) => Task.CompletedTask;
+
+    static Task<string> NamedActivityFunc4(TaskActivityContext ctx) => Task.FromResult(string.Empty);
+
+    static Task NamedActivityFunc5(TaskActivityContext ctx) => Task.CompletedTask;
+
+    static string NamedActivityFunc6(TaskActivityContext ctx) => string.Empty;
+
+    static void NamedActivityAction1(TaskActivityContext ctx, string input) { }
+
+    static void NamedActivityAction2(TaskActivityContext ctx) { }
+
+    [DurableTask("CustomActivityName")]
+    static Task AttributedActivityFunc(TaskActivityContext ctx) => Task.CompletedTask;
+
     static ITaskActivity RunAddActivityTest(Action<DurableTaskRegistry> callback)
     {
         DurableTaskRegistry registry = new();
@@ -171,6 +261,19 @@ public partial class DurableTaskRegistryTests
 
         bool found = factory.TryCreateActivity(
             nameof(TestActivity), Mock.Of<IServiceProvider>(), out ITaskActivity? actual);
+        found.Should().BeTrue();
+        actual.Should().NotBeNull();
+        return actual!;
+    }
+
+    static ITaskActivity RunAddActivityTest(Action<DurableTaskRegistry> callback, string expectedName)
+    {
+        DurableTaskRegistry registry = new();
+        callback(registry);
+        IDurableTaskFactory factory = registry.BuildFactory();
+
+        bool found = factory.TryCreateActivity(
+            expectedName, Mock.Of<IServiceProvider>(), out ITaskActivity? actual);
         found.Should().BeTrue();
         actual.Should().NotBeNull();
         return actual!;

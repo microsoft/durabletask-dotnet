@@ -57,55 +57,59 @@ partial class TaskOrchestrationShim : TaskOrchestration
 
     /// <inheritdoc/>
     public override async Task<string?> Execute(OrchestrationContext innerContext, string rawInput)
-    {
-        Check.NotNull(innerContext);
-        JsonDataConverterShim converterShim = new(this.invocationContext.Options.DataConverter);
-        innerContext.MessageDataConverter = converterShim;
-        innerContext.ErrorDataConverter = converterShim;
-
-        object? input = this.DataConverter.Deserialize(rawInput, this.implementation.InputType);
-        this.wrapperContext = new(innerContext, this.invocationContext, input, this.properties);
-
-        string instanceId = innerContext.OrchestrationInstance.InstanceId;
-        if (!innerContext.IsReplaying)
         {
-            this.logger.OrchestrationStarted(instanceId, this.invocationContext.Name);
-        }
+            Check.NotNull(innerContext);
+            JsonDataConverterShim converterShim = new(this.invocationContext.Options.DataConverter);
+            innerContext.MessageDataConverter = converterShim;
+            innerContext.ErrorDataConverter = converterShim;
 
-        try
-        {
-            object? output = await this.implementation.RunAsync(this.wrapperContext, input);
+            object? input = this.DataConverter.Deserialize(rawInput, this.implementation.InputType);
+            this.wrapperContext = new(innerContext, this.invocationContext, input, this.properties);
 
+            string instanceId = innerContext.OrchestrationInstance.InstanceId;
+            using IDisposable? scope = this.logger.BeginScope(new Dictionary<string, object?>
+            {
+                ["InstanceId"] = instanceId,
+            });
             if (!innerContext.IsReplaying)
             {
-                this.logger.OrchestrationCompleted(instanceId, this.invocationContext.Name);
+                this.logger.OrchestrationStarted(instanceId, this.invocationContext.Name);
             }
 
-            // Return the output (if any) as a serialized string.
-            return this.DataConverter.Serialize(output);
-        }
-        catch (TaskFailedException e)
-        {
-            if (!innerContext.IsReplaying)
+            try
             {
-                this.logger.OrchestrationFailed(e, instanceId, this.invocationContext.Name);
-            }
+                object? output = await this.implementation.RunAsync(this.wrapperContext, input);
 
-            // Convert back to something the Durable Task Framework natively understands so that
-            // failure details are correctly propagated.
-            throw new CoreTaskFailedException(e.Message, e.InnerException)
+                if (!innerContext.IsReplaying)
+                {
+                    this.logger.OrchestrationCompleted(instanceId, this.invocationContext.Name);
+                }
+
+                // Return the output (if any) as a serialized string.
+                return this.DataConverter.Serialize(output);
+            }
+            catch (TaskFailedException e)
             {
-                FailureDetails = new FailureDetails(e,
-                    e.FailureDetails.ToCoreFailureDetails(),
-                    properties: e.FailureDetails.Properties),
-            };
+                if (!innerContext.IsReplaying)
+                {
+                    this.logger.OrchestrationFailed(e, instanceId, this.invocationContext.Name);
+                }
+
+                // Convert back to something the Durable Task Framework natively understands so that
+                // failure details are correctly propagated.
+                throw new CoreTaskFailedException(e.Message, e.InnerException)
+                {
+                    FailureDetails = new FailureDetails(e,
+                        e.FailureDetails.ToCoreFailureDetails(),
+                        properties: e.FailureDetails.Properties),
+                };
+            }
+            finally
+            {
+                // if user code crashed inside a critical section, or did not exit it, do that now
+                this.wrapperContext.ExitCriticalSectionIfNeeded();
+            }
         }
-        finally
-        {
-            // if user code crashed inside a critical section, or did not exit it, do that now
-            this.wrapperContext.ExitCriticalSectionIfNeeded();
-        }
-    }
 
     /// <inheritdoc/>
     public override string? GetStatus()

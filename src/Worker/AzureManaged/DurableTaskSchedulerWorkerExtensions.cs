@@ -173,7 +173,9 @@ public static class DurableTaskSchedulerWorkerExtensions
                 {
                     await DisposeChannelAsync(channel.Value).ConfigureAwait(false);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OutOfMemoryException
+                                            and not StackOverflowException
+                                            and not ThreadAbortException)
                 {
                     // Swallow disposal exceptions - disposal should be best-effort to ensure
                     // all channels get a chance to dispose and app shutdown is not blocked.

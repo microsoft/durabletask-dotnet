@@ -232,7 +232,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             // Convert OrchestrationIdReusePolicy to dedupeStatuses
             // The policy uses "replaceableStatus" - these are statuses that CAN be replaced
             // dedupeStatuses are statuses that should NOT be replaced (should throw exception)
-            // So dedupeStatuses = all terminal statuses MINUS replaceableStatus
+            // So dedupeStatuses = all statuses MINUS replaceableStatus
             OrchestrationStatus[]? dedupeStatuses = null;
             P.OrchestrationStatus[]? dedupeStatusesProto = ProtoUtils.ConvertReusePolicyToDedupeStatuses(request.OrchestrationIdReusePolicy);
             if (dedupeStatusesProto != null)

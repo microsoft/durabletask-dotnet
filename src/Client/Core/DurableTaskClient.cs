@@ -73,10 +73,11 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <remarks>
     /// <para>All orchestrations must have a unique instance ID. You can provide an instance ID using the
     /// <paramref name="options"/> parameter or you can omit this and a random instance ID will be
-    /// generated for you automatically. If an orchestration with the specified instance ID already exists and is in a
-    /// non-terminal state (Pending, Running, etc.), then this operation may fail silently. However, if an orchestration
-    /// instance with this ID already exists in a terminal state (Completed, Terminated, Failed, etc.) then the instance
-    /// may be recreated automatically, depending on the configuration of the backend instance store.
+    /// generated for you automatically. If an orchestration with the specified instance ID already exists and its status
+    /// is not in the <see cref="StartOrchestrationOptions.DedupeStatuses"/> field of <paramref name="options"/>, then
+    /// a new orchestration may be recreated automatically, depending on the configuration of the backend instance store.
+    /// If the existing orchestration is in a non-terminal state (Pending, Running, etc.), then the orchestration will first
+    /// be terminated before the new orchestration is created.
     /// </para><para>
     /// Orchestration instances started with this method will be created in the
     /// <see cref="OrchestrationRuntimeStatus.Pending"/> state and will transition to the
@@ -98,8 +99,9 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// </param>
     /// <param name="options">The options to start the new orchestration with.</param>
     /// <param name="cancellation">
-    /// The cancellation token. This only cancels enqueueing the new orchestration to the backend. Does not cancel the
-    /// orchestration once enqueued.
+    /// The cancellation token. This only cancels enqueueing the new orchestration to the backend, or waiting for the
+    /// termination of an existing non-terminal instance if its status is not in
+    /// <see cref="StartOrchestrationOptions.DedupeStatuses"/>. Does not cancel the orchestration once enqueued.
     /// </param>
     /// <returns>
     /// A task that completes when the orchestration instance is successfully scheduled. The value of this task is

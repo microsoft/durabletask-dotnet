@@ -124,9 +124,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
 
         // Set orchestration ID reuse policy for deduplication support
-        // Note: This requires the protobuf to support OrchestrationIdReusePolicy field
-        // If the protobuf doesn't support it yet, this will need to be updated when the protobuf is updated
-        if (options?.DedupeStatuses != null && options.DedupeStatuses.Count > 0)
+        if (options?.DedupeStatuses != null)
         {
             // Parse and validate all status strings to enum first
             ImmutableHashSet<OrchestrationRuntimeStatus> dedupeStatuses = options.DedupeStatuses
@@ -143,12 +141,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
             // Convert dedupe statuses to protobuf statuses and create reuse policy
             IEnumerable<P.OrchestrationStatus> dedupeStatusesProto = dedupeStatuses.Select(s => s.ToGrpcStatus());
-            P.OrchestrationIdReusePolicy? policy = ProtoUtils.ConvertDedupeStatusesToReusePolicy(dedupeStatusesProto);
-
-            if (policy != null)
-            {
-                request.OrchestrationIdReusePolicy = policy;
-            }
+            request.OrchestrationIdReusePolicy = ProtoUtils.ConvertDedupeStatusesToReusePolicy(dedupeStatusesProto);
         }
 
         using Activity? newActivity = TraceHelper.StartActivityForNewOrchestration(request);

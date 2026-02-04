@@ -4,6 +4,7 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Text;
+using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.DurableTask.Client.Entities;
@@ -146,9 +147,16 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
         using Activity? newActivity = TraceHelper.StartActivityForNewOrchestration(request);
 
-        P.CreateInstanceResponse? result = await this.sidecarClient.StartInstanceAsync(
+        try
+        {
+            P.CreateInstanceResponse? result = await this.sidecarClient.StartInstanceAsync(
             request, cancellationToken: cancellation);
-        return result.InstanceId;
+            return result.InstanceId;
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.AlreadyExists)
+        {
+            throw new OrchestrationAlreadyExistsException(e.Status.Detail);
+        }
     }
 
     /// <inheritdoc/>

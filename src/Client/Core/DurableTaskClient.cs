@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.ComponentModel;
+using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Internal;
@@ -109,6 +110,8 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <paramref name="options" />, the same value will be returned by the completed task.
     /// </returns>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="orchestratorName"/> is empty.</exception>
+    /// <exception cref="OrchestrationAlreadyExistsException">If an orchestration with status in
+    /// <see cref="StartOrchestrationOptions.DedupeStatuses"/> with this instance ID already exists.</exception>
     public abstract Task<string> ScheduleNewOrchestrationInstanceAsync(
         TaskName orchestratorName,
         object? input = null,

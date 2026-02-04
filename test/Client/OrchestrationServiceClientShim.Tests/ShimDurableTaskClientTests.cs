@@ -569,6 +569,16 @@ public class ShimDurableTaskClientTests
             .Setup(m => m.ForceTerminateTaskOrchestrationAsync(instanceId, It.IsAny<string>()))
             .Returns(Task.CompletedTask);
 
+        // Set up waiting for the orchestration to terminate call
+        this.orchestrationClient
+            .Setup(m => m.WaitForOrchestrationAsync(instanceId, It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OrchestrationState() 
+            {
+                Name = "TestOrchestration",
+                OrchestrationInstance = new OrchestrationInstance { InstanceId = instanceId },
+                OrchestrationStatus = OrchestrationStatus.Terminated 
+            });
+
         // Set up creation call
         this.orchestrationClient
             .Setup(m => m.CreateTaskOrchestrationAsync(

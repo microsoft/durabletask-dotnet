@@ -426,12 +426,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
 
                     await this.TerminateInstanceAsync(instanceId, terminationReason, cancellation);
 
-                    while (metadata != null && !metadata.IsCompleted)
-                    {
-                        cancellation.ThrowIfCancellationRequested();
-                        await Task.Delay(TimeSpan.FromSeconds(1), cancellation);
-                        metadata = await this.GetInstancesAsync(instanceId, getInputsAndOutputs: false, cancellation);
-                    }
+                    await this.WaitForInstanceCompletionAsync(instanceId, cancellation: cancellation);
                 }
             }
         }

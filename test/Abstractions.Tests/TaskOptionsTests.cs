@@ -122,10 +122,11 @@ public class TaskOptionsTests
 
         // Assert
         validStatuses.Should().NotBeNull();
-        validStatuses.Should().HaveCount(6);
+        validStatuses.Should().HaveCount(7);
         validStatuses.Should().Contain(OrchestrationRuntimeStatus.Completed);
         validStatuses.Should().Contain(OrchestrationRuntimeStatus.Failed);
         validStatuses.Should().Contain(OrchestrationRuntimeStatus.Terminated);
+        validStatuses.Should().Contain(OrchestrationRuntimeStatus.Canceled);
         validStatuses.Should().Contain(OrchestrationRuntimeStatus.Pending);
         validStatuses.Should().Contain(OrchestrationRuntimeStatus.Running);
         validStatuses.Should().Contain(OrchestrationRuntimeStatus.Suspended);

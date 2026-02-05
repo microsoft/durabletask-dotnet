@@ -79,6 +79,9 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// a new orchestration may be recreated automatically, depending on the configuration of the backend instance store.
     /// If the existing orchestration is in a non-terminal state (Pending, Running, etc.), then the orchestration will first
     /// be terminated before the new orchestration is created.
+    /// A null <see cref="StartOrchestrationOptions.DedupeStatuses"/> field means the deduplication behavior will follow
+    /// whatever the default deduplication behavior of the backend instance store is. A non-null, empty field means that all
+    /// statuses are reusable.
     /// </para><para>
     /// Orchestration instances started with this method will be created in the
     /// <see cref="OrchestrationRuntimeStatus.Pending"/> state and will transition to the

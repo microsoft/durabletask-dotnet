@@ -15,7 +15,7 @@ This pattern produces a rich trace with multiple parallel spans, making it easy 
 
 ## Prerequisites
 
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or later
+- .NET 10.0 SDK or later
 - [Docker](https://www.docker.com/get-started) and [Docker Compose](https://docs.docker.com/compose/)
 
 ## Running the Sample

@@ -9,15 +9,15 @@
 
   <!-- Microsoft.Extensions.* Packages -->
   <ItemGroup>
-    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.2" />
   </ItemGroup>
 
   <!-- Azure.* Packages -->
@@ -42,11 +42,11 @@
     <PackageVersion Include="System.ComponentModel.Annotations" Version="5.0.0" />
   </ItemGroup>
   <ItemGroup>
-    <PackageVersion Include="Google.Protobuf" Version="3.33.2" />
+    <PackageVersion Include="Google.Protobuf" Version="3.33.5" />
     <PackageVersion Include="Grpc.Core" Version="2.46.6" />
-    <PackageVersion Include="Grpc.Net.Client" Version="2.67.0" />
-    <PackageVersion Include="Grpc.Tools" Version="2.76.0" />
-    <PackageVersion Include="Grpc.AspNetCore.Server" Version="2.71.0" />
+    <PackageVersion Include="Grpc.Net.Client" Version="2.76.0" />
+    <PackageVersion Include="Grpc.Tools" Version="2.78.0" />
+    <PackageVersion Include="Grpc.AspNetCore.Server" Version="2.76.0" />
   </ItemGroup>
 
   <!-- Microsoft.CodeAnalysis.* Packages -->
@@ -82,9 +82,9 @@
     <PackageVersion Include="DotNext" Version="4.13.1" Condition="'$(TargetFramework)' != 'net8.0' AND '$(TargetFramework)' != 'net10.0'" />
     <PackageVersion Include="DotNext" Version="5.19.0" Condition="'$(TargetFramework)' == 'net8.0' OR '$(TargetFramework)' == 'net10.0'" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.2" />
     <PackageVersion Include="System.Linq.Async" Version="6.0.1" />
-    <PackageVersion Include="System.Text.Json" Version="10.0.0" />
+    <PackageVersion Include="System.Text.Json" Version="10.0.2" />
     <PackageVersion Include="System.Collections.Immutable" Version="8.0.0" />
   </ItemGroup>
 

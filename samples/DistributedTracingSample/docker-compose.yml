@@ -1,0 +1,15 @@
+services:
+  jaeger:
+    image: jaegertracing/jaeger:latest
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC receiver
+      - "4318:4318"    # OTLP HTTP receiver
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
+  dts-emulator:
+    image: mcr.microsoft.com/dts/dts-emulator:latest
+    ports:
+      - "8080:8080"    # DTS emulator gRPC endpoint
+      - "8082:8082"    # DTS emulator dashboard UI

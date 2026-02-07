@@ -88,10 +88,11 @@ await using DurableTaskClient client = host.Services.GetRequiredService<DurableT
 string instanceId = await client.ScheduleNewOrchestrationInstanceAsync("FanOutFanIn");
 Console.WriteLine($"Started orchestration instance: '{instanceId}'");
 
+using CancellationTokenSource timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
 OrchestrationMetadata result = await client.WaitForInstanceCompletionAsync(
     instanceId,
     getInputsAndOutputs: true,
-    new CancellationTokenSource(TimeSpan.FromSeconds(60)).Token);
+    timeoutCts.Token);
 
 Console.WriteLine($"Orchestration completed with status: {result.RuntimeStatus}");
 Console.WriteLine($"Output:\n{result.ReadOutputAs<string>()}");

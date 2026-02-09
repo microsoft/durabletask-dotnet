@@ -150,17 +150,30 @@ public static class DurableTaskWorkerBuilderExtensions
         Check.NotNull(builder);
         if (workItemFilters != null)
         {
-            builder.Services.AddSingleton(workItemFilters);
+            // Use the options pattern with the builder's name to support named builders
+            builder.Services.AddOptions<DurableTaskWorkerWorkItemFilters>(builder.Name)
+                .Configure(opts =>
+                {
+                    opts.Orchestrations = workItemFilters.Orchestrations;
+                    opts.Activities = workItemFilters.Activities;
+                    opts.Entities = workItemFilters.Entities;
+                });
         }
         else
         {
             // Auto-generate the filters from registered orchestrations, activities, and entities.
-            builder.Services.AddSingleton(provider =>
-            {
-                DurableTaskRegistry registry = provider.GetRequiredService<IOptionsMonitor<DurableTaskRegistry>>().Get(builder.Name);
-                DurableTaskWorkerOptions? options = provider.GetOptions<DurableTaskWorkerOptions>(builder.Name);
-                return DurableTaskWorkerWorkItemFilters.FromDurableTaskRegistry(registry, options);
-            });
+            builder.Services.AddOptions<DurableTaskWorkerWorkItemFilters>(builder.Name)
+                .Configure<IOptionsMonitor<DurableTaskRegistry>, IOptionsMonitor<DurableTaskWorkerOptions>>(
+                    (opts, registryMonitor, workerOptionsMonitor) =>
+                    {
+                        DurableTaskRegistry registry = registryMonitor.Get(builder.Name);
+                        DurableTaskWorkerOptions workerOptions = workerOptionsMonitor.Get(builder.Name);
+                        DurableTaskWorkerWorkItemFilters generated =
+                            DurableTaskWorkerWorkItemFilters.FromDurableTaskRegistry(registry, workerOptions);
+                        opts.Orchestrations = generated.Orchestrations;
+                        opts.Activities = generated.Activities;
+                        opts.Entities = generated.Entities;
+                    });
         }
 
         return builder;

@@ -3,6 +3,7 @@
 
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Microsoft.DurableTask.Worker.Tests;
 
@@ -33,10 +34,14 @@ public class UseWorkItemFiltersTests
         // Act
         builder.UseWorkItemFilters(filters);
         ServiceProvider provider = services.BuildServiceProvider();
-        DurableTaskWorkerWorkItemFilters actual = provider.GetRequiredService<DurableTaskWorkerWorkItemFilters>();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
         // Assert
-        actual.Should().BeSameAs(filters);
+        actual.Orchestrations.Should().BeEquivalentTo(filters.Orchestrations);
+        actual.Activities.Should().BeEquivalentTo(filters.Activities);
+        actual.Entities.Should().BeEquivalentTo(filters.Entities);
     }
 
     [Fact]
@@ -54,7 +59,9 @@ public class UseWorkItemFiltersTests
         // Act
         builder.UseWorkItemFilters();
         ServiceProvider provider = services.BuildServiceProvider();
-        DurableTaskWorkerWorkItemFilters actual = provider.GetRequiredService<DurableTaskWorkerWorkItemFilters>();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
         // Assert
         actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator));
@@ -83,7 +90,9 @@ public class UseWorkItemFiltersTests
         // Act
         builder.UseWorkItemFilters();
         ServiceProvider provider = services.BuildServiceProvider();
-        DurableTaskWorkerWorkItemFilters actual = provider.GetRequiredService<DurableTaskWorkerWorkItemFilters>();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
         // Assert
         actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.Contains("1.0"));
@@ -104,7 +113,9 @@ public class UseWorkItemFiltersTests
         // Act
         builder.UseWorkItemFilters();
         ServiceProvider provider = services.BuildServiceProvider();
-        DurableTaskWorkerWorkItemFilters actual = provider.GetRequiredService<DurableTaskWorkerWorkItemFilters>();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
         // Assert
         actual.Entities.Should().ContainSingle(e => e.Name == nameof(TestEntity).ToLowerInvariant());
@@ -135,7 +146,9 @@ public class UseWorkItemFiltersTests
         // Act
         builder.UseWorkItemFilters();
         ServiceProvider provider = services.BuildServiceProvider();
-        DurableTaskWorkerWorkItemFilters actual = provider.GetRequiredService<DurableTaskWorkerWorkItemFilters>();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
         // Assert
         actual.Orchestrations.Should().BeEmpty();
@@ -158,12 +171,57 @@ public class UseWorkItemFiltersTests
 
         // Act
         ServiceProvider provider = services.BuildServiceProvider();
-        IEnumerable<DurableTaskWorkerWorkItemFilters> allFilters = provider.GetServices<DurableTaskWorkerWorkItemFilters>();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+
+        DurableTaskWorkerWorkItemFilters worker1Filters = filtersMonitor.Get("worker1");
+        DurableTaskWorkerWorkItemFilters worker2Filters = filtersMonitor.Get("worker2");
 
         // Assert
-        allFilters.Should().HaveCount(2);
-        allFilters.Should().Contain(f => f.Orchestrations.Any(o => o.Name == nameof(TestOrchestrator)) && !f.Activities.Any());
-        allFilters.Should().Contain(f => f.Activities.Any(a => a.Name == nameof(TestActivity)) && !f.Orchestrations.Any());
+        worker1Filters.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator));
+        worker1Filters.Activities.Should().BeEmpty();
+
+        worker2Filters.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity));
+        worker2Filters.Orchestrations.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void UseWorkItemFilters_NamedBuilders_CanResolveCorrectFiltersByName()
+    {
+        // Arrange
+        // This test verifies that named builders can have their filters resolved independently,
+        // which is how the actual GrpcDurableTaskWorker needs to resolve filters for each named worker.
+        ServiceCollection services = new();
+
+        DefaultDurableTaskWorkerBuilder builder1 = new("worker1", services);
+        builder1.AddTasks(registry => registry.AddOrchestrator<TestOrchestrator>());
+        builder1.UseWorkItemFilters();
+
+        DefaultDurableTaskWorkerBuilder builder2 = new("worker2", services);
+        builder2.AddTasks(registry => registry.AddActivity<TestActivity>());
+        builder2.UseWorkItemFilters();
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+
+        // Use the options pattern to get filters by name - this is how the worker should resolve filters
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+
+        DurableTaskWorkerWorkItemFilters worker1Filters = filtersMonitor.Get("worker1");
+        DurableTaskWorkerWorkItemFilters worker2Filters = filtersMonitor.Get("worker2");
+
+        // Assert
+        // Worker1 should have orchestrator but no activity
+        worker1Filters.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator));
+        worker1Filters.Activities.Should().BeEmpty();
+
+        // Worker2 should have activity but no orchestrator
+        worker2Filters.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity));
+        worker2Filters.Orchestrations.Should().BeEmpty();
+
+        // The two filters should be different instances
+        worker1Filters.Should().NotBeSameAs(worker2Filters);
     }
 
     class TestOrchestrator : TaskOrchestrator<object, object>

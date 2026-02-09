@@ -11,19 +11,19 @@ namespace Microsoft.DurableTask.Worker;
 public class DurableTaskWorkerWorkItemFilters
 {
     /// <summary>
-    /// Gets or initializes the orchestration filters.
+    /// Gets or sets the orchestration filters.
     /// </summary>
-    public IReadOnlyList<OrchestrationFilter> Orchestrations { get; init; } = [];
+    public IReadOnlyList<OrchestrationFilter> Orchestrations { get; set; } = [];
 
     /// <summary>
-    /// Gets or initializes the activity filters.
+    /// Gets or sets the activity filters.
     /// </summary>
-    public IReadOnlyList<ActivityFilter> Activities { get; init; } = [];
+    public IReadOnlyList<ActivityFilter> Activities { get; set; } = [];
 
     /// <summary>
-    /// Gets or initializes the entity filters.
+    /// Gets or sets the entity filters.
     /// </summary>
-    public IReadOnlyList<EntityFilter> Entities { get; init; } = [];
+    public IReadOnlyList<EntityFilter> Entities { get; set; } = [];
 
     /// <summary>
     /// Creates a new instance of the <see cref="DurableTaskWorkerWorkItemFilters"/> class.
@@ -55,7 +55,7 @@ public class DurableTaskWorkerWorkItemFilters
     }
 
     /// <summary>
-    /// Struct specifying an orchestration filter.
+    /// Specifies an orchestration filter.
     /// </summary>
     public struct OrchestrationFilter
     {
@@ -71,7 +71,7 @@ public class DurableTaskWorkerWorkItemFilters
     }
 
     /// <summary>
-    /// Struct specifying an activity filter.
+    /// Specifies an activity filter.
     /// </summary>
     public struct ActivityFilter
     {
@@ -87,7 +87,7 @@ public class DurableTaskWorkerWorkItemFilters
     }
 
     /// <summary>
-    /// Struct specifying an entity filter.
+    /// Specifies an entity filter.
     /// </summary>
     public struct EntityFilter
     {

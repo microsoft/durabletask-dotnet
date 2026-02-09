@@ -31,7 +31,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     /// <param name="loggerFactory">The logger.</param>
     /// <param name="orchestrationFilter">The optional <see cref="IOrchestrationFilter"/> used to filter orchestration execution.</param>
     /// <param name="exceptionPropertiesProvider">The custom exception properties provider that help build failure details.</param>
-    /// <param name="workItemFilters">The optional <see cref="DurableTaskWorkerWorkItemFilters"/> used to filter work items in the backend.</param>
+    /// <param name="workItemFiltersMonitor">The optional <see cref="IOptionsMonitor{DurableTaskWorkerWorkItemFilters}"/> used to filter work items in the backend.</param>
     public GrpcDurableTaskWorker(
         string name,
         IDurableTaskFactory factory,
@@ -41,7 +41,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         ILoggerFactory loggerFactory,
         IOrchestrationFilter? orchestrationFilter = null,
         IExceptionPropertiesProvider? exceptionPropertiesProvider = null,
-        DurableTaskWorkerWorkItemFilters? workItemFilters = null)
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters>? workItemFiltersMonitor = null)
         : base(name, factory)
     {
         this.grpcOptions = Check.NotNull(grpcOptions).Get(name);
@@ -51,7 +51,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         this.logger = CreateLogger(loggerFactory, this.workerOptions);
         this.orchestrationFilter = orchestrationFilter;
         this.ExceptionPropertiesProvider = exceptionPropertiesProvider;
-        this.workItemFilters = workItemFilters;
+        this.workItemFilters = workItemFiltersMonitor?.Get(name);
     }
 
     /// <inheritdoc />

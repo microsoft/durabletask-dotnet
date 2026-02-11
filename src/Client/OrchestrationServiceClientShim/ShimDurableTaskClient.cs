@@ -400,6 +400,14 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                 OrchestrationStatus.Suspended,
             };
 
+        if (dedupeStatuses != null && runningStatuses.Any(
+            status => !dedupeStatuses.Contains(status)) && dedupeStatuses.Contains(OrchestrationStatus.Terminated))
+        {
+            throw new ArgumentException(
+                "Invalid dedupe statuses: cannot include 'Terminated' while also allowing reuse of running instances, " +
+                "because the running instance would be terminated and then immediately conflict with the dedupe check.");
+        }
+
         // At least one running status is reusable, so determine if an orchestration already exists with this status and terminate it if so
         if (dedupeStatuses == null || runningStatuses.Any(status => !dedupeStatuses.Contains(status)))
         {

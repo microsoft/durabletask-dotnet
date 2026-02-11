@@ -446,7 +446,7 @@ public class ShimDurableTaskClientTests
         // Arrange
         StartOrchestrationOptions options = new()
         {
-            DedupeStatuses = new[] { "completed", "FAILED", "Terminated" },
+            DedupeStatuses = new[] { "completed", "FAILED", "Pending" },
         };
 
         // Setup the mock to handle the call
@@ -631,6 +631,30 @@ public class ShimDurableTaskClientTests
             CancellationToken.None);
 
         await act.Should().ThrowAsync<OrchestrationAlreadyExistsException>();
+        this.orchestrationClient.VerifyAll();
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_InvalidDedupeStatuses_ThrowsArgumentException()
+    {
+        // Arrange
+        string instanceId = "test-instance-id";
+        var options = new StartOrchestrationOptions
+        {
+            InstanceId = instanceId,
+            DedupeStatuses = ["Pending", "Failed", "Terminated"]
+        };
+
+        // Act & Assert
+        Func<Task> act = async () => await this.client.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName("TestOrchestration"),
+            input: null,
+            options,
+            CancellationToken.None);
+
+        // An ArgumentException is thrown because the dedupe statuses list contains both a running status ('Pending')
+        // and 'Terminated'
+        await act.Should().ThrowAsync<ArgumentException>();
         this.orchestrationClient.VerifyAll();
     }
 

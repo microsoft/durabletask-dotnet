@@ -157,6 +157,10 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         {
             throw new OrchestrationAlreadyExistsException(e.Status.Detail);
         }
+        catch (RpcException e) when (e.StatusCode == StatusCode.InvalidArgument)
+        {
+            throw new ArgumentException(e.Status.Detail);
+        }
     }
 
     /// <inheritdoc/>

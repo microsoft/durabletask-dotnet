@@ -115,6 +115,12 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="orchestratorName"/> is empty.</exception>
     /// <exception cref="OrchestrationAlreadyExistsException">If an orchestration with status in
     /// <see cref="StartOrchestrationOptions.DedupeStatuses"/> with this instance ID already exists.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown if <see cref="StartOrchestrationOptions.DedupeStatuses"/> contains 'Terminated', but also allows at
+    /// least one running status to be reusable. In this case, an existing orchestration with that running status
+    /// would be terminated, but the creation of the new orchestration would immediately fail due to the existing
+    /// orchestration now having status 'Terminated'.
+    /// </exception>
     public abstract Task<string> ScheduleNewOrchestrationInstanceAsync(
         TaskName orchestratorName,
         object? input = null,

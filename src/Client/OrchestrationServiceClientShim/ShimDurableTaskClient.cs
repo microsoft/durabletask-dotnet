@@ -170,6 +170,8 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     }
 
     /// <inheritdoc/>
+    /// This implementation treats a null <see cref="StartOrchestrationOptions.DedupeStatuses"/> field as all statuses
+    /// being reusable.
     public override async Task<string> ScheduleNewOrchestrationInstanceAsync(
         TaskName orchestratorName,
         object? input = null,
@@ -289,6 +291,9 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     }
 
     /// <inheritdoc/>
+    /// This implementation will terminate an existing non-terminal instance if <paramref name="restartWithNewInstanceId"/>
+    /// is <c>false</c> and wait for the existing instance to enter a terminal state before restarting it, until
+    /// <paramref name="cancellation"/> is cancelled.
     public override async Task<string> RestartAsync(
         string instanceId,
         bool restartWithNewInstanceId = false,
@@ -305,14 +310,13 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
             throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.");
         }
 
-        bool isInstaceNotCompleted = status.RuntimeStatus == OrchestrationRuntimeStatus.Running ||
-                                    status.RuntimeStatus == OrchestrationRuntimeStatus.Pending ||
-                                    status.RuntimeStatus == OrchestrationRuntimeStatus.Suspended;
-
-        if (isInstaceNotCompleted && !restartWithNewInstanceId)
+        if (!restartWithNewInstanceId)
         {
-            throw new InvalidOperationException($"Instance '{instanceId}' cannot be restarted while it is in state '{status.RuntimeStatus}'. " +
-                   "Wait until it has completed, or restart with a new instance ID.");
+            await this.TerminateTaskOrchestrationWithReusableRunningStatusAndWaitAsync(
+                instanceId,
+                dedupeStatuses: null,
+                cancellation,
+                existingOrchestration: status);
         }
 
         // Determine the instance ID for the restarted orchestration
@@ -391,7 +395,8 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     async Task TerminateTaskOrchestrationWithReusableRunningStatusAndWaitAsync(
             string instanceId,
             OrchestrationStatus[]? dedupeStatuses,
-            CancellationToken cancellation)
+            CancellationToken cancellation,
+            OrchestrationMetadata? existingOrchestration = null)
     {
         var runningStatuses = new List<OrchestrationStatus>()
             {
@@ -411,7 +416,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
         // At least one running status is reusable, so determine if an orchestration already exists with this status and terminate it if so
         if (dedupeStatuses == null || runningStatuses.Any(status => !dedupeStatuses.Contains(status)))
         {
-            OrchestrationMetadata? metadata = await this.GetInstancesAsync(instanceId, getInputsAndOutputs: false, cancellation);
+            OrchestrationMetadata? metadata = existingOrchestration ?? await this.GetInstancesAsync(instanceId, getInputsAndOutputs: false, cancellation);
 
             if (metadata != null)
             {

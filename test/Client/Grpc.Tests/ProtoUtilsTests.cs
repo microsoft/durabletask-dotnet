@@ -55,6 +55,16 @@ public class ProtoUtilsTests
     }
 
     [Fact]
+    public void ConvertDedupeStatusesToReusePolicy_NullArray_ThrowsArgumentNullException()
+    {
+        // Arrange and Act
+        Action act = () => ProtoUtils.ConvertDedupeStatusesToReusePolicy(null!);
+
+        // Assert
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
     public void ConvertDedupeStatusesToReusePolicy_AllStatuses_ReturnsPolicyWithNoReplaceableStatuses()
     {
         // Arrange

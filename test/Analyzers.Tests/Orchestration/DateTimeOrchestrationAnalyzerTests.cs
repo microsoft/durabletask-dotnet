@@ -311,6 +311,46 @@ tasks.AddOrchestratorFunc(""HelloSequence"", context =>
     }
 
     [Fact]
+    public async Task FuncOrchestratorInForEachWithVariableNameNoDiag()
+    {
+        string code = Wrapper.WrapFuncOrchestrator(@"
+string[] names = new[] { ""A"", ""B"" };
+foreach (string name in names)
+{
+    tasks.AddOrchestratorFunc<string, string>(
+        name,
+        async (ctx, input) =>
+        {
+            return await ctx.CallActivityAsync<string>(""Activity"", input);
+        });
+}
+");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
+    }
+
+    [Fact]
+    public async Task FuncOrchestratorInForEachWithVariableNameHasDiag()
+    {
+        string code = Wrapper.WrapFuncOrchestrator(@"
+string[] names = new[] { ""A"", ""B"" };
+foreach (string name in names)
+{
+    tasks.AddOrchestratorFunc(
+        name,
+        context =>
+        {
+            return {|#0:DateTime.Now|};
+        });
+}
+");
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Main", "System.DateTime.Now", "Main");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+    }
+
+    [Fact]
     public async Task FuncOrchestratorWithMethodReferenceHasDiag()
     {
         string code = @"

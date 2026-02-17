@@ -92,6 +92,25 @@ tasks.AddOrchestratorFunc(""HelloSequence"", context =>
         await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
     }
 
+    [Fact]
+    public async Task FuncOrchestratorInForEachWithVariableNameNoDiag()
+    {
+        string code = Wrapper.WrapFuncOrchestrator(@"
+string[] names = new[] { ""A"", ""B"" };
+foreach (string name in names)
+{
+    tasks.AddOrchestratorFunc<string, string>(
+        name,
+        async (ctx, input) =>
+        {
+            return await ctx.CallActivityAsync<string>(""Activity"", input);
+        });
+}
+");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
+    }
+
     static DiagnosticResult BuildDiagnostic()
     {
         return VerifyCS.Diagnostic(GuidOrchestrationAnalyzer.DiagnosticId);

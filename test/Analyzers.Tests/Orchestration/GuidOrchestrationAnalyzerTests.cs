@@ -111,6 +111,26 @@ foreach (string name in names)
         await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
     }
 
+    [Fact]
+    public async Task FuncOrchestratorInForEachWithVariableNameHasDiag()
+    {
+        string code = Wrapper.WrapFuncOrchestrator(@"
+string[] names = new[] { ""A"", ""B"" };
+foreach (string name in names)
+{
+    tasks.AddOrchestratorFunc<string, string>(
+        name,
+        async (ctx, input) =>
+        {
+            return {|#0:Guid.NewGuid()|};
+        });
+}
+");
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Main", "Guid.NewGuid()", "name");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+    }
     static DiagnosticResult BuildDiagnostic()
     {
         return VerifyCS.Diagnostic(GuidOrchestrationAnalyzer.DiagnosticId);

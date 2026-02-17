@@ -118,9 +118,9 @@ foreach (string name in names)
 string[] names = new[] { ""A"", ""B"" };
 foreach (string name in names)
 {
-    tasks.AddOrchestratorFunc<string, string>(
+    tasks.AddOrchestratorFunc(
         name,
-        async (ctx, input) =>
+        context =>
         {
             return {|#0:Guid.NewGuid()|};
         });

@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.20.1
+- Fix GrpcChannel handle leak in AzureManaged backendby nytian ([#629](https://github.com/microsoft/durabletask-dotnet/pull/629))
+
 ## 1.20.0
 - Partial orchestration workitem completion support (merge after next dts dp release) by wangbill ([#514](https://github.com/microsoft/durabletask-dotnet/pull/514))
 - Export history job by wangbill ([#494](https://github.com/microsoft/durabletask-dotnet/pull/494))
@@ -390,6 +393,7 @@ Microsoft.DurableTask.Generators
 ## v0.4.1-beta
 
 Initial public release
+
 
 
 

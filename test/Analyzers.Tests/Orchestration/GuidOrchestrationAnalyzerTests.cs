@@ -127,7 +127,7 @@ foreach (string name in names)
 }
 ");
 
-        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Main", "Guid.NewGuid()", "name");
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Main", "Guid.NewGuid()", "Main");
 
         await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
     }

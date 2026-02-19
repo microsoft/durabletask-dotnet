@@ -39,17 +39,17 @@ public class DurableTaskWorkerWorkItemFilters
             Orchestrations = registry.Orchestrators.Select(orchestration => new OrchestrationFilter
             {
                 Name = orchestration.Key,
-                Versions = workerOptions?.Versioning != null ? [workerOptions.Versioning.DefaultVersion] : [],
+                Versions = workerOptions?.Versioning != null ? [workerOptions.Versioning.Version] : [],
             }).ToList(),
             Activities = registry.Activities.Select(activity => new ActivityFilter
             {
                 Name = activity.Key,
-                Versions = workerOptions?.Versioning != null ? [workerOptions.Versioning.DefaultVersion] : [],
+                Versions = workerOptions?.Versioning != null ? [workerOptions.Versioning.Version] : [],
             }).ToList(),
             Entities = registry.Entities.Select(entity => new EntityFilter
             {
                 // Entity names are normalized to lowercase in the backend.
-                Name = entity.Key.ToString().ToLowerInvariant(),
+                Name = entity.Key.ToString(),
             }).ToList(),
         };
     }
@@ -57,43 +57,48 @@ public class DurableTaskWorkerWorkItemFilters
     /// <summary>
     /// Specifies an orchestration filter.
     /// </summary>
-    public struct OrchestrationFilter
+    /// <param name="name">The name of the orchestration.</param>
+    /// <param name="versions">The optional versions of the orchestration.</param>
+    public readonly struct OrchestrationFilter(string name, IReadOnlyList<string>? versions)
     {
         /// <summary>
         /// Gets or initializes the name of the orchestration to filter.
         /// </summary>
-        public string Name { get; init; }
+        public string Name { get; init; } = name;
 
         /// <summary>
         /// Gets or initializes the versions of the orchestration to filter.
         /// </summary>
-        public IReadOnlyList<string> Versions { get; init; }
+        public IReadOnlyList<string> Versions { get; init; } = versions ?? [];
     }
 
     /// <summary>
     /// Specifies an activity filter.
     /// </summary>
-    public struct ActivityFilter
+    /// <param name="name">The name of the activity.</param>
+    /// <param name="versions">The optional versions of the activity.</param>
+    public readonly struct ActivityFilter(string name, IReadOnlyList<string>? versions)
     {
         /// <summary>
         /// Gets or initializes the name of the activity to filter.
         /// </summary>
-        public string Name { get; init; }
+        public string Name { get; init; } = name;
 
         /// <summary>
         /// Gets or initializes the versions of the activity to filter.
         /// </summary>
-        public IReadOnlyList<string> Versions { get; init; }
+        public IReadOnlyList<string> Versions { get; init; } = versions ?? [];
     }
 
     /// <summary>
     /// Specifies an entity filter.
     /// </summary>
-    public struct EntityFilter
+    /// <param name="name">The name of the entity.</param>
+    public readonly struct EntityFilter(string name)
     {
         /// <summary>
         /// Gets or initializes the name of the entity to filter.
         /// </summary>
-        public string Name { get; init; }
+        public string Name { get; init; } = name;
     }
 }

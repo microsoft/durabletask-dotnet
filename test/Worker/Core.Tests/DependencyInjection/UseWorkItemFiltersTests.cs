@@ -83,7 +83,7 @@ public class UseWorkItemFiltersTests
         {
             options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
             {
-                DefaultVersion = "1.0"
+                Version = "1.0"
             };
         });
 
@@ -118,7 +118,7 @@ public class UseWorkItemFiltersTests
         DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
         // Assert
-        actual.Entities.Should().ContainSingle(e => e.Name == nameof(TestEntity).ToLowerInvariant());
+        actual.Entities.Should().ContainSingle(e => e.Name == nameof(TestEntity));
     }
 
     [Fact]

@@ -547,7 +547,7 @@ public class ShimDurableTaskClientTests
             DedupeStatuses = dedupeStatuses
         };
 
-        // Set up GetOrchestrationStateAsync to return Running first, then Terminated
+        // Set up GetOrchestrationStateAsync to return Running first
         this.orchestrationClient
             .Setup(m => m.GetOrchestrationStateAsync(instanceId, false))
             .ReturnsAsync(

@@ -486,9 +486,9 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    /// Whether or not this method throws a <see cref="InvalidOperationException"/> or terminates the existing instance
-    /// when <paramref name="restartWithNewInstanceId"/> is <c>false</c> and the existing instance is not in a terminal state
-    /// depends on the server-side implementation.
+    // Whether or not this method throws a <see cref="InvalidOperationException"/> or terminates the existing instance
+    // when <paramref name="restartWithNewInstanceId"/> is <c>false</c> and the existing instance is not in a terminal state
+    // depends on the server-side implementation.
     public override async Task<string> RestartAsync(
         string instanceId,
         bool restartWithNewInstanceId = false,

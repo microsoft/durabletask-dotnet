@@ -548,7 +548,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         throw new NotSupportedException(
             $"{this.GetType()} does not support listing orchestration instance IDs filtered by completed time.");
     }
-    
+
     // TODO: Create task hub
 
     // TODO: Delete task hub

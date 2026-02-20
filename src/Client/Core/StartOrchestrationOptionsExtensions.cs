@@ -12,7 +12,13 @@ public static class StartOrchestrationOptionsExtensions
 {
 #pragma warning disable CS0618 // Type or member is obsolete - Cancelled is intentionally included for compatibility with the
                                // Durable Task Framework
-    public static readonly OrchestrationRuntimeStatus[] ValidDedupeStatuses = new[]
+
+    /// <summary>
+    /// The list of orchestration statuses that can be deduplicated upon a creation request.
+    /// If one of these statuses is included in the request via the <see cref="StartOrchestrationOptions.DedupeStatuses"/>
+    /// field, and an orchestration with this status and same instance ID is found, the request will fail.
+    /// </summary>
+    internal static readonly OrchestrationRuntimeStatus[] ValidDedupeStatuses = new[]
     {
         OrchestrationRuntimeStatus.Completed,
         OrchestrationRuntimeStatus.Failed,

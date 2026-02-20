@@ -170,8 +170,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     }
 
     /// <inheritdoc/>
-    /// This implementation treats a null <see cref="StartOrchestrationOptions.DedupeStatuses"/> field as all statuses
-    /// being reusable.
+    // This implementation treats a null dedupe statuses field as all statuses being reusable.
     public override async Task<string> ScheduleNewOrchestrationInstanceAsync(
         TaskName orchestratorName,
         object? input = null,
@@ -291,9 +290,9 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     }
 
     /// <inheritdoc/>
-    /// This implementation will terminate an existing non-terminal instance if <paramref name="restartWithNewInstanceId"/>
-    /// is <c>false</c> and wait for the existing instance to enter a terminal state before restarting it, until
-    /// <paramref name="cancellation"/> is cancelled.
+    // This implementation will terminate an existing non-terminal instance if restartWithNewInstanceId
+    // is false, and wait for the existing instance to enter a terminal state before restarting it until
+    // the cancellation token is cancelled.
     public override async Task<string> RestartAsync(
         string instanceId,
         bool restartWithNewInstanceId = false,
@@ -432,10 +431,16 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                     // Check for cancellation before attempting to terminate the orchestration
                     cancellation.ThrowIfCancellationRequested();
 
+                    string dedupeStatusesDescription = dedupeStatuses == null
+                        ? "null (all statuses reusable)"
+                        : dedupeStatuses.Length == 0
+                        ? "[] (all statuses reusable)"
+                        : $"[{string.Join(", ", dedupeStatuses)}]";
+
                     string terminationReason = $"A new instance creation request has been issued for instance {instanceId} which " +
                         $"currently has status {metadata.RuntimeStatus}. Since the dedupe statuses of the creation request, " +
-                        $"{(dedupeStatuses == null ? "[]" : string.Join(", ", dedupeStatuses))}, do not contain the orchestration's status, " +
-                        $"the orchestration has been terminated and a new instance with the same instance ID will be created.";
+                        $"{dedupeStatusesDescription}, do not contain the orchestration's status, the orchestration has been terminated " +
+                        $"and a new instance with the same instance ID will be created.";
 
                     await this.TerminateInstanceAsync(instanceId, terminationReason, cancellation);
 

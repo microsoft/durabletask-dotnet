@@ -162,6 +162,11 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         {
             throw new ArgumentException(e.Status.Detail);
         }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.ScheduleNewOrchestrationInstanceAsync)} operation was canceled.", e, cancellation);
+        }
     }
 
     /// <inheritdoc/>

@@ -74,8 +74,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    /// The behavior of this method when the <see cref="StartOrchestrationOptions.DedupeStatuses"/> field
-    /// is null depends on the server-side implementation.
+    // The behavior of this method when the dedupe statuses field is null depends on the server-side implementation.
     public override async Task<string> ScheduleNewOrchestrationInstanceAsync(
         TaskName orchestratorName,
         object? input = null,

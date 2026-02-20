@@ -114,11 +114,11 @@ public class TaskOptionsTests
     }
 
     [Fact]
-    public void ValidDedupeStatuses_ContainsExpectedTerminalStatuses()
+    public void ValidDedupeStatuses_ContainsExpectedStatuses()
     {
         // Act
 #pragma warning disable CS0618 // Type or member is obsolete - Canceled is intentionally included for compatibility
-        OrchestrationRuntimeStatus[] validStatuses = StartOrchestrationOptionsExtensions.ValidDedupeStatuses;
+        IReadOnlyList<OrchestrationRuntimeStatus> validStatuses = StartOrchestrationOptionsExtensions.ValidDedupeStatuses;
 
         // Assert
         validStatuses.Should().NotBeNull();

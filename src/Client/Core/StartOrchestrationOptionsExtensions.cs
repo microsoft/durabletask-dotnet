@@ -18,8 +18,8 @@ public static class StartOrchestrationOptionsExtensions
     /// If one of these statuses is included in the request via the <see cref="StartOrchestrationOptions.DedupeStatuses"/>
     /// field, and an orchestration with this status and same instance ID is found, the request will fail.
     /// </summary>
-    internal static readonly OrchestrationRuntimeStatus[] ValidDedupeStatuses = new[]
-    {
+    public static readonly IReadOnlyList<OrchestrationRuntimeStatus> ValidDedupeStatuses =
+    [
         OrchestrationRuntimeStatus.Completed,
         OrchestrationRuntimeStatus.Failed,
         OrchestrationRuntimeStatus.Terminated,
@@ -27,7 +27,7 @@ public static class StartOrchestrationOptionsExtensions
         OrchestrationRuntimeStatus.Pending,
         OrchestrationRuntimeStatus.Running,
         OrchestrationRuntimeStatus.Suspended,
-    };
+    ];
 #pragma warning restore CS0618 // Type or member is obsolete
 
     /// <summary>

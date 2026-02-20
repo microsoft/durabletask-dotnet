@@ -434,8 +434,8 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                     string dedupeStatusesDescription = dedupeStatuses == null
                         ? "null (all statuses reusable)"
                         : dedupeStatuses.Length == 0
-                        ? "[] (all statuses reusable)"
-                        : $"[{string.Join(", ", dedupeStatuses)}]";
+                            ? "[] (all statuses reusable)"
+                            : $"[{string.Join(", ", dedupeStatuses)}]";
 
                     string terminationReason = $"A new instance creation request has been issued for instance {instanceId} which " +
                         $"currently has status {metadata.RuntimeStatus}. Since the dedupe statuses of the creation request, " +

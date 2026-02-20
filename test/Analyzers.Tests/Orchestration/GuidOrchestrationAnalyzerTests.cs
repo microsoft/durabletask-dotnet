@@ -92,6 +92,45 @@ tasks.AddOrchestratorFunc(""HelloSequence"", context =>
         await VerifyCS.VerifyDurableTaskCodeFixAsync(code, expected, fix);
     }
 
+    [Fact]
+    public async Task FuncOrchestratorInForEachWithVariableNameNoDiag()
+    {
+        string code = Wrapper.WrapFuncOrchestrator(@"
+string[] names = new[] { ""A"", ""B"" };
+foreach (string name in names)
+{
+    tasks.AddOrchestratorFunc<string, string>(
+        name,
+        async (ctx, input) =>
+        {
+            return await ctx.CallActivityAsync<string>(""Activity"", input);
+        });
+}
+");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
+    }
+
+    [Fact]
+    public async Task FuncOrchestratorInForEachWithVariableNameHasDiag()
+    {
+        string code = Wrapper.WrapFuncOrchestrator(@"
+string[] names = new[] { ""A"", ""B"" };
+foreach (string name in names)
+{
+    tasks.AddOrchestratorFunc(
+        name,
+        context =>
+        {
+            return {|#0:Guid.NewGuid()|};
+        });
+}
+");
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Main", "Guid.NewGuid()", "Main");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+    }
     static DiagnosticResult BuildDiagnostic()
     {
         return VerifyCS.Diagnostic(GuidOrchestrationAnalyzer.DiagnosticId);

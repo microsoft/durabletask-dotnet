@@ -150,9 +150,9 @@ public static class DurableTaskWorkerBuilderExtensions
         Check.NotNull(builder);
         if (workItemFilters != null)
         {
-            // Use the options pattern with the builder's name to support named builders
+            // Use PostConfigure to ensure user-provided filters override the auto-generated defaults.
             builder.Services.AddOptions<DurableTaskWorkerWorkItemFilters>(builder.Name)
-                .Configure(opts =>
+                .PostConfigure(opts =>
                 {
                     opts.Orchestrations = workItemFilters.Orchestrations;
                     opts.Activities = workItemFilters.Activities;

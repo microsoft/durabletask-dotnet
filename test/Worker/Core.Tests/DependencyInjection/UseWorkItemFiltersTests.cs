@@ -224,6 +224,120 @@ public class UseWorkItemFiltersTests
         worker1Filters.Should().NotBeSameAs(worker2Filters);
     }
 
+    [Fact]
+    public void WorkItemFilters_DefaultFromRegistry_WhenNoExplicitFiltersConfigured()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<TestOrchestrator>();
+                registry.AddActivity<TestActivity>();
+            });
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator));
+        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity));
+    }
+
+    [Fact]
+    public void WorkItemFilters_DefaultWithEntity_WhenNoExplicitFiltersConfigured()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddEntity<TestEntity>();
+            });
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Entities.Should().ContainSingle(e => e.Name == nameof(TestEntity));
+    }
+
+    [Fact]
+    public void WorkItemFilters_ExplicitFiltersOverrideDefaults()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        DurableTaskWorkerWorkItemFilters customFilters = new()
+        {
+            Orchestrations = [new DurableTaskWorkerWorkItemFilters.OrchestrationFilter { Name = "CustomOrch", Versions = ["2.0"] }],
+            Activities = [],
+            Entities = [],
+        };
+
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<TestOrchestrator>();
+                registry.AddActivity<TestActivity>();
+            });
+            builder.UseWorkItemFilters(customFilters);
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle(o => o.Name == "CustomOrch" && o.Versions.Contains("2.0"));
+        actual.Activities.Should().BeEmpty();
+        actual.Entities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void WorkItemFilters_DefaultWithVersioning_WhenNoExplicitFiltersConfigured()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<TestOrchestrator>();
+                registry.AddActivity<TestActivity>();
+            });
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    Version = "1.0"
+                };
+            });
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.Contains("1.0"));
+        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.Contains("1.0"));
+    }
+
     class TestOrchestrator : TaskOrchestrator<object, object>
     {
         public override Task<object> RunAsync(TaskOrchestrationContext context, object input)

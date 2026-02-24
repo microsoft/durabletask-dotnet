@@ -8,7 +8,7 @@ namespace Microsoft.DurableTask.Worker;
 /// and only work items matching the filters will be processed by the worker. If no filters are provided,
 /// the worker will process all work items. By default, these are auto-generated from the registered orchestrations,
 /// activities, and entities in the <see cref="DurableTaskRegistry"/>. To opt-out of filters, provide a <c>null</c>
-/// value to the <see cref="DurableTaskWorkerBuilderExtensions.UseWorkItemFilters"/> property when configuring the gRPC worker.
+/// value to the <see cref="DurableTaskWorkerBuilderExtensions.UseWorkItemFilters"/> method when configuring the worker.
 /// </summary>
 public class DurableTaskWorkerWorkItemFilters
 {
@@ -64,6 +64,14 @@ public class DurableTaskWorkerWorkItemFilters
     public readonly struct OrchestrationFilter(string name, IReadOnlyList<string>? versions)
     {
         /// <summary>
+        /// Initializes a new instance of the <see cref="OrchestrationFilter"/> struct with default values.
+        /// </summary>
+        public OrchestrationFilter()
+            : this(string.Empty, [])
+        {
+        }
+
+        /// <summary>
         /// Gets or initializes the name of the orchestration to filter.
         /// </summary>
         public string Name { get; init; } = name;
@@ -82,6 +90,14 @@ public class DurableTaskWorkerWorkItemFilters
     public readonly struct ActivityFilter(string name, IReadOnlyList<string>? versions)
     {
         /// <summary>
+        /// Initializes a new instance of the <see cref="ActivityFilter"/> struct with default values.
+        /// </summary>
+        public ActivityFilter()
+            : this(string.Empty, [])
+        {
+        }
+
+        /// <summary>
         /// Gets or initializes the name of the activity to filter.
         /// </summary>
         public string Name { get; init; } = name;
@@ -98,6 +114,14 @@ public class DurableTaskWorkerWorkItemFilters
     /// <param name="name">The name of the entity.</param>
     public readonly struct EntityFilter(string name)
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="EntityFilter"/> struct with default values.
+        /// </summary>
+        public EntityFilter()
+            : this(string.Empty)
+        {
+        }
+
         /// <summary>
         /// Gets or initializes the name of the entity to filter.
         /// </summary>

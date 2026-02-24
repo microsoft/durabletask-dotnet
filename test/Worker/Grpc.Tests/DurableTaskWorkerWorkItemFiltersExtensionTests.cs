@@ -164,6 +164,41 @@ public class DurableTaskWorkerWorkItemFiltersExtensionTests
     }
 
     [Fact]
+    public void ToGrpcWorkItemFilters_WithNullVersions_ConvertsWithoutError()
+    {
+        // Arrange
+        DurableTaskWorkerWorkItemFilters filters = new()
+        {
+            Orchestrations =
+            [
+                new DurableTaskWorkerWorkItemFilters.OrchestrationFilter
+                {
+                    Name = "TestOrchestrator",
+                },
+            ],
+            Activities =
+            [
+                new DurableTaskWorkerWorkItemFilters.ActivityFilter
+                {
+                    Name = "TestActivity",
+                },
+            ],
+            Entities = [],
+        };
+
+        // Act
+        P.WorkItemFilters result = filters.ToGrpcWorkItemFilters();
+
+        // Assert
+        result.Orchestrations.Should().ContainSingle();
+        result.Orchestrations[0].Name.Should().Be("TestOrchestrator");
+        result.Orchestrations[0].Versions.Should().BeEmpty();
+        result.Activities.Should().ContainSingle();
+        result.Activities[0].Name.Should().Be("TestActivity");
+        result.Activities[0].Versions.Should().BeEmpty();
+    }
+
+    [Fact]
     public void ToGrpcWorkItemFilters_WithMultipleOrchestrations_ConvertsAll()
     {
         // Arrange

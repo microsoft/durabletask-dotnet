@@ -2,6 +2,10 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Worker.Grpc.Internal;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
@@ -259,5 +263,128 @@ public class DurableTaskWorkerWorkItemFiltersExtensionTests
         result.Activities.Should().ContainSingle().Which.Name.Should().Be("MyActivity");
         result.Activities[0].Versions.Should().BeEquivalentTo(["1.0", "2.0"]);
         result.Entities.Should().ContainSingle().Which.Name.Should().Be("myentity");
+    }
+
+    [Fact]
+    public void WorkerConstruction_DefaultFilters_FlowToWorker()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddSingleton<ILoggerFactory>(new Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory());
+
+        services.AddDurableTaskWorker(builder =>
+        {
+            builder.UseGrpc();
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<TestOrchestrator>();
+                registry.AddActivity<TestActivity>();
+            });
+        });
+
+        // Act
+        using ServiceProvider provider = services.BuildServiceProvider();
+        IHostedService hosted = Assert.Single(provider.GetServices<IHostedService>());
+        Assert.IsType<GrpcDurableTaskWorker>(hosted);
+
+        DurableTaskWorkerWorkItemFilters? filters = (DurableTaskWorkerWorkItemFilters?)typeof(GrpcDurableTaskWorker)
+            .GetField("workItemFilters", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(hosted);
+
+        // Assert
+        filters.Should().NotBeNull();
+        filters!.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator));
+        filters.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity));
+    }
+
+    [Fact]
+    public void WorkerConstruction_ExplicitFilters_FlowToWorker()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddSingleton<ILoggerFactory>(new Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory());
+
+        DurableTaskWorkerWorkItemFilters customFilters = new()
+        {
+            Orchestrations = [new DurableTaskWorkerWorkItemFilters.OrchestrationFilter { Name = "CustomOrch", Versions = ["2.0"] }],
+            Activities = [],
+            Entities = [],
+        };
+
+        services.AddDurableTaskWorker(builder =>
+        {
+            builder.UseGrpc();
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<TestOrchestrator>();
+                registry.AddActivity<TestActivity>();
+            });
+            builder.UseWorkItemFilters(customFilters);
+        });
+
+        // Act
+        using ServiceProvider provider = services.BuildServiceProvider();
+        IHostedService hosted = Assert.Single(provider.GetServices<IHostedService>());
+        Assert.IsType<GrpcDurableTaskWorker>(hosted);
+
+        DurableTaskWorkerWorkItemFilters? filters = (DurableTaskWorkerWorkItemFilters?)typeof(GrpcDurableTaskWorker)
+            .GetField("workItemFilters", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(hosted);
+
+        // Assert
+        filters.Should().NotBeNull();
+        filters!.Orchestrations.Should().ContainSingle(o => o.Name == "CustomOrch" && o.Versions.Contains("2.0"));
+        filters.Activities.Should().BeEmpty();
+        filters.Entities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void WorkerConstruction_NullFilters_ClearsDefaultsOnWorker()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddSingleton<ILoggerFactory>(new Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory());
+
+        services.AddDurableTaskWorker(builder =>
+        {
+            builder.UseGrpc();
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<TestOrchestrator>();
+                registry.AddActivity<TestActivity>();
+            });
+            builder.UseWorkItemFilters(null);
+        });
+
+        // Act
+        using ServiceProvider provider = services.BuildServiceProvider();
+        IHostedService hosted = Assert.Single(provider.GetServices<IHostedService>());
+        Assert.IsType<GrpcDurableTaskWorker>(hosted);
+
+        DurableTaskWorkerWorkItemFilters? filters = (DurableTaskWorkerWorkItemFilters?)typeof(GrpcDurableTaskWorker)
+            .GetField("workItemFilters", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(hosted);
+
+        // Assert
+        filters.Should().NotBeNull();
+        filters!.Orchestrations.Should().BeEmpty();
+        filters.Activities.Should().BeEmpty();
+        filters.Entities.Should().BeEmpty();
+    }
+
+    class TestOrchestrator : TaskOrchestrator<object, object>
+    {
+        public override Task<object> RunAsync(TaskOrchestrationContext context, object input)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    class TestActivity : TaskActivity<object, object>
+    {
+        public override Task<object> RunAsync(TaskActivityContext context, object input)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

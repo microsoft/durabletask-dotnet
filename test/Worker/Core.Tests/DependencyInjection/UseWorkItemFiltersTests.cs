@@ -16,7 +16,7 @@ public class UseWorkItemFiltersTests
         IDurableTaskWorkerBuilder builder = null!;
 
         // Act
-        Action act = () => builder.UseWorkItemFilters();
+        Action act = () => builder.UseWorkItemFilters(null);
 
         // Assert
         act.Should().ThrowExactly<ArgumentNullException>().WithParameterName("builder");
@@ -28,8 +28,12 @@ public class UseWorkItemFiltersTests
         // Arrange
         ServiceCollection services = new();
         DefaultDurableTaskWorkerBuilder builder = new("test", services);
-        DurableTaskRegistry registry = new();
-        DurableTaskWorkerWorkItemFilters filters = DurableTaskWorkerWorkItemFilters.FromDurableTaskRegistry(registry, null);
+        DurableTaskWorkerWorkItemFilters filters = new()
+        {
+            Orchestrations = [new DurableTaskWorkerWorkItemFilters.OrchestrationFilter { Name = "MyOrch", Versions = ["1.0"] }],
+            Activities = [new DurableTaskWorkerWorkItemFilters.ActivityFilter { Name = "MyActivity", Versions = [] }],
+            Entities = [new DurableTaskWorkerWorkItemFilters.EntityFilter { Name = "myentity" }],
+        };
 
         // Act
         builder.UseWorkItemFilters(filters);
@@ -45,83 +49,6 @@ public class UseWorkItemFiltersTests
     }
 
     [Fact]
-    public void UseWorkItemFilters_WithoutFilters_AutoGeneratesFromRegistry()
-    {
-        // Arrange
-        ServiceCollection services = new();
-        DefaultDurableTaskWorkerBuilder builder = new("test", services);
-        builder.AddTasks(registry =>
-        {
-            registry.AddOrchestrator<TestOrchestrator>();
-            registry.AddActivity<TestActivity>();
-        });
-
-        // Act
-        builder.UseWorkItemFilters();
-        ServiceProvider provider = services.BuildServiceProvider();
-        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
-            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
-        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
-
-        // Assert
-        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator));
-        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity));
-    }
-
-    [Fact]
-    public void UseWorkItemFilters_WithVersioning_IncludesVersionInFilters()
-    {
-        // Arrange
-        ServiceCollection services = new();
-        DefaultDurableTaskWorkerBuilder builder = new("test", services);
-        builder.AddTasks(registry =>
-        {
-            registry.AddOrchestrator<TestOrchestrator>();
-            registry.AddActivity<TestActivity>();
-        });
-        builder.Configure(options =>
-        {
-            options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
-            {
-                Version = "1.0"
-            };
-        });
-
-        // Act
-        builder.UseWorkItemFilters();
-        ServiceProvider provider = services.BuildServiceProvider();
-        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
-            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
-        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
-
-        // Assert
-        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.Contains("1.0"));
-        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.Contains("1.0"));
-    }
-
-    [Fact]
-    public void UseWorkItemFilters_WithEntity_IncludesEntityInFilters()
-    {
-        // Arrange
-        ServiceCollection services = new();
-        DefaultDurableTaskWorkerBuilder builder = new("test", services);
-        builder.AddTasks(registry =>
-        {
-            registry.AddEntity<TestEntity>();
-        });
-
-        // Act
-        builder.UseWorkItemFilters();
-        ServiceProvider provider = services.BuildServiceProvider();
-        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
-            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
-        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
-
-        // Assert
-        actual.Entities.Should().ContainSingle(e => e.Name == nameof(TestEntity));
-    }
-
-    [Fact]
     public void UseWorkItemFilters_ReturnsBuilder_ForChaining()
     {
         // Arrange
@@ -129,99 +56,10 @@ public class UseWorkItemFiltersTests
         DefaultDurableTaskWorkerBuilder builder = new("test", services);
 
         // Act
-        IDurableTaskWorkerBuilder result = builder.UseWorkItemFilters();
+        IDurableTaskWorkerBuilder result = builder.UseWorkItemFilters(null);
 
         // Assert
         result.Should().BeSameAs(builder);
-    }
-
-    [Fact]
-    public void UseWorkItemFilters_EmptyRegistry_CreatesEmptyFilters()
-    {
-        // Arrange
-        ServiceCollection services = new();
-        DefaultDurableTaskWorkerBuilder builder = new("test", services);
-        builder.AddTasks(_ => { });
-
-        // Act
-        builder.UseWorkItemFilters();
-        ServiceProvider provider = services.BuildServiceProvider();
-        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
-            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
-        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
-
-        // Assert
-        actual.Orchestrations.Should().BeEmpty();
-        actual.Activities.Should().BeEmpty();
-        actual.Entities.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void UseWorkItemFilters_NamedBuilders_HaveUniqueFilters()
-    {
-        // Arrange
-        ServiceCollection services = new();
-        DefaultDurableTaskWorkerBuilder builder1 = new("worker1", services);
-        builder1.AddTasks(registry => registry.AddOrchestrator<TestOrchestrator>());
-        builder1.UseWorkItemFilters();
-
-        DefaultDurableTaskWorkerBuilder builder2 = new("worker2", services);
-        builder2.AddTasks(registry => registry.AddActivity<TestActivity>());
-        builder2.UseWorkItemFilters();
-
-        // Act
-        ServiceProvider provider = services.BuildServiceProvider();
-        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
-            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
-
-        DurableTaskWorkerWorkItemFilters worker1Filters = filtersMonitor.Get("worker1");
-        DurableTaskWorkerWorkItemFilters worker2Filters = filtersMonitor.Get("worker2");
-
-        // Assert
-        worker1Filters.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator));
-        worker1Filters.Activities.Should().BeEmpty();
-
-        worker2Filters.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity));
-        worker2Filters.Orchestrations.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void UseWorkItemFilters_NamedBuilders_CanResolveCorrectFiltersByName()
-    {
-        // Arrange
-        // This test verifies that named builders can have their filters resolved independently,
-        // which is how the actual GrpcDurableTaskWorker needs to resolve filters for each named worker.
-        ServiceCollection services = new();
-
-        DefaultDurableTaskWorkerBuilder builder1 = new("worker1", services);
-        builder1.AddTasks(registry => registry.AddOrchestrator<TestOrchestrator>());
-        builder1.UseWorkItemFilters();
-
-        DefaultDurableTaskWorkerBuilder builder2 = new("worker2", services);
-        builder2.AddTasks(registry => registry.AddActivity<TestActivity>());
-        builder2.UseWorkItemFilters();
-
-        // Act
-        ServiceProvider provider = services.BuildServiceProvider();
-
-        // Use the options pattern to get filters by name - this is how the worker should resolve filters
-        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
-            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
-
-        DurableTaskWorkerWorkItemFilters worker1Filters = filtersMonitor.Get("worker1");
-        DurableTaskWorkerWorkItemFilters worker2Filters = filtersMonitor.Get("worker2");
-
-        // Assert
-        // Worker1 should have orchestrator but no activity
-        worker1Filters.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator));
-        worker1Filters.Activities.Should().BeEmpty();
-
-        // Worker2 should have activity but no orchestrator
-        worker2Filters.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity));
-        worker2Filters.Orchestrations.Should().BeEmpty();
-
-        // The two filters should be different instances
-        worker1Filters.Should().NotBeSameAs(worker2Filters);
     }
 
     [Fact]
@@ -273,6 +111,60 @@ public class UseWorkItemFiltersTests
     }
 
     [Fact]
+    public void WorkItemFilters_DefaultWithVersioning_WhenNoExplicitFiltersConfigured()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<TestOrchestrator>();
+                registry.AddActivity<TestActivity>();
+            });
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    Version = "1.0"
+                };
+            });
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.Contains("1.0"));
+        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.Contains("1.0"));
+    }
+
+    [Fact]
+    public void WorkItemFilters_DefaultEmptyRegistry_ProducesEmptyFilters()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(_ => { });
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().BeEmpty();
+        actual.Activities.Should().BeEmpty();
+        actual.Entities.Should().BeEmpty();
+    }
+
+    [Fact]
     public void WorkItemFilters_ExplicitFiltersOverrideDefaults()
     {
         // Arrange
@@ -307,7 +199,7 @@ public class UseWorkItemFiltersTests
     }
 
     [Fact]
-    public void WorkItemFilters_DefaultWithVersioning_WhenNoExplicitFiltersConfigured()
+    public void WorkItemFilters_NullOverwritesDefaults()
     {
         // Arrange
         ServiceCollection services = new();
@@ -318,13 +210,7 @@ public class UseWorkItemFiltersTests
                 registry.AddOrchestrator<TestOrchestrator>();
                 registry.AddActivity<TestActivity>();
             });
-            builder.Configure(options =>
-            {
-                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
-                {
-                    Version = "1.0"
-                };
-            });
+            builder.UseWorkItemFilters(null);
         });
 
         // Act
@@ -334,8 +220,75 @@ public class UseWorkItemFiltersTests
         DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
         // Assert
-        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.Contains("1.0"));
-        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.Contains("1.0"));
+        actual.Orchestrations.Should().BeEmpty();
+        actual.Activities.Should().BeEmpty();
+        actual.Entities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void WorkItemFilters_EmptyFiltersOverrideDefaults()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        DurableTaskWorkerWorkItemFilters emptyFilters = new()
+        {
+            Orchestrations = [],
+            Activities = [],
+            Entities = [],
+        };
+
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<TestOrchestrator>();
+                registry.AddActivity<TestActivity>();
+            });
+            builder.UseWorkItemFilters(emptyFilters);
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().BeEmpty();
+        actual.Activities.Should().BeEmpty();
+        actual.Entities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void WorkItemFilters_NamedBuilders_HaveUniqueDefaultFilters()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("worker1", builder =>
+        {
+            builder.AddTasks(registry => registry.AddOrchestrator<TestOrchestrator>());
+        });
+        services.AddDurableTaskWorker("worker2", builder =>
+        {
+            builder.AddTasks(registry => registry.AddActivity<TestActivity>());
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+
+        DurableTaskWorkerWorkItemFilters worker1Filters = filtersMonitor.Get("worker1");
+        DurableTaskWorkerWorkItemFilters worker2Filters = filtersMonitor.Get("worker2");
+
+        // Assert
+        worker1Filters.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator));
+        worker1Filters.Activities.Should().BeEmpty();
+
+        worker2Filters.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity));
+        worker2Filters.Orchestrations.Should().BeEmpty();
+
+        worker1Filters.Should().NotBeSameAs(worker2Filters);
     }
 
     class TestOrchestrator : TaskOrchestrator<object, object>

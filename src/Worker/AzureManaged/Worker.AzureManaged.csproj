@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
     <SharedSection Include="AzureManaged" />
     <SharedSection Include="Core" />
   </ItemGroup>

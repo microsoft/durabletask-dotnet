@@ -111,7 +111,7 @@ public class UseWorkItemFiltersTests
     }
 
     [Fact]
-    public void WorkItemFilters_DefaultWithVersioning_WhenNoExplicitFiltersConfigured()
+    public void WorkItemFilters_DefaultNullWithVersioningCurrentOrOlder_WhenNoExplicitFiltersConfigured()
     {
         // Arrange
         ServiceCollection services = new();
@@ -126,7 +126,74 @@ public class UseWorkItemFiltersTests
             {
                 options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
                 {
-                    Version = "1.0"
+                    Version = "1.0",
+                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.CurrentOrOlder,
+                };
+            });
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.Count == 0);
+        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.Count == 0);
+    }
+
+    [Fact]
+    public void WorkItemFilters_DefaultNullWithVersioningNone_WhenNoExplicitFiltersConfigured()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<TestOrchestrator>();
+                registry.AddActivity<TestActivity>();
+            });
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    Version = "1.0",
+                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.None,
+                };
+            });
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.Count == 0);
+        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.Count == 0);
+    }
+
+    [Fact]
+    public void WorkItemFilters_DefaultVersionWithVersioningStrict_WhenNoExplicitFiltersConfigured()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<TestOrchestrator>();
+                registry.AddActivity<TestActivity>();
+            });
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    Version = "1.0",
+                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
                 };
             });
         });
@@ -291,7 +358,7 @@ public class UseWorkItemFiltersTests
         worker1Filters.Should().NotBeSameAs(worker2Filters);
     }
 
-    class TestOrchestrator : TaskOrchestrator<object, object>
+    sealed class TestOrchestrator : TaskOrchestrator<object, object>
     {
         public override Task<object> RunAsync(TaskOrchestrationContext context, object input)
         {
@@ -299,7 +366,7 @@ public class UseWorkItemFiltersTests
         }
     }
 
-    class TestActivity : TaskActivity<object, object>
+    sealed class TestActivity : TaskActivity<object, object>
     {
         public override Task<object> RunAsync(TaskActivityContext context, object input)
         {
@@ -307,7 +374,7 @@ public class UseWorkItemFiltersTests
         }
     }
 
-    class TestEntity : TaskEntity<object>
+    sealed class TestEntity : TaskEntity<object>
     {
     }
 }

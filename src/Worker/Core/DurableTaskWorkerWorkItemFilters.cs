@@ -35,18 +35,25 @@ public class DurableTaskWorkerWorkItemFilters
     /// <returns>A new instance of <see cref="DurableTaskWorkerWorkItemFilters"/> constructed from the provided registry.</returns>
     internal static DurableTaskWorkerWorkItemFilters FromDurableTaskRegistry(DurableTaskRegistry registry, DurableTaskWorkerOptions? workerOptions)
     {
-        // TODO: Support multiple versions per orchestration/activity. For now, grab the worker version from the options.
+        // TODO: Support multiple versions per orchestration/activity.
+        // For now, fetch the version based on the versioning match strategy if defined. If undefined, default to null (all versions match).
+        IReadOnlyList<string> versions = [];
+        if (workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict)
+        {
+            versions = [workerOptions.Versioning.Version];
+        }
+
         return new DurableTaskWorkerWorkItemFilters
         {
             Orchestrations = registry.Orchestrators.Select(orchestration => new OrchestrationFilter
             {
                 Name = orchestration.Key,
-                Versions = workerOptions?.Versioning != null ? [workerOptions.Versioning.Version] : [],
+                Versions = versions,
             }).ToList(),
             Activities = registry.Activities.Select(activity => new ActivityFilter
             {
                 Name = activity.Key,
-                Versions = workerOptions?.Versioning != null ? [workerOptions.Versioning.Version] : [],
+                Versions = versions,
             }).ToList(),
             Entities = registry.Entities.Select(entity => new EntityFilter
             {

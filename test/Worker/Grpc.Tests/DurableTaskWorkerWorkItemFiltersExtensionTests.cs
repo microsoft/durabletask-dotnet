@@ -5,7 +5,6 @@ using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
@@ -407,7 +406,7 @@ public class DurableTaskWorkerWorkItemFiltersExtensionTests
         filters.Entities.Should().BeEmpty();
     }
 
-    class TestOrchestrator : TaskOrchestrator<object, object>
+    sealed class TestOrchestrator : TaskOrchestrator<object, object>
     {
         public override Task<object> RunAsync(TaskOrchestrationContext context, object input)
         {
@@ -415,7 +414,7 @@ public class DurableTaskWorkerWorkItemFiltersExtensionTests
         }
     }
 
-    class TestActivity : TaskActivity<object, object>
+    sealed class TestActivity : TaskActivity<object, object>
     {
         public override Task<object> RunAsync(TaskActivityContext context, object input)
         {

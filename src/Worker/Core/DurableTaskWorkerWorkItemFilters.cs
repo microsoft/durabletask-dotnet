@@ -7,8 +7,8 @@ namespace Microsoft.DurableTask.Worker;
 /// A class that represents work item filters for a Durable Task Worker. These filters are passed to the backend
 /// and only work items matching the filters will be processed by the worker. If no filters are provided,
 /// the worker will process all work items. By default, these are auto-generated from the registered orchestrations,
-/// activities, and entities in the <see cref="DurableTaskRegistry"/>. To opt-out of filters, provide a <code>null</code>
-/// value to the <see cref="GrpcDurableTaskWorkerOptions.WorkItemFilters"/> property when configuring the gRPC worker.
+/// activities, and entities in the <see cref="DurableTaskRegistry"/>. To opt-out of filters, provide a <c>null</c>
+/// value to the <see cref="DurableTaskWorkerBuilderExtensions.UseWorkItemFilters"/> property when configuring the gRPC worker.
 /// </summary>
 public class DurableTaskWorkerWorkItemFilters
 {

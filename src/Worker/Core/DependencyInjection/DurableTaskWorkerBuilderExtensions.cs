@@ -137,4 +137,39 @@ public static class DurableTaskWorkerBuilderExtensions
         builder.Services.AddSingleton(filter);
         return builder;
     }
+
+    /// <summary>
+    /// Adds <see cref="DurableTaskWorkerWorkItemFilters"/> to the specified <see cref="IDurableTaskWorkerBuilder"/>.
+    /// </summary>
+    /// <param name="builder">The builder to set the builder target for.</param>
+    /// <param name="workItemFilters">The instance of a <see cref="DurableTaskWorkerWorkItemFilters"/> to use.
+    /// If <c>null</c>, the auto-generated default filters will be cleared.</param>
+    /// <returns>The same <see cref="IDurableTaskWorkerBuilder"/> instance, allowing for method chaining.</returns>
+    /// <remarks>Work item filters are auto-generated from the registry by default.
+    /// Use this method with explicit filters to override the defaults, or with <c>null</c> to opt out of filtering entirely.</remarks>
+    public static IDurableTaskWorkerBuilder UseWorkItemFilters(this IDurableTaskWorkerBuilder builder, DurableTaskWorkerWorkItemFilters? workItemFilters)
+    {
+        Check.NotNull(builder);
+
+        // Use PostConfigure to ensure provided filters override the auto-generated defaults.
+        // When null is passed, the filters are cleared to opt out of filtering entirely.
+        builder.Services.AddOptions<DurableTaskWorkerWorkItemFilters>(builder.Name)
+            .PostConfigure(opts =>
+            {
+                if (workItemFilters is null)
+                {
+                    opts.Orchestrations = [];
+                    opts.Activities = [];
+                    opts.Entities = [];
+                }
+                else
+                {
+                    opts.Orchestrations = workItemFilters.Orchestrations;
+                    opts.Activities = workItemFilters.Activities;
+                    opts.Entities = workItemFilters.Entities;
+                }
+            });
+
+        return builder;
+    }
 }

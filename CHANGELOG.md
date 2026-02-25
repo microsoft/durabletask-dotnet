@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+## v1.21.0
+- Introduce WorkItemFilters into worker flow by halspang ([#616](https://github.com/microsoft/durabletask-dotnet/pull/616))
+- Fix Analyzers treating passed in variable argument name as null by wangbill ([#640](https://github.com/microsoft/durabletask-dotnet/pull/640))
+- Move DURABLE0009/0010 from Unshipped to Shipped for v0.3.0 by cgillum ([#641](https://github.com/microsoft/durabletask-dotnet/pull/641))
+
 ## 1.20.1
 - Fix GrpcChannel handle leak in AzureManaged backendby nytian ([#629](https://github.com/microsoft/durabletask-dotnet/pull/629))
 

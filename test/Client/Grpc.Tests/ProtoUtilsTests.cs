@@ -47,7 +47,7 @@ public class ProtoUtilsTests
         // Assert
         // Empty array means no dedupe statuses, so all terminal statuses are replaceable
         result.Should().NotBeNull();
-        result!.ReplaceableStatus.Should().HaveCount(4);
+        result!.OperationStatus.Should().HaveCount(4);
     }
 
     [Fact]
@@ -76,12 +76,12 @@ public class ProtoUtilsTests
         // Assert
         // When no dedupe statuses, all terminal statuses should be replaceable
         result.Should().NotBeNull();
-        result!.ReplaceableStatus.Should().HaveCount(4);
-        result.ReplaceableStatus.Should().Contain(P.OrchestrationStatus.Completed);
-        result.ReplaceableStatus.Should().Contain(P.OrchestrationStatus.Failed);
-        result.ReplaceableStatus.Should().Contain(P.OrchestrationStatus.Terminated);
+        result!.OperationStatus.Should().HaveCount(4);
+        result.OperationStatus.Should().Contain(P.OrchestrationStatus.Completed);
+        result.OperationStatus.Should().Contain(P.OrchestrationStatus.Failed);
+        result.OperationStatus.Should().Contain(P.OrchestrationStatus.Terminated);
 #pragma warning disable CS0618 // Type or member is obsolete
-        result.ReplaceableStatus.Should().Contain(P.OrchestrationStatus.Canceled);
+        result.OperationStatus.Should().Contain(P.OrchestrationStatus.Canceled);
 #pragma warning restore CS0618
     }
 
@@ -96,13 +96,13 @@ public class ProtoUtilsTests
 
         // Assert
         result.Should().NotBeNull();
-        result!.ReplaceableStatus.Should().HaveCount(3);
-        result.ReplaceableStatus.Should().Contain(P.OrchestrationStatus.Failed);
-        result.ReplaceableStatus.Should().Contain(P.OrchestrationStatus.Terminated);
+        result!.OperationStatus.Should().HaveCount(3);
+        result.OperationStatus.Should().Contain(P.OrchestrationStatus.Failed);
+        result.OperationStatus.Should().Contain(P.OrchestrationStatus.Terminated);
 #pragma warning disable CS0618 // Type or member is obsolete
-        result.ReplaceableStatus.Should().Contain(P.OrchestrationStatus.Canceled);
+        result.OperationStatus.Should().Contain(P.OrchestrationStatus.Canceled);
 #pragma warning restore CS0618
-        result.ReplaceableStatus.Should().NotContain(P.OrchestrationStatus.Completed);
+        result.OperationStatus.Should().NotContain(P.OrchestrationStatus.Completed);
     }
 
     [Fact]
@@ -120,13 +120,13 @@ public class ProtoUtilsTests
 
         // Assert
         result.Should().NotBeNull();
-        result!.ReplaceableStatus.Should().HaveCount(2);
-        result.ReplaceableStatus.Should().Contain(P.OrchestrationStatus.Terminated);
+        result!.OperationStatus.Should().HaveCount(2);
+        result.OperationStatus.Should().Contain(P.OrchestrationStatus.Terminated);
 #pragma warning disable CS0618 // Type or member is obsolete
-        result.ReplaceableStatus.Should().Contain(P.OrchestrationStatus.Canceled);
+        result.OperationStatus.Should().Contain(P.OrchestrationStatus.Canceled);
 #pragma warning restore CS0618
-        result.ReplaceableStatus.Should().NotContain(P.OrchestrationStatus.Completed);
-        result.ReplaceableStatus.Should().NotContain(P.OrchestrationStatus.Failed);
+        result.OperationStatus.Should().NotContain(P.OrchestrationStatus.Completed);
+        result.OperationStatus.Should().NotContain(P.OrchestrationStatus.Failed);
     }
 
     [Fact]
@@ -145,10 +145,10 @@ public class ProtoUtilsTests
 
         // Assert
         result.Should().NotBeNull();
-        result!.ReplaceableStatus.Should().HaveCount(2);
-        result.ReplaceableStatus.Should().Contain(P.OrchestrationStatus.Terminated);
+        result!.OperationStatus.Should().HaveCount(2);
+        result.OperationStatus.Should().Contain(P.OrchestrationStatus.Terminated);
 #pragma warning disable CS0618 // Type or member is obsolete
-        result.ReplaceableStatus.Should().Contain(P.OrchestrationStatus.Canceled);
+        result.OperationStatus.Should().Contain(P.OrchestrationStatus.Canceled);
 #pragma warning restore CS0618
     }
 
@@ -168,13 +168,13 @@ public class ProtoUtilsTests
 
         // Assert
         result.Should().NotBeNull();
-        result!.ReplaceableStatus.Should().HaveCount(3);
-        result.ReplaceableStatus.Should().Contain(P.OrchestrationStatus.Failed);
-        result.ReplaceableStatus.Should().Contain(P.OrchestrationStatus.Terminated);
+        result!.OperationStatus.Should().HaveCount(3);
+        result.OperationStatus.Should().Contain(P.OrchestrationStatus.Failed);
+        result.OperationStatus.Should().Contain(P.OrchestrationStatus.Terminated);
 #pragma warning disable CS0618 // Type or member is obsolete
-        result.ReplaceableStatus.Should().Contain(P.OrchestrationStatus.Canceled);
+        result.OperationStatus.Should().Contain(P.OrchestrationStatus.Canceled);
 #pragma warning restore CS0618
-        result.ReplaceableStatus.Should().NotContain(P.OrchestrationStatus.Completed);
+        result.OperationStatus.Should().NotContain(P.OrchestrationStatus.Completed);
     }
 
     [Fact]
@@ -211,7 +211,7 @@ public class ProtoUtilsTests
         ImmutableArray<P.OrchestrationStatus> terminalStatuses = ProtoUtils.GetTerminalStatuses();
         foreach (var status in terminalStatuses)
         {
-            policy.ReplaceableStatus.Add(status);
+            policy.OperationStatus.Add(status);
         }
 
         // Act
@@ -222,11 +222,11 @@ public class ProtoUtilsTests
     }
 
     [Fact]
-    public void ConvertReusePolicyToDedupeStatuses_SingleReplaceableStatus_ReturnsRemainingStatuses()
+    public void ConvertReusePolicyToDedupeStatuses_SingleOperationStatus_ReturnsRemainingStatuses()
     {
         // Arrange
         var policy = new P.OrchestrationIdReusePolicy();
-        policy.ReplaceableStatus.Add(P.OrchestrationStatus.Completed);
+        policy.OperationStatus.Add(P.OrchestrationStatus.Completed);
 
         // Act
         P.OrchestrationStatus[]? result = ProtoUtils.ConvertReusePolicyToDedupeStatuses(policy);
@@ -243,12 +243,12 @@ public class ProtoUtilsTests
     }
 
     [Fact]
-    public void ConvertReusePolicyToDedupeStatuses_MultipleReplaceableStatuses_ReturnsRemainingStatuses()
+    public void ConvertReusePolicyToDedupeStatuses_MultipleOperationStatuses_ReturnsRemainingStatuses()
     {
         // Arrange
         var policy = new P.OrchestrationIdReusePolicy();
-        policy.ReplaceableStatus.Add(P.OrchestrationStatus.Completed);
-        policy.ReplaceableStatus.Add(P.OrchestrationStatus.Failed);
+        policy.OperationStatus.Add(P.OrchestrationStatus.Completed);
+        policy.OperationStatus.Add(P.OrchestrationStatus.Failed);
 
         // Act
         P.OrchestrationStatus[]? result = ProtoUtils.ConvertReusePolicyToDedupeStatuses(policy);
@@ -269,9 +269,9 @@ public class ProtoUtilsTests
     {
         // Arrange
         var policy = new P.OrchestrationIdReusePolicy();
-        policy.ReplaceableStatus.Add(P.OrchestrationStatus.Completed);
-        policy.ReplaceableStatus.Add(P.OrchestrationStatus.Running); // Non-terminal status
-        policy.ReplaceableStatus.Add(P.OrchestrationStatus.Pending); // Non-terminal status
+        policy.OperationStatus.Add(P.OrchestrationStatus.Completed);
+        policy.OperationStatus.Add(P.OrchestrationStatus.Running); // Non-terminal status
+        policy.OperationStatus.Add(P.OrchestrationStatus.Pending); // Non-terminal status
 
         // Act
         P.OrchestrationStatus[]? result = ProtoUtils.ConvertReusePolicyToDedupeStatuses(policy);
@@ -288,13 +288,13 @@ public class ProtoUtilsTests
     }
 
     [Fact]
-    public void ConvertReusePolicyToDedupeStatuses_DuplicateReplaceableStatuses_HandlesDuplicates()
+    public void ConvertReusePolicyToDedupeStatuses_DuplicateOperationStatuses_HandlesDuplicates()
     {
         // Arrange
         var policy = new P.OrchestrationIdReusePolicy();
-        policy.ReplaceableStatus.Add(P.OrchestrationStatus.Completed);
-        policy.ReplaceableStatus.Add(P.OrchestrationStatus.Completed); // Duplicate
-        policy.ReplaceableStatus.Add(P.OrchestrationStatus.Failed);
+        policy.OperationStatus.Add(P.OrchestrationStatus.Completed);
+        policy.OperationStatus.Add(P.OrchestrationStatus.Completed); // Duplicate
+        policy.OperationStatus.Add(P.OrchestrationStatus.Failed);
 
         // Act
         P.OrchestrationStatus[]? result = ProtoUtils.ConvertReusePolicyToDedupeStatuses(policy);
@@ -332,8 +332,8 @@ public class ProtoUtilsTests
     {
         // Arrange
         var policy = new P.OrchestrationIdReusePolicy();
-        policy.ReplaceableStatus.Add(P.OrchestrationStatus.Completed);
-        policy.ReplaceableStatus.Add(P.OrchestrationStatus.Failed);
+        policy.OperationStatus.Add(P.OrchestrationStatus.Completed);
+        policy.OperationStatus.Add(P.OrchestrationStatus.Failed);
 
         // Act
         P.OrchestrationStatus[]? dedupeStatuses = ProtoUtils.ConvertReusePolicyToDedupeStatuses(policy);
@@ -341,7 +341,7 @@ public class ProtoUtilsTests
 
         // Assert
         convertedBack.Should().NotBeNull();
-        convertedBack!.ReplaceableStatus.Should().BeEquivalentTo(policy.ReplaceableStatus);
+        convertedBack!.OperationStatus.Should().BeEquivalentTo(policy.OperationStatus);
     }
 
     [Fact]
@@ -368,7 +368,7 @@ public class ProtoUtilsTests
         ImmutableArray<P.OrchestrationStatus> terminalStatuses = ProtoUtils.GetTerminalStatuses();
         foreach (var status in terminalStatuses)
         {
-            policy.ReplaceableStatus.Add(status);
+            policy.OperationStatus.Add(status);
         }
 
         // Act
@@ -380,8 +380,8 @@ public class ProtoUtilsTests
         // null dedupe statuses -> all are replaceable -> policy with all statuses
         dedupeStatuses.Should().BeNull();
         convertedBack.Should().NotBeNull();
-        convertedBack!.ReplaceableStatus.Should().HaveCount(4);
-        convertedBack.ReplaceableStatus.Should().BeEquivalentTo(policy.ReplaceableStatus);
+        convertedBack!.OperationStatus.Should().HaveCount(4);
+        convertedBack.OperationStatus.Should().BeEquivalentTo(policy.OperationStatus);
     }
 
     [Fact]
@@ -416,7 +416,7 @@ public class ProtoUtilsTests
         // null dedupe statuses -> all terminal statuses are replaceable -> policy with all statuses
         dedupeStatuses.Should().BeNull();
         convertedBack.Should().NotBeNull();
-        convertedBack!.ReplaceableStatus.Should().HaveCount(4);
+        convertedBack!.OperationStatus.Should().HaveCount(4);
     }
 
     [Theory]

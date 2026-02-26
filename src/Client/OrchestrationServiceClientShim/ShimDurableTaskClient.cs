@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using DurableTask.Core;
+using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
 using Microsoft.DurableTask.Client;
@@ -169,6 +170,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     }
 
     /// <inheritdoc/>
+    // This implementation treats a null dedupe statuses field as all statuses being reusable.
     public override async Task<string> ScheduleNewOrchestrationInstanceAsync(
         TaskName orchestratorName,
         object? input = null,
@@ -224,6 +226,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                 .ToArray();
         }
 
+        await this.TerminateTaskOrchestrationWithReusableRunningStatusAndWaitAsync(instanceId, dedupeStatuses, cancellation);
         await this.Client.CreateTaskOrchestrationAsync(message, dedupeStatuses);
         return instanceId;
     }
@@ -287,6 +290,9 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     }
 
     /// <inheritdoc/>
+    // This implementation will terminate an existing non-terminal instance if restartWithNewInstanceId
+    // is false, and wait for the existing instance to enter a terminal state before restarting it until
+    // the cancellation token is cancelled.
     public override async Task<string> RestartAsync(
         string instanceId,
         bool restartWithNewInstanceId = false,
@@ -303,14 +309,13 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
             throw new ArgumentException($"An orchestration with the instanceId {instanceId} was not found.");
         }
 
-        bool isInstaceNotCompleted = status.RuntimeStatus == OrchestrationRuntimeStatus.Running ||
-                                    status.RuntimeStatus == OrchestrationRuntimeStatus.Pending ||
-                                    status.RuntimeStatus == OrchestrationRuntimeStatus.Suspended;
-
-        if (isInstaceNotCompleted && !restartWithNewInstanceId)
+        if (!restartWithNewInstanceId)
         {
-            throw new InvalidOperationException($"Instance '{instanceId}' cannot be restarted while it is in state '{status.RuntimeStatus}'. " +
-                   "Wait until it has completed, or restart with a new instance ID.");
+            await this.TerminateTaskOrchestrationWithReusableRunningStatusAndWaitAsync(
+                instanceId,
+                dedupeStatuses: null,
+                cancellation,
+                existingOrchestration: status);
         }
 
         // Determine the instance ID for the restarted orchestration
@@ -384,5 +389,64 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
         };
 
         return this.Client.SendTaskOrchestrationMessageAsync(message);
+    }
+
+    async Task TerminateTaskOrchestrationWithReusableRunningStatusAndWaitAsync(
+            string instanceId,
+            OrchestrationStatus[]? dedupeStatuses,
+            CancellationToken cancellation,
+            OrchestrationMetadata? existingOrchestration = null)
+    {
+        var runningStatuses = new List<OrchestrationStatus>()
+            {
+                OrchestrationStatus.Running,
+                OrchestrationStatus.Pending,
+                OrchestrationStatus.Suspended,
+            };
+
+        if (dedupeStatuses != null && runningStatuses.Any(
+            status => !dedupeStatuses.Contains(status)) && dedupeStatuses.Contains(OrchestrationStatus.Terminated))
+        {
+            throw new ArgumentException(
+                "Invalid dedupe statuses: cannot include 'Terminated' while also allowing reuse of running instances, " +
+                "because the running instance would be terminated and then immediately conflict with the dedupe check.");
+        }
+
+        // At least one running status is reusable, so determine if an orchestration already exists with this status and terminate it if so
+        if (dedupeStatuses == null || runningStatuses.Any(status => !dedupeStatuses.Contains(status)))
+        {
+            OrchestrationMetadata? metadata = existingOrchestration ?? await this.GetInstancesAsync(instanceId, getInputsAndOutputs: false, cancellation);
+
+            if (metadata != null)
+            {
+                OrchestrationStatus orchestrationStatus = metadata.RuntimeStatus.ConvertToCore();
+                if (dedupeStatuses?.Contains(orchestrationStatus) == true)
+                {
+                    throw new OrchestrationAlreadyExistsException($"An orchestration with instance ID '{instanceId}' and status " +
+                        $"'{metadata.RuntimeStatus}' already exists");
+                }
+
+                if (runningStatuses.Contains(orchestrationStatus))
+                {
+                    // Check for cancellation before attempting to terminate the orchestration
+                    cancellation.ThrowIfCancellationRequested();
+
+                    string dedupeStatusesDescription = dedupeStatuses == null
+                        ? "null (all statuses reusable)"
+                        : dedupeStatuses.Length == 0
+                            ? "[] (all statuses reusable)"
+                            : $"[{string.Join(", ", dedupeStatuses)}]";
+
+                    string terminationReason = $"A new instance creation request has been issued for instance {instanceId} which " +
+                        $"currently has status {metadata.RuntimeStatus}. Since the dedupe statuses of the creation request, " +
+                        $"{dedupeStatusesDescription}, do not contain the orchestration's status, the orchestration has been terminated " +
+                        $"and a new instance with the same instance ID will be created.";
+
+                    await this.TerminateInstanceAsync(instanceId, terminationReason, cancellation);
+
+                    await this.WaitForInstanceCompletionAsync(instanceId, cancellation: cancellation);
+                }
+            }
+        }
     }
 }

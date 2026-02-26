@@ -4,6 +4,7 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Text;
+using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.DurableTask.Client.Entities;
@@ -73,6 +74,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
+    // The behavior of this method when the dedupe statuses field is null depends on the server-side implementation.
     public override async Task<string> ScheduleNewOrchestrationInstanceAsync(
         TaskName orchestratorName,
         object? input = null,
@@ -124,9 +126,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
 
         // Set orchestration ID reuse policy for deduplication support
-        // Note: This requires the protobuf to support OrchestrationIdReusePolicy field
-        // If the protobuf doesn't support it yet, this will need to be updated when the protobuf is updated
-        if (options?.DedupeStatuses != null && options.DedupeStatuses.Count > 0)
+        if (options?.DedupeStatuses != null)
         {
             // Parse and validate all status strings to enum first
             ImmutableHashSet<OrchestrationRuntimeStatus> dedupeStatuses = options.DedupeStatuses
@@ -143,19 +143,30 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
             // Convert dedupe statuses to protobuf statuses and create reuse policy
             IEnumerable<P.OrchestrationStatus> dedupeStatusesProto = dedupeStatuses.Select(s => s.ToGrpcStatus());
-            P.OrchestrationIdReusePolicy? policy = ProtoUtils.ConvertDedupeStatusesToReusePolicy(dedupeStatusesProto);
-
-            if (policy != null)
-            {
-                request.OrchestrationIdReusePolicy = policy;
-            }
+            request.OrchestrationIdReusePolicy = ProtoUtils.ConvertDedupeStatusesToReusePolicy(dedupeStatusesProto);
         }
 
         using Activity? newActivity = TraceHelper.StartActivityForNewOrchestration(request);
 
-        P.CreateInstanceResponse? result = await this.sidecarClient.StartInstanceAsync(
+        try
+        {
+            P.CreateInstanceResponse? result = await this.sidecarClient.StartInstanceAsync(
             request, cancellationToken: cancellation);
-        return result.InstanceId;
+            return result.InstanceId;
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.AlreadyExists)
+        {
+            throw new OrchestrationAlreadyExistsException(e.Status.Detail);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.InvalidArgument)
+        {
+            throw new ArgumentException(e.Status.Detail);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.ScheduleNewOrchestrationInstanceAsync)} operation was canceled.", e, cancellation);
+        }
     }
 
     /// <inheritdoc/>
@@ -479,6 +490,9 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
+    // Whether or not this method throws a <see cref="InvalidOperationException"/> or terminates the existing instance
+    // when <paramref name="restartWithNewInstanceId"/> is <c>false</c> and the existing instance is not in a terminal state
+    // depends on the server-side implementation.
     public override async Task<string> RestartAsync(
         string instanceId,
         bool restartWithNewInstanceId = false,

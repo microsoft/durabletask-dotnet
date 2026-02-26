@@ -3,9 +3,9 @@
 
 using DurableTask.Core;
 using DurableTask.Core.Entities;
+using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using DurableTask.Core.Query;
-using FluentAssertions.Specialized;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Converters;
 using Microsoft.Extensions.Options;
@@ -419,6 +419,10 @@ public class ShimDurableTaskClientTests
         };
 
         // Setup the mock to handle the call
+        this.orchestrationClient
+            .Setup(m => m.GetOrchestrationStateAsync(It.IsAny<string>(), false))
+            .ReturnsAsync((List<Core.OrchestrationState>?)null);
+
         this.orchestrationClient.Setup(
             m => m.CreateTaskOrchestrationAsync(
                 It.IsAny<TaskMessage>(),
@@ -442,10 +446,14 @@ public class ShimDurableTaskClientTests
         // Arrange
         StartOrchestrationOptions options = new()
         {
-            DedupeStatuses = new[] { "completed", "FAILED", "Terminated" },
+            DedupeStatuses = new[] { "completed", "FAILED", "Pending" },
         };
 
         // Setup the mock to handle the call
+        this.orchestrationClient
+            .Setup(m => m.GetOrchestrationStateAsync(It.IsAny<string>(), false))
+            .ReturnsAsync((List<Core.OrchestrationState>?)null);
+
         this.orchestrationClient.Setup(
             m => m.CreateTaskOrchestrationAsync(
                 It.IsAny<TaskMessage>(),
@@ -473,6 +481,10 @@ public class ShimDurableTaskClientTests
         };
 
         // Setup the mock to handle the call
+        this.orchestrationClient
+            .Setup(m => m.GetOrchestrationStateAsync(It.IsAny<string>(), false))
+            .ReturnsAsync((List<Core.OrchestrationState>?)null);
+
         this.orchestrationClient.Setup(
             m => m.CreateTaskOrchestrationAsync(
                 It.IsAny<TaskMessage>(),
@@ -500,6 +512,10 @@ public class ShimDurableTaskClientTests
         };
 
         // Setup the mock to handle the call
+        this.orchestrationClient
+            .Setup(m => m.GetOrchestrationStateAsync(It.IsAny<string>(), false))
+            .ReturnsAsync((List<Core.OrchestrationState>?)null);
+
         this.orchestrationClient.Setup(
             m => m.CreateTaskOrchestrationAsync(
                 It.IsAny<TaskMessage>(),
@@ -514,6 +530,121 @@ public class ShimDurableTaskClientTests
             default);
 
         await act.Should().NotThrowAsync<ArgumentException>();
+        this.orchestrationClient.VerifyAll();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData([])]
+    [InlineData("Pending", "Failed")]
+    public async Task ScheduleNewOrchestrationInstance_TerminatesExistingRunningOrchestration(params string[]? dedupeStatuses)
+    {
+        // Arrange
+        string instanceId = "test-instance-id";
+        var options = new StartOrchestrationOptions
+        {
+            InstanceId = instanceId,
+            DedupeStatuses = dedupeStatuses
+        };
+
+        // Set up GetOrchestrationStateAsync to return Running first
+        this.orchestrationClient
+            .Setup(m => m.GetOrchestrationStateAsync(instanceId, false))
+            .ReturnsAsync(
+            [
+                new()
+                {
+                    OrchestrationInstance = new OrchestrationInstance { InstanceId = instanceId },
+                    OrchestrationStatus = OrchestrationStatus.Running
+                }
+            ]);
+
+        // Set up termination call
+        this.orchestrationClient
+            .Setup(m => m.ForceTerminateTaskOrchestrationAsync(instanceId, It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
+
+        // Set up waiting for the orchestration to terminate
+        this.orchestrationClient
+            .Setup(m => m.WaitForOrchestrationAsync(instanceId, It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OrchestrationState() 
+            {
+                OrchestrationInstance = new OrchestrationInstance { InstanceId = instanceId },
+                OrchestrationStatus = OrchestrationStatus.Terminated 
+            });
+
+        // Set up creation call
+        this.orchestrationClient
+            .Setup(m => m.CreateTaskOrchestrationAsync(
+                It.IsAny<TaskMessage>(),
+                It.IsAny<OrchestrationStatus[]?>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await this.client.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName("TestOrchestration"),
+            input: null,
+            options,
+            CancellationToken.None);
+
+        // Assert
+        this.orchestrationClient.VerifyAll();
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_ThrowsOrchestrationAlreadyExistsException()
+    {
+        // Arrange
+        string instanceId = "test-instance-id";
+        var options = new StartOrchestrationOptions
+        {
+            InstanceId = instanceId,
+            DedupeStatuses = ["Pending", "Failed"]
+        };
+
+        // Set up GetOrchestrationStateAsync to return a Pending orchestration
+        this.orchestrationClient
+            .Setup(m => m.GetOrchestrationStateAsync(instanceId, false))
+            .ReturnsAsync(
+            [
+                new() {
+                    OrchestrationInstance = new OrchestrationInstance { InstanceId = instanceId },
+                    OrchestrationStatus = OrchestrationStatus.Pending
+                }
+            ]);
+
+        // Act & Assert
+        Func<Task> act = async () => await this.client.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName("TestOrchestration"),
+            input: null,
+            options,
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<OrchestrationAlreadyExistsException>();
+        this.orchestrationClient.VerifyAll();
+    }
+
+    [Fact]
+    public async Task ScheduleNewOrchestrationInstance_InvalidDedupeStatuses_ThrowsArgumentException()
+    {
+        // Arrange
+        string instanceId = "test-instance-id";
+        var options = new StartOrchestrationOptions
+        {
+            InstanceId = instanceId,
+            DedupeStatuses = ["Pending", "Failed", "Terminated"]
+        };
+
+        // Act & Assert
+        Func<Task> act = async () => await this.client.ScheduleNewOrchestrationInstanceAsync(
+            new TaskName("TestOrchestration"),
+            input: null,
+            options,
+            CancellationToken.None);
+
+        // An ArgumentException is thrown because the dedupe statuses list contains both a running status ('Pending')
+        // and 'Terminated'
+        await act.Should().ThrowAsync<ArgumentException>();
         this.orchestrationClient.VerifyAll();
     }
 
@@ -589,6 +720,72 @@ public class ShimDurableTaskClientTests
 
         await restartAction.Should().ThrowAsync<ArgumentException>()
             .WithMessage($"*An orchestration with the instanceId {nonExistentInstanceId} was not found*");
+    }
+
+    [Fact]
+    public async Task RestartAsync_TerminatesExistingRunningInstance()
+    {
+        string originalInstanceId = "test-instance-id";
+        string orchestratorName = "TestOrchestrator";
+        object input = "test-input";
+        string serializedInput = "\"test-input\"";
+        string originalExecutionId = "execution-id";
+
+        // Create a running orchestration state
+        Core.OrchestrationState originalState = CreateState(input, "test-output");
+        originalState.OrchestrationInstance.InstanceId = originalInstanceId;
+        originalState.OrchestrationInstance.ExecutionId = originalExecutionId;
+        originalState.Name = orchestratorName;
+        originalState.OrchestrationStatus = OrchestrationStatus.Running;
+
+        // Set up GetOrchestrationStateAsync to return Running first
+        this.orchestrationClient
+            .Setup(m => m.GetOrchestrationStateAsync(originalInstanceId, false))
+            .ReturnsAsync([originalState]);
+
+        // Set up termination call
+        this.orchestrationClient
+            .Setup(m => m.ForceTerminateTaskOrchestrationAsync(originalInstanceId, It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
+
+        // Set up waiting for the orchestration to terminate
+        this.orchestrationClient
+            .Setup(m => m.WaitForOrchestrationAsync(originalInstanceId, It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OrchestrationState()
+            {
+                Name = orchestratorName,
+                OrchestrationInstance = new OrchestrationInstance
+                {
+                    InstanceId = originalInstanceId,
+                    ExecutionId = originalExecutionId,
+                },
+                OrchestrationStatus = OrchestrationStatus.Terminated
+            });
+
+        // Capture the TaskMessage for verification because we will create this message at RestartAsync.
+        TaskMessage? capturedMessage = null;
+        this.orchestrationClient
+            .Setup(x => x.CreateTaskOrchestrationAsync(It.IsAny<TaskMessage>(), It.IsAny<Core.OrchestrationStatus[]?>()))
+            .Callback<TaskMessage, Core.OrchestrationStatus[]?>((msg, _) => capturedMessage = msg)
+            .Returns(Task.CompletedTask);
+
+        string restartedInstanceId = await this.client.RestartAsync(originalInstanceId, restartWithNewInstanceId: false);
+
+        restartedInstanceId.Should().Be(originalInstanceId);
+
+        // Verify the captured message details
+        capturedMessage.Should().NotBeNull();
+        capturedMessage!.Event.Should().BeOfType<ExecutionStartedEvent>();
+
+        var startedEvent = (ExecutionStartedEvent)capturedMessage.Event;
+        startedEvent.Name.Should().Be(orchestratorName);
+        startedEvent.Input.Should().Be(serializedInput);
+        // TODO: once we support version at ShimDurableTaskClient, we should check version here. 
+        startedEvent.OrchestrationInstance.InstanceId.Should().Be(restartedInstanceId);
+        startedEvent.OrchestrationInstance.ExecutionId.Should().NotBeNullOrEmpty();
+        startedEvent.OrchestrationInstance.ExecutionId.Should().NotBe(originalExecutionId);
+
+        this.orchestrationClient.VerifyAll();
     }
 
     static Core.OrchestrationState CreateState(
@@ -724,6 +921,10 @@ public class ShimDurableTaskClientTests
         TaskName name, object? input, StartOrchestrationOptions? options)
     {
         // arrange
+        this.orchestrationClient
+            .Setup(m => m.GetOrchestrationStateAsync(It.IsAny<string>(), false))
+            .ReturnsAsync((List<Core.OrchestrationState>?)null);
+
         this.orchestrationClient.Setup(
             m => m.CreateTaskOrchestrationAsync(
                 MatchStartExecutionMessage(name, input, options),

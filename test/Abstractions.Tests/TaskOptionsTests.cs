@@ -114,19 +114,23 @@ public class TaskOptionsTests
     }
 
     [Fact]
-    public void ValidDedupeStatuses_ContainsExpectedTerminalStatuses()
+    public void ValidDedupeStatuses_ContainsExpectedStatuses()
     {
         // Act
 #pragma warning disable CS0618 // Type or member is obsolete - Canceled is intentionally included for compatibility
-        OrchestrationRuntimeStatus[] validStatuses = StartOrchestrationOptionsExtensions.ValidDedupeStatuses;
+        IReadOnlyList<OrchestrationRuntimeStatus> validStatuses = StartOrchestrationOptionsExtensions.ValidDedupeStatuses;
 
         // Assert
         validStatuses.Should().NotBeNull();
-        validStatuses.Should().HaveCount(4);
+        validStatuses.Should().HaveCount(7);
         validStatuses.Should().Contain(OrchestrationRuntimeStatus.Completed);
         validStatuses.Should().Contain(OrchestrationRuntimeStatus.Failed);
         validStatuses.Should().Contain(OrchestrationRuntimeStatus.Terminated);
         validStatuses.Should().Contain(OrchestrationRuntimeStatus.Canceled);
+        validStatuses.Should().Contain(OrchestrationRuntimeStatus.Pending);
+        validStatuses.Should().Contain(OrchestrationRuntimeStatus.Running);
+        validStatuses.Should().Contain(OrchestrationRuntimeStatus.Suspended);
+
 #pragma warning restore CS0618
     }
 

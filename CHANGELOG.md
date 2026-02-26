@@ -1,6 +1,7 @@
 # Changelog
 
-## Unreleased
+## v1.21.1
+- Changing the default dedupe statuses behavior by sophiatev ([#622](https://github.com/microsoft/durabletask-dotnet/pull/622))
 
 ## 1.21.0
 - Introduce WorkItemFilters into worker flow by halspang ([#616](https://github.com/microsoft/durabletask-dotnet/pull/616))

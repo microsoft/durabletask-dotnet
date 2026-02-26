@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.21.1
+## v1.22.0
 - Changing the default dedupe statuses behavior by sophiatev ([#622](https://github.com/microsoft/durabletask-dotnet/pull/622))
 
 ## 1.21.0

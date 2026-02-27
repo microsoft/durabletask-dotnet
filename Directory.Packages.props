@@ -65,7 +65,6 @@
   <!-- Testing Frameworks & Analysis Packages -->
   <ItemGroup>
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
-    <PackageVersion Include="BenchmarkDotNet" Version="0.14.0" />
     <PackageVersion Include="FluentAssertions" Version="6.12.2" />
     <PackageVersion Include="FluentAssertions.Analyzers" Version="0.34.1"/>
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />

@@ -110,6 +110,8 @@ internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistr
     {
         // Test that explicit "Functions" configuration generates Functions code
         // even without Functions references
+        // Note: With Durable Functions v1.11.0+, only extension methods are generated,
+        // not [Function] definitions, as the runtime handles class-based tasks natively
         string code = @"
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
@@ -120,7 +122,7 @@ class MyActivity : TaskActivity<int, string>
     public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
 }";
 
-        // With explicit "Functions", we should get Functions code (Activity trigger function)
+        // With explicit "Functions" and version >= 1.11.0, we only get extension methods
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
@@ -131,28 +133,6 @@ class MyActivity : TaskActivity<int, string>
 public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
-}
-
-[Function(nameof(MyActivity))]
-public static async Task<string> MyActivity([ActivityTrigger] int input, string instanceId, FunctionContext executionContext)
-{
-    ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<MyActivity>(executionContext.InstanceServices);
-    TaskActivityContext context = new GeneratedActivityContext(""MyActivity"", instanceId);
-    object? result = await activity.RunAsync(context, input);
-    return (string)result!;
-}
-
-sealed class GeneratedActivityContext : TaskActivityContext
-{
-    public GeneratedActivityContext(TaskName name, string instanceId)
-    {
-        this.Name = name;
-        this.InstanceId = instanceId;
-    }
-
-    public override TaskName Name { get; }
-
-    public override string InstanceId { get; }
 }",
             isDurableFunctions: true);
 
@@ -170,6 +150,8 @@ sealed class GeneratedActivityContext : TaskActivityContext
     public Task ExplicitFunctionsMode_OrchestratorTest()
     {
         // Test that "Functions" mode generates orchestrator Functions code
+        // Note: With Durable Functions v1.11.0+, only extension methods are generated,
+        // not [Function] definitions, as the runtime handles class-based tasks natively
         string code = @"
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
@@ -183,15 +165,6 @@ class MyOrchestrator : TaskOrchestrator<int, string>
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: @"
-static readonly ITaskOrchestrator singletonMyOrchestrator = new MyOrchestrator();
-
-[Function(nameof(MyOrchestrator))]
-public static Task<string> MyOrchestrator([OrchestrationTrigger] TaskOrchestrationContext context)
-{
-    return singletonMyOrchestrator.RunAsync(context, context.GetInput<int>())
-        .ContinueWith(t => (string)(t.Result ?? default(string)!), TaskContinuationOptions.ExecuteSynchronously);
-}
-
 /// <summary>
 /// Schedules a new instance of the <see cref=""MyOrchestrator""/> orchestrator.
 /// </summary>
@@ -225,6 +198,8 @@ public static Task<string> CallMyOrchestratorAsync(
     public Task AutoMode_WithFunctionsReference_GeneratesFunctionsCode()
     {
         // Test that "Auto" mode falls back to auto-detection
+        // Note: With Durable Functions v1.11.0+, only extension methods are generated,
+        // not [Function] definitions, as the runtime handles class-based tasks natively
         string code = @"
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
@@ -245,28 +220,6 @@ class MyActivity : TaskActivity<int, string>
 public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
-}
-
-[Function(nameof(MyActivity))]
-public static async Task<string> MyActivity([ActivityTrigger] int input, string instanceId, FunctionContext executionContext)
-{
-    ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<MyActivity>(executionContext.InstanceServices);
-    TaskActivityContext context = new GeneratedActivityContext(""MyActivity"", instanceId);
-    object? result = await activity.RunAsync(context, input);
-    return (string)result!;
-}
-
-sealed class GeneratedActivityContext : TaskActivityContext
-{
-    public GeneratedActivityContext(TaskName name, string instanceId)
-    {
-        this.Name = name;
-        this.InstanceId = instanceId;
-    }
-
-    public override TaskName Name { get; }
-
-    public override string InstanceId { get; }
 }",
             isDurableFunctions: true);
 
@@ -323,6 +276,8 @@ internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistr
     public Task UnrecognizedMode_WithFunctionsReference_FallsBackToAutoDetection()
     {
         // Test that unrecognized values fall back to auto-detection
+        // Note: With Durable Functions v1.11.0+, only extension methods are generated,
+        // not [Function] definitions, as the runtime handles class-based tasks natively
         string code = @"
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
@@ -343,28 +298,6 @@ class MyActivity : TaskActivity<int, string>
 public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
-}
-
-[Function(nameof(MyActivity))]
-public static async Task<string> MyActivity([ActivityTrigger] int input, string instanceId, FunctionContext executionContext)
-{
-    ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<MyActivity>(executionContext.InstanceServices);
-    TaskActivityContext context = new GeneratedActivityContext(""MyActivity"", instanceId);
-    object? result = await activity.RunAsync(context, input);
-    return (string)result!;
-}
-
-sealed class GeneratedActivityContext : TaskActivityContext
-{
-    public GeneratedActivityContext(TaskName name, string instanceId)
-    {
-        this.Name = name;
-        this.InstanceId = instanceId;
-    }
-
-    public override TaskName Name { get; }
-
-    public override string InstanceId { get; }
 }",
             isDurableFunctions: true);
 
@@ -421,6 +354,8 @@ internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistr
     public Task NullProjectType_WithFunctionsReference_GeneratesFunctionsCode()
     {
         // Test that null projectType (default) with Functions reference falls back to auto-detection
+        // Note: With Durable Functions v1.11.0+, only extension methods are generated,
+        // not [Function] definitions, as the runtime handles class-based tasks natively
         string code = @"
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
@@ -441,28 +376,6 @@ class MyActivity : TaskActivity<int, string>
 public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
-}
-
-[Function(nameof(MyActivity))]
-public static async Task<string> MyActivity([ActivityTrigger] int input, string instanceId, FunctionContext executionContext)
-{
-    ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<MyActivity>(executionContext.InstanceServices);
-    TaskActivityContext context = new GeneratedActivityContext(""MyActivity"", instanceId);
-    object? result = await activity.RunAsync(context, input);
-    return (string)result!;
-}
-
-sealed class GeneratedActivityContext : TaskActivityContext
-{
-    public GeneratedActivityContext(TaskName name, string instanceId)
-    {
-        this.Name = name;
-        this.InstanceId = instanceId;
-    }
-
-    public override TaskName Name { get; }
-
-    public override string InstanceId { get; }
 }",
             isDurableFunctions: true);
 

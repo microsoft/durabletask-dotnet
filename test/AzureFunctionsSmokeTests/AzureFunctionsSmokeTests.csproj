@@ -10,9 +10,6 @@
     <!-- This is a smoke test application, not a unit test project -->
     <IsTestProject>false</IsTestProject>
     <IsPackable>false</IsPackable>
-    <!-- Disable SDK's source generation to allow reflection-based discovery of source-generated functions -->
-    <FunctionsEnableExecutorSourceGen>false</FunctionsEnableExecutorSourceGen>
-    <FunctionsEnableWorkerIndexing>false</FunctionsEnableWorkerIndexing>
   </PropertyGroup>
 
   <ItemGroup>

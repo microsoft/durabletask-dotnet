@@ -18,6 +18,7 @@
     <None Include="$(RepoRoot).gitignore" />
     <None Include="$(RepoRoot)azure-pipelines-release.yml" />
     <None Include="$(RepoRoot)Directory.Build.*" />
+    <None Include="$(RepoRoot)Directory.Packages.*" />
     <None Include="$(RepoRoot)*.md" />
     <None Include="$(RepoRoot)nuget.config" />
     <None Include="$(EngRoot)**" LinkBase="eng" />

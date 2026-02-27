@@ -59,9 +59,11 @@ builder.Services.AddDurableTaskWorker(workerBuilder =>
         tasks.AddActivityFunc<string, string>("GetWeather", (context, city) =>
         {
             // Simulate fetching weather data for a city.
+            // Use uint cast to avoid negative modulo results (Math.Abs(int.MinValue) overflows).
             string[] conditions = ["Sunny", "Cloudy", "Rainy", "Snowy", "Windy"];
-            string condition = conditions[Math.Abs(city.GetHashCode()) % conditions.Length];
-            int temperature = 15 + (Math.Abs(city.GetHashCode()) % 20);
+            uint hash = (uint)city.GetHashCode();
+            string condition = conditions[hash % conditions.Length];
+            int temperature = 15 + (int)(hash % 20);
             return $"{city}: {condition}, {temperature}°C";
         });
 

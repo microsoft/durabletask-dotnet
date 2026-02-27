@@ -217,6 +217,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override async Task SuspendInstanceAsync(
         string instanceId, string? reason = null, CancellationToken cancellation = default)
     {
+        Check.NotNullOrEmpty(instanceId);
         Check.NotEntity(this.options.EnableEntitySupport, instanceId);
 
         P.SuspendRequest request = new()
@@ -240,6 +241,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override async Task ResumeInstanceAsync(
         string instanceId, string? reason = null, CancellationToken cancellation = default)
     {
+        Check.NotNullOrEmpty(instanceId);
         Check.NotEntity(this.options.EnableEntitySupport, instanceId);
 
         P.ResumeRequest request = new()

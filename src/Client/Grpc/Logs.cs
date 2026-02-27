@@ -39,6 +39,18 @@ namespace Microsoft.DurableTask.Client.Grpc
         [LoggerMessage(EventId = 46, Level = LogLevel.Information, Message = "Purging instances with filter: {{ CreatedFrom = {createdFrom}, CreatedTo = {createdTo}, Statuses = {statuses} }}")]
         public static partial void PurgingInstances(this ILogger logger, DateTimeOffset? createdFrom, DateTimeOffset? createdTo, string? statuses);
 
+        [LoggerMessage(EventId = 47, Level = LogLevel.Information, Message = "Signaling entity '{instanceId}' with operation '{operationName}'.")]
+        public static partial void SignalingEntity(this ILogger logger, string instanceId, string operationName);
+
+        [LoggerMessage(EventId = 48, Level = LogLevel.Information, Message = "Getting entity '{instanceId}'.")]
+        public static partial void GettingEntity(this ILogger logger, string instanceId);
+
+        [LoggerMessage(EventId = 49, Level = LogLevel.Information, Message = "Querying entities with filter: {{ StartsWith = {startsWith}, LastModifiedFrom = {lastModifiedFrom}, LastModifiedTo = {lastModifiedTo} }}")]
+        public static partial void QueryingEntities(this ILogger logger, string? startsWith, DateTimeOffset? lastModifiedFrom, DateTimeOffset? lastModifiedTo);
+
+        [LoggerMessage(EventId = 50, Level = LogLevel.Information, Message = "Cleaning entity storage.")]
+        public static partial void CleaningEntityStorage(this ILogger logger);
+
         /// <summary>
         /// <see cref="PurgingInstances(ILogger, DateTimeOffset?, DateTimeOffset?, string?)" />.
         /// </summary>
@@ -49,17 +61,5 @@ namespace Microsoft.DurableTask.Client.Grpc
             string? statuses = filter?.Statuses is null ? null : string.Join("|", filter.Statuses);
             PurgingInstances(logger, filter?.CreatedFrom, filter?.CreatedTo, statuses);
         }
-
-        [LoggerMessage(EventId = 47, Level = LogLevel.Information, Message = "Signaling entity '{instanceId}' with operation '{operationName}'.")]
-        public static partial void SignalingEntity(this ILogger logger, string instanceId, string operationName);
-
-        [LoggerMessage(EventId = 48, Level = LogLevel.Information, Message = "Getting entity '{instanceId}'.")]
-        public static partial void GettingEntity(this ILogger logger, string instanceId);
-
-        [LoggerMessage(EventId = 50, Level = LogLevel.Information, Message = "Querying entities with filter: {{ StartsWith = {startsWith}, LastModifiedFrom = {lastModifiedFrom}, LastModifiedTo = {lastModifiedTo} }}")]
-        public static partial void QueryingEntities(this ILogger logger, string? startsWith, DateTimeOffset? lastModifiedFrom, DateTimeOffset? lastModifiedTo);
-
-        [LoggerMessage(EventId = 52, Level = LogLevel.Information, Message = "Cleaning entity storage.")]
-        public static partial void CleaningEntityStorage(this ILogger logger);
     }
 }

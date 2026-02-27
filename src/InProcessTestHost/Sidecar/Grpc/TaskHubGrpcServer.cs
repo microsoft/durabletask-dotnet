@@ -902,7 +902,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         {
             outputStream = this.workerToClientStream ??
                 // CA2201: Use specific exception types
-                throw new InvalidOperationException("TODO: No client is connected! Need to wait until a client connects before executing!");
+                throw new InvalidOperationException("No client is connected. Need to wait until a client connects before executing.");
         }
 
         // The gRPC channel can only handle one message at a time, so we need to serialize access to it.

@@ -31,7 +31,7 @@ public class ExecuteScheduleOperationOrchestrator : TaskOrchestrator<ScheduleOpe
         }
         catch (Exception ex)
         {
-            logger.ScheduleOperationError(scheduleId, input.OperationName, ex.Message, ex);
+            logger.ScheduleOperationError(scheduleId, input.OperationName, "Failed to execute schedule operation via orchestrator", ex);
             throw;
         }
     }

@@ -3,9 +3,6 @@
   
   <!-- Functions sample packages -->
   <ItemGroup>
-    <PackageVersion Update="coverlet.collector" Version="6.0.0" />
-    <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.0.13" />
-    <PackageVersion Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.16.2" />
   </ItemGroup>
 
   <!-- Durable sample packages -->
@@ -13,6 +10,12 @@
     <PackageVersion Include="Microsoft.DurableTask.Client.Grpc" Version="1.5.0" />
     <PackageVersion Include="Microsoft.DurableTask.Generators" Version="1.0.0-preview.1" />
     <PackageVersion Include="Microsoft.DurableTask.Worker.Grpc" Version="1.5.0" />
+  </ItemGroup>
+
+  <!-- OpenTelemetry packages -->
+  <ItemGroup>
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.0" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.0" />
   </ItemGroup>
 
 </Project>

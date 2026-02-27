@@ -18,10 +18,8 @@ using OpenTelemetry.Trace;
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
 // Read the DTS emulator connection string from configuration.
-// Default: "Endpoint=http://localhost:8080;Authentication=None;TaskHub=default"
 string connectionString = builder.Configuration.GetValue<string>("DURABLE_TASK_SCHEDULER_CONNECTION_STRING")
-    ?? "Endpoint=http://localhost:8080;Authentication=None;TaskHub=default";
-
+    ?? throw new InvalidOperationException("DURABLE_TASK_SCHEDULER_CONNECTION_STRING is not set.");
 // Configure OpenTelemetry tracing.
 // The Durable Task SDK automatically emits traces using the "Microsoft.DurableTask" ActivitySource.
 // We subscribe to that source and export traces to Jaeger via OTLP.

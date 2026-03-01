@@ -318,6 +318,8 @@ message SendEntityMessageAction {
         EntityLockRequestedEvent entityLockRequested = 3;
         EntityUnlockSentEvent entityUnlockSent = 4;
     }
+
+    TraceContext parentTraceContext = 5;
 }
 
 message OrchestratorAction {

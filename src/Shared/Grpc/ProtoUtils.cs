@@ -414,6 +414,8 @@ static class ProtoUtils
                             sendAction,
                             out string requestId);
 
+                        sendAction.ParentTraceContext = CreateTraceContext();
+
                         entityConversionState.EntityRequestIds.Add(requestId);
 
                         switch (sendAction.EntityMessageTypeCase)
@@ -1054,7 +1056,7 @@ static class ProtoUtils
             case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.StringValue:
                 string stringValue = value.StringValue;
 
-                // If the value starts with the 'dt:' prefix, it may represent a DateTime value — attempt to parse it.
+                // If the value starts with the 'dt:' prefix, it may represent a DateTime value ï¿½ attempt to parse it.
                 if (stringValue.StartsWith("dt:", StringComparison.Ordinal))
                 {
                     if (DateTime.TryParse(stringValue[3..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime date))
@@ -1063,7 +1065,7 @@ static class ProtoUtils
                     }
                 }
 
-                // If the value starts with the 'dto:' prefix, it may represent a DateTime value — attempt to parse it.
+                // If the value starts with the 'dto:' prefix, it may represent a DateTime value ï¿½ attempt to parse it.
                 if (stringValue.StartsWith("dto:", StringComparison.Ordinal))
                 {
                     if (DateTimeOffset.TryParse(stringValue[4..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTimeOffset date))

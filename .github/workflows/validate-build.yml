@@ -12,6 +12,9 @@ on:
       - 'feature/**'
     paths-ignore: [ '**.md' ]
 
+permissions:
+  contents: read
+
 env:
   solution: Microsoft.DurableTask.sln
   config: release

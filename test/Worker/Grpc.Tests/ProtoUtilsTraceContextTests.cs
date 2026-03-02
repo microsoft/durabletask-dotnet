@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using DurableTask.Core;
 using DurableTask.Core.Command;
+using DurableTask.Core.Entities.OperationFormat;
 using Newtonsoft.Json;
 using P = Microsoft.DurableTask.Protobuf;
 
@@ -267,5 +268,111 @@ public class ProtoUtilsTraceContextTests
 
         ActivitySource.AddActivityListener(listener);
         return listener;
+    }
+
+    [Fact]
+    public void ToEntityBatchRequest_SignalEntity_ExtractsTraceContext()
+    {
+        // Arrange
+        string traceParent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
+        string traceState = "vendor=value";
+
+        P.EntityRequest entityRequest = new()
+        {
+            InstanceId = "@counter@myKey",
+            OperationRequests =
+            {
+                new P.HistoryEvent
+                {
+                    EntityOperationSignaled = new P.EntityOperationSignaledEvent
+                    {
+                        RequestId = Guid.NewGuid().ToString(),
+                        Operation = "increment",
+                        ParentTraceContext = new P.TraceContext
+                        {
+                            TraceParent = traceParent,
+                            TraceState = traceState,
+                        },
+                    },
+                },
+            },
+        };
+
+        // Act
+        entityRequest.ToEntityBatchRequest(out EntityBatchRequest batchRequest, out _);
+
+        // Assert
+        batchRequest.Operations.Should().ContainSingle();
+        batchRequest.Operations[0].TraceContext.Should().NotBeNull();
+        batchRequest.Operations[0].TraceContext!.TraceParent.Should().Be(traceParent);
+        batchRequest.Operations[0].TraceContext!.TraceState.Should().Be(traceState);
+    }
+
+    [Fact]
+    public void ToEntityBatchRequest_CallEntity_ExtractsTraceContext()
+    {
+        // Arrange
+        string traceParent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
+        string traceState = "vendor=value";
+
+        P.EntityRequest entityRequest = new()
+        {
+            InstanceId = "@counter@myKey",
+            OperationRequests =
+            {
+                new P.HistoryEvent
+                {
+                    EntityOperationCalled = new P.EntityOperationCalledEvent
+                    {
+                        RequestId = Guid.NewGuid().ToString(),
+                        Operation = "get",
+                        ParentInstanceId = "parent-instance",
+                        ParentExecutionId = "parent-exec",
+                        ParentTraceContext = new P.TraceContext
+                        {
+                            TraceParent = traceParent,
+                            TraceState = traceState,
+                        },
+                    },
+                },
+            },
+        };
+
+        // Act
+        entityRequest.ToEntityBatchRequest(out EntityBatchRequest batchRequest, out _);
+
+        // Assert
+        batchRequest.Operations.Should().ContainSingle();
+        batchRequest.Operations[0].TraceContext.Should().NotBeNull();
+        batchRequest.Operations[0].TraceContext!.TraceParent.Should().Be(traceParent);
+        batchRequest.Operations[0].TraceContext!.TraceState.Should().Be(traceState);
+    }
+
+    [Fact]
+    public void ToEntityBatchRequest_NoTraceContext_LeavesTraceContextNull()
+    {
+        // Arrange
+        P.EntityRequest entityRequest = new()
+        {
+            InstanceId = "@counter@myKey",
+            OperationRequests =
+            {
+                new P.HistoryEvent
+                {
+                    EntityOperationSignaled = new P.EntityOperationSignaledEvent
+                    {
+                        RequestId = Guid.NewGuid().ToString(),
+                        Operation = "increment",
+                    },
+                },
+            },
+        };
+
+        // Act
+        entityRequest.ToEntityBatchRequest(out EntityBatchRequest batchRequest, out _);
+
+        // Assert
+        batchRequest.Operations.Should().ContainSingle();
+        batchRequest.Operations[0].TraceContext.Should().BeNull();
     }
 }

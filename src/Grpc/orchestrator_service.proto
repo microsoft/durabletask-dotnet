@@ -182,6 +182,7 @@ message EntityOperationSignaledEvent {
     google.protobuf.Timestamp scheduledTime = 3;
     google.protobuf.StringValue input = 4;
     google.protobuf.StringValue targetInstanceId = 5; // used only within histories, null in messages
+    TraceContext parentTraceContext = 6;
 }
 
 message EntityOperationCalledEvent {
@@ -192,6 +193,7 @@ message EntityOperationCalledEvent {
     google.protobuf.StringValue parentInstanceId = 5;  // used only within messages, null in histories
     google.protobuf.StringValue parentExecutionId = 6;  // used only within messages, null in histories
     google.protobuf.StringValue targetInstanceId = 7; // used only within histories, null in messages
+    TraceContext parentTraceContext = 8;
 }
 
 message EntityLockRequestedEvent {

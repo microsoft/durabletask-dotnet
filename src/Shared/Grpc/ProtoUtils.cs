@@ -638,6 +638,11 @@ static class ProtoUtils
                     Id = Guid.Parse(op.EntityOperationSignaled.RequestId),
                     Operation = op.EntityOperationSignaled.Operation,
                     Input = op.EntityOperationSignaled.Input,
+                    TraceContext = op.EntityOperationSignaled.ParentTraceContext != null
+                        ? new DistributedTraceContext(
+                            op.EntityOperationSignaled.ParentTraceContext.TraceParent,
+                            op.EntityOperationSignaled.ParentTraceContext.TraceState)
+                        : null,
                 });
                 operationInfos.Add(new P.OperationInfo
                 {
@@ -652,6 +657,11 @@ static class ProtoUtils
                     Id = Guid.Parse(op.EntityOperationCalled.RequestId),
                     Operation = op.EntityOperationCalled.Operation,
                     Input = op.EntityOperationCalled.Input,
+                    TraceContext = op.EntityOperationCalled.ParentTraceContext != null
+                        ? new DistributedTraceContext(
+                            op.EntityOperationCalled.ParentTraceContext.TraceParent,
+                            op.EntityOperationCalled.ParentTraceContext.TraceState)
+                        : null,
                 });
                 operationInfos.Add(new P.OperationInfo
                 {

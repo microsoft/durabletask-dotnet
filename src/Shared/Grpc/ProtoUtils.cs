@@ -414,9 +414,8 @@ static class ProtoUtils
                             sendAction,
                             out string requestId);
 
-                        sendAction.ParentTraceContext = CreateTraceContext();
-
                         entityConversionState.EntityRequestIds.Add(requestId);
+                        sendAction.ParentTraceContext = CreateTraceContext();
 
                         switch (sendAction.EntityMessageTypeCase)
                         {
@@ -638,10 +637,8 @@ static class ProtoUtils
                     Id = Guid.Parse(op.EntityOperationSignaled.RequestId),
                     Operation = op.EntityOperationSignaled.Operation,
                     Input = op.EntityOperationSignaled.Input,
-                    TraceContext = op.EntityOperationSignaled.ParentTraceContext != null
-                        ? new DistributedTraceContext(
-                            op.EntityOperationSignaled.ParentTraceContext.TraceParent,
-                            op.EntityOperationSignaled.ParentTraceContext.TraceState)
+                    TraceContext = op.EntityOperationSignaled.ParentTraceContext is { } signalTc
+                        ? new DistributedTraceContext(signalTc.TraceParent, signalTc.TraceState)
                         : null,
                 });
                 operationInfos.Add(new P.OperationInfo
@@ -657,10 +654,8 @@ static class ProtoUtils
                     Id = Guid.Parse(op.EntityOperationCalled.RequestId),
                     Operation = op.EntityOperationCalled.Operation,
                     Input = op.EntityOperationCalled.Input,
-                    TraceContext = op.EntityOperationCalled.ParentTraceContext != null
-                        ? new DistributedTraceContext(
-                            op.EntityOperationCalled.ParentTraceContext.TraceParent,
-                            op.EntityOperationCalled.ParentTraceContext.TraceState)
+                    TraceContext = op.EntityOperationCalled.ParentTraceContext is { } calledTc
+                        ? new DistributedTraceContext(calledTc.TraceParent, calledTc.TraceState)
                         : null,
                 });
                 operationInfos.Add(new P.OperationInfo
@@ -1066,7 +1061,7 @@ static class ProtoUtils
             case Google.Protobuf.WellKnownTypes.Value.KindOneofCase.StringValue:
                 string stringValue = value.StringValue;
 
-                // If the value starts with the 'dt:' prefix, it may represent a DateTime value - attempt to parse it.
+                // If the value starts with the 'dt:' prefix, it may represent a DateTime value — attempt to parse it.
                 if (stringValue.StartsWith("dt:", StringComparison.Ordinal))
                 {
                     if (DateTime.TryParse(stringValue[3..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime date))
@@ -1075,7 +1070,7 @@ static class ProtoUtils
                     }
                 }
 
-                // If the value starts with the 'dto:' prefix, it may represent a DateTime value - attempt to parse it.
+                // If the value starts with the 'dto:' prefix, it may represent a DateTime value — attempt to parse it.
                 if (stringValue.StartsWith("dto:", StringComparison.Ordinal))
                 {
                     if (DateTimeOffset.TryParse(stringValue[4..], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTimeOffset date))

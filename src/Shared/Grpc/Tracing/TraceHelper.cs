@@ -255,6 +255,51 @@ static class TraceHelper
     }
 
     /// <summary>
+    /// Emits a new trace activity for an entity operation that successfully completes.
+    /// </summary>
+    /// <param name="instanceId">The ID of the associated orchestration.</param>
+    /// <param name="historyEvent">The associated <see cref="P.HistoryEvent" />.</param>
+    /// <param name="calledEvent">The associated <see cref="P.EntityOperationCalledEvent"/>.</param>
+    public static void EmitTraceActivityForEntityOperationCompleted(
+        string? instanceId,
+        P.HistoryEvent? historyEvent,
+        P.EntityOperationCalledEvent? calledEvent)
+    {
+        Activity? activity = StartTraceActivityForSchedulingEntityOperation(instanceId, historyEvent, calledEvent);
+
+        activity?.Dispose();
+    }
+
+    /// <summary>
+    /// Emits a new trace activity for an entity operation that fails.
+    /// </summary>
+    /// <param name="instanceId">The ID of the associated orchestration.</param>
+    /// <param name="historyEvent">The associated <see cref="P.HistoryEvent" />.</param>
+    /// <param name="calledEvent">The associated <see cref="P.EntityOperationCalledEvent"/>.</param>
+    /// <param name="failedEvent">The associated <see cref="P.EntityOperationFailedEvent"/>.</param>
+    public static void EmitTraceActivityForEntityOperationFailed(
+        string? instanceId,
+        P.HistoryEvent? historyEvent,
+        P.EntityOperationCalledEvent? calledEvent,
+        P.EntityOperationFailedEvent? failedEvent)
+    {
+        Activity? activity = StartTraceActivityForSchedulingEntityOperation(instanceId, historyEvent, calledEvent);
+
+        if (activity is null)
+        {
+            return;
+        }
+
+        if (failedEvent != null)
+        {
+            string statusDescription = failedEvent.FailureDetails?.ErrorMessage ?? "Unspecified entity operation failure";
+            activity.SetStatus(ActivityStatusCode.Error, statusDescription);
+        }
+
+        activity.Dispose();
+    }
+
+    /// <summary>
     /// Emits a new trace activity for sub-orchestration execution when the sub-orchestration
     /// completes successfully.
     /// </summary>
@@ -456,6 +501,65 @@ static class TraceHelper
         if (!string.IsNullOrEmpty(taskScheduledEvent.Version))
         {
             newActivity.AddTag(Schema.Task.Version, taskScheduledEvent.Version);
+        }
+
+        return newActivity;
+    }
+
+    /// <summary>
+    /// Starts a new trace activity for scheduling an entity operation. Represents the time between
+    /// enqueuing the entity operation message and it completing.
+    /// </summary>
+    /// <param name="instanceId">The ID of the associated orchestration.</param>
+    /// <param name="historyEvent">The associated <see cref="P.HistoryEvent" />.</param>
+    /// <param name="calledEvent">The associated <see cref="P.EntityOperationCalledEvent"/>.</param>
+    /// <returns>
+    /// Returns a newly started <see cref="Activity"/> with entity operation metadata.
+    /// </returns>
+    static Activity? StartTraceActivityForSchedulingEntityOperation(
+        string? instanceId,
+        P.HistoryEvent? historyEvent,
+        P.EntityOperationCalledEvent? calledEvent)
+    {
+        if (calledEvent == null)
+        {
+            return null;
+        }
+
+        string entityName = historyEvent?.EntityOperationCalled?.TargetInstanceId ?? string.Empty;
+        string spanName = string.IsNullOrEmpty(calledEvent.Operation)
+            ? $"{TraceActivityConstants.EntityOperation}:{entityName}"
+            : $"{TraceActivityConstants.EntityOperation}:{entityName}:{calledEvent.Operation}";
+
+        Activity? newActivity = ActivityTraceSource.StartActivity(
+            spanName,
+            kind: ActivityKind.Client,
+            startTime: historyEvent?.Timestamp?.ToDateTimeOffset() ?? default,
+            parentContext: Activity.Current?.Context ?? default);
+
+        if (newActivity == null)
+        {
+            return null;
+        }
+
+        if (calledEvent.ParentTraceContext != null)
+        {
+            if (ActivityContext.TryParse(
+                    calledEvent.ParentTraceContext.TraceParent,
+                    calledEvent.ParentTraceContext?.TraceState,
+                    out ActivityContext parentContext))
+            {
+                newActivity.SetSpanId(parentContext.SpanId.ToString());
+            }
+        }
+
+        newActivity.AddTag(Schema.Task.Type, TraceActivityConstants.EntityOperation);
+        newActivity.AddTag(Schema.Task.Name, entityName);
+        newActivity.AddTag(Schema.Task.InstanceId, instanceId);
+
+        if (!string.IsNullOrEmpty(calledEvent.Operation))
+        {
+            newActivity.AddTag("durabletask.entity.operation", calledEvent.Operation);
         }
 
         return newActivity;

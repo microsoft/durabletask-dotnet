@@ -502,6 +502,14 @@ sealed partial class GrpcDurableTaskWorker
                     return taskScheduledEvent;
                 }
 
+                P.HistoryEvent? GetEntityOperationCalledEvent(string requestId)
+                {
+                    return request
+                        .PastEvents
+                        .Where(x => x.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.EntityOperationCalled)
+                        .FirstOrDefault(x => x.EntityOperationCalled.RequestId == requestId);
+                }
+
                 foreach (var newEvent in request.NewEvents)
                 {
                     switch (newEvent.EventTypeCase)
@@ -565,6 +573,33 @@ sealed partial class GrpcDurableTaskWorker
                                 newEvent.Timestamp.ToDateTime(),
                                 newEvent.TimerFired);
                             break;
+
+                        case P.HistoryEvent.EventTypeOneofCase.EntityOperationCompleted:
+                            {
+                                P.HistoryEvent? entityCalledEvent =
+                                    GetEntityOperationCalledEvent(
+                                        newEvent.EntityOperationCompleted.RequestId);
+
+                                TraceHelper.EmitTraceActivityForEntityOperationCompleted(
+                                    request.InstanceId,
+                                    entityCalledEvent,
+                                    entityCalledEvent?.EntityOperationCalled);
+                                break;
+                            }
+
+                        case P.HistoryEvent.EventTypeOneofCase.EntityOperationFailed:
+                            {
+                                P.HistoryEvent? entityCalledEvent =
+                                    GetEntityOperationCalledEvent(
+                                        newEvent.EntityOperationFailed.RequestId);
+
+                                TraceHelper.EmitTraceActivityForEntityOperationFailed(
+                                    request.InstanceId,
+                                    entityCalledEvent,
+                                    entityCalledEvent?.EntityOperationCalled,
+                                    newEvent.EntityOperationFailed);
+                                break;
+                            }
                     }
                 }
             }

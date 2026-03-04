@@ -202,7 +202,7 @@ static class TraceHelper
 
         if (!string.IsNullOrEmpty(operationName))
         {
-            newActivity.SetTag("durabletask.entity.operation", operationName);
+            newActivity.SetTag(Schema.Task.EntityOperationName, operationName);
         }
 
         return newActivity;
@@ -526,7 +526,18 @@ static class TraceHelper
             return null;
         }
 
-        string entityName = historyEvent?.EntityOperationCalled?.TargetInstanceId ?? string.Empty;
+        string targetInstanceId = historyEvent?.EntityOperationCalled?.TargetInstanceId ?? string.Empty;
+
+        // Extract entity name from instance ID (format: "@name@key")
+        string entityName = targetInstanceId;
+        if (targetInstanceId.Length > 1 && targetInstanceId[0] == '@')
+        {
+            int secondAt = targetInstanceId.IndexOf('@', 1);
+            if (secondAt > 1)
+            {
+                entityName = targetInstanceId.Substring(1, secondAt - 1);
+            }
+        }
         string spanName = string.IsNullOrEmpty(calledEvent.Operation)
             ? $"{TraceActivityConstants.EntityOperation}:{entityName}"
             : $"{TraceActivityConstants.EntityOperation}:{entityName}:{calledEvent.Operation}";
@@ -542,15 +553,13 @@ static class TraceHelper
             return null;
         }
 
-        if (calledEvent.ParentTraceContext != null)
+        if (calledEvent.ParentTraceContext != null
+            && ActivityContext.TryParse(
+                calledEvent.ParentTraceContext.TraceParent,
+                calledEvent.ParentTraceContext?.TraceState,
+                out ActivityContext parentContext))
         {
-            if (ActivityContext.TryParse(
-                    calledEvent.ParentTraceContext.TraceParent,
-                    calledEvent.ParentTraceContext?.TraceState,
-                    out ActivityContext parentContext))
-            {
-                newActivity.SetSpanId(parentContext.SpanId.ToString());
-            }
+            newActivity.SetSpanId(parentContext.SpanId.ToString());
         }
 
         newActivity.AddTag(Schema.Task.Type, TraceActivityConstants.EntityOperation);
@@ -559,7 +568,7 @@ static class TraceHelper
 
         if (!string.IsNullOrEmpty(calledEvent.Operation))
         {
-            newActivity.AddTag("durabletask.entity.operation", calledEvent.Operation);
+            newActivity.AddTag(Schema.Task.EntityOperationName, calledEvent.Operation);
         }
 
         return newActivity;

@@ -900,7 +900,10 @@ sealed partial class GrpcDurableTaskWorker
             var coreEntityId = DTCore.Entities.EntityId.FromString(batchRequest.InstanceId!);
             EntityId entityId = new(coreEntityId.Name, coreEntityId.Key);
 
-            // Start a trace span for entity operation execution using the first operation's trace context.
+            // Start a Server trace span for entity operation execution using the first operation's
+            // trace context. In multi-operation batches, only the first operation's trace context is
+            // used as the parent. This is acceptable because entity batches are typically single-operation,
+            // and individual Client spans are emitted per-operation in the orchestrator replay path.
             OperationRequest? firstOp = batchRequest.Operations?.FirstOrDefault();
             using Activity? traceActivity = TraceHelper.StartTraceActivityForEntityOperation(
                 entityId.Name,

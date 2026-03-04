@@ -900,17 +900,28 @@ sealed partial class GrpcDurableTaskWorker
             var coreEntityId = DTCore.Entities.EntityId.FromString(batchRequest.InstanceId!);
             EntityId entityId = new(coreEntityId.Name, coreEntityId.Key);
 
-            // Start a Server trace span for entity operation execution using the first operation's
-            // trace context. In multi-operation batches, only the first operation's trace context is
-            // used as the parent. This is acceptable because entity batches are typically single-operation,
-            // and individual Client spans are emitted per-operation in the orchestrator replay path.
-            OperationRequest? firstOp = batchRequest.Operations?.FirstOrDefault();
-            using Activity? traceActivity = TraceHelper.StartTraceActivityForEntityOperation(
-                entityId.Name,
-                firstOp?.Operation,
-                batchRequest.InstanceId!,
-                firstOp?.TraceContext?.TraceParent,
-                firstOp?.TraceContext?.TraceState);
+            // Start a Server trace span for each entity operation in the batch.
+            // Each operation may come from a different orchestration with its own trace context,
+            // so we create individual spans to preserve correct parent-child relationships.
+            List<Activity>? traceActivities = null;
+            if (batchRequest.Operations is { Count: > 0 })
+            {
+                foreach (OperationRequest op in batchRequest.Operations)
+                {
+                    Activity? activity = TraceHelper.StartTraceActivityForEntityOperation(
+                        entityId.Name,
+                        op.Operation,
+                        batchRequest.InstanceId!,
+                        op.TraceContext?.TraceParent,
+                        op.TraceContext?.TraceState);
+
+                    if (activity != null)
+                    {
+                        traceActivities ??= [];
+                        traceActivities.Add(activity);
+                    }
+                }
+            }
 
             TaskName name = new(entityId.Name);
 
@@ -961,7 +972,11 @@ sealed partial class GrpcDurableTaskWorker
                     FailureDetails = new FailureDetails(frameworkException),
                 };
 
-                traceActivity?.SetStatus(ActivityStatusCode.Error, frameworkException.Message);
+                traceActivities?.ForEach(a => a.SetStatus(ActivityStatusCode.Error, frameworkException.Message));
+            }
+            finally
+            {
+                traceActivities?.ForEach(a => a.Dispose());
             }
 
             P.EntityBatchResult response = batchResult.ToEntityBatchResult(

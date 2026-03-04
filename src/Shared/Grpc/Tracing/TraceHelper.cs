@@ -157,6 +157,58 @@ static class TraceHelper
     }
 
     /// <summary>
+    /// Starts a new trace activity for executing an entity operation.
+    /// </summary>
+    /// <param name="entityName">The name of the entity.</param>
+    /// <param name="operationName">The name of the operation being executed.</param>
+    /// <param name="instanceId">The instance ID of the entity.</param>
+    /// <param name="traceParent">The W3C traceparent header value from the parent orchestration.</param>
+    /// <param name="traceState">The W3C tracestate header value from the parent orchestration.</param>
+    /// <returns>
+    /// Returns a newly started <see cref="Activity"/> with entity operation metadata, or null if tracing is not enabled.
+    /// </returns>
+    public static Activity? StartTraceActivityForEntityOperation(
+        string entityName,
+        string? operationName,
+        string instanceId,
+        string? traceParent,
+        string? traceState)
+    {
+        if (traceParent is null || !ActivityContext.TryParse(
+                traceParent,
+                traceState,
+                out ActivityContext activityContext))
+        {
+            return null;
+        }
+
+        string spanName = string.IsNullOrEmpty(operationName)
+            ? $"{TraceActivityConstants.EntityOperation}:{entityName}"
+            : $"{TraceActivityConstants.EntityOperation}:{entityName}:{operationName}";
+
+        Activity? newActivity = ActivityTraceSource.StartActivity(
+            spanName,
+            kind: ActivityKind.Server,
+            parentContext: activityContext);
+
+        if (newActivity == null)
+        {
+            return null;
+        }
+
+        newActivity.SetTag(Schema.Task.Type, TraceActivityConstants.EntityOperation);
+        newActivity.SetTag(Schema.Task.Name, entityName);
+        newActivity.SetTag(Schema.Task.InstanceId, instanceId);
+
+        if (!string.IsNullOrEmpty(operationName))
+        {
+            newActivity.SetTag("durabletask.entity.operation", operationName);
+        }
+
+        return newActivity;
+    }
+
+    /// <summary>
     /// Emits a new trace activity for a (task) activity that successfully completes.
     /// </summary>
     /// <param name="instanceId">The ID of the associated orchestration.</param>

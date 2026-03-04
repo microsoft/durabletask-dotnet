@@ -865,6 +865,15 @@ sealed partial class GrpcDurableTaskWorker
             var coreEntityId = DTCore.Entities.EntityId.FromString(batchRequest.InstanceId!);
             EntityId entityId = new(coreEntityId.Name, coreEntityId.Key);
 
+            // Start a trace span for entity operation execution using the first operation's trace context.
+            OperationRequest? firstOp = batchRequest.Operations?.FirstOrDefault();
+            using Activity? traceActivity = TraceHelper.StartTraceActivityForEntityOperation(
+                entityId.Name,
+                firstOp?.Operation,
+                batchRequest.InstanceId!,
+                firstOp?.TraceContext?.TraceParent,
+                firstOp?.TraceContext?.TraceState);
+
             TaskName name = new(entityId.Name);
 
             EntityBatchResult? batchResult;
@@ -913,6 +922,8 @@ sealed partial class GrpcDurableTaskWorker
                 {
                     FailureDetails = new FailureDetails(frameworkException),
                 };
+
+                traceActivity?.SetStatus(ActivityStatusCode.Error, frameworkException.Message);
             }
 
             P.EntityBatchResult response = batchResult.ToEntityBatchResult(

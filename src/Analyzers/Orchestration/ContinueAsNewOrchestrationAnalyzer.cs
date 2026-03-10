@@ -6,6 +6,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Operations;
 using static Microsoft.DurableTask.Analyzers.Orchestration.ContinueAsNewOrchestrationAnalyzer;
 
 namespace Microsoft.DurableTask.Analyzers.Orchestration;
@@ -16,7 +17,7 @@ namespace Microsoft.DurableTask.Analyzers.Orchestration;
 /// This pattern can lead to unbounded history growth.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
-public class ContinueAsNewOrchestrationAnalyzer : OrchestrationAnalyzer<ContinueAsNewOrchestrationVisitor>
+public sealed class ContinueAsNewOrchestrationAnalyzer : OrchestrationAnalyzer<ContinueAsNewOrchestrationVisitor>
 {
     /// <summary>
     /// Diagnostic ID supported for the analyzer.
@@ -43,8 +44,20 @@ public class ContinueAsNewOrchestrationAnalyzer : OrchestrationAnalyzer<Continue
     public sealed class ContinueAsNewOrchestrationVisitor : MethodProbeOrchestrationVisitor
     {
         /// <inheritdoc/>
+        public override bool Initialize()
+        {
+            return this.KnownTypeSymbols.TaskOrchestrationContext is not null;
+        }
+
+        /// <inheritdoc/>
         protected override void VisitMethod(SemanticModel semanticModel, SyntaxNode methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
         {
+            IOperation? methodOperation = semanticModel.GetOperation(methodSyntax);
+            if (methodOperation is null)
+            {
+                return;
+            }
+
             foreach (WhileStatementSyntax whileStatement in methodSyntax.DescendantNodes().OfType<WhileStatementSyntax>())
             {
                 if (!IsAlwaysTrueCondition(whileStatement.Condition))
@@ -52,17 +65,31 @@ public class ContinueAsNewOrchestrationAnalyzer : OrchestrationAnalyzer<Continue
                     continue;
                 }
 
-                bool hasHistoryGrowingCall = ContainsIdentifier(whileStatement, "WaitForExternalEvent")
-                    || ContainsIdentifier(whileStatement, "CallSubOrchestratorAsync");
+                bool hasHistoryGrowingCall = false;
+                bool hasContinueAsNew = false;
 
-                if (!hasHistoryGrowingCall)
+                foreach (IInvocationOperation invocation in methodOperation.Descendants().OfType<IInvocationOperation>())
                 {
-                    continue;
+                    if (!whileStatement.Span.Contains(invocation.Syntax.Span))
+                    {
+                        continue;
+                    }
+
+                    IMethodSymbol targetMethod = invocation.TargetMethod;
+
+                    if (targetMethod.IsEqualTo(this.KnownTypeSymbols.TaskOrchestrationContext, "WaitForExternalEvent") ||
+                        targetMethod.IsEqualTo(this.KnownTypeSymbols.TaskOrchestrationContext, "CallSubOrchestratorAsync"))
+                    {
+                        hasHistoryGrowingCall = true;
+                    }
+
+                    if (targetMethod.IsEqualTo(this.KnownTypeSymbols.TaskOrchestrationContext, "ContinueAsNew"))
+                    {
+                        hasContinueAsNew = true;
+                    }
                 }
 
-                bool hasContinueAsNew = ContainsIdentifier(whileStatement, "ContinueAsNew");
-
-                if (!hasContinueAsNew)
+                if (hasHistoryGrowingCall && !hasContinueAsNew)
                 {
                     reportDiagnostic(Diagnostic.Create(Rule, whileStatement.WhileKeyword.GetLocation(), orchestrationName));
                 }
@@ -73,13 +100,6 @@ public class ContinueAsNewOrchestrationAnalyzer : OrchestrationAnalyzer<Continue
         {
             return condition is LiteralExpressionSyntax literal
                 && literal.IsKind(SyntaxKind.TrueLiteralExpression);
-        }
-
-        static bool ContainsIdentifier(SyntaxNode node, string identifierName)
-        {
-            return node.DescendantNodes()
-                .OfType<IdentifierNameSyntax>()
-                .Any(id => string.Equals(id.Identifier.Text, identifierName, StringComparison.Ordinal));
         }
     }
 }

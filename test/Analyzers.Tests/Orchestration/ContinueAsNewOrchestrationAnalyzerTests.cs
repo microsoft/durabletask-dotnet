@@ -18,7 +18,7 @@ public class ContinueAsNewOrchestrationAnalyzerTests
         await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
     }
 
-    [Fact(Skip = "Requires test infrastructure update to resolve TaskOrchestrationContext symbols correctly in CommonAssemblies")]
+    [Fact]
     public async Task TaskOrchestratorWhileTrueWithExternalEventNoContinueAsNew_ReportsDiagnostic()
     {
         string code = Wrapper.WrapTaskOrchestrator(@"
@@ -26,7 +26,7 @@ public class MyOrchestrator : TaskOrchestrator<object, object>
 {
     public override async Task<object> RunAsync(TaskOrchestrationContext context, object input)
     {
-        while (true)
+        {|#0:while|} (true)
         {
             var item = await context.WaitForExternalEvent<string>(""new-work"");
             await context.CallActivityAsync<string>(""ProcessItem"", item);
@@ -34,12 +34,12 @@ public class MyOrchestrator : TaskOrchestrator<object, object>
     }
 }
 ");
-        DiagnosticResult expected = BuildDiagnostic().WithArguments("MyOrchestrator");
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("MyOrchestrator");
 
-        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, test => test.CompilerDiagnostics = Microsoft.CodeAnalysis.Testing.CompilerDiagnostics.None, expected);
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
     }
 
-    [Fact(Skip = "Requires test infrastructure update to resolve TaskOrchestrationContext symbols correctly in CommonAssemblies")]
+    [Fact]
     public async Task TaskOrchestratorWhileTrueWithSubOrchestratorNoContinueAsNew_ReportsDiagnostic()
     {
         string code = Wrapper.WrapTaskOrchestrator(@"
@@ -47,7 +47,7 @@ public class MyOrchestrator : TaskOrchestrator<object, object>
 {
     public override async Task<object> RunAsync(TaskOrchestrationContext context, object input)
     {
-        while (true)
+        {|#0:while|} (true)
         {
             var item = await context.WaitForExternalEvent<string>(""new-work"");
             await context.CallSubOrchestratorAsync<string>(""ProcessItem"", item);
@@ -55,9 +55,9 @@ public class MyOrchestrator : TaskOrchestrator<object, object>
     }
 }
 ");
-        DiagnosticResult expected = BuildDiagnostic().WithArguments("MyOrchestrator");
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("MyOrchestrator");
 
-        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, test => test.CompilerDiagnostics = Microsoft.CodeAnalysis.Testing.CompilerDiagnostics.None, expected);
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
     }
 
     [Fact]
@@ -146,23 +146,23 @@ public class MyOrchestrator : TaskOrchestrator<object, object>
         await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
     }
 
-    [Fact(Skip = "Requires test infrastructure update to resolve TaskOrchestrationContext symbols correctly in CommonAssemblies")]
+    [Fact]
     public async Task DurableFunctionWhileTrueWithExternalEventNoContinueAsNew_ReportsDiagnostic()
     {
         string code = Wrapper.WrapDurableFunctionOrchestration(@"
 [Function(""Run"")]
 async Task<object> Method([OrchestrationTrigger] TaskOrchestrationContext context)
 {
-    while (true)
+    {|#0:while|} (true)
     {
         var item = await context.WaitForExternalEvent<string>(""new-work"");
         await context.CallActivityAsync<string>(""ProcessItem"", item);
     }
 }
 ");
-        DiagnosticResult expected = BuildDiagnostic().WithArguments("Run");
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Run");
 
-        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, test => test.CompilerDiagnostics = Microsoft.CodeAnalysis.Testing.CompilerDiagnostics.None, expected);
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
     }
 
     static DiagnosticResult BuildDiagnostic()

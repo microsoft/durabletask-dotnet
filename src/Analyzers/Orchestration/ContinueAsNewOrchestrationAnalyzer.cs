@@ -45,6 +45,9 @@ public sealed class ContinueAsNewOrchestrationAnalyzer : OrchestrationAnalyzer<C
     /// Visitor that inspects orchestration methods for unbounded loops without ContinueAsNew.
     /// Only direct invocations within the loop body are considered; calls made through helper
     /// methods invoked from the loop are not tracked back to the loop context.
+    /// Note: invocations inside lambdas or local functions declared within the loop body are
+    /// included by span containment, which may cause false negatives if ContinueAsNew appears
+    /// only inside such a nested function.
     /// </summary>
     public sealed class ContinueAsNewOrchestrationVisitor : MethodProbeOrchestrationVisitor
     {

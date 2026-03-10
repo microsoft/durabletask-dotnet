@@ -60,7 +60,7 @@ public class MyOrchestrator : TaskOrchestrator<object, object>
     }
 
     [Fact]
-    public async Task TaskOrchestratorWhileTrueWithOnlyActivitiesNoContinueAsNew_ReportsDiagnostic()
+    public async Task TaskOrchestratorWhileTrueWithContextCallsNoContinueAsNew_ReportsDiagnostic()
     {
         string code = Wrapper.WrapTaskOrchestrator(@"
 public class MyOrchestrator : TaskOrchestrator<object, object>

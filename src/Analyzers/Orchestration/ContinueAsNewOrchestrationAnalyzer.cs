@@ -36,7 +36,7 @@ public sealed class ContinueAsNewOrchestrationAnalyzer : OrchestrationAnalyzer<C
         AnalyzersCategories.Orchestration,
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        helpLinkUri: "https://go.microsoft.com/fwlink/?linkid=2346202");
+        helpLinkUri: "https://aka.ms/durabletask-analyzers");
 
     /// <inheritdoc/>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];

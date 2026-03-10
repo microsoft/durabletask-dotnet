@@ -49,8 +49,7 @@ public class MyOrchestrator : TaskOrchestrator<object, object>
     {
         {|#0:while|} (true)
         {
-            var item = await context.WaitForExternalEvent<string>(""new-work"");
-            await context.CallSubOrchestratorAsync<string>(""ProcessItem"", item);
+            await context.CallSubOrchestratorAsync<string>(""ProcessItem"", null);
         }
     }
 }

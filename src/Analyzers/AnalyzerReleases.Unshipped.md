@@ -5,3 +5,4 @@
 
 Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
+DURABLE0011 | Orchestration | Warning | ContinueAsNewOrchestrationAnalyzer

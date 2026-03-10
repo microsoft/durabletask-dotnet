@@ -61,6 +61,27 @@ public class MyOrchestrator : TaskOrchestrator<object, object>
     }
 
     [Fact]
+    public async Task TaskOrchestratorWhileTrueWithOnlyActivitiesNoContinueAsNew_ReportsDiagnostic()
+    {
+        string code = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<object, object>
+{
+    public override async Task<object> RunAsync(TaskOrchestrationContext context, object input)
+    {
+        {|#0:while|} (true)
+        {
+            await context.CallActivityAsync<string>(""DoWork"", ""input"");
+            await context.CreateTimer(TimeSpan.FromSeconds(30), CancellationToken.None);
+        }
+    }
+}
+");
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("MyOrchestrator");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+    }
+
+    [Fact]
     public async Task TaskOrchestratorWhileTrueWithContinueAsNew_NoDiagnostic()
     {
         string code = Wrapper.WrapTaskOrchestrator(@"
@@ -127,17 +148,18 @@ public class MyOrchestrator : TaskOrchestrator<string, string>
     }
 
     [Fact]
-    public async Task TaskOrchestratorWhileTrueWithOnlyActivitiesNoExternalEvent_NoDiagnostic()
+    public async Task TaskOrchestratorWhileTrueNoContextCalls_NoDiagnostic()
     {
         string code = Wrapper.WrapTaskOrchestrator(@"
-public class MyOrchestrator : TaskOrchestrator<object, object>
+public class MyOrchestrator : TaskOrchestrator<string, string>
 {
-    public override async Task<object> RunAsync(TaskOrchestrationContext context, object input)
+    public override async Task<string> RunAsync(TaskOrchestrationContext context, string input)
     {
+        int i = 0;
         while (true)
         {
-            await context.CallActivityAsync<string>(""DoWork"", ""input"");
-            await context.CreateTimer(TimeSpan.FromSeconds(30), CancellationToken.None);
+            i++;
+            if (i > 10) return ""done"";
         }
     }
 }

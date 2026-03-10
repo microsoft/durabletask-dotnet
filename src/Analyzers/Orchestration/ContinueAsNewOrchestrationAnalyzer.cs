@@ -13,8 +13,10 @@ namespace Microsoft.DurableTask.Analyzers.Orchestration;
 
 /// <summary>
 /// Analyzer that reports a warning when an orchestration contains an unconditional while loop
-/// with WaitForExternalEvent or CallSubOrchestratorAsync but no ContinueAsNew call within that loop.
-/// This pattern can lead to unbounded history growth.
+/// that calls any TaskOrchestrationContext method (e.g. CallActivityAsync, WaitForExternalEvent,
+/// CallSubOrchestratorAsync, CreateTimer) but no ContinueAsNew call within that loop.
+/// Every orchestration API call adds to the replay history, so unbounded loops without
+/// ContinueAsNew lead to unbounded history growth.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class ContinueAsNewOrchestrationAnalyzer : OrchestrationAnalyzer<ContinueAsNewOrchestrationVisitor>
@@ -81,14 +83,14 @@ public sealed class ContinueAsNewOrchestrationAnalyzer : OrchestrationAnalyzer<C
 
                     IMethodSymbol targetMethod = invocation.TargetMethod;
 
-                    if (targetMethod.IsEqualTo(this.KnownTypeSymbols.TaskOrchestrationContext, "WaitForExternalEvent") ||
-                        targetMethod.IsEqualTo(this.KnownTypeSymbols.TaskOrchestrationContext, "CallSubOrchestratorAsync"))
-                    {
-                        hasHistoryGrowingCall = true;
-                    }
-                    else if (targetMethod.IsEqualTo(this.KnownTypeSymbols.TaskOrchestrationContext, "ContinueAsNew"))
+                    if (targetMethod.IsEqualTo(this.KnownTypeSymbols.TaskOrchestrationContext, "ContinueAsNew"))
                     {
                         hasContinueAsNew = true;
+                    }
+                    else if (SymbolEqualityComparer.Default.Equals(targetMethod.ContainingType, this.KnownTypeSymbols.TaskOrchestrationContext) ||
+                             SymbolEqualityComparer.Default.Equals(targetMethod.ContainingType?.OriginalDefinition, this.KnownTypeSymbols.TaskOrchestrationContext))
+                    {
+                        hasHistoryGrowingCall = true;
                     }
 
                     if (hasHistoryGrowingCall && hasContinueAsNew)

@@ -186,6 +186,42 @@ async Task<object> Method([OrchestrationTrigger] TaskOrchestrationContext contex
         await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
     }
 
+    [Fact]
+    public async Task FuncOrchestratorWhileTrueWithContextCallsNoContinueAsNew_ReportsDiagnostic()
+    {
+        string code = Wrapper.WrapFuncOrchestrator(@"
+tasks.AddOrchestratorFunc<string>(""Run"", async context =>
+{
+    {|#0:while|} (true)
+    {
+        var item = await context.WaitForExternalEvent<string>(""new-work"");
+        await context.CallActivityAsync<string>(""ProcessItem"", item);
+    }
+});
+");
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Run");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+    }
+
+    [Fact]
+    public async Task FuncOrchestratorWhileTrueNoContextCalls_NoDiagnostic()
+    {
+        string code = Wrapper.WrapFuncOrchestrator(@"
+tasks.AddOrchestratorFunc<string>(""Run"", async context =>
+{
+    int i = 0;
+    while (true)
+    {
+        i++;
+        if (i > 10) return ""done"";
+    }
+});
+");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
+    }
+
     static DiagnosticResult BuildDiagnostic()
     {
         return VerifyCS.Diagnostic(ContinueAsNewOrchestrationAnalyzer.DiagnosticId);

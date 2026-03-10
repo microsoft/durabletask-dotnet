@@ -45,9 +45,6 @@ public sealed class ContinueAsNewOrchestrationAnalyzer : OrchestrationAnalyzer<C
     /// Visitor that inspects orchestration methods for unbounded loops without ContinueAsNew.
     /// Only direct invocations within the loop body are considered; calls made through helper
     /// methods invoked from the loop are not tracked back to the loop context.
-    /// Note: invocations inside lambdas or local functions declared within the loop body are
-    /// included by span containment, which may cause false negatives if ContinueAsNew appears
-    /// only inside such a nested function.
     /// </summary>
     public sealed class ContinueAsNewOrchestrationVisitor : MethodProbeOrchestrationVisitor
     {
@@ -60,14 +57,6 @@ public sealed class ContinueAsNewOrchestrationAnalyzer : OrchestrationAnalyzer<C
         /// <inheritdoc/>
         protected override void VisitMethod(SemanticModel semanticModel, SyntaxNode methodSyntax, IMethodSymbol methodSymbol, string orchestrationName, Action<Diagnostic> reportDiagnostic)
         {
-            IOperation? methodOperation = semanticModel.GetOperation(methodSyntax);
-            if (methodOperation is null)
-            {
-                return;
-            }
-
-            IInvocationOperation[] allInvocations = methodOperation.Descendants().OfType<IInvocationOperation>().ToArray();
-
             foreach (WhileStatementSyntax whileStatement in methodSyntax.DescendantNodes().OfType<WhileStatementSyntax>())
             {
                 if (!IsAlwaysTrueCondition(whileStatement.Condition))
@@ -75,16 +64,17 @@ public sealed class ContinueAsNewOrchestrationAnalyzer : OrchestrationAnalyzer<C
                     continue;
                 }
 
+                IOperation? whileOperation = semanticModel.GetOperation(whileStatement);
+                if (whileOperation is not IWhileLoopOperation whileLoop || whileLoop.Body is null)
+                {
+                    continue;
+                }
+
                 bool hasHistoryGrowingCall = false;
                 bool hasContinueAsNew = false;
 
-                foreach (IInvocationOperation invocation in allInvocations)
+                foreach (IInvocationOperation invocation in whileLoop.Body.Descendants().OfType<IInvocationOperation>())
                 {
-                    if (!whileStatement.Span.Contains(invocation.Syntax.Span))
-                    {
-                        continue;
-                    }
-
                     IMethodSymbol targetMethod = invocation.TargetMethod;
 
                     if (targetMethod.IsEqualTo(this.KnownTypeSymbols.TaskOrchestrationContext, "ContinueAsNew"))

@@ -13,7 +13,7 @@ namespace Microsoft.DurableTask.Analyzers.Orchestration;
 
 /// <summary>
 /// Analyzer that reports a warning when an orchestration contains an unconditional while loop
-/// with WaitForExternalEvent or CallSubOrchestratorAsync but no reachable ContinueAsNew call.
+/// with WaitForExternalEvent or CallSubOrchestratorAsync but no ContinueAsNew call within that loop.
 /// This pattern can lead to unbounded history growth.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]

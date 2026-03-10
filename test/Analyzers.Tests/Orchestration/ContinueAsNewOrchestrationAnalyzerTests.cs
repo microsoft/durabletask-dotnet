@@ -167,6 +167,6 @@ async Task<object> Method([OrchestrationTrigger] TaskOrchestrationContext contex
 
     static DiagnosticResult BuildDiagnostic()
     {
-        return new DiagnosticResult(ContinueAsNewOrchestrationAnalyzer.DiagnosticId, Microsoft.CodeAnalysis.DiagnosticSeverity.Warning);
+        return VerifyCS.Diagnostic(ContinueAsNewOrchestrationAnalyzer.DiagnosticId);
     }
 }

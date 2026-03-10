@@ -40,6 +40,8 @@ public sealed class ContinueAsNewOrchestrationAnalyzer : OrchestrationAnalyzer<C
 
     /// <summary>
     /// Visitor that inspects orchestration methods for unbounded loops without ContinueAsNew.
+    /// Only direct invocations within the loop body are considered; calls made through helper
+    /// methods invoked from the loop are not tracked back to the loop context.
     /// </summary>
     public sealed class ContinueAsNewOrchestrationVisitor : MethodProbeOrchestrationVisitor
     {
@@ -58,6 +60,8 @@ public sealed class ContinueAsNewOrchestrationAnalyzer : OrchestrationAnalyzer<C
                 return;
             }
 
+            IInvocationOperation[] allInvocations = methodOperation.Descendants().OfType<IInvocationOperation>().ToArray();
+
             foreach (WhileStatementSyntax whileStatement in methodSyntax.DescendantNodes().OfType<WhileStatementSyntax>())
             {
                 if (!IsAlwaysTrueCondition(whileStatement.Condition))
@@ -68,7 +72,7 @@ public sealed class ContinueAsNewOrchestrationAnalyzer : OrchestrationAnalyzer<C
                 bool hasHistoryGrowingCall = false;
                 bool hasContinueAsNew = false;
 
-                foreach (IInvocationOperation invocation in methodOperation.Descendants().OfType<IInvocationOperation>())
+                foreach (IInvocationOperation invocation in allInvocations)
                 {
                     if (!whileStatement.Span.Contains(invocation.Syntax.Span))
                     {
@@ -82,10 +86,14 @@ public sealed class ContinueAsNewOrchestrationAnalyzer : OrchestrationAnalyzer<C
                     {
                         hasHistoryGrowingCall = true;
                     }
-
-                    if (targetMethod.IsEqualTo(this.KnownTypeSymbols.TaskOrchestrationContext, "ContinueAsNew"))
+                    else if (targetMethod.IsEqualTo(this.KnownTypeSymbols.TaskOrchestrationContext, "ContinueAsNew"))
                     {
                         hasContinueAsNew = true;
+                    }
+
+                    if (hasHistoryGrowingCall && hasContinueAsNew)
+                    {
+                        break;
                     }
                 }
 

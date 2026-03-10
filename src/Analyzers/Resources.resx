@@ -223,7 +223,7 @@
     <value>Input parameter binding can be used instead of GetInput</value>
   </data>
   <data name="ContinueAsNewOrchestrationAnalyzerMessageFormat" xml:space="preserve">
-    <value>Orchestration '{0}' contains an unbounded loop with WaitForExternalEvent or CallSubOrchestratorAsync but no ContinueAsNew. This can cause unbounded history growth leading to performance degradation and persistence failures.</value>
+    <value>Orchestration '{0}' contains an unbounded loop with WaitForExternalEvent or CallSubOrchestratorAsync but no ContinueAsNew within that loop. This can cause unbounded history growth leading to performance degradation and persistence failures.</value>
   </data>
   <data name="ContinueAsNewOrchestrationAnalyzerTitle" xml:space="preserve">
     <value>Long-running orchestration loops should call ContinueAsNew to bound history growth</value>

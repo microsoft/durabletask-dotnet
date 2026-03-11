@@ -3,6 +3,9 @@
 ## v1.22.0
 - Changing the default dedupe statuses behavior by sophiatev ([#622](https://github.com/microsoft/durabletask-dotnet/pull/622))
 
+## Analyzers v2.0.0
+- Bump Analyzers package version to 2.0.0 stable release
+
 ## 1.21.0
 - Introduce WorkItemFilters into worker flow by halspang ([#616](https://github.com/microsoft/durabletask-dotnet/pull/616))
 - Fix Analyzers treating passed in variable argument name as null by wangbill ([#640](https://github.com/microsoft/durabletask-dotnet/pull/640))

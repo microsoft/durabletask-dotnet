@@ -7,7 +7,7 @@
 
 Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
-DURABLE0011 | Orchestration | Warning | **ContinueAsNewOrchestrationAnalyzer**: Warns when ContinueAsNew is used in unbounded orchestration loops.
+DURABLE0011 | Orchestration | Warning | **ContinueAsNewOrchestrationAnalyzer**: Warns when an unbounded `while (true)` orchestration loop does not call ContinueAsNew.
 
 ## Release 0.3.0
 

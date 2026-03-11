@@ -2,9 +2,8 @@
 
 ## v1.22.0
 - Changing the default dedupe statuses behavior by sophiatev ([#622](https://github.com/microsoft/durabletask-dotnet/pull/622))
-
-## Analyzers v2.0.0
-- Bump Analyzers package version to 2.0.0 stable release
+- Bump Analyzers package version to 1.22.0 stable release (from 0.3.0)
+- Add DURABLE0011: ContinueAsNew warning for unbounded orchestration loops ([#660](https://github.com/microsoft/durabletask-dotnet/pull/660))
 
 ## 1.21.0
 - Introduce WorkItemFilters into worker flow by halspang ([#616](https://github.com/microsoft/durabletask-dotnet/pull/616))

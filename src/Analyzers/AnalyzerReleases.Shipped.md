@@ -1,12 +1,13 @@
 ﻿; Shipped analyzer releases
 ; https://github.com/dotnet/roslyn/blob/main/src/RoslynAnalyzers/Microsoft.CodeAnalysis.Analyzers/ReleaseTrackingAnalyzers.Help.md
 
-## Release 2.0.0
+## Release 1.22.0
 
 ### New Rules
 
 Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
+DURABLE0011 | Orchestration | Warning | **ContinueAsNewOrchestrationAnalyzer**: Warns when ContinueAsNew is used in unbounded orchestration loops.
 
 ## Release 0.3.0
 

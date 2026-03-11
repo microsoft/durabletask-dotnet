@@ -211,6 +211,29 @@ extends:
             packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Generators.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
             packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
 
+      # NuGet release (Microsoft.DurableTask.Analyzers)
+      - job: nugetRelease_Microsoft_DurableTask_Analyzers
+        displayName: NuGet Release (Microsoft.DurableTask.Analyzers)
+        dependsOn: nugetApproval
+        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        templateContext:
+          type: releaseJob
+          isProduction: true
+          inputs:
+          - input: pipelineArtifact
+            pipeline: officialPipeline  # Pipeline reference as defined in the resources section
+            artifactName: drop
+            targetPath: $(System.DefaultWorkingDirectory)/drop
+        steps:
+        - task: 1ES.PublishNuget@1
+          displayName: 'NuGet push (Microsoft.DurableTask.Analyzers)'
+          inputs:
+            command: push
+            nuGetFeedType: external
+            publishFeedCredentials: 'DurableTask org NuGet API Key'
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Analyzers.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
+            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+
       # NuGet release (Microsoft.DurableTask.Grpc)
       - job: nugetRelease_Microsoft_DurableTask_Grpc
         displayName: NuGet Release (Microsoft.DurableTask.Grpc)

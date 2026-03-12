@@ -27,7 +27,7 @@ permissions:
 jobs:
   auto-issue-fix:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     env:
       DOTNET_VER_6: "6.0.x"
@@ -68,10 +68,10 @@ jobs:
           dotnet restore $SOLUTION
           dotnet build $SOLUTION --configuration Release --no-restore
 
-      - name: ✅ Verify tests pass before analysis
+      - name: 🧪 Run tests (non-blocking baseline before analysis)
+        continue-on-error: true
         run: |
-          dotnet test $SOLUTION --configuration Release --no-build --verbosity normal \
-            || echo "::warning::Some pre-existing test failures detected"
+          dotnet test $SOLUTION --configuration Release --no-build --verbosity normal
 
       # ─── Deduplication Context ───────────────────────────────────────
 
@@ -80,11 +80,11 @@ jobs:
         run: |
           echo "Fetching open PRs and issues with copilot-finds label..."
 
-          # Get open PRs with copilot-finds label
+          # Get open PRs with copilot-finds label (include file paths for targeted dedup)
           OPEN_PRS=$(gh pr list \
             --label "copilot-finds" \
             --state open \
-            --limit 200 \
+            --limit 50 \
             --json title,url,headRefName,files \
             --jq '[.[] | {title: .title, url: .url, branch: .headRefName, files: [.files[].path]}]' \
             2>/dev/null || echo "[]")
@@ -93,18 +93,18 @@ jobs:
           OPEN_ISSUES=$(gh issue list \
             --label "copilot-finds" \
             --state open \
-            --limit 200 \
-            --json title,url,body \
+            --limit 50 \
+            --json title,url \
             --jq '[.[] | {title: .title, url: .url}]' \
             2>/dev/null || echo "[]")
 
-          # Get recently merged PRs (last 14 days) with copilot-finds label
+          # Get recently merged PRs (last 14 days) — title/url only to avoid prompt bloat
           RECENT_MERGED=$(gh pr list \
             --label "copilot-finds" \
             --state merged \
-            --limit 200 \
-            --json title,url,mergedAt,files \
-            --jq '[.[] | select((.mergedAt | fromdateiso8601) > (now - 14*86400)) | {title: .title, url: .url, files: [.files[].path]}]' \
+            --limit 50 \
+            --json title,url,mergedAt \
+            --jq '[.[] | select((.mergedAt | fromdateiso8601) > (now - 14*86400)) | {title: .title, url: .url}]' \
             2>/dev/null || echo "[]")
 
           # Write dedup context
@@ -132,15 +132,49 @@ jobs:
 
       - name: 🏷️ Ensure required labels exist
         run: |
-          gh label create "copilot-finds" \
-            --description "Findings from automated code review agents" \
-            --color "7057ff" --force
-          gh label create "pending-verification" \
-            --description "PR awaiting automated verification" \
-            --color "fbca04" --force
-          gh label create "sample-verification-added" \
-            --description "PR has been verified by the PR verification agent" \
-            --color "0e8a16" --force
+          set -euo pipefail
+
+          ensure_label() {
+            local name="$1"
+            local description="$2"
+            local color="$3"
+            if gh label list --limit 200 --json name --jq '.[].name' | grep -Fxq "$name"; then
+              echo "Label '$name' already exists; skipping."
+            else
+              echo "Creating label '$name'."
+              gh label create "$name" --description "$description" --color "$color"
+            fi
+          }
+
+          # Pipeline labels
+          ensure_label "copilot-finds" \
+            "Findings from automated code review agents" "7057ff"
+          ensure_label "pending-verification" \
+            "PR awaiting automated verification" "fbca04"
+          ensure_label "sample-verification-added" \
+            "PR has been verified by the PR verification agent" "0e8a16"
+
+          # Triage labels (used by issue-scanner agent)
+          ensure_label "triage/actionable" \
+            "Issue is ready for automated fix — clear scope, no blockers" "1d76db"
+          ensure_label "triage/needs-human-verification" \
+            "Requires human judgment or domain expertise to verify" "c5def5"
+          ensure_label "triage/known-blocker" \
+            "Has a known dependency or blocker preventing fix" "e4e669"
+          ensure_label "triage/requires-redesign" \
+            "Needs architectural changes or design discussion" "d4c5f9"
+          ensure_label "triage/needs-info" \
+            "Missing reproduction steps or unclear description" "d93f0b"
+          ensure_label "triage/already-fixed" \
+            "Already resolved by a merged PR or closed" "bfdadc"
+          ensure_label "triage/too-large" \
+            "Scope too large for a single automated fix" "f9d0c4"
+          ensure_label "triage/external-dependency" \
+            "Depends on changes in another repo or service" "c2e0c6"
+          ensure_label "triage/duplicate" \
+            "Duplicate of another issue" "cfd3d7"
+          ensure_label "triage/feature-request" \
+            "Feature request, not a bug fix" "a2eeef"
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

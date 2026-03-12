@@ -194,8 +194,8 @@ Environment.Exit(passed ? 0 : 1);
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../../src/Client/Grpc/Client.Grpc.csproj" />
-    <ProjectReference Include="../../../src/Worker/Grpc/Worker.Grpc.csproj" />
+    <ProjectReference Include="$(SrcRoot)Client/Grpc/Client.Grpc.csproj" />
+    <ProjectReference Include="$(SrcRoot)Worker/Grpc/Worker.Grpc.csproj" />
   </ItemGroup>
 </Project>
 ```
@@ -400,7 +400,9 @@ If verification **failed**, do NOT update labels. Instead:
 
 - Do NOT delete the verification sample — it has been pushed to the
   `verification/pr-<number>` branch.
-- Do NOT stop the DTS emulator (other tests or agents may be using it).
+- **DTS emulator lifecycle:**
+  - In **CI** (the workflow): the workflow manages emulator start/stop. Do not stop it yourself.
+  - In **manual/local runs**: do NOT stop the emulator as other processes may be using it.
 - Switch back to `main` before processing the next PR:
   ```bash
   git checkout main

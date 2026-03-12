@@ -1,0 +1,494 @@
+name: 🤖 Auto Issue Fix Pipeline
+
+# Multi-agent pipeline that:
+# 1. Scans and triages recent GitHub issues (issue-scanner agent)
+# 2. Fixes the selected issue and opens a PR (issue-fixer agent)
+# 3. Verifies the PR against the DTS emulator (pr-verification agent)
+#
+# Agents are chained sequentially via file-based handoff:
+#   issue-scanner → /tmp/selected-issue.json → issue-fixer → /tmp/pr-info.json → pr-verification
+#
+# Note: GitHub Copilot CLI agents do not support built-in handoffs in CI.
+# Chaining is achieved by running agents as sequential workflow steps and
+# injecting the previous agent's output into the next agent's prompt.
+
+on:
+  # Run every day at 09:00 UTC
+  schedule:
+    - cron: "0 9 * * *"
+  # Allow manual trigger for testing
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  auto-issue-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    env:
+      DOTNET_VER_6: "6.0.x"
+      DOTNET_VER_8: "8.0.x"
+      DOTNET_VER_10: "10.0.x"
+      SOLUTION: "Microsoft.DurableTask.sln"
+
+    steps:
+      # ─── Setup ───────────────────────────────────────────────────────
+
+      - name: 📥 Checkout code (full history for analysis)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: ⚙️ Setup .NET 6.0
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VER_6 }}
+
+      - name: ⚙️ Setup .NET 8.0
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VER_8 }}
+
+      - name: ⚙️ Setup .NET 10.0
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VER_10 }}
+
+      - name: ⚙️ Setup .NET from global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: 🔨 Restore and build
+        run: |
+          dotnet restore $SOLUTION
+          dotnet build $SOLUTION --configuration Release --no-restore
+
+      - name: 🧪 Run tests (non-blocking baseline before analysis)
+        continue-on-error: true
+        run: |
+          dotnet test $SOLUTION --configuration Release --no-build --verbosity normal
+
+      # ─── Deduplication Context ───────────────────────────────────────
+
+      - name: 🔍 Collect existing work to avoid duplicates
+        id: dedup
+        run: |
+          echo "Fetching open PRs and issues with copilot-finds label..."
+
+          # Get open PRs with copilot-finds label (include file paths for targeted dedup)
+          OPEN_PRS=$(gh pr list \
+            --label "copilot-finds" \
+            --state open \
+            --limit 50 \
+            --json title,url,headRefName,files \
+            --jq '[.[] | {title: .title, url: .url, branch: .headRefName, files: [.files[].path]}]' \
+            2>/dev/null || echo "[]")
+
+          # Get open issues with copilot-finds label
+          OPEN_ISSUES=$(gh issue list \
+            --label "copilot-finds" \
+            --state open \
+            --limit 50 \
+            --json title,url \
+            --jq '[.[] | {title: .title, url: .url}]' \
+            2>/dev/null || echo "[]")
+
+          # Get recently merged PRs (last 14 days) — title/url only to avoid prompt bloat
+          RECENT_MERGED=$(gh pr list \
+            --label "copilot-finds" \
+            --state merged \
+            --limit 50 \
+            --json title,url,mergedAt \
+            --jq '[.[] | select((.mergedAt | fromdateiso8601) > (now - 14*86400)) | {title: .title, url: .url}]' \
+            2>/dev/null || echo "[]")
+
+          # Write dedup context
+          cat <<DEDUP_EOF > /tmp/exclusion-context.txt
+          === EXISTING WORK (DO NOT DUPLICATE) ===
+
+          ## Open PRs with copilot-finds label:
+          $OPEN_PRS
+
+          ## Open issues with copilot-finds label:
+          $OPEN_ISSUES
+
+          ## Recently merged copilot-finds PRs (last 14 days):
+          $RECENT_MERGED
+
+          === END EXISTING WORK ===
+          DEDUP_EOF
+
+          echo "Dedup context collected."
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+
+      # ─── Labels ─────────────────────────────────────────────────────
+
+      - name: 🏷️ Ensure required labels exist
+        run: |
+          set -euo pipefail
+
+          ensure_label() {
+            local name="$1"
+            local description="$2"
+            local color="$3"
+            if gh label list --limit 200 --json name --jq '.[].name' | grep -Fxq "$name"; then
+              echo "Label '$name' already exists; skipping."
+            else
+              echo "Creating label '$name'."
+              gh label create "$name" --description "$description" --color "$color"
+            fi
+          }
+
+          # Pipeline labels
+          ensure_label "copilot-finds" \
+            "Findings from automated code review agents" "7057ff"
+          ensure_label "pending-verification" \
+            "PR awaiting automated verification" "fbca04"
+          ensure_label "sample-verification-added" \
+            "PR has been verified by the PR verification agent" "0e8a16"
+
+          # Triage labels (used by issue-scanner agent)
+          ensure_label "triage/actionable" \
+            "Issue is ready for automated fix — clear scope, no blockers" "1d76db"
+          ensure_label "triage/needs-human-verification" \
+            "Requires human judgment or domain expertise to verify" "c5def5"
+          ensure_label "triage/known-blocker" \
+            "Has a known dependency or blocker preventing fix" "e4e669"
+          ensure_label "triage/requires-redesign" \
+            "Needs architectural changes or design discussion" "d4c5f9"
+          ensure_label "triage/needs-info" \
+            "Missing reproduction steps or unclear description" "d93f0b"
+          ensure_label "triage/already-fixed" \
+            "Already resolved by a merged PR or closed" "bfdadc"
+          ensure_label "triage/too-large" \
+            "Scope too large for a single automated fix" "f9d0c4"
+          ensure_label "triage/external-dependency" \
+            "Depends on changes in another repo or service" "c2e0c6"
+          ensure_label "triage/duplicate" \
+            "Duplicate of another issue" "cfd3d7"
+          ensure_label "triage/feature-request" \
+            "Feature request, not a bug fix" "a2eeef"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+
+      # ─── Agent 1: Issue Scanner ─────────────────────────────────────
+
+      - name: 🤖 Install GitHub Copilot CLI
+        run: npm install -g @github/copilot
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+
+      - name: 🔍 Agent 1 — Issue Scanner
+        id: issue_scanner
+        run: |
+          EXCLUSION_CONTEXT=$(cat /tmp/exclusion-context.txt)
+          AGENT_PROMPT=$(cat .github/agents/issue-scanner.agent.md)
+
+          FULL_PROMPT=$(cat <<PROMPT_EOF
+          $AGENT_PROMPT
+
+          ---
+
+          ## Pre-loaded Deduplication Context
+
+          The following items are already tracked. DO NOT select issues that overlap
+          with any of these:
+
+          $EXCLUSION_CONTEXT
+
+          ---
+
+          ## Execution Instructions
+
+          You are running in CI. Today's date is $(date +%Y-%m-%d).
+          Repository: ${{ github.repository }}
+
+          Execute the full workflow described above:
+          1. Fetch the 20 most recent GitHub issues
+          2. Triage and classify each one
+          3. Select the single best actionable issue (if any)
+          4. Write the handoff context to /tmp/selected-issue.json
+
+          Remember:
+          - Be conservative — only select issues with high confidence
+          - Write the handoff file to /tmp/selected-issue.json (MANDATORY)
+          - If no actionable issue is found, write {"found": false, ...} and stop
+          PROMPT_EOF
+          )
+
+          EXIT_CODE=0
+          timeout --foreground --signal=TERM --kill-after=30s 600s \
+            copilot \
+              --prompt "$FULL_PROMPT" \
+              --model "claude-opus-4.6" \
+              --allow-all-tools \
+              --allow-all-paths \
+              < /dev/null 2>&1 || EXIT_CODE=$?
+
+          if [ $EXIT_CODE -eq 124 ]; then
+            echo "::warning::Issue scanner agent timed out after 10 minutes"
+          fi
+
+          # Check if an issue was found
+          if [ -f /tmp/selected-issue.json ]; then
+            FOUND=$(cat /tmp/selected-issue.json | jq -r '.found // false')
+            echo "issue_found=$FOUND" >> $GITHUB_OUTPUT
+            if [ "$FOUND" = "true" ]; then
+              ISSUE_NUM=$(cat /tmp/selected-issue.json | jq -r '.issueNumber')
+              echo "issue_number=$ISSUE_NUM" >> $GITHUB_OUTPUT
+              echo "Issue #$ISSUE_NUM selected for fixing."
+            else
+              echo "No actionable issue found. Pipeline will stop."
+            fi
+          else
+            echo "issue_found=false" >> $GITHUB_OUTPUT
+            echo "::warning::Handoff file not created — no issue found."
+          fi
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          CI: "true"
+          NO_COLOR: "1"
+          TERM: "dumb"
+
+      # ─── Agent 2: Issue Fixer ───────────────────────────────────────
+
+      - name: 🔧 Agent 2 — Issue Fixer
+        id: issue_fixer
+        if: steps.issue_scanner.outputs.issue_found == 'true'
+        run: |
+          ISSUE_CONTEXT=$(cat /tmp/selected-issue.json)
+          AGENT_PROMPT=$(cat .github/agents/issue-fixer.agent.md)
+
+          FULL_PROMPT=$(cat <<PROMPT_EOF
+          $AGENT_PROMPT
+
+          ---
+
+          ## Injected Issue Context (from Issue Scanner Agent)
+
+          The issue-scanner agent has selected the following issue for you to fix:
+
+          \`\`\`json
+          $ISSUE_CONTEXT
+          \`\`\`
+
+          ---
+
+          ## Execution Instructions
+
+          You are running in CI. Today's date is $(date +%Y-%m-%d).
+          Repository: ${{ github.repository }}
+
+          Execute the full workflow described above:
+          1. Read the injected issue context above
+          2. Deep-analyze the codebase to understand the problem
+          3. Implement the fix following ALL repository conventions
+          4. Add comprehensive unit tests (and integration tests if applicable)
+          5. Run the full test suite: dotnet test Microsoft.DurableTask.sln --configuration Release
+          6. Open a PR linked to the issue
+          7. Write the handoff context to /tmp/pr-info.json
+
+          Remember:
+          - Follow all C# conventions from .github/copilot-instructions.md
+          - Copyright headers, XML docs, this., Async suffix, sealed private classes
+          - Maximum 1 PR
+          - All tests must pass
+          - Write the handoff file to /tmp/pr-info.json (MANDATORY)
+          PROMPT_EOF
+          )
+
+          EXIT_CODE=0
+          timeout --foreground --signal=TERM --kill-after=30s 1200s \
+            copilot \
+              --prompt "$FULL_PROMPT" \
+              --model "claude-opus-4.6" \
+              --allow-all-tools \
+              --allow-all-paths \
+              < /dev/null 2>&1 || EXIT_CODE=$?
+
+          if [ $EXIT_CODE -eq 124 ]; then
+            echo "::warning::Issue fixer agent timed out after 20 minutes"
+          fi
+
+          # Check if a PR was created
+          if [ -f /tmp/pr-info.json ]; then
+            CREATED=$(cat /tmp/pr-info.json | jq -r '.created // false')
+            echo "pr_created=$CREATED" >> $GITHUB_OUTPUT
+            if [ "$CREATED" = "true" ]; then
+              PR_NUM=$(cat /tmp/pr-info.json | jq -r '.prNumber')
+              echo "pr_number=$PR_NUM" >> $GITHUB_OUTPUT
+              echo "PR #$PR_NUM created successfully."
+            else
+              echo "No PR was created. Pipeline will stop before verification."
+            fi
+          else
+            echo "pr_created=false" >> $GITHUB_OUTPUT
+            echo "::warning::Handoff file not created — no PR opened."
+          fi
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          CI: "true"
+          NO_COLOR: "1"
+          TERM: "dumb"
+
+      # ─── Agent 3: PR Verification ──────────────────────────────────
+
+      - name: 🐳 Start DTS Emulator
+        if: steps.issue_fixer.outputs.pr_created == 'true'
+        run: |
+          docker run --name dts-emulator -d --rm -p 4001:8080 \
+            mcr.microsoft.com/dts/dts-emulator:latest
+
+          echo "Waiting for emulator to be ready..."
+          for i in $(seq 1 30); do
+            if nc -z localhost 4001 2>/dev/null; then
+              echo "Emulator is ready!"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Emulator failed to start within 30 seconds"
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: 🔎 Agent 3 — PR Verification
+        if: steps.issue_fixer.outputs.pr_created == 'true'
+        run: |
+          PR_CONTEXT=$(cat /tmp/pr-info.json)
+          AGENT_PROMPT=$(cat .github/agents/pr-verification.agent.md)
+
+          FULL_PROMPT=$(cat <<PROMPT_EOF
+          $AGENT_PROMPT
+
+          ---
+
+          ## Injected PR Context (from Issue Fixer Agent)
+
+          The issue-fixer agent has opened the following PR for you to verify:
+
+          \`\`\`json
+          $PR_CONTEXT
+          \`\`\`
+
+          ---
+
+          ## Execution Instructions
+
+          You are running in CI. Today's date is $(date +%Y-%m-%d).
+          Repository: ${{ github.repository }}
+
+          The DTS emulator is running at localhost:4001.
+
+          Execute the full workflow described above:
+          1. Read the injected PR context above
+          2. Understand the fix from the PR diff
+          3. Extract the verification scenario
+          4. Checkout the PR branch and rebuild
+          5. Create a standalone C# verification sample
+          6. Run it against the emulator
+          7. Post verification results to the linked issue
+          8. Update PR labels accordingly
+
+          Remember:
+          - DTS_ENDPOINT=localhost:4001
+          - DTS_TASKHUB=default
+          - Always checkout the PR branch before building/running
+          - Retry up to 2 times on failure
+          - Maximum timeout per PR: 5 minutes
+          PROMPT_EOF
+          )
+
+          EXIT_CODE=0
+          timeout --foreground --signal=TERM --kill-after=30s 900s \
+            copilot \
+              --prompt "$FULL_PROMPT" \
+              --model "claude-opus-4.6" \
+              --allow-all-tools \
+              --allow-all-paths \
+              < /dev/null 2>&1 || EXIT_CODE=$?
+
+          if [ $EXIT_CODE -eq 124 ]; then
+            echo "::warning::PR verification agent timed out after 15 minutes"
+          elif [ $EXIT_CODE -ne 0 ]; then
+            echo "::warning::PR verification agent exited with code $EXIT_CODE"
+          fi
+
+          echo "PR verification agent completed."
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          DTS_ENDPOINT: localhost:4001
+          DTS_TASKHUB: default
+          CI: "true"
+          NO_COLOR: "1"
+          TERM: "dumb"
+
+      - name: 🧹 Stop DTS Emulator
+        if: always()
+        run: docker stop dts-emulator 2>/dev/null || true
+
+      # ─── Summary ────────────────────────────────────────────────────
+
+      - name: 📊 Pipeline Summary
+        if: always()
+        run: |
+          echo "## 🤖 Auto Issue Fix Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date +%Y-%m-%d)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Agent 1 results
+          echo "### Agent 1: Issue Scanner" >> $GITHUB_STEP_SUMMARY
+          if [ -f /tmp/selected-issue.json ]; then
+            FOUND=$(cat /tmp/selected-issue.json | jq -r '.found // false')
+            if [ "$FOUND" = "true" ]; then
+              ISSUE_NUM=$(cat /tmp/selected-issue.json | jq -r '.issueNumber')
+              ISSUE_TITLE=$(cat /tmp/selected-issue.json | jq -r '.issueTitle')
+              echo "- ✅ Selected issue: #$ISSUE_NUM — $ISSUE_TITLE" >> $GITHUB_STEP_SUMMARY
+            else
+              REASON=$(cat /tmp/selected-issue.json | jq -r '.reason // "Unknown"')
+              echo "- ⏭️ No actionable issue found: $REASON" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "- ❌ Handoff file not created" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Agent 2 results
+          echo "### Agent 2: Issue Fixer" >> $GITHUB_STEP_SUMMARY
+          if [ -f /tmp/pr-info.json ]; then
+            CREATED=$(cat /tmp/pr-info.json | jq -r '.created // false')
+            if [ "$CREATED" = "true" ]; then
+              PR_NUM=$(cat /tmp/pr-info.json | jq -r '.prNumber')
+              PR_URL=$(cat /tmp/pr-info.json | jq -r '.prUrl')
+              echo "- ✅ PR opened: [#$PR_NUM]($PR_URL)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- ⏭️ No PR created" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "- ⏭️ Skipped (no issue selected)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Agent 3 results
+          echo "### Agent 3: PR Verification" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.issue_fixer.outputs.pr_created }}" = "true" ]; then
+            echo "- ✅ Verification completed (check issue comments for results)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ⏭️ Skipped (no PR to verify)" >> $GITHUB_STEP_SUMMARY
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}

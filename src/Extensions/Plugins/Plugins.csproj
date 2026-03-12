@@ -21,7 +21,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <SharedSection Include="Core" />
+    <!--
+      Do NOT include SharedSection Core here. The Plugins project has IVT from Abstractions,
+      and Abstractions (netstandard2.0) ships polyfill types (NullableAttributes, CSharpLangCompat)
+      that clash with their real counterparts when the Plugins project targets net6.0+.
+      Instead, the minimal Check utilities needed are included directly.
+    -->
   </ItemGroup>
 
 </Project>

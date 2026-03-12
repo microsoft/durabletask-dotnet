@@ -5,6 +5,7 @@ using Microsoft.DurableTask.Plugins;
 using Microsoft.DurableTask.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace Microsoft.DurableTask;
 
@@ -13,9 +14,12 @@ namespace Microsoft.DurableTask;
 /// </summary>
 public static class DurableTaskWorkerBuilderExtensionsPlugins
 {
+    static readonly object WrappingRegistered = new();
+
     /// <summary>
     /// Adds a plugin to the Durable Task worker. All orchestration and activity interceptors
-    /// from the plugin will be invoked during execution.
+    /// from the plugin will be invoked during execution, and the plugin's built-in activities
+    /// and orchestrations will be auto-registered into the worker's task registry.
     /// </summary>
     /// <param name="builder">The worker builder.</param>
     /// <param name="plugin">The plugin to add.</param>
@@ -39,6 +43,12 @@ public static class DurableTaskWorkerBuilderExtensionsPlugins
         {
             plugin.RegisterTasks(registry);
         });
+
+        // Register the PostConfigure that wraps all factories with plugin interceptors.
+        // TryAddEnumerable ensures this only runs once per builder name even if UsePlugin is called multiple times.
+        builder.Services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IPostConfigureOptions<DurableTaskRegistry>>(
+                new PluginRegistryPostConfigure(builder.Name)));
 
         return builder;
     }

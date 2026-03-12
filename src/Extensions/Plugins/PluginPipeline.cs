@@ -26,6 +26,16 @@ public sealed class PluginPipeline
     public IReadOnlyList<IDurableTaskPlugin> Plugins => this.plugins;
 
     /// <summary>
+    /// Gets a value indicating whether any registered plugin has orchestration interceptors.
+    /// </summary>
+    public bool HasOrchestrationInterceptors => this.plugins.Any(p => p.OrchestrationInterceptors.Count > 0);
+
+    /// <summary>
+    /// Gets a value indicating whether any registered plugin has activity interceptors.
+    /// </summary>
+    public bool HasActivityInterceptors => this.plugins.Any(p => p.ActivityInterceptors.Count > 0);
+
+    /// <summary>
     /// Executes all orchestration-starting interceptors in registration order.
     /// </summary>
     /// <param name="context">The orchestration interceptor context.</param>

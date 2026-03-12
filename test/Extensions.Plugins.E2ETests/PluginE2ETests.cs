@@ -33,14 +33,19 @@ public class PluginE2ETests : IAsyncLifetime
 
     public async Task DisposeAsync() => await this.fixture.DisposeAsync();
 
-    void SkipIfNoConnectionString()
+    /// <summary>
+    /// Returns true if DTS_CONNECTION_STRING is set; tests should return early if false.
+    /// </summary>
+    bool HasConnectionString()
     {
         string? cs = DtsFixture.GetConnectionString();
         if (string.IsNullOrEmpty(cs))
         {
-            throw new SkipException(
-                "DTS_CONNECTION_STRING not set. Set it to run E2E tests against a real DTS scheduler.");
+            this.output.WriteLine("SKIPPED: DTS_CONNECTION_STRING not set.");
+            return false;
         }
+
+        return true;
     }
 
     // ─── Test 1: Metrics plugin tracks orchestration and activity counts ───
@@ -48,7 +53,7 @@ public class PluginE2ETests : IAsyncLifetime
     [Fact]
     public async Task MetricsPlugin_TracksExecutionCounts_E2E()
     {
-        this.SkipIfNoConnectionString();
+        if (!this.HasConnectionString()) return;
         string orchName = $"MetricsOrch_{this.testId}";
         string actName = $"MetricsAct_{this.testId}";
         MetricsStore store = new();
@@ -93,7 +98,7 @@ public class PluginE2ETests : IAsyncLifetime
     [Fact]
     public async Task LoggingPlugin_DoesNotBreakExecution_E2E()
     {
-        this.SkipIfNoConnectionString();
+        if (!this.HasConnectionString()) return;
         string orchName = $"LogOrch_{this.testId}";
         string actName = $"LogAct_{this.testId}";
 
@@ -126,7 +131,7 @@ public class PluginE2ETests : IAsyncLifetime
     [Fact]
     public async Task AuthorizationPlugin_BlocksUnauthorized_E2E()
     {
-        this.SkipIfNoConnectionString();
+        if (!this.HasConnectionString()) return;
         string orchName = $"AuthBlockOrch_{this.testId}";
         string actName = $"AuthBlockAct_{this.testId}";
 
@@ -161,7 +166,7 @@ public class PluginE2ETests : IAsyncLifetime
     [Fact]
     public async Task AuthorizationPlugin_AllowsAuthorized_E2E()
     {
-        this.SkipIfNoConnectionString();
+        if (!this.HasConnectionString()) return;
         string orchName = $"AuthAllowOrch_{this.testId}";
         string actName = $"AuthAllowAct_{this.testId}";
 
@@ -193,7 +198,7 @@ public class PluginE2ETests : IAsyncLifetime
     [Fact]
     public async Task ValidationPlugin_RejectsInvalidInput_E2E()
     {
-        this.SkipIfNoConnectionString();
+        if (!this.HasConnectionString()) return;
         string orchName = $"ValRejectOrch_{this.testId}";
         string actName = $"ValRejectAct_{this.testId}";
 
@@ -230,7 +235,7 @@ public class PluginE2ETests : IAsyncLifetime
     [Fact]
     public async Task ValidationPlugin_AcceptsValidInput_E2E()
     {
-        this.SkipIfNoConnectionString();
+        if (!this.HasConnectionString()) return;
         string orchName = $"ValAcceptOrch_{this.testId}";
         string actName = $"ValAcceptAct_{this.testId}";
 
@@ -264,7 +269,7 @@ public class PluginE2ETests : IAsyncLifetime
     [Fact]
     public async Task PluginRegisteredActivity_IsCallable_E2E()
     {
-        this.SkipIfNoConnectionString();
+        if (!this.HasConnectionString()) return;
         string orchName = $"PluginTaskOrch_{this.testId}";
         string pluginActName = $"PluginAct_{this.testId}";
 
@@ -303,7 +308,7 @@ public class PluginE2ETests : IAsyncLifetime
     [Fact]
     public async Task MultiplePlugins_AllInterceptorsFire_E2E()
     {
-        this.SkipIfNoConnectionString();
+        if (!this.HasConnectionString()) return;
         string orchName = $"MultiPlugOrch_{this.testId}";
         string actName = $"MultiPlugAct_{this.testId}";
         MetricsStore store = new();
@@ -345,7 +350,7 @@ public class PluginE2ETests : IAsyncLifetime
     [Fact]
     public async Task PluginWithTasksAndInterceptors_WorksE2E()
     {
-        this.SkipIfNoConnectionString();
+        if (!this.HasConnectionString()) return;
         string orchName = $"FullPlugOrch_{this.testId}";
         string pluginActName = $"FullPlugAct_{this.testId}";
         MetricsStore store = new();
@@ -416,10 +421,4 @@ public class PluginE2ETests : IAsyncLifetime
     }
 }
 
-/// <summary>
-/// Custom xUnit exception for skipped tests.
-/// </summary>
-public class SkipException : Exception
-{
-    public SkipException(string message) : base(message) { }
-}
+

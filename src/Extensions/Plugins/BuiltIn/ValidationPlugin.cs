@@ -44,6 +44,12 @@ public sealed class ValidationPlugin : IDurableTaskPlugin
     /// <inheritdoc />
     public IReadOnlyList<IActivityInterceptor> ActivityInterceptors => this.activityInterceptors;
 
+    /// <inheritdoc />
+    public void RegisterTasks(DurableTaskRegistry registry)
+    {
+        // Validation plugin is cross-cutting only; it does not register any tasks.
+    }
+
     sealed class ValidationOrchestrationInterceptor : IOrchestrationInterceptor
     {
         readonly IInputValidator[] validators;

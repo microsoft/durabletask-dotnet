@@ -34,6 +34,12 @@ public static class DurableTaskWorkerBuilderExtensionsPlugins
             return new PluginPipeline(plugins);
         });
 
+        // Auto-register the plugin's built-in activities and orchestrations.
+        builder.Services.Configure<DurableTaskRegistry>(builder.Name, registry =>
+        {
+            plugin.RegisterTasks(registry);
+        });
+
         return builder;
     }
 

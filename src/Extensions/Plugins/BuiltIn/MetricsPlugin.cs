@@ -56,6 +56,12 @@ public sealed class MetricsPlugin : IDurableTaskPlugin
     /// <inheritdoc />
     public IReadOnlyList<IActivityInterceptor> ActivityInterceptors => this.activityInterceptors;
 
+    /// <inheritdoc />
+    public void RegisterTasks(DurableTaskRegistry registry)
+    {
+        // Metrics plugin is cross-cutting only; it does not register any tasks.
+    }
+
     /// <summary>
     /// Gets the metrics store used by this plugin.
     /// </summary>

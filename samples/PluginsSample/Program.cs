@@ -148,13 +148,38 @@ for (int i = 0; i < 5; i++)
 
 Console.WriteLine($"  Rate limit (max 3): Allowed={allowed}, Denied={denied}");
 
-// Demo: SimplePlugin builder
-Console.WriteLine("\n--- SimplePlugin Builder ---");
-var customPlugin = Microsoft.DurableTask.Plugins.SimplePlugin.NewBuilder("MyOrg.CustomPlugin")
+// Demo: SimplePlugin builder with built-in activities
+Console.WriteLine("\n--- SimplePlugin Builder (with built-in activities) ---");
+Console.WriteLine("Plugins can provide reusable activities that auto-register when added to a worker.");
+Console.WriteLine("Example: A 'StringUtils' plugin that ships pre-built string activities.");
+
+// This is how a plugin author would package reusable activities.
+// Users just call .UsePlugin(stringUtilsPlugin) and the activities become available.
+var stringUtilsPlugin = Microsoft.DurableTask.Plugins.SimplePlugin.NewBuilder("MyOrg.StringUtils")
+    .AddTasks(registry =>
+    {
+        registry.AddActivityFunc<string, string>("StringUtils.ToUpper", (ctx, input) => input.ToUpperInvariant());
+        registry.AddActivityFunc<string, string>("StringUtils.Reverse", (ctx, input) =>
+            new string(input.Reverse().ToArray()));
+        registry.AddActivityFunc<string, int>("StringUtils.WordCount", (ctx, input) =>
+            input.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length);
+    })
     .AddOrchestrationInterceptor(loggingPlugin.OrchestrationInterceptors[0])
-    .AddActivityInterceptor(metricsPlugin.ActivityInterceptors[0])
     .Build();
-Console.WriteLine($"Custom plugin '{customPlugin.Name}' created with {customPlugin.OrchestrationInterceptors.Count} orchestration and {customPlugin.ActivityInterceptors.Count} activity interceptors.");
+
+// Verify the plugin registers its tasks into a registry
+DurableTaskRegistry testRegistry = new();
+stringUtilsPlugin.RegisterTasks(testRegistry);
+Console.WriteLine($"  Plugin '{stringUtilsPlugin.Name}' registered activities into the worker.");
+Console.WriteLine($"  Orchestration interceptors: {stringUtilsPlugin.OrchestrationInterceptors.Count}");
+Console.WriteLine("");
+Console.WriteLine("  Usage in production:");
+Console.WriteLine("    builder.Services.AddDurableTaskWorker()");
+Console.WriteLine("        .UsePlugin(stringUtilsPlugin)  // auto-registers StringUtils.* activities");
+Console.WriteLine("        .UseGrpc();");
+Console.WriteLine("");
+Console.WriteLine("  Then in an orchestration:");
+Console.WriteLine("    string upper = await context.CallActivityAsync<string>(\"StringUtils.ToUpper\", \"hello\");");
 
 Console.WriteLine("\n=== All plugin demonstrations completed successfully! ===");
 

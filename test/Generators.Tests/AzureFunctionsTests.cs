@@ -192,7 +192,8 @@ public static Task CallFlakeyActivityAsync(this TaskOrchestrationContext ctx, ob
 
     /// <summary>
     /// Verifies that using the class-based activity syntax generates a <see cref="TaskOrchestrationContext"/>
-    /// extension method as well as an <see cref="ActivityTriggerAttribute"/> function definition.
+    /// extension method. With PR #3229, Durable Functions now natively handles class-based invocations,
+    /// so the generator no longer creates [Function] attribute definitions to avoid duplicates.
     /// </summary>
     /// <param name="inputType">The activity input type.</param>
     /// <param name="outputType">The activity output type.</param>
@@ -216,13 +217,6 @@ public class MyActivity : TaskActivity<{inputType}, {outputType}>
     public override Task<{outputType}> RunAsync(TaskActivityContext context, {inputType} input) => Task.FromResult<{outputType}>(default!);
 }}";
 
-        // Build the expected InputParameter format (matches generator logic)
-        string expectedInputParameter = inputType + " input";
-        if (inputType.EndsWith('?'))
-        {
-            expectedInputParameter += " = default";
-        }
-
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
@@ -233,17 +227,7 @@ public class MyActivity : TaskActivity<{inputType}, {outputType}>
 public static Task<{outputType}> CallMyActivityAsync(this TaskOrchestrationContext ctx, {inputType} input, TaskOptions? options = null)
 {{
     return ctx.CallActivityAsync<{outputType}>(""MyActivity"", input, options);
-}}
-
-[Function(nameof(MyActivity))]
-public static async Task<{outputType}> MyActivity([ActivityTrigger] {expectedInputParameter}, string instanceId, FunctionContext executionContext)
-{{
-    ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<MyActivity>(executionContext.InstanceServices);
-    TaskActivityContext context = new GeneratedActivityContext(""MyActivity"", instanceId);
-    object? result = await activity.RunAsync(context, input);
-    return ({outputType})result!;
-}}
-{TestHelpers.DeIndent(DurableTaskSourceGenerator.GetGeneratedActivityContextCode(), spacesToRemove: 8)}",
+}}",
             isDurableFunctions: true);
 
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
@@ -256,7 +240,8 @@ public static async Task<{outputType}> MyActivity([ActivityTrigger] {expectedInp
     /// <summary>
     /// Verifies that using the class-based syntax for authoring orchestrations generates 
     /// type-safe <see cref="DurableTaskClient"/> and <see cref="TaskOrchestrationContext"/> 
-    /// extension methods as well as <see cref="OrchestrationTriggerAttribute"/> function triggers.
+    /// extension methods. With PR #3229, Durable Functions now natively handles class-based
+    /// invocations, so the generator no longer creates [Function] attribute definitions.
     /// </summary>
     /// <param name="inputType">The activity input type.</param>
     /// <param name="outputType">The activity output type.</param>
@@ -294,15 +279,6 @@ namespace MyNS
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
-static readonly ITaskOrchestrator singletonMyOrchestrator = new MyNS.MyOrchestrator();
-
-[Function(nameof(MyOrchestrator))]
-public static Task<{outputType}> MyOrchestrator([OrchestrationTrigger] TaskOrchestrationContext context)
-{{
-    return singletonMyOrchestrator.RunAsync(context, context.GetInput<{inputType}>())
-        .ContinueWith(t => ({outputType})(t.Result ?? default({outputType})!), TaskContinuationOptions.ExecuteSynchronously);
-}}
-
 /// <summary>
 /// Schedules a new instance of the <see cref=""MyNS.MyOrchestrator""/> orchestrator.
 /// </summary>
@@ -334,7 +310,8 @@ public static Task<{outputType}> CallMyOrchestratorAsync(
     /// <summary>
     /// Verifies that using the class-based syntax for authoring orchestrations generates 
     /// type-safe <see cref="DurableTaskClient"/> and <see cref="TaskOrchestrationContext"/> 
-    /// extension methods as well as <see cref="OrchestrationTriggerAttribute"/> function triggers.
+    /// extension methods. With PR #3229, Durable Functions now natively handles class-based
+    /// invocations, so the generator no longer creates [Function] attribute definitions.
     /// </summary>
     /// <param name="inputType">The activity input type.</param>
     /// <param name="outputType">The activity output type.</param>
@@ -377,15 +354,6 @@ namespace MyNS
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
-static readonly ITaskOrchestrator singletonMyOrchestrator = new MyNS.MyOrchestrator();
-
-[Function(nameof(MyOrchestrator))]
-public static Task<{outputType}> MyOrchestrator([OrchestrationTrigger] TaskOrchestrationContext context)
-{{
-    return singletonMyOrchestrator.RunAsync(context, context.GetInput<{inputType}>())
-        .ContinueWith(t => ({outputType})(t.Result ?? default({outputType})!), TaskContinuationOptions.ExecuteSynchronously);
-}}
-
 /// <summary>
 /// Schedules a new instance of the <see cref=""MyNS.MyOrchestrator""/> orchestrator.
 /// </summary>
@@ -415,8 +383,9 @@ public static Task<{outputType}> CallMyOrchestratorAsync(
     }
 
     /// <summary>
-    /// Verifies that using the class-based syntax for authoring entities generates
-    /// <see cref="EntityTriggerAttribute"/> function triggers for Azure Functions.
+    /// Verifies that using the class-based syntax for authoring entities no longer generates
+    /// any code for Azure Functions. With PR #3229, Durable Functions now natively handles
+    /// class-based invocations. Entities don't have extension methods, so nothing is generated.
     /// </summary>
     /// <param name="stateType">The entity state type.</param>
     [Theory]
@@ -439,26 +408,17 @@ namespace MyNS
     }}
 }}";
 
-        string expectedOutput = TestHelpers.WrapAndFormat(
-            GeneratedClassName,
-            methodList: @"
-[Function(nameof(MyEntity))]
-public static Task MyEntity([EntityTrigger] TaskEntityDispatcher dispatcher)
-{
-    return dispatcher.DispatchAsync<MyNS.MyEntity>();
-}",
-            isDurableFunctions: true);
-
+        // With PR #3229, no code is generated for class-based entities in Durable Functions
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
             GeneratedFileName,
             code,
-            expectedOutput,
+            expectedOutputSource: null, // No output expected
             isDurableFunctions: true);
     }
 
     /// <summary>
-    /// Verifies that using the class-based syntax for authoring entities with inheritance generates
-    /// <see cref="EntityTriggerAttribute"/> function triggers for Azure Functions.
+    /// Verifies that using the class-based syntax for authoring entities with inheritance no longer generates
+    /// any code for Azure Functions. With PR #3229, Durable Functions now natively handles class-based invocations.
     /// </summary>
     /// <param name="stateType">The entity state type.</param>
     [Theory]
@@ -486,26 +446,17 @@ namespace MyNS
     }}
 }}";
 
-        string expectedOutput = TestHelpers.WrapAndFormat(
-            GeneratedClassName,
-            methodList: @"
-[Function(nameof(MyEntity))]
-public static Task MyEntity([EntityTrigger] TaskEntityDispatcher dispatcher)
-{
-    return dispatcher.DispatchAsync<MyNS.MyEntity>();
-}",
-            isDurableFunctions: true);
-
+        // With PR #3229, no code is generated for class-based entities in Durable Functions
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
             GeneratedFileName,
             code,
-            expectedOutput,
+            expectedOutputSource: null, // No output expected
             isDurableFunctions: true);
     }
 
     /// <summary>
-    /// Verifies that using the class-based syntax for authoring entities with custom state types generates
-    /// <see cref="EntityTriggerAttribute"/> function triggers for Azure Functions.
+    /// Verifies that using the class-based syntax for authoring entities with custom state types no longer generates
+    /// any code for Azure Functions. With PR #3229, Durable Functions now natively handles class-based invocations.
     /// </summary>
     [Fact]
     public async Task Entities_ClassBasedSyntax_CustomStateType()
@@ -530,26 +481,19 @@ namespace MyNS
     }
 }";
 
-        string expectedOutput = TestHelpers.WrapAndFormat(
-            GeneratedClassName,
-            methodList: @"
-[Function(nameof(MyEntity))]
-public static Task MyEntity([EntityTrigger] TaskEntityDispatcher dispatcher)
-{
-    return dispatcher.DispatchAsync<MyNS.MyEntity>();
-}",
-            isDurableFunctions: true);
-
+        // With PR #3229, no code is generated for class-based entities in Durable Functions
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
             GeneratedFileName,
             code,
-            expectedOutput,
+            expectedOutputSource: null, // No output expected
             isDurableFunctions: true);
     }
 
     /// <summary>
     /// Verifies that using the class-based syntax for authoring a mix of orchestrators, activities,
-    /// and entities generates the appropriate function triggers for Azure Functions.
+    /// and entities generates the appropriate extension methods for Azure Functions.
+    /// With PR #3229, Durable Functions now natively handles class-based invocations,
+    /// so the generator no longer creates [Function] attribute definitions.
     /// </summary>
     [Fact]
     public async Task Mixed_OrchestratorActivityEntity_ClassBasedSyntax()
@@ -585,15 +529,6 @@ namespace MyNS
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
             methodList: $@"
-static readonly ITaskOrchestrator singletonMyOrchestrator = new MyNS.MyOrchestrator();
-
-[Function(nameof(MyOrchestrator))]
-public static Task<string> MyOrchestrator([OrchestrationTrigger] TaskOrchestrationContext context)
-{{
-    return singletonMyOrchestrator.RunAsync(context, context.GetInput<int>())
-        .ContinueWith(t => (string)(t.Result ?? default(string)!), TaskContinuationOptions.ExecuteSynchronously);
-}}
-
 /// <summary>
 /// Schedules a new instance of the <see cref=""MyNS.MyOrchestrator""/> orchestrator.
 /// </summary>
@@ -621,23 +556,7 @@ public static Task<string> CallMyOrchestratorAsync(
 public static Task<string> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {{
     return ctx.CallActivityAsync<string>(""MyActivity"", input, options);
-}}
-
-[Function(nameof(MyActivity))]
-public static async Task<string> MyActivity([ActivityTrigger] int input, string instanceId, FunctionContext executionContext)
-{{
-    ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<MyNS.MyActivity>(executionContext.InstanceServices);
-    TaskActivityContext context = new GeneratedActivityContext(""MyActivity"", instanceId);
-    object? result = await activity.RunAsync(context, input);
-    return (string)result!;
-}}
-
-[Function(nameof(MyEntity))]
-public static Task MyEntity([EntityTrigger] TaskEntityDispatcher dispatcher)
-{{
-    return dispatcher.DispatchAsync<MyNS.MyEntity>();
-}}
-{TestHelpers.DeIndent(DurableTaskSourceGenerator.GetGeneratedActivityContextCode(), spacesToRemove: 8)}",
+}}",
             isDurableFunctions: true);
 
         await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(

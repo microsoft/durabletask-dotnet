@@ -217,7 +217,7 @@ Environment.Exit(passed ? 0 : 1);
 Before building or running anything, switch to the fix branch:
 
 ```bash
-git fetch origin <branch-name>
+git fetch origin <branch-name>:<branch-name>
 git checkout <branch-name>
 ```
 

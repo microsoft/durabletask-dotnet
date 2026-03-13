@@ -12,7 +12,6 @@ tools:
   - runTerminal
   - github/issues
   - github/issues.write
-  - github/pull_requests
   - github/search
   - github/repos.read
 ---
@@ -75,7 +74,7 @@ For the fix branch:
 
 1. **Read the diff:** Compare the branch against `main` to understand what changed.
    ```bash
-   git diff main...<branch-name> -- '*.cs'
+   git diff main...<branch-name> -- '**/*.cs'
    ```
 2. **Read the linked issue:** Understand the user-facing scenario that motivated the fix.
 3. **Read the changed test files:** Understand what the unit tests already verify.

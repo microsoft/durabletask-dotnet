@@ -30,7 +30,7 @@ permissions:
 jobs:
   auto-issue-fix:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 150
 
     env:
       DOTNET_VER_6: "6.0.x"
@@ -229,7 +229,7 @@ jobs:
           )
 
           EXIT_CODE=0
-          timeout --foreground --signal=TERM --kill-after=30s 600s \
+          timeout --foreground --signal=TERM --kill-after=30s 1200s \
             copilot \
               --prompt "$FULL_PROMPT" \
               --model "claude-opus-4.6" \
@@ -238,7 +238,7 @@ jobs:
               < /dev/null 2>&1 || EXIT_CODE=$?
 
           if [ $EXIT_CODE -eq 124 ]; then
-            echo "::warning::Issue scanner agent timed out after 10 minutes"
+            echo "::warning::Issue scanner agent timed out after 20 minutes"
           fi
 
           # Check if an issue was found
@@ -313,7 +313,7 @@ jobs:
           )
 
           EXIT_CODE=0
-          timeout --foreground --signal=TERM --kill-after=30s 1200s \
+          timeout --foreground --signal=TERM --kill-after=30s 2400s \
             copilot \
               --prompt "$FULL_PROMPT" \
               --model "claude-opus-4.6" \
@@ -322,7 +322,7 @@ jobs:
               < /dev/null 2>&1 || EXIT_CODE=$?
 
           if [ $EXIT_CODE -eq 124 ]; then
-            echo "::warning::Issue fixer agent timed out after 20 minutes"
+            echo "::warning::Issue fixer agent timed out after 40 minutes"
           fi
 
           # Check if a fix branch was pushed
@@ -347,7 +347,7 @@ jobs:
           NO_COLOR: "1"
           TERM: "dumb"
 
-      # ─── Agent 3: PR Verification ──────────────────────────────────
+      # ─── Agent 3: Branch Verification ──────────────────────────────
 
       - name: 🐳 Start DTS Emulator
         if: steps.issue_fixer.outputs.branch_created == 'true'
@@ -415,7 +415,7 @@ jobs:
           )
 
           EXIT_CODE=0
-          timeout --foreground --signal=TERM --kill-after=30s 900s \
+          timeout --foreground --signal=TERM --kill-after=30s 1800s \
             copilot \
               --prompt "$FULL_PROMPT" \
               --model "claude-opus-4.6" \
@@ -424,7 +424,7 @@ jobs:
               < /dev/null 2>&1 || EXIT_CODE=$?
 
           if [ $EXIT_CODE -eq 124 ]; then
-            echo "::warning::Branch verification agent timed out after 15 minutes"
+            echo "::warning::Branch verification agent timed out after 30 minutes"
           elif [ $EXIT_CODE -ne 0 ]; then
             echo "::warning::Branch verification agent exited with code $EXIT_CODE"
           fi
@@ -472,7 +472,9 @@ jobs:
 
           # Agent 2 results
           echo "### Agent 2: Issue Fixer" >> $GITHUB_STEP_SUMMARY
-          if [ -f /tmp/fix-branch-info.json ]; then
+          if [ "${{ steps.issue_scanner.outputs.issue_found }}" != "true" ]; then
+            echo "- ⏭️ Skipped (no issue selected)" >> $GITHUB_STEP_SUMMARY
+          elif [ -f /tmp/fix-branch-info.json ]; then
             CREATED=$(cat /tmp/fix-branch-info.json | jq -r '.created // false')
             if [ "$CREATED" = "true" ]; then
               BRANCH_NAME=$(cat /tmp/fix-branch-info.json | jq -r '.branchName')
@@ -482,7 +484,7 @@ jobs:
               echo "- ⏭️ No fix branch pushed" >> $GITHUB_STEP_SUMMARY
             fi
           else
-            echo "- ⏭️ Skipped (no issue selected)" >> $GITHUB_STEP_SUMMARY
+            echo "- ❌ Fixer agent ran but handoff file was not created (agent may have crashed or timed out)" >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
 

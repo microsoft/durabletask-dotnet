@@ -2,15 +2,18 @@ name: 🤖 Auto Issue Fix Pipeline
 
 # Multi-agent pipeline that:
 # 1. Scans and triages recent GitHub issues (issue-scanner agent)
-# 2. Fixes the selected issue and opens a PR (issue-fixer agent)
-# 3. Verifies the PR against the DTS emulator (pr-verification agent)
+# 2. Fixes the selected issue and pushes a fix branch (issue-fixer agent)
+# 3. Verifies the fix branch against the DTS emulator (pr-verification agent)
 #
 # Agents are chained sequentially via file-based handoff:
-#   issue-scanner → /tmp/selected-issue.json → issue-fixer → /tmp/pr-info.json → pr-verification
+#   issue-scanner → /tmp/selected-issue.json → issue-fixer → /tmp/fix-branch-info.json → pr-verification
 #
 # Note: GitHub Copilot CLI agents do not support built-in handoffs in CI.
 # Chaining is achieved by running agents as sequential workflow steps and
 # injecting the previous agent's output into the next agent's prompt.
+#
+# The fixer agent pushes a branch (not a PR) because the workflow only has
+# pull-requests: read permission. A human opens the PR from the branch.
 
 on:
   # Run every day at 09:00 UTC
@@ -295,15 +298,17 @@ jobs:
           3. Implement the fix following ALL repository conventions
           4. Add comprehensive unit tests (and integration tests if applicable)
           5. Run the full test suite: dotnet test Microsoft.DurableTask.sln --configuration Release
-          6. Open a PR linked to the issue
-          7. Write the handoff context to /tmp/pr-info.json
+          6. Push a fix branch and post a comment on the issue with the branch link
+          7. Write the handoff context to /tmp/fix-branch-info.json
+
+          IMPORTANT: Do NOT open a PR. You do not have permission to create PRs.
+          Instead, push a branch and comment on the issue so a human can open the PR.
 
           Remember:
           - Follow all C# conventions from .github/copilot-instructions.md
           - Copyright headers, XML docs, this., Async suffix, sealed private classes
-          - Maximum 1 PR
           - All tests must pass
-          - Write the handoff file to /tmp/pr-info.json (MANDATORY)
+          - Write the handoff file to /tmp/fix-branch-info.json (MANDATORY)
           PROMPT_EOF
           )
 
@@ -320,20 +325,20 @@ jobs:
             echo "::warning::Issue fixer agent timed out after 20 minutes"
           fi
 
-          # Check if a PR was created
-          if [ -f /tmp/pr-info.json ]; then
-            CREATED=$(cat /tmp/pr-info.json | jq -r '.created // false')
-            echo "pr_created=$CREATED" >> $GITHUB_OUTPUT
+          # Check if a fix branch was pushed
+          if [ -f /tmp/fix-branch-info.json ]; then
+            CREATED=$(cat /tmp/fix-branch-info.json | jq -r '.created // false')
+            echo "branch_created=$CREATED" >> $GITHUB_OUTPUT
             if [ "$CREATED" = "true" ]; then
-              PR_NUM=$(cat /tmp/pr-info.json | jq -r '.prNumber')
-              echo "pr_number=$PR_NUM" >> $GITHUB_OUTPUT
-              echo "PR #$PR_NUM created successfully."
+              BRANCH_NAME=$(cat /tmp/fix-branch-info.json | jq -r '.branchName')
+              echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+              echo "Fix branch '$BRANCH_NAME' pushed successfully."
             else
-              echo "No PR was created. Pipeline will stop before verification."
+              echo "No fix branch was pushed. Pipeline will stop before verification."
             fi
           else
-            echo "pr_created=false" >> $GITHUB_OUTPUT
-            echo "::warning::Handoff file not created — no PR opened."
+            echo "branch_created=false" >> $GITHUB_OUTPUT
+            echo "::warning::Handoff file not created — no fix branch pushed."
           fi
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
@@ -345,7 +350,7 @@ jobs:
       # ─── Agent 3: PR Verification ──────────────────────────────────
 
       - name: 🐳 Start DTS Emulator
-        if: steps.issue_fixer.outputs.pr_created == 'true'
+        if: steps.issue_fixer.outputs.branch_created == 'true'
         run: |
           docker run --name dts-emulator -d --rm -p 4001:8080 \
             mcr.microsoft.com/dts/dts-emulator:latest
@@ -363,10 +368,10 @@ jobs:
             sleep 1
           done
 
-      - name: 🔎 Agent 3 — PR Verification
-        if: steps.issue_fixer.outputs.pr_created == 'true'
+      - name: 🔎 Agent 3 — Branch Verification
+        if: steps.issue_fixer.outputs.branch_created == 'true'
         run: |
-          PR_CONTEXT=$(cat /tmp/pr-info.json)
+          BRANCH_CONTEXT=$(cat /tmp/fix-branch-info.json)
           AGENT_PROMPT=$(cat .github/agents/pr-verification.agent.md)
 
           FULL_PROMPT=$(cat <<PROMPT_EOF
@@ -374,12 +379,12 @@ jobs:
 
           ---
 
-          ## Injected PR Context (from Issue Fixer Agent)
+          ## Injected Branch Context (from Issue Fixer Agent)
 
-          The issue-fixer agent has opened the following PR for you to verify:
+          The issue-fixer agent has pushed the following fix branch for you to verify:
 
           \`\`\`json
-          $PR_CONTEXT
+          $BRANCH_CONTEXT
           \`\`\`
 
           ---
@@ -392,21 +397,20 @@ jobs:
           The DTS emulator is running at localhost:4001.
 
           Execute the full workflow described above:
-          1. Read the injected PR context above
-          2. Understand the fix from the PR diff
+          1. Read the injected branch context above
+          2. Understand the fix from the branch diff
           3. Extract the verification scenario
-          4. Checkout the PR branch and rebuild
+          4. Checkout the fix branch and rebuild
           5. Create a standalone C# verification sample
           6. Run it against the emulator
           7. Post verification results to the linked issue
-          8. Update PR labels accordingly
 
           Remember:
           - DTS_ENDPOINT=localhost:4001
           - DTS_TASKHUB=default
-          - Always checkout the PR branch before building/running
+          - Always checkout the fix branch before building/running
           - Retry up to 2 times on failure
-          - Maximum timeout per PR: 5 minutes
+          - Maximum timeout per verification: 5 minutes
           PROMPT_EOF
           )
 
@@ -425,7 +429,7 @@ jobs:
             echo "::warning::PR verification agent exited with code $EXIT_CODE"
           fi
 
-          echo "PR verification agent completed."
+          echo "Branch verification agent completed."
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GH_TOKEN: ${{ github.token }}
@@ -468,14 +472,14 @@ jobs:
 
           # Agent 2 results
           echo "### Agent 2: Issue Fixer" >> $GITHUB_STEP_SUMMARY
-          if [ -f /tmp/pr-info.json ]; then
-            CREATED=$(cat /tmp/pr-info.json | jq -r '.created // false')
+          if [ -f /tmp/fix-branch-info.json ]; then
+            CREATED=$(cat /tmp/fix-branch-info.json | jq -r '.created // false')
             if [ "$CREATED" = "true" ]; then
-              PR_NUM=$(cat /tmp/pr-info.json | jq -r '.prNumber')
-              PR_URL=$(cat /tmp/pr-info.json | jq -r '.prUrl')
-              echo "- ✅ PR opened: [#$PR_NUM]($PR_URL)" >> $GITHUB_STEP_SUMMARY
+              BRANCH_NAME=$(cat /tmp/fix-branch-info.json | jq -r '.branchName')
+              BRANCH_URL=$(cat /tmp/fix-branch-info.json | jq -r '.branchUrl')
+              echo "- ✅ Fix branch pushed: [$BRANCH_NAME]($BRANCH_URL)" >> $GITHUB_STEP_SUMMARY
             else
-              echo "- ⏭️ No PR created" >> $GITHUB_STEP_SUMMARY
+              echo "- ⏭️ No fix branch pushed" >> $GITHUB_STEP_SUMMARY
             fi
           else
             echo "- ⏭️ Skipped (no issue selected)" >> $GITHUB_STEP_SUMMARY
@@ -483,11 +487,11 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
 
           # Agent 3 results
-          echo "### Agent 3: PR Verification" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ steps.issue_fixer.outputs.pr_created }}" = "true" ]; then
+          echo "### Agent 3: Branch Verification" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.issue_fixer.outputs.branch_created }}" = "true" ]; then
             echo "- ✅ Verification completed (check issue comments for results)" >> $GITHUB_STEP_SUMMARY
           else
-            echo "- ⏭️ Skipped (no PR to verify)" >> $GITHUB_STEP_SUMMARY
+            echo "- ⏭️ Skipped (no fix branch to verify)" >> $GITHUB_STEP_SUMMARY
           fi
         env:
           GH_TOKEN: ${{ github.token }}

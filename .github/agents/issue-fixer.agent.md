@@ -278,14 +278,15 @@ open a PR from the branch:
 
 ### Checklist
 
-- [x] Copyright headers on all new files
-- [x] XML documentation on all public APIs
-- [x] `this.` used for all member access
-- [x] Async suffix on async methods
-- [x] Private classes are sealed
-- [x] No breaking changes
-- [x] All tests pass
-- [x] No new dependencies introduced
+Start with all items unchecked and only check items you have positively verified.
+- [ ] Copyright headers on all new files
+- [ ] XML documentation on all public APIs
+- [ ] `this.` used for all member access
+- [ ] Async suffix on async methods
+- [ ] Private classes are sealed
+- [ ] No breaking changes
+- [ ] All tests pass
+- [ ] No new dependencies introduced
 
 ---
 

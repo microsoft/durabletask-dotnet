@@ -8,6 +8,7 @@ using Grpc.Net.Client;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Primitives;
 using Moq;
 using Xunit;
 
@@ -447,6 +448,125 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         options1.Channel.Should().NotBeNull();
         options2.Channel.Should().NotBeNull();
         options1.Channel.Should().NotBeSameAs(options2.Channel, "different WorkerId should use different channels");
+    }
+
+    [Fact]
+    public async Task UseDurableTaskScheduler_OptionsChange_CreatesNewChannel()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new Mock<IDurableTaskWorkerBuilder>();
+        mockBuilder.Setup(b => b.Services).Returns(services);
+        DefaultAzureCredential credential = new DefaultAzureCredential();
+
+        mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
+
+        string currentEndpoint = ValidEndpoint;
+        services.PostConfigureAll<DurableTaskSchedulerWorkerOptions>(options =>
+        {
+            options.EndpointAddress = currentEndpoint;
+        });
+
+        TestOptionsChangeTokenSource<DurableTaskSchedulerWorkerOptions> changeTokenSource = new();
+        services.AddSingleton<IOptionsChangeTokenSource<DurableTaskSchedulerWorkerOptions>>(changeTokenSource);
+
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<GrpcDurableTaskWorkerOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>();
+        GrpcDurableTaskWorkerOptions initialOptions = optionsMonitor.Get(Options.DefaultName);
+        GrpcChannel initialChannel = initialOptions.Channel!;
+
+        // Act
+        currentEndpoint = "newaccount.westus3.durabletask.io";
+        changeTokenSource.SignalChange();
+
+        GrpcDurableTaskWorkerOptions updatedOptions = optionsMonitor.Get(Options.DefaultName);
+
+        // Assert
+        initialChannel.Should().NotBeSameAs(updatedOptions.Channel, "options change should create a new channel");
+    }
+
+    [Fact]
+    public async Task UseDurableTaskScheduler_OptionsChange_DisposesOldChannel()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new Mock<IDurableTaskWorkerBuilder>();
+        mockBuilder.Setup(b => b.Services).Returns(services);
+        DefaultAzureCredential credential = new DefaultAzureCredential();
+
+        mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential);
+
+        string currentEndpoint = ValidEndpoint;
+        services.PostConfigureAll<DurableTaskSchedulerWorkerOptions>(options =>
+        {
+            options.EndpointAddress = currentEndpoint;
+        });
+
+        TestOptionsChangeTokenSource<DurableTaskSchedulerWorkerOptions> changeTokenSource = new();
+        services.AddSingleton<IOptionsChangeTokenSource<DurableTaskSchedulerWorkerOptions>>(changeTokenSource);
+
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<GrpcDurableTaskWorkerOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>();
+        GrpcDurableTaskWorkerOptions initialOptions = optionsMonitor.Get(Options.DefaultName);
+        GrpcChannel oldChannel = initialOptions.Channel!;
+
+        // Act
+        currentEndpoint = "newaccount.westus3.durabletask.io";
+        changeTokenSource.SignalChange();
+
+        // Allow background channel disposal to complete
+        await Task.Delay(500);
+
+        // Assert
+        Action action = () => oldChannel.CreateCallInvoker();
+        action.Should().Throw<ObjectDisposedException>("old channel should be disposed after options change");
+    }
+
+    [Fact]
+    public async Task UseDurableTaskScheduler_SameOptionsValues_DoesNotInvalidateCache()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new Mock<IDurableTaskWorkerBuilder>();
+        mockBuilder.Setup(b => b.Services).Returns(services);
+        DefaultAzureCredential credential = new DefaultAzureCredential();
+
+        mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options =>
+        {
+            options.WorkerId = "fixed-worker-id";
+        });
+
+        TestOptionsChangeTokenSource<DurableTaskSchedulerWorkerOptions> changeTokenSource = new();
+        services.AddSingleton<IOptionsChangeTokenSource<DurableTaskSchedulerWorkerOptions>>(changeTokenSource);
+
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<GrpcDurableTaskWorkerOptions> optionsMonitor = provider.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>();
+        GrpcDurableTaskWorkerOptions initialOptions = optionsMonitor.Get(Options.DefaultName);
+        GrpcChannel initialChannel = initialOptions.Channel!;
+
+        // Act - signal change without modifying actual values
+        changeTokenSource.SignalChange();
+
+        GrpcDurableTaskWorkerOptions updatedOptions = optionsMonitor.Get(Options.DefaultName);
+
+        // Assert
+        initialChannel.Should().BeSameAs(updatedOptions.Channel, "same options values should reuse the same channel");
+    }
+
+    sealed class TestOptionsChangeTokenSource<T> : IOptionsChangeTokenSource<T>
+    {
+        CancellationTokenSource cts = new();
+
+        public string? Name => null;
+
+        public IChangeToken GetChangeToken() => new CancellationChangeToken(this.cts.Token);
+
+        public void SignalChange()
+        {
+            CancellationTokenSource old = Interlocked.Exchange(ref this.cts, new CancellationTokenSource());
+            old.Cancel();
+            old.Dispose();
+        }
     }
 }
 

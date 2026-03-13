@@ -104,20 +104,29 @@ public static class DurableTaskSchedulerClientExtensions
     /// Configuration class that sets up gRPC channels for client options
     /// using the provided Durable Task Scheduler options.
     /// Channels are cached per configuration key and disposed when the service provider is disposed.
+    /// When source options change at runtime, cached channels are invalidated and recreated.
     /// </summary>
     sealed class ConfigureGrpcChannel : IConfigureNamedOptions<GrpcDurableTaskClientOptions>, IAsyncDisposable
     {
         readonly IOptionsMonitor<DurableTaskSchedulerClientOptions> schedulerOptions;
+        readonly IOptionsMonitorCache<GrpcDurableTaskClientOptions> grpcOptionsCache;
         readonly ConcurrentDictionary<string, Lazy<GrpcChannel>> channels = new();
+        readonly ConcurrentDictionary<string, string> optionsNameToCacheKey = new();
+        readonly IDisposable? onChangeSubscription;
         volatile int disposed;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ConfigureGrpcChannel"/> class.
         /// </summary>
         /// <param name="schedulerOptions">Monitor for accessing the current scheduler options configuration.</param>
-        public ConfigureGrpcChannel(IOptionsMonitor<DurableTaskSchedulerClientOptions> schedulerOptions)
+        /// <param name="grpcOptionsCache">Cache for the downstream gRPC options, used to invalidate entries when source options change.</param>
+        public ConfigureGrpcChannel(
+            IOptionsMonitor<DurableTaskSchedulerClientOptions> schedulerOptions,
+            IOptionsMonitorCache<GrpcDurableTaskClientOptions> grpcOptionsCache)
         {
             this.schedulerOptions = schedulerOptions;
+            this.grpcOptionsCache = grpcOptionsCache;
+            this.onChangeSubscription = schedulerOptions.OnChange(this.OnSchedulerOptionsChanged);
         }
 
         /// <summary>
@@ -144,16 +153,10 @@ public static class DurableTaskSchedulerClientExtensions
 
             string optionsName = name ?? Options.DefaultName;
             DurableTaskSchedulerClientOptions source = this.schedulerOptions.Get(optionsName);
+            string cacheKey = BuildCacheKey(optionsName, source);
 
-            // Create a cache key that includes all properties that affect CreateChannel behavior.
-            // This ensures channels are reused for the same configuration
-            // but separate channels are created when any relevant property changes.
-            // Use a delimiter character (\u001F) that will not appear in typical endpoint URIs.
-            string credentialType = source.Credential?.GetType().FullName ?? "null";
-            string retryOptionsKey = source.RetryOptions != null
-                ? $"{source.RetryOptions.MaxRetries}|{source.RetryOptions.InitialBackoffMs}|{source.RetryOptions.MaxBackoffMs}|{source.RetryOptions.BackoffMultiplier}|{(source.RetryOptions.RetryableStatusCodes != null ? string.Join(",", source.RetryOptions.RetryableStatusCodes) : string.Empty)}"
-                : "null";
-            string cacheKey = $"{optionsName}\u001F{source.EndpointAddress}\u001F{source.TaskHubName}\u001F{source.ResourceId}\u001F{credentialType}\u001F{source.AllowInsecureCredentials}\u001F{retryOptionsKey}";
+            this.optionsNameToCacheKey[optionsName] = cacheKey;
+
             options.Channel = this.channels.GetOrAdd(
                 cacheKey,
                 _ => new Lazy<GrpcChannel>(source.CreateChannel)).Value;
@@ -166,6 +169,8 @@ public static class DurableTaskSchedulerClientExtensions
             {
                 return;
             }
+
+            this.onChangeSubscription?.Dispose();
 
             foreach (Lazy<GrpcChannel> channel in this.channels.Values.Where(lazy => lazy.IsValueCreated))
             {
@@ -192,6 +197,19 @@ public static class DurableTaskSchedulerClientExtensions
             GC.SuppressFinalize(this);
         }
 
+        static string BuildCacheKey(string optionsName, DurableTaskSchedulerClientOptions source)
+        {
+            // Create a cache key that includes all properties that affect CreateChannel behavior.
+            // This ensures channels are reused for the same configuration
+            // but separate channels are created when any relevant property changes.
+            // Use a delimiter character (\u001F) that will not appear in typical endpoint URIs.
+            string credentialType = source.Credential?.GetType().FullName ?? "null";
+            string retryOptionsKey = source.RetryOptions != null
+                ? $"{source.RetryOptions.MaxRetries}|{source.RetryOptions.InitialBackoffMs}|{source.RetryOptions.MaxBackoffMs}|{source.RetryOptions.BackoffMultiplier}|{(source.RetryOptions.RetryableStatusCodes != null ? string.Join(",", source.RetryOptions.RetryableStatusCodes) : string.Empty)}"
+                : "null";
+            return $"{optionsName}\u001F{source.EndpointAddress}\u001F{source.TaskHubName}\u001F{source.ResourceId}\u001F{credentialType}\u001F{source.AllowInsecureCredentials}\u001F{retryOptionsKey}";
+        }
+
         static async Task DisposeChannelAsync(GrpcChannel channel)
         {
             // ShutdownAsync is the graceful way to close a gRPC channel.
@@ -205,6 +223,35 @@ public static class DurableTaskSchedulerClientExtensions
                 {
                     // Ignore expected shutdown/disposal errors
                 }
+            }
+        }
+
+        void OnSchedulerOptionsChanged(DurableTaskSchedulerClientOptions newOptions, string? name)
+        {
+            if (this.disposed == 1)
+            {
+                return;
+            }
+
+            string optionsName = name ?? Options.DefaultName;
+            string newCacheKey = BuildCacheKey(optionsName, newOptions);
+
+            if (this.optionsNameToCacheKey.TryGetValue(optionsName, out string? oldCacheKey)
+                && oldCacheKey != newCacheKey)
+            {
+                this.optionsNameToCacheKey[optionsName] = newCacheKey;
+
+                if (this.channels.TryRemove(oldCacheKey, out Lazy<GrpcChannel>? oldChannel)
+                    && oldChannel.IsValueCreated)
+                {
+                    // Dispose the old channel asynchronously to avoid blocking the OnChange callback.
+                    // In-flight RPCs on the old channel will fail gracefully.
+                    _ = Task.Run(() => DisposeChannelAsync(oldChannel.Value));
+                }
+
+                // Invalidate the downstream gRPC options cache entry so the next resolution
+                // triggers a fresh Configure() call with the updated source options.
+                this.grpcOptionsCache.TryRemove(optionsName);
             }
         }
     }

@@ -424,9 +424,9 @@ jobs:
               < /dev/null 2>&1 || EXIT_CODE=$?
 
           if [ $EXIT_CODE -eq 124 ]; then
-            echo "::warning::PR verification agent timed out after 15 minutes"
+            echo "::warning::Branch verification agent timed out after 15 minutes"
           elif [ $EXIT_CODE -ne 0 ]; then
-            echo "::warning::PR verification agent exited with code $EXIT_CODE"
+            echo "::warning::Branch verification agent exited with code $EXIT_CODE"
           fi
 
           echo "Branch verification agent completed."

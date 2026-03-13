@@ -28,8 +28,8 @@ applications that exercise the fix, run them against the DTS emulator, capture
 verification evidence, and post the results to the linked GitHub issue.
 
 **This agent is idempotent.** If the linked issue already has a comment containing
-`## Verification Report` or `<!-- pr-verification-agent -->`, skip verification
-entirely. Never produce duplicate work.
+the unique marker `<!-- pr-verification-agent -->`, skip verification entirely.
+Always include this marker in your own verification comments to ensure idempotency.
 
 ## Repository Context
 

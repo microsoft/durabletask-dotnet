@@ -13,6 +13,8 @@ namespace Microsoft.DurableTask;
 /// </summary>
 public abstract class TaskOrchestrationContext
 {
+    ILoggerFactory? replaySafeLoggerFactory;
+
     /// <summary>
     /// Gets the name of the task orchestration.
     /// </summary>
@@ -80,6 +82,25 @@ public abstract class TaskOrchestrationContext
     /// Gets the logger factory for this context.
     /// </summary>
     protected abstract ILoggerFactory LoggerFactory { get; }
+
+    /// <summary>
+    /// Gets an <see cref="ILoggerFactory"/> whose loggers are replay-safe, meaning they suppress log
+    /// output during orchestration replay. This is the recommended way to expose logger functionality
+    /// when wrapping a <see cref="TaskOrchestrationContext"/> instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Loggers created by this factory automatically check <see cref="IsReplaying"/> and suppress
+    /// duplicate log messages during replay. This is equivalent to calling
+    /// <see cref="CreateReplaySafeLogger(string)"/> for each logger category.
+    /// </para>
+    /// <para>
+    /// Context wrapper implementations can delegate <see cref="LoggerFactory"/> to this property
+    /// on the inner context: <c>protected override ILoggerFactory LoggerFactory =&gt; inner.ReplaySafeLoggerFactory;</c>
+    /// </para>
+    /// </remarks>
+    public virtual ILoggerFactory ReplaySafeLoggerFactory
+        => this.replaySafeLoggerFactory ??= new ReplaySafeLoggerFactoryImpl(this);
 
     /// <summary>
     /// Gets the deserialized input of the orchestrator.
@@ -471,6 +492,28 @@ public abstract class TaskOrchestrationContext
             {
                 this.logger.Log(logLevel, eventId, state, exception, formatter);
             }
+        }
+    }
+
+    sealed class ReplaySafeLoggerFactoryImpl : ILoggerFactory
+    {
+        readonly TaskOrchestrationContext context;
+
+        internal ReplaySafeLoggerFactoryImpl(TaskOrchestrationContext context)
+        {
+            this.context = context ?? throw new ArgumentNullException(nameof(context));
+        }
+
+        public ILogger CreateLogger(string categoryName)
+            => this.context.CreateReplaySafeLogger(categoryName);
+
+        public void AddProvider(ILoggerProvider provider)
+            => throw new NotSupportedException(
+                "Adding providers to the replay-safe logger factory is not supported.");
+
+        public void Dispose()
+        {
+            // No-op: this wrapper does not own the underlying logger factory.
         }
     }
 }

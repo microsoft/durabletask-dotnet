@@ -163,7 +163,7 @@ public class TaskOrchestrationContextReplaySafeLoggerFactoryTests
 
         public int DisposeCallCount { get; private set; }
 
-        public void AddProvider(ILoggerProvider provider)
+        public void AddProvider(ILoggerProvider loggerProvider)
         {
             this.AddProviderCallCount++;
         }

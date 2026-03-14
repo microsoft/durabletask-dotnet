@@ -79,11 +79,6 @@ public abstract class TaskOrchestrationContext
         throw new NotSupportedException($"Durable entities are not supported by {this.GetType()}.");
 
     /// <summary>
-    /// Gets the logger factory for this context.
-    /// </summary>
-    protected abstract ILoggerFactory LoggerFactory { get; }
-
-    /// <summary>
     /// Gets an <see cref="ILoggerFactory"/> whose loggers are replay-safe, meaning they suppress log
     /// output during orchestration replay. This is the recommended way to expose logger functionality
     /// when wrapping a <see cref="TaskOrchestrationContext"/> instance.
@@ -96,11 +91,16 @@ public abstract class TaskOrchestrationContext
     /// </para>
     /// <para>
     /// Context wrapper implementations can delegate <see cref="LoggerFactory"/> to this property
-    /// on the inner context: <c>protected override ILoggerFactory LoggerFactory =&gt; inner.ReplaySafeLoggerFactory;</c>
+    /// on the inner context: <c>protected override ILoggerFactory LoggerFactory =&gt; inner.ReplaySafeLoggerFactory;</c>.
     /// </para>
     /// </remarks>
     public virtual ILoggerFactory ReplaySafeLoggerFactory
         => this.replaySafeLoggerFactory ??= new ReplaySafeLoggerFactoryImpl(this);
+
+    /// <summary>
+    /// Gets the logger factory for this context.
+    /// </summary>
+    protected abstract ILoggerFactory LoggerFactory { get; }
 
     /// <summary>
     /// Gets the deserialized input of the orchestrator.
@@ -466,7 +466,7 @@ public abstract class TaskOrchestrationContext
         return TaskOrchestrationVersioningUtils.CompareVersions(this.Version, version);
     }
 
-    class ReplaySafeLogger : ILogger
+    sealed class ReplaySafeLogger : ILogger
     {
         readonly TaskOrchestrationContext context;
         readonly ILogger logger;
@@ -477,7 +477,9 @@ public abstract class TaskOrchestrationContext
             this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public IDisposable BeginScope<TState>(TState state) => this.logger.BeginScope(state);
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+            => this.logger.BeginScope(state);
 
         public bool IsEnabled(LogLevel logLevel) => this.logger.IsEnabled(logLevel);
 

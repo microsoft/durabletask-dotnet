@@ -165,8 +165,6 @@ The Durable Task Scheduler for Azure Functions is a managed backend that is curr
 
 This SDK can also be used with the Durable Task Scheduler directly, without any Durable Functions dependency. To get started, sign up for the [Durable Task Scheduler private preview](https://techcommunity.microsoft.com/blog/appsonazureblog/announcing-limited-early-access-of-the-durable-task-scheduler-for-azure-durable-/4286526) and follow the instructions to create a new Durable Task Scheduler instance. Once granted access to the private preview GitHub repository, you can find samples and documentation for getting started [here](https://github.com/Azure/Azure-Functions-Durable-Task-Scheduler-Private-Preview/tree/main/samples/portable-sdk/dotnet/AspNetWebApp#readme).
 
-For a sample that demonstrates wrapping `TaskOrchestrationContext` while preserving replay-safe logging, see [samples/ReplaySafeLoggerFactorySample](samples/ReplaySafeLoggerFactorySample/README.md).
-
 ## Obtaining the Protobuf definitions
 
 This project utilizes protobuf definitions from [durabletask-protobuf](https://github.com/microsoft/durabletask-protobuf), which are copied (vendored) into this repository under the `src/Grpc` directory. See the corresponding [README.md](./src/Grpc/README.md) for more information about how to update the protobuf definitions.

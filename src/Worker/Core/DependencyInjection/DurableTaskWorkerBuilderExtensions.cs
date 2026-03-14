@@ -143,10 +143,10 @@ public static class DurableTaskWorkerBuilderExtensions
     /// </summary>
     /// <param name="builder">The builder to set the builder target for.</param>
     /// <param name="workItemFilters">The instance of a <see cref="DurableTaskWorkerWorkItemFilters"/> to use.
-    /// If <c>null</c>, the auto-generated default filters will be cleared.</param>
+    /// If <c>null</c>, any previously configured filters will be cleared and filtering will be disabled.</param>
     /// <returns>The same <see cref="IDurableTaskWorkerBuilder"/> instance, allowing for method chaining.</returns>
-    /// <remarks>Work item filters are auto-generated from the registry by default.
-    /// Use this method with explicit filters to override the defaults, or with <c>null</c> to opt out of filtering entirely.</remarks>
+    /// <remarks>By default, no work item filters are applied and the worker processes all work items.
+    /// Use this method with explicit filters to enable filtering, or with <c>null</c> to disable filtering.</remarks>
     public static IDurableTaskWorkerBuilder UseWorkItemFilters(this IDurableTaskWorkerBuilder builder, DurableTaskWorkerWorkItemFilters? workItemFilters)
     {
         Check.NotNull(builder);
@@ -169,6 +169,45 @@ public static class DurableTaskWorkerBuilderExtensions
                     opts.Entities = workItemFilters.Entities;
                 }
             });
+
+        return builder;
+    }
+
+    /// <summary>
+    /// Enables work item filtering by auto-generating filters from the <see cref="DurableTaskRegistry"/>.
+    /// When enabled, the backend will only dispatch work items for registered orchestrations, activities,
+    /// and entities to this worker.
+    /// </summary>
+    /// <param name="builder">The builder to set the builder target for.</param>
+    /// <returns>The same <see cref="IDurableTaskWorkerBuilder"/> instance, allowing for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Work item filtering can improve efficiency in multi-worker deployments by ensuring each worker
+    /// only receives work items it can handle. However, if an orchestration calls a task type
+    /// (e.g., an entity, activity, or sub-orchestrator) that is not registered with any connected worker,
+    /// the call may hang indefinitely instead of failing with an error.
+    /// </para>
+    /// <para>
+    /// Only use this method when all task types referenced by orchestrations are guaranteed to be
+    /// registered with at least one connected worker.
+    /// </para>
+    /// </remarks>
+    public static IDurableTaskWorkerBuilder UseWorkItemFilters(this IDurableTaskWorkerBuilder builder)
+    {
+        Check.NotNull(builder);
+
+        builder.Services.AddOptions<DurableTaskWorkerWorkItemFilters>(builder.Name)
+            .PostConfigure<IOptionsMonitor<DurableTaskRegistry>, IOptionsMonitor<DurableTaskWorkerOptions>>(
+                (opts, registryMonitor, workerOptionsMonitor) =>
+                {
+                    DurableTaskRegistry registry = registryMonitor.Get(builder.Name);
+                    DurableTaskWorkerOptions workerOptions = workerOptionsMonitor.Get(builder.Name);
+                    DurableTaskWorkerWorkItemFilters generated =
+                        DurableTaskWorkerWorkItemFilters.FromDurableTaskRegistry(registry, workerOptions);
+                    opts.Orchestrations = generated.Orchestrations;
+                    opts.Activities = generated.Activities;
+                    opts.Entities = generated.Entities;
+                });
 
         return builder;
     }

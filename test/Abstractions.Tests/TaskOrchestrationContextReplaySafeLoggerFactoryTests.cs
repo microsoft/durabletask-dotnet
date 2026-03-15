@@ -108,7 +108,7 @@ public class TaskOrchestrationContextReplaySafeLoggerFactoryTests
 
         // Assert
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*Cycle detected*");
+            .WithMessage("*Maximum unwrap depth exceeded*");
     }
 
     [Fact]
@@ -161,7 +161,6 @@ public class TaskOrchestrationContextReplaySafeLoggerFactoryTests
         protected override ILoggerFactory LoggerFactory => this.loggerFactory;
 
         public override T GetInput<T>()
-            where T : default
             => default!;
 
         public override Task<TResult> CallActivityAsync<TResult>(TaskName name, object? input = null, TaskOptions? options = null)
@@ -218,7 +217,6 @@ public class TaskOrchestrationContextReplaySafeLoggerFactoryTests
         protected override ILoggerFactory LoggerFactory => this.innerContext.ReplaySafeLoggerFactory;
 
         public override T GetInput<T>()
-            where T : default
             => this.innerContext.GetInput<T>()!;
 
         public override Task<TResult> CallActivityAsync<TResult>(TaskName name, object? input = null, TaskOptions? options = null)
@@ -274,7 +272,6 @@ public class TaskOrchestrationContextReplaySafeLoggerFactoryTests
         protected override ILoggerFactory LoggerFactory => this.ReplaySafeLoggerFactory;
 
         public override T GetInput<T>()
-            where T : default
             => default!;
 
         public override Task<TResult> CallActivityAsync<TResult>(TaskName name, object? input = null, TaskOptions? options = null)

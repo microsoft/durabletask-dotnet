@@ -479,7 +479,7 @@ public abstract class TaskOrchestrationContext
             if (++depth > 10)
             {
                 throw new InvalidOperationException(
-                    "Cycle detected while unwrapping ReplaySafeLoggerFactory. " +
+                    "Maximum unwrap depth exceeded while resolving the underlying ILoggerFactory. " +
                     "Ensure the wrapper's LoggerFactory property delegates to the inner context's " +
                     "ReplaySafeLoggerFactory (e.g., 'inner.ReplaySafeLoggerFactory'), not 'this.ReplaySafeLoggerFactory'.");
             }

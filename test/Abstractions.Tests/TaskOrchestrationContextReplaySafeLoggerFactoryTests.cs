@@ -99,9 +99,7 @@ public class TaskOrchestrationContextReplaySafeLoggerFactoryTests
     public void ReplaySafeLoggerFactory_CreateLogger_ThrowsOnCyclicLoggerFactory()
     {
         // Arrange
-        TrackingLoggerProvider provider = new();
-        TrackingLoggerFactory loggerFactory = new(provider);
-        SelfReferencingContext cyclicContext = new(loggerFactory);
+        SelfReferencingContext cyclicContext = new();
 
         // Act
         Action act = () => cyclicContext.ReplaySafeLoggerFactory.CreateLogger("Test");
@@ -249,11 +247,8 @@ public class TaskOrchestrationContextReplaySafeLoggerFactoryTests
 
     sealed class SelfReferencingContext : TaskOrchestrationContext
     {
-        readonly ILoggerFactory loggerFactory;
-
-        public SelfReferencingContext(ILoggerFactory loggerFactory)
+        public SelfReferencingContext()
         {
-            this.loggerFactory = loggerFactory;
         }
 
         public override TaskName Name => default;
@@ -315,7 +310,7 @@ public class TaskOrchestrationContextReplaySafeLoggerFactoryTests
 
         public int DisposeCallCount { get; private set; }
 
-        public void AddProvider(ILoggerProvider loggerProvider)
+        public void AddProvider(ILoggerProvider provider)
         {
             this.AddProviderCallCount++;
         }

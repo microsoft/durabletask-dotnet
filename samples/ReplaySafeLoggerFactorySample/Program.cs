@@ -17,9 +17,9 @@ using Microsoft.Extensions.Logging;
 
 namespace ReplaySafeLoggerFactorySample;
 
-internal static class Program
+static class Program
 {
-    private static async Task Main(string[] args)
+    static async Task Main(string[] args)
     {
         HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
@@ -72,7 +72,7 @@ internal static class Program
         }
     }
 
-    private static void ConfigureDurableTask(
+    static void ConfigureDurableTask(
         HostApplicationBuilder builder,
         bool useScheduler,
         string? schedulerConnectionString)
@@ -108,7 +108,7 @@ internal static class Program
 }
 
 [DurableTask(nameof(ReplaySafeLoggingOrchestration))]
-internal sealed class ReplaySafeLoggingOrchestration : TaskOrchestrator<string, string>
+sealed class ReplaySafeLoggingOrchestration : TaskOrchestrator<string, string>
 {
     public override async Task<string> RunAsync(TaskOrchestrationContext context, string input)
     {
@@ -125,7 +125,7 @@ internal sealed class ReplaySafeLoggingOrchestration : TaskOrchestrator<string, 
 }
 
 [DurableTask(nameof(SayHelloActivity))]
-internal sealed class SayHelloActivity : TaskActivity<string, string>
+sealed class SayHelloActivity : TaskActivity<string, string>
 {
     readonly ILogger<SayHelloActivity> logger;
 
@@ -142,7 +142,7 @@ internal sealed class SayHelloActivity : TaskActivity<string, string>
     }
 }
 
-internal sealed class LoggingTaskOrchestrationContext : TaskOrchestrationContext
+sealed class LoggingTaskOrchestrationContext : TaskOrchestrationContext
 {
     readonly TaskOrchestrationContext innerContext;
 
@@ -151,6 +151,8 @@ internal sealed class LoggingTaskOrchestrationContext : TaskOrchestrationContext
         this.innerContext = innerContext ?? throw new ArgumentNullException(nameof(innerContext));
     }
 
+    // Only abstract members need explicit forwarding here. Virtual helpers such as
+    // ReplaySafeLoggerFactory and the convenience overloads continue to work through these overrides.
     public override TaskName Name => this.innerContext.Name;
 
     public override string InstanceId => this.innerContext.InstanceId;
@@ -164,8 +166,6 @@ internal sealed class LoggingTaskOrchestrationContext : TaskOrchestrationContext
     public override string Version => this.innerContext.Version;
 
     public override IReadOnlyDictionary<string, object?> Properties => this.innerContext.Properties;
-
-    public override TaskOrchestrationEntityFeature Entities => this.innerContext.Entities;
 
     protected override ILoggerFactory LoggerFactory => this.innerContext.ReplaySafeLoggerFactory;
 

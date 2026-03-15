@@ -74,7 +74,8 @@ $packages = @(
     "Microsoft.DurableTask.Extensions.AzureBlobPayloads",
     "Microsoft.DurableTask.Client.AzureManaged",
     "Microsoft.DurableTask.Worker.AzureManaged",
-    "Microsoft.DurableTask.ScheduledTasks"
+    "Microsoft.DurableTask.ScheduledTasks",
+    "Microsoft.DurableTask.ExportHistory"
 )
 
 Write-Host "DurableTask .NET NuGet Packages (latest versions):" -ForegroundColor Green

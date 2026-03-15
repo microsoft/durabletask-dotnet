@@ -4,6 +4,7 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Text;
+using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.DurableTask.Client.Entities;
@@ -73,6 +74,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
+    // The behavior of this method when the dedupe statuses field is null depends on the server-side implementation.
     public override async Task<string> ScheduleNewOrchestrationInstanceAsync(
         TaskName orchestratorName,
         object? input = null,
@@ -124,9 +126,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
 
         // Set orchestration ID reuse policy for deduplication support
-        // Note: This requires the protobuf to support OrchestrationIdReusePolicy field
-        // If the protobuf doesn't support it yet, this will need to be updated when the protobuf is updated
-        if (options?.DedupeStatuses != null && options.DedupeStatuses.Count > 0)
+        if (options?.DedupeStatuses != null)
         {
             // Parse and validate all status strings to enum first
             ImmutableHashSet<OrchestrationRuntimeStatus> dedupeStatuses = options.DedupeStatuses
@@ -143,19 +143,30 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
             // Convert dedupe statuses to protobuf statuses and create reuse policy
             IEnumerable<P.OrchestrationStatus> dedupeStatusesProto = dedupeStatuses.Select(s => s.ToGrpcStatus());
-            P.OrchestrationIdReusePolicy? policy = ProtoUtils.ConvertDedupeStatusesToReusePolicy(dedupeStatusesProto);
-
-            if (policy != null)
-            {
-                request.OrchestrationIdReusePolicy = policy;
-            }
+            request.OrchestrationIdReusePolicy = ProtoUtils.ConvertDedupeStatusesToReusePolicy(dedupeStatusesProto);
         }
 
         using Activity? newActivity = TraceHelper.StartActivityForNewOrchestration(request);
 
-        P.CreateInstanceResponse? result = await this.sidecarClient.StartInstanceAsync(
+        try
+        {
+            P.CreateInstanceResponse? result = await this.sidecarClient.StartInstanceAsync(
             request, cancellationToken: cancellation);
-        return result.InstanceId;
+            return result.InstanceId;
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.AlreadyExists)
+        {
+            throw new OrchestrationAlreadyExistsException(e.Status.Detail);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.InvalidArgument)
+        {
+            throw new ArgumentException(e.Status.Detail);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.ScheduleNewOrchestrationInstanceAsync)} operation was canceled.", e, cancellation);
+        }
     }
 
     /// <inheritdoc/>
@@ -206,6 +217,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override async Task SuspendInstanceAsync(
         string instanceId, string? reason = null, CancellationToken cancellation = default)
     {
+        Check.NotNullOrEmpty(instanceId);
         Check.NotEntity(this.options.EnableEntitySupport, instanceId);
 
         P.SuspendRequest request = new()
@@ -229,6 +241,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override async Task ResumeInstanceAsync(
         string instanceId, string? reason = null, CancellationToken cancellation = default)
     {
+        Check.NotNullOrEmpty(instanceId);
         Check.NotEntity(this.options.EnableEntitySupport, instanceId);
 
         P.ResumeRequest request = new()
@@ -354,6 +367,53 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
+    public override async Task<Page<string>> ListInstanceIdsAsync(
+        IEnumerable<OrchestrationRuntimeStatus>? runtimeStatus = null,
+        DateTimeOffset? completedTimeFrom = null,
+        DateTimeOffset? completedTimeTo = null,
+        int pageSize = OrchestrationQuery.DefaultPageSize,
+        string? lastInstanceKey = null,
+        CancellationToken cancellation = default)
+    {
+        Check.NotEntity(this.options.EnableEntitySupport, null);
+
+        P.ListInstanceIdsRequest request = new()
+        {
+            PageSize = pageSize,
+            LastInstanceKey = lastInstanceKey ?? string.Empty,
+        };
+
+        if (runtimeStatus != null)
+        {
+            request.RuntimeStatus.AddRange(runtimeStatus.Select(x => x.ToGrpcStatus()));
+        }
+
+        if (completedTimeFrom.HasValue)
+        {
+            request.CompletedTimeFrom = completedTimeFrom.Value.ToTimestamp();
+        }
+
+        if (completedTimeTo.HasValue)
+        {
+            request.CompletedTimeTo = completedTimeTo.Value.ToTimestamp();
+        }
+
+        try
+        {
+            P.ListInstanceIdsResponse response = await this.sidecarClient.ListInstanceIdsAsync(
+                request,
+                cancellationToken: cancellation);
+
+            return new Page<string>(response.InstanceIds.ToList(), response.LastInstanceKey);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.ListInstanceIdsAsync)} operation was canceled.", e, cancellation);
+        }
+    }
+
+    /// <inheritdoc/>
     public override async Task<OrchestrationMetadata> WaitForInstanceCompletionAsync(
         string instanceId, bool getInputsAndOutputs = false, CancellationToken cancellation = default)
     {
@@ -394,10 +454,16 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override Task<PurgeResult> PurgeInstanceAsync(
         string instanceId, PurgeInstanceOptions? options = null, CancellationToken cancellation = default)
     {
+        Check.NotNullOrEmpty(instanceId);
         bool recursive = options?.Recursive ?? false;
         this.logger.PurgingInstanceMetadata(instanceId);
 
-        P.PurgeInstancesRequest request = new() { InstanceId = instanceId, Recursive = recursive };
+        P.PurgeInstancesRequest request = new()
+        {
+            InstanceId = instanceId,
+            Recursive = recursive,
+            IsOrchestration = !this.options.EnableEntitySupport || instanceId[0] != '@',
+        };
         return this.PurgeInstancesCoreAsync(request, cancellation);
     }
 
@@ -426,6 +492,9 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
+    // Whether or not this method throws a <see cref="InvalidOperationException"/> or terminates the existing instance
+    // when <paramref name="restartWithNewInstanceId"/> is <c>false</c> and the existing instance is not in a terminal state
+    // depends on the server-side implementation.
     public override async Task<string> RestartAsync(
         string instanceId,
         bool restartWithNewInstanceId = false,
@@ -517,10 +586,11 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             using AsyncServerStreamingCall<P.HistoryChunk> streamResponse =
                 this.sidecarClient.StreamInstanceHistory(streamRequest, cancellationToken: cancellation);
 
+            Microsoft.DurableTask.ProtoUtils.EntityConversionState conversionState = new(insertMissingEntityUnlocks: false);
             List<HistoryEvent> pastEvents = [];
             while (await streamResponse.ResponseStream.MoveNext(cancellation))
             {
-                pastEvents.AddRange(streamResponse.ResponseStream.Current.Events.Select(DurableTask.ProtoUtils.ConvertHistoryEvent));
+                pastEvents.AddRange(streamResponse.ResponseStream.Current.Events.Select(conversionState.ConvertFromProto));
             }
 
             return pastEvents;
@@ -597,6 +667,14 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         {
             throw new OperationCanceledException(
                 $"The {nameof(this.PurgeAllInstancesAsync)} operation was canceled.", e, cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.FailedPrecondition)
+        {
+            throw new InvalidOperationException(e.Status.Detail);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
+        {
+            throw new NotImplementedException(e.Status.Detail);
         }
     }
 

@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.22.0
+- Changing the default dedupe statuses behavior by sophiatev ([#622](https://github.com/microsoft/durabletask-dotnet/pull/622))
+- Bump Analyzers package version to 1.22.0 stable release (from 0.3.0)
+- Add DURABLE0011: ContinueAsNew warning for unbounded orchestration loops ([#660](https://github.com/microsoft/durabletask-dotnet/pull/660))
+
+## 1.21.0
+- Introduce WorkItemFilters into worker flow by halspang ([#616](https://github.com/microsoft/durabletask-dotnet/pull/616))
+- Fix Analyzers treating passed in variable argument name as null by wangbill ([#640](https://github.com/microsoft/durabletask-dotnet/pull/640))
+- Move DURABLE0009/0010 from Unshipped to Shipped for v0.3.0 by cgillum ([#641](https://github.com/microsoft/durabletask-dotnet/pull/641))
+
+## 1.20.1
+- Fix GrpcChannel handle leak in AzureManaged backendby nytian ([#629](https://github.com/microsoft/durabletask-dotnet/pull/629))
+
+## 1.20.0
+- Partial orchestration workitem completion support (merge after next dts dp release) by wangbill ([#514](https://github.com/microsoft/durabletask-dotnet/pull/514))
+- Export history job by wangbill ([#494](https://github.com/microsoft/durabletask-dotnet/pull/494))
+- Add dependency injection support to durabletasktesthost by Naiyuan Tian ([#613](https://github.com/microsoft/durabletask-dotnet/pull/613))
+
+## v1.19.1
+- Throw an `InvalidOperationException` for purge requests on running orchestrations by sophiatev ([#611](https://github.com/microsoft/durabletask-dotnet/pull/611))
+- Validate c# identifiers in durabletask source generator by Copilot ([#578](https://github.com/microsoft/durabletask-dotnet/pull/578))
+- Document orchestration discovery and method probing behavior in analyzers by Copilot ([#594](https://github.com/microsoft/durabletask-dotnet/pull/594))
+
 ## v1.19.0
 - Extended sessions for entities in .net isolated by sophiatev ([#507](https://github.com/microsoft/durabletask-dotnet/pull/507))
 - Adding the ability to specify tags and a retry policy for suborchestrations by sophiatev ([#603](https://github.com/microsoft/durabletask-dotnet/pull/603))
@@ -380,6 +403,7 @@ Microsoft.DurableTask.Generators
 ## v0.4.1-beta
 
 Initial public release
+
 
 
 

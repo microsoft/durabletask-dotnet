@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Linq;
 using Azure.Core;
+using Grpc.Net.Client;
 using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -99,11 +103,23 @@ public static class DurableTaskSchedulerClientExtensions
     /// <summary>
     /// Configuration class that sets up gRPC channels for client options
     /// using the provided Durable Task Scheduler options.
+    /// Channels are cached per configuration key and disposed when the service provider is disposed.
     /// </summary>
-    /// <param name="schedulerOptions">Monitor for accessing the current scheduler options configuration.</param>
-    class ConfigureGrpcChannel(IOptionsMonitor<DurableTaskSchedulerClientOptions> schedulerOptions) :
-        IConfigureNamedOptions<GrpcDurableTaskClientOptions>
+    sealed class ConfigureGrpcChannel : IConfigureNamedOptions<GrpcDurableTaskClientOptions>, IAsyncDisposable
     {
+        readonly IOptionsMonitor<DurableTaskSchedulerClientOptions> schedulerOptions;
+        readonly ConcurrentDictionary<string, Lazy<GrpcChannel>> channels = new();
+        volatile int disposed;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ConfigureGrpcChannel"/> class.
+        /// </summary>
+        /// <param name="schedulerOptions">Monitor for accessing the current scheduler options configuration.</param>
+        public ConfigureGrpcChannel(IOptionsMonitor<DurableTaskSchedulerClientOptions> schedulerOptions)
+        {
+            this.schedulerOptions = schedulerOptions;
+        }
+
         /// <summary>
         /// Configures the default named options instance.
         /// </summary>
@@ -117,8 +133,79 @@ public static class DurableTaskSchedulerClientExtensions
         /// <param name="options">The options instance to configure.</param>
         public void Configure(string? name, GrpcDurableTaskClientOptions options)
         {
-            DurableTaskSchedulerClientOptions source = schedulerOptions.Get(name ?? Options.DefaultName);
-            options.Channel = source.CreateChannel();
+#if NET7_0_OR_GREATER
+            ObjectDisposedException.ThrowIf(this.disposed == 1, this);
+#else
+            if (this.disposed == 1)
+            {
+                throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
+            }
+#endif
+
+            string optionsName = name ?? Options.DefaultName;
+            DurableTaskSchedulerClientOptions source = this.schedulerOptions.Get(optionsName);
+
+            // Create a cache key that includes all properties that affect CreateChannel behavior.
+            // This ensures channels are reused for the same configuration
+            // but separate channels are created when any relevant property changes.
+            // Use a delimiter character (\u001F) that will not appear in typical endpoint URIs.
+            string credentialType = source.Credential?.GetType().FullName ?? "null";
+            string retryOptionsKey = source.RetryOptions != null
+                ? $"{source.RetryOptions.MaxRetries}|{source.RetryOptions.InitialBackoffMs}|{source.RetryOptions.MaxBackoffMs}|{source.RetryOptions.BackoffMultiplier}|{(source.RetryOptions.RetryableStatusCodes != null ? string.Join(",", source.RetryOptions.RetryableStatusCodes) : string.Empty)}"
+                : "null";
+            string cacheKey = $"{optionsName}\u001F{source.EndpointAddress}\u001F{source.TaskHubName}\u001F{source.ResourceId}\u001F{credentialType}\u001F{source.AllowInsecureCredentials}\u001F{retryOptionsKey}";
+            options.Channel = this.channels.GetOrAdd(
+                cacheKey,
+                _ => new Lazy<GrpcChannel>(source.CreateChannel)).Value;
+        }
+
+        /// <inheritdoc/>
+        public async ValueTask DisposeAsync()
+        {
+            if (Interlocked.Exchange(ref this.disposed, 1) == 1)
+            {
+                return;
+            }
+
+            foreach (Lazy<GrpcChannel> channel in this.channels.Values.Where(lazy => lazy.IsValueCreated))
+            {
+                try
+                {
+                    await DisposeChannelAsync(channel.Value).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException
+                                            and not StackOverflowException
+                                            and not ThreadAbortException)
+                {
+                    // Swallow disposal exceptions - disposal should be best-effort to ensure
+                    // all channels get a chance to dispose and app shutdown is not blocked.
+                    if (ex is not OperationCanceledException and not ObjectDisposedException)
+                    {
+                        Trace.TraceError(
+                            "Unexpected exception while disposing gRPC channel in DurableTaskSchedulerClientExtensions.DisposeAsync: {0}",
+                            ex);
+                    }
+                }
+            }
+
+            this.channels.Clear();
+            GC.SuppressFinalize(this);
+        }
+
+        static async Task DisposeChannelAsync(GrpcChannel channel)
+        {
+            // ShutdownAsync is the graceful way to close a gRPC channel.
+            using (channel)
+            {
+                try
+                {
+                    await channel.ShutdownAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+                {
+                    // Ignore expected shutdown/disposal errors
+                }
+            }
         }
     }
 }

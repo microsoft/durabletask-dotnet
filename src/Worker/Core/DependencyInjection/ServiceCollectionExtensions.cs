@@ -86,6 +86,21 @@ public static class ServiceCollectionExtensions
                 }
             });
 
+        // Auto-generate work item filters from the registry by default.
+        // Users can override these by calling UseWorkItemFilters(customFilters) on the builder.
+        services.AddOptions<DurableTaskWorkerWorkItemFilters>(name)
+            .Configure<IOptionsMonitor<DurableTaskRegistry>, IOptionsMonitor<DurableTaskWorkerOptions>>(
+                (opts, registryMonitor, workerOptionsMonitor) =>
+                {
+                    DurableTaskRegistry registry = registryMonitor.Get(name);
+                    DurableTaskWorkerOptions workerOptions = workerOptionsMonitor.Get(name);
+                    DurableTaskWorkerWorkItemFilters generated =
+                        DurableTaskWorkerWorkItemFilters.FromDurableTaskRegistry(registry, workerOptions);
+                    opts.Orchestrations = generated.Orchestrations;
+                    opts.Activities = generated.Activities;
+                    opts.Entities = generated.Entities;
+                });
+
         return services;
     }
 

@@ -10,13 +10,25 @@ namespace Microsoft.DurableTask.Client;
 /// </summary>
 public static class StartOrchestrationOptionsExtensions
 {
-    public static readonly OrchestrationRuntimeStatus[] ValidDedupeStatuses = new[]
-    {
+#pragma warning disable CS0618 // Type or member is obsolete - Cancelled is intentionally included for compatibility with the
+                               // Durable Task Framework
+
+    /// <summary>
+    /// The list of orchestration statuses that can be deduplicated upon a creation request.
+    /// If one of these statuses is included in the request via the <see cref="StartOrchestrationOptions.DedupeStatuses"/>
+    /// field, and an orchestration with this status and same instance ID is found, the request will fail.
+    /// </summary>
+    public static readonly IReadOnlyList<OrchestrationRuntimeStatus> ValidDedupeStatuses =
+    [
         OrchestrationRuntimeStatus.Completed,
         OrchestrationRuntimeStatus.Failed,
         OrchestrationRuntimeStatus.Terminated,
         OrchestrationRuntimeStatus.Canceled,
-    };
+        OrchestrationRuntimeStatus.Pending,
+        OrchestrationRuntimeStatus.Running,
+        OrchestrationRuntimeStatus.Suspended,
+    ];
+#pragma warning restore CS0618 // Type or member is obsolete
 
     /// <summary>
     /// Creates a new <see cref="StartOrchestrationOptions"/> with the specified deduplication statuses.

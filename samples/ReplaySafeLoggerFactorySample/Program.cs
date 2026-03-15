@@ -187,7 +187,6 @@ sealed class LoggingTaskOrchestrationContext : TaskOrchestrationContext
     }
 
     public override T GetInput<T>()
-        where T : default
         => this.innerContext.GetInput<T>()!;
 
     public override Task<TResult> CallActivityAsync<TResult>(

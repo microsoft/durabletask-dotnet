@@ -474,7 +474,7 @@ public abstract class TaskOrchestrationContext
         // When a wrapper context delegates LoggerFactory to inner.ReplaySafeLoggerFactory,
         // the returned factory is already a ReplaySafeLoggerFactoryImpl. Unwrap it to avoid
         // double-wrapping loggers with redundant replay-safe checks.
-        while (loggerFactory is ReplaySafeLoggerFactoryImpl replaySafeLoggerFactory)
+        while (loggerFactory is ReplaySafeLoggerFactoryImpl wrappedFactory)
         {
             if (++depth > 10)
             {
@@ -484,7 +484,7 @@ public abstract class TaskOrchestrationContext
                     "ReplaySafeLoggerFactory (e.g., 'inner.ReplaySafeLoggerFactory'), not 'this.ReplaySafeLoggerFactory'.");
             }
 
-            loggerFactory = replaySafeLoggerFactory.UnderlyingLoggerFactory;
+            loggerFactory = wrappedFactory.UnderlyingLoggerFactory;
         }
 
         return loggerFactory;

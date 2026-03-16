@@ -250,16 +250,15 @@ public class CancellationTests(ITestOutputHelper output, GrpcSidecarFixture side
     }
 
     /// <summary>
-    /// Tests that when a token is cancelled outside the retry handler (between retry attempts),
-    /// the handler receives the cancelled token on the next attempt.
+    /// Tests that pre-scheduling cancellation check catches a token cancelled
+    /// after options creation but before calling CallActivityAsync.
     /// </summary>
     [Fact]
-    public async Task RetryHandlerReceivesCancelledTokenFromOutside()
+    public async Task PreSchedulingCancellationCheck()
     {
-        TaskName orchestratorName = nameof(RetryHandlerReceivesCancelledTokenFromOutside);
+        TaskName orchestratorName = nameof(PreSchedulingCancellationCheck);
 
         int attemptCount = 0;
-        bool tokenWasCancelledInHandler = false;
 
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
@@ -271,16 +270,6 @@ public class CancellationTests(ITestOutputHelper output, GrpcSidecarFixture side
                     TaskRetryOptions retryOptions = TaskOptions.FromRetryHandler(retryContext =>
                     {
                         attemptCount = retryContext.LastAttemptNumber;
-                        
-                        // Check if token is cancelled
-                        tokenWasCancelledInHandler = retryContext.CancellationToken.IsCancellationRequested;
-
-                        // Stop retrying if cancelled
-                        if (retryContext.CancellationToken.IsCancellationRequested)
-                        {
-                            return false;
-                        }
-
                         return attemptCount < 5;
                     }).Retry!;
 
@@ -289,24 +278,17 @@ public class CancellationTests(ITestOutputHelper output, GrpcSidecarFixture side
                         CancellationToken = cts.Token
                     };
 
-                    // Cancel the token AFTER creating options but BEFORE first attempt
-                    // This tests that the retry handler receives the cancelled token from outside
+                    // Cancel the token AFTER creating options but BEFORE calling CallActivityAsync
                     cts.Cancel();
 
                     try
                     {
                         await ctx.CallActivityAsync("FailingActivity", options);
-                        return "Should not reach here - activity succeeded";
+                        return "Should not reach here";
                     }
                     catch (TaskCanceledException)
                     {
-                        // Pre-scheduling check caught the cancelled token before even attempting
                         return $"Cancelled before scheduling, attempts: {attemptCount}";
-                    }
-                    catch (TaskFailedException)
-                    {
-                        // Activity failed and retry handler stopped retrying
-                        return $"Failed after {attemptCount} attempts, token was cancelled in handler: {tokenWasCancelledInHandler}";
                     }
                 })
                 .AddActivityFunc("FailingActivity", (TaskActivityContext activityContext) =>
@@ -322,9 +304,8 @@ public class CancellationTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-        
-        // Since token was cancelled before CallActivityAsync, the pre-scheduling check throws
-        // TaskCanceledException and retry handler never gets called
+
+        // Pre-scheduling check throws TaskCanceledException; retry handler never gets called
         Assert.Equal(0, attemptCount);
         Assert.Contains("Cancelled before scheduling", metadata.SerializedOutput);
     }
@@ -390,7 +371,7 @@ public class CancellationTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-        
+
         // Should have processed 3 items (0, 1, 2) before cancellation at item 3
         Assert.Equal(3, activitiesInvoked);
         Assert.Contains("Processed 4 items", metadata.SerializedOutput); // 3 successful + 1 cancellation message
@@ -398,5 +379,75 @@ public class CancellationTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.Contains("Item 0", metadata.SerializedOutput);
         Assert.Contains("Item 1", metadata.SerializedOutput);
         Assert.Contains("Item 2", metadata.SerializedOutput);
+    }
+
+    /// <summary>
+    /// Tests that the cancellation token is passed to the retry handler for sub-orchestrators,
+    /// allowing the handler to stop retrying when cancelled.
+    /// </summary>
+    [Fact]
+    public async Task SubOrchestratorRetryHandlerCanStopOnCancellation()
+    {
+        TaskName orchestratorName = nameof(SubOrchestratorRetryHandlerCanStopOnCancellation);
+        TaskName subOrchestratorName = "FailingSubOrchestrator";
+
+        int maxAttempts = 0;
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc(orchestratorName, async ctx =>
+                {
+                    using CancellationTokenSource cts = new();
+
+                    TaskRetryOptions retryOptions = TaskOptions.FromRetryHandler(retryContext =>
+                    {
+                        maxAttempts = retryContext.LastAttemptNumber;
+
+                        // Cancel after second attempt
+                        if (maxAttempts == 2)
+                        {
+                            cts.Cancel();
+                        }
+
+                        // Stop retrying if cancelled
+                        if (retryContext.CancellationToken.IsCancellationRequested)
+                        {
+                            return false;
+                        }
+
+                        return maxAttempts < 10;
+                    }).Retry!;
+
+                    TaskOptions options = new(retryOptions)
+                    {
+                        CancellationToken = cts.Token
+                    };
+
+                    try
+                    {
+                        await ctx.CallSubOrchestratorAsync(subOrchestratorName, options: options);
+                        return "Should not reach here";
+                    }
+                    catch (TaskFailedException)
+                    {
+                        return $"Stopped after {maxAttempts} attempts";
+                    }
+                })
+                .AddOrchestratorFunc(subOrchestratorName, ctx =>
+                {
+                    throw new InvalidOperationException("Sub-orchestrator always fails");
+                }));
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(instanceId, metadata.InstanceId);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.Equal(2, maxAttempts); // Should stop after 2 attempts due to cancellation
+        Assert.Equal("\"Stopped after 2 attempts\"", metadata.SerializedOutput);
     }
 }

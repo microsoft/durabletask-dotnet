@@ -300,7 +300,7 @@ public class DurableTaskWorkerWorkItemFiltersExtensionTests
     }
 
     [Fact]
-    public void WorkerConstruction_DefaultFilters_FlowToWorker()
+    public void WorkerConstruction_NoOptIn_HasEmptyFilters()
     {
         // Arrange
         ServiceCollection services = new();
@@ -325,10 +325,10 @@ public class DurableTaskWorkerWorkItemFiltersExtensionTests
             .GetField("workItemFilters", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .GetValue(hosted);
 
-        // Assert
+        // Assert - without UseWorkItemFilters(), filters should be empty (no filtering)
         filters.Should().NotBeNull();
-        filters!.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator));
-        filters.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity));
+        filters!.Orchestrations.Should().BeEmpty();
+        filters.Activities.Should().BeEmpty();
     }
 
     [Fact]

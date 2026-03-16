@@ -260,14 +260,13 @@ public class CancellationTests(ITestOutputHelper output, GrpcSidecarFixture side
 
         int attemptCount = 0;
         bool tokenWasCancelledInHandler = false;
-        CancellationTokenSource? cts = null;
 
         await using HostTestLifetime server = await this.StartWorkerAsync(b =>
         {
             b.AddTasks(tasks => tasks
                 .AddOrchestratorFunc(orchestratorName, async ctx =>
                 {
-                    cts = new CancellationTokenSource();
+                    using CancellationTokenSource cts = new();
 
                     TaskRetryOptions retryOptions = TaskOptions.FromRetryHandler(retryContext =>
                     {

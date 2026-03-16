@@ -13,6 +13,8 @@ namespace Microsoft.DurableTask;
 /// </summary>
 public abstract class TaskOrchestrationContext
 {
+    ILoggerFactory? replaySafeLoggerFactory;
+
     /// <summary>
     /// Gets the name of the task orchestration.
     /// </summary>
@@ -75,6 +77,25 @@ public abstract class TaskOrchestrationContext
     /// </summary>
     public virtual TaskOrchestrationEntityFeature Entities =>
         throw new NotSupportedException($"Durable entities are not supported by {this.GetType()}.");
+
+    /// <summary>
+    /// Gets an <see cref="ILoggerFactory"/> whose loggers are replay-safe, meaning they suppress log
+    /// output during orchestration replay. This is the recommended way to expose logger functionality
+    /// when wrapping a <see cref="TaskOrchestrationContext"/> instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Loggers created by this factory automatically check <see cref="IsReplaying"/> and suppress
+    /// duplicate log messages during replay. This is equivalent to calling
+    /// <see cref="CreateReplaySafeLogger(string)"/> for each logger category.
+    /// </para>
+    /// <para>
+    /// Context wrapper implementations can delegate <see cref="LoggerFactory"/> to this property
+    /// on the inner context: <c>protected override ILoggerFactory LoggerFactory =&gt; inner.ReplaySafeLoggerFactory;</c>.
+    /// </para>
+    /// </remarks>
+    public virtual ILoggerFactory ReplaySafeLoggerFactory
+        => this.replaySafeLoggerFactory ??= new ReplaySafeLoggerFactoryImpl(this);
 
     /// <summary>
     /// Gets the logger factory for this context.
@@ -412,17 +433,17 @@ public abstract class TaskOrchestrationContext
     /// <param name="categoryName">The logger's category name.</param>
     /// <returns>An instance of <see cref="ILogger"/> that is replay-safe.</returns>
     public virtual ILogger CreateReplaySafeLogger(string categoryName)
-        => new ReplaySafeLogger(this, this.LoggerFactory.CreateLogger(categoryName));
+        => new ReplaySafeLogger(this, this.GetUnwrappedLoggerFactory().CreateLogger(categoryName));
 
     /// <inheritdoc cref="CreateReplaySafeLogger(string)" />
     /// <param name="type">The type to derive the category name from.</param>
     public virtual ILogger CreateReplaySafeLogger(Type type)
-        => new ReplaySafeLogger(this, this.LoggerFactory.CreateLogger(type));
+        => new ReplaySafeLogger(this, this.GetUnwrappedLoggerFactory().CreateLogger(type));
 
     /// <inheritdoc cref="CreateReplaySafeLogger(string)" />
     /// <typeparam name="T">The type to derive category name from.</typeparam>
     public virtual ILogger CreateReplaySafeLogger<T>()
-        => new ReplaySafeLogger(this, this.LoggerFactory.CreateLogger<T>());
+        => new ReplaySafeLogger(this, this.GetUnwrappedLoggerFactory().CreateLogger<T>());
 
     /// <summary>
     /// Checks if the current orchestration version is greater than the specified version.
@@ -445,7 +466,31 @@ public abstract class TaskOrchestrationContext
         return TaskOrchestrationVersioningUtils.CompareVersions(this.Version, version);
     }
 
-    class ReplaySafeLogger : ILogger
+    ILoggerFactory GetUnwrappedLoggerFactory()
+    {
+        ILoggerFactory loggerFactory = this.LoggerFactory;
+        int depth = 0;
+
+        // When a wrapper context delegates LoggerFactory to inner.ReplaySafeLoggerFactory,
+        // the returned factory is already a ReplaySafeLoggerFactoryImpl. Unwrap it to avoid
+        // double-wrapping loggers with redundant replay-safe checks.
+        while (loggerFactory is ReplaySafeLoggerFactoryImpl wrappedFactory)
+        {
+            if (++depth > 10)
+            {
+                throw new InvalidOperationException(
+                    "Maximum unwrap depth exceeded while resolving the underlying ILoggerFactory. " +
+                    "Ensure the wrapper's LoggerFactory property delegates to the inner context's " +
+                    "ReplaySafeLoggerFactory (e.g., 'inner.ReplaySafeLoggerFactory'), not 'this.ReplaySafeLoggerFactory'.");
+            }
+
+            loggerFactory = wrappedFactory.UnderlyingLoggerFactory;
+        }
+
+        return loggerFactory;
+    }
+
+    sealed class ReplaySafeLogger : ILogger
     {
         readonly TaskOrchestrationContext context;
         readonly ILogger logger;
@@ -456,7 +501,9 @@ public abstract class TaskOrchestrationContext
             this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public IDisposable BeginScope<TState>(TState state) => this.logger.BeginScope(state);
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+            => this.logger.BeginScope(state);
 
         public bool IsEnabled(LogLevel logLevel) => this.logger.IsEnabled(logLevel);
 
@@ -471,6 +518,30 @@ public abstract class TaskOrchestrationContext
             {
                 this.logger.Log(logLevel, eventId, state, exception, formatter);
             }
+        }
+    }
+
+    sealed class ReplaySafeLoggerFactoryImpl : ILoggerFactory
+    {
+        readonly TaskOrchestrationContext context;
+
+        internal ReplaySafeLoggerFactoryImpl(TaskOrchestrationContext context)
+        {
+            this.context = context ?? throw new ArgumentNullException(nameof(context));
+        }
+
+        internal ILoggerFactory UnderlyingLoggerFactory => this.context.LoggerFactory;
+
+        public ILogger CreateLogger(string categoryName)
+            => new ReplaySafeLogger(this.context, this.context.GetUnwrappedLoggerFactory().CreateLogger(categoryName));
+
+        public void AddProvider(ILoggerProvider provider)
+            => throw new NotSupportedException(
+                "Adding providers to the replay-safe logger factory is not supported.");
+
+        public void Dispose()
+        {
+            // No-op: this wrapper does not own the underlying logger factory.
         }
     }
 }

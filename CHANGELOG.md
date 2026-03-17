@@ -7,7 +7,6 @@
 - Fix #668: Change work item filters from auto opt-in to explicit opt-in ([#669](https://github.com/microsoft/durabletask-dotnet/pull/669))
 - Add `ReplaySafeLoggerFactory` for context wrappers ([#670](https://github.com/microsoft/durabletask-dotnet/pull/670))
 - Add NuGet publish job for Microsoft.DurableTask.Analyzers ([#662](https://github.com/microsoft/durabletask-dotnet/pull/662))
-- Add DURABLE0011: ContinueAsNew warning for unbounded orchestration loops ([#660](https://github.com/microsoft/durabletask-dotnet/pull/660))
 - Bump Azure.Identity from 1.17.1 to 1.18.0 ([#656](https://github.com/microsoft/durabletask-dotnet/pull/656))
 - Bump Microsoft.Azure.Functions.Worker.Extensions.DurableTask from 1.12.1 to 1.15.0 ([#658](https://github.com/microsoft/durabletask-dotnet/pull/658))
 - Add missing input validation to SuspendInstanceAsync and ResumeInstanceAsync ([#652](https://github.com/microsoft/durabletask-dotnet/pull/652))

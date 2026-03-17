@@ -877,33 +877,11 @@ namespace {targetNamespace}
                 this.TaskNameLocation = taskNameLocation;
                 this.InputTypeSymbol = inputType;
                 this.OutputTypeSymbol = outputType;
-
-                // Entities only have a state type parameter, not input/output
-                if (kind == DurableTaskKind.Entity)
-                {
-                    this.InputType = string.Empty;
-                    this.InputParameter = string.Empty;
-                    this.OutputType = string.Empty;
-                }
-                else
-                {
-                    this.InputType = GetRenderedTypeExpression(inputType);
-                    this.InputParameter = this.InputType + " input";
-                    if (this.InputType[this.InputType.Length - 1] == '?')
-                    {
-                        this.InputParameter += " = default";
-                    }
-
-                    this.OutputType = GetRenderedTypeExpression(outputType);
-                }
             }
 
             public string TypeName { get; }
             public string Namespace { get; }
             public string TaskName { get; }
-            public string InputType { get; }
-            public string InputParameter { get; }
-            public string OutputType { get; }
             public DurableTaskKind Kind { get; }
             public Location? TaskNameLocation { get; }
             ITypeSymbol? InputTypeSymbol { get; }
@@ -951,23 +929,6 @@ namespace {targetNamespace}
                     && symbol.ContainingNamespace.ToDisplayString() == targetNamespace)
                 {
                     expression = symbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
-                }
-
-                return expression;
-            }
-
-            static string GetRenderedTypeExpression(ITypeSymbol? symbol)
-            {
-                if (symbol == null)
-                {
-                    return "object";
-                }
-
-                string expression = symbol.ToString();
-                if (expression.StartsWith("System.", StringComparison.Ordinal)
-                    && symbol.ContainingNamespace.Name == "System")
-                {
-                    expression = expression.Substring("System.".Length);
                 }
 
                 return expression;

@@ -710,4 +710,75 @@ internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistr
             expectedOutput,
             isDurableFunctions: false);
     }
+
+    [Fact]
+    public Task MultiNamespace_CustomTypesSimplifiedPerNamespace()
+    {
+        // Verify that custom types are simplified when in the same namespace as the generated code,
+        // but remain fully qualified when referenced from a different namespace
+        string code = @"
+using System.Threading.Tasks;
+using Microsoft.DurableTask;
+
+namespace OrderNS
+{
+    public class OrderInput { }
+    public class OrderOutput { }
+
+    [DurableTask(nameof(OrderActivity))]
+    public class OrderActivity : TaskActivity<OrderInput, OrderOutput>
+    {
+        public override Task<OrderOutput> RunAsync(TaskActivityContext context, OrderInput input) => Task.FromResult(new OrderOutput());
+    }
+}
+
+namespace ShippingNS
+{
+    public class ShippingRequest { }
+    public class ShippingResult { }
+
+    [DurableTask(nameof(ShippingActivity))]
+    public class ShippingActivity : TaskActivity<ShippingRequest, ShippingResult>
+    {
+        public override Task<ShippingResult> RunAsync(TaskActivityContext context, ShippingRequest input) => Task.FromResult(new ShippingResult());
+    }
+}";
+
+        string expectedOutput = TestHelpers.WrapAndFormatMultiNamespace(
+            GeneratedClassName,
+            isDurableFunctions: false,
+            ("OrderNS", @"
+/// <summary>
+/// Calls the <see cref=""OrderActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
+public static Task<OrderOutput> CallOrderActivityAsync(this TaskOrchestrationContext ctx, OrderInput input, TaskOptions? options = null)
+{
+    return ctx.CallActivityAsync<OrderOutput>(""OrderActivity"", input, options);
+}"),
+            ("ShippingNS", @"
+/// <summary>
+/// Calls the <see cref=""ShippingActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
+public static Task<ShippingResult> CallShippingActivityAsync(this TaskOrchestrationContext ctx, ShippingRequest input, TaskOptions? options = null)
+{
+    return ctx.CallActivityAsync<ShippingResult>(""ShippingActivity"", input, options);
+}"),
+            ("Microsoft.DurableTask", @"
+internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
+{
+    builder.AddActivity<OrderNS.OrderActivity>();
+    builder.AddActivity<ShippingNS.ShippingActivity>();
+    return builder;
+}")
+        );
+
+        return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: false);
+    }
+
 }

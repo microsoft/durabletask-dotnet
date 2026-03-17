@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.3.32901.215
@@ -112,6 +112,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DistributedTracingSample", "samples\DistributedTracingSample\DistributedTracingSample.csproj", "{4A7305AE-AAAE-43AE-AAB2-DA58DACC6FA8}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NamespaceGenerationSample", "samples\NamespaceGenerationSample\NamespaceGenerationSample.csproj", "{5A69FD28-D814-490E-A76B-B0A5F88C25B2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReplaySafeLoggerFactorySample", "samples\ReplaySafeLoggerFactorySample\ReplaySafeLoggerFactorySample.csproj", "{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -687,6 +689,19 @@ Global
 		{5A69FD28-D814-490E-A76B-B0A5F88C25B2}.Release|x64.Build.0 = Release|Any CPU
 		{5A69FD28-D814-490E-A76B-B0A5F88C25B2}.Release|x86.ActiveCfg = Release|Any CPU
 		{5A69FD28-D814-490E-A76B-B0A5F88C25B2}.Release|x86.Build.0 = Release|Any CPU
+		{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4}.Debug|x64.Build.0 = Debug|Any CPU
+		{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4}.Debug|x86.Build.0 = Debug|Any CPU
+		{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4}.Release|x64.ActiveCfg = Release|Any CPU
+		{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4}.Release|x64.Build.0 = Release|Any CPU
+		{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4}.Release|x86.ActiveCfg = Release|Any CPU
+		{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4}.Release|x86.Build.0 = Release|Any CPU
+
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -743,6 +758,8 @@ Global
 		{05C9EBA6-7221-D458-47D6-DA457C2F893B} = {E5637F81-2FB9-4CD7-900D-455363B142A7}
 		{4A7305AE-AAAE-43AE-AAB2-DA58DACC6FA8} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
 		{5A69FD28-D814-490E-A76B-B0A5F88C25B2} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
+		{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
+
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AB41CB55-35EA-4986-A522-387AB3402E71}

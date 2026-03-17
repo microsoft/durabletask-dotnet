@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Add `ReplaySafeLoggerFactory` public property to `TaskOrchestrationContext` to enable context-wrapping scenarios while preserving replay-safe logging guarantees ([#497](https://github.com/microsoft/durabletask-dotnet/issues/497))
+
 ## v1.22.0
 - Changing the default dedupe statuses behavior by sophiatev ([#622](https://github.com/microsoft/durabletask-dotnet/pull/622))
 - Bump Analyzers package version to 1.22.0 stable release (from 0.3.0)

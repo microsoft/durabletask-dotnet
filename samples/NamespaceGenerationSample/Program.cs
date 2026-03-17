@@ -7,7 +7,12 @@
 
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Testing;
+using Microsoft.DurableTask.Client.AzureManaged;
+using Microsoft.DurableTask.Worker;
+using Microsoft.DurableTask.Worker.AzureManaged;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 // The generated AddAllGeneratedTasks() method is always in Microsoft.DurableTask namespace.
 // Extension methods like ScheduleNewApprovalOrchestratorInstanceAsync() are in the
@@ -15,12 +20,25 @@ using Microsoft.DurableTask.Testing;
 // NamespaceGenerationSample.Registrations namespace.
 using NamespaceGenerationSample.Approvals;
 
-// Start the in-process test host (no external services needed)
-// The generated AddAllGeneratedTasks() registers all orchestrators and activities
-await using DurableTaskTestHost testHost = await DurableTaskTestHost.StartAsync(
-    registry => registry.AddAllGeneratedTasks());
+HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
-DurableTaskClient client = testHost.Client;
+// Read the DTS connection string from configuration
+string schedulerConnectionString = builder.Configuration.GetValue<string>("DURABLE_TASK_SCHEDULER_CONNECTION_STRING")
+    ?? throw new InvalidOperationException("DURABLE_TASK_SCHEDULER_CONNECTION_STRING is not set.");
+
+builder.Services.AddDurableTaskClient(clientBuilder => clientBuilder.UseDurableTaskScheduler(schedulerConnectionString));
+
+builder.Services.AddDurableTaskWorker(workerBuilder =>
+{
+    // Use the generated AddAllGeneratedTasks() to register all orchestrators and activities
+    workerBuilder.AddTasks(tasks => tasks.AddAllGeneratedTasks());
+    workerBuilder.UseDurableTaskScheduler(schedulerConnectionString);
+});
+
+IHost host = builder.Build();
+await host.StartAsync();
+
+await using DurableTaskClient client = host.Services.GetRequiredService<DurableTaskClient>();
 
 // Use the generated typed extension method (in the Approvals namespace)
 string instanceId = await client.ScheduleNewApprovalOrchestratorInstanceAsync("request-123");
@@ -31,3 +49,5 @@ OrchestrationMetadata? result = await client.WaitForInstanceCompletionAsync(
     instanceId, getInputsAndOutputs: true);
 Console.WriteLine($"Orchestration completed with status: {result?.RuntimeStatus}");
 Console.WriteLine($"Output: {result?.ReadOutputAs<string>()}");
+
+await host.StopAsync();

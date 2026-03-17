@@ -21,10 +21,15 @@ This results in cleaner IDE suggestions — you only see extension methods for t
 
 1. Start the DTS emulator:
    ```bash
-   docker run --name durabletask-emulator -d -p 8080:8080 mcr.microsoft.com/durabletask/emulator:latest
+   docker run --name durabletask-emulator -d -p 8080:8080 -e ASPNETCORE_URLS=http://+:8080 mcr.microsoft.com/dts/dts-emulator:latest
    ```
 
-2. Run the sample:
+2. Set the connection string environment variable:
+   ```bash
+   export DURABLE_TASK_SCHEDULER_CONNECTION_STRING="Endpoint=http://localhost:8080;TaskHub=default;Authentication=None"
+   ```
+
+3. Run the sample:
    ```bash
    dotnet run
    ```

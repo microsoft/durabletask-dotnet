@@ -8,8 +8,9 @@ using Microsoft.DurableTask;
 using NamespaceGenerationSample.Registrations;
 
 // Approval-related tasks live in their own namespace.
-// The generated CallRegistrationActivityAsync() and ScheduleNewApprovalOrchestratorInstanceAsync()
-// extension methods will be generated in this namespace.
+// The generated ScheduleNewApprovalOrchestratorInstanceAsync() extension method
+// will be generated in this namespace. The CallRegistrationActivityAsync() extension
+// method is generated in the NamespaceGenerationSample.Registrations namespace.
 namespace NamespaceGenerationSample.Approvals
 {
     /// <summary>

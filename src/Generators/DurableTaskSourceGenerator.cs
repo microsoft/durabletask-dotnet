@@ -401,9 +401,9 @@ namespace Microsoft.DurableTask.Generators
             }
 
             // Activity function triggers from DurableFunction go into Microsoft.DurableTask namespace
-            IEnumerable<DurableFunction> activityTriggers = allFunctions.Where(
-                df => df.Kind == DurableFunctionKind.Activity);
-            if (activityTriggers.Any())
+            List<DurableFunction> activityTriggers = allFunctions.Where(
+                df => df.Kind == DurableFunctionKind.Activity).ToList();
+            if (activityTriggers.Count > 0)
             {
                 allNamespaces.Add("Microsoft.DurableTask");
             }
@@ -452,7 +452,7 @@ using Microsoft.Extensions.DependencyInjection;");
                 bool hasOrchestratorMethods = orchestratorsInNs.Count > 0;
                 bool hasActivityMethods = activitiesInNs.Count > 0;
                 bool hasEntityFunctions = isDurableFunctions && entitiesInNs.Count > 0;
-                bool hasActivityTriggers = isMicrosoftDurableTask && activityTriggers.Any();
+                bool hasActivityTriggers = isMicrosoftDurableTask && activityTriggers.Count > 0;
                 bool hasEvents = eventsInNamespace != null && eventsInNamespace.Count > 0;
                 bool hasRegistration = isMicrosoftDurableTask && needsRegistrationMethod;
 
@@ -629,7 +629,6 @@ namespace {targetNamespace}
         static void AddOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator, string targetNamespace)
         {
             string inputType = orchestrator.GetInputTypeForNamespace(targetNamespace);
-            string outputType = orchestrator.GetOutputTypeForNamespace(targetNamespace);
             string inputParameter = inputType + " input";
             if (inputType.EndsWith("?", StringComparison.Ordinal))
             {

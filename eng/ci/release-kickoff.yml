@@ -1,0 +1,206 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# This pipeline automates the SDK release kickoff process.
+# It bumps package versions, generates a changelog update, creates a release branch,
+# and opens a pull request for the release.
+
+trigger: none
+pr: none
+
+parameters:
+  - name: bumpType
+    displayName: 'Version bump type'
+    type: string
+    default: 'minor'
+    values:
+      - major
+      - minor
+      - patch
+      - explicit
+
+  - name: explicitVersion
+    displayName: 'Explicit version (required if bump type is "explicit", format: X.Y.Z)'
+    type: string
+    default: ''
+
+  - name: versionSuffix
+    displayName: 'Version suffix (e.g., "preview", "rc.1"; leave empty for stable release)'
+    type: string
+    default: ''
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+  - checkout: self
+    persistCredentials: true
+    fetchDepth: 0
+
+  - task: UseDotNet@2
+    displayName: 'Install .NET SDK'
+    inputs:
+      packageType: 'sdk'
+      useGlobalJson: true
+
+  - task: UsePythonVersion@0
+    displayName: 'Use Python 3.x'
+    inputs:
+      versionSpec: '3.x'
+
+  - pwsh: |
+      $ErrorActionPreference = 'Stop'
+
+      $repoRoot = "$(Build.SourcesDirectory)"
+      $releasePropsPath = Join-Path $repoRoot 'eng/targets/Release.props'
+      $changelogPath = Join-Path $repoRoot 'CHANGELOG.md'
+      $changelogScript = Join-Path $repoRoot 'generate_changelog.py'
+
+      $bumpType = '${{ parameters.bumpType }}'
+      $explicitVersion = '${{ parameters.explicitVersion }}'
+      $versionSuffix = '${{ parameters.versionSuffix }}'
+
+      # --- Read current version ---
+      [xml]$props = Get-Content $releasePropsPath -Raw
+      $currentVersion = $props.Project.PropertyGroup.VersionPrefix.Trim()
+      Write-Host "Current version: $currentVersion"
+
+      # --- Compute new version ---
+      if ($bumpType -eq 'explicit') {
+          if (-not $explicitVersion) {
+              throw "explicitVersion parameter is required when bumpType is 'explicit'."
+          }
+          if ($explicitVersion -notmatch '^\d+\.\d+\.\d+$') {
+              throw "explicitVersion must be in the format 'X.Y.Z'. Got: '$explicitVersion'"
+          }
+          $newVersion = $explicitVersion
+      }
+      else {
+          $parts = $currentVersion.Split('.')
+          [int]$major = $parts[0]
+          [int]$minor = $parts[1]
+          [int]$patch = $parts[2]
+
+          switch ($bumpType) {
+              'major' { $major++; $minor = 0; $patch = 0 }
+              'minor' { $minor++; $patch = 0 }
+              'patch' { $patch++ }
+          }
+          $newVersion = "$major.$minor.$patch"
+      }
+
+      $fullVersion = $newVersion
+      if ($versionSuffix) {
+          $fullVersion = "$newVersion-$versionSuffix"
+      }
+
+      Write-Host "New version: $newVersion"
+      Write-Host "Full version: $fullVersion"
+      Write-Host "##vso[task.setvariable variable=NewVersion]$newVersion"
+      Write-Host "##vso[task.setvariable variable=FullVersion]$fullVersion"
+      Write-Host "##vso[task.setvariable variable=VersionSuffix]$versionSuffix"
+
+      # --- Update Release.props ---
+      $content = Get-Content $releasePropsPath -Raw
+      $content = $content -replace '<VersionPrefix>[^<]*</VersionPrefix>', "<VersionPrefix>$newVersion</VersionPrefix>"
+      $content = $content -replace '<VersionSuffix>[^<]*</VersionSuffix>', "<VersionSuffix>$versionSuffix</VersionSuffix>"
+      Set-Content -Path $releasePropsPath -Value $content -NoNewline
+      Write-Host "Updated Release.props"
+
+      # --- Update CHANGELOG.md ---
+      Write-Host "Generating changelog..."
+      $changelogEntry = python $changelogScript --tag "v$fullVersion" 2>&1 | Out-String
+      Write-Host "Changelog generator output:"
+      Write-Host $changelogEntry
+
+      $existingChangelog = Get-Content $changelogPath -Raw
+      if ($existingChangelog -match '## Unreleased') {
+          # Insert the new version header after "## Unreleased" and a blank line
+          $updatedChangelog = $existingChangelog -replace '(## Unreleased\r?\n)', "`$1`n## v$fullVersion`n"
+          Set-Content -Path $changelogPath -Value $updatedChangelog -NoNewline
+          Write-Host "Updated CHANGELOG.md"
+      }
+      else {
+          Write-Warning "Could not find '## Unreleased' section in CHANGELOG.md."
+      }
+    displayName: 'Bump version and update changelog'
+
+  - pwsh: |
+      $ErrorActionPreference = 'Stop'
+
+      $fullVersion = "$(FullVersion)"
+      $branchName = "release/v$fullVersion"
+
+      git config user.email "azuredevops@microsoft.com"
+      git config user.name "Azure DevOps Pipeline"
+
+      git checkout -b $branchName
+      git add eng/targets/Release.props
+      git add CHANGELOG.md
+      git commit -m "Bump version to $fullVersion and update changelog"
+      git push origin $branchName
+
+      Write-Host "##vso[task.setvariable variable=ReleaseBranch]$branchName"
+      Write-Host "Release branch '$branchName' created and pushed."
+    displayName: 'Create and push release branch'
+
+  - pwsh: |
+      $ErrorActionPreference = 'Stop'
+
+      $fullVersion = "$(FullVersion)"
+      $newVersion = "$(NewVersion)"
+      $versionSuffix = "$(VersionSuffix)"
+      $branchName = "$(ReleaseBranch)"
+      $repo = "microsoft/durabletask-dotnet"
+
+      $prTitle = "Release v$fullVersion"
+      $prBody = @"
+      ## SDK Release v$fullVersion
+
+      This PR prepares the release of **v$fullVersion**.
+
+      ### Changes
+      - Bumped ``VersionPrefix`` to ``$newVersion`` in ``eng/targets/Release.props``
+      - Updated ``VersionSuffix`` to ``$versionSuffix``
+      - Updated ``CHANGELOG.md``
+
+      ### Release Checklist
+      - [ ] Verify version bump is correct
+      - [ ] Verify CHANGELOG.md entries are accurate
+      - [ ] Verify RELEASENOTES.md files are updated (if needed)
+      - [ ] Merge this PR
+      - [ ] Tag the release: ``git tag v$fullVersion``
+      - [ ] Kick off the [ADO release build](https://dev.azure.com/durabletaskframework/Durable%20Task%20Framework%20CI/_build?definitionId=29)
+      "@
+
+      # Create PR using the Azure DevOps REST API
+      $org = $env:SYSTEM_COLLECTIONURI
+      $project = $env:SYSTEM_TEAMPROJECT
+      $repoId = $env:BUILD_REPOSITORY_ID
+
+      $url = "${org}${project}/_apis/git/repositories/${repoId}/pullrequests?api-version=7.1"
+
+      $body = @{
+          sourceRefName = "refs/heads/$branchName"
+          targetRefName = "refs/heads/main"
+          title = $prTitle
+          description = $prBody
+      } | ConvertTo-Json -Depth 10
+
+      $headers = @{
+          'Content-Type' = 'application/json'
+          'Authorization' = "Bearer $(System.AccessToken)"
+      }
+
+      try {
+          $response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
+          Write-Host "Pull request created: $($response.url)"
+          Write-Host "PR ID: $($response.pullRequestId)"
+      }
+      catch {
+          Write-Warning "Failed to create PR via ADO API: $_"
+          Write-Host "You can create the PR manually at: https://github.com/$repo/compare/main...$branchName"
+      }
+    displayName: 'Open release pull request'
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)

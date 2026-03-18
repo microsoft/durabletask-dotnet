@@ -488,6 +488,11 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             request.PurgeInstanceFilter.RuntimeStatus.AddRange(filter.Statuses.Select(x => x.ToGrpcStatus()));
         }
 
+        if (filter?.Timeout is not null)
+        {
+            request.PurgeInstanceFilter.Timeout = Google.Protobuf.WellKnownTypes.Duration.FromTimeSpan(filter.Timeout.Value);
+        }
+
         return this.PurgeInstancesCoreAsync(request, cancellation);
     }
 

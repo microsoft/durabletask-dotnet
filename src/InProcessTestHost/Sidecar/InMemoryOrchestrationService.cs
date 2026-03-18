@@ -879,7 +879,7 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
         class ReadyToRunQueue
         {
             readonly Channel<SerializedInstanceState> readyToRunQueue = Channel.CreateUnbounded<SerializedInstanceState>();
-            readonly Dictionary<string, object> readyInstances = new(StringComparer.OrdinalIgnoreCase);
+            readonly ConcurrentDictionary<string, object> readyInstances = new(StringComparer.OrdinalIgnoreCase);
 
             public void Reset()
             {
@@ -893,7 +893,7 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                     SerializedInstanceState state = await this.readyToRunQueue.Reader.ReadAsync(ct);
                     lock (state)
                     {
-                        if (this.readyInstances.Remove(state.InstanceId))
+                        if (this.readyInstances.TryRemove(state.InstanceId, out _))
                         {
                             if (state.IsLoaded)
                             {
@@ -909,12 +909,9 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
 
             public void Schedule(SerializedInstanceState state)
             {
-                // TODO: There is a race condition here. If another thread is calling TakeNextAsync
-                //       and removed the queue item before updating the dictionary, then we'll fail
-                //       to update the readyToRunQueue and the orchestration will get stuck.
                 if (this.readyInstances.TryAdd(state.InstanceId, state))
                 {
-                    if (!this.readyToRunQueue.Writer.TryWrite(state)) 
+                    if (!this.readyToRunQueue.Writer.TryWrite(state))
                     {
                         throw new InvalidOperationException($"unable to write to queue for {state.InstanceId}");
                     }

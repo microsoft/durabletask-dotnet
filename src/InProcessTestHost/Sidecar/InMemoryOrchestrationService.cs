@@ -879,7 +879,7 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
         class ReadyToRunQueue
         {
             readonly Channel<SerializedInstanceState> readyToRunQueue = Channel.CreateUnbounded<SerializedInstanceState>();
-            readonly ConcurrentDictionary<string, object> readyInstances = new(StringComparer.OrdinalIgnoreCase);
+            readonly ConcurrentDictionary<string, SerializedInstanceState> readyInstances = new(StringComparer.OrdinalIgnoreCase);
 
             public void Reset()
             {

@@ -16,7 +16,7 @@ namespace InProcessTestHost.Tests;
 public class ConcurrentTimerTests
 {
     [Fact]
-    // Test that multi orchestrations with the same timer that fire at the same time
+    // Test that multiple orchestrations with the same timer that fire at the same time
     // can all complete correctly.
     public async Task MultipleOrchestrations_WithSameTimerFireAt_AllComplete()
     {
@@ -32,7 +32,7 @@ public class ConcurrentTimerTests
             });
         });
 
-        DateTime sharedFireAt = DateTime.UtcNow.AddSeconds(10);
+        DateTime sharedFireAt = DateTime.UtcNow.AddSeconds(5);
 
         string[] instanceIds = new string[orchestrationCount];
         for (int i = 0; i < orchestrationCount; i++)
@@ -60,7 +60,7 @@ public class ConcurrentTimerTests
     }
 
     [Fact]
-    // Test that fan-out sub-orchestrations with the same timer fire at time
+    // Test that fan-out sub-orchestrations with timers that all fire at the same time
     // can all complete correctly.
     public async Task SubOrchestrations_WithIdenticalTimers_AllComplete()
     {

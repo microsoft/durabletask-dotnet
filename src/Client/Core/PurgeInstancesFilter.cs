@@ -17,9 +17,11 @@ public record PurgeInstancesFilter(
     /// <summary>
     /// Gets or sets the maximum amount of time to spend purging instances in a single call.
     /// If <c>null</c> (default), all matching instances are purged with no time limit.
-    /// When set, the purge stops accepting new instances after this duration elapses
-    /// and returns with <see cref="PurgeResult.IsComplete"/> set to <c>false</c>.
-    /// Already-started instance deletions will complete before the method returns.
+    /// When set, the purge stops accepting new instances after this duration elapses.
+    /// The value of <see cref="PurgeResult.IsComplete"/> depends on the backend implementation:
+    /// it may be <c>false</c> if the purge timed out, <c>true</c> if all instances were purged,
+    /// or <c>null</c> if the backend does not support reporting completion status.
+    /// Not all backends support this property; those that do not will ignore it.
     /// </summary>
     public TimeSpan? Timeout { get; init; }
 }

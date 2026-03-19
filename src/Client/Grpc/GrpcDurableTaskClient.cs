@@ -490,6 +490,14 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
         if (filter?.Timeout is not null)
         {
+            if (filter.Timeout.Value <= TimeSpan.Zero)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(filter),
+                    filter.Timeout.Value,
+                    "Timeout must be a positive TimeSpan.");
+            }
+
             request.PurgeInstanceFilter.Timeout = Google.Protobuf.WellKnownTypes.Duration.FromTimeSpan(filter.Timeout.Value);
         }
 

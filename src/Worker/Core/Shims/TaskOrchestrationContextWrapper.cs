@@ -337,7 +337,20 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override void ContinueAsNew(object? newInput = null, bool preserveUnprocessedEvents = true)
     {
-        this.innerContext.ContinueAsNew(newInput);
+        this.ContinueAsNew(options: null, newInput, preserveUnprocessedEvents);
+    }
+
+    /// <inheritdoc/>
+    public override void ContinueAsNew(ContinueAsNewOptions? options, object? newInput = null, bool preserveUnprocessedEvents = true)
+    {
+        if (options?.NewVersion is not null)
+        {
+            this.innerContext.ContinueAsNew(options.NewVersion, newInput);
+        }
+        else
+        {
+            this.innerContext.ContinueAsNew(newInput);
+        }
 
         if (preserveUnprocessedEvents)
         {

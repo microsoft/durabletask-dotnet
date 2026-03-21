@@ -341,7 +341,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     }
 
     /// <inheritdoc/>
-    public override void ContinueAsNew(ContinueAsNewOptions? options, object? newInput, bool preserveUnprocessedEvents = true)
+    public override void ContinueAsNew(ContinueAsNewOptions? options, object? newInput, bool preserveUnprocessedEvents)
     {
         if (!string.IsNullOrWhiteSpace(options?.NewVersion))
         {

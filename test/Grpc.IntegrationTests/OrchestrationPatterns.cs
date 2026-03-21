@@ -593,7 +593,7 @@ public class OrchestrationPatterns : IntegrationTestBase
                 {
                     // First generation: migrate to "v2"
                     await ctx.CreateTimer(TimeSpan.Zero, CancellationToken.None);
-                    ctx.ContinueAsNew(new ContinueAsNewOptions { NewVersion = "v2" }, input + 1);
+                    ctx.ContinueAsNew(new ContinueAsNewOptions { NewVersion = "v2" }, input + 1, true);
                     return string.Empty;
                 }
 

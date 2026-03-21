@@ -441,7 +441,7 @@ public abstract class TaskOrchestrationContext
     /// history when the orchestration instance restarts. If <c>false</c>, any unprocessed
     /// external events will be discarded when the orchestration instance restarts.
     /// </param>
-    public virtual void ContinueAsNew(ContinueAsNewOptions? options, object? newInput, bool preserveUnprocessedEvents = true)
+    public virtual void ContinueAsNew(ContinueAsNewOptions? options, object? newInput, bool preserveUnprocessedEvents)
     {
         this.ContinueAsNew(newInput, preserveUnprocessedEvents);
     }

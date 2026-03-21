@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Abstractions;
@@ -398,7 +398,7 @@ public abstract class TaskOrchestrationContext
     /// <see cref="ContinueAsNew(object?, bool)"/>. For example, if a timer is scheduled and then <see cref="ContinueAsNew(object?, bool)"/>
     /// is called before the timer fires, the timer event will be discarded. The only exception to this
     /// is external events. By default, if an external event is received by an orchestration but not yet
-    /// processed, the event is saved in the orchestration state unit it is received by a call to
+    /// processed, the event is saved in the orchestration state until it is received by a call to
     /// <see cref="WaitForExternalEvent{T}(string, CancellationToken)"/>. These events will continue to remain in memory
     /// even after an orchestrator restarts using <see cref="ContinueAsNew(object?, bool)"/>. You can disable this behavior and
     /// remove any saved external events by specifying <c>false</c> for the <paramref name="preserveUnprocessedEvents"/>
@@ -435,7 +435,7 @@ public abstract class TaskOrchestrationContext
     /// history when the orchestration instance restarts. If <c>false</c>, any unprocessed
     /// external events will be discarded when the orchestration instance restarts.
     /// </param>
-    public virtual void ContinueAsNew(ContinueAsNewOptions options, object? newInput = null, bool preserveUnprocessedEvents = true)
+    public virtual void ContinueAsNew(ContinueAsNewOptions? options, object? newInput, bool preserveUnprocessedEvents = true)
     {
         this.ContinueAsNew(newInput, preserveUnprocessedEvents);
     }

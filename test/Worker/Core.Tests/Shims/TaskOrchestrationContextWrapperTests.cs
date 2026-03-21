@@ -94,7 +94,7 @@ public class TaskOrchestrationContextWrapperTests
         innerContext.LastContinueAsNewVersion.Should().BeNull();
     }
 
-    class TrackingOrchestrationContext : OrchestrationContext
+    sealed class TrackingOrchestrationContext : OrchestrationContext
     {
         public TrackingOrchestrationContext()
         {

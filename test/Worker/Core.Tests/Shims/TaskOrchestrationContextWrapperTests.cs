@@ -71,7 +71,12 @@ public class TaskOrchestrationContextWrapperTests
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
 
         // Act
-        wrapper.ContinueAsNew(new ContinueAsNewOptions { NewVersion = "v2" }, "new-input", preserveUnprocessedEvents: false);
+        wrapper.ContinueAsNew(new ContinueAsNewOptions
+        {
+            NewVersion = "v2",
+            NewInput = "new-input",
+            PreserveUnprocessedEvents = false,
+        });
 
         // Assert
         innerContext.LastContinueAsNewInput.Should().Be("new-input");
@@ -79,7 +84,7 @@ public class TaskOrchestrationContextWrapperTests
     }
 
     [Fact]
-    public void ContinueAsNew_WithNullOptions_CallsInnerContextWithoutVersion()
+    public void ContinueAsNew_WithOptionsNoVersion_CallsInnerContextWithoutVersion()
     {
         // Arrange
         TrackingOrchestrationContext innerContext = new();
@@ -87,7 +92,11 @@ public class TaskOrchestrationContextWrapperTests
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
 
         // Act
-        wrapper.ContinueAsNew(options: null, newInput: "new-input", preserveUnprocessedEvents: false);
+        wrapper.ContinueAsNew(new ContinueAsNewOptions
+        {
+            NewInput = "new-input",
+            PreserveUnprocessedEvents = false,
+        });
 
         // Assert
         innerContext.LastContinueAsNewInput.Should().Be("new-input");

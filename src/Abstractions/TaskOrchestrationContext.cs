@@ -416,34 +416,29 @@ public abstract class TaskOrchestrationContext
     public abstract void ContinueAsNew(object? newInput = null, bool preserveUnprocessedEvents = true);
 
     /// <summary>
-    /// Restarts the orchestration, optionally with a new version, clearing the history.
+    /// Restarts the orchestration with the specified options, clearing the history.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This overload accepts <see cref="ContinueAsNewOptions"/> to control the restart behavior.
+    /// This overload accepts <see cref="ContinueAsNewOptions"/> to control the restart behavior,
+    /// including the new input, whether to preserve unprocessed events, and an optional new version.
     /// When <see cref="ContinueAsNewOptions.NewVersion"/> is set, the framework uses the new version
     /// to route the restarted instance to the appropriate orchestrator implementation, enabling
-    /// version-based dispatch. When no version is specified (i.e., <paramref name="options"/> is
-    /// <c>null</c> or <c>NewVersion</c> is not set), this method behaves identically to
-    /// <see cref="ContinueAsNew(object?, bool)"/>.
+    /// version-based dispatch.
     /// </para><para>
-    /// The default implementation ignores <paramref name="options"/> and delegates to
-    /// <see cref="ContinueAsNew(object?, bool)"/>. Subclasses that support version-based
+    /// The default implementation delegates to
+    /// <see cref="ContinueAsNew(object?, bool)"/> using the input and preserve-events values
+    /// from <paramref name="options"/>. Subclasses that support version-based
     /// dispatch should override this method.
     /// </para><para>
     /// Orchestrator implementations should complete immediately after calling this method.
     /// </para>
     /// </remarks>
-    /// <param name="options">Options for the continue-as-new operation, including an optional new version.</param>
-    /// <param name="newInput">The JSON-serializable input data to re-initialize the instance with.</param>
-    /// <param name="preserveUnprocessedEvents">
-    /// If set to <c>true</c>, re-adds any unprocessed external events into the new execution
-    /// history when the orchestration instance restarts. If <c>false</c>, any unprocessed
-    /// external events will be discarded when the orchestration instance restarts.
-    /// </param>
-    public virtual void ContinueAsNew(ContinueAsNewOptions? options, object? newInput, bool preserveUnprocessedEvents)
+    /// <param name="options">Options for the continue-as-new operation.</param>
+    public virtual void ContinueAsNew(ContinueAsNewOptions options)
     {
-        this.ContinueAsNew(newInput, preserveUnprocessedEvents);
+        Check.NotNull(options);
+        this.ContinueAsNew(options.NewInput, options.PreserveUnprocessedEvents);
     }
 
     /// <summary>

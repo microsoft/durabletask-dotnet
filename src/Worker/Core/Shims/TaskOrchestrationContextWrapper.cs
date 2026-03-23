@@ -337,22 +337,28 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override void ContinueAsNew(object? newInput = null, bool preserveUnprocessedEvents = true)
     {
-        this.ContinueAsNew(options: null, newInput, preserveUnprocessedEvents);
+        this.ContinueAsNew(new ContinueAsNewOptions
+        {
+            NewInput = newInput,
+            PreserveUnprocessedEvents = preserveUnprocessedEvents,
+        });
     }
 
     /// <inheritdoc/>
-    public override void ContinueAsNew(ContinueAsNewOptions? options, object? newInput, bool preserveUnprocessedEvents)
+    public override void ContinueAsNew(ContinueAsNewOptions options)
     {
-        if (!string.IsNullOrWhiteSpace(options?.NewVersion))
+        Check.NotNull(options);
+
+        if (!string.IsNullOrWhiteSpace(options.NewVersion))
         {
-            this.innerContext.ContinueAsNew(options.NewVersion, newInput);
+            this.innerContext.ContinueAsNew(options.NewVersion, options.NewInput);
         }
         else
         {
-            this.innerContext.ContinueAsNew(newInput);
+            this.innerContext.ContinueAsNew(options.NewInput);
         }
 
-        if (preserveUnprocessedEvents)
+        if (options.PreserveUnprocessedEvents)
         {
             // Send all the buffered external events to ourself.
             OrchestrationInstance instance = new() { InstanceId = this.InstanceId };

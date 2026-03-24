@@ -156,6 +156,7 @@ jobs:
 
           # Detect line ending style used in the file
           eol = '\r\n' if '\r\n' in content else '\n'
+          changes = changes.replace('\r\n', '\n').replace('\n', eol)
           new_section = f'{eol}## v{version}{eol}{changes}{eol}'
 
           # Insert the new version section after '## Unreleased'

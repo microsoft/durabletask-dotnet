@@ -150,10 +150,14 @@ jobs:
           with open(changelog_file, 'r') as f:
               changes = f.read().strip()
 
-          with open('CHANGELOG.md', 'r') as f:
+          # Read with newline='' to preserve original line endings (CRLF or LF)
+          with open('CHANGELOG.md', 'r', newline='') as f:
               content = f.read()
 
-          new_section = f'\n## v{version}\n{changes}\n'
+          # Detect line ending style used in the file
+          eol = '\r\n' if '\r\n' in content else '\n'
+          changes = changes.replace('\r\n', '\n').replace('\n', eol)
+          new_section = f'{eol}## v{version}{eol}{changes}{eol}'
 
           # Insert the new version section after '## Unreleased'
           marker = '## Unreleased'
@@ -163,17 +167,19 @@ jobs:
               # Skip any whitespace/newlines after the marker
               while insert_pos < len(content) and content[insert_pos] in (' ', '\t', '\n', '\r'):
                   # Stop if we hit another section header
-                  if content[insert_pos] == '\n' and insert_pos + 1 < len(content) and content[insert_pos + 1] == '#':
+                  next_char = insert_pos + 1 if content[insert_pos] == '\r' else insert_pos
+                  if content[insert_pos] in ('\n', '\r') and next_char + 1 < len(content) and content[next_char + 1] == '#':
                       break
                   insert_pos += 1
-              content = content[:insert_pos] + '\n' + new_section + content[insert_pos:]
+              content = content[:insert_pos] + eol + new_section + content[insert_pos:]
           else:
               # No Unreleased section found, insert at top after title
-              title_end = content.find('\n', content.find('# Changelog'))
+              title_end = content.find(eol, content.find('# Changelog'))
               if title_end != -1:
-                  content = content[:title_end + 1] + '\n## Unreleased\n' + new_section + content[title_end + 1:]
+                  content = content[:title_end + len(eol)] + eol + '## Unreleased' + eol + new_section + content[title_end + len(eol):]
 
-          with open('CHANGELOG.md', 'w') as f:
+          # Write with newline='' to preserve the detected line endings
+          with open('CHANGELOG.md', 'w', newline='') as f:
               f.write(content)
 
           print(f'Updated CHANGELOG.md with v{version}')

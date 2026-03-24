@@ -1,7 +1,18 @@
 # Changelog
 
 ## Unreleased
-- Add `ReplaySafeLoggerFactory` public property to `TaskOrchestrationContext` to enable context-wrapping scenarios while preserving replay-safe logging guarantees ([#497](https://github.com/microsoft/durabletask-dotnet/issues/497))
+
+## v1.23.0
+- Generate extension methods in task namespace instead of Microsoft.DurableTask ([#538](https://github.com/microsoft/durabletask-dotnet/pull/538))
+- Fix #668: Change work item filters from auto opt-in to explicit opt-in ([#669](https://github.com/microsoft/durabletask-dotnet/pull/669))
+- Add `ReplaySafeLoggerFactory` for context wrappers ([#670](https://github.com/microsoft/durabletask-dotnet/pull/670))
+- Add NuGet publish job for Microsoft.DurableTask.Analyzers ([#662](https://github.com/microsoft/durabletask-dotnet/pull/662))
+- Bump Azure.Identity from 1.17.1 to 1.18.0 ([#656](https://github.com/microsoft/durabletask-dotnet/pull/656))
+- Bump Microsoft.Azure.Functions.Worker.Extensions.DurableTask from 1.12.1 to 1.15.0 ([#658](https://github.com/microsoft/durabletask-dotnet/pull/658))
+- Add missing input validation to SuspendInstanceAsync and ResumeInstanceAsync ([#652](https://github.com/microsoft/durabletask-dotnet/pull/652))
+- Add ExportHistory package to NuGet publish pipeline ([#651](https://github.com/microsoft/durabletask-dotnet/pull/651))
+- Add OpenTelemetry sample and update deps ([#637](https://github.com/microsoft/durabletask-dotnet/pull/637))
+- Fix build warnings and clean up exception message ([#647](https://github.com/microsoft/durabletask-dotnet/pull/647))
 
 ## v1.22.0
 - Changing the default dedupe statuses behavior by sophiatev ([#622](https://github.com/microsoft/durabletask-dotnet/pull/622))

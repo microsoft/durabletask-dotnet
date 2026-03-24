@@ -1,0 +1,231 @@
+# Prepare Release Workflow
+# This workflow automates the release preparation process:
+# 1. Updates the version in eng/targets/Release.props
+# 2. Generates changelog from git diff between main and last release tag
+# 3. Updates CHANGELOG.md with the new version section
+# 4. Creates a release branch and tag
+# After the workflow completes, manually create a PR from the release branch to main.
+
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.24.0 or 1.24.0-preview.1). Leave empty to auto-increment (patch for stable, pre-release number for pre-release).'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history needed for git diff and tags
+
+      - name: Get current version
+        id: get-current-version
+        run: |
+          # Extract VersionPrefix and VersionSuffix from Release.props
+          VERSION_PREFIX=$(grep -oP '(?<=<VersionPrefix>)[^<]+' eng/targets/Release.props)
+          VERSION_SUFFIX=$(grep -oP '(?<=<VersionSuffix>)[^<]*' eng/targets/Release.props)
+
+          if [ -n "$VERSION_SUFFIX" ]; then
+            CURRENT_VERSION="${VERSION_PREFIX}-${VERSION_SUFFIX}"
+          else
+            CURRENT_VERSION="$VERSION_PREFIX"
+          fi
+
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Calculate next version
+        id: calc-version
+        run: |
+          INPUT_VERSION="${{ github.event.inputs.version }}"
+          CURRENT_VERSION="${{ steps.get-current-version.outputs.current_version }}"
+
+          if [ -n "$INPUT_VERSION" ]; then
+            NEW_VERSION="$INPUT_VERSION"
+          else
+            # Auto-increment: parse current version and bump appropriately
+            # Handle pre-release versions like 1.23.0-preview.1 -> 1.23.0-preview.2
+            # Handle stable versions like 1.23.0 -> 1.23.1
+            NEW_VERSION=$(python3 -c "
+          import re, sys
+          v = '$CURRENT_VERSION'
+          m = re.match(r'^(\d+)\.(\d+)\.(\d+)(?:-([a-zA-Z]+)\.(\d+))?$', v)
+          if not m:
+              print(v)
+              sys.exit(0)
+          major, minor, patch, pre_type, pre_num = m.groups()
+          if pre_type and pre_num:
+              print(f'{major}.{minor}.{patch}-{pre_type}.{int(pre_num) + 1}')
+          else:
+              print(f'{major}.{minor}.{int(patch) + 1}')
+          ")
+          fi
+
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Get latest release tag
+        id: get-latest-tag
+        run: |
+          NEW_VERSION="${{ steps.calc-version.outputs.new_version }}"
+          # Get the latest tag that looks like a version (v*), excluding the
+          # tag being created so that re-runs don't use it as the baseline.
+          LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | \
+            grep -v "^v${NEW_VERSION}$" | head -n 1)
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No previous release tag found, using initial commit"
+            LATEST_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "Latest tag: $LATEST_TAG"
+
+      - name: Generate changelog diff
+        id: changelog-diff
+        run: |
+          LATEST_TAG="${{ steps.get-latest-tag.outputs.latest_tag }}"
+          NEW_VERSION="${{ steps.calc-version.outputs.new_version }}"
+
+          echo "Generating changelog for changes between $LATEST_TAG and HEAD..."
+
+          # Get commits between last tag and HEAD.
+          # GitHub squash-merges put the PR number in parentheses, e.g. "Some change (#123)".
+          # We convert "(#N)" to a markdown link.
+          CHANGELOG_CONTENT=$(git log "$LATEST_TAG"..HEAD --pretty=format:"%s" --no-merges | \
+            sed 's/(#\([0-9]*\))/([#\1](https:\/\/github.com\/microsoft\/durabletask-dotnet\/pull\/\1))/' | \
+            sed 's/^/- /' | \
+            grep -v '^- $' || echo "")
+
+          # Save to file for multi-line output
+          echo "$CHANGELOG_CONTENT" > /tmp/changelog_content.txt
+          echo "changelog_file=/tmp/changelog_content.txt" >> $GITHUB_OUTPUT
+
+          echo "Generated changelog:"
+          cat /tmp/changelog_content.txt
+
+      - name: Update Release.props version
+        run: |
+          NEW_VERSION="${{ steps.calc-version.outputs.new_version }}"
+
+          # Parse version into prefix and suffix
+          if [[ "$NEW_VERSION" == *-* ]]; then
+            VERSION_PREFIX="${NEW_VERSION%%-*}"
+            VERSION_SUFFIX="${NEW_VERSION#*-}"
+          else
+            VERSION_PREFIX="$NEW_VERSION"
+            VERSION_SUFFIX=""
+          fi
+
+          echo "Updating Release.props: VersionPrefix=$VERSION_PREFIX, VersionSuffix=$VERSION_SUFFIX"
+
+          # Update VersionPrefix
+          sed -i "s|<VersionPrefix>[^<]*</VersionPrefix>|<VersionPrefix>$VERSION_PREFIX</VersionPrefix>|" eng/targets/Release.props
+
+          # Update VersionSuffix
+          sed -i "s|<VersionSuffix>[^<]*</VersionSuffix>|<VersionSuffix>$VERSION_SUFFIX</VersionSuffix>|" eng/targets/Release.props
+
+          echo "Updated eng/targets/Release.props:"
+          cat eng/targets/Release.props
+
+      - name: Update CHANGELOG.md
+        run: |
+          NEW_VERSION="${{ steps.calc-version.outputs.new_version }}"
+          CHANGELOG_FILE="/tmp/changelog_content.txt"
+
+          python3 -c "
+          import sys
+
+          version = '${NEW_VERSION}'
+          changelog_file = '${CHANGELOG_FILE}'
+
+          with open(changelog_file, 'r') as f:
+              changes = f.read().strip()
+
+          with open('CHANGELOG.md', 'r') as f:
+              content = f.read()
+
+          new_section = f'\n## v{version}\n{changes}\n'
+
+          # Insert the new version section after '## Unreleased'
+          marker = '## Unreleased'
+          idx = content.find(marker)
+          if idx != -1:
+              insert_pos = idx + len(marker)
+              # Skip any whitespace/newlines after the marker
+              while insert_pos < len(content) and content[insert_pos] in (' ', '\t', '\n', '\r'):
+                  # Stop if we hit another section header
+                  if content[insert_pos] == '\n' and insert_pos + 1 < len(content) and content[insert_pos + 1] == '#':
+                      break
+                  insert_pos += 1
+              content = content[:insert_pos] + '\n' + new_section + content[insert_pos:]
+          else:
+              # No Unreleased section found, insert at top after title
+              title_end = content.find('\n', content.find('# Changelog'))
+              if title_end != -1:
+                  content = content[:title_end + 1] + '\n## Unreleased\n' + new_section + content[title_end + 1:]
+
+          with open('CHANGELOG.md', 'w') as f:
+              f.write(content)
+
+          print(f'Updated CHANGELOG.md with v{version}')
+          "
+
+      - name: Create release branch and commit
+        id: create-branch
+        run: |
+          NEW_VERSION="${{ steps.calc-version.outputs.new_version }}"
+          BRANCH_NAME="release/v${NEW_VERSION}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create and checkout release branch (idempotent)
+          git checkout -B "$BRANCH_NAME"
+
+          # Stage and commit changes
+          git add eng/targets/Release.props
+          git add CHANGELOG.md
+          if ! git diff --cached --quiet; then
+            git commit -m "Release v${NEW_VERSION}"
+          else
+            echo "No changes to commit (re-run with same version)"
+          fi
+
+          # Create release tag (idempotent)
+          git tag -f "v${NEW_VERSION}"
+
+          # Push branch and tag (force to handle re-runs)
+          git push -f origin "$BRANCH_NAME"
+          git push -f origin "v${NEW_VERSION}"
+
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "Created branch $BRANCH_NAME and tag v${NEW_VERSION}"
+
+      - name: Summary
+        run: |
+          NEW_VERSION="${{ steps.calc-version.outputs.new_version }}"
+          BRANCH_NAME="${{ steps.create-branch.outputs.branch_name }}"
+
+          echo "## Release Preparation Complete! :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: v${NEW_VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${BRANCH_NAME}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag**: v${NEW_VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. **Create a Pull Request** from **${BRANCH_NAME}** → **main** with title: **Release v${NEW_VERSION}**" >> $GITHUB_STEP_SUMMARY
+          echo "2. Review the version bump in \`eng/targets/Release.props\` and changelog updates" >> $GITHUB_STEP_SUMMARY
+          echo "3. Update per-package \`RELEASENOTES.md\` files if needed" >> $GITHUB_STEP_SUMMARY
+          echo "4. Merge the PR after CI passes" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[Create PR](https://github.com/microsoft/durabletask-dotnet/compare/main...${BRANCH_NAME}?expand=1&title=Release+v${NEW_VERSION})" >> $GITHUB_STEP_SUMMARY

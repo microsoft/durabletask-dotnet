@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+
+## v1.23.1
+- Fix CHANGELOG line ending preservation in Prepare Release workflow ([#687](https://github.com/microsoft/durabletask-dotnet/pull/687))
+- Add Prepare Release GitHub Action for automated release kickoff ([#686](https://github.com/microsoft/durabletask-dotnet/pull/686))
+- Add ContinueAsNewOptions with NewVersion support ([#682](https://github.com/microsoft/durabletask-dotnet/pull/682))
+- Fix concurrent timer race condition in InMemoryOrchestrationService ([#678](https://github.com/microsoft/durabletask-dotnet/pull/678))
+
 ## v1.23.0
 - Generate extension methods in task namespace instead of Microsoft.DurableTask ([#538](https://github.com/microsoft/durabletask-dotnet/pull/538))
 - Fix #668: Change work item filters from auto opt-in to explicit opt-in ([#669](https://github.com/microsoft/durabletask-dotnet/pull/669))

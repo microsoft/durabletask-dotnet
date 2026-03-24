@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <PackageReference Include="Google.Protobuf" VersionOverride="3.33.5" />
+    <PackageReference Include="Microsoft.Azure.DurableTask.Core" VersionOverride="3.7.1" />
     <None Update="host.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

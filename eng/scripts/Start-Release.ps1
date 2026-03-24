@@ -101,7 +101,7 @@ function Set-Version {
     # Update VersionSuffix
     $content = $content -replace '<VersionSuffix>[^<]*</VersionSuffix>', "<VersionSuffix>$Suffix</VersionSuffix>"
 
-    Set-Content -Path $releasePropsPath -Value $content -NoNewline
+    Set-Content -Path $releasePropsPath -Value $content -NoNewline -Encoding UTF8
     Write-Host "Updated $releasePropsPath -> VersionPrefix=$NewVersion, VersionSuffix=$Suffix"
 }
 
@@ -110,27 +110,38 @@ function Update-Changelog {
         [string]$VersionTag
     )
 
-    Write-Host "Generating changelog for tag '$VersionTag'..."
+    Write-Host "Generating changelog for tag 'v$VersionTag'..."
 
-    # Run the changelog generator
-    $changelogEntry = & python $changelogScript --tag $VersionTag 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warning "Changelog generation returned non-zero exit code. Output: $changelogEntry"
+    # Run the changelog generator with v-prefixed tag to match repo tagging convention
+    $generatorOutput = & python $changelogScript --tag "v$VersionTag" 2>&1 | Out-String
+    $generatorSucceeded = $LASTEXITCODE -eq 0
+    if (-not $generatorSucceeded) {
+        Write-Warning "Changelog generation returned non-zero exit code. Output: $generatorOutput"
+    }
+
+    # Extract changelog entries (lines starting with "- ") from generator output
+    $generatedEntries = ''
+    if ($generatorSucceeded -and $generatorOutput) {
+        $entryLines = $generatorOutput -split "`n" | Where-Object { $_ -match '^- ' }
+        $generatedEntries = ($entryLines -join "`n").Trim()
     }
 
     # Read the existing changelog
     $existingChangelog = Get-Content $changelogPath -Raw
 
     # Replace "## Unreleased" section with the new version entry
-    # The unreleased content gets moved under the new version heading
     if ($existingChangelog -match '(?s)(## Unreleased\r?\n)(.*?)((?=\r?\n## )|$)') {
         $unreleasedContent = $Matches[2].Trim()
+
+        # Use generated entries if available, fall back to existing unreleased content
+        $versionContent = if ($generatedEntries) { $generatedEntries } else { $unreleasedContent }
+
         $newSection = "## Unreleased`n`n## v$VersionTag`n"
-        if ($unreleasedContent) {
-            $newSection = "## Unreleased`n`n## v$VersionTag`n$unreleasedContent`n"
+        if ($versionContent) {
+            $newSection = "## Unreleased`n`n## v$VersionTag`n`n$versionContent`n"
         }
         $updatedChangelog = $existingChangelog -replace '(?s)## Unreleased\r?\n.*?(?=(\r?\n## )|$)', $newSection
-        Set-Content -Path $changelogPath -Value $updatedChangelog -NoNewline
+        Set-Content -Path $changelogPath -Value $updatedChangelog -NoNewline -Encoding UTF8
         Write-Host "Updated CHANGELOG.md with version v$VersionTag"
     }
     else {
@@ -163,6 +174,13 @@ Write-Host "Creating release branch: $branchName"
 
 Push-Location $repoRoot
 try {
+    # Ensure we start from an up-to-date main branch
+    Write-Host "Switching to main and pulling latest..."
+    git checkout main
+    if ($LASTEXITCODE -ne 0) { throw "Failed to checkout main." }
+    git pull origin main
+    if ($LASTEXITCODE -ne 0) { throw "Failed to pull latest main." }
+
     git checkout -b $branchName
     if ($LASTEXITCODE -ne 0) { throw "Failed to create branch '$branchName'." }
 

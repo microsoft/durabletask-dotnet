@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Abstractions;
@@ -395,16 +395,16 @@ public abstract class TaskOrchestrationContext
     /// replays when rebuilding state.
     /// </para><para>
     /// The results of any incomplete tasks will be discarded when an orchestrator calls
-    /// <see cref="ContinueAsNew"/>. For example, if a timer is scheduled and then <see cref="ContinueAsNew"/>
+    /// <see cref="ContinueAsNew(object?, bool)"/>. For example, if a timer is scheduled and then <see cref="ContinueAsNew(object?, bool)"/>
     /// is called before the timer fires, the timer event will be discarded. The only exception to this
     /// is external events. By default, if an external event is received by an orchestration but not yet
-    /// processed, the event is saved in the orchestration state unit it is received by a call to
+    /// processed, the event is saved in the orchestration state until it is received by a call to
     /// <see cref="WaitForExternalEvent{T}(string, CancellationToken)"/>. These events will continue to remain in memory
-    /// even after an orchestrator restarts using <see cref="ContinueAsNew"/>. You can disable this behavior and
+    /// even after an orchestrator restarts using <see cref="ContinueAsNew(object?, bool)"/>. You can disable this behavior and
     /// remove any saved external events by specifying <c>false</c> for the <paramref name="preserveUnprocessedEvents"/>
     /// parameter value.
     /// </para><para>
-    /// Orchestrator implementations should complete immediately after calling the <see cref="ContinueAsNew"/> method.
+    /// Orchestrator implementations should complete immediately after calling the <see cref="ContinueAsNew(object?, bool)"/> method.
     /// </para>
     /// </remarks>
     /// <param name="newInput">The JSON-serializable input data to re-initialize the instance with.</param>
@@ -414,6 +414,32 @@ public abstract class TaskOrchestrationContext
     /// external events will be discarded when the orchestration instance restarts.
     /// </param>
     public abstract void ContinueAsNew(object? newInput = null, bool preserveUnprocessedEvents = true);
+
+    /// <summary>
+    /// Restarts the orchestration with the specified options, clearing the history.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This overload accepts <see cref="ContinueAsNewOptions"/> to control the restart behavior,
+    /// including the new input, whether to preserve unprocessed events, and an optional new version.
+    /// When <see cref="ContinueAsNewOptions.NewVersion"/> is set, the framework uses the new version
+    /// to route the restarted instance to the appropriate orchestrator implementation, enabling
+    /// version-based dispatch.
+    /// </para><para>
+    /// The default implementation delegates to
+    /// <see cref="ContinueAsNew(object?, bool)"/> using the input and preserve-events values
+    /// from <paramref name="options"/>. Subclasses that support version-based
+    /// dispatch should override this method.
+    /// </para><para>
+    /// Orchestrator implementations should complete immediately after calling this method.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">Options for the continue-as-new operation.</param>
+    public virtual void ContinueAsNew(ContinueAsNewOptions options)
+    {
+        Check.NotNull(options);
+        this.ContinueAsNew(options.NewInput, options.PreserveUnprocessedEvents);
+    }
 
     /// <summary>
     /// Creates a new GUID that is safe for replay within an orchestration or operation.

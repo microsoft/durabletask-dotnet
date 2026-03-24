@@ -78,7 +78,7 @@ public interface ITaskOrchestrator
 ///     </item>
 ///     <item>
 ///       Avoid infinite loops as they could cause the application to run out of memory. Instead, ensure that loops are
-///       bounded or use <see cref="TaskOrchestrationContext.ContinueAsNew"/> to restart an orchestrator with a new
+///       bounded or use <see cref="TaskOrchestrationContext.ContinueAsNew(object?, bool)"/> to restart an orchestrator with a new
 ///       input.
 ///     </item>
 ///     <item>

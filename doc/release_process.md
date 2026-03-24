@@ -26,7 +26,7 @@ Use the **Prepare Release** GitHub Action to automate the release preparation pr
 
 1. Go to **Actions** → **Prepare Release** in GitHub
 2. Click **Run workflow**
-3. Optionally specify a version (e.g., `1.24.0` or `1.24.0-preview.1`). Leave empty to auto-increment the patch version.
+3. Optionally specify a version (e.g., `1.24.0` or `1.24.0-preview.1`). Leave empty to auto-increment (patch for stable, pre-release number for pre-release).
 4. Click **Run workflow**
 
 ### What the Workflow Does

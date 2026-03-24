@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., 1.24.0 or 1.24.0-preview.1). Leave empty to auto-increment patch version.'
+        description: 'Release version (e.g., 1.24.0 or 1.24.0-preview.1). Leave empty to auto-increment (patch for stable, pre-release number for pre-release).'
         required: false
         type: string
 
@@ -140,13 +140,11 @@ jobs:
         run: |
           NEW_VERSION="${{ steps.calc-version.outputs.new_version }}"
           CHANGELOG_FILE="/tmp/changelog_content.txt"
-          RELEASE_DATE=$(date +%Y-%m-%d)
 
           python3 -c "
           import sys
 
           version = '${NEW_VERSION}'
-          release_date = '${RELEASE_DATE}'
           changelog_file = '${CHANGELOG_FILE}'
 
           with open(changelog_file, 'r') as f:
@@ -196,7 +194,11 @@ jobs:
           # Stage and commit changes
           git add eng/targets/Release.props
           git add CHANGELOG.md
-          git commit -m "Release v${NEW_VERSION}"
+          if ! git diff --cached --quiet; then
+            git commit -m "Release v${NEW_VERSION}"
+          else
+            echo "No changes to commit (re-run with same version)"
+          fi
 
           # Create release tag (idempotent)
           git tag -f "v${NEW_VERSION}"

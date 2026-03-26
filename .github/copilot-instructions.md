@@ -6,6 +6,35 @@ The purpose of this code is to provide a standalone SDK that can be used to inte
 
 When contributing to this repository, please follow these guidelines:
 
+## Replay Determinism — Critical Invariant
+
+Orchestrator code is **replayed from history** to rebuild state after each await point. This means:
+
+- Orchestrator methods must be **fully deterministic**: never call `DateTime.Now`, `Guid.NewGuid()`, `Random`, or any non-deterministic API directly inside an orchestrator. Use `context.CurrentUtcDateTime` and `context.NewGuid()` instead.
+- Do not add I/O, network calls, or file system access inside orchestrator logic. These belong in activities.
+- If changing `TaskOrchestrationContext`, `FuncTaskOrchestrator`, or any type under `src/Abstractions/` that orchestrators call directly, verify the change does not break replay of existing history.
+- Source generator output in `src/Generators/` implements the abstract orchestrator/activity interfaces — any change to those interfaces must be reflected consistently in the generator output (see `// IMPORTANT` comments in `TaskActivityContext.cs` and `TypeExtensions.cs`).
+
+## gRPC / Protobuf Layer
+
+The protobuf definition is in `src/Grpc/orchestrator_service.proto`. Generated code lives alongside it in `src/Grpc/Grpc/`.
+
+- Do not hand-edit generated protobuf files.
+- Preserve all existing field numbers in the proto — removing or renumbering a field breaks wire compatibility with in-flight orchestrations.
+- Changing default serialization options in `JsonDataConverter.cs` is a breaking change for in-flight orchestrations (see `// WARNING` comment there).
+- Run `src/Grpc/refresh-protos.ps1` to regenerate gRPC stubs after modifying the proto.
+
+## Build and Test
+
+Before submitting changes, verify the full solution builds and all tests pass:
+
+```bash
+dotnet build Microsoft.DurableTask.sln --configuration Release
+dotnet test Microsoft.DurableTask.sln --configuration Release --no-build --verbosity normal
+```
+
+CI targets .NET 6, 8, and 10 on `windows-latest`. Changes must compile and pass tests on all three targets. Do not change `global.json`, `nuget.config`, or version numbers in `.csproj` files.
+
 ## C# Code Guidelines
 
 Here are some general guidelines that apply to all code.

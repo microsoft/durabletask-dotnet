@@ -18,7 +18,7 @@ applyTo: "src/Grpc/**,src/Worker/**,src/InProcessTestHost/**,test/Grpc.Integrati
 
 - The `IEnumerable<OrchestratorAction>` returned by the orchestrator engine may be lazily evaluated — enumerate it exactly once (see `// IMPORTANT` in `src/InProcessTestHost/Sidecar/Dispatcher/TaskOrchestrationDispatcher.cs`).
 - The receive loop in `src/InProcessTestHost/Sidecar/Dispatcher/WorkItemDispatcher.cs` assumes a single logical thread — do not introduce concurrent access to its internal state without an explicit concurrency mechanism.
-- Changing `DurableTaskWorkerOptions.DataConverter` or `DurableTaskWorkerOptions.DefaultVersion` is a breaking change for in-flight orchestrations. Add a `// WARNING` comment and update the XML doc if you touch those properties.
+- Changing `DurableTaskWorkerOptions.DataConverter`, `DurableTaskWorkerOptions.Versioning.DefaultVersion`, or `DurableTaskClientOptions.DefaultVersion` is a breaking change for in-flight orchestrations. Add a `// WARNING` comment and update the XML doc if you touch those properties.
 
 ## Writing Integration Tests
 

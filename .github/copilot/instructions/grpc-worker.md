@@ -35,6 +35,6 @@ Integration tests in `test/Grpc.IntegrationTests/` require a gRPC sidecar. Follo
        instanceId,
        getInputsAndOutputs: true,
        cancellationToken: cts.Token);
-5. Do not use `Task.Delay` for synchronization — use `WaitForInstanceCompletionAsync` or external events.
+5. Do not use `Task.Delay` to wait for orchestration completion when `WaitForInstanceCompletionAsync` or external events are available; if you must poll, use bounded `Task.Delay`-based polling with clear timeouts.
 
 Add integration tests (not just unit tests) when the behavior change touches the gRPC dispatch path, retry logic, or cancellation handling.

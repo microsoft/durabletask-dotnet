@@ -24,5 +24,5 @@ Code in `src/Analyzers/` runs at **compile time only** inside the compiler proce
 ## Testing Generators
 
 - Generator tests use `Microsoft.CodeAnalysis.CSharp.SourceGenerators.Testing` — use `GeneratorDriver` or the test helper wrappers in `test/Generators.Tests/`.
-- Compare generated output with stored expected snapshots. When changing generator templates, update all affected snapshots.
+- Compare generated output with explicit expected source strings (inline in the tests or via shared helpers). When changing generator templates, update all affected expected outputs or helper expectations.
 - Do not emit `#pragma warning disable` in generated output without explicit justification.

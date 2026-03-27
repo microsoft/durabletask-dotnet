@@ -19,7 +19,7 @@ Invoke this skill whenever you are about to:
 Read the file containing the change. List every `public` or `protected` member being modified.
 
 For each, determine: is this member shipped in a `Microsoft.DurableTask.*` NuGet package?
-Check whether `src/<area>/<area>.csproj` contains a `<PackageId>` element — if yes, customers depend on it.
+To decide this, inspect `src/<area>/<area>.csproj` and our build/CI configuration: look for NuGet packaging metadata (such as `<PackageId>`, `IsPackable`, `GeneratePackageOnBuild`, or inclusion in a packing target or release artifact). If the project is packed into a `Microsoft.DurableTask.*` NuGet, assume customers may depend on it.
 
 ## Step 2 — Verify All Callers Inside This Repo
 

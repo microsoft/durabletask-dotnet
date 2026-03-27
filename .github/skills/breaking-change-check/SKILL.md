@@ -26,7 +26,7 @@ To decide this, inspect `src/<area>/<area>.csproj` and our build/CI configuratio
 For each changed member, search the full solution before modifying the signature:
 
 ```bash
-grep -rn "MemberName" --include="*.cs" .
+git grep -n "MemberName" -- '*.cs'
 ```
 
 Also search `test/` and `samples/` — these are first-party consumers that must be updated alongside the change.

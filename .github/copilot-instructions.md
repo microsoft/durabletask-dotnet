@@ -17,23 +17,13 @@ Orchestrator code is **replayed from history** to rebuild state after each await
 
 ## gRPC / Protobuf Layer
 
-The protobuf definition is in `src/Grpc/orchestrator_service.proto`. Generated code lives alongside it in `src/Grpc/Grpc/`.
+The protobuf definition is in `src/Grpc/orchestrator_service.proto`. C# stubs are generated at build time by `Grpc.Tools` and are not committed to source.
 
-- Do not hand-edit generated protobuf files.
 - Preserve all existing field numbers in the proto — removing or renumbering a field breaks wire compatibility with in-flight orchestrations.
+- Adding new optional fields is backward-compatible. Adding required fields or changing field types is not.
 - Changing default serialization options in `JsonDataConverter.cs` is a breaking change for in-flight orchestrations (see `// WARNING` comment there).
-- Run `src/Grpc/refresh-protos.ps1` to regenerate gRPC stubs after modifying the proto.
-
-## Build and Test
-
-Before submitting changes, verify the full solution builds and all tests pass:
-
-```bash
-dotnet build Microsoft.DurableTask.sln --configuration Release
-dotnet test Microsoft.DurableTask.sln --configuration Release --no-build --verbosity normal
-```
-
-CI targets .NET 6, 8, and 10 on `windows-latest`. Changes must compile and pass tests on all three targets. Do not change `global.json`, `nuget.config`, or version numbers in `.csproj` files.
+- Run `src/Grpc/refresh-protos.ps1` to pull the latest proto version from upstream.
+- Before renaming any file path referenced in another file, confirm the full impact with the user — do not assume file locations without verification.
 
 ## C# Code Guidelines
 

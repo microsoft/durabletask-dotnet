@@ -27,7 +27,14 @@ Integration tests in `test/Grpc.IntegrationTests/` require a gRPC sidecar. Follo
 1. Inherit from `IntegrationTestBase` — it manages the `GrpcSidecarFixture` lifecycle.
 2. Register orchestrators and activities using `StartWorkerAsync(b => b.AddTasks(...))`.
 3. Schedule orchestrations via the injected `DurableTaskClient` from the fixture.
-4. Await completion with a timeout: `await client.WaitForInstanceCompletionAsync(instanceId, timeout)`.
+4. Await completion with a timeout by using a `CancellationTokenSource`, for example:
+
+   ```csharp
+   using CancellationTokenSource cts = new CancellationTokenSource(timeout);
+   OrchestrationMetadata result = await client.WaitForInstanceCompletionAsync(
+       instanceId,
+       getInputsAndOutputs: true,
+       cancellationToken: cts.Token);
 5. Do not use `Task.Delay` for synchronization — use `WaitForInstanceCompletionAsync` or external events.
 
 Add integration tests (not just unit tests) when the behavior change touches the gRPC dispatch path, retry logic, or cancellation handling.

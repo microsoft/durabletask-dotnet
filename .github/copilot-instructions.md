@@ -20,7 +20,7 @@ Orchestrator code is **replayed from history** to rebuild state after each await
 The protobuf definition is in `src/Grpc/orchestrator_service.proto`. C# stubs are generated at build time by `Grpc.Tools` and are not committed to source.
 
 - Preserve all existing field numbers in the proto — removing or renumbering a field breaks wire compatibility with in-flight orchestrations.
-- Adding new optional fields is backward-compatible. Adding required fields or changing field types is not.
+- Adding new optional fields is backward-compatible. Adding fields that the SDK or sidecar treats as required, adding fields without safe defaults, or changing existing field types is not.
 - Changing default serialization options in `JsonDataConverter.cs` is a breaking change for in-flight orchestrations (see `// WARNING` comment there).
 - Run `src/Grpc/refresh-protos.ps1` to pull the latest proto version from upstream.
 - Before renaming any file path referenced in another file, confirm the full impact with the user — do not assume file locations without verification.

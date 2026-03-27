@@ -1,5 +1,5 @@
 ---
-applyTo: "src/Analyzers/**,src/Generators/**,test/Analyzers.Tests/**,test/Generators.Tests/**"
+applyTo: "src/Analyzers/**,src/Generators/**"
 ---
 # Roslyn Analyzers and Source Generators
 

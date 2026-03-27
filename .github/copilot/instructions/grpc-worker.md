@@ -9,7 +9,7 @@ applyTo: "src/Grpc/**,src/Worker/**,src/InProcessTestHost/**,test/Grpc.Integrati
 
 - Do not remove, rename, or renumber any existing proto field or RPC. Field numbers are permanent.
 - Adding new optional fields is backward-compatible. Adding required fields or changing field types is not.
-- After modifying the proto, run `src/Grpc/refresh-protos.ps1` to pull the latest proto version. C# stubs are generated at build time by `Grpc.Tools` — not committed to source.
+- When updating the proto from the upstream `microsoft/durabletask-protobuf` repository, run `src/Grpc/refresh-protos.ps1` to pull the latest proto version. C# stubs are generated at build time by `Grpc.Tools` — not committed to source.
 - Proto-consumer code in `src/Client/Grpc/ProtoUtils.cs` and `src/Worker/Grpc/` must be updated to handle any new fields added.
 
 ## Worker Dispatch Loop

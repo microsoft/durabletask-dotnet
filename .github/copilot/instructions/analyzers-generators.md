@@ -1,14 +1,14 @@
 ---
-applyTo: "src/Analyzers/**,src/Generators/**"
+applyTo: "src/Analyzers/**,src/Generators/**,test/Analyzers.Tests/**,test/Generators.Tests/**"
 ---
 # Roslyn Analyzers and Source Generators
 
-## Runtime vs. Compile-Time Boundary
+## Runtime vs. Compile-Time Boundary (production code only)
 
-Code in `src/Analyzers/` runs at **compile time only** inside the compiler process. Code in `src/Generators/` runs at **compile time only** to emit new C# source files.
+Code in `src/Analyzers/` runs at **compile time only** inside the compiler process. Code in `src/Generators/` runs at **compile time only** to emit new C# source files. The constraints below apply to these production projects, not to their test projects.
 
 - Do not reference any NuGet package that has a runtime dependency (e.g., `Microsoft.Extensions.*`, gRPC libs). Analyzer/generator projects may only reference `Microsoft.CodeAnalysis.*` packages.
-- Do not use `System.Reflection` APIs at runtime — use Roslyn symbol APIs (`INamedTypeSymbol`, `IMethodSymbol`, etc.) instead.
+- Do not use `System.Reflection` APIs — use Roslyn symbol APIs (`INamedTypeSymbol`, `IMethodSymbol`, etc.) instead.
 - Generator output must reproduce the same source given the same input — generators must be **deterministic and idempotent**.
 
 ## Interface Consistency Constraint

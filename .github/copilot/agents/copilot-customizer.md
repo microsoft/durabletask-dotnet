@@ -18,10 +18,8 @@ tools:
 
 ## Operating Model — Two Phases, Hard Stop Between Them
 
-```
-PHASE 1: ANALYZE → PLAN → STOP AND WAIT
-PHASE 2: EXECUTE → only after explicit user approval
-```
+    PHASE 1: ANALYZE → PLAN → STOP AND WAIT
+    PHASE 2: EXECUTE → only after explicit user approval
 
 Never begin Phase 2 during Phase 1. If the user says "just do it" without a
 plan: run Phase 1 first, then ask. Skipping the plan produces unreviewed output.

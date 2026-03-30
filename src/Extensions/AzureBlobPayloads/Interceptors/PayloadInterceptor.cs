@@ -68,6 +68,14 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
 
             if (startCallTask.IsFaulted)
             {
+                // Distinguish permanent failures from transient ones so callers
+                // can avoid retrying errors that will never succeed.
+                Exception? inner = startCallTask.Exception?.InnerException ?? startCallTask.Exception;
+                if (inner is InvalidOperationException)
+                {
+                    return new Status(StatusCode.FailedPrecondition, inner.Message);
+                }
+
                 return new Status(StatusCode.Internal, startCallTask.Exception?.Message ?? "Unknown error");
             }
 
@@ -183,8 +191,11 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
         if (size > this.options.MaxExternalizedPayloadBytes)
         {
             throw new InvalidOperationException(
-                $"Payload size {size / 1024} kb exceeds the configured maximum of {this.options.MaxExternalizedPayloadBytes / 1024} kb. " +
-                "Consider reducing the payload or increase MaxExternalizedPayloadBytes setting.");
+                $"Payload size {size / 1024} kb exceeds the configured maximum of " +
+                $"{this.options.MaxExternalizedPayloadBytes / 1024} kb. Consider reducing the payload size, " +
+                $"or increase the max payload size limit " +
+                $"(LargePayloadStorageOptions.MaxExternalizedPayloadBytes for standalone SDK, " +
+                $"or 'largePayloadStorageMaxPayloadBytes' in host.json extensions.durableTask section for Azure Functions).");
         }
 
         return await this.payloadStore.UploadAsync(value!, cancellation);

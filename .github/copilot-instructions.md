@@ -6,6 +6,25 @@ The purpose of this code is to provide a standalone SDK that can be used to inte
 
 When contributing to this repository, please follow these guidelines:
 
+## Replay Determinism — Critical Invariant
+
+Orchestrator code is **replayed from history** to rebuild state after each await point. This means:
+
+- Orchestrator methods must be **fully deterministic**: never call `DateTime.Now`, `Guid.NewGuid()`, `Random`, or any non-deterministic API directly inside an orchestrator. Use `context.CurrentUtcDateTime` and `context.NewGuid()` instead.
+- Do not add I/O, network calls, or file system access inside orchestrator logic. These belong in activities.
+- If changing `TaskOrchestrationContext`, `FuncTaskOrchestrator`, or any type under `src/Abstractions/` that orchestrators call directly, verify the change does not break replay of existing history.
+- Source generator output in `src/Generators/` implements the abstract orchestrator/activity interfaces — any change to those interfaces must be reflected consistently in the generator output (see `// IMPORTANT` comments in `TaskActivityContext.cs` and `TypeExtensions.cs`).
+
+## gRPC / Protobuf Layer
+
+The protobuf definition is in `src/Grpc/orchestrator_service.proto`. C# stubs are generated at build time by `Grpc.Tools` and are not committed to source.
+
+- Preserve all existing field numbers in the proto — removing or renumbering a field breaks wire compatibility with in-flight orchestrations.
+- Adding new optional fields is backward-compatible. Adding fields that the SDK or sidecar treats as required, adding fields without safe defaults, or changing existing field types is not.
+- Changing default serialization options in `JsonDataConverter.cs` could potentially be breaking for in-flight orchestrations (see `// WARNING` comment there).
+- Run `src/Grpc/refresh-protos.ps1` to pull the latest proto version from upstream.
+- Before renaming any file path referenced in another file, confirm the full impact with the user — do not assume file locations without verification.
+
 ## C# Code Guidelines
 
 Here are some general guidelines that apply to all code.

@@ -762,7 +762,8 @@ sealed partial class GrpcDurableTaskWorker
             await this.CompleteOrchestratorTaskWithChunkingAsync(
                 response,
                 this.worker.grpcOptions.CompleteOrchestrationWorkItemChunkSizeInBytes,
-                cancellationToken);
+                cancellationToken,
+                completionToken);
         }
 
         async Task OnRunActivityAsync(P.ActivityRequest request, string completionToken, CancellationToken cancellation)
@@ -853,7 +854,33 @@ sealed partial class GrpcDurableTaskWorker
             // Stop the trace activity here to avoid including the completion time in the latency calculation
             traceActivity?.Stop();
 
-            await this.client.CompleteActivityTaskAsync(response, cancellationToken: cancellation);
+            try
+            {
+                await this.client.CompleteActivityTaskAsync(response, cancellationToken: cancellation);
+            }
+            catch (RpcException ex) when (ex.StatusCode == StatusCode.FailedPrecondition)
+            {
+                // Permanent failure (e.g., payload too large for externalization).
+                // Complete the activity with a failure instead of letting the exception propagate
+                // to RunBackgroundTask, which would abandon and cause an infinite re-delivery loop.
+                this.Logger.UnexpectedError(ex, instance.InstanceId);
+
+                P.ActivityResponse failureResponse = new()
+                {
+                    InstanceId = instance.InstanceId,
+                    TaskId = request.TaskId,
+                    FailureDetails = new P.TaskFailureDetails
+                    {
+                        ErrorType = typeof(InvalidOperationException).FullName,
+                        ErrorMessage = ex.Status.Detail,
+                        StackTrace = ex.ToString(),
+                        IsNonRetriable = true,
+                    },
+                    CompletionToken = completionToken,
+                };
+
+                await this.client.CompleteActivityTaskAsync(failureResponse, cancellationToken: cancellation);
+            }
         }
 
         async Task OnRunEntityBatchAsync(
@@ -919,7 +946,18 @@ sealed partial class GrpcDurableTaskWorker
                 completionToken,
                 operationInfos?.Take(batchResult.Results?.Count ?? 0));
 
-            await this.client.CompleteEntityTaskAsync(response, cancellationToken: cancellation);
+            try
+            {
+                await this.client.CompleteEntityTaskAsync(response, cancellationToken: cancellation);
+            }
+            catch (RpcException ex) when (ex.StatusCode == StatusCode.FailedPrecondition)
+            {
+                // Permanent failure (e.g., payload too large for externalization).
+                // Log the error clearly. The RunBackgroundTask catch-all will handle cleanup.
+                // Entity operations don't have a simple "fail with event" mechanism like activities.
+                this.Logger.UnexpectedError(ex, batchRequest.InstanceId ?? string.Empty);
+                throw;
+            }
         }
 
         /// <summary>
@@ -931,7 +969,8 @@ sealed partial class GrpcDurableTaskWorker
         async Task CompleteOrchestratorTaskWithChunkingAsync(
             P.OrchestratorResponse response,
             int maxChunkBytes,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            string? completionToken = null)
         {
             // Validate that no single action exceeds the maximum chunk size
             static P.TaskFailureDetails? ValidateActionsSize(IEnumerable<P.OrchestratorAction> actions, int maxChunkBytes)
@@ -1002,6 +1041,8 @@ sealed partial class GrpcDurableTaskWorker
             }
 
             // Check if the entire response fits in one chunk
+            try
+            {
             int totalSize = response.CalculateSize();
             if (totalSize <= maxChunkBytes)
             {
@@ -1053,6 +1094,38 @@ sealed partial class GrpcDurableTaskWorker
 
                 // Send the chunk
                 await this.client.CompleteOrchestratorTaskAsync(chunkedResponse, cancellationToken: cancellationToken);
+            }
+            }
+            catch (RpcException ex) when (ex.StatusCode == StatusCode.FailedPrecondition)
+            {
+                // Permanent failure (e.g., payload too large for externalization).
+                // Complete with a failure to prevent infinite re-delivery loop.
+                this.Logger.UnexpectedError(ex, response.InstanceId);
+
+                P.OrchestratorResponse failureResponse = new()
+                {
+                    InstanceId = response.InstanceId,
+                    CompletionToken = response.CompletionToken ?? completionToken,
+                    Actions =
+                    {
+                        new P.OrchestratorAction
+                        {
+                            CompleteOrchestration = new P.CompleteOrchestrationAction
+                            {
+                                OrchestrationStatus = P.OrchestrationStatus.Failed,
+                                FailureDetails = new P.TaskFailureDetails
+                                {
+                                    ErrorType = typeof(InvalidOperationException).FullName,
+                                    ErrorMessage = ex.Status.Detail,
+                                    StackTrace = ex.ToString(),
+                                    IsNonRetriable = true,
+                                },
+                            },
+                        },
+                    },
+                };
+
+                await this.client.CompleteOrchestratorTaskAsync(failureResponse, cancellationToken: cancellationToken);
             }
         }
     }

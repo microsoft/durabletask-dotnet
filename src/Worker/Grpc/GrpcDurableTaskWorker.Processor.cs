@@ -881,6 +881,29 @@ sealed partial class GrpcDurableTaskWorker
 
                 await this.client.CompleteActivityTaskAsync(failureResponse, cancellationToken: cancellation);
             }
+            catch (InvalidOperationException ex)
+            {
+                // Permanent failure thrown directly by the payload interceptor (e.g., payload too large).
+                // The interceptor surfaces this as InvalidOperationException through ResponseAsync(),
+                // not as RpcException, so we need a separate catch block.
+                this.Logger.UnexpectedError(ex, instance.InstanceId);
+
+                P.ActivityResponse failureResponse2 = new()
+                {
+                    InstanceId = instance.InstanceId,
+                    TaskId = request.TaskId,
+                    FailureDetails = new P.TaskFailureDetails
+                    {
+                        ErrorType = typeof(InvalidOperationException).FullName,
+                        ErrorMessage = ex.Message,
+                        StackTrace = ex.ToString(),
+                        IsNonRetriable = true,
+                    },
+                    CompletionToken = completionToken,
+                };
+
+                await this.client.CompleteActivityTaskAsync(failureResponse2, cancellationToken: cancellation);
+            }
         }
 
         async Task OnRunEntityBatchAsync(
@@ -1116,6 +1139,37 @@ sealed partial class GrpcDurableTaskWorker
                 };
 
                 await this.client.CompleteOrchestratorTaskAsync(failureResponse, cancellationToken: cancellationToken);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Permanent failure thrown directly by the payload interceptor (e.g., payload too large).
+                this.Logger.UnexpectedError(ex, response.InstanceId);
+
+                P.OrchestratorResponse failureResponse2 = new()
+                {
+                    InstanceId = response.InstanceId,
+                    CompletionToken = response.CompletionToken ?? completionToken,
+                    OrchestrationTraceContext = response.OrchestrationTraceContext,
+                    Actions =
+                    {
+                        new P.OrchestratorAction
+                        {
+                            CompleteOrchestration = new P.CompleteOrchestrationAction
+                            {
+                                OrchestrationStatus = P.OrchestrationStatus.Failed,
+                                FailureDetails = new P.TaskFailureDetails
+                                {
+                                    ErrorType = typeof(InvalidOperationException).FullName,
+                                    ErrorMessage = ex.Message,
+                                    StackTrace = ex.ToString(),
+                                    IsNonRetriable = true,
+                                },
+                            },
+                        },
+                    },
+                };
+
+                await this.client.CompleteOrchestratorTaskAsync(failureResponse2, cancellationToken: cancellationToken);
             }
         }
     }

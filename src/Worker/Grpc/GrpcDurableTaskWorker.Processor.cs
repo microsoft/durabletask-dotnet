@@ -1032,58 +1032,58 @@ sealed partial class GrpcDurableTaskWorker
             // Check if the entire response fits in one chunk
             try
             {
-            int totalSize = response.CalculateSize();
-            if (totalSize <= maxChunkBytes)
-            {
-                // Response fits in one chunk, send it directly (isPartial defaults to false)
-                await this.client.CompleteOrchestratorTaskAsync(response, cancellationToken: cancellationToken);
-                return;
-            }
-
-            // Response is too large, split into multiple chunks
-            int actionsCompletedSoFar = 0, chunkIndex = 0;
-            List<P.OrchestratorAction> allActions = response.Actions.ToList();
-            bool isPartial = true;
-
-            while (isPartial)
-            {
-                P.OrchestratorResponse chunkedResponse = new()
+                int totalSize = response.CalculateSize();
+                if (totalSize <= maxChunkBytes)
                 {
-                    InstanceId = response.InstanceId,
-                    CustomStatus = response.CustomStatus,
-                    CompletionToken = response.CompletionToken,
-                    RequiresHistory = response.RequiresHistory,
-                    NumEventsProcessed = 0,
-                    ChunkIndex = chunkIndex,
-                };
-
-                int chunkPayloadSize = 0;
-
-                // Fill the chunk with actions until we reach the size limit
-                while (actionsCompletedSoFar < allActions.Count &&
-                       TryAddAction(chunkedResponse.Actions, allActions[actionsCompletedSoFar], ref chunkPayloadSize, maxChunkBytes))
-                {
-                    actionsCompletedSoFar++;
+                    // Response fits in one chunk, send it directly (isPartial defaults to false)
+                    await this.client.CompleteOrchestratorTaskAsync(response, cancellationToken: cancellationToken);
+                    return;
                 }
 
-                // Determine if this is a partial chunk (more actions remaining)
-                isPartial = actionsCompletedSoFar < allActions.Count;
-                chunkedResponse.IsPartial = isPartial;
+                // Response is too large, split into multiple chunks
+                int actionsCompletedSoFar = 0, chunkIndex = 0;
+                List<P.OrchestratorAction> allActions = response.Actions.ToList();
+                bool isPartial = true;
 
-                if (chunkIndex == 0)
+                while (isPartial)
                 {
-                    // The first chunk preserves the original response's NumEventsProcessed value (null)
-                    // When this is set to null, backend by default handles all the messages in the workitem.
-                    // For subsequent chunks, we set it to 0 since all messages are already handled in first chunk.
-                    chunkedResponse.NumEventsProcessed = null;
-                    chunkedResponse.OrchestrationTraceContext = response.OrchestrationTraceContext;
+                    P.OrchestratorResponse chunkedResponse = new()
+                    {
+                        InstanceId = response.InstanceId,
+                        CustomStatus = response.CustomStatus,
+                        CompletionToken = response.CompletionToken,
+                        RequiresHistory = response.RequiresHistory,
+                        NumEventsProcessed = 0,
+                        ChunkIndex = chunkIndex,
+                    };
+
+                    int chunkPayloadSize = 0;
+
+                    // Fill the chunk with actions until we reach the size limit
+                    while (actionsCompletedSoFar < allActions.Count &&
+                           TryAddAction(chunkedResponse.Actions, allActions[actionsCompletedSoFar], ref chunkPayloadSize, maxChunkBytes))
+                    {
+                        actionsCompletedSoFar++;
+                    }
+
+                    // Determine if this is a partial chunk (more actions remaining)
+                    isPartial = actionsCompletedSoFar < allActions.Count;
+                    chunkedResponse.IsPartial = isPartial;
+
+                    if (chunkIndex == 0)
+                    {
+                        // The first chunk preserves the original response's NumEventsProcessed value (null)
+                        // When this is set to null, backend by default handles all the messages in the workitem.
+                        // For subsequent chunks, we set it to 0 since all messages are already handled in first chunk.
+                        chunkedResponse.NumEventsProcessed = null;
+                        chunkedResponse.OrchestrationTraceContext = response.OrchestrationTraceContext;
+                    }
+
+                    chunkIndex++;
+
+                    // Send the chunk
+                    await this.client.CompleteOrchestratorTaskAsync(chunkedResponse, cancellationToken: cancellationToken);
                 }
-
-                chunkIndex++;
-
-                // Send the chunk
-                await this.client.CompleteOrchestratorTaskAsync(chunkedResponse, cancellationToken: cancellationToken);
-            }
             }
             catch (RpcException ex) when (ex.StatusCode == StatusCode.FailedPrecondition)
             {
@@ -1095,6 +1095,7 @@ sealed partial class GrpcDurableTaskWorker
                 {
                     InstanceId = response.InstanceId,
                     CompletionToken = response.CompletionToken ?? completionToken,
+                    OrchestrationTraceContext = response.OrchestrationTraceContext,
                     Actions =
                     {
                         new P.OrchestratorAction

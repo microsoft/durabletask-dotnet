@@ -582,7 +582,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             });
 
         // The client will attempt to externalize the input and should fail fast on cap
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        await Assert.ThrowsAsync<PayloadStorageException>(async () =>
         {
             await server.Client.ScheduleNewOrchestrationInstanceAsync(orch, tooLarge);
         });

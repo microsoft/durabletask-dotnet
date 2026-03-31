@@ -68,14 +68,6 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
 
             if (startCallTask.IsFaulted)
             {
-                // Distinguish permanent failures from transient ones so callers
-                // can avoid retrying errors that will never succeed.
-                Exception? inner = startCallTask.Exception?.InnerException ?? startCallTask.Exception;
-                if (IsPermanentFailure(inner))
-                {
-                    return new Status(StatusCode.FailedPrecondition, inner?.Message ?? "Permanent failure");
-                }
-
                 return new Status(StatusCode.Internal, startCallTask.Exception?.Message ?? "Unknown error");
             }
 
@@ -88,27 +80,6 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
             return new Status(StatusCode.Unknown, string.Empty);
         }
 
-        static bool IsPermanentFailure(Exception? ex)
-        {
-            // InvalidOperationException: payload too large, blob not found, decompression error, etc.
-            if (ex is InvalidOperationException or ArgumentException)
-            {
-                return true;
-            }
-
-            // Azure Storage errors that are permanent (auth/permission failures).
-            // Transient errors (429, 500, 503) are already retried by the Azure SDK
-            // client with exponential backoff before reaching here, so if they still
-            // fail, they may also be effectively permanent — but we keep them as
-            // Internal/retryable to give the upper layers a chance.
-            if (ex is Azure.RequestFailedException rfe &&
-                rfe.Status is 401 or 403 or 404)
-            {
-                return true;
-            }
-
-            return false;
-        }
 
         Metadata GetTrailers()
         {
@@ -212,7 +183,7 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
         // Enforce a hard cap to prevent unbounded payload sizes
         if (size > this.options.MaxPayloadBytes)
         {
-            throw new InvalidOperationException(
+            throw new PayloadStorageException(
                 $"Payload size {size / 1024} KB exceeds the configured maximum of {this.options.MaxPayloadBytes / 1024} KB. " +
                 "Reduce the payload size or increase the max payload size limit.");
         }

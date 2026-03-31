@@ -55,7 +55,7 @@ public sealed class BlobPayloadStore : PayloadStore
                 Mode = RetryMode.Exponential,
                 MaxRetries = MaxRetryAttempts,
                 Delay = TimeSpan.FromMilliseconds(BaseDelayMs),
-                MaxDelay = TimeSpan.FromSeconds(MaxDelayMs),
+                MaxDelay = TimeSpan.FromMilliseconds(MaxDelayMs),
                 NetworkTimeout = TimeSpan.FromMinutes(NetworkTimeoutMinutes),
             },
         };
@@ -138,7 +138,7 @@ public sealed class BlobPayloadStore : PayloadStore
         }
         catch (RequestFailedException ex) when (ex.Status == (int)HttpStatusCode.NotFound)
         {
-            throw new InvalidOperationException(
+            throw new PayloadStorageException(
                 $"The blob '{name}' was not found in container '{container}'. " +
                 "The payload may have been deleted or the container was never created.",
                 ex);

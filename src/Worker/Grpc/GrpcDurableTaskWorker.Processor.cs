@@ -953,23 +953,12 @@ sealed partial class GrpcDurableTaskWorker
             catch (RpcException ex) when (ex.StatusCode == StatusCode.FailedPrecondition)
             {
                 // Permanent failure (e.g., payload too large for externalization).
-                // Complete with a batch-level failure using failureDetails so the entity
-                // framework sees the failure instead of an infinite abandon/re-deliver loop.
+                // Entity completion API does not support failure responses — the sidecar converts
+                // batch-level FailureDetails into an abandon, which causes infinite re-delivery.
+                // A proto change to CompleteEntityWorkItemRequest is needed to support this.
+                // For now, log clearly and rethrow so RunBackgroundTask can handle cleanup.
                 this.Logger.UnexpectedError(ex, batchRequest.InstanceId ?? string.Empty);
-
-                P.EntityBatchResult failureResponse = new()
-                {
-                    CompletionToken = completionToken ?? response.CompletionToken,
-                    FailureDetails = new P.TaskFailureDetails
-                    {
-                        ErrorType = typeof(InvalidOperationException).FullName,
-                        ErrorMessage = ex.Status.Detail,
-                        StackTrace = ex.ToString(),
-                        IsNonRetriable = true,
-                    },
-                };
-
-                await this.client.CompleteEntityTaskAsync(failureResponse, cancellationToken: cancellation);
+                throw;
             }
         }
 

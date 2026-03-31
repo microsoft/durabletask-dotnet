@@ -213,11 +213,8 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
         if (size > this.options.MaxExternalizedPayloadBytes)
         {
             throw new InvalidOperationException(
-                $"Payload size {size / 1024} kb exceeds the configured maximum of " +
-                $"{this.options.MaxExternalizedPayloadBytes / 1024} kb. Consider reducing the payload size, " +
-                $"or increase the max payload size limit " +
-                $"(LargePayloadStorageOptions.MaxExternalizedPayloadBytes for standalone SDK, " +
-                $"or 'largePayloadStorageMaxPayloadBytes' in host.json extensions.durableTask section for Azure Functions).");
+                $"Payload size {size / 1024} kb exceeds the configured maximum of {this.options.MaxExternalizedPayloadBytes / 1024} kb. " +
+                "Consider reducing the payload or increase MaxExternalizedPayloadBytes setting.");
         }
 
         return await this.payloadStore.UploadAsync(value!, cancellation);

@@ -946,20 +946,7 @@ sealed partial class GrpcDurableTaskWorker
                 completionToken,
                 operationInfos?.Take(batchResult.Results?.Count ?? 0));
 
-            try
-            {
-                await this.client.CompleteEntityTaskAsync(response, cancellationToken: cancellation);
-            }
-            catch (RpcException ex) when (ex.StatusCode == StatusCode.FailedPrecondition)
-            {
-                // Permanent failure (e.g., payload too large for externalization).
-                // Entity completion API does not support failure responses — the sidecar converts
-                // batch-level FailureDetails into an abandon, which causes infinite re-delivery.
-                // A proto change to CompleteEntityWorkItemRequest is needed to support this.
-                // For now, log clearly and rethrow so RunBackgroundTask can handle cleanup.
-                this.Logger.UnexpectedError(ex, batchRequest.InstanceId ?? string.Empty);
-                throw;
-            }
+            await this.client.CompleteEntityTaskAsync(response, cancellationToken: cancellation);
         }
 
         /// <summary>

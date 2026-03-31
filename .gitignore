@@ -351,3 +351,4 @@ MigrationBackup/
 
 # Rider (cross platform .NET/C# tools) working folder
 .idea/
+.worktrees/

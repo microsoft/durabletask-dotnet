@@ -71,9 +71,9 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
                 // Distinguish permanent failures from transient ones so callers
                 // can avoid retrying errors that will never succeed.
                 Exception? inner = startCallTask.Exception?.InnerException ?? startCallTask.Exception;
-                if (inner is InvalidOperationException)
+                if (IsPermanentFailure(inner))
                 {
-                    return new Status(StatusCode.FailedPrecondition, inner.Message);
+                    return new Status(StatusCode.FailedPrecondition, inner?.Message ?? "Permanent failure");
                 }
 
                 return new Status(StatusCode.Internal, startCallTask.Exception?.Message ?? "Unknown error");
@@ -86,6 +86,28 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
 
             // Not started yet; unknown
             return new Status(StatusCode.Unknown, string.Empty);
+        }
+
+        static bool IsPermanentFailure(Exception? ex)
+        {
+            // InvalidOperationException: payload too large, blob not found, decompression error, etc.
+            if (ex is InvalidOperationException or ArgumentException)
+            {
+                return true;
+            }
+
+            // Azure Storage errors that are permanent (auth/permission failures).
+            // Transient errors (429, 500, 503) are already retried by the Azure SDK
+            // client with exponential backoff before reaching here, so if they still
+            // fail, they may also be effectively permanent — but we keep them as
+            // Internal/retryable to give the upper layers a chance.
+            if (ex is Azure.RequestFailedException rfe &&
+                rfe.Status is 401 or 403 or 404)
+            {
+                return true;
+            }
+
+            return false;
         }
 
         Metadata GetTrailers()

@@ -79,7 +79,7 @@ public sealed class BlobPayloadStore : PayloadStore
         // Ensure container exists (idempotent)
         await this.containerClient.CreateIfNotExistsAsync(PublicAccessType.None, default, default, cancellationToken);
 
-        if (this.options.CompressPayloads)
+        if (this.options.CompressionEnabled)
         {
             BlobOpenWriteOptions writeOptions = new()
             {

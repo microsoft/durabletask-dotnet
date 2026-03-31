@@ -25,7 +25,7 @@ string schedulerConnectionString = builder.Configuration.GetValue<string>("DURAB
 builder.Services.AddExternalizedPayloadStore(opts =>
 {
     // Keep threshold small to force externalization for demo purposes
-    opts.ExternalizeThresholdBytes = 1024; // 1KB
+    opts.ThresholdBytes = 1024; // 1KB
     opts.ConnectionString = builder.Configuration.GetValue<string>("DURABLETASK_STORAGE") ?? "UseDevelopmentStorage=true";
     opts.ContainerName = builder.Configuration.GetValue<string>("DURABLETASK_PAYLOAD_CONTAINER") ?? "payloads";
 });

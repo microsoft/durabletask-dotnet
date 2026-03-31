@@ -48,7 +48,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -123,7 +123,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -173,7 +173,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -264,7 +264,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -328,7 +328,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -385,7 +385,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -433,7 +433,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -487,7 +487,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -574,8 +574,8 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                 services.AddExternalizedPayloadStore(opts =>
                 {
                     // Keep a low threshold to force externalization, but default cap applies
-                    opts.ExternalizeThresholdBytes = 1024;
-                    opts.MaxExternalizedPayloadBytes = 2048;
+                    opts.ThresholdBytes = 1024;
+                    opts.MaxPayloadBytes = 2048;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -617,7 +617,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });

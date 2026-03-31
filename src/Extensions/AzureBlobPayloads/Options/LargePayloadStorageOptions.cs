@@ -73,7 +73,7 @@ public sealed class LargePayloadStorageOptions
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(this.ThresholdBytes),
-                    $"ThresholdBytes cannot exceed 1 MiB ({OneMiB} bytes).");
+                    $"Externalization threshold cannot exceed 1 MiB ({OneMiB} bytes).");
             }
 
             this.thresholdBytes = value;

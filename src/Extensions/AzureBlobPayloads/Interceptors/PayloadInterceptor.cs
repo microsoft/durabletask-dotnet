@@ -213,8 +213,8 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
         if (size > this.options.MaxPayloadBytes)
         {
             throw new InvalidOperationException(
-                $"Payload size {size / 1024} kb exceeds the configured maximum of {this.options.MaxPayloadBytes / 1024} kb. " +
-                "Consider reducing the payload or increase MaxPayloadBytes setting.");
+                $"Payload size {size / 1024} KB exceeds the configured maximum of {this.options.MaxPayloadBytes / 1024} KB. " +
+                "Reduce the payload size or increase the max payload size limit.");
         }
 
         return await this.payloadStore.UploadAsync(value!, cancellation);

@@ -762,8 +762,7 @@ sealed partial class GrpcDurableTaskWorker
             await this.CompleteOrchestratorTaskWithChunkingAsync(
                 response,
                 this.worker.grpcOptions.CompleteOrchestrationWorkItemChunkSizeInBytes,
-                cancellationToken,
-                completionToken);
+                cancellationToken);
         }
 
         async Task OnRunActivityAsync(P.ActivityRequest request, string completionToken, CancellationToken cancellation)
@@ -958,8 +957,7 @@ sealed partial class GrpcDurableTaskWorker
         async Task CompleteOrchestratorTaskWithChunkingAsync(
             P.OrchestratorResponse response,
             int maxChunkBytes,
-            CancellationToken cancellationToken,
-            string? completionToken = null)
+            CancellationToken cancellationToken)
         {
             // Validate that no single action exceeds the maximum chunk size
             static P.TaskFailureDetails? ValidateActionsSize(IEnumerable<P.OrchestratorAction> actions, int maxChunkBytes)
@@ -1093,7 +1091,7 @@ sealed partial class GrpcDurableTaskWorker
                 P.OrchestratorResponse failureResponse2 = new()
                 {
                     InstanceId = response.InstanceId,
-                    CompletionToken = response.CompletionToken ?? completionToken,
+                    CompletionToken = response.CompletionToken,
                     OrchestrationTraceContext = response.OrchestrationTraceContext,
                     Actions =
                     {

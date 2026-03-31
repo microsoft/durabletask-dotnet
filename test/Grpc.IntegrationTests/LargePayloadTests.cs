@@ -639,6 +639,106 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.Contains(JsonSerializer.Serialize(largeEvent), fakeStore.uploadedPayloads);
     }
 
+
+    // Validates that when an activity output exceeds MaxPayloadBytes, the orchestration
+    // fails gracefully instead of getting stuck in an infinite retry loop.
+    [Fact]
+    public async Task ActivityOutputExceedsMaxPayload_OrchestrationFailsGracefully()
+    {
+        // Activity returns output larger than MaxPayloadBytes cap
+        string oversizedOutput = new string('X', 3000);
+        TaskName orch = nameof(ActivityOutputExceedsMaxPayload_OrchestrationFailsGracefully);
+        TaskName activity = "ProduceOversized";
+
+        InMemoryPayloadStore fakeStore = new InMemoryPayloadStore();
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(
+            worker =>
+            {
+                worker.AddTasks(tasks => tasks
+                    .AddOrchestratorFunc<object?, string>(
+                        orch,
+                        async (ctx, _) => await ctx.CallActivityAsync<string>(activity))
+                    .AddActivityFunc<string>(activity, (ctx) => Task.FromResult(oversizedOutput)));
+
+                worker.UseExternalizedPayloads();
+                worker.Services.AddSingleton<PayloadStore>(fakeStore);
+            },
+            client =>
+            {
+                client.UseExternalizedPayloads();
+                client.Services.AddSingleton<PayloadStore>(fakeStore);
+            },
+            services =>
+            {
+                services.AddExternalizedPayloadStore(opts =>
+                {
+                    opts.ThresholdBytes = 1024;
+                    opts.MaxPayloadBytes = 2048;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+            });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orch);
+        OrchestrationMetadata result = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        // The orchestration should fail (not hang forever) because the activity's
+        // oversized output triggers FailedPrecondition which is caught and converted to a failure.
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, result.RuntimeStatus);
+        Assert.NotNull(result.FailureDetails);
+        Assert.Contains("exceeds the configured maximum", result.FailureDetails!.ErrorMessage);
+    }
+
+    // Validates that when an orchestration's own output exceeds MaxPayloadBytes,
+    // it fails gracefully instead of getting stuck in an infinite retry loop.
+    [Fact]
+    public async Task OrchestrationOutputExceedsMaxPayload_FailsGracefully()
+    {
+        // Orchestration returns output larger than MaxPayloadBytes cap
+        string oversizedOutput = new string('Y', 3000);
+        TaskName orch = nameof(OrchestrationOutputExceedsMaxPayload_FailsGracefully);
+
+        InMemoryPayloadStore fakeStore = new InMemoryPayloadStore();
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(
+            worker =>
+            {
+                worker.AddTasks(tasks => tasks.AddOrchestratorFunc<object?, string>(
+                    orch,
+                    (ctx, _) => Task.FromResult(oversizedOutput)));
+
+                worker.UseExternalizedPayloads();
+                worker.Services.AddSingleton<PayloadStore>(fakeStore);
+            },
+            client =>
+            {
+                client.UseExternalizedPayloads();
+                client.Services.AddSingleton<PayloadStore>(fakeStore);
+            },
+            services =>
+            {
+                services.AddExternalizedPayloadStore(opts =>
+                {
+                    opts.ThresholdBytes = 1024;
+                    opts.MaxPayloadBytes = 2048;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+            });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orch);
+        OrchestrationMetadata result = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        // The orchestration should fail (not hang forever) because the oversized output
+        // triggers FailedPrecondition which is caught and converted to a failure completion.
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, result.RuntimeStatus);
+        Assert.NotNull(result.FailureDetails);
+        Assert.Contains("exceeds the configured maximum", result.FailureDetails!.ErrorMessage);
+    }
+
     class InMemoryPayloadStore : PayloadStore
     {
         const string TokenPrefix = "blob:v1:";

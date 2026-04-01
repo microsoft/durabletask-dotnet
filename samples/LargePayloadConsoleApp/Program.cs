@@ -166,30 +166,17 @@ builder.Services.AddDurableTaskWorker(b =>
             });
         tasks.AddEntity<StateEntity>(nameof(StateEntity));
 
-
-
         // Overflow: activity output > MaxPayloadBytes
-
         tasks.AddOrchestratorFunc<object?, string>("ActivityProducesOversized", async (ctx, _) =>
-
         {
-
             return await ctx.CallActivityAsync<string>("ProduceOversized");
-
         });
-
         tasks.AddActivityFunc<string>("ProduceOversized", (ctx) => Task.FromResult(new string('O', 16 * 1024 * 1024)));
 
-
-
         // Overflow: orchestration output > MaxPayloadBytes
-
         tasks.AddOrchestratorFunc<object?, string>("OrchestrationProducesOversized", (ctx, _) =>
-
         {
-
             return Task.FromResult(new string('P', 16 * 1024 * 1024));
-
         });
 
         // 13MB scenarios: validates that ValidateActionsSize does not block externalization
@@ -254,7 +241,6 @@ string largeInput = new string('B', 40 * 1024); // 40KB
 string instanceId = await client.ScheduleNewOrchestrationInstanceAsync("LargeInputEcho", largeInput);
 Console.WriteLine($"Started orchestration with direct large input. Instance: {instanceId}");
 
-
 using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
 OrchestrationMetadata result = await client.WaitForInstanceCompletionAsync(
     instanceId,
@@ -301,78 +287,41 @@ int stateLength = state?.State?.Length ?? 0;
 Console.WriteLine($"State length: {stateLength}");
 Console.WriteLine($"Deserialized state equals original: {state?.State == largeEntityState}");
 
-
-
 // ==================== Overflow Scenarios ====================
-
 Console.WriteLine();
-
 Console.WriteLine("=== Overflow Scenarios (MaxPayloadBytes=15MB) ===");
 
-
-
 // Scenario 1: Client input > cap -> PayloadStorageException
-
 Console.WriteLine("[Scenario 1] Client oversized input");
-
 try
-
 {
-
     string tooLarge = new string('Z', 16 * 1024 * 1024);
-
     await client.ScheduleNewOrchestrationInstanceAsync("LargeInputEcho", tooLarge);
-
     Console.WriteLine("ERROR: Expected PayloadStorageException!");
-
 }
-
 catch (PayloadStorageException ex)
-
 {
-
     Console.WriteLine("PASS: " + ex.GetType().Name + ": " + ex.Message);
-
 }
-
 catch (Exception ex)
-
 {
-
     Console.WriteLine("FAIL: " + ex.GetType().Name + ": " + ex.Message);
-
 }
-
-
 
 // Scenario 2: Activity output > cap -> orchestration fails
-
 Console.WriteLine("[Scenario 2] Activity oversized output");
-
 string actOvfId = await client.ScheduleNewOrchestrationInstanceAsync("ActivityProducesOversized");
-
 OrchestrationMetadata actOvfResult = await client.WaitForInstanceCompletionAsync(actOvfId, getInputsAndOutputs: true, cts.Token);
-
 Console.WriteLine("  Status: " + actOvfResult.RuntimeStatus);
-
 Console.WriteLine(actOvfResult.RuntimeStatus == OrchestrationRuntimeStatus.Failed ? "PASS" : "FAIL: expected Failed");
-
 if (actOvfResult.FailureDetails != null) Console.WriteLine("  Error: " + actOvfResult.FailureDetails.ErrorMessage);
 
-
-
 // Scenario 3: Orchestration output > cap -> fails
-
 Console.WriteLine("[Scenario 3] Orchestration oversized output");
-
 string orchOvfId = await client.ScheduleNewOrchestrationInstanceAsync("OrchestrationProducesOversized");
-
 OrchestrationMetadata orchOvfResult = await client.WaitForInstanceCompletionAsync(orchOvfId, getInputsAndOutputs: true, cts.Token);
-
 Console.WriteLine("  Status: " + orchOvfResult.RuntimeStatus);
-
 Console.WriteLine(orchOvfResult.RuntimeStatus == OrchestrationRuntimeStatus.Failed ? "PASS" : "FAIL: expected Failed");
-
 if (orchOvfResult.FailureDetails != null) Console.WriteLine("  Error: " + orchOvfResult.FailureDetails.ErrorMessage);
 
 // Scenario 4: 13MB activity output + orchestration output with LP enabled
@@ -450,8 +399,6 @@ if (threeResult.FailureDetails != null) Console.WriteLine("  Error: " + threeRes
 
 Console.WriteLine();
 Console.WriteLine("=== ALL SCENARIOS DONE ===");
-
-
 
 public class EchoLengthEntity : TaskEntity<int>
 {

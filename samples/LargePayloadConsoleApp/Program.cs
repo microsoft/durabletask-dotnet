@@ -27,7 +27,7 @@ builder.Services.AddExternalizedPayloadStore(opts =>
     // Keep threshold small to force externalization for demo purposes
     opts.ThresholdBytes = 1024; // 1KB
 
-    opts.MaxPayloadBytes = 50 * 1024; // 50KB cap for overflow testing
+    opts.MaxPayloadBytes = 15 * 1024 * 1024; // 15MB - allows 13MB scenario while still rejecting 16MB overflow
     opts.ConnectionString = builder.Configuration.GetValue<string>("DURABLETASK_STORAGE") ?? "UseDevelopmentStorage=true";
     opts.ContainerName = builder.Configuration.GetValue<string>("DURABLETASK_PAYLOAD_CONTAINER") ?? "payloads";
 });
@@ -113,7 +113,7 @@ builder.Services.AddDurableTaskWorker(b =>
 
         });
 
-        tasks.AddActivityFunc<string>("ProduceOversized", (ctx) => Task.FromResult(new string('O', 60 * 1024)));
+        tasks.AddActivityFunc<string>("ProduceOversized", (ctx) => Task.FromResult(new string('O', 16 * 1024 * 1024)));
 
 
 
@@ -123,9 +123,18 @@ builder.Services.AddDurableTaskWorker(b =>
 
         {
 
-            return Task.FromResult(new string('P', 60 * 1024));
+            return Task.FromResult(new string('P', 16 * 1024 * 1024));
 
         });
+
+        // 13MB scenarios: validates that ValidateActionsSize does not block externalization
+        tasks.AddOrchestratorFunc<object?, string>("LargeActivityIO", async (ctx, _) =>
+        {
+            // Activity produces 13MB output, then orchestration returns it as its own output
+            string actResult = await ctx.CallActivityAsync<string>("Produce13MB");
+            return actResult;
+        });
+        tasks.AddActivityFunc<string>("Produce13MB", (ctx) => Task.FromResult(new string('M', 13 * 1024 * 1024)));
     });
 
     // Use shared store (no duplication of options)
@@ -197,7 +206,7 @@ Console.WriteLine($"Deserialized state equals original: {state?.State == largeEn
 
 Console.WriteLine();
 
-Console.WriteLine("=== Overflow Scenarios (MaxPayloadBytes=50KB) ===");
+Console.WriteLine("=== Overflow Scenarios (MaxPayloadBytes=15MB) ===");
 
 
 
@@ -209,7 +218,7 @@ try
 
 {
 
-    string tooLarge = new string('Z', 60 * 1024);
+    string tooLarge = new string('Z', 16 * 1024 * 1024);
 
     await client.ScheduleNewOrchestrationInstanceAsync("LargeInputEcho", tooLarge);
 
@@ -265,7 +274,25 @@ Console.WriteLine(orchOvfResult.RuntimeStatus == OrchestrationRuntimeStatus.Fail
 
 if (orchOvfResult.FailureDetails != null) Console.WriteLine("  Error: " + orchOvfResult.FailureDetails.ErrorMessage);
 
-
+// Scenario 4: 13MB activity output + orchestration output with LP enabled
+// Tests that ValidateActionsSize bypass allows 13MB through the interceptor
+Console.WriteLine();
+Console.WriteLine("[Scenario 4] 13MB activity output -> orchestration output (round-trip)");
+string largeIOId = await client.ScheduleNewOrchestrationInstanceAsync("LargeActivityIO");
+OrchestrationMetadata largeIOResult = await client.WaitForInstanceCompletionAsync(largeIOId, getInputsAndOutputs: true, cts.Token);
+Console.WriteLine("  Status: " + largeIOResult.RuntimeStatus);
+if (largeIOResult.RuntimeStatus == OrchestrationRuntimeStatus.Completed)
+{
+    string? orchOutput = largeIOResult.ReadOutputAs<string>();
+    bool outputOk = orchOutput?.Length == 13 * 1024 * 1024;
+    Console.WriteLine("  Output length: " + (orchOutput?.Length ?? 0));
+    Console.WriteLine(outputOk ? "PASS: 13MB activity output -> orch output externalized correctly" : "FAIL: output length mismatch");
+}
+else
+{
+    Console.WriteLine("FAIL: Expected Completed, got " + largeIOResult.RuntimeStatus);
+    if (largeIOResult.FailureDetails != null) Console.WriteLine("  Error: " + largeIOResult.FailureDetails.ErrorMessage);
+}
 
 Console.WriteLine("=== All scenarios complete ===");
 

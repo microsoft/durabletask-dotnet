@@ -135,6 +135,42 @@ builder.Services.AddDurableTaskWorker(b =>
             return actResult;
         });
         tasks.AddActivityFunc<string, string>("Echo13MB", (ctx, input) => input);
+
+        // Scenario 5: 13MB orchestration input
+        tasks.AddOrchestratorFunc<string, string>("LargeOrchInput", async (ctx, input) =>
+        {
+            return await ctx.CallActivityAsync<string>("Echo13MB", input);
+        });
+
+        // Scenario 6: 13MB sub-orchestration input
+        tasks.AddOrchestratorFunc<object?, string>("LargeSubOrchParent", async (ctx, _) =>
+        {
+            return await ctx.CallSubOrchestratorAsync<string>("LargeSubOrchChild", new string('S', 13 * 1024 * 1024));
+        });
+        tasks.AddOrchestratorFunc<string, string>("LargeSubOrchChild", (ctx, input) => Task.FromResult(input));
+
+        // Scenario 7: 13MB external event
+        tasks.AddOrchestratorFunc<string>("LargeExternalEventOrch", async ctx =>
+        {
+            return await ctx.WaitForExternalEvent<string>("BigEvent");
+        });
+
+        // Scenario 8: 13MB custom status
+        tasks.AddOrchestratorFunc<object?, string>("LargeCustomStatus", (ctx, _) =>
+        {
+            ctx.SetCustomStatus(new string('C', 13 * 1024 * 1024));
+            return Task.FromResult("done");
+        });
+
+        // Scenario 9: 3x 13MB activity inputs (chunked orchestration completion)
+        tasks.AddOrchestratorFunc<object?, int>("ThreelargeActivities", async (ctx, _) =>
+        {
+            var t1 = ctx.CallActivityAsync<string>("Echo13MB", new string('A', 13 * 1024 * 1024));
+            var t2 = ctx.CallActivityAsync<string>("Echo13MB", new string('B', 13 * 1024 * 1024));
+            var t3 = ctx.CallActivityAsync<string>("Echo13MB", new string('C', 13 * 1024 * 1024));
+            string[] results = await Task.WhenAll(t1, t2, t3);
+            return results.Sum(r => r.Length);
+        });
     });
 
     // Use shared store (no duplication of options)
@@ -295,6 +331,62 @@ else
 }
 
 Console.WriteLine("=== All scenarios complete ===");
+
+// Scenario 5: 13MB orchestration input
+Console.WriteLine();
+Console.WriteLine("[Scenario 5] 13MB orchestration input -> activity echo -> orch output");
+string orchInputId = await client.ScheduleNewOrchestrationInstanceAsync("LargeOrchInput", new string('I', 13 * 1024 * 1024));
+OrchestrationMetadata orchInputResult = await client.WaitForInstanceCompletionAsync(orchInputId, getInputsAndOutputs: true, cts.Token);
+Console.WriteLine("  Status: " + orchInputResult.RuntimeStatus);
+Console.WriteLine(orchInputResult.RuntimeStatus == OrchestrationRuntimeStatus.Completed && orchInputResult.ReadOutputAs<string>()?.Length == 13 * 1024 * 1024
+    ? "PASS" : "FAIL");
+if (orchInputResult.FailureDetails != null) Console.WriteLine("  Error: " + orchInputResult.FailureDetails.ErrorMessage);
+
+// Scenario 6: 13MB sub-orchestration input
+Console.WriteLine();
+Console.WriteLine("[Scenario 6] 13MB sub-orchestration input -> child returns it");
+string subOrchId = await client.ScheduleNewOrchestrationInstanceAsync("LargeSubOrchParent");
+OrchestrationMetadata subOrchResult = await client.WaitForInstanceCompletionAsync(subOrchId, getInputsAndOutputs: true, cts.Token);
+Console.WriteLine("  Status: " + subOrchResult.RuntimeStatus);
+Console.WriteLine(subOrchResult.RuntimeStatus == OrchestrationRuntimeStatus.Completed && subOrchResult.ReadOutputAs<string>()?.Length == 13 * 1024 * 1024
+    ? "PASS" : "FAIL");
+if (subOrchResult.FailureDetails != null) Console.WriteLine("  Error: " + subOrchResult.FailureDetails.ErrorMessage);
+
+// Scenario 7: 13MB external event
+Console.WriteLine();
+Console.WriteLine("[Scenario 7] 13MB external event");
+string extEvtId = await client.ScheduleNewOrchestrationInstanceAsync("LargeExternalEventOrch");
+await client.WaitForInstanceStartAsync(extEvtId, cts.Token);
+await client.RaiseEventAsync(extEvtId, "BigEvent", new string('E', 13 * 1024 * 1024), cts.Token);
+OrchestrationMetadata extEvtResult = await client.WaitForInstanceCompletionAsync(extEvtId, getInputsAndOutputs: true, cts.Token);
+Console.WriteLine("  Status: " + extEvtResult.RuntimeStatus);
+Console.WriteLine(extEvtResult.RuntimeStatus == OrchestrationRuntimeStatus.Completed && extEvtResult.ReadOutputAs<string>()?.Length == 13 * 1024 * 1024
+    ? "PASS" : "FAIL");
+if (extEvtResult.FailureDetails != null) Console.WriteLine("  Error: " + extEvtResult.FailureDetails.ErrorMessage);
+
+// Scenario 8: 13MB custom status
+Console.WriteLine();
+Console.WriteLine("[Scenario 8] 13MB custom status");
+string csId = await client.ScheduleNewOrchestrationInstanceAsync("LargeCustomStatus");
+OrchestrationMetadata csResult = await client.WaitForInstanceCompletionAsync(csId, getInputsAndOutputs: true, cts.Token);
+Console.WriteLine("  Status: " + csResult.RuntimeStatus);
+string? customStatus = csResult.ReadCustomStatusAs<string>();
+Console.WriteLine(csResult.RuntimeStatus == OrchestrationRuntimeStatus.Completed && customStatus?.Length == 13 * 1024 * 1024
+    ? "PASS" : "FAIL: custom status length=" + (customStatus?.Length ?? 0));
+
+// Scenario 9: 3x 13MB activity inputs (chunked orchestration completion with LP)
+Console.WriteLine();
+Console.WriteLine("[Scenario 9] 3x 13MB activity inputs (chunked orch complete)");
+string threeId = await client.ScheduleNewOrchestrationInstanceAsync("ThreelargeActivities");
+OrchestrationMetadata threeResult = await client.WaitForInstanceCompletionAsync(threeId, getInputsAndOutputs: true, cts.Token);
+Console.WriteLine("  Status: " + threeResult.RuntimeStatus);
+int totalLen = threeResult.ReadOutputAs<int>();
+Console.WriteLine(threeResult.RuntimeStatus == OrchestrationRuntimeStatus.Completed && totalLen == 3 * 13 * 1024 * 1024
+    ? "PASS: total=" + totalLen : "FAIL: total=" + totalLen);
+if (threeResult.FailureDetails != null) Console.WriteLine("  Error: " + threeResult.FailureDetails.ErrorMessage);
+
+Console.WriteLine();
+Console.WriteLine("=== ALL SCENARIOS DONE ===");
 
 
 

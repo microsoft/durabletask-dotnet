@@ -733,7 +733,8 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
 
         // The orchestration should fail (not hang forever) because the oversized output
-        // triggers FailedPrecondition which is caught and converted to a failure completion.
+        // triggers a PayloadStorageException in the interceptor, which the worker catches
+        // and converts to a non-retriable failure completion.
         Assert.Equal(OrchestrationRuntimeStatus.Failed, result.RuntimeStatus);
         Assert.NotNull(result.FailureDetails);
         Assert.Contains("exceeds the configured maximum", result.FailureDetails!.ErrorMessage);

@@ -330,8 +330,6 @@ else
     if (largeIOResult.FailureDetails != null) Console.WriteLine("  Error: " + largeIOResult.FailureDetails.ErrorMessage);
 }
 
-Console.WriteLine("=== All scenarios complete ===");
-
 // Scenario 5: 13MB orchestration input
 Console.WriteLine();
 Console.WriteLine("[Scenario 5] 13MB orchestration input -> activity echo -> orch output");

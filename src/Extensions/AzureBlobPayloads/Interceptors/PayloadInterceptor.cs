@@ -80,7 +80,6 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
             return new Status(StatusCode.Unknown, string.Empty);
         }
 
-
         Metadata GetTrailers()
         {
             return startCallTask.Status == TaskStatus.RanToCompletion ? startCallTask.Result.GetTrailers() : [];

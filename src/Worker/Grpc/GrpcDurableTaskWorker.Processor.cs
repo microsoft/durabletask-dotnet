@@ -853,32 +853,7 @@ sealed partial class GrpcDurableTaskWorker
             // Stop the trace activity here to avoid including the completion time in the latency calculation
             traceActivity?.Stop();
 
-            try
-            {
-                await this.client.CompleteActivityTaskAsync(response, cancellationToken: cancellation);
-            }
-            catch (InvalidOperationException ex) when (ex.GetType().FullName == "Microsoft.DurableTask.PayloadStorageException")
-            {
-                // Permanent failure thrown by the payload interceptor (e.g., payload too large).
-                // Matched by fully-qualified type name because Worker.Grpc does not reference AzureBlobPayloads.
-                this.Logger.UnexpectedError(ex, instance.InstanceId);
-
-                P.ActivityResponse failureResponse = new()
-                {
-                    InstanceId = instance.InstanceId,
-                    TaskId = request.TaskId,
-                    FailureDetails = new P.TaskFailureDetails
-                    {
-                        ErrorType = ex.GetType().FullName,
-                        ErrorMessage = ex.Message,
-                        StackTrace = ex.ToString(),
-                        IsNonRetriable = true,
-                    },
-                    CompletionToken = completionToken,
-                };
-
-                await this.client.CompleteActivityTaskAsync(failureResponse, cancellationToken: cancellation);
-            }
+            await this.client.CompleteActivityTaskAsync(response, cancellationToken: cancellation);
         }
 
         async Task OnRunEntityBatchAsync(
@@ -982,7 +957,7 @@ sealed partial class GrpcDurableTaskWorker
                 return null;
             }
 
-            P.TaskFailureDetails? validationFailure = this.worker.grpcOptions.IsPayloadExternalizationEnabled
+            P.TaskFailureDetails? validationFailure = this.worker.grpcOptions.Capabilities.Contains(P.WorkerCapability.LargePayloads)
                 ? null
                 : ValidateActionsSize(response.Actions, maxChunkBytes);
             if (validationFailure != null)
@@ -1029,106 +1004,71 @@ sealed partial class GrpcDurableTaskWorker
             }
 
             // Check if the entire response fits in one chunk
-            try
+            int totalSize = response.CalculateSize();
+            if (totalSize <= maxChunkBytes)
             {
-                int totalSize = response.CalculateSize();
-                if (totalSize <= maxChunkBytes)
-                {
-                    // Response fits in one chunk, send it directly (isPartial defaults to false)
-                    await this.client.CompleteOrchestratorTaskAsync(response, cancellationToken: cancellationToken);
-                    return;
-                }
-
-                // Response is too large, split into multiple chunks
-                int actionsCompletedSoFar = 0, chunkIndex = 0;
-                List<P.OrchestratorAction> allActions = response.Actions.ToList();
-                bool isPartial = true;
-                bool isChunkedMode = false;
-
-                while (isPartial)
-                {
-                    P.OrchestratorResponse chunkedResponse = new()
-                    {
-                        InstanceId = response.InstanceId,
-                        CustomStatus = response.CustomStatus,
-                        CompletionToken = response.CompletionToken,
-                        RequiresHistory = response.RequiresHistory,
-                        NumEventsProcessed = 0,
-                    };
-
-                    int chunkPayloadSize = 0;
-
-                    // Fill the chunk with actions until we reach the size limit
-                    while (actionsCompletedSoFar < allActions.Count &&
-                           TryAddAction(chunkedResponse.Actions, allActions[actionsCompletedSoFar], ref chunkPayloadSize, maxChunkBytes))
-                    {
-                        actionsCompletedSoFar++;
-                    }
-
-                    // Determine if this is a partial chunk (more actions remaining)
-                    isPartial = actionsCompletedSoFar < allActions.Count;
-                    chunkedResponse.IsPartial = isPartial;
-
-                    // Only activate chunked mode when we actually need multiple chunks.
-                    // A single oversized action that fits in one chunk (via TryAddAction allowing
-                    // the first item in an empty chunk) should be sent as non-chunked to avoid
-                    // backend issues with ChunkIndex=0 + IsPartial=false.
-                    if (isPartial)
-                    {
-                        isChunkedMode = true;
-                    }
-
-                    if (isChunkedMode)
-                    {
-                        chunkedResponse.ChunkIndex = chunkIndex;
-                    }
-
-                    if (chunkIndex == 0)
-                    {
-                        // The first chunk preserves the original response's NumEventsProcessed value (null)
-                        // When this is set to null, backend by default handles all the messages in the workitem.
-                        // For subsequent chunks, we set it to 0 since all messages are already handled in first chunk.
-                        chunkedResponse.NumEventsProcessed = null;
-                        chunkedResponse.OrchestrationTraceContext = response.OrchestrationTraceContext;
-                    }
-
-                    chunkIndex++;
-
-                    // Send the chunk
-                    await this.client.CompleteOrchestratorTaskAsync(chunkedResponse, cancellationToken: cancellationToken);
-                }
+                // Response fits in one chunk, send it directly (isPartial defaults to false)
+                await this.client.CompleteOrchestratorTaskAsync(response, cancellationToken: cancellationToken);
+                return;
             }
-            catch (InvalidOperationException ex) when (ex.GetType().FullName == "Microsoft.DurableTask.PayloadStorageException")
-            {
-                // Permanent failure thrown by the payload interceptor (e.g., payload too large).
-                // Matched by fully-qualified type name because Worker.Grpc does not reference AzureBlobPayloads.
-                this.Logger.UnexpectedError(ex, response.InstanceId);
 
-                P.OrchestratorResponse failureResponse = new()
+            // Response is too large, split into multiple chunks
+            int actionsCompletedSoFar = 0, chunkIndex = 0;
+            List<P.OrchestratorAction> allActions = response.Actions.ToList();
+            bool isPartial = true;
+            bool isChunkedMode = false;
+
+            while (isPartial)
+            {
+                P.OrchestratorResponse chunkedResponse = new()
                 {
                     InstanceId = response.InstanceId,
+                    CustomStatus = response.CustomStatus,
                     CompletionToken = response.CompletionToken,
-                    OrchestrationTraceContext = response.OrchestrationTraceContext,
-                    Actions =
-                    {
-                        new P.OrchestratorAction
-                        {
-                            CompleteOrchestration = new P.CompleteOrchestrationAction
-                            {
-                                OrchestrationStatus = P.OrchestrationStatus.Failed,
-                                FailureDetails = new P.TaskFailureDetails
-                                {
-                                    ErrorType = ex.GetType().FullName,
-                                    ErrorMessage = ex.Message,
-                                    StackTrace = ex.ToString(),
-                                    IsNonRetriable = true,
-                                },
-                            },
-                        },
-                    },
+                    RequiresHistory = response.RequiresHistory,
+                    NumEventsProcessed = 0,
                 };
 
-                await this.client.CompleteOrchestratorTaskAsync(failureResponse, cancellationToken: cancellationToken);
+                int chunkPayloadSize = 0;
+
+                // Fill the chunk with actions until we reach the size limit
+                while (actionsCompletedSoFar < allActions.Count &&
+                       TryAddAction(chunkedResponse.Actions, allActions[actionsCompletedSoFar], ref chunkPayloadSize, maxChunkBytes))
+                {
+                    actionsCompletedSoFar++;
+                }
+
+                // Determine if this is a partial chunk (more actions remaining)
+                isPartial = actionsCompletedSoFar < allActions.Count;
+                chunkedResponse.IsPartial = isPartial;
+
+                // Only activate chunked mode when we actually need multiple chunks.
+                // A single oversized action that fits in one chunk (via TryAddAction allowing
+                // the first item in an empty chunk) should be sent as non-chunked to avoid
+                // backend issues with ChunkIndex=0 + IsPartial=false.
+                if (isPartial)
+                {
+                    isChunkedMode = true;
+                }
+
+                if (isChunkedMode)
+                {
+                    chunkedResponse.ChunkIndex = chunkIndex;
+                }
+
+                if (chunkIndex == 0)
+                {
+                    // The first chunk preserves the original response's NumEventsProcessed value (null)
+                    // When this is set to null, backend by default handles all the messages in the workitem.
+                    // For subsequent chunks, we set it to 0 since all messages are already handled in first chunk.
+                    chunkedResponse.NumEventsProcessed = null;
+                    chunkedResponse.OrchestrationTraceContext = response.OrchestrationTraceContext;
+                }
+
+                chunkIndex++;
+
+                // Send the chunk
+                await this.client.CompleteOrchestratorTaskAsync(chunkedResponse, cancellationToken: cancellationToken);
             }
         }
     }

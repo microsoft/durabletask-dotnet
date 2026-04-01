@@ -39,10 +39,55 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                 r.Input = await this.MaybeExternalizeAsync(r.Input, cancellation);
                 break;
             case P.ActivityResponse r:
-                r.Result = await this.MaybeExternalizeAsync(r.Result, cancellation);
+                try
+                {
+                    r.Result = await this.MaybeExternalizeAsync(r.Result, cancellation);
+                }
+                catch (PayloadStorageException ex)
+                {
+                    // Permanent failure (e.g., payload exceeds configured maximum).
+                    // Replace with a failure response so the orchestration sees a failed activity
+                    // instead of the work item being abandoned and redelivered indefinitely.
+                    r.Result = null;
+                    r.FailureDetails = new P.TaskFailureDetails
+                    {
+                        ErrorType = ex.GetType().FullName,
+                        ErrorMessage = ex.Message,
+                        StackTrace = ex.ToString(),
+                        IsNonRetriable = true,
+                    };
+                }
+
                 break;
             case P.OrchestratorResponse r:
-                await this.ExternalizeOrchestratorResponseAsync(r, cancellation);
+                try
+                {
+                    await this.ExternalizeOrchestratorResponseAsync(r, cancellation);
+                }
+                catch (PayloadStorageException ex)
+                {
+                    // Permanent failure during orchestration response externalization.
+                    // Replace all actions with a single Failed completion so the orchestration
+                    // terminates instead of being abandoned and redelivered indefinitely.
+                    r.Actions.Clear();
+                    r.IsPartial = false;
+                    r.ChunkIndex = null;
+                    r.Actions.Add(new P.OrchestratorAction
+                    {
+                        CompleteOrchestration = new P.CompleteOrchestrationAction
+                        {
+                            OrchestrationStatus = P.OrchestrationStatus.Failed,
+                            FailureDetails = new P.TaskFailureDetails
+                            {
+                                ErrorType = ex.GetType().FullName,
+                                ErrorMessage = ex.Message,
+                                StackTrace = ex.ToString(),
+                                IsNonRetriable = true,
+                            },
+                        },
+                    });
+                }
+
                 break;
             case P.EntityBatchResult r:
                 await this.ExternalizeEntityBatchResultAsync(r, cancellation);

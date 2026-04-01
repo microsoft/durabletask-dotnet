@@ -982,7 +982,9 @@ sealed partial class GrpcDurableTaskWorker
                 return null;
             }
 
-            P.TaskFailureDetails? validationFailure = ValidateActionsSize(response.Actions, maxChunkBytes);
+            P.TaskFailureDetails? validationFailure = this.worker.grpcOptions.IsPayloadExternalizationEnabled
+                ? null
+                : ValidateActionsSize(response.Actions, maxChunkBytes);
             if (validationFailure != null)
             {
                 // Complete the orchestration with a failed status and failure details
@@ -1016,7 +1018,7 @@ sealed partial class GrpcDurableTaskWorker
                 int maxChunkBytes)
             {
                 int actionSize = action.CalculateSize();
-                if (currentSize + actionSize > maxChunkBytes)
+                if (currentSize + actionSize > maxChunkBytes && currentSize > 0)
                 {
                     return false;
                 }

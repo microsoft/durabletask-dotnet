@@ -44,6 +44,13 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
     public HashSet<P.WorkerCapability> Capabilities { get; } = new() { P.WorkerCapability.HistoryStreaming };
 
     /// <summary>
+    /// Gets a value indicating whether payload externalization is enabled.
+    /// This is set internally by <c>UseExternalizedPayloads()</c> and is used to skip
+    /// pre-send size validation that conflicts with interceptor-based externalization.
+    /// </summary>
+    public bool IsPayloadExternalizationEnabled { get; set; }
+
+    /// <summary>
     /// Gets or sets the maximum size of all actions in a complete orchestration work item chunk.
     /// The default value is 3.9MB. We leave some headroom to account for request size overhead.
     /// </summary>

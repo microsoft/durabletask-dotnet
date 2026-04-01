@@ -80,6 +80,7 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
                 }
 
                 opt.Capabilities.Add(P.WorkerCapability.LargePayloads);
+                opt.IsPayloadExternalizationEnabled = true;
             });
 
         return builder;

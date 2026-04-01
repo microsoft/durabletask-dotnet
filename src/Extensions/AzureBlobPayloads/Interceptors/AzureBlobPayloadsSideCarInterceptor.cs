@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Azure;
 using Grpc.Core.Interceptors;
 
 using P = Microsoft.DurableTask.Protobuf;
@@ -43,9 +44,9 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                 {
                     r.Result = await this.MaybeExternalizeAsync(r.Result, cancellation);
                 }
-                catch (PayloadStorageException ex)
+                catch (Exception ex) when (IsPermanentStorageFailure(ex))
                 {
-                    // Permanent failure (e.g., payload exceeds configured maximum).
+                    // Permanent failure (e.g., payload exceeds configured maximum, 4xx auth/permission error).
                     // Replace with a failure response so the orchestration sees a failed activity
                     // instead of the work item being abandoned and redelivered indefinitely.
                     r.Result = null;
@@ -64,7 +65,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                 {
                     await this.ExternalizeOrchestratorResponseAsync(r, cancellation);
                 }
-                catch (PayloadStorageException ex)
+                catch (Exception ex) when (IsPermanentStorageFailure(ex))
                 {
                     // Permanent failure during orchestration response externalization.
                     // Replace all actions with a single Failed completion so the orchestration
@@ -404,5 +405,29 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
 
                 break;
         }
+    }
+
+    /// <summary>
+    /// Determines whether an exception represents a permanent storage failure that will never
+    /// succeed on retry, such as payload exceeding the configured maximum or 4xx HTTP errors
+    /// (authentication, authorization, not found).
+    /// </summary>
+    static bool IsPermanentStorageFailure(Exception ex)
+    {
+        if (ex is PayloadStorageException)
+        {
+            return true;
+        }
+
+        // Azure SDK does not retry 4xx errors (except 408/429). If we receive a 4xx
+        // RequestFailedException, it means the request is fundamentally invalid
+        // (e.g., 401 bad credentials, 403 missing RBAC role, 404 account/container not found).
+        // These will never succeed on retry with the same configuration.
+        if (ex is RequestFailedException rfe && rfe.Status >= 400 && rfe.Status < 500)
+        {
+            return true;
+        }
+
+        return false;
     }
 }

@@ -1043,6 +1043,7 @@ sealed partial class GrpcDurableTaskWorker
                 int actionsCompletedSoFar = 0, chunkIndex = 0;
                 List<P.OrchestratorAction> allActions = response.Actions.ToList();
                 bool isPartial = true;
+                bool isChunkedMode = false;
 
                 while (isPartial)
                 {
@@ -1053,7 +1054,6 @@ sealed partial class GrpcDurableTaskWorker
                         CompletionToken = response.CompletionToken,
                         RequiresHistory = response.RequiresHistory,
                         NumEventsProcessed = 0,
-                        ChunkIndex = chunkIndex,
                     };
 
                     int chunkPayloadSize = 0;
@@ -1068,6 +1068,20 @@ sealed partial class GrpcDurableTaskWorker
                     // Determine if this is a partial chunk (more actions remaining)
                     isPartial = actionsCompletedSoFar < allActions.Count;
                     chunkedResponse.IsPartial = isPartial;
+
+                    // Only activate chunked mode when we actually need multiple chunks.
+                    // A single oversized action that fits in one chunk (via TryAddAction allowing
+                    // the first item in an empty chunk) should be sent as non-chunked to avoid
+                    // backend issues with ChunkIndex=0 + IsPartial=false.
+                    if (isPartial)
+                    {
+                        isChunkedMode = true;
+                    }
+
+                    if (isChunkedMode)
+                    {
+                        chunkedResponse.ChunkIndex = chunkIndex;
+                    }
 
                     if (chunkIndex == 0)
                     {

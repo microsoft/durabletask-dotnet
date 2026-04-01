@@ -130,11 +130,11 @@ builder.Services.AddDurableTaskWorker(b =>
         // 13MB scenarios: validates that ValidateActionsSize does not block externalization
         tasks.AddOrchestratorFunc<object?, string>("LargeActivityIO", async (ctx, _) =>
         {
-            // Activity produces 13MB output, then orchestration returns it as its own output
-            string actResult = await ctx.CallActivityAsync<string>("Produce13MB");
+            // Send 13MB as activity input, activity echoes it back, orchestration returns it
+            string actResult = await ctx.CallActivityAsync<string>("Echo13MB", new string('M', 13 * 1024 * 1024));
             return actResult;
         });
-        tasks.AddActivityFunc<string>("Produce13MB", (ctx) => Task.FromResult(new string('M', 13 * 1024 * 1024)));
+        tasks.AddActivityFunc<string, string>("Echo13MB", (ctx, input) => input);
     });
 
     // Use shared store (no duplication of options)

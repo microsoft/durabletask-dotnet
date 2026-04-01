@@ -1,6 +1,71 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// =================================================================================================
+// Large Payload Externalization Sample
+// =================================================================================================
+// Demonstrates Azure Blob Storage externalization for oversized payloads.
+// Requires: Azurite (azurite --skipApiVersionCheck) + DTS Scheduler connection string.
+//
+// Run:
+//   $env:DURABLE_TASK_SCHEDULER_CONNECTION_STRING = "Endpoint=https://...;Taskhub=...;Authentication=DefaultAzure"
+//   $env:DURABLETASK_STORAGE = "UseDevelopmentStorage=true"
+//   dotnet run --framework net10.0 --no-launch-profile
+//
+// Config: ThresholdBytes=1KB, MaxPayloadBytes=15MB, Azurite blob storage.
+//
+// ---- Scenario Summary & Expected Output (verified 2026-04-01 against real DTS) ----
+//
+// [Scenario 1] Client oversized input (16MB > 15MB MaxPayloadBytes)
+//   Validates: PayloadStorageException thrown immediately on client side
+//   Expected: PASS: PayloadStorageException: Payload size 16384 KB exceeds the configured maximum...
+//   Output:   PASS: PayloadStorageException: Payload size 16384 KB exceeds the configured maximum of 15360 KB.
+//
+// [Scenario 2] Activity oversized output (16MB > 15MB MaxPayloadBytes)
+//   Validates: Orchestration fails gracefully (not infinite retry loop)
+//   Expected: Status: Failed, PASS
+//   Output:   Status: Failed / PASS / Error: Task 'ProduceOversized' (#0) failed...Payload size 16384 KB exceeds...
+//
+// [Scenario 3] Orchestration oversized output (16MB > 15MB MaxPayloadBytes)
+//   Validates: Orchestration fails gracefully (not infinite retry loop)
+//   Expected: Status: Failed, PASS
+//   Output:   Status: Failed / PASS / Error: Payload size 16384 KB exceeds...
+//
+// [Scenario 4] 13MB activity input -> echo -> orchestration output
+//   Validates: ValidateActionsSize bypass (13MB > 3.9MB chunk limit) + ScheduleTask.Input externalization
+//              + ActivityResponse.Result externalization + CompleteOrchestration.Result externalization
+//              + isChunkedMode: single oversized action sent as non-chunked (no ChunkIndex)
+//   Expected: Status: Completed, Output length: 13631488, PASS
+//   Output:   Status: Completed / Output length: 13631488 / PASS: 13MB activity output -> orch output externalized correctly
+//
+// [Scenario 5] 13MB orchestration input -> activity echo -> output
+//   Validates: CreateInstanceRequest.Input externalization + replay with large input token in history
+//   Expected: Status: Completed, PASS
+//   Output:   Status: Completed / PASS
+//
+// [Scenario 6] 13MB sub-orchestration input -> child returns it
+//   Validates: CreateSubOrchestration.Input externalization (>3.9MB action in orchestration completion)
+//   Expected: Status: Completed, PASS
+//   Output:   Status: Completed / PASS
+//
+// [Scenario 7] 13MB external event
+//   Validates: RaiseEventRequest.Input externalization + WaitForExternalEvent resolution
+//   Expected: Status: Completed, PASS
+//   Output:   Status: Completed / PASS
+//
+// [Scenario 8] 13MB custom status
+//   Validates: OrchestratorResponse.CustomStatus externalization + GetInstance resolution
+//   Expected: Status: Completed, PASS
+//   Output:   Status: Completed / PASS
+//
+// [Scenario 9] 3x 13MB activity inputs (real multi-chunk LP completion)
+//   Validates: Multiple oversized ScheduleTask actions → real chunked completion with isChunkedMode=true
+//              + all 3 activities execute and return correct data
+//   Expected: Status: Completed, PASS: total=40894464
+//   Output:   Status: Completed / PASS: total=40894464
+//
+// =================================================================================================
+
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.AzureManaged;
 using Microsoft.DurableTask.Client.Entities;

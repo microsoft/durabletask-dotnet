@@ -857,10 +857,10 @@ sealed partial class GrpcDurableTaskWorker
             {
                 await this.client.CompleteActivityTaskAsync(response, cancellationToken: cancellation);
             }
-            catch (InvalidOperationException ex) when (ex.GetType().Name == "PayloadStorageException")
+            catch (InvalidOperationException ex) when (ex.GetType().FullName == "Microsoft.DurableTask.PayloadStorageException")
             {
                 // Permanent failure thrown by the payload interceptor (e.g., payload too large).
-                // Matched by type name because Worker.Grpc does not reference AzureBlobPayloads.
+                // Matched by fully-qualified type name because Worker.Grpc does not reference AzureBlobPayloads.
                 this.Logger.UnexpectedError(ex, instance.InstanceId);
 
                 P.ActivityResponse failureResponse = new()
@@ -1082,10 +1082,10 @@ sealed partial class GrpcDurableTaskWorker
                     await this.client.CompleteOrchestratorTaskAsync(chunkedResponse, cancellationToken: cancellationToken);
                 }
             }
-            catch (InvalidOperationException ex) when (ex.GetType().Name == "PayloadStorageException")
+            catch (InvalidOperationException ex) when (ex.GetType().FullName == "Microsoft.DurableTask.PayloadStorageException")
             {
                 // Permanent failure thrown by the payload interceptor (e.g., payload too large).
-                // Matched by type name because Worker.Grpc does not reference AzureBlobPayloads.
+                // Matched by fully-qualified type name because Worker.Grpc does not reference AzureBlobPayloads.
                 this.Logger.UnexpectedError(ex, response.InstanceId);
 
                 P.OrchestratorResponse failureResponse = new()

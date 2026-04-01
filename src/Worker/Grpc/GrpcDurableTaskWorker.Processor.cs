@@ -863,13 +863,13 @@ sealed partial class GrpcDurableTaskWorker
                 // Matched by type name because Worker.Grpc does not reference AzureBlobPayloads.
                 this.Logger.UnexpectedError(ex, instance.InstanceId);
 
-                P.ActivityResponse failureResponse2 = new()
+                P.ActivityResponse failureResponse = new()
                 {
                     InstanceId = instance.InstanceId,
                     TaskId = request.TaskId,
                     FailureDetails = new P.TaskFailureDetails
                     {
-                        ErrorType = typeof(InvalidOperationException).FullName,
+                        ErrorType = ex.GetType().FullName,
                         ErrorMessage = ex.Message,
                         StackTrace = ex.ToString(),
                         IsNonRetriable = true,
@@ -877,7 +877,7 @@ sealed partial class GrpcDurableTaskWorker
                     CompletionToken = completionToken,
                 };
 
-                await this.client.CompleteActivityTaskAsync(failureResponse2, cancellationToken: cancellation);
+                await this.client.CompleteActivityTaskAsync(failureResponse, cancellationToken: cancellation);
             }
         }
 
@@ -1088,7 +1088,7 @@ sealed partial class GrpcDurableTaskWorker
                 // Matched by type name because Worker.Grpc does not reference AzureBlobPayloads.
                 this.Logger.UnexpectedError(ex, response.InstanceId);
 
-                P.OrchestratorResponse failureResponse2 = new()
+                P.OrchestratorResponse failureResponse = new()
                 {
                     InstanceId = response.InstanceId,
                     CompletionToken = response.CompletionToken,
@@ -1102,7 +1102,7 @@ sealed partial class GrpcDurableTaskWorker
                                 OrchestrationStatus = P.OrchestrationStatus.Failed,
                                 FailureDetails = new P.TaskFailureDetails
                                 {
-                                    ErrorType = typeof(InvalidOperationException).FullName,
+                                    ErrorType = ex.GetType().FullName,
                                     ErrorMessage = ex.Message,
                                     StackTrace = ex.ToString(),
                                     IsNonRetriable = true,
@@ -1112,7 +1112,7 @@ sealed partial class GrpcDurableTaskWorker
                     },
                 };
 
-                await this.client.CompleteOrchestratorTaskAsync(failureResponse2, cancellationToken: cancellationToken);
+                await this.client.CompleteOrchestratorTaskAsync(failureResponse, cancellationToken: cancellationToken);
             }
         }
     }

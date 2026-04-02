@@ -35,12 +35,6 @@ public class DurableTaskWorkerWorkItemFilters
     /// <returns>A new instance of <see cref="DurableTaskWorkerWorkItemFilters"/> constructed from the provided registry.</returns>
     internal static DurableTaskWorkerWorkItemFilters FromDurableTaskRegistry(DurableTaskRegistry registry, DurableTaskWorkerOptions? workerOptions)
     {
-        IReadOnlyList<string> workerActivityVersions = [];
-        if (workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict)
-        {
-            workerActivityVersions = [workerOptions.Versioning.Version];
-        }
-
         // Orchestration filters now group registrations by logical name. Version lists are only emitted when every
         // registration for a logical name is explicitly versioned; otherwise, the filter conservatively matches all
         // versions for that name.
@@ -68,17 +62,13 @@ public class DurableTaskWorkerWorkItemFilters
             .GroupBy(activity => activity.Key.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
+                // Activity filters mirror orchestration filters: any unversioned registration becomes a catch-all
+                // for that logical name, while fully versioned groups advertise only the explicit versions.
                 bool hasUnversionedRegistration = group.Any(entry => string.IsNullOrWhiteSpace(entry.Key.Version));
-                IReadOnlyList<string> registeredVersions = group.Select(entry => entry.Key.Version)
-                    .Where(version => !string.IsNullOrWhiteSpace(version))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-
-                IReadOnlyList<string> versions = hasUnversionedRegistration && workerActivityVersions.Count == 0
+                IReadOnlyList<string> versions = hasUnversionedRegistration
                     ? []
-                    : registeredVersions
-                        .Concat(workerActivityVersions)
+                    : group.Select(entry => entry.Key.Version)
+                        .Where(version => !string.IsNullOrWhiteSpace(version))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
                         .ToArray();

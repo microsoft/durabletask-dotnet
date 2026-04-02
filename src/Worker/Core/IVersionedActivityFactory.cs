@@ -6,7 +6,8 @@ using System.Diagnostics.CodeAnalysis;
 namespace Microsoft.DurableTask.Worker;
 
 /// <summary>
-/// Creates activities by exact logical name and version.
+/// Creates activity instances by logical name and requested version.
+/// Implementations may use an unversioned registration as a compatibility fallback when no exact version match exists.
 /// </summary>
 internal interface IVersionedActivityFactory
 {

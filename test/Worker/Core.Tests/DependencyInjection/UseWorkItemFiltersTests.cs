@@ -181,7 +181,7 @@ public class UseWorkItemFiltersTests
     }
 
     [Fact]
-    public void WorkItemFilters_DefaultVersionWithVersioningStrict_AppliesToActivitiesOnly_WhenExplicitlyOptedIn()
+    public void WorkItemFilters_DefaultVersionWithVersioningStrict_DoesNotChangeActivityFilters_WhenExplicitlyOptedIn()
     {
         // Arrange
         ServiceCollection services = new();
@@ -211,7 +211,7 @@ public class UseWorkItemFiltersTests
 
         // Assert
         actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.Count == 0);
-        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.Contains("1.0"));
+        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.Count == 0);
     }
 
     [Fact]
@@ -266,6 +266,60 @@ public class UseWorkItemFiltersTests
         actual.Orchestrations.Should().ContainSingle();
         actual.Orchestrations[0].Name.Should().Be("FilterWorkflow");
         actual.Orchestrations[0].Versions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void WorkItemFilters_VersionedActivities_GroupVersionsByLogicalName()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddActivity<VersionedFilterActivityV1>();
+                registry.AddActivity<VersionedFilterActivityV2>();
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Activities.Should().ContainSingle();
+        actual.Activities[0].Name.Should().Be("FilterActivity");
+        actual.Activities[0].Versions.Should().BeEquivalentTo(["v1", "v2"]);
+    }
+
+    [Fact]
+    public void WorkItemFilters_UnversionedAndVersionedActivities_FallBackToNameOnlyFilter()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddActivity<UnversionedFilterActivity>();
+                registry.AddActivity<VersionedFilterActivityV2>();
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Activities.Should().ContainSingle();
+        actual.Activities[0].Name.Should().Be("FilterActivity");
+        actual.Activities[0].Versions.Should().BeEmpty();
     }
 
     [Fact]
@@ -492,6 +546,36 @@ public class UseWorkItemFiltersTests
             throw new NotImplementedException();
         }
     }
+
+    [DurableTask("FilterActivity")]
+    [DurableTaskVersion("v1")]
+    sealed class VersionedFilterActivityV1 : TaskActivity<string, string>
+    {
+        public override Task<string> RunAsync(TaskActivityContext context, string input)
+        {
+            return Task.FromResult("v1");
+        }
+    }
+
+    [DurableTask("FilterActivity")]
+    [DurableTaskVersion("v2")]
+    sealed class VersionedFilterActivityV2 : TaskActivity<string, string>
+    {
+        public override Task<string> RunAsync(TaskActivityContext context, string input)
+        {
+            return Task.FromResult("v2");
+        }
+    }
+
+    [DurableTask("FilterActivity")]
+    sealed class UnversionedFilterActivity : TaskActivity<string, string>
+    {
+        public override Task<string> RunAsync(TaskActivityContext context, string input)
+        {
+            return Task.FromResult("unversioned");
+        }
+    }
+
     sealed class TestEntity : TaskEntity<object>
     {
     }

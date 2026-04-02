@@ -33,6 +33,27 @@ public sealed partial class DurableTaskRegistry
     */
 
     /// <summary>
+    /// Registers an activity factory.
+    /// </summary>
+    /// <param name="name">The name of the activity.</param>
+    /// <param name="version">The activity version.</param>
+    /// <param name="factory">The activity factory.</param>
+    /// <returns>This registry instance, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if any of the following are true:
+    /// <list type="bullet">
+    ///   <item>If <paramref name="name"/> is <c>default</c>.</item>
+    ///   <item>If <paramref name="name" /> and <paramref name="version" /> are already registered.</item>
+    ///   <item>If <paramref name="factory"/> is <c>null</c>.</item>
+    /// </list>
+    /// </exception>
+    public DurableTaskRegistry AddActivity(TaskName name, TaskVersion version, Func<ITaskActivity> factory)
+    {
+        Check.NotNull(factory);
+        return this.AddActivity(name, version, _ => factory());
+    }
+
+    /// <summary>
     /// Registers an activity factory, resolving the provided type with the service provider.
     /// </summary>
     /// <param name="name">The name of the activity to register.</param>
@@ -41,7 +62,10 @@ public sealed partial class DurableTaskRegistry
     public DurableTaskRegistry AddActivity(TaskName name, Type type)
     {
         Check.ConcreteType<ITaskActivity>(type);
-        return this.AddActivity(name, sp => (ITaskActivity)ActivatorUtilities.GetServiceOrCreateInstance(sp, type));
+        return this.AddActivity(
+            name,
+            type.GetDurableTaskVersion(),
+            sp => (ITaskActivity)ActivatorUtilities.GetServiceOrCreateInstance(sp, type));
     }
 
     /// <summary>
@@ -51,7 +75,13 @@ public sealed partial class DurableTaskRegistry
     /// <param name="type">The activity type.</param>
     /// <returns>The same registry, for call chaining.</returns>
     public DurableTaskRegistry AddActivity(Type type)
-        => this.AddActivity(type.GetTaskName(), type);
+    {
+        Check.ConcreteType<ITaskActivity>(type);
+        return this.AddActivity(
+            type.GetTaskName(),
+            type.GetDurableTaskVersion(),
+            sp => (ITaskActivity)ActivatorUtilities.GetServiceOrCreateInstance(sp, type));
+    }
 
     /// <summary>
     /// Registers an activity factory, resolving the provided type with the service provider.
@@ -77,23 +107,26 @@ public sealed partial class DurableTaskRegistry
     /// Registers an activity singleton.
     /// </summary>
     /// <param name="name">The name of the activity to register.</param>
-    /// <param name="activity">The orchestration instance to use.</param>
+    /// <param name="activity">The activity instance to use.</param>
     /// <returns>The same registry, for call chaining.</returns>
     public DurableTaskRegistry AddActivity(TaskName name, ITaskActivity activity)
     {
         Check.NotNull(activity);
-        return this.AddActivity(name, (IServiceProvider _) => activity);
+        return this.AddActivity(name, activity.GetType().GetDurableTaskVersion(), () => activity);
     }
 
     /// <summary>
     /// Registers an activity singleton.
     /// </summary>
-    /// <param name="activity">The orchestration instance to use.</param>
+    /// <param name="activity">The activity instance to use.</param>
     /// <returns>The same registry, for call chaining.</returns>
     public DurableTaskRegistry AddActivity(ITaskActivity activity)
     {
         Check.NotNull(activity);
-        return this.AddActivity(activity.GetType().GetTaskName(), activity);
+        return this.AddActivity(
+            activity.GetType().GetTaskName(),
+            activity.GetType().GetDurableTaskVersion(),
+            () => activity);
     }
 
     /// <summary>

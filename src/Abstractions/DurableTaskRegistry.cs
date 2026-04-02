@@ -16,8 +16,8 @@ public sealed partial class DurableTaskRegistry
     /// <summary>
     /// Gets the currently registered activities.
     /// </summary>
-    internal IDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> Activities { get; }
-        = new Dictionary<TaskName, Func<IServiceProvider, ITaskActivity>>();
+    internal IDictionary<ActivityVersionKey, Func<IServiceProvider, ITaskActivity>> Activities { get; }
+        = new Dictionary<ActivityVersionKey, Func<IServiceProvider, ITaskActivity>>();
 
     /// <summary>
     /// Gets the currently registered orchestrators.
@@ -46,17 +46,7 @@ public sealed partial class DurableTaskRegistry
     /// </list>
     /// </exception>
     public DurableTaskRegistry AddActivity(TaskName name, Func<IServiceProvider, ITaskActivity> factory)
-    {
-        Check.NotDefault(name);
-        Check.NotNull(factory);
-        if (this.Activities.ContainsKey(name))
-        {
-            throw new ArgumentException($"An {nameof(ITaskActivity)} named '{name}' is already added.", nameof(name));
-        }
-
-        this.Activities.Add(name, factory);
-        return this;
-    }
+        => this.AddActivity(name, default, factory);
 
     /// <summary>
     /// Registers an entity factory.
@@ -82,6 +72,24 @@ public sealed partial class DurableTaskRegistry
         }
 
         this.Entities.Add(name, factory);
+        return this;
+    }
+
+    DurableTaskRegistry AddActivity(TaskName name, TaskVersion version, Func<IServiceProvider, ITaskActivity> factory)
+    {
+        Check.NotDefault(name);
+        Check.NotNull(factory);
+
+        ActivityVersionKey key = new(name, version);
+        if (this.Activities.ContainsKey(key))
+        {
+            string message = string.IsNullOrEmpty(version.Version)
+                ? $"An {nameof(ITaskActivity)} named '{name}' is already added."
+                : $"An {nameof(ITaskActivity)} named '{name}' with version '{version.Version}' is already added.";
+            throw new ArgumentException(message, nameof(name));
+        }
+
+        this.Activities.Add(key, factory);
         return this;
     }
 }

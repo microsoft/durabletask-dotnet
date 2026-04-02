@@ -41,56 +41,6 @@ public static Task<string> CallInvoiceActivityAsync(this TaskOrchestrationContex
     return ctx.CallActivityAsync<string>(""InvoiceActivity"", input, ApplyGeneratedActivityVersion(options, ""v1""));
 }
 
-static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
-{
-    if (options?.Version is { Version: not null and not """" })
-    {
-        return options;
-    }
-
-    if (options is null)
-    {
-        return new StartOrchestrationOptions
-        {
-            Version = version,
-        };
-    }
-
-    return new StartOrchestrationOptions(options)
-    {
-        Version = version,
-    };
-}
-
-static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
-{
-    if (options is SubOrchestrationOptions { Version: { Version: not null and not """" } })
-    {
-        return options;
-    }
-
-    if (options is SubOrchestrationOptions subOrchestrationOptions)
-    {
-        return new SubOrchestrationOptions(subOrchestrationOptions)
-        {
-            Version = version,
-        };
-    }
-
-    if (options is null)
-    {
-        return new SubOrchestrationOptions
-        {
-            Version = version,
-        };
-    }
-
-    return new SubOrchestrationOptions(options)
-    {
-        Version = version,
-    };
-}
-
 static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
 {
     if (options is ActivityOptions activityOptions
@@ -177,56 +127,6 @@ public static Task<string> CallInvoiceActivity_v2Async(this TaskOrchestrationCon
     return ctx.CallActivityAsync<string>(""InvoiceActivity"", input, ApplyGeneratedActivityVersion(options, ""v2""));
 }
 
-static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
-{
-    if (options?.Version is { Version: not null and not """" })
-    {
-        return options;
-    }
-
-    if (options is null)
-    {
-        return new StartOrchestrationOptions
-        {
-            Version = version,
-        };
-    }
-
-    return new StartOrchestrationOptions(options)
-    {
-        Version = version,
-    };
-}
-
-static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
-{
-    if (options is SubOrchestrationOptions { Version: { Version: not null and not """" } })
-    {
-        return options;
-    }
-
-    if (options is SubOrchestrationOptions subOrchestrationOptions)
-    {
-        return new SubOrchestrationOptions(subOrchestrationOptions)
-        {
-            Version = version,
-        };
-    }
-
-    if (options is null)
-    {
-        return new SubOrchestrationOptions
-        {
-            Version = version,
-        };
-    }
-
-    return new SubOrchestrationOptions(options)
-    {
-        Version = version,
-    };
-}
-
 static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
 {
     if (options is ActivityOptions activityOptions
@@ -303,56 +203,6 @@ class InvoiceActivityV1Duplicate : TaskActivity<int, string>
 public static Task<string> CallInvoiceActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<string>(""InvoiceActivity"", input, ApplyGeneratedActivityVersion(options, ""v1""));
-}
-
-static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
-{
-    if (options?.Version is { Version: not null and not """" })
-    {
-        return options;
-    }
-
-    if (options is null)
-    {
-        return new StartOrchestrationOptions
-        {
-            Version = version,
-        };
-    }
-
-    return new StartOrchestrationOptions(options)
-    {
-        Version = version,
-    };
-}
-
-static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
-{
-    if (options is SubOrchestrationOptions { Version: { Version: not null and not """" } })
-    {
-        return options;
-    }
-
-    if (options is SubOrchestrationOptions subOrchestrationOptions)
-    {
-        return new SubOrchestrationOptions(subOrchestrationOptions)
-        {
-            Version = version,
-        };
-    }
-
-    if (options is null)
-    {
-        return new SubOrchestrationOptions
-        {
-            Version = version,
-        };
-    }
-
-    return new SubOrchestrationOptions(options)
-    {
-        Version = version,
-    };
 }
 
 static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)

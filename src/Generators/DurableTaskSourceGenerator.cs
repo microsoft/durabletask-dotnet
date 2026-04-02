@@ -657,7 +657,10 @@ namespace {targetNamespace}
 
                 if (hasVersionedStandaloneHelpers)
                 {
-                    AddStandaloneGeneratedVersionHelperMethods(sourceBuilder, hasVersionedStandaloneActivityHelpers);
+                    AddStandaloneGeneratedVersionHelperMethods(
+                        sourceBuilder,
+                        hasVersionedStandaloneOrchestratorHelpers,
+                        hasVersionedStandaloneActivityHelpers);
                 }
 
                 foreach (DurableTaskTypeInfo entity in entitiesInNs)
@@ -884,9 +887,14 @@ namespace {targetNamespace}
         }}");
         }
 
-        static void AddStandaloneGeneratedVersionHelperMethods(StringBuilder sourceBuilder, bool includeActivityVersionHelpers)
+        static void AddStandaloneGeneratedVersionHelperMethods(
+            StringBuilder sourceBuilder,
+            bool includeOrchestrationVersionHelpers,
+            bool includeActivityVersionHelpers)
         {
-            sourceBuilder.AppendLine(@"
+            if (includeOrchestrationVersionHelpers)
+            {
+                sourceBuilder.AppendLine(@"
         static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
         {
             if (options?.Version is { Version: not null and not """" })
@@ -936,10 +944,12 @@ namespace {targetNamespace}
                 Version = version,
             };
         }");
+            }
 
             if (includeActivityVersionHelpers)
             {
-                sourceBuilder.AppendLine().AppendLine(@"        static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
+                sourceBuilder.AppendLine(@"
+        static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
         {
             if (options is ActivityOptions activityOptions
                 && activityOptions.Version is TaskVersion explicitVersion

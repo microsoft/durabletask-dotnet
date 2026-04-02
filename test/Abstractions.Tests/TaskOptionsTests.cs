@@ -14,6 +14,11 @@ public class TaskOptionsTests
         options.Retry.Should().BeNull();
         options.Tags.Should().BeNull();
 
+        ActivityOptions activityOptions = new();
+        activityOptions.Retry.Should().BeNull();
+        activityOptions.Tags.Should().BeNull();
+        activityOptions.Version.Should().BeNull();
+
         SubOrchestrationOptions subOptions = new();
         subOptions.Retry.Should().BeNull();
         subOptions.Tags.Should().BeNull();
@@ -168,6 +173,70 @@ public class TaskOptionsTests
         // Assert
         copy.Retry.Should().Be(original.Retry);
         copy.Tags.Should().BeSameAs(original.Tags);
+    }
+
+    [Fact]
+    public void ActivityOptions_CopyConstructor_CopiesAllProperties()
+    {
+        // Arrange
+        RetryPolicy policy = new(3, TimeSpan.FromSeconds(1));
+        TaskRetryOptions retry = new(policy);
+        Dictionary<string, string> tags = new() { { "key1", "value1" }, { "key2", "value2" } };
+        TaskVersion version = new("1.0");
+        ActivityOptions original = new(retry)
+        {
+            Tags = tags,
+            Version = version,
+        };
+
+        // Act
+        ActivityOptions copy = new(original);
+
+        // Assert
+        copy.Retry.Should().Be(original.Retry);
+        copy.Tags.Should().BeSameAs(original.Tags);
+        copy.Version.Should().Be(original.Version);
+    }
+
+    [Fact]
+    public void ActivityOptions_CopyFromTaskOptions_PreservesRetryAndTagsButLeavesVersionNull()
+    {
+        // Arrange
+        RetryPolicy policy = new(3, TimeSpan.FromSeconds(1));
+        TaskRetryOptions retry = new(policy);
+        Dictionary<string, string> tags = new() { { "key1", "value1" }, { "key2", "value2" } };
+        TaskOptions original = new(retry, tags);
+
+        // Act
+        ActivityOptions copy = new(original);
+
+        // Assert
+        copy.Retry.Should().Be(original.Retry);
+        copy.Tags.Should().BeSameAs(original.Tags);
+        copy.Version.Should().BeNull();
+    }
+
+    [Fact]
+    public void ActivityOptions_CopyFromTaskOptions_CopiesVersionWhenSourceIsActivityOptions()
+    {
+        // Arrange
+        RetryPolicy policy = new(3, TimeSpan.FromSeconds(1));
+        TaskRetryOptions retry = new(policy);
+        Dictionary<string, string> tags = new() { { "key1", "value1" } };
+        TaskVersion version = new("1.0");
+        ActivityOptions original = new(retry)
+        {
+            Tags = tags,
+            Version = version,
+        };
+
+        // Act
+        ActivityOptions copy = new(original as TaskOptions);
+
+        // Assert
+        copy.Retry.Should().Be(original.Retry);
+        copy.Tags.Should().BeSameAs(original.Tags);
+        copy.Version.Should().Be(original.Version);
     }
 
     [Fact]

@@ -71,6 +71,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                     // Replace all actions with a single Failed completion so the orchestration
                     // terminates instead of being abandoned and redelivered indefinitely.
                     r.Actions.Clear();
+                    r.CustomStatus = null;
                     r.IsPartial = false;
                     r.ChunkIndex = null;
                     r.Actions.Add(new P.OrchestratorAction

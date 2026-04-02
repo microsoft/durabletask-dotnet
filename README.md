@@ -155,6 +155,35 @@ public class SayHelloTyped : TaskActivity<string, string>
 
 You can find the full sample file, including detailed comments, at [samples/AzureFunctionsApp/HelloCitiesTyped.cs](samples/AzureFunctionsApp/HelloCitiesTyped.cs).
 
+### Versioned class-based orchestrators
+
+Standalone worker projects can register multiple class-based orchestrators under the same durable task name when each class declares a unique `[DurableTaskVersion]`. Start a specific implementation by setting `StartOrchestrationOptions.Version`, and migrate long-running instances between implementations by calling `context.ContinueAsNew(new ContinueAsNewOptions { NewVersion = "vNext", ... })`.
+
+```csharp
+[DurableTask("OrderWorkflow")]
+[DurableTaskVersion("v1")]
+public sealed class OrderWorkflowV1 : TaskOrchestrator<int, string>
+{
+    public override Task<string> RunAsync(TaskOrchestrationContext context, int input)
+        => Task.FromResult($"v1:{input}");
+}
+
+[DurableTask("OrderWorkflow")]
+[DurableTaskVersion("v2")]
+public sealed class OrderWorkflowV2 : TaskOrchestrator<int, string>
+{
+    public override Task<string> RunAsync(TaskOrchestrationContext context, int input)
+        => Task.FromResult($"v2:{input}");
+}
+
+string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
+    "OrderWorkflow",
+    input: 5,
+    new StartOrchestrationOptions { Version = new TaskVersion("v2") });
+```
+
+Azure Functions currently does **not** support same-name multi-version class-based orchestrators. When the source generator sees multiple class-based orchestrators with the same durable task name in an Azure Functions project, it now emits a diagnostic instead of generating ambiguous bindings.
+
 ### Compatibility with Durable Functions in-process
 
 This SDK is *not* compatible with Durable Functions for the .NET *in-process* worker. It only works with the newer out-of-process .NET Isolated worker.

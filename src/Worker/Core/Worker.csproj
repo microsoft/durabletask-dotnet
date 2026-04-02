@@ -20,6 +20,10 @@ The worker is responsible for processing durable task work items.</PackageDescri
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.DurableTask.Worker.Grpc" Key="$(StrongNamePublicKey)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <SharedSection Include="DependencyInjection" />
   </ItemGroup>
 

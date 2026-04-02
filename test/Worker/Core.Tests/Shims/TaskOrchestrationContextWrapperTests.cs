@@ -150,6 +150,27 @@ public class TaskOrchestrationContextWrapperTests
     }
 
     [Fact]
+    public async Task CallActivityAsync_ActivityOptionsVersionOverridesInheritedOrchestrationVersion_WithRetryHandler()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+        ActivityOptions options = new(TaskOptions.FromRetryHandler(_ => false))
+        {
+            Version = "v1",
+        };
+
+        // Act
+        await wrapper.CallActivityAsync<string>("TestActivity", 123, options);
+
+        // Assert
+        innerContext.LastScheduledTaskName.Should().Be("TestActivity");
+        innerContext.LastScheduledTaskVersion.Should().Be("v1");
+        innerContext.LastScheduledTaskInput.Should().Be(123);
+    }
+
+    [Fact]
     public async Task CallActivityAsync_PlainTaskOptionsUsesInheritedOrchestrationVersion()
     {
         // Arrange

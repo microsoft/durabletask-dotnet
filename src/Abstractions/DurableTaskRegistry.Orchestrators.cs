@@ -45,6 +45,10 @@ public partial class DurableTaskRegistry
     ///   <item>If <paramref name="factory"/> is <c>null</c>.</item>
     /// </list>
     /// </exception>
+    /// <remarks>
+    /// Registration is version-aware in the registry. Version-based worker and factory resolution is introduced in
+    /// later staged follow-up work.
+    /// </remarks>
     public DurableTaskRegistry AddOrchestrator(TaskName name, TaskVersion version, Func<ITaskOrchestrator> factory)
     {
         Check.NotDefault(name);

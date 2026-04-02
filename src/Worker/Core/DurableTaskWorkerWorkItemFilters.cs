@@ -35,7 +35,8 @@ public class DurableTaskWorkerWorkItemFilters
     /// <returns>A new instance of <see cref="DurableTaskWorkerWorkItemFilters"/> constructed from the provided registry.</returns>
     internal static DurableTaskWorkerWorkItemFilters FromDurableTaskRegistry(DurableTaskRegistry registry, DurableTaskWorkerOptions? workerOptions)
     {
-        // TODO: Support multiple versions per orchestration/activity.
+        // TODO: Add grouped, version-aware orchestration filters in the later filter task.
+        // At this stage, versioned orchestrators are intentionally excluded from auto-generated orchestration filters.
         // For now, fetch the version based on the versioning match strategy if defined. If undefined, default to null (all versions match).
         IReadOnlyList<string> versions = [];
         if (workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict)

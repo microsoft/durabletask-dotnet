@@ -50,6 +50,8 @@ sealed class DurableTaskFactory : IDurableTaskFactory2
     public bool TryCreateOrchestrator(
         TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskOrchestrator? orchestrator)
     {
+        // This staged implementation intentionally resolves only the default-version registration.
+        // Version-aware worker dispatch is introduced in the subsequent worker-dispatch task.
         if (this.orchestrators.TryGetValue(new OrchestratorVersionKey(name, default), out Func<IServiceProvider, ITaskOrchestrator>? factory))
         {
             orchestrator = factory.Invoke(serviceProvider);

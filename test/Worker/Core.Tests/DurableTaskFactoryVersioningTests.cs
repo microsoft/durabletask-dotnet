@@ -67,6 +67,50 @@ public class DurableTaskFactoryVersioningTests
     }
 
     [Fact]
+    public void TryCreateOrchestrator_WithMixedRegistrations_PrefersExactVersionMatch()
+    {
+        // Arrange
+        DurableTaskRegistry registry = new();
+        registry.AddOrchestrator<InvoiceWorkflowV1>();
+        registry.AddOrchestrator<InvoiceWorkflowV2>();
+        registry.AddOrchestrator<UnversionedInvoiceWorkflow>();
+        IDurableTaskFactory factory = registry.BuildFactory();
+
+        // Act
+        bool found = ((IVersionedOrchestratorFactory)factory).TryCreateOrchestrator(
+            new TaskName("InvoiceWorkflow"),
+            new TaskVersion("v1"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskOrchestrator? orchestrator);
+
+        // Assert
+        found.Should().BeTrue();
+        orchestrator.Should().BeOfType<InvoiceWorkflowV1>();
+    }
+
+    [Fact]
+    public void TryCreateOrchestrator_WithMixedRegistrations_UsesUnversionedFallbackForUnknownVersion()
+    {
+        // Arrange
+        DurableTaskRegistry registry = new();
+        registry.AddOrchestrator<InvoiceWorkflowV1>();
+        registry.AddOrchestrator<InvoiceWorkflowV2>();
+        registry.AddOrchestrator<UnversionedInvoiceWorkflow>();
+        IDurableTaskFactory factory = registry.BuildFactory();
+
+        // Act
+        bool found = ((IVersionedOrchestratorFactory)factory).TryCreateOrchestrator(
+            new TaskName("InvoiceWorkflow"),
+            new TaskVersion("v3"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskOrchestrator? orchestrator);
+
+        // Assert
+        found.Should().BeTrue();
+        orchestrator.Should().BeOfType<UnversionedInvoiceWorkflow>();
+    }
+
+    [Fact]
     public void PublicTryCreateOrchestrator_UsesUnversionedRegistrationOnly()
     {
         // Arrange

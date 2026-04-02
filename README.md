@@ -198,7 +198,7 @@ The Durable Task Scheduler for Azure Functions is a managed backend that is curr
 
 This SDK can also be used with the Durable Task Scheduler directly, without any Durable Functions dependency. To get started, sign up for the [Durable Task Scheduler private preview](https://techcommunity.microsoft.com/blog/appsonazureblog/announcing-limited-early-access-of-the-durable-task-scheduler-for-azure-durable-/4286526) and follow the instructions to create a new Durable Task Scheduler instance. Once granted access to the private preview GitHub repository, you can find samples and documentation for getting started [here](https://github.com/Azure/Azure-Functions-Durable-Task-Scheduler-Private-Preview/tree/main/samples/portable-sdk/dotnet/AspNetWebApp#readme).
 
-For runnable DTS emulator examples that demonstrate versioning, see the [WorkerVersioningSample](samples/WorkerVersioningSample/README.md) (deployment-based versioning) and [PerOrchestratorVersioningSample](samples/PerOrchestratorVersioningSample/README.md) (multi-version routing with `[DurableTaskVersion]`).
+For runnable DTS emulator examples that demonstrate versioning, see the [WorkerVersioningSample](samples/WorkerVersioningSample/README.md) (deployment-based versioning), the [PerOrchestratorVersioningSample](samples/PerOrchestratorVersioningSample/README.md) (multi-version routing with `[DurableTaskVersion]`), and the [ActivityVersioningSample](samples/ActivityVersioningSample/README.md) (activity versioning with inherited defaults and explicit override support).
 
 ## Obtaining the Protobuf definitions
 

@@ -363,7 +363,7 @@ namespace Microsoft.DurableTask.Generators
             IEnumerable<DurableTaskTypeInfo> validTasks = allTasks
                 .Where(task => IsValidCSharpIdentifier(task.TaskName));
 
-            Dictionary<(string TaskName, string TaskVersion), DurableTaskTypeInfo> standaloneOrchestratorRegistrations = new();
+            Dictionary<string, DurableTaskTypeInfo> standaloneOrchestratorRegistrations = new(StringComparer.OrdinalIgnoreCase);
             foreach (DurableTaskTypeInfo task in validTasks)
             {
                 if (task.IsActivity)
@@ -378,7 +378,7 @@ namespace Microsoft.DurableTask.Generators
                 {
                     if (!isDurableFunctions)
                     {
-                        (string TaskName, string TaskVersion) registrationKey = (task.TaskName, task.TaskVersion);
+                        string registrationKey = GetStandaloneOrchestratorRegistrationKey(task.TaskName, task.TaskVersion);
                         if (standaloneOrchestratorRegistrations.ContainsKey(registrationKey))
                         {
                             Location location = task.TaskNameLocation ?? Location.None;
@@ -399,8 +399,8 @@ namespace Microsoft.DurableTask.Generators
             }
 
             Dictionary<string, int> standaloneOrchestratorCountsByTaskName = orchestrators
-                .GroupBy(task => task.TaskName, StringComparer.Ordinal)
-                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+                .GroupBy(task => task.TaskName, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
 
             // Filter out events with invalid names
             List<DurableEventTypeInfo> validEvents = allEvents
@@ -679,6 +679,11 @@ namespace {targetNamespace}
             }
 
             return ToVersionSuffix(orchestrator.TaskVersion);
+        }
+
+        static string GetStandaloneOrchestratorRegistrationKey(string taskName, string taskVersion)
+        {
+            return string.Concat(taskName, "\0", taskVersion);
         }
 
         static string ToVersionSuffix(string version)

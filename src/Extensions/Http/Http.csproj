@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageDescription>Built-in HTTP activity support for the Durable Task standalone SDK.
+Enables CallHttpAsync in non-Azure Functions scenarios (e.g., with durabletask-go sidecar).</PackageDescription>
+    <AssemblyName>Microsoft.DurableTask.Extensions.Http</AssemblyName>
+    <RootNamespace>Microsoft.DurableTask.Http</RootNamespace>
+    <EnableStyleCop>true</EnableStyleCop>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="System.Text.Json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Worker\Core\Worker.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <SharedSection Include="Core" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.DurableTask.Http.Tests" Key="$(StrongNamePublicKey)" />
+  </ItemGroup>
+
+</Project>

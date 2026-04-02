@@ -11,10 +11,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Using p2p references so we can show latest changes in samples. -->
     <ProjectReference Include="$(SrcRoot)Client/AzureManaged/Client.AzureManaged.csproj" />
     <ProjectReference Include="$(SrcRoot)Worker/AzureManaged/Worker.AzureManaged.csproj" />
     <ProjectReference Include="$(SrcRoot)Analyzers/Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-    <ProjectReference Include="$(SrcRoot)Generators/Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+
+    <!-- Reference the source generator -->
+    <ProjectReference Include="$(SrcRoot)Generators/Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

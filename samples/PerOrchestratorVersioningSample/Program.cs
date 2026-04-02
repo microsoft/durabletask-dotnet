@@ -24,7 +24,7 @@ string connectionString = builder.Configuration.GetValue<string>("DURABLE_TASK_S
         "For the local emulator: Endpoint=http://localhost:8080;TaskHub=default;Authentication=None");
 
 // Configure the worker. AddAllGeneratedTasks() registers every [DurableTask]-annotated
-// class in the project — including both versions of OrderWorkflow.
+// class in the project — including both versions of OrderWorkflow and MigratingWorkflow.
 builder.Services.AddDurableTaskWorker(wb =>
 {
     wb.AddTasks(tasks => tasks.AddAllGeneratedTasks());
@@ -59,6 +59,18 @@ Console.WriteLine($"  Result: {v2.ReadOutputAs<string>()}");
 Console.WriteLine();
 
 Console.WriteLine("Done! Both versions ran in the same worker process.");
+Console.WriteLine();
+
+// 3) Demonstrate ContinueAsNew version migration: the v1 orchestration migrates
+//    to v2 using ContinueAsNewOptions.NewVersion. This is the safest migration point
+//    for eternal orchestrations because the history is fully reset.
+Console.WriteLine("Scheduling MigratingWorkflow v1 → v2 (ContinueAsNew migration) ...");
+string migrateId = await client.ScheduleNewMigratingWorkflow_1InstanceAsync(new MigrationInput(10));
+OrchestrationMetadata migrate = await client.WaitForInstanceCompletionAsync(migrateId, getInputsAndOutputs: true);
+Console.WriteLine($"  Result: {migrate.ReadOutputAs<string>()}");
+Console.WriteLine();
+
+Console.WriteLine("Sample completed successfully!");
 await host.StopAsync();
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -97,3 +109,55 @@ public sealed class OrderWorkflowV2 : TaskOrchestrator<int, string>
         return Task.FromResult($"Order total: ${total} (v2 — with discount)");
     }
 }
+
+/// <summary>
+/// MigratingWorkflow v1 — migrates to v2 via ContinueAsNew.
+/// The input is an (itemCount, alreadyMigrated) tuple to guard against infinite loops
+/// if the backend does not propagate NewVersion.
+/// </summary>
+[DurableTask("MigratingWorkflow")]
+[DurableTaskVersion("1")]
+public sealed class MigratingWorkflowV1 : TaskOrchestrator<MigrationInput, string>
+{
+    public override Task<string> RunAsync(TaskOrchestrationContext context, MigrationInput input)
+    {
+        if (input.AlreadyMigrated)
+        {
+            // NewVersion was not propagated — complete here instead of looping.
+            return Task.FromResult($"Order total: ${input.ItemCount * 10} (v1 — migration not supported by backend)");
+        }
+
+        // Migrate to v2. The history is fully reset so there is no replay conflict risk.
+        context.ContinueAsNew(new ContinueAsNewOptions
+        {
+            NewInput = new MigrationInput(input.ItemCount, AlreadyMigrated: true),
+            NewVersion = "2",
+        });
+
+        return Task.FromResult(string.Empty);
+    }
+}
+
+/// <summary>
+/// MigratingWorkflow v2 — the target of the v1 → v2 migration.
+/// </summary>
+[DurableTask("MigratingWorkflow")]
+[DurableTaskVersion("2")]
+public sealed class MigratingWorkflowV2 : TaskOrchestrator<MigrationInput, string>
+{
+    public override Task<string> RunAsync(TaskOrchestrationContext context, MigrationInput input)
+    {
+        int total = input.ItemCount * 10;
+        if (input.ItemCount >= 5)
+        {
+            total = (int)(total * 0.8);
+        }
+
+        return Task.FromResult($"Migrated order total: ${total} (v2 — after migration from v1)");
+    }
+}
+
+/// <summary>
+/// Input for the MigratingWorkflow orchestrators.
+/// </summary>
+public sealed record MigrationInput(int ItemCount, bool AlreadyMigrated = false);

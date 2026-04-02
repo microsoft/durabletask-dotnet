@@ -54,7 +54,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                     {
                         ErrorType = ex.GetType().FullName,
                         ErrorMessage = ex.Message,
-                        StackTrace = ex.ToString(),
+                        StackTrace = ex.StackTrace,
                         IsNonRetriable = true,
                     };
                 }
@@ -83,7 +83,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                             {
                                 ErrorType = ex.GetType().FullName,
                                 ErrorMessage = ex.Message,
-                                StackTrace = ex.ToString(),
+                                StackTrace = ex.StackTrace,
                                 IsNonRetriable = true,
                             },
                         },

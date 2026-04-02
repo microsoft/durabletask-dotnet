@@ -45,11 +45,14 @@ public class DurableTaskWorkerWorkItemFilters
 
         return new DurableTaskWorkerWorkItemFilters
         {
-            Orchestrations = registry.Orchestrators.Select(orchestration => new OrchestrationFilter
-            {
-                Name = orchestration.Key.Name,
-                Versions = versions,
-            }).ToList(),
+            Orchestrations = registry.Orchestrators
+                .GroupBy(orchestration => orchestration.Key.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(group => new OrchestrationFilter
+                {
+                    Name = group.Key,
+                    Versions = versions,
+                })
+                .ToList(),
             Activities = registry.Activities.Select(activity => new ActivityFilter
             {
                 Name = activity.Key,

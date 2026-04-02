@@ -89,6 +89,31 @@ public class UseWorkItemFiltersTests
     }
 
     [Fact]
+    public void WorkItemFilters_VersionedOrchestrators_DeduplicateLogicalNames()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<VersionedWorkflowV1>();
+                registry.AddOrchestrator<VersionedWorkflowV2>();
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle(o => o.Name == "VersionedWorkflow");
+    }
+
+    [Fact]
     public void WorkItemFilters_DefaultWithEntity_WhenExplicitlyOptedIn()
     {
         // Arrange
@@ -405,6 +430,26 @@ public class UseWorkItemFiltersTests
     sealed class TestActivity : TaskActivity<object, object>
     {
         public override Task<object> RunAsync(TaskActivityContext context, object input)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    [DurableTask("VersionedWorkflow")]
+    [DurableTaskVersion("v1")]
+    sealed class VersionedWorkflowV1 : TaskOrchestrator<object, object>
+    {
+        public override Task<object> RunAsync(TaskOrchestrationContext context, object input)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    [DurableTask("VersionedWorkflow")]
+    [DurableTaskVersion("v2")]
+    sealed class VersionedWorkflowV2 : TaskOrchestrator<object, object>
+    {
+        public override Task<object> RunAsync(TaskOrchestrationContext context, object input)
         {
             throw new NotImplementedException();
         }

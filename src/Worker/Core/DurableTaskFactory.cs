@@ -56,6 +56,29 @@ sealed class DurableTaskFactory : IDurableTaskFactory2
             return true;
         }
 
+        Func<IServiceProvider, ITaskOrchestrator>? matchingFactory = null;
+        foreach (KeyValuePair<OrchestratorVersionKey, Func<IServiceProvider, ITaskOrchestrator>> registration in this.orchestrators)
+        {
+            if (!string.Equals(registration.Key.Name, name.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (matchingFactory is not null)
+            {
+                orchestrator = null;
+                return false;
+            }
+
+            matchingFactory = registration.Value;
+        }
+
+        if (matchingFactory is not null)
+        {
+            orchestrator = matchingFactory.Invoke(serviceProvider);
+            return true;
+        }
+
         orchestrator = null;
         return false;
     }

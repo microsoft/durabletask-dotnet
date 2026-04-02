@@ -47,7 +47,7 @@ public class DurableTaskWorkerWorkItemFilters
         {
             Orchestrations = registry.Orchestrators.Select(orchestration => new OrchestrationFilter
             {
-                Name = orchestration.Key,
+                Name = orchestration.Key.Name,
                 Versions = versions,
             }).ToList(),
             Activities = registry.Activities.Select(activity => new ActivityFilter

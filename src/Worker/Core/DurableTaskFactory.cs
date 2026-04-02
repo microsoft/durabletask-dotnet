@@ -12,7 +12,7 @@ namespace Microsoft.DurableTask.Worker;
 sealed class DurableTaskFactory : IDurableTaskFactory2
 {
     readonly IDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities;
-    readonly IDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>> orchestrators;
+    readonly IDictionary<OrchestratorVersionKey, Func<IServiceProvider, ITaskOrchestrator>> orchestrators;
     readonly IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities;
 
     /// <summary>
@@ -23,7 +23,7 @@ sealed class DurableTaskFactory : IDurableTaskFactory2
     /// <param name="entities">The entity factories.</param>
     internal DurableTaskFactory(
         IDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities,
-        IDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>> orchestrators,
+        IDictionary<OrchestratorVersionKey, Func<IServiceProvider, ITaskOrchestrator>> orchestrators,
         IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities)
     {
         this.activities = Check.NotNull(activities);
@@ -50,7 +50,7 @@ sealed class DurableTaskFactory : IDurableTaskFactory2
     public bool TryCreateOrchestrator(
         TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskOrchestrator? orchestrator)
     {
-        if (this.orchestrators.TryGetValue(name, out Func<IServiceProvider, ITaskOrchestrator>? factory))
+        if (this.orchestrators.TryGetValue(new OrchestratorVersionKey(name, default), out Func<IServiceProvider, ITaskOrchestrator>? factory))
         {
             orchestrator = factory.Invoke(serviceProvider);
             return true;

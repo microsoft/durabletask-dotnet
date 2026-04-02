@@ -22,8 +22,8 @@ public sealed partial class DurableTaskRegistry
     /// <summary>
     /// Gets the currently registered orchestrators.
     /// </summary>
-    internal IDictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>> Orchestrators { get; }
-        = new Dictionary<TaskName, Func<IServiceProvider, ITaskOrchestrator>>();
+    internal IDictionary<OrchestratorVersionKey, Func<IServiceProvider, ITaskOrchestrator>> Orchestrators { get; }
+        = new Dictionary<OrchestratorVersionKey, Func<IServiceProvider, ITaskOrchestrator>>();
 
     /// <summary>
     /// Gets the currently registered entities.
@@ -55,34 +55,6 @@ public sealed partial class DurableTaskRegistry
         }
 
         this.Activities.Add(name, factory);
-        return this;
-    }
-
-    /// <summary>
-    /// Registers an orchestrator factory.
-    /// </summary>
-    /// <param name="name">The name of the orchestrator.</param>
-    /// <param name="factory">The orchestrator factory.</param>
-    /// <returns>This registry instance, for call chaining.</returns>
-    /// <exception cref="ArgumentException">
-    /// Thrown if any of the following are true:
-    /// <list type="bullet">
-    ///   <item>If <paramref name="name"/> is <c>default</c>.</item>
-    ///   <item>If <paramref name="name" /> is already registered.</item>
-    ///   <item>If <paramref name="factory"/> is <c>null</c>.</item>
-    /// </list>
-    /// </exception>
-    public DurableTaskRegistry AddOrchestrator(TaskName name, Func<ITaskOrchestrator> factory)
-    {
-        Check.NotDefault(name);
-        Check.NotNull(factory);
-        if (this.Orchestrators.ContainsKey(name))
-        {
-            throw new ArgumentException(
-                $"An {nameof(ITaskOrchestrator)} named '{name}' is already added.", nameof(name));
-        }
-
-        this.Orchestrators.Add(name, _ => factory());
         return this;
     }
 

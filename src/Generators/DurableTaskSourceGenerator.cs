@@ -1,8 +1,10 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
@@ -704,7 +706,7 @@ namespace {targetNamespace}
             return fullyQualifiedTypeName;
         }
 
-        static string GetStandaloneOrchestratorHelperSuffix(DurableTaskTypeInfo orchestrator, bool isDurableFunctions, IReadOnlyDictionary<string, int> standaloneOrchestratorCountsByTaskName)
+        static string GetStandaloneOrchestratorHelperSuffix(DurableTaskTypeInfo orchestrator, bool isDurableFunctions, Dictionary<string, int> standaloneOrchestratorCountsByTaskName)
         {
             if (isDurableFunctions
                 || string.IsNullOrEmpty(orchestrator.TaskVersion)
@@ -739,7 +741,7 @@ namespace {targetNamespace}
                 }
                 else
                 {
-                    suffixBuilder.Append("_x").Append(((int)c).ToString("X4")).Append('_');
+                    suffixBuilder.Append("_x").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture)).Append('_');
                 }
             }
 

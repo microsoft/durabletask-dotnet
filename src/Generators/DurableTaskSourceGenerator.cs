@@ -55,6 +55,11 @@ namespace Microsoft.DurableTask.Generators
         /// </summary>
         const string DuplicateStandaloneOrchestratorVersionDiagnosticId = "DURABLE3003";
 
+        /// <summary>
+        /// Diagnostic ID for Azure Functions orchestrator logical name collisions.
+        /// </summary>
+        const string DuplicateAzureFunctionsOrchestratorNameDiagnosticId = "DURABLE3004";
+
         static readonly DiagnosticDescriptor InvalidTaskNameRule = new(
             InvalidTaskNameDiagnosticId,
             title: "Invalid task name",
@@ -75,6 +80,14 @@ namespace Microsoft.DurableTask.Generators
             DuplicateStandaloneOrchestratorVersionDiagnosticId,
             title: "Duplicate standalone orchestrator logical name and version",
             messageFormat: "The standalone orchestrator logical name '{0}' with version '{1}' is declared more than once. Each logical name and version combination must be unique.",
+            category: "DurableTask.Design",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        static readonly DiagnosticDescriptor DuplicateAzureFunctionsOrchestratorNameRule = new(
+            DuplicateAzureFunctionsOrchestratorNameDiagnosticId,
+            title: "Azure Functions multi-version orchestrators are not supported",
+            messageFormat: "Azure Functions projects cannot generate multiple orchestrators with the durable task name '{0}'. Use the standalone worker or keep a single logical orchestrator per name.",
             category: "DurableTask.Design",
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -396,6 +409,29 @@ namespace Microsoft.DurableTask.Generators
 
                     orchestrators.Add(task);
                 }
+            }
+
+            if (isDurableFunctions)
+            {
+                HashSet<DurableTaskTypeInfo> collidingAzureFunctionsOrchestrators = new(
+                    orchestrators
+                        .GroupBy(task => task.TaskName, StringComparer.OrdinalIgnoreCase)
+                        .Where(group => group.Count() > 1)
+                        .SelectMany(group => group));
+
+                foreach (DurableTaskTypeInfo task in collidingAzureFunctionsOrchestrators)
+                {
+                    Location location = task.TaskNameLocation ?? Location.None;
+                    Diagnostic diagnostic = Diagnostic.Create(
+                        DuplicateAzureFunctionsOrchestratorNameRule,
+                        location,
+                        task.TaskName);
+                    context.ReportDiagnostic(diagnostic);
+                }
+
+                orchestrators = orchestrators
+                    .Where(task => !collidingAzureFunctionsOrchestrators.Contains(task))
+                    .ToList();
             }
 
             Dictionary<string, int> standaloneOrchestratorCountsByTaskName = orchestrators

@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Testing;
 using Microsoft.DurableTask.Generators.Tests.Utils;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Microsoft.DurableTask.Generators.Tests;
 
@@ -414,6 +417,59 @@ public static Task<{outputType}> CallMyOrchestratorAsync(
             code,
             expectedOutput,
             isDurableFunctions: true);
+    }
+
+    [Fact]
+    public Task Orchestrators_ClassBasedSyntax_DuplicateLogicalNameAcrossVersions_ReportsDiagnostic()
+    {
+        string code = @"
+using System.Threading.Tasks;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.DurableTask;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace MyFunctions
+{
+    [DurableTask(""PaymentWorkflow"")]
+    [DurableTaskVersion(""v1"")]
+    class PaymentWorkflowV1 : TaskOrchestrator<int, string>
+    {
+        public override Task<string> RunAsync(TaskOrchestrationContext context, int input) => Task.FromResult(string.Empty);
+    }
+
+    [DurableTask(""PaymentWorkflow"")]
+    [DurableTaskVersion(""v2"")]
+    class PaymentWorkflowV2 : TaskOrchestrator<int, string>
+    {
+        public override Task<string> RunAsync(TaskOrchestrationContext context, int input) => Task.FromResult(string.Empty);
+    }
+}";
+
+        DiagnosticResult firstExpected = new DiagnosticResult("DURABLE3004", DiagnosticSeverity.Error)
+            .WithSpan("/0/Test0.cs", 9, 18, 9, 35)
+            .WithArguments("PaymentWorkflow");
+        DiagnosticResult secondExpected = new DiagnosticResult("DURABLE3004", DiagnosticSeverity.Error)
+            .WithSpan("/0/Test0.cs", 16, 18, 16, 35)
+            .WithArguments("PaymentWorkflow");
+
+        CSharpSourceGeneratorVerifier<DurableTaskSourceGenerator>.Test test = new()
+        {
+            TestState =
+            {
+                Sources = { code },
+                ExpectedDiagnostics = { firstExpected, secondExpected },
+                AdditionalReferences =
+                {
+                    typeof(TaskActivityContext).Assembly,
+                    typeof(FunctionAttribute).Assembly,
+                    typeof(FunctionContext).Assembly,
+                    typeof(OrchestrationTriggerAttribute).Assembly,
+                    typeof(ActivatorUtilities).Assembly,
+                },
+            },
+        };
+
+        return test.RunAsync();
     }
 
     /// <summary>

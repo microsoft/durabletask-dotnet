@@ -685,7 +685,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
 
         // The orchestration should fail (not hang forever) because the activity's
-        // oversized output triggers FailedPrecondition which is caught and converted to a failure.
+        // oversized output triggers PayloadStorageException which is caught and converted to a failure.
         Assert.Equal(OrchestrationRuntimeStatus.Failed, result.RuntimeStatus);
         Assert.NotNull(result.FailureDetails);
         Assert.Contains("exceeds the configured maximum", result.FailureDetails!.ErrorMessage);
@@ -733,8 +733,8 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
 
         // The orchestration should fail (not hang forever) because the oversized output
-        // triggers a PayloadStorageException in the interceptor, which the worker catches
-        // and converts to a non-retriable failure completion.
+        // triggers a PayloadStorageException in the interceptor, which replaces the response
+        // with a non-retriable failure completion directly (no exception escapes to the Processor).
         Assert.Equal(OrchestrationRuntimeStatus.Failed, result.RuntimeStatus);
         Assert.NotNull(result.FailureDetails);
         Assert.Contains("exceeds the configured maximum", result.FailureDetails!.ErrorMessage);
@@ -784,8 +784,8 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         OrchestrationMetadata completed = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
 
-        // Should complete successfully — the interceptor externalizes the 5MB payload
-        // ValidateActionsSize is skipped because IsPayloadExternalizationEnabled is true
+        // Should complete successfully — the interceptor externalizes the 5MB payload.
+        // ValidateActionsSize is skipped because the worker has the LargePayloads capability.
         Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
         string? output = completed.ReadOutputAs<string>();
         Assert.Equal(largeOutput.Length, output?.Length);

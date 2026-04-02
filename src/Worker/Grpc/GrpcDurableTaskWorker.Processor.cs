@@ -802,7 +802,17 @@ sealed partial class GrpcDurableTaskWorker
                 try
                 {
                     await using AsyncServiceScope scope = this.worker.services.CreateAsyncScope();
-                    if (this.worker.Factory.TryCreateActivity(name, scope.ServiceProvider, out ITaskActivity? activity))
+                    TaskVersion requestedVersion = string.IsNullOrWhiteSpace(request.Version)
+                        ? default
+                        : new TaskVersion(request.Version);
+                    bool found = this.worker.Factory is IVersionedActivityFactory versionedFactory
+                        ? versionedFactory.TryCreateActivity(
+                            name,
+                            requestedVersion,
+                            scope.ServiceProvider,
+                            out ITaskActivity? activity)
+                        : this.worker.Factory.TryCreateActivity(name, scope.ServiceProvider, out activity);
+                    if (found)
                     {
                         // Both the factory invocation and the RunAsync could involve user code and need to be handled as
                         // part of try/catch.
@@ -811,10 +821,13 @@ sealed partial class GrpcDurableTaskWorker
                     }
                     else
                     {
+                        string versionText = requestedVersion.Version ?? string.Empty;
                         failureDetails = new P.TaskFailureDetails
                         {
                             ErrorType = "ActivityTaskNotFound",
-                            ErrorMessage = $"No activity task named '{name}' was found.",
+                            ErrorMessage = string.IsNullOrEmpty(versionText) || this.worker.Factory is not IVersionedActivityFactory
+                                ? $"No activity task named '{name}' was found."
+                                : $"No activity task named '{name}' with version '{versionText}' was found.",
                             IsNonRetriable = true,
                         };
                     }

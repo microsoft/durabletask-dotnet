@@ -9,9 +9,9 @@ namespace Microsoft.DurableTask.Worker;
 /// <summary>
 /// A factory for creating orchestrators and activities.
 /// </summary>
-sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedOrchestratorFactory
+sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedActivityFactory, IVersionedOrchestratorFactory
 {
-    readonly IDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities;
+    readonly IDictionary<ActivityVersionKey, Func<IServiceProvider, ITaskActivity>> activities;
     readonly IDictionary<OrchestratorVersionKey, Func<IServiceProvider, ITaskOrchestrator>> orchestrators;
     readonly IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities;
 
@@ -22,7 +22,7 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedOrchestratorFa
     /// <param name="orchestrators">The orchestrator factories.</param>
     /// <param name="entities">The entity factories.</param>
     internal DurableTaskFactory(
-        IDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities,
+        IDictionary<ActivityVersionKey, Func<IServiceProvider, ITaskActivity>> activities,
         IDictionary<OrchestratorVersionKey, Func<IServiceProvider, ITaskOrchestrator>> orchestrators,
         IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities)
     {
@@ -33,10 +33,21 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedOrchestratorFa
 
     /// <inheritdoc/>
     public bool TryCreateActivity(
-        TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskActivity? activity)
+        TaskName name,
+        TaskVersion version,
+        IServiceProvider serviceProvider,
+        [NotNullWhen(true)] out ITaskActivity? activity)
     {
         Check.NotNull(serviceProvider);
-        if (this.activities.TryGetValue(name, out Func<IServiceProvider, ITaskActivity>? factory))
+        ActivityVersionKey key = new(name, version);
+        if (this.activities.TryGetValue(key, out Func<IServiceProvider, ITaskActivity>? factory))
+        {
+            activity = factory.Invoke(serviceProvider);
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(version.Version)
+            && this.activities.TryGetValue(new ActivityVersionKey(name, default(TaskVersion)), out factory))
         {
             activity = factory.Invoke(serviceProvider);
             return true;
@@ -45,6 +56,11 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedOrchestratorFa
         activity = null;
         return false;
     }
+
+    /// <inheritdoc/>
+    public bool TryCreateActivity(
+        TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskActivity? activity)
+        => this.TryCreateActivity(name, default(TaskVersion), serviceProvider, out activity);
 
     /// <inheritdoc/>
     public bool TryCreateOrchestrator(

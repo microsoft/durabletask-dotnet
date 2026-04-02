@@ -35,10 +35,10 @@ public class DurableTaskWorkerWorkItemFilters
     /// <returns>A new instance of <see cref="DurableTaskWorkerWorkItemFilters"/> constructed from the provided registry.</returns>
     internal static DurableTaskWorkerWorkItemFilters FromDurableTaskRegistry(DurableTaskRegistry registry, DurableTaskWorkerOptions? workerOptions)
     {
-        IReadOnlyList<string> activityVersions = [];
+        IReadOnlyList<string> workerActivityVersions = [];
         if (workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict)
         {
-            activityVersions = [workerOptions.Versioning.Version];
+            workerActivityVersions = [workerOptions.Versioning.Version];
         }
 
         // Orchestration filters now group registrations by logical name. Version lists are only emitted when every
@@ -64,14 +64,37 @@ public class DurableTaskWorkerWorkItemFilters
             })
             .ToList();
 
+        List<ActivityFilter> activityFilters = registry.Activities
+            .GroupBy(activity => activity.Key.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                bool hasUnversionedRegistration = group.Any(entry => string.IsNullOrWhiteSpace(entry.Key.Version));
+                IReadOnlyList<string> registeredVersions = group.Select(entry => entry.Key.Version)
+                    .Where(version => !string.IsNullOrWhiteSpace(version))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                IReadOnlyList<string> versions = hasUnversionedRegistration && workerActivityVersions.Count == 0
+                    ? []
+                    : registeredVersions
+                        .Concat(workerActivityVersions)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+
+                return new ActivityFilter
+                {
+                    Name = group.Key,
+                    Versions = versions,
+                };
+            })
+            .ToList();
+
         return new DurableTaskWorkerWorkItemFilters
         {
             Orchestrations = orchestrationFilters,
-            Activities = registry.Activities.Select(activity => new ActivityFilter
-            {
-                Name = activity.Key,
-                Versions = activityVersions,
-            }).ToList(),
+            Activities = activityFilters,
             Entities = registry.Entities.Select(entity => new EntityFilter
             {
                 // Entity names are normalized to lowercase in the backend.

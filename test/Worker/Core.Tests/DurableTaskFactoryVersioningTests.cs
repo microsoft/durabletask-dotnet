@@ -47,6 +47,26 @@ public class DurableTaskFactoryVersioningTests
     }
 
     [Fact]
+    public void TryCreateOrchestrator_WithRequestedVersion_UsesUnversionedRegistrationWhenAvailable()
+    {
+        // Arrange
+        DurableTaskRegistry registry = new();
+        registry.AddOrchestrator<UnversionedInvoiceWorkflow>();
+        IDurableTaskFactory factory = registry.BuildFactory();
+
+        // Act
+        bool found = ((IVersionedOrchestratorFactory)factory).TryCreateOrchestrator(
+            new TaskName("InvoiceWorkflow"),
+            new TaskVersion("v2"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskOrchestrator? orchestrator);
+
+        // Assert
+        found.Should().BeTrue();
+        orchestrator.Should().BeOfType<UnversionedInvoiceWorkflow>();
+    }
+
+    [Fact]
     public void PublicTryCreateOrchestrator_UsesUnversionedRegistrationOnly()
     {
         // Arrange

@@ -61,6 +61,15 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedOrchestratorFa
             return true;
         }
 
+        // Unversioned registrations remain the compatibility fallback when a caller requests a version but the
+        // logical orchestrator has not opted into per-version handlers.
+        if (!string.IsNullOrWhiteSpace(version.Version)
+            && this.orchestrators.TryGetValue(new OrchestratorVersionKey(name, default(TaskVersion)), out factory))
+        {
+            orchestrator = factory.Invoke(serviceProvider);
+            return true;
+        }
+
         orchestrator = null;
         return false;
     }

@@ -155,9 +155,9 @@ public class SayHelloTyped : TaskActivity<string, string>
 
 You can find the full sample file, including detailed comments, at [samples/AzureFunctionsApp/HelloCitiesTyped.cs](samples/AzureFunctionsApp/HelloCitiesTyped.cs).
 
-### Versioned class-based orchestrators
+### Versioned class-based orchestrators (standalone worker)
 
-Standalone worker projects can register multiple class-based orchestrators under the same durable task name when each class declares a unique `[DurableTaskVersion]`. Start a specific implementation by setting `StartOrchestrationOptions.Version`, and migrate long-running instances between implementations by calling `context.ContinueAsNew(new ContinueAsNewOptions { NewVersion = "vNext", ... })`.
+Standalone worker projects can register multiple class-based orchestrators under the same durable task name when each class declares a unique `[DurableTaskVersion]`. Start a specific implementation by setting `StartOrchestrationOptions.Version`.
 
 ```csharp
 [DurableTask("OrderWorkflow")]
@@ -182,7 +182,11 @@ string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
     new StartOrchestrationOptions { Version = new TaskVersion("v2") });
 ```
 
-Azure Functions currently does **not** support same-name multi-version class-based orchestrators. When the source generator sees multiple class-based orchestrators with the same durable task name in an Azure Functions project, it now emits a diagnostic instead of generating ambiguous bindings.
+Use `ContinueAsNewOptions.NewVersion` to migrate long-running orchestrations at a replay-safe boundary.
+
+> Do not combine per-orchestrator `[DurableTaskVersion]` routing with `DurableTaskWorkerOptions.Versioning` (or `UseVersioning(...)`). Both features use the orchestration instance version field, so worker-level version checks can reject per-orchestrator versions before class-based routing occurs.
+>
+> Azure Functions projects do not support same-name multi-version class-based orchestrators in v1. The source generator reports a diagnostic instead of generating colliding triggers.
 
 ### Compatibility with Durable Functions in-process
 

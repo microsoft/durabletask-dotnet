@@ -82,7 +82,7 @@ public record TaskOptions
 }
 
 /// <summary>
-/// Options that can be used to control the behavior of orchestrator task execution. This derived type can be used to
+/// Options that can be used to control the behavior of activity task execution. This derived type can be used to
 /// supply extra options for activities.
 /// </summary>
 public record ActivityOptions : TaskOptions

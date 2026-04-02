@@ -38,7 +38,88 @@ class InvoiceActivity : TaskActivity<int, string>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallInvoiceActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
-    return ctx.CallActivityAsync<string>(""InvoiceActivity"", input, options);
+    return ctx.CallActivityAsync<string>(""InvoiceActivity"", input, ApplyGeneratedActivityVersion(options, ""v1""));
+}
+
+static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
+{
+    if (options?.Version is { Version: not null and not """" })
+    {
+        return options;
+    }
+
+    if (options is null)
+    {
+        return new StartOrchestrationOptions
+        {
+            Version = version,
+        };
+    }
+
+    return new StartOrchestrationOptions(options)
+    {
+        Version = version,
+    };
+}
+
+static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
+{
+    if (options is SubOrchestrationOptions { Version: { Version: not null and not """" } })
+    {
+        return options;
+    }
+
+    if (options is SubOrchestrationOptions subOrchestrationOptions)
+    {
+        return new SubOrchestrationOptions(subOrchestrationOptions)
+        {
+            Version = version,
+        };
+    }
+
+    if (options is null)
+    {
+        return new SubOrchestrationOptions
+        {
+            Version = version,
+        };
+    }
+
+    return new SubOrchestrationOptions(options)
+    {
+        Version = version,
+    };
+}
+
+static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
+{
+    if (options is ActivityOptions activityOptions
+        && activityOptions.Version is TaskVersion explicitVersion
+        && !string.IsNullOrWhiteSpace(explicitVersion.Version))
+    {
+        return options;
+    }
+
+    if (options is ActivityOptions existingActivityOptions)
+    {
+        return new ActivityOptions(existingActivityOptions)
+        {
+            Version = version,
+        };
+    }
+
+    if (options is null)
+    {
+        return new ActivityOptions
+        {
+            Version = version,
+        };
+    }
+
+    return new ActivityOptions(options)
+    {
+        Version = version,
+    };
 }
 
 internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
@@ -84,7 +165,7 @@ class InvoiceActivityV2 : TaskActivity<int, string>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallInvoiceActivity_v1Async(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
-    return ctx.CallActivityAsync<string>(""InvoiceActivity"", input, options);
+    return ctx.CallActivityAsync<string>(""InvoiceActivity"", input, ApplyGeneratedActivityVersion(options, ""v1""));
 }
 
 /// <summary>
@@ -93,7 +174,88 @@ public static Task<string> CallInvoiceActivity_v1Async(this TaskOrchestrationCon
 /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallInvoiceActivity_v2Async(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
-    return ctx.CallActivityAsync<string>(""InvoiceActivity"", input, options);
+    return ctx.CallActivityAsync<string>(""InvoiceActivity"", input, ApplyGeneratedActivityVersion(options, ""v2""));
+}
+
+static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
+{
+    if (options?.Version is { Version: not null and not """" })
+    {
+        return options;
+    }
+
+    if (options is null)
+    {
+        return new StartOrchestrationOptions
+        {
+            Version = version,
+        };
+    }
+
+    return new StartOrchestrationOptions(options)
+    {
+        Version = version,
+    };
+}
+
+static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
+{
+    if (options is SubOrchestrationOptions { Version: { Version: not null and not """" } })
+    {
+        return options;
+    }
+
+    if (options is SubOrchestrationOptions subOrchestrationOptions)
+    {
+        return new SubOrchestrationOptions(subOrchestrationOptions)
+        {
+            Version = version,
+        };
+    }
+
+    if (options is null)
+    {
+        return new SubOrchestrationOptions
+        {
+            Version = version,
+        };
+    }
+
+    return new SubOrchestrationOptions(options)
+    {
+        Version = version,
+    };
+}
+
+static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
+{
+    if (options is ActivityOptions activityOptions
+        && activityOptions.Version is TaskVersion explicitVersion
+        && !string.IsNullOrWhiteSpace(explicitVersion.Version))
+    {
+        return options;
+    }
+
+    if (options is ActivityOptions existingActivityOptions)
+    {
+        return new ActivityOptions(existingActivityOptions)
+        {
+            Version = version,
+        };
+    }
+
+    if (options is null)
+    {
+        return new ActivityOptions
+        {
+            Version = version,
+        };
+    }
+
+    return new ActivityOptions(options)
+    {
+        Version = version,
+    };
 }
 
 internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
@@ -140,7 +302,88 @@ class InvoiceActivityV1Duplicate : TaskActivity<int, string>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallInvoiceActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
-    return ctx.CallActivityAsync<string>(""InvoiceActivity"", input, options);
+    return ctx.CallActivityAsync<string>(""InvoiceActivity"", input, ApplyGeneratedActivityVersion(options, ""v1""));
+}
+
+static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
+{
+    if (options?.Version is { Version: not null and not """" })
+    {
+        return options;
+    }
+
+    if (options is null)
+    {
+        return new StartOrchestrationOptions
+        {
+            Version = version,
+        };
+    }
+
+    return new StartOrchestrationOptions(options)
+    {
+        Version = version,
+    };
+}
+
+static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
+{
+    if (options is SubOrchestrationOptions { Version: { Version: not null and not """" } })
+    {
+        return options;
+    }
+
+    if (options is SubOrchestrationOptions subOrchestrationOptions)
+    {
+        return new SubOrchestrationOptions(subOrchestrationOptions)
+        {
+            Version = version,
+        };
+    }
+
+    if (options is null)
+    {
+        return new SubOrchestrationOptions
+        {
+            Version = version,
+        };
+    }
+
+    return new SubOrchestrationOptions(options)
+    {
+        Version = version,
+    };
+}
+
+static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
+{
+    if (options is ActivityOptions activityOptions
+        && activityOptions.Version is TaskVersion explicitVersion
+        && !string.IsNullOrWhiteSpace(explicitVersion.Version))
+    {
+        return options;
+    }
+
+    if (options is ActivityOptions existingActivityOptions)
+    {
+        return new ActivityOptions(existingActivityOptions)
+        {
+            Version = version,
+        };
+    }
+
+    if (options is null)
+    {
+        return new ActivityOptions
+        {
+            Version = version,
+        };
+    }
+
+    return new ActivityOptions(options)
+    {
+        Version = version,
+    };
 }
 
 internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)

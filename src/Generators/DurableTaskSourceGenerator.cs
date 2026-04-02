@@ -602,7 +602,11 @@ using Microsoft.Extensions.DependencyInjection;");
                 bool hasActivityTriggers = isMicrosoftDurableTask && activityTriggers.Count > 0;
                 bool hasEvents = eventsInNamespace != null && eventsInNamespace.Count > 0;
                 bool hasRegistration = isMicrosoftDurableTask && needsRegistrationMethod;
-                bool hasVersionedStandaloneHelpers = !isDurableFunctions && orchestratorsInNs.Any(task => !string.IsNullOrEmpty(task.TaskVersion));
+                bool hasVersionedStandaloneOrchestratorHelpers = !isDurableFunctions
+                    && orchestratorsInNs.Any(task => !string.IsNullOrEmpty(task.TaskVersion));
+                bool hasVersionedStandaloneActivityHelpers = !isDurableFunctions
+                    && activitiesInNs.Any(task => !string.IsNullOrEmpty(task.TaskVersion));
+                bool hasVersionedStandaloneHelpers = hasVersionedStandaloneOrchestratorHelpers || hasVersionedStandaloneActivityHelpers;
 
                 if (!hasOrchestratorMethods && !hasActivityMethods && !hasEntityFunctions
                     && !hasActivityTriggers && !hasEvents && !hasRegistration)
@@ -639,20 +643,21 @@ namespace {targetNamespace}
                     AddSubOrchestratorCallMethod(sourceBuilder, orchestrator, targetNamespace, helperSuffix, applyGeneratedVersion);
                 }
 
-                if (hasVersionedStandaloneHelpers)
-                {
-                    AddStandaloneGeneratedVersionHelperMethods(sourceBuilder);
-                }
-
                 foreach (DurableTaskTypeInfo activity in activitiesInNs)
                 {
                     string helperSuffix = GetStandaloneTaskHelperSuffix(activity, isDurableFunctions, standaloneActivityCountsByTaskName);
-                    AddActivityCallMethod(sourceBuilder, activity, targetNamespace, helperSuffix);
+                    bool applyGeneratedVersion = !isDurableFunctions && !string.IsNullOrEmpty(activity.TaskVersion);
+                    AddActivityCallMethod(sourceBuilder, activity, targetNamespace, helperSuffix, applyGeneratedVersion);
 
                     if (isDurableFunctions)
                     {
                         AddActivityFunctionDeclaration(sourceBuilder, activity, targetNamespace);
                     }
+                }
+
+                if (hasVersionedStandaloneHelpers)
+                {
+                    AddStandaloneGeneratedVersionHelperMethods(sourceBuilder, hasVersionedStandaloneActivityHelpers);
                 }
 
                 foreach (DurableTaskTypeInfo entity in entitiesInNs)
@@ -879,7 +884,7 @@ namespace {targetNamespace}
         }}");
         }
 
-        static void AddStandaloneGeneratedVersionHelperMethods(StringBuilder sourceBuilder)
+        static void AddStandaloneGeneratedVersionHelperMethods(StringBuilder sourceBuilder, bool includeActivityVersionHelpers)
         {
             sourceBuilder.AppendLine(@"
         static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
@@ -931,9 +936,43 @@ namespace {targetNamespace}
                 Version = version,
             };
         }");
+
+            if (includeActivityVersionHelpers)
+            {
+                sourceBuilder.AppendLine().AppendLine(@"        static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
+        {
+            if (options is ActivityOptions activityOptions
+                && activityOptions.Version is TaskVersion explicitVersion
+                && !string.IsNullOrWhiteSpace(explicitVersion.Version))
+            {
+                return options;
+            }
+
+            if (options is ActivityOptions existingActivityOptions)
+            {
+                return new ActivityOptions(existingActivityOptions)
+                {
+                    Version = version,
+                };
+            }
+
+            if (options is null)
+            {
+                return new ActivityOptions
+                {
+                    Version = version,
+                };
+            }
+
+            return new ActivityOptions(options)
+            {
+                Version = version,
+            };
+        }");
+            }
         }
 
-        static void AddActivityCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo activity, string targetNamespace, string helperSuffix)
+        static void AddActivityCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo activity, string targetNamespace, string helperSuffix, bool applyGeneratedVersion)
         {
             string inputType = activity.GetInputTypeForNamespace(targetNamespace);
             string outputType = activity.GetOutputTypeForNamespace(targetNamespace);
@@ -944,6 +983,9 @@ namespace {targetNamespace}
             }
 
             string simplifiedTypeName = SimplifyTypeName(activity.TypeName, targetNamespace);
+            string optionsExpression = applyGeneratedVersion
+                ? $"ApplyGeneratedActivityVersion(options, {ToCSharpStringLiteral(activity.TaskVersion)})"
+                : "options";
 
             sourceBuilder.AppendLine($@"
         /// <summary>
@@ -952,7 +994,7 @@ namespace {targetNamespace}
         /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
         public static Task<{outputType}> Call{activity.TaskName}{helperSuffix}Async(this TaskOrchestrationContext ctx, {inputParameter}, TaskOptions? options = null)
         {{
-            return ctx.CallActivityAsync<{outputType}>(""{activity.TaskName}"", input, options);
+            return ctx.CallActivityAsync<{outputType}>(""{activity.TaskName}"", input, {optionsExpression});
         }}");
         }
 

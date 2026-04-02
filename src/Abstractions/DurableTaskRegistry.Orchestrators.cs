@@ -46,8 +46,9 @@ public partial class DurableTaskRegistry
     /// </list>
     /// </exception>
     /// <remarks>
-    /// Registration is version-aware in the registry. Version-based worker and factory resolution is introduced in
-    /// later staged follow-up work.
+    /// Registration is version-aware in the registry. Worker dispatch uses exact <paramref name="name" /> and
+    /// <paramref name="version" /> matching, while the public name-only factory path continues to resolve only the
+    /// default registration.
     /// </remarks>
     public DurableTaskRegistry AddOrchestrator(TaskName name, TaskVersion version, Func<ITaskOrchestrator> factory)
     {

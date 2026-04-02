@@ -618,6 +618,9 @@ sealed partial class GrpcDurableTaskWorker
                 // Only continue with the work if the versioning check passed.
                 if (failureDetails == null)
                 {
+                    TaskVersion requestedVersion = string.IsNullOrWhiteSpace(runtimeState.Version)
+                        ? default
+                        : new TaskVersion(runtimeState.Version);
                     name = new TaskName(runtimeState.Name);
 
                     this.Logger.ReceivedOrchestratorRequest(
@@ -627,8 +630,17 @@ sealed partial class GrpcDurableTaskWorker
                         runtimeState.NewEvents.Count);
 
                     await using AsyncServiceScope scope = this.worker.services.CreateAsyncScope();
-                    if (this.worker.Factory.TryCreateOrchestrator(
-                        name, scope.ServiceProvider, out ITaskOrchestrator? orchestrator))
+                    bool found = this.worker.Factory is IVersionedOrchestratorFactory versionedFactory
+                        ? versionedFactory.TryCreateOrchestrator(
+                            name,
+                            requestedVersion,
+                            scope.ServiceProvider,
+                            out ITaskOrchestrator? orchestrator)
+                        : this.worker.Factory.TryCreateOrchestrator(
+                            name,
+                            scope.ServiceProvider,
+                            out orchestrator);
+                    if (found)
                     {
                         // Both the factory invocation and the ExecuteAsync could involve user code and need to be handled
                         // as part of try/catch.
@@ -650,10 +662,13 @@ sealed partial class GrpcDurableTaskWorker
                     }
                     else
                     {
+                        string versionText = requestedVersion.Version ?? string.Empty;
                         failureDetails = new P.TaskFailureDetails
                         {
                             ErrorType = "OrchestratorTaskNotFound",
-                            ErrorMessage = $"No orchestrator task named '{name}' was found.",
+                            ErrorMessage = string.IsNullOrEmpty(versionText)
+                                ? $"No orchestrator task named '{name}' was found."
+                                : $"No orchestrator task named '{name}' with version '{versionText}' was found.",
                             IsNonRetriable = true,
                         };
                     }

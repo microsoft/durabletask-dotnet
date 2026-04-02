@@ -9,7 +9,7 @@ namespace Microsoft.DurableTask.Worker;
 /// <summary>
 /// A factory for creating orchestrators and activities.
 /// </summary>
-sealed class DurableTaskFactory : IDurableTaskFactory2
+sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedOrchestratorFactory
 {
     readonly IDictionary<TaskName, Func<IServiceProvider, ITaskActivity>> activities;
     readonly IDictionary<OrchestratorVersionKey, Func<IServiceProvider, ITaskOrchestrator>> orchestrators;
@@ -48,11 +48,14 @@ sealed class DurableTaskFactory : IDurableTaskFactory2
 
     /// <inheritdoc/>
     public bool TryCreateOrchestrator(
-        TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskOrchestrator? orchestrator)
+        TaskName name,
+        TaskVersion version,
+        IServiceProvider serviceProvider,
+        [NotNullWhen(true)] out ITaskOrchestrator? orchestrator)
     {
-        // This staged implementation intentionally resolves only the default-version registration.
-        // Version-aware worker dispatch is introduced in the subsequent worker-dispatch task.
-        if (this.orchestrators.TryGetValue(new OrchestratorVersionKey(name, default), out Func<IServiceProvider, ITaskOrchestrator>? factory))
+        Check.NotNull(serviceProvider);
+        OrchestratorVersionKey key = new(name, version);
+        if (this.orchestrators.TryGetValue(key, out Func<IServiceProvider, ITaskOrchestrator>? factory))
         {
             orchestrator = factory.Invoke(serviceProvider);
             return true;
@@ -61,6 +64,11 @@ sealed class DurableTaskFactory : IDurableTaskFactory2
         orchestrator = null;
         return false;
     }
+
+    /// <inheritdoc/>
+    public bool TryCreateOrchestrator(
+        TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskOrchestrator? orchestrator)
+        => this.TryCreateOrchestrator(name, default(TaskVersion), serviceProvider, out orchestrator);
 
     /// <inheritdoc/>
     public bool TryCreateEntity(

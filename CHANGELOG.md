@@ -9,7 +9,6 @@
 - Bump dotnet-sdk from 10.0.103 to 10.0.201 ([#673](https://github.com/microsoft/durabletask-dotnet/pull/673))
 - Bump Microsoft.Azure.DurableTask.Core from 3.7.0 to 3.7.1 ([#685](https://github.com/microsoft/durabletask-dotnet/pull/685))
 - feat(copilot): add evidence-based Copilot customizations ([#690](https://github.com/microsoft/durabletask-dotnet/pull/690))
-- Release v1.23.1 ([#688](https://github.com/microsoft/durabletask-dotnet/pull/688))
 
 ## v1.23.1
 - Fix CHANGELOG line ending preservation in Prepare Release workflow ([#687](https://github.com/microsoft/durabletask-dotnet/pull/687))

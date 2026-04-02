@@ -415,11 +415,20 @@ namespace Microsoft.DurableTask.Generators
 
             if (isDurableFunctions)
             {
+                HashSet<string> existingAzureFunctionsOrchestratorNames = new(
+                    allFunctions
+                        .Where(function => function.Kind == DurableFunctionKind.Orchestration)
+                        .Select(function => function.Name),
+                    StringComparer.OrdinalIgnoreCase);
+
                 HashSet<DurableTaskTypeInfo> collidingAzureFunctionsOrchestrators = new(
                     orchestrators
-                        .GroupBy(task => task.TaskName, StringComparer.OrdinalIgnoreCase)
-                        .Where(group => group.Count() > 1)
-                        .SelectMany(group => group));
+                        .Where(task => existingAzureFunctionsOrchestratorNames.Contains(task.TaskName))
+                        .Concat(
+                            orchestrators
+                                .GroupBy(task => task.TaskName, StringComparer.OrdinalIgnoreCase)
+                                .Where(group => group.Count() > 1)
+                                .SelectMany(group => group)));
 
                 foreach (DurableTaskTypeInfo task in collidingAzureFunctionsOrchestrators)
                 {

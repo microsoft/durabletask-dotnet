@@ -103,20 +103,139 @@ public class TaskOrchestrationContextWrapperTests
         innerContext.LastContinueAsNewVersion.Should().BeNull();
     }
 
+    [Fact]
+    public async Task CallActivityAsync_ActivityOptionsVersionOverridesInheritedOrchestrationVersion()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        await wrapper.CallActivityAsync<string>(
+            "TestActivity",
+            123,
+            new ActivityOptions
+            {
+                Version = "v1",
+            });
+
+        // Assert
+        innerContext.LastScheduledTaskName.Should().Be("TestActivity");
+        innerContext.LastScheduledTaskVersion.Should().Be("v1");
+        innerContext.LastScheduledTaskInput.Should().Be(123);
+    }
+
+    [Fact]
+    public async Task CallActivityAsync_ActivityOptionsVersionOverridesInheritedOrchestrationVersion_WithRetryPolicy()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        await wrapper.CallActivityAsync<string>(
+            "TestActivity",
+            123,
+            new ActivityOptions(new RetryPolicy(1, TimeSpan.FromSeconds(1)))
+            {
+                Version = "v1",
+            });
+
+        // Assert
+        innerContext.LastScheduledTaskName.Should().Be("TestActivity");
+        innerContext.LastScheduledTaskVersion.Should().Be("v1");
+        innerContext.LastScheduledTaskInput.Should().Be(123);
+    }
+
+    [Fact]
+    public async Task CallActivityAsync_PlainTaskOptionsUsesInheritedOrchestrationVersion()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        await wrapper.CallActivityAsync<string>("TestActivity", 123, new TaskOptions());
+
+        // Assert
+        innerContext.LastScheduledTaskName.Should().Be("TestActivity");
+        innerContext.LastScheduledTaskVersion.Should().Be("v2");
+        innerContext.LastScheduledTaskInput.Should().Be(123);
+    }
+
+    [Fact]
+    public async Task CallActivityAsync_NullOptionsUsesInheritedOrchestrationVersion()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        await wrapper.CallActivityAsync<string>("TestActivity", 123);
+
+        // Assert
+        innerContext.LastScheduledTaskName.Should().Be("TestActivity");
+        innerContext.LastScheduledTaskVersion.Should().Be("v2");
+        innerContext.LastScheduledTaskInput.Should().Be(123);
+    }
+
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    [InlineData(true, "")]
+    [InlineData(true, "   ")]
+    public async Task CallActivityAsync_MissingOrEmptyActivityVersionUsesInheritedOrchestrationVersion(
+        bool setVersion,
+        string? explicitVersion)
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+        ActivityOptions options = new();
+
+        if (setVersion)
+        {
+            options = options with
+            {
+                Version = explicitVersion is null ? default(TaskVersion?) : new TaskVersion(explicitVersion),
+            };
+        }
+
+        // Act
+        await wrapper.CallActivityAsync<string>("TestActivity", 123, options);
+
+        // Assert
+        innerContext.LastScheduledTaskName.Should().Be("TestActivity");
+        innerContext.LastScheduledTaskVersion.Should().Be("v2");
+        innerContext.LastScheduledTaskInput.Should().Be(123);
+    }
+
     sealed class TrackingOrchestrationContext : OrchestrationContext
     {
-        public TrackingOrchestrationContext()
+        public TrackingOrchestrationContext(string? version = null)
         {
             this.OrchestrationInstance = new()
             {
                 InstanceId = Guid.NewGuid().ToString(),
                 ExecutionId = Guid.NewGuid().ToString(),
             };
+            this.Version = version ?? string.Empty;
         }
 
         public object? LastContinueAsNewInput { get; private set; }
 
         public string? LastContinueAsNewVersion { get; private set; }
+
+        public string? LastScheduledTaskName { get; private set; }
+
+        public string? LastScheduledTaskVersion { get; private set; }
+
+        public object? LastScheduledTaskInput { get; private set; }
 
         public override void ContinueAsNew(object input)
         {
@@ -146,7 +265,28 @@ public class TaskOrchestrationContextWrapperTests
             => throw new NotImplementedException();
 
         public override Task<TResult> ScheduleTask<TResult>(string name, string version, params object[] parameters)
-            => throw new NotImplementedException();
+            => this.CaptureScheduledTask<TResult>(name, version, parameters);
+
+        public override Task<TResult> ScheduleTask<TResult>(
+            string name,
+            string version,
+            ScheduleTaskOptions options,
+            params object[] parameters)
+            => this.CaptureScheduledTask<TResult>(name, version, parameters);
+
+        Task<TResult> CaptureScheduledTask<TResult>(string name, string version, object[] parameters)
+        {
+            this.LastScheduledTaskName = name;
+            this.LastScheduledTaskVersion = version;
+            this.LastScheduledTaskInput = parameters.Length switch
+            {
+                0 => null,
+                1 => parameters[0],
+                _ => parameters,
+            };
+
+            return Task.FromResult(default(TResult)!);
+        }
 
         public override void SendEvent(OrchestrationInstance orchestrationInstance, string eventName, object eventData)
             => throw new NotImplementedException();

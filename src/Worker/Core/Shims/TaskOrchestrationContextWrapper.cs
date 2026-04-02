@@ -128,6 +128,18 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         object? input = null,
         TaskOptions? options = null)
     {
+        static string GetRequestedActivityVersion(TaskOptions? taskOptions, string inheritedVersion)
+        {
+            if (taskOptions is ActivityOptions activityOptions
+                && activityOptions.Version is TaskVersion explicitVersion
+                && !string.IsNullOrWhiteSpace(explicitVersion.Version))
+            {
+                return explicitVersion.Version;
+            }
+
+            return inheritedVersion;
+        }
+
         // Since the input parameter takes any object, it's possible that callers may accidentally provide a
         // TaskOptions parameter here when the actually meant to provide TaskOptions for the optional options
         // parameter.
@@ -142,6 +154,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
         try
         {
+            string requestedVersion = GetRequestedActivityVersion(options, this.innerContext.Version);
             IDictionary<string, string> tags = ImmutableDictionary<string, string>.Empty;
             if (options is TaskOptions callActivityOptions)
             {
@@ -157,7 +170,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             {
                 return await this.innerContext.ScheduleTask<T>(
                     name.Name,
-                    this.innerContext.Version,
+                    requestedVersion,
                     options: ScheduleTaskOptions.CreateBuilder()
                         .WithRetryOptions(policy.ToDurableTaskCoreRetryOptions())
                         .WithTags(tags)
@@ -169,7 +182,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                 return await this.InvokeWithCustomRetryHandler(
                     () => this.innerContext.ScheduleTask<T>(
                         name.Name,
-                        this.innerContext.Version,
+                        requestedVersion,
                         options: ScheduleTaskOptions.CreateBuilder()
                             .WithTags(tags)
                             .Build(),
@@ -182,7 +195,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             {
                 return await this.innerContext.ScheduleTask<T>(
                     name.Name,
-                    this.innerContext.Version,
+                    requestedVersion,
                     options: ScheduleTaskOptions.CreateBuilder()
                         .WithTags(tags)
                         .Build(),

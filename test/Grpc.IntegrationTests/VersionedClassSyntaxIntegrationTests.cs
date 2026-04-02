@@ -51,6 +51,37 @@ public class VersionedClassSyntaxIntegrationTests : IntegrationTestBase
     }
 
     /// <summary>
+    /// Verifies explicit activity versions override the inherited orchestration version.
+    /// </summary>
+    [Fact]
+    public async Task ClassBasedVersionedActivity_ExplicitActivityVersionOverridesOrchestrationVersion()
+    {
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks =>
+            {
+                tasks.AddOrchestrator<VersionedActivityOverrideOrchestrationV2>();
+                tasks.AddActivity<VersionedActivityOverrideActivityV1>();
+                tasks.AddActivity<VersionedActivityOverrideActivityV2>();
+            });
+        });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            "VersionedActivityOverrideOrchestration",
+            input: 5,
+            new StartOrchestrationOptions
+            {
+                Version = new TaskVersion("v2"),
+            });
+        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.Equal("activity-v1:5", metadata.ReadOutputAs<string>());
+    }
+
+    /// <summary>
     /// Verifies starting without a version fails when only versioned handlers are registered.
     /// </summary>
     [Fact]

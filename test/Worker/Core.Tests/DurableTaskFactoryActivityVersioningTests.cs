@@ -19,6 +19,7 @@ public class DurableTaskFactoryActivityVersioningTests
             new TaskName("InvoiceActivity"),
             new TaskVersion("v2"),
             Mock.Of<IServiceProvider>(),
+            allowVersionFallback: true,
             out ITaskActivity? activity);
 
         // Assert
@@ -39,6 +40,7 @@ public class DurableTaskFactoryActivityVersioningTests
             new TaskName("InvoiceActivity"),
             new TaskVersion("v2"),
             Mock.Of<IServiceProvider>(),
+            allowVersionFallback: true,
             out ITaskActivity? activity);
 
         // Assert
@@ -59,6 +61,7 @@ public class DurableTaskFactoryActivityVersioningTests
             new TaskName("InvoiceActivity"),
             new TaskVersion("v2"),
             Mock.Of<IServiceProvider>(),
+            allowVersionFallback: true,
             out ITaskActivity? activity);
 
         // Assert
@@ -81,6 +84,7 @@ public class DurableTaskFactoryActivityVersioningTests
             new TaskName("InvoiceActivity"),
             new TaskVersion("v1"),
             Mock.Of<IServiceProvider>(),
+            allowVersionFallback: true,
             out ITaskActivity? activity);
 
         // Assert
@@ -105,6 +109,27 @@ public class DurableTaskFactoryActivityVersioningTests
         // Assert
         found.Should().BeTrue();
         activity.Should().BeOfType<UnversionedInvoiceActivity>();
+    }
+
+    [Fact]
+    public void TryCreateActivity_WithRequestedVersion_DoesNotUseUnversionedRegistrationWhenFallbackIsDisallowed()
+    {
+        // Arrange
+        DurableTaskRegistry registry = new();
+        registry.AddActivity<UnversionedInvoiceActivity>();
+        IDurableTaskFactory factory = registry.BuildFactory();
+
+        // Act
+        bool found = ((IVersionedActivityFactory)factory).TryCreateActivity(
+            new TaskName("InvoiceActivity"),
+            new TaskVersion("v2"),
+            Mock.Of<IServiceProvider>(),
+            allowVersionFallback: false,
+            out ITaskActivity? activity);
+
+        // Assert
+        found.Should().BeFalse();
+        activity.Should().BeNull();
     }
 
     [DurableTask("InvoiceActivity")]

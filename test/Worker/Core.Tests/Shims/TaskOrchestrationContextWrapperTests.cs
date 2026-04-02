@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Generic;
+using System.Reflection;
 using DurableTask.Core;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -124,6 +126,9 @@ public class TaskOrchestrationContextWrapperTests
         innerContext.LastScheduledTaskName.Should().Be("TestActivity");
         innerContext.LastScheduledTaskVersion.Should().Be("v1");
         innerContext.LastScheduledTaskInput.Should().Be(123);
+        GetLastScheduledTaskTags(innerContext).Should().Contain(
+            ActivityVersioning.ExplicitVersionTagName,
+            bool.TrueString);
     }
 
     [Fact]
@@ -185,6 +190,31 @@ public class TaskOrchestrationContextWrapperTests
         innerContext.LastScheduledTaskName.Should().Be("TestActivity");
         innerContext.LastScheduledTaskVersion.Should().Be("v2");
         innerContext.LastScheduledTaskInput.Should().Be(123);
+        GetLastScheduledTaskTags(innerContext).Should().NotContainKey(ActivityVersioning.ExplicitVersionTagName);
+    }
+
+    [Fact]
+    public async Task CallActivityAsync_UserSuppliedReservedExplicitVersionTagIsIgnoredWhenVersionIsInherited()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        await wrapper.CallActivityAsync<string>(
+            "TestActivity",
+            123,
+            new TaskOptions(tags: new Dictionary<string, string>
+            {
+                [ActivityVersioning.ExplicitVersionTagName] = bool.FalseString,
+            }));
+
+        // Assert
+        innerContext.LastScheduledTaskName.Should().Be("TestActivity");
+        innerContext.LastScheduledTaskVersion.Should().Be("v2");
+        innerContext.LastScheduledTaskInput.Should().Be(123);
+        GetLastScheduledTaskTags(innerContext).Should().NotContainKey(ActivityVersioning.ExplicitVersionTagName);
     }
 
     [Fact]
@@ -202,6 +232,7 @@ public class TaskOrchestrationContextWrapperTests
         innerContext.LastScheduledTaskName.Should().Be("TestActivity");
         innerContext.LastScheduledTaskVersion.Should().Be("v2");
         innerContext.LastScheduledTaskInput.Should().Be(123);
+        GetLastScheduledTaskTags(innerContext).Should().NotContainKey(ActivityVersioning.ExplicitVersionTagName);
     }
 
     [Theory]
@@ -234,6 +265,13 @@ public class TaskOrchestrationContextWrapperTests
         innerContext.LastScheduledTaskName.Should().Be("TestActivity");
         innerContext.LastScheduledTaskVersion.Should().Be("v2");
         innerContext.LastScheduledTaskInput.Should().Be(123);
+        GetLastScheduledTaskTags(innerContext).Should().NotContainKey(ActivityVersioning.ExplicitVersionTagName);
+    }
+
+    static IReadOnlyDictionary<string, string> GetLastScheduledTaskTags(TrackingOrchestrationContext innerContext)
+    {
+        PropertyInfo tagsProperty = innerContext.LastScheduledTaskOptions!.GetType().GetProperty("Tags")!;
+        return (IReadOnlyDictionary<string, string>)tagsProperty.GetValue(innerContext.LastScheduledTaskOptions)!;
     }
 
     sealed class TrackingOrchestrationContext : OrchestrationContext
@@ -257,6 +295,8 @@ public class TaskOrchestrationContextWrapperTests
         public string? LastScheduledTaskVersion { get; private set; }
 
         public object? LastScheduledTaskInput { get; private set; }
+
+        public ScheduleTaskOptions? LastScheduledTaskOptions { get; private set; }
 
         public override void ContinueAsNew(object input)
         {
@@ -293,9 +333,13 @@ public class TaskOrchestrationContextWrapperTests
             string version,
             ScheduleTaskOptions options,
             params object[] parameters)
-            => this.CaptureScheduledTask<TResult>(name, version, parameters);
+            => this.CaptureScheduledTask<TResult>(name, version, parameters, options);
 
-        Task<TResult> CaptureScheduledTask<TResult>(string name, string version, object[] parameters)
+        Task<TResult> CaptureScheduledTask<TResult>(
+            string name,
+            string version,
+            object[] parameters,
+            ScheduleTaskOptions? options = null)
         {
             this.LastScheduledTaskName = name;
             this.LastScheduledTaskVersion = version;
@@ -305,6 +349,7 @@ public class TaskOrchestrationContextWrapperTests
                 1 => parameters[0],
                 _ => parameters,
             };
+            this.LastScheduledTaskOptions = options;
 
             return Task.FromResult(default(TResult)!);
         }

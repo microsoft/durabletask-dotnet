@@ -805,13 +805,40 @@ sealed partial class GrpcDurableTaskWorker
                     TaskVersion requestedVersion = string.IsNullOrWhiteSpace(request.Version)
                         ? default
                         : new TaskVersion(request.Version);
-                    bool found = this.worker.Factory is IVersionedActivityFactory versionedFactory
-                        ? versionedFactory.TryCreateActivity(
+                    ITaskActivity? activity;
+                    bool found;
+                    if (this.worker.Factory is IVersionedActivityFactory versionedFactory)
+                    {
+                        found = versionedFactory.TryCreateActivity(
                             name,
                             requestedVersion,
                             scope.ServiceProvider,
-                            out ITaskActivity? activity)
-                        : this.worker.Factory.TryCreateActivity(name, scope.ServiceProvider, out activity);
+                            allowVersionFallback: false,
+                            out activity);
+
+                        if (!found && !string.IsNullOrWhiteSpace(requestedVersion.Version))
+                        {
+                            bool explicitVersionRequested =
+                                request.Tags.TryGetValue(ActivityVersioning.ExplicitVersionTagName, out string? tagValue)
+                                && bool.TryParse(tagValue, out bool parsedTagValue)
+                                && parsedTagValue;
+                            bool allowVersionFallback = !explicitVersionRequested;
+                            if (allowVersionFallback)
+                            {
+                                found = versionedFactory.TryCreateActivity(
+                                    name,
+                                    requestedVersion,
+                                    scope.ServiceProvider,
+                                    allowVersionFallback: true,
+                                    out activity);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        found = this.worker.Factory.TryCreateActivity(name, scope.ServiceProvider, out activity);
+                    }
+
                     if (found)
                     {
                         // Both the factory invocation and the RunAsync could involve user code and need to be handled as

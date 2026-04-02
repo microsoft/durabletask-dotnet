@@ -181,7 +181,7 @@ public class UseWorkItemFiltersTests
     }
 
     [Fact]
-    public void WorkItemFilters_DefaultVersionWithVersioningStrict_DoesNotChangeActivityFilters_WhenExplicitlyOptedIn()
+    public void WorkItemFilters_DefaultVersionWithVersioningStrict_NarrowsGeneratedFilters_WhenExplicitlyOptedIn()
     {
         // Arrange
         ServiceCollection services = new();
@@ -210,8 +210,52 @@ public class UseWorkItemFiltersTests
         DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
         // Assert
-        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.Count == 0);
-        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.Count == 0);
+        actual.Orchestrations.Should().ContainSingle();
+        actual.Orchestrations[0].Name.Should().Be(nameof(TestOrchestrator));
+        actual.Orchestrations[0].Versions.Should().BeEquivalentTo(["1.0"]);
+        actual.Activities.Should().ContainSingle();
+        actual.Activities[0].Name.Should().Be(nameof(TestActivity));
+        actual.Activities[0].Versions.Should().BeEquivalentTo(["1.0"]);
+    }
+
+    [Fact]
+    public void WorkItemFilters_MixedRegistrationsWithVersioningStrict_UseConfiguredWorkerVersion()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<UnversionedFilterWorkflow>();
+                registry.AddOrchestrator<VersionedFilterWorkflowV2>();
+                registry.AddActivity<UnversionedFilterActivity>();
+                registry.AddActivity<VersionedFilterActivityV2>();
+            });
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    Version = "1.0",
+                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+                };
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle();
+        actual.Orchestrations[0].Name.Should().Be("FilterWorkflow");
+        actual.Orchestrations[0].Versions.Should().BeEquivalentTo(["1.0"]);
+        actual.Activities.Should().ContainSingle();
+        actual.Activities[0].Name.Should().Be("FilterActivity");
+        actual.Activities[0].Versions.Should().BeEquivalentTo(["1.0"]);
     }
 
     [Fact]

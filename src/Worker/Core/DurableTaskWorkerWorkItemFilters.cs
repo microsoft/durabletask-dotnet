@@ -35,6 +35,12 @@ public class DurableTaskWorkerWorkItemFilters
     /// <returns>A new instance of <see cref="DurableTaskWorkerWorkItemFilters"/> constructed from the provided registry.</returns>
     internal static DurableTaskWorkerWorkItemFilters FromDurableTaskRegistry(DurableTaskRegistry registry, DurableTaskWorkerOptions? workerOptions)
     {
+        IReadOnlyList<string>? strictWorkerVersions =
+            workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict
+            && !string.IsNullOrWhiteSpace(workerOptions.Versioning.Version)
+                ? [workerOptions.Versioning.Version]
+                : null;
+
         // Orchestration filters now group registrations by logical name. Version lists are only emitted when every
         // registration for a logical name is explicitly versioned; otherwise, the filter conservatively matches all
         // versions for that name.
@@ -42,13 +48,7 @@ public class DurableTaskWorkerWorkItemFilters
             .GroupBy(orchestration => orchestration.Key.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
-                bool hasUnversionedRegistration = group.Any(entry => string.IsNullOrWhiteSpace(entry.Key.Version));
-                IReadOnlyList<string> versions = hasUnversionedRegistration
-                    ? []
-                    : group.Select(entry => entry.Key.Version)
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
-                        .ToArray();
+                IReadOnlyList<string> versions = strictWorkerVersions ?? GetRegistrationVersions(group.Select(entry => entry.Key.Version));
 
                 return new OrchestrationFilter
                 {
@@ -62,16 +62,7 @@ public class DurableTaskWorkerWorkItemFilters
             .GroupBy(activity => activity.Key.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
-                // Activity filters mirror orchestration filters: any unversioned registration becomes a catch-all
-                // for that logical name, while fully versioned groups advertise only the explicit versions.
-                bool hasUnversionedRegistration = group.Any(entry => string.IsNullOrWhiteSpace(entry.Key.Version));
-                IReadOnlyList<string> versions = hasUnversionedRegistration
-                    ? []
-                    : group.Select(entry => entry.Key.Version)
-                        .Where(version => !string.IsNullOrWhiteSpace(version))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
-                        .ToArray();
+                IReadOnlyList<string> versions = strictWorkerVersions ?? GetRegistrationVersions(group.Select(entry => entry.Key.Version));
 
                 return new ActivityFilter
                 {
@@ -91,6 +82,19 @@ public class DurableTaskWorkerWorkItemFilters
                 Name = entity.Key.ToString(),
             }).ToList(),
         };
+
+        static IReadOnlyList<string> GetRegistrationVersions(IEnumerable<string?> versions)
+        {
+            bool hasUnversionedRegistration = versions.Any(string.IsNullOrWhiteSpace);
+            return hasUnversionedRegistration
+                ? []
+                : versions
+                    .Where(version => !string.IsNullOrWhiteSpace(version))
+                    .Cast<string>()
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+        }
     }
 
     /// <summary>

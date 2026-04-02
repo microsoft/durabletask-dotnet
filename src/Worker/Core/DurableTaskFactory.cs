@@ -36,6 +36,7 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedActivityFactor
         TaskName name,
         TaskVersion version,
         IServiceProvider serviceProvider,
+        bool allowVersionFallback,
         [NotNullWhen(true)] out ITaskActivity? activity)
     {
         Check.NotNull(serviceProvider);
@@ -46,7 +47,8 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedActivityFactor
             return true;
         }
 
-        if (!string.IsNullOrWhiteSpace(version.Version)
+        if (allowVersionFallback
+            && !string.IsNullOrWhiteSpace(version.Version)
             && this.activities.TryGetValue(new ActivityVersionKey(name, default(TaskVersion)), out factory))
         {
             activity = factory.Invoke(serviceProvider);
@@ -60,7 +62,7 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedActivityFactor
     /// <inheritdoc/>
     public bool TryCreateActivity(
         TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskActivity? activity)
-        => this.TryCreateActivity(name, default(TaskVersion), serviceProvider, out activity);
+        => this.TryCreateActivity(name, default(TaskVersion), serviceProvider, allowVersionFallback: false, out activity);
 
     /// <inheritdoc/>
     public bool TryCreateOrchestrator(

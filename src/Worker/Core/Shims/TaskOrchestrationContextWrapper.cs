@@ -128,16 +128,41 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         object? input = null,
         TaskOptions? options = null)
     {
-        static string GetRequestedActivityVersion(TaskOptions? taskOptions, string inheritedVersion)
+        static (string RequestedVersion, bool ExplicitVersionRequested) GetRequestedActivityVersion(
+            TaskOptions? taskOptions,
+            string inheritedVersion)
         {
             if (taskOptions is ActivityOptions activityOptions
                 && activityOptions.Version is TaskVersion explicitVersion
                 && !string.IsNullOrWhiteSpace(explicitVersion.Version))
             {
-                return explicitVersion.Version;
+                return (explicitVersion.Version, true);
             }
 
-            return inheritedVersion;
+            return (inheritedVersion, false);
+        }
+
+        static IDictionary<string, string> GetActivityTags(TaskOptions? taskOptions, bool explicitVersionRequested)
+        {
+            Dictionary<string, string> tags = new(StringComparer.Ordinal);
+
+            if (taskOptions?.Tags is not null)
+            {
+                foreach ((string key, string value) in taskOptions.Tags)
+                {
+                    if (key != ActivityVersioning.ExplicitVersionTagName)
+                    {
+                        tags[key] = value;
+                    }
+                }
+            }
+
+            if (explicitVersionRequested)
+            {
+                tags[ActivityVersioning.ExplicitVersionTagName] = bool.TrueString;
+            }
+
+            return tags;
         }
 
         // Since the input parameter takes any object, it's possible that callers may accidentally provide a
@@ -154,15 +179,9 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
         try
         {
-            string requestedVersion = GetRequestedActivityVersion(options, this.innerContext.Version);
-            IDictionary<string, string> tags = ImmutableDictionary<string, string>.Empty;
-            if (options is TaskOptions callActivityOptions)
-            {
-                if (callActivityOptions.Tags is not null)
-                {
-                    tags = callActivityOptions.Tags;
-                }
-            }
+            (string requestedVersion, bool explicitVersionRequested) =
+                GetRequestedActivityVersion(options, this.innerContext.Version);
+            IDictionary<string, string> tags = GetActivityTags(options, explicitVersionRequested);
 
             // TODO: Cancellation (https://github.com/microsoft/durabletask-dotnet/issues/7)
 #pragma warning disable 0618

@@ -25,6 +25,7 @@ message ActivityRequest {
     OrchestrationInstance orchestrationInstance = 4;
     int32 taskId = 5;
     TraceContext parentTraceContext = 6;
+    map<string, string> tags = 7;
 }
 
 message ActivityResponse {

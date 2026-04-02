@@ -3,8 +3,6 @@
 
 namespace Microsoft.DurableTask.Tests;
 
-using System.Reflection;
-
 public class DurableTaskVersionAttributeTests
 {
     [Fact]
@@ -27,7 +25,7 @@ public class DurableTaskVersionAttributeTests
         Type type = typeof(VersionedTestOrchestrator);
 
         // Act
-        TaskVersion version = GetDurableTaskVersion(type);
+        TaskVersion version = type.GetDurableTaskVersion();
 
         // Assert
         version.Version.Should().Be("v1");
@@ -40,7 +38,7 @@ public class DurableTaskVersionAttributeTests
         Type type = typeof(UnversionedTestOrchestrator);
 
         // Act
-        TaskVersion version = GetDurableTaskVersion(type);
+        TaskVersion version = type.GetDurableTaskVersion();
 
         // Assert
         version.Should().Be(default(TaskVersion));
@@ -57,14 +55,5 @@ public class DurableTaskVersionAttributeTests
     {
         public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
             => Task.FromResult(input);
-    }
-
-    static TaskVersion GetDurableTaskVersion(Type type)
-    {
-        MethodInfo method = typeof(TaskName).Assembly
-            .GetType("Microsoft.DurableTask.TypeExtensions", throwOnError: true)!
-            .GetMethod("GetDurableTaskVersion", BindingFlags.Static | BindingFlags.NonPublic)!;
-
-        return (TaskVersion)method.Invoke(null, new object[] { type })!;
     }
 }

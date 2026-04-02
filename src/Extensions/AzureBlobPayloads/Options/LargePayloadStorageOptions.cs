@@ -26,7 +26,7 @@ namespace Microsoft.DurableTask;
 /// </summary>
 public sealed class LargePayloadStorageOptions
 {
-    int externalizeThresholdBytes = 900_000;
+    int thresholdBytes = 900_000;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LargePayloadStorageOptions"/> class.
@@ -63,20 +63,20 @@ public sealed class LargePayloadStorageOptions
     /// Gets or sets the threshold in bytes at which payloads are externalized. Default is 900_000 bytes.
     /// Value must not exceed 1 MiB (1,048,576 bytes).
     /// </summary>
-    public int ExternalizeThresholdBytes
+    public int ThresholdBytes
     {
-        get => this.externalizeThresholdBytes;
+        get => this.thresholdBytes;
         set
         {
             const int OneMiB = 1 * 1024 * 1024;
             if (value > OneMiB)
             {
                 throw new ArgumentOutOfRangeException(
-                    nameof(this.ExternalizeThresholdBytes),
-                    $"ExternalizeThresholdBytes cannot exceed 1 MiB ({OneMiB} bytes).");
+                    nameof(this.ThresholdBytes),
+                    $"Payload storage threshold cannot exceed 1 MiB ({OneMiB} bytes).");
             }
 
-            this.externalizeThresholdBytes = value;
+            this.thresholdBytes = value;
         }
     }
 
@@ -85,7 +85,7 @@ public sealed class LargePayloadStorageOptions
     /// Defaults to 10MB. Requests exceeding this limit will fail fast
     /// with a clear error to prevent unbounded payload growth and excessive storage/network usage.
     /// </summary>
-    public int MaxExternalizedPayloadBytes { get; set; } = 10 * 1024 * 1024;
+    public int MaxPayloadBytes { get; set; } = 10 * 1024 * 1024;
 
     /// <summary>
     /// Gets or sets the Azure Storage connection string to the customer's storage account.
@@ -114,5 +114,5 @@ public sealed class LargePayloadStorageOptions
     /// Gets or sets a value indicating whether payloads should be gzip-compressed when stored.
     /// Defaults to true for reduced storage and bandwidth.
     /// </summary>
-    public bool CompressPayloads { get; set; } = true;
+    public bool CompressionEnabled { get; set; } = true;
 }

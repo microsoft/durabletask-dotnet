@@ -352,3 +352,6 @@ MigrationBackup/
 # Rider (cross platform .NET/C# tools) working folder
 .idea/
 .worktrees/
+AzuriteConfig
+__azurite_db_*
+__blobstorage__

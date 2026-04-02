@@ -48,7 +48,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -123,7 +123,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -173,7 +173,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -264,7 +264,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -328,7 +328,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -385,7 +385,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -433,7 +433,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -487,7 +487,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -574,15 +574,15 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
                 services.AddExternalizedPayloadStore(opts =>
                 {
                     // Keep a low threshold to force externalization, but default cap applies
-                    opts.ExternalizeThresholdBytes = 1024;
-                    opts.MaxExternalizedPayloadBytes = 2048;
+                    opts.ThresholdBytes = 1024;
+                    opts.MaxPayloadBytes = 2048;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
             });
 
         // The client will attempt to externalize the input and should fail fast on cap
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        await Assert.ThrowsAsync<PayloadStorageException>(async () =>
         {
             await server.Client.ScheduleNewOrchestrationInstanceAsync(orch, tooLarge);
         });
@@ -617,7 +617,7 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
             {
                 services.AddExternalizedPayloadStore(opts =>
                 {
-                    opts.ExternalizeThresholdBytes = 1024;
+                    opts.ThresholdBytes = 1024;
                     opts.ContainerName = "test";
                     opts.ConnectionString = "UseDevelopmentStorage=true";
                 });
@@ -637,6 +637,159 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         Assert.True(fakeStore.UploadCount >= 1);
         Assert.True(fakeStore.DownloadCount >= 1);
         Assert.Contains(JsonSerializer.Serialize(largeEvent), fakeStore.uploadedPayloads);
+    }
+
+
+    // Validates that when an activity output exceeds MaxPayloadBytes, the orchestration
+    // fails gracefully instead of getting stuck in an infinite retry loop.
+    [Fact]
+    public async Task ActivityOutputExceedsMaxPayload_OrchestrationFailsGracefully()
+    {
+        // Activity returns output larger than MaxPayloadBytes cap
+        string oversizedOutput = new string('X', 3000);
+        TaskName orch = nameof(ActivityOutputExceedsMaxPayload_OrchestrationFailsGracefully);
+        TaskName activity = "ProduceOversized";
+
+        InMemoryPayloadStore fakeStore = new InMemoryPayloadStore();
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(
+            worker =>
+            {
+                worker.AddTasks(tasks => tasks
+                    .AddOrchestratorFunc<object?, string>(
+                        orch,
+                        async (ctx, _) => await ctx.CallActivityAsync<string>(activity))
+                    .AddActivityFunc<string>(activity, (ctx) => Task.FromResult(oversizedOutput)));
+
+                worker.UseExternalizedPayloads();
+                worker.Services.AddSingleton<PayloadStore>(fakeStore);
+            },
+            client =>
+            {
+                client.UseExternalizedPayloads();
+                client.Services.AddSingleton<PayloadStore>(fakeStore);
+            },
+            services =>
+            {
+                services.AddExternalizedPayloadStore(opts =>
+                {
+                    opts.ThresholdBytes = 1024;
+                    opts.MaxPayloadBytes = 2048;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+            });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orch);
+        OrchestrationMetadata result = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        // The orchestration should fail (not hang forever) because the activity's oversized
+        // output causes payload externalization to throw (e.g. PayloadStorageException or
+        // RequestFailedException), which is caught and converted into a non-retriable FailureDetails.
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, result.RuntimeStatus);
+        Assert.NotNull(result.FailureDetails);
+        Assert.Contains("exceeds the configured maximum", result.FailureDetails!.ErrorMessage);
+    }
+
+    // Validates that when an orchestration's own output exceeds MaxPayloadBytes,
+    // it fails gracefully instead of getting stuck in an infinite retry loop.
+    [Fact]
+    public async Task OrchestrationOutputExceedsMaxPayload_FailsGracefully()
+    {
+        // Orchestration returns output larger than MaxPayloadBytes cap
+        string oversizedOutput = new string('Y', 3000);
+        TaskName orch = nameof(OrchestrationOutputExceedsMaxPayload_FailsGracefully);
+
+        InMemoryPayloadStore fakeStore = new InMemoryPayloadStore();
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(
+            worker =>
+            {
+                worker.AddTasks(tasks => tasks.AddOrchestratorFunc<object?, string>(
+                    orch,
+                    (ctx, _) => Task.FromResult(oversizedOutput)));
+
+                worker.UseExternalizedPayloads();
+                worker.Services.AddSingleton<PayloadStore>(fakeStore);
+            },
+            client =>
+            {
+                client.UseExternalizedPayloads();
+                client.Services.AddSingleton<PayloadStore>(fakeStore);
+            },
+            services =>
+            {
+                services.AddExternalizedPayloadStore(opts =>
+                {
+                    opts.ThresholdBytes = 1024;
+                    opts.MaxPayloadBytes = 2048;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+            });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orch);
+        OrchestrationMetadata result = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        // The orchestration should fail (not hang forever) because the oversized output
+        // triggers a PayloadStorageException in the interceptor, which replaces the response
+        // with a non-retriable failure completion directly (no exception escapes to the Processor).
+        Assert.Equal(OrchestrationRuntimeStatus.Failed, result.RuntimeStatus);
+        Assert.NotNull(result.FailureDetails);
+        Assert.Contains("exceeds the configured maximum", result.FailureDetails!.ErrorMessage);
+    }
+
+    // Validates that activity output larger than the chunk size limit (3.9MB) but within MaxPayloadBytes
+    // is externalized successfully when large payload is enabled, rather than being rejected by
+    // ValidateActionsSize pre-send validation.
+    [Fact]
+    public async Task LargeActivityOutput_ExceedsChunkSize_ExternalizesWithLP()
+    {
+        // 5MB output exceeds 3.9MB chunk limit but is within 10MB default MaxPayloadBytes
+        string largeOutput = new string('L', 5 * 1024 * 1024);
+        TaskName orch = nameof(LargeActivityOutput_ExceedsChunkSize_ExternalizesWithLP);
+        TaskName activity = "ProduceLarge5MB";
+
+        InMemoryPayloadStore fakeStore = new InMemoryPayloadStore();
+
+        await using HostTestLifetime server = await this.StartWorkerAsync(
+            worker =>
+            {
+                worker.AddTasks(tasks => tasks
+                    .AddOrchestratorFunc<object?, string>(
+                        orch,
+                        async (ctx, _) => await ctx.CallActivityAsync<string>(activity))
+                    .AddActivityFunc<string>(activity, (ctx) => Task.FromResult(largeOutput)));
+
+                worker.UseExternalizedPayloads();
+                worker.Services.AddSingleton<PayloadStore>(fakeStore);
+            },
+            client =>
+            {
+                client.UseExternalizedPayloads();
+                client.Services.AddSingleton<PayloadStore>(fakeStore);
+            },
+            services =>
+            {
+                services.AddExternalizedPayloadStore(opts =>
+                {
+                    opts.ThresholdBytes = 1024;
+                    opts.ContainerName = "test";
+                    opts.ConnectionString = "UseDevelopmentStorage=true";
+                });
+            });
+
+        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(orch);
+        OrchestrationMetadata completed = await server.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+
+        // Should complete successfully — the interceptor externalizes the 5MB payload.
+        // ValidateActionsSize is skipped because the worker has the LargePayloads capability.
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, completed.RuntimeStatus);
+        string? output = completed.ReadOutputAs<string>();
+        Assert.Equal(largeOutput.Length, output?.Length);
     }
 
     class InMemoryPayloadStore : PayloadStore

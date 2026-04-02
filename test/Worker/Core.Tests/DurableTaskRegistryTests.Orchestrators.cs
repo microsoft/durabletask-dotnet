@@ -109,25 +109,6 @@ public partial class DurableTaskRegistryTests
     }
 
     [Fact]
-    public void BuildFactory_SingleVersionedOrchestrator_CanCreateByLogicalName()
-    {
-        // Arrange
-        DurableTaskRegistry registry = new();
-        registry.AddOrchestrator<VersionedTestOrchestrator>();
-        IDurableTaskFactory factory = registry.BuildFactory();
-
-        // Act
-        bool found = factory.TryCreateOrchestrator(
-            "VersionedWorkflow",
-            Mock.Of<IServiceProvider>(),
-            out ITaskOrchestrator? actual);
-
-        // Assert
-        found.Should().BeTrue();
-        actual.Should().BeOfType<VersionedTestOrchestrator>();
-    }
-
-    [Fact]
     public void AddOrchestrator_Generic1_Invalid()
     {
         DurableTaskRegistry registry = new();
@@ -205,16 +186,6 @@ public partial class DurableTaskRegistryTests
     }
 
     class TestOrchestrator : TaskOrchestrator<object, object>
-    {
-        public override Task<object> RunAsync(TaskOrchestrationContext context, object input)
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    [DurableTask("VersionedWorkflow")]
-    [DurableTaskVersion("v1")]
-    sealed class VersionedTestOrchestrator : TaskOrchestrator<object, object>
     {
         public override Task<object> RunAsync(TaskOrchestrationContext context, object input)
         {

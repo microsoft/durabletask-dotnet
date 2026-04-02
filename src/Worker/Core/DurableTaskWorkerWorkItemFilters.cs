@@ -46,10 +46,10 @@ public class DurableTaskWorkerWorkItemFilters
         return new DurableTaskWorkerWorkItemFilters
         {
             Orchestrations = registry.Orchestrators
-                .GroupBy(orchestration => orchestration.Key.Name, StringComparer.OrdinalIgnoreCase)
-                .Select(group => new OrchestrationFilter
+                .Where(orchestration => orchestration.Key.Version.Length == 0)
+                .Select(orchestration => new OrchestrationFilter
                 {
-                    Name = group.Key,
+                    Name = orchestration.Key.Name,
                     Versions = versions,
                 })
                 .ToList(),

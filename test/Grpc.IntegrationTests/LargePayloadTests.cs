@@ -684,8 +684,9 @@ public class LargePayloadTests(ITestOutputHelper output, GrpcSidecarFixture side
         OrchestrationMetadata result = await server.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, this.TimeoutToken);
 
-        // The orchestration should fail (not hang forever) because the activity's
-        // oversized output triggers PayloadStorageException which is caught and converted to a failure.
+        // The orchestration should fail (not hang forever) because the activity's oversized
+        // output causes payload externalization to throw (e.g. PayloadStorageException or
+        // RequestFailedException), which is caught and converted into a non-retriable FailureDetails.
         Assert.Equal(OrchestrationRuntimeStatus.Failed, result.RuntimeStatus);
         Assert.NotNull(result.FailureDetails);
         Assert.Contains("exceeds the configured maximum", result.FailureDetails!.ErrorMessage);

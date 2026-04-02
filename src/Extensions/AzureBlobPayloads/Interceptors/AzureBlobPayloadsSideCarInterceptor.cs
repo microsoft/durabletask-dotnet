@@ -420,11 +420,14 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             return true;
         }
 
-        // Azure SDK does not retry 4xx errors (except 408/429). If we receive a 4xx
-        // RequestFailedException, it means the request is fundamentally invalid
+        // Azure SDK retries 408 (Request Timeout) and 429 (Too Many Requests) automatically
+        // (see ResponseClassifier.IsRetriableResponse in Azure.Core). All other 4xx status codes
+        // are NOT retried, meaning the request is fundamentally invalid
         // (e.g., 401 bad credentials, 403 missing RBAC role, 404 account/container not found).
         // These will never succeed on retry with the same configuration.
-        if (ex is RequestFailedException rfe && rfe.Status >= 400 && rfe.Status < 500)
+        if (ex is RequestFailedException rfe
+            && rfe.Status >= 400 && rfe.Status < 500
+            && rfe.Status != 408 && rfe.Status != 429)
         {
             return true;
         }

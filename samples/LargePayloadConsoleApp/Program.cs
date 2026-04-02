@@ -215,7 +215,7 @@ builder.Services.AddDurableTaskWorker(b =>
         });
 
         // Scenario 9: 3x 13MB activity inputs (chunked orchestration completion)
-        tasks.AddOrchestratorFunc<object?, int>("ThreelargeActivities", async (ctx, _) =>
+        tasks.AddOrchestratorFunc<object?, int>("ThreeLargeActivities", async (ctx, _) =>
         {
             var t1 = ctx.CallActivityAsync<string>("Echo13MB", new string('A', 13 * 1024 * 1024));
             var t2 = ctx.CallActivityAsync<string>("Echo13MB", new string('B', 13 * 1024 * 1024));
@@ -389,7 +389,7 @@ Console.WriteLine(csResult.RuntimeStatus == OrchestrationRuntimeStatus.Completed
 // Scenario 9: 3x 13MB activity inputs (chunked orchestration completion with LP)
 Console.WriteLine();
 Console.WriteLine("[Scenario 9] 3x 13MB activity inputs (chunked orch complete)");
-string threeId = await client.ScheduleNewOrchestrationInstanceAsync("ThreelargeActivities");
+string threeId = await client.ScheduleNewOrchestrationInstanceAsync("ThreeLargeActivities");
 OrchestrationMetadata threeResult = await client.WaitForInstanceCompletionAsync(threeId, getInputsAndOutputs: true, cts.Token);
 Console.WriteLine("  Status: " + threeResult.RuntimeStatus);
 int totalLen = threeResult.ReadOutputAs<int>();

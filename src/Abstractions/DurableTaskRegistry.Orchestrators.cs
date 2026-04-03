@@ -19,7 +19,17 @@ public partial class DurableTaskRegistry
         ITaskOrchestrator singleton
         TaskName and ITaskOrchestrator singleton
 
-      by func/action:
+      by func/action (with explicit name):
+        Func{Context, Input, Task{Output}}
+        Func{Context, Input, Task}
+        Func{Context, Input, Output}
+        Func{Context, Task{Output}}
+        Func{Context, Task}
+        Func{Context, Output}
+        Action{Context, TInput}
+        Action{Context}
+
+      by func/action (name inferred from method or [DurableTask] attribute):
         Func{Context, Input, Task{Output}}
         Func{Context, Input, Task}
         Func{Context, Input, Output}
@@ -219,5 +229,139 @@ public partial class DurableTaskRegistry
             orchestrator(context);
             return CompletedNullTask;
         });
+    }
+
+    /// <summary>
+    /// Registers an orchestrator factory, where the implementation is <paramref name="orchestrator" />.
+    /// The name is inferred from a <see cref="DurableTaskAttribute"/> on the method, or the method name.
+    /// </summary>
+    /// <typeparam name="TInput">The orchestrator input type.</typeparam>
+    /// <typeparam name="TOutput">The orchestrator output type.</typeparam>
+    /// <param name="orchestrator">The orchestrator implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    public DurableTaskRegistry AddOrchestratorFunc<TInput, TOutput>(
+        Func<TaskOrchestrationContext, TInput, Task<TOutput>> orchestrator)
+    {
+        Check.NotNull(orchestrator);
+        return this.AddOrchestratorFunc(GetTaskNameFromDelegate(orchestrator), orchestrator);
+    }
+
+    /// <summary>
+    /// Registers an orchestrator factory, where the implementation is <paramref name="orchestrator" />.
+    /// The name is inferred from a <see cref="DurableTaskAttribute"/> on the method, or the method name.
+    /// </summary>
+    /// <typeparam name="TInput">The orchestrator input type.</typeparam>
+    /// <typeparam name="TOutput">The orchestrator output type.</typeparam>
+    /// <param name="orchestrator">The orchestrator implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    public DurableTaskRegistry AddOrchestratorFunc<TInput, TOutput>(
+        Func<TaskOrchestrationContext, TInput, TOutput> orchestrator)
+    {
+        Check.NotNull(orchestrator);
+        return this.AddOrchestratorFunc(GetTaskNameFromDelegate(orchestrator), orchestrator);
+    }
+
+    /// <summary>
+    /// Registers an orchestrator factory, where the implementation is <paramref name="orchestrator" />.
+    /// The name is inferred from a <see cref="DurableTaskAttribute"/> on the method, or the method name.
+    /// </summary>
+    /// <typeparam name="TInput">The orchestrator input type.</typeparam>
+    /// <param name="orchestrator">The orchestrator implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    public DurableTaskRegistry AddOrchestratorFunc<TInput>(
+        Func<TaskOrchestrationContext, TInput, Task> orchestrator)
+    {
+        Check.NotNull(orchestrator);
+        return this.AddOrchestratorFunc(GetTaskNameFromDelegate(orchestrator), orchestrator);
+    }
+
+    /// <summary>
+    /// Registers an orchestrator factory, where the implementation is <paramref name="orchestrator" />.
+    /// The name is inferred from a <see cref="DurableTaskAttribute"/> on the method, or the method name.
+    /// </summary>
+    /// <typeparam name="TOutput">The orchestrator output type.</typeparam>
+    /// <param name="orchestrator">The orchestrator implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    public DurableTaskRegistry AddOrchestratorFunc<TOutput>(
+        Func<TaskOrchestrationContext, Task<TOutput>> orchestrator)
+    {
+        Check.NotNull(orchestrator);
+        return this.AddOrchestratorFunc(GetTaskNameFromDelegate(orchestrator), orchestrator);
+    }
+
+    /// <summary>
+    /// Registers an orchestrator factory, where the implementation is <paramref name="orchestrator" />.
+    /// The name is inferred from a <see cref="DurableTaskAttribute"/> on the method, or the method name.
+    /// </summary>
+    /// <param name="orchestrator">The orchestrator implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    public DurableTaskRegistry AddOrchestratorFunc(Func<TaskOrchestrationContext, Task> orchestrator)
+    {
+        Check.NotNull(orchestrator);
+        return this.AddOrchestratorFunc(GetTaskNameFromDelegate(orchestrator), orchestrator);
+    }
+
+    /// <summary>
+    /// Registers an orchestrator factory, where the implementation is <paramref name="orchestrator" />.
+    /// The name is inferred from a <see cref="DurableTaskAttribute"/> on the method, or the method name.
+    /// </summary>
+    /// <typeparam name="TOutput">The orchestrator output type.</typeparam>
+    /// <param name="orchestrator">The orchestrator implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    public DurableTaskRegistry AddOrchestratorFunc<TOutput>(
+        Func<TaskOrchestrationContext, TOutput> orchestrator)
+    {
+        Check.NotNull(orchestrator);
+        return this.AddOrchestratorFunc(GetTaskNameFromDelegate(orchestrator), orchestrator);
+    }
+
+    /// <summary>
+    /// Registers an orchestrator factory, where the implementation is <paramref name="orchestrator" />.
+    /// The name is inferred from a <see cref="DurableTaskAttribute"/> on the method, or the method name.
+    /// </summary>
+    /// <typeparam name="TInput">The orchestrator input type.</typeparam>
+    /// <param name="orchestrator">The orchestrator implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    public DurableTaskRegistry AddOrchestratorFunc<TInput>(
+        Action<TaskOrchestrationContext, TInput> orchestrator)
+    {
+        Check.NotNull(orchestrator);
+        return this.AddOrchestratorFunc(GetTaskNameFromDelegate(orchestrator), orchestrator);
+    }
+
+    /// <summary>
+    /// Registers an orchestrator factory, where the implementation is <paramref name="orchestrator" />.
+    /// The name is inferred from a <see cref="DurableTaskAttribute"/> on the method, or the method name.
+    /// </summary>
+    /// <param name="orchestrator">The orchestrator implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the name cannot be inferred from the delegate.
+    /// </exception>
+    public DurableTaskRegistry AddOrchestratorFunc(Action<TaskOrchestrationContext> orchestrator)
+    {
+        Check.NotNull(orchestrator);
+        return this.AddOrchestratorFunc(GetTaskNameFromDelegate(orchestrator), orchestrator);
     }
 }

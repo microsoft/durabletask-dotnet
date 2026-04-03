@@ -148,6 +148,12 @@ public abstract class TaskEntity<TState> : ITaskEntity
     /// <remarks>The default implementation uses <see cref="Activator.CreateInstance()"/>.</remarks>
     protected virtual TState InitializeState(TaskEntityOperation entityOperation)
     {
+        // Throw if TState is a string, since strings are immutable and don't support dynamic creation of new instances.
+        if (typeof(TState) == typeof(string))
+        {
+            throw new InvalidOperationException("Entity state cannot be a string. Use a class or struct instead.");
+        }
+
         if (Nullable.GetUnderlyingType(typeof(TState)) is Type t)
         {
             // Activator.CreateInstance<Nullable<T>>() returns null. To avoid this, we will instantiate via underlying

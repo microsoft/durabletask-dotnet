@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+
+
+## v1.23.2
+- fix: improve large payload error handling — better error message and prevent infinite retry and fix conflict with auto chunking ([#691](https://github.com/microsoft/durabletask-dotnet/pull/691))
+- Bump dotnet-sdk from 10.0.103 to 10.0.201 ([#673](https://github.com/microsoft/durabletask-dotnet/pull/673))
+- Bump Microsoft.Azure.DurableTask.Core from 3.7.0 to 3.7.1 ([#685](https://github.com/microsoft/durabletask-dotnet/pull/685))
+- feat(copilot): add evidence-based Copilot customizations ([#690](https://github.com/microsoft/durabletask-dotnet/pull/690))
+
+## v1.23.1
+- Fix CHANGELOG line ending preservation in Prepare Release workflow ([#687](https://github.com/microsoft/durabletask-dotnet/pull/687))
+- Add Prepare Release GitHub Action for automated release kickoff ([#686](https://github.com/microsoft/durabletask-dotnet/pull/686))
+- Add ContinueAsNewOptions with NewVersion support ([#682](https://github.com/microsoft/durabletask-dotnet/pull/682))
+- Fix concurrent timer race condition in InMemoryOrchestrationService ([#678](https://github.com/microsoft/durabletask-dotnet/pull/678))
+
 ## v1.23.0
 - Generate extension methods in task namespace instead of Microsoft.DurableTask ([#538](https://github.com/microsoft/durabletask-dotnet/pull/538))
 - Fix #668: Change work item filters from auto opt-in to explicit opt-in ([#669](https://github.com/microsoft/durabletask-dotnet/pull/669))

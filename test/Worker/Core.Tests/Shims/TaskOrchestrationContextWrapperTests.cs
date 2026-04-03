@@ -46,6 +46,112 @@ public class TaskOrchestrationContextWrapperTests
         wrapper.GetInput<T>().Should().Be(input);
     }
 
+    [Fact]
+    public void ContinueAsNew_WithoutVersion_CallsInnerContextWithoutVersion()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        wrapper.ContinueAsNew("new-input", preserveUnprocessedEvents: false);
+
+        // Assert
+        innerContext.LastContinueAsNewInput.Should().Be("new-input");
+        innerContext.LastContinueAsNewVersion.Should().BeNull();
+    }
+
+    [Fact]
+    public void ContinueAsNew_WithVersion_CallsInnerContextWithVersion()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        wrapper.ContinueAsNew(new ContinueAsNewOptions
+        {
+            NewVersion = "v2",
+            NewInput = "new-input",
+            PreserveUnprocessedEvents = false,
+        });
+
+        // Assert
+        innerContext.LastContinueAsNewInput.Should().Be("new-input");
+        innerContext.LastContinueAsNewVersion.Should().Be("v2");
+    }
+
+    [Fact]
+    public void ContinueAsNew_WithOptionsNoVersion_CallsInnerContextWithoutVersion()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        wrapper.ContinueAsNew(new ContinueAsNewOptions
+        {
+            NewInput = "new-input",
+            PreserveUnprocessedEvents = false,
+        });
+
+        // Assert
+        innerContext.LastContinueAsNewInput.Should().Be("new-input");
+        innerContext.LastContinueAsNewVersion.Should().BeNull();
+    }
+
+    sealed class TrackingOrchestrationContext : OrchestrationContext
+    {
+        public TrackingOrchestrationContext()
+        {
+            this.OrchestrationInstance = new()
+            {
+                InstanceId = Guid.NewGuid().ToString(),
+                ExecutionId = Guid.NewGuid().ToString(),
+            };
+        }
+
+        public object? LastContinueAsNewInput { get; private set; }
+
+        public string? LastContinueAsNewVersion { get; private set; }
+
+        public override void ContinueAsNew(object input)
+        {
+            this.LastContinueAsNewInput = input;
+            this.LastContinueAsNewVersion = null;
+        }
+
+        public override void ContinueAsNew(string newVersion, object input)
+        {
+            this.LastContinueAsNewInput = input;
+            this.LastContinueAsNewVersion = newVersion;
+        }
+
+        public override Task<T> CreateSubOrchestrationInstance<T>(string name, string version, object input)
+            => throw new NotImplementedException();
+
+        public override Task<T> CreateSubOrchestrationInstance<T>(string name, string version, string instanceId, object input)
+            => throw new NotImplementedException();
+
+        public override Task<T> CreateSubOrchestrationInstance<T>(string name, string version, string instanceId, object input, IDictionary<string, string> tags)
+            => throw new NotImplementedException();
+
+        public override Task<T> CreateTimer<T>(DateTime fireAt, T state)
+            => throw new NotImplementedException();
+
+        public override Task<T> CreateTimer<T>(DateTime fireAt, T state, CancellationToken cancelToken)
+            => throw new NotImplementedException();
+
+        public override Task<TResult> ScheduleTask<TResult>(string name, string version, params object[] parameters)
+            => throw new NotImplementedException();
+
+        public override void SendEvent(OrchestrationInstance orchestrationInstance, string eventName, object eventData)
+            => throw new NotImplementedException();
+    }
+
     class TestOrchestrationContext : OrchestrationContext
     {
         public TestOrchestrationContext()

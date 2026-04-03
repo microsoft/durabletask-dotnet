@@ -10,6 +10,9 @@ on:
     paths-ignore: [ '**.md' ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   smoke-tests:
     runs-on: ubuntu-latest

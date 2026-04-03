@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics.CodeAnalysis;
+using DurableTask.Core.Exceptions;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Grpc.Core;
@@ -323,8 +324,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             input: false,
             new StartOrchestrationOptions(instanceId).WithDedupeStatuses(OrchestrationRuntimeStatus.Completed));
 
-        await createAction.Should().ThrowAsync<RpcException>()
-            .Where(e => e.StatusCode == StatusCode.AlreadyExists);
+        await createAction.Should().ThrowAsync<OrchestrationAlreadyExistsException>();
     }
 
     [Fact]
@@ -400,8 +400,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
             input: false,
             new StartOrchestrationOptions(instanceId).WithDedupeStatuses(OrchestrationRuntimeStatus.Failed));
 
-        await createAction.Should().ThrowAsync<RpcException>()
-            .Where(e => e.StatusCode == StatusCode.AlreadyExists);
+        await createAction.Should().ThrowAsync<OrchestrationAlreadyExistsException>();
     }
 
     [Fact]
@@ -463,8 +462,7 @@ public class DurableTaskGrpcClientIntegrationTests : IntegrationTestBase
                 OrchestrationRuntimeStatus.Failed,
                 OrchestrationRuntimeStatus.Terminated));
 
-        await createAction.Should().ThrowAsync<RpcException>()
-            .Where(e => e.StatusCode == StatusCode.AlreadyExists);
+        await createAction.Should().ThrowAsync<OrchestrationAlreadyExistsException>();
     }
 
     [Fact]

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.ComponentModel;
+using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Internal;
@@ -73,10 +74,14 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <remarks>
     /// <para>All orchestrations must have a unique instance ID. You can provide an instance ID using the
     /// <paramref name="options"/> parameter or you can omit this and a random instance ID will be
-    /// generated for you automatically. If an orchestration with the specified instance ID already exists and is in a
-    /// non-terminal state (Pending, Running, etc.), then this operation may fail silently. However, if an orchestration
-    /// instance with this ID already exists in a terminal state (Completed, Terminated, Failed, etc.) then the instance
-    /// may be recreated automatically, depending on the configuration of the backend instance store.
+    /// generated for you automatically. If an orchestration with the specified instance ID already exists and its status
+    /// is not in the <see cref="StartOrchestrationOptions.DedupeStatuses"/> field of <paramref name="options"/>, then
+    /// a new orchestration may be recreated automatically, depending on the configuration of the backend instance store.
+    /// If the existing orchestration is in a non-terminal state (Pending, Running, etc.), then the orchestration will first
+    /// be terminated before the new orchestration is created.
+    /// A null <see cref="StartOrchestrationOptions.DedupeStatuses"/> field means the deduplication behavior will follow
+    /// whatever the default deduplication behavior of the backend instance store or implementation of this client is.
+    /// A non-null, empty field means that all statuses are reusable.
     /// </para><para>
     /// Orchestration instances started with this method will be created in the
     /// <see cref="OrchestrationRuntimeStatus.Pending"/> state and will transition to the
@@ -98,8 +103,9 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// </param>
     /// <param name="options">The options to start the new orchestration with.</param>
     /// <param name="cancellation">
-    /// The cancellation token. This only cancels enqueueing the new orchestration to the backend. Does not cancel the
-    /// orchestration once enqueued.
+    /// The cancellation token. This only cancels enqueueing the new orchestration to the backend, or waiting for the
+    /// termination of an existing non-terminal instance if its status is not in
+    /// <see cref="StartOrchestrationOptions.DedupeStatuses"/>. Does not cancel the orchestration once enqueued.
     /// </param>
     /// <returns>
     /// A task that completes when the orchestration instance is successfully scheduled. The value of this task is
@@ -107,6 +113,14 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <paramref name="options" />, the same value will be returned by the completed task.
     /// </returns>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="orchestratorName"/> is empty.</exception>
+    /// <exception cref="OrchestrationAlreadyExistsException">If an orchestration with status in
+    /// <see cref="StartOrchestrationOptions.DedupeStatuses"/> with this instance ID already exists.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown if <see cref="StartOrchestrationOptions.DedupeStatuses"/> contains 'Terminated', but also allows at
+    /// least one running status to be reusable. In this case, an existing orchestration with that running status
+    /// would be terminated, but the creation of the new orchestration would immediately fail due to the existing
+    /// orchestration now having status 'Terminated'.
+    /// </exception>
     public abstract Task<string> ScheduleNewOrchestrationInstanceAsync(
         TaskName orchestratorName,
         object? input = null,
@@ -412,6 +426,9 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <para>
     /// This method restarts an existing orchestration instance. If <paramref name="restartWithNewInstanceId"/> is <c>true</c>,
     /// a new instance ID will be generated for the restarted orchestration. If <c>false</c>, the original instance ID will be reused.
+    /// If the existing instance is not in a terminal state, depending on the specific implementation, either:
+    /// 1. The existing instance will be terminated before being restarted, or
+    /// 2. An <see cref="InvalidOperationException"/> will be thrown.
     /// </para><para>
     /// The restarted orchestration will use the same input data as the original instance. If the original orchestration
     /// instance is not found, an <see cref="ArgumentException"/> will be thrown.
@@ -426,8 +443,9 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// If <c>false</c>, the original instance ID will be reused.
     /// </param>
     /// <param name="cancellation">
-    /// The cancellation token. This only cancels enqueueing the restart request to the backend.
-    /// Does not abort restarting the orchestration once enqueued.
+    /// The cancellation token. This only cancels enqueueing the restart request to the backend,
+    /// or waiting for the termination of an existing non-terminal instance if the implementation supports
+    /// this behavior. Does not abort restarting the orchestration once enqueued.
     /// </param>
     /// <returns>
     /// A task that completes when the orchestration instance is successfully restarted.
@@ -437,7 +455,8 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// Thrown if an orchestration with the specified <paramref name="instanceId"/> was not found. </exception>
     /// <exception cref="InvalidOperationException">
     /// Thrown when attempting to restart an instance using the same instance Id
-    /// while the instance has not yet reached a completed or terminal state. </exception>
+    /// while the instance has not yet reached a completed or terminal state, in the case that
+    /// the implementation does not support terminating existing non-terminal instances before restarting.</exception>
     /// <exception cref="NotSupportedException">
     /// Thrown if the backend does not support restart operations. </exception>
     public virtual Task<string> RestartAsync(
@@ -529,7 +548,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         throw new NotSupportedException(
             $"{this.GetType()} does not support listing orchestration instance IDs filtered by completed time.");
     }
-    
+
     // TODO: Create task hub
 
     // TODO: Delete task hub

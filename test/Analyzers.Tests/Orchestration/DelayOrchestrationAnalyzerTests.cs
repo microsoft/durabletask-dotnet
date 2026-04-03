@@ -111,6 +111,46 @@ tasks.AddOrchestratorFunc(""HelloSequence"", context =>
         await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
     }
 
+    [Fact]
+    public async Task FuncOrchestratorInForEachWithVariableNameNoDiag()
+    {
+        string code = Wrapper.WrapFuncOrchestrator(@"
+string[] names = new[] { ""A"", ""B"" };
+foreach (string name in names)
+{
+    tasks.AddOrchestratorFunc<string, string>(
+        name,
+        async (ctx, input) =>
+        {
+            return await ctx.CallActivityAsync<string>(""Activity"", input);
+        });
+}
+");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
+    }
+
+    [Fact]
+    public async Task FuncOrchestratorInForEachWithVariableNameHasDiag()
+    {
+        string code = Wrapper.WrapFuncOrchestrator(@"
+string[] names = new[] { ""A"", ""B"" };
+foreach (string name in names)
+{
+    tasks.AddOrchestratorFunc(
+        name,
+        context =>
+        {
+            {|#0:Thread.Sleep(1000)|};
+        });
+}
+");
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("Main", "Thread.Sleep(int)", "Main");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+    }
+
     static DiagnosticResult BuildDiagnostic()
     {
         return VerifyCS.Diagnostic(DelayOrchestrationAnalyzer.DiagnosticId);

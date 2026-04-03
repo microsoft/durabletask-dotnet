@@ -1,5 +1,56 @@
 # Changelog
 
+## Unreleased
+
+
+
+
+## v1.23.3
+- fix: revert shared framework packages to 8.x for net8 Functions host compatibility ([#698](https://github.com/microsoft/durabletask-dotnet/pull/698))
+- Release v1.23.2 ([#693](https://github.com/microsoft/durabletask-dotnet/pull/693))
+
+## v1.23.2
+- fix: improve large payload error handling — better error message and prevent infinite retry and fix conflict with auto chunking ([#691](https://github.com/microsoft/durabletask-dotnet/pull/691))
+- Bump dotnet-sdk from 10.0.103 to 10.0.201 ([#673](https://github.com/microsoft/durabletask-dotnet/pull/673))
+- Bump Microsoft.Azure.DurableTask.Core from 3.7.0 to 3.7.1 ([#685](https://github.com/microsoft/durabletask-dotnet/pull/685))
+- feat(copilot): add evidence-based Copilot customizations ([#690](https://github.com/microsoft/durabletask-dotnet/pull/690))
+
+## v1.23.1
+- Fix CHANGELOG line ending preservation in Prepare Release workflow ([#687](https://github.com/microsoft/durabletask-dotnet/pull/687))
+- Add Prepare Release GitHub Action for automated release kickoff ([#686](https://github.com/microsoft/durabletask-dotnet/pull/686))
+- Add ContinueAsNewOptions with NewVersion support ([#682](https://github.com/microsoft/durabletask-dotnet/pull/682))
+- Fix concurrent timer race condition in InMemoryOrchestrationService ([#678](https://github.com/microsoft/durabletask-dotnet/pull/678))
+
+## v1.23.0
+- Generate extension methods in task namespace instead of Microsoft.DurableTask ([#538](https://github.com/microsoft/durabletask-dotnet/pull/538))
+- Fix #668: Change work item filters from auto opt-in to explicit opt-in ([#669](https://github.com/microsoft/durabletask-dotnet/pull/669))
+- Add `ReplaySafeLoggerFactory` for context wrappers ([#670](https://github.com/microsoft/durabletask-dotnet/pull/670))
+- Add NuGet publish job for Microsoft.DurableTask.Analyzers ([#662](https://github.com/microsoft/durabletask-dotnet/pull/662))
+- Bump Azure.Identity from 1.17.1 to 1.18.0 ([#656](https://github.com/microsoft/durabletask-dotnet/pull/656))
+- Bump Microsoft.Azure.Functions.Worker.Extensions.DurableTask from 1.12.1 to 1.15.0 ([#658](https://github.com/microsoft/durabletask-dotnet/pull/658))
+- Add missing input validation to SuspendInstanceAsync and ResumeInstanceAsync ([#652](https://github.com/microsoft/durabletask-dotnet/pull/652))
+- Add ExportHistory package to NuGet publish pipeline ([#651](https://github.com/microsoft/durabletask-dotnet/pull/651))
+- Add OpenTelemetry sample and update deps ([#637](https://github.com/microsoft/durabletask-dotnet/pull/637))
+- Fix build warnings and clean up exception message ([#647](https://github.com/microsoft/durabletask-dotnet/pull/647))
+
+## v1.22.0
+- Changing the default dedupe statuses behavior by sophiatev ([#622](https://github.com/microsoft/durabletask-dotnet/pull/622))
+- Bump Analyzers package version to 1.22.0 stable release (from 0.3.0)
+- Add DURABLE0011: ContinueAsNew warning for unbounded orchestration loops ([#660](https://github.com/microsoft/durabletask-dotnet/pull/660))
+
+## 1.21.0
+- Introduce WorkItemFilters into worker flow by halspang ([#616](https://github.com/microsoft/durabletask-dotnet/pull/616))
+- Fix Analyzers treating passed in variable argument name as null by wangbill ([#640](https://github.com/microsoft/durabletask-dotnet/pull/640))
+- Move DURABLE0009/0010 from Unshipped to Shipped for v0.3.0 by cgillum ([#641](https://github.com/microsoft/durabletask-dotnet/pull/641))
+
+## 1.20.1
+- Fix GrpcChannel handle leak in AzureManaged backendby nytian ([#629](https://github.com/microsoft/durabletask-dotnet/pull/629))
+
+## 1.20.0
+- Partial orchestration workitem completion support (merge after next dts dp release) by wangbill ([#514](https://github.com/microsoft/durabletask-dotnet/pull/514))
+- Export history job by wangbill ([#494](https://github.com/microsoft/durabletask-dotnet/pull/494))
+- Add dependency injection support to durabletasktesthost by Naiyuan Tian ([#613](https://github.com/microsoft/durabletask-dotnet/pull/613))
+
 ## v1.19.1
 - Throw an `InvalidOperationException` for purge requests on running orchestrations by sophiatev ([#611](https://github.com/microsoft/durabletask-dotnet/pull/611))
 - Validate c# identifiers in durabletask source generator by Copilot ([#578](https://github.com/microsoft/durabletask-dotnet/pull/578))
@@ -385,6 +436,7 @@ Microsoft.DurableTask.Generators
 ## v0.4.1-beta
 
 Initial public release
+
 
 
 

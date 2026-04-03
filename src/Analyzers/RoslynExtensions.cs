@@ -129,6 +129,11 @@ static class RoslynExtensions
     {
         LiteralExpressionSyntax? nameLiteralSyntax = argumentOperation.Syntax.DescendantNodes().OfType<LiteralExpressionSyntax>().FirstOrDefault();
 
+        if (nameLiteralSyntax is null)
+        {
+            return default;
+        }
+
         return semanticModel.GetConstantValue(nameLiteralSyntax, cancellationToken);
     }
 

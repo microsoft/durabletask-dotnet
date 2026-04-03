@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Abstractions;
@@ -13,6 +13,8 @@ namespace Microsoft.DurableTask;
 /// </summary>
 public abstract class TaskOrchestrationContext
 {
+    ILoggerFactory? replaySafeLoggerFactory;
+
     /// <summary>
     /// Gets the name of the task orchestration.
     /// </summary>
@@ -75,6 +77,25 @@ public abstract class TaskOrchestrationContext
     /// </summary>
     public virtual TaskOrchestrationEntityFeature Entities =>
         throw new NotSupportedException($"Durable entities are not supported by {this.GetType()}.");
+
+    /// <summary>
+    /// Gets an <see cref="ILoggerFactory"/> whose loggers are replay-safe, meaning they suppress log
+    /// output during orchestration replay. This is the recommended way to expose logger functionality
+    /// when wrapping a <see cref="TaskOrchestrationContext"/> instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Loggers created by this factory automatically check <see cref="IsReplaying"/> and suppress
+    /// duplicate log messages during replay. This is equivalent to calling
+    /// <see cref="CreateReplaySafeLogger(string)"/> for each logger category.
+    /// </para>
+    /// <para>
+    /// Context wrapper implementations can delegate <see cref="LoggerFactory"/> to this property
+    /// on the inner context: <c>protected override ILoggerFactory LoggerFactory =&gt; inner.ReplaySafeLoggerFactory;</c>.
+    /// </para>
+    /// </remarks>
+    public virtual ILoggerFactory ReplaySafeLoggerFactory
+        => this.replaySafeLoggerFactory ??= new ReplaySafeLoggerFactoryImpl(this);
 
     /// <summary>
     /// Gets the logger factory for this context.
@@ -374,16 +395,16 @@ public abstract class TaskOrchestrationContext
     /// replays when rebuilding state.
     /// </para><para>
     /// The results of any incomplete tasks will be discarded when an orchestrator calls
-    /// <see cref="ContinueAsNew"/>. For example, if a timer is scheduled and then <see cref="ContinueAsNew"/>
+    /// <see cref="ContinueAsNew(object?, bool)"/>. For example, if a timer is scheduled and then <see cref="ContinueAsNew(object?, bool)"/>
     /// is called before the timer fires, the timer event will be discarded. The only exception to this
     /// is external events. By default, if an external event is received by an orchestration but not yet
-    /// processed, the event is saved in the orchestration state unit it is received by a call to
+    /// processed, the event is saved in the orchestration state until it is received by a call to
     /// <see cref="WaitForExternalEvent{T}(string, CancellationToken)"/>. These events will continue to remain in memory
-    /// even after an orchestrator restarts using <see cref="ContinueAsNew"/>. You can disable this behavior and
+    /// even after an orchestrator restarts using <see cref="ContinueAsNew(object?, bool)"/>. You can disable this behavior and
     /// remove any saved external events by specifying <c>false</c> for the <paramref name="preserveUnprocessedEvents"/>
     /// parameter value.
     /// </para><para>
-    /// Orchestrator implementations should complete immediately after calling the <see cref="ContinueAsNew"/> method.
+    /// Orchestrator implementations should complete immediately after calling the <see cref="ContinueAsNew(object?, bool)"/> method.
     /// </para>
     /// </remarks>
     /// <param name="newInput">The JSON-serializable input data to re-initialize the instance with.</param>
@@ -393,6 +414,32 @@ public abstract class TaskOrchestrationContext
     /// external events will be discarded when the orchestration instance restarts.
     /// </param>
     public abstract void ContinueAsNew(object? newInput = null, bool preserveUnprocessedEvents = true);
+
+    /// <summary>
+    /// Restarts the orchestration with the specified options, clearing the history.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This overload accepts <see cref="ContinueAsNewOptions"/> to control the restart behavior,
+    /// including the new input, whether to preserve unprocessed events, and an optional new version.
+    /// When <see cref="ContinueAsNewOptions.NewVersion"/> is set, the framework uses the new version
+    /// to route the restarted instance to the appropriate orchestrator implementation, enabling
+    /// version-based dispatch.
+    /// </para><para>
+    /// The default implementation delegates to
+    /// <see cref="ContinueAsNew(object?, bool)"/> using the input and preserve-events values
+    /// from <paramref name="options"/>. Subclasses that support version-based
+    /// dispatch should override this method.
+    /// </para><para>
+    /// Orchestrator implementations should complete immediately after calling this method.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">Options for the continue-as-new operation.</param>
+    public virtual void ContinueAsNew(ContinueAsNewOptions options)
+    {
+        Check.NotNull(options);
+        this.ContinueAsNew(options.NewInput, options.PreserveUnprocessedEvents);
+    }
 
     /// <summary>
     /// Creates a new GUID that is safe for replay within an orchestration or operation.
@@ -412,17 +459,17 @@ public abstract class TaskOrchestrationContext
     /// <param name="categoryName">The logger's category name.</param>
     /// <returns>An instance of <see cref="ILogger"/> that is replay-safe.</returns>
     public virtual ILogger CreateReplaySafeLogger(string categoryName)
-        => new ReplaySafeLogger(this, this.LoggerFactory.CreateLogger(categoryName));
+        => new ReplaySafeLogger(this, this.GetUnwrappedLoggerFactory().CreateLogger(categoryName));
 
     /// <inheritdoc cref="CreateReplaySafeLogger(string)" />
     /// <param name="type">The type to derive the category name from.</param>
     public virtual ILogger CreateReplaySafeLogger(Type type)
-        => new ReplaySafeLogger(this, this.LoggerFactory.CreateLogger(type));
+        => new ReplaySafeLogger(this, this.GetUnwrappedLoggerFactory().CreateLogger(type));
 
     /// <inheritdoc cref="CreateReplaySafeLogger(string)" />
     /// <typeparam name="T">The type to derive category name from.</typeparam>
     public virtual ILogger CreateReplaySafeLogger<T>()
-        => new ReplaySafeLogger(this, this.LoggerFactory.CreateLogger<T>());
+        => new ReplaySafeLogger(this, this.GetUnwrappedLoggerFactory().CreateLogger<T>());
 
     /// <summary>
     /// Checks if the current orchestration version is greater than the specified version.
@@ -445,7 +492,31 @@ public abstract class TaskOrchestrationContext
         return TaskOrchestrationVersioningUtils.CompareVersions(this.Version, version);
     }
 
-    class ReplaySafeLogger : ILogger
+    ILoggerFactory GetUnwrappedLoggerFactory()
+    {
+        ILoggerFactory loggerFactory = this.LoggerFactory;
+        int depth = 0;
+
+        // When a wrapper context delegates LoggerFactory to inner.ReplaySafeLoggerFactory,
+        // the returned factory is already a ReplaySafeLoggerFactoryImpl. Unwrap it to avoid
+        // double-wrapping loggers with redundant replay-safe checks.
+        while (loggerFactory is ReplaySafeLoggerFactoryImpl wrappedFactory)
+        {
+            if (++depth > 10)
+            {
+                throw new InvalidOperationException(
+                    "Maximum unwrap depth exceeded while resolving the underlying ILoggerFactory. " +
+                    "Ensure the wrapper's LoggerFactory property delegates to the inner context's " +
+                    "ReplaySafeLoggerFactory (e.g., 'inner.ReplaySafeLoggerFactory'), not 'this.ReplaySafeLoggerFactory'.");
+            }
+
+            loggerFactory = wrappedFactory.UnderlyingLoggerFactory;
+        }
+
+        return loggerFactory;
+    }
+
+    sealed class ReplaySafeLogger : ILogger
     {
         readonly TaskOrchestrationContext context;
         readonly ILogger logger;
@@ -456,7 +527,9 @@ public abstract class TaskOrchestrationContext
             this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public IDisposable BeginScope<TState>(TState state) => this.logger.BeginScope(state);
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+            => this.logger.BeginScope(state);
 
         public bool IsEnabled(LogLevel logLevel) => this.logger.IsEnabled(logLevel);
 
@@ -471,6 +544,30 @@ public abstract class TaskOrchestrationContext
             {
                 this.logger.Log(logLevel, eventId, state, exception, formatter);
             }
+        }
+    }
+
+    sealed class ReplaySafeLoggerFactoryImpl : ILoggerFactory
+    {
+        readonly TaskOrchestrationContext context;
+
+        internal ReplaySafeLoggerFactoryImpl(TaskOrchestrationContext context)
+        {
+            this.context = context ?? throw new ArgumentNullException(nameof(context));
+        }
+
+        internal ILoggerFactory UnderlyingLoggerFactory => this.context.LoggerFactory;
+
+        public ILogger CreateLogger(string categoryName)
+            => new ReplaySafeLogger(this.context, this.context.GetUnwrappedLoggerFactory().CreateLogger(categoryName));
+
+        public void AddProvider(ILoggerProvider provider)
+            => throw new NotSupportedException(
+                "Adding providers to the replay-safe logger factory is not supported.");
+
+        public void Dispose()
+        {
+            // No-op: this wrapper does not own the underlying logger factory.
         }
     }
 }

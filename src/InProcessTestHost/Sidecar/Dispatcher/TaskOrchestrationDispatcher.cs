@@ -284,6 +284,11 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                     scheduleTaskAction.Version,
                     scheduleTaskAction.Input);
 
+                if (scheduleTaskAction.Tags is not null)
+                {
+                    scheduledEvent.Tags = new Dictionary<string, string>(scheduleTaskAction.Tags, StringComparer.Ordinal);
+                }
+
                 if (action is GrpcScheduleTaskOrchestratorAction { ParentTraceContext: not null } grpcAction)
                 {
                     scheduledEvent.ParentTraceContext ??= new(grpcAction.ParentTraceContext.TraceParent, grpcAction.ParentTraceContext.TraceState);

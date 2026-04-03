@@ -133,6 +133,12 @@ public static class ProtobufUtils
                         TraceState = taskScheduledEvent.ParentTraceContext.TraceState,
                     },
                 };
+
+                if (taskScheduledEvent.Tags is not null)
+                {
+                    payload.TaskScheduled.Tags.Add(taskScheduledEvent.Tags);
+                }
+
                 break;
             case EventType.TaskCompleted:
                 var taskCompletedEvent = (TaskCompletedEvent)e;
@@ -273,6 +279,7 @@ public static class ProtobufUtils
                     Id = a.Id,
                     Input = a.ScheduleTask.Input,
                     Name = a.ScheduleTask.Name,
+                    Tags = a.ScheduleTask.Tags,
                     Version = a.ScheduleTask.Version,
                     ParentTraceContext = a.ScheduleTask.ParentTraceContext is not null
                         ? new DistributedTraceContext(a.ScheduleTask.ParentTraceContext.TraceParent, a.ScheduleTask.ParentTraceContext.TraceState)

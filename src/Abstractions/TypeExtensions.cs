@@ -15,12 +15,28 @@ static class TypeExtensions
     /// <returns>The task name.</returns>
     public static TaskName GetTaskName(this Type type)
     {
-        // IMPORTANT: This logic needs to be kept consistent with the source generator logic
+        // IMPORTANT: This logic needs to be kept consistent with the source generator logic.
         Check.NotNull(type);
         return Attribute.GetCustomAttribute(type, typeof(DurableTaskAttribute)) switch
         {
             DurableTaskAttribute { Name.Name: not null and not "" } attr => attr.Name,
             _ => new TaskName(type.Name),
+        };
+    }
+
+    /// <summary>
+    /// Gets the durable task version for a type.
+    /// </summary>
+    /// <param name="type">The type to get the durable task version for.</param>
+    /// <returns>The durable task version.</returns>
+    internal static TaskVersion GetDurableTaskVersion(this Type type)
+    {
+        // IMPORTANT: This logic needs to be kept consistent with the source generator logic.
+        Check.NotNull(type);
+        return Attribute.GetCustomAttribute(type, typeof(DurableTaskVersionAttribute)) switch
+        {
+            DurableTaskVersionAttribute { Version.Version: not null and not "" } attr => attr.Version,
+            _ => default,
         };
     }
 }

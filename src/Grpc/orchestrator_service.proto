@@ -25,6 +25,7 @@ message ActivityRequest {
     OrchestrationInstance orchestrationInstance = 4;
     int32 taskId = 5;
     TraceContext parentTraceContext = 6;
+    map<string, string> tags = 7;
 }
 
 message ActivityResponse {
@@ -320,6 +321,10 @@ message SendEntityMessageAction {
     }
 }
 
+message RewindOrchestrationAction {
+    repeated HistoryEvent newHistory = 1;
+}
+
 message OrchestratorAction {
     int32 id = 1;
     oneof orchestratorActionType {
@@ -330,6 +335,7 @@ message OrchestratorAction {
         CompleteOrchestrationAction completeOrchestration = 6;
         TerminateOrchestrationAction terminateOrchestration = 7;
         SendEntityMessageAction sendEntityMessage = 8;
+        RewindOrchestrationAction rewindOrchestration = 9;
     }
 }
 

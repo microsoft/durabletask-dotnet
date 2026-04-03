@@ -22,6 +22,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.DurableTask.Worker" Key="$(StrongNamePublicKey)" />
     <InternalsVisibleTo Include="Microsoft.DurableTask.Client" Key="$(StrongNamePublicKey)" />
+    <InternalsVisibleTo Include="Microsoft.DurableTask.Abstractions.Tests" Key="$(StrongNamePublicKey)" />
   </ItemGroup>
 
 </Project>

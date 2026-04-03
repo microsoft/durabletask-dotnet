@@ -1,8 +1,10 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
@@ -50,6 +52,16 @@ namespace Microsoft.DurableTask.Generators
         /// </summary>
         const string InvalidEventNameDiagnosticId = "DURABLE3002";
 
+        /// <summary>
+        /// Diagnostic ID for duplicate standalone orchestrator or activity logical name + version combinations.
+        /// </summary>
+        const string DuplicateStandaloneOrchestratorVersionDiagnosticId = "DURABLE3003";
+
+        /// <summary>
+        /// Diagnostic ID for Azure Functions orchestrator or activity logical name collisions.
+        /// </summary>
+        const string DuplicateAzureFunctionsOrchestratorNameDiagnosticId = "DURABLE3004";
+
         static readonly DiagnosticDescriptor InvalidTaskNameRule = new(
             InvalidTaskNameDiagnosticId,
             title: "Invalid task name",
@@ -62,6 +74,22 @@ namespace Microsoft.DurableTask.Generators
             InvalidEventNameDiagnosticId,
             title: "Invalid event name",
             messageFormat: "The event name '{0}' is not a valid C# identifier. Event names must start with a letter or underscore and contain only letters, digits, and underscores.",
+            category: "DurableTask.Design",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        static readonly DiagnosticDescriptor DuplicateStandaloneOrchestratorVersionRule = new(
+            DuplicateStandaloneOrchestratorVersionDiagnosticId,
+            title: "Duplicate standalone durable task logical name and version",
+            messageFormat: "The standalone durable task logical name '{0}' with version '{1}' is declared more than once. Each logical name and version combination must be unique.",
+            category: "DurableTask.Design",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        static readonly DiagnosticDescriptor DuplicateAzureFunctionsOrchestratorNameRule = new(
+            DuplicateAzureFunctionsOrchestratorNameDiagnosticId,
+            title: "Azure Functions multi-version class-based tasks are not supported",
+            messageFormat: "Azure Functions projects cannot generate multiple class-based orchestrators or activities with the durable task name '{0}'. Use the standalone worker or keep a single logical task per name.",
             category: "DurableTask.Design",
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -214,7 +242,19 @@ namespace Microsoft.DurableTask.Generators
                 taskNameLocation = expression.GetLocation();
             }
 
-            return new DurableTaskTypeInfo(className, classNamespace, taskName, inputType, outputType, kind, taskNameLocation);
+            string taskVersion = string.Empty;
+            foreach (AttributeData attributeData in classType.GetAttributes())
+            {
+                if (attributeData.AttributeClass?.ToDisplayString() == "Microsoft.DurableTask.DurableTaskVersionAttribute"
+                    && attributeData.ConstructorArguments.Length > 0
+                    && attributeData.ConstructorArguments[0].Value is string version)
+                {
+                    taskVersion = version;
+                    break;
+                }
+            }
+
+            return new DurableTaskTypeInfo(className, classNamespace, taskName, inputType, outputType, kind, taskVersion, taskNameLocation);
         }
 
         static DurableEventTypeInfo? GetDurableEventTypeInfo(GeneratorSyntaxContext context)
@@ -338,10 +378,30 @@ namespace Microsoft.DurableTask.Generators
             IEnumerable<DurableTaskTypeInfo> validTasks = allTasks
                 .Where(task => IsValidCSharpIdentifier(task.TaskName));
 
+            Dictionary<string, DurableTaskTypeInfo> standaloneOrchestratorRegistrations = new(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, DurableTaskTypeInfo> standaloneActivityRegistrations = new(StringComparer.OrdinalIgnoreCase);
             foreach (DurableTaskTypeInfo task in validTasks)
             {
                 if (task.IsActivity)
                 {
+                    if (!isDurableFunctions)
+                    {
+                        string registrationKey = GetStandaloneTaskRegistrationKey(task.TaskName, task.TaskVersion);
+                        if (standaloneActivityRegistrations.ContainsKey(registrationKey))
+                        {
+                            Location location = task.TaskNameLocation ?? Location.None;
+                            Diagnostic diagnostic = Diagnostic.Create(
+                                DuplicateStandaloneOrchestratorVersionRule,
+                                location,
+                                task.TaskName,
+                                task.TaskVersion);
+                            context.ReportDiagnostic(diagnostic);
+                            continue;
+                        }
+
+                        standaloneActivityRegistrations.Add(registrationKey, task);
+                    }
+
                     activities.Add(task);
                 }
                 else if (task.IsEntity)
@@ -350,9 +410,96 @@ namespace Microsoft.DurableTask.Generators
                 }
                 else
                 {
+                    if (!isDurableFunctions)
+                    {
+                        string registrationKey = GetStandaloneTaskRegistrationKey(task.TaskName, task.TaskVersion);
+                        if (standaloneOrchestratorRegistrations.ContainsKey(registrationKey))
+                        {
+                            Location location = task.TaskNameLocation ?? Location.None;
+                            Diagnostic diagnostic = Diagnostic.Create(
+                                DuplicateStandaloneOrchestratorVersionRule,
+                                location,
+                                task.TaskName,
+                                task.TaskVersion);
+                            context.ReportDiagnostic(diagnostic);
+                            continue;
+                        }
+
+                        standaloneOrchestratorRegistrations.Add(registrationKey, task);
+                    }
+
                     orchestrators.Add(task);
                 }
             }
+
+            if (isDurableFunctions)
+            {
+                HashSet<string> existingAzureFunctionsOrchestratorNames = new(
+                    allFunctions
+                        .Where(function => function.Kind == DurableFunctionKind.Orchestration)
+                        .Select(function => function.Name),
+                    StringComparer.OrdinalIgnoreCase);
+
+                HashSet<DurableTaskTypeInfo> collidingAzureFunctionsOrchestrators = new(
+                    orchestrators
+                        .Where(task => existingAzureFunctionsOrchestratorNames.Contains(task.TaskName))
+                        .Concat(
+                            orchestrators
+                                .GroupBy(task => task.TaskName, StringComparer.OrdinalIgnoreCase)
+                                .Where(group => group.Count() > 1)
+                                .SelectMany(group => group)));
+
+                foreach (DurableTaskTypeInfo task in collidingAzureFunctionsOrchestrators)
+                {
+                    Location location = task.TaskNameLocation ?? Location.None;
+                    Diagnostic diagnostic = Diagnostic.Create(
+                        DuplicateAzureFunctionsOrchestratorNameRule,
+                        location,
+                        task.TaskName);
+                    context.ReportDiagnostic(diagnostic);
+                }
+
+                orchestrators = orchestrators
+                    .Where(task => !collidingAzureFunctionsOrchestrators.Contains(task))
+                    .ToList();
+
+                HashSet<string> existingAzureFunctionsActivityNames = new(
+                    allFunctions
+                        .Where(function => function.Kind == DurableFunctionKind.Activity)
+                        .Select(function => function.Name),
+                    StringComparer.OrdinalIgnoreCase);
+
+                HashSet<DurableTaskTypeInfo> collidingAzureFunctionsActivities = new(
+                    activities
+                        .Where(task => existingAzureFunctionsActivityNames.Contains(task.TaskName))
+                        .Concat(
+                            activities
+                                .GroupBy(task => task.TaskName, StringComparer.OrdinalIgnoreCase)
+                                .Where(group => group.Count() > 1)
+                                .SelectMany(group => group)));
+
+                foreach (DurableTaskTypeInfo task in collidingAzureFunctionsActivities)
+                {
+                    Location location = task.TaskNameLocation ?? Location.None;
+                    Diagnostic diagnostic = Diagnostic.Create(
+                        DuplicateAzureFunctionsOrchestratorNameRule,
+                        location,
+                        task.TaskName);
+                    context.ReportDiagnostic(diagnostic);
+                }
+
+                activities = activities
+                    .Where(task => !collidingAzureFunctionsActivities.Contains(task))
+                    .ToList();
+            }
+
+            Dictionary<string, int> standaloneOrchestratorCountsByTaskName = orchestrators
+                .GroupBy(task => task.TaskName, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+
+            Dictionary<string, int> standaloneActivityCountsByTaskName = activities
+                .GroupBy(task => task.TaskName, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
 
             // Filter out events with invalid names
             List<DurableEventTypeInfo> validEvents = allEvents
@@ -455,6 +602,11 @@ using Microsoft.Extensions.DependencyInjection;");
                 bool hasActivityTriggers = isMicrosoftDurableTask && activityTriggers.Count > 0;
                 bool hasEvents = eventsInNamespace != null && eventsInNamespace.Count > 0;
                 bool hasRegistration = isMicrosoftDurableTask && needsRegistrationMethod;
+                bool hasVersionedStandaloneOrchestratorHelpers = !isDurableFunctions
+                    && orchestratorsInNs.Any(task => !string.IsNullOrEmpty(task.TaskVersion));
+                bool hasVersionedStandaloneActivityHelpers = !isDurableFunctions
+                    && activitiesInNs.Any(task => !string.IsNullOrEmpty(task.TaskVersion));
+                bool hasVersionedStandaloneHelpers = hasVersionedStandaloneOrchestratorHelpers || hasVersionedStandaloneActivityHelpers;
 
                 if (!hasOrchestratorMethods && !hasActivityMethods && !hasEntityFunctions
                     && !hasActivityTriggers && !hasEvents && !hasRegistration)
@@ -485,18 +637,30 @@ namespace {targetNamespace}
                         AddOrchestratorFunctionDeclaration(sourceBuilder, orchestrator, targetNamespace);
                     }
 
-                    AddOrchestratorCallMethod(sourceBuilder, orchestrator, targetNamespace);
-                    AddSubOrchestratorCallMethod(sourceBuilder, orchestrator, targetNamespace);
+                    string helperSuffix = GetStandaloneTaskHelperSuffix(orchestrator, isDurableFunctions, standaloneOrchestratorCountsByTaskName);
+                    bool applyGeneratedVersion = !isDurableFunctions && !string.IsNullOrEmpty(orchestrator.TaskVersion);
+                    AddOrchestratorCallMethod(sourceBuilder, orchestrator, targetNamespace, helperSuffix, applyGeneratedVersion);
+                    AddSubOrchestratorCallMethod(sourceBuilder, orchestrator, targetNamespace, helperSuffix, applyGeneratedVersion);
                 }
 
                 foreach (DurableTaskTypeInfo activity in activitiesInNs)
                 {
-                    AddActivityCallMethod(sourceBuilder, activity, targetNamespace);
+                    string helperSuffix = GetStandaloneTaskHelperSuffix(activity, isDurableFunctions, standaloneActivityCountsByTaskName);
+                    bool applyGeneratedVersion = !isDurableFunctions && !string.IsNullOrEmpty(activity.TaskVersion);
+                    AddActivityCallMethod(sourceBuilder, activity, targetNamespace, helperSuffix, applyGeneratedVersion);
 
                     if (isDurableFunctions)
                     {
                         AddActivityFunctionDeclaration(sourceBuilder, activity, targetNamespace);
                     }
+                }
+
+                if (hasVersionedStandaloneHelpers)
+                {
+                    AddStandaloneGeneratedVersionHelperMethods(
+                        sourceBuilder,
+                        hasVersionedStandaloneOrchestratorHelpers,
+                        hasVersionedStandaloneActivityHelpers);
                 }
 
                 foreach (DurableTaskTypeInfo entity in entitiesInNs)
@@ -612,6 +776,50 @@ namespace {targetNamespace}
             return fullyQualifiedTypeName;
         }
 
+        static string GetStandaloneTaskHelperSuffix(DurableTaskTypeInfo task, bool isDurableFunctions, Dictionary<string, int> standaloneTaskCountsByTaskName)
+        {
+            if (isDurableFunctions
+                || string.IsNullOrEmpty(task.TaskVersion)
+                || !standaloneTaskCountsByTaskName.TryGetValue(task.TaskName, out int count)
+                || count <= 1)
+            {
+                return string.Empty;
+            }
+
+            return ToVersionSuffix(task.TaskVersion);
+        }
+
+        static string GetStandaloneTaskRegistrationKey(string taskName, string taskVersion)
+        {
+            return string.Concat(taskName, "\0", taskVersion);
+        }
+
+        static string ToVersionSuffix(string version)
+        {
+            if (string.IsNullOrEmpty(version))
+            {
+                return string.Empty;
+            }
+
+            StringBuilder suffixBuilder = new(version.Length + 1);
+            suffixBuilder.Append('_');
+            foreach (char c in version)
+            {
+                if (char.IsLetterOrDigit(c) || c == '_')
+                {
+                    suffixBuilder.Append(c);
+                }
+                else
+                {
+                    suffixBuilder.Append("_x").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture)).Append('_');
+                }
+            }
+
+            return suffixBuilder.ToString();
+        }
+
+        static string ToCSharpStringLiteral(string value) => SymbolDisplay.FormatLiteral(value, quote: true);
+
         static void AddOrchestratorFunctionDeclaration(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator, string targetNamespace)
         {
             string inputType = orchestrator.GetInputTypeForNamespace(targetNamespace);
@@ -626,7 +834,7 @@ namespace {targetNamespace}
         }}");
         }
 
-        static void AddOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator, string targetNamespace)
+        static void AddOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator, string targetNamespace, string helperSuffix, bool applyGeneratedVersion)
         {
             string inputType = orchestrator.GetInputTypeForNamespace(targetNamespace);
             string inputParameter = inputType + " input";
@@ -636,20 +844,23 @@ namespace {targetNamespace}
             }
 
             string simplifiedTypeName = SimplifyTypeName(orchestrator.TypeName, targetNamespace);
+            string optionsExpression = applyGeneratedVersion
+                ? $"ApplyGeneratedVersion(options, {ToCSharpStringLiteral(orchestrator.TaskVersion)})"
+                : "options";
 
             sourceBuilder.AppendLine($@"
         /// <summary>
         /// Schedules a new instance of the <see cref=""{simplifiedTypeName}""/> orchestrator.
         /// </summary>
         /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
-        public static Task<string> ScheduleNew{orchestrator.TaskName}InstanceAsync(
+        public static Task<string> ScheduleNew{orchestrator.TaskName}{helperSuffix}InstanceAsync(
             this IOrchestrationSubmitter client, {inputParameter}, StartOrchestrationOptions? options = null)
         {{
-            return client.ScheduleNewOrchestrationInstanceAsync(""{orchestrator.TaskName}"", input, options);
+            return client.ScheduleNewOrchestrationInstanceAsync(""{orchestrator.TaskName}"", input, {optionsExpression});
         }}");
         }
 
-        static void AddSubOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator, string targetNamespace)
+        static void AddSubOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator, string targetNamespace, string helperSuffix, bool applyGeneratedVersion)
         {
             string inputType = orchestrator.GetInputTypeForNamespace(targetNamespace);
             string outputType = orchestrator.GetOutputTypeForNamespace(targetNamespace);
@@ -660,20 +871,118 @@ namespace {targetNamespace}
             }
 
             string simplifiedTypeName = SimplifyTypeName(orchestrator.TypeName, targetNamespace);
+            string optionsExpression = applyGeneratedVersion
+                ? $"ApplyGeneratedVersion(options, {ToCSharpStringLiteral(orchestrator.TaskVersion)})"
+                : "options";
 
             sourceBuilder.AppendLine($@"
         /// <summary>
         /// Calls the <see cref=""{simplifiedTypeName}""/> sub-orchestrator.
         /// </summary>
         /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
-        public static Task<{outputType}> Call{orchestrator.TaskName}Async(
+        public static Task<{outputType}> Call{orchestrator.TaskName}{helperSuffix}Async(
             this TaskOrchestrationContext context, {inputParameter}, TaskOptions? options = null)
         {{
-            return context.CallSubOrchestratorAsync<{outputType}>(""{orchestrator.TaskName}"", input, options);
+            return context.CallSubOrchestratorAsync<{outputType}>(""{orchestrator.TaskName}"", input, {optionsExpression});
         }}");
         }
 
-        static void AddActivityCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo activity, string targetNamespace)
+        static void AddStandaloneGeneratedVersionHelperMethods(
+            StringBuilder sourceBuilder,
+            bool includeOrchestrationVersionHelpers,
+            bool includeActivityVersionHelpers)
+        {
+            if (includeOrchestrationVersionHelpers)
+            {
+                sourceBuilder.AppendLine(@"
+        static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
+        {
+            if (options?.Version is { Version: not null and not """" })
+            {
+                return options;
+            }
+
+            if (options is null)
+            {
+                return new StartOrchestrationOptions
+                {
+                    Version = version,
+                };
+            }
+
+            return new StartOrchestrationOptions(options)
+            {
+                Version = version,
+            };
+        }
+
+        static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
+        {
+            if (options is SubOrchestrationOptions { Version: { Version: not null and not """" } })
+            {
+                return options;
+            }
+
+            if (options is SubOrchestrationOptions subOrchestrationOptions)
+            {
+                return new SubOrchestrationOptions(subOrchestrationOptions)
+                {
+                    Version = version,
+                };
+            }
+
+            if (options is null)
+            {
+                return new SubOrchestrationOptions
+                {
+                    Version = version,
+                };
+            }
+
+            return new SubOrchestrationOptions(options)
+            {
+                Version = version,
+            };
+        }");
+            }
+
+            if (includeActivityVersionHelpers)
+            {
+                sourceBuilder.AppendLine(@"
+        static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
+        {
+            if (options is ActivityOptions activityOptions
+                && activityOptions.Version is TaskVersion explicitVersion
+                && !string.IsNullOrWhiteSpace(explicitVersion.Version))
+            {
+                return options;
+            }
+
+            if (options is ActivityOptions existingActivityOptions)
+            {
+                return new ActivityOptions(existingActivityOptions)
+                {
+                    Version = version,
+                };
+            }
+
+            if (options is null)
+            {
+                return new ActivityOptions
+                {
+                    Version = version,
+                };
+            }
+
+            return new ActivityOptions(options)
+            {
+                Version = version,
+            };
+        }");
+            }
+        }
+
+        static void AddActivityCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo activity, string targetNamespace, string helperSuffix, bool applyGeneratedVersion)
         {
             string inputType = activity.GetInputTypeForNamespace(targetNamespace);
             string outputType = activity.GetOutputTypeForNamespace(targetNamespace);
@@ -684,15 +993,18 @@ namespace {targetNamespace}
             }
 
             string simplifiedTypeName = SimplifyTypeName(activity.TypeName, targetNamespace);
+            string optionsExpression = applyGeneratedVersion
+                ? $"ApplyGeneratedActivityVersion(options, {ToCSharpStringLiteral(activity.TaskVersion)})"
+                : "options";
 
             sourceBuilder.AppendLine($@"
         /// <summary>
         /// Calls the <see cref=""{simplifiedTypeName}""/> activity.
         /// </summary>
         /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
-        public static Task<{outputType}> Call{activity.TaskName}Async(this TaskOrchestrationContext ctx, {inputParameter}, TaskOptions? options = null)
+        public static Task<{outputType}> Call{activity.TaskName}{helperSuffix}Async(this TaskOrchestrationContext ctx, {inputParameter}, TaskOptions? options = null)
         {{
-            return ctx.CallActivityAsync<{outputType}>(""{activity.TaskName}"", input, options);
+            return ctx.CallActivityAsync<{outputType}>(""{activity.TaskName}"", input, {optionsExpression});
         }}");
         }
 
@@ -868,12 +1180,14 @@ namespace {targetNamespace}
                 ITypeSymbol? inputType,
                 ITypeSymbol? outputType,
                 DurableTaskKind kind,
+                string taskVersion,
                 Location? taskNameLocation = null)
             {
                 this.TypeName = taskType;
                 this.Namespace = taskNamespace;
                 this.TaskName = taskName;
                 this.Kind = kind;
+                this.TaskVersion = taskVersion;
                 this.TaskNameLocation = taskNameLocation;
                 this.InputTypeSymbol = inputType;
                 this.OutputTypeSymbol = outputType;
@@ -882,6 +1196,7 @@ namespace {targetNamespace}
             public string TypeName { get; }
             public string Namespace { get; }
             public string TaskName { get; }
+            public string TaskVersion { get; }
             public DurableTaskKind Kind { get; }
             public Location? TaskNameLocation { get; }
             ITypeSymbol? InputTypeSymbol { get; }

@@ -35,32 +35,66 @@ public class DurableTaskWorkerWorkItemFilters
     /// <returns>A new instance of <see cref="DurableTaskWorkerWorkItemFilters"/> constructed from the provided registry.</returns>
     internal static DurableTaskWorkerWorkItemFilters FromDurableTaskRegistry(DurableTaskRegistry registry, DurableTaskWorkerOptions? workerOptions)
     {
-        // TODO: Support multiple versions per orchestration/activity.
-        // For now, fetch the version based on the versioning match strategy if defined. If undefined, default to null (all versions match).
-        IReadOnlyList<string> versions = [];
-        if (workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict)
-        {
-            versions = [workerOptions.Versioning.Version];
-        }
+        IReadOnlyList<string>? strictWorkerVersions =
+            workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict
+            && !string.IsNullOrWhiteSpace(workerOptions.Versioning.Version)
+                ? [workerOptions.Versioning.Version]
+                : null;
+
+        // Orchestration filters now group registrations by logical name. Version lists are only emitted when every
+        // registration for a logical name is explicitly versioned; otherwise, the filter conservatively matches all
+        // versions for that name.
+        List<OrchestrationFilter> orchestrationFilters = registry.Orchestrators
+            .GroupBy(orchestration => orchestration.Key.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                IReadOnlyList<string> versions = strictWorkerVersions ?? GetRegistrationVersions(group.Select(entry => entry.Key.Version));
+
+                return new OrchestrationFilter
+                {
+                    Name = group.Key,
+                    Versions = versions,
+                };
+            })
+            .ToList();
+
+        List<ActivityFilter> activityFilters = registry.Activities
+            .GroupBy(activity => activity.Key.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                IReadOnlyList<string> versions = strictWorkerVersions ?? GetRegistrationVersions(group.Select(entry => entry.Key.Version));
+
+                return new ActivityFilter
+                {
+                    Name = group.Key,
+                    Versions = versions,
+                };
+            })
+            .ToList();
 
         return new DurableTaskWorkerWorkItemFilters
         {
-            Orchestrations = registry.Orchestrators.Select(orchestration => new OrchestrationFilter
-            {
-                Name = orchestration.Key,
-                Versions = versions,
-            }).ToList(),
-            Activities = registry.Activities.Select(activity => new ActivityFilter
-            {
-                Name = activity.Key,
-                Versions = versions,
-            }).ToList(),
+            Orchestrations = orchestrationFilters,
+            Activities = activityFilters,
             Entities = registry.Entities.Select(entity => new EntityFilter
             {
                 // Entity names are normalized to lowercase in the backend.
                 Name = entity.Key.ToString(),
             }).ToList(),
         };
+
+        static IReadOnlyList<string> GetRegistrationVersions(IEnumerable<string?> versions)
+        {
+            bool hasUnversionedRegistration = versions.Any(string.IsNullOrWhiteSpace);
+            return hasUnversionedRegistration
+                ? []
+                : versions
+                    .Where(version => !string.IsNullOrWhiteSpace(version))
+                    .Cast<string>()
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+        }
     }
 
     /// <summary>

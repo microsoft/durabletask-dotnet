@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-
+- Add built-in HTTP activity extension (`Microsoft.DurableTask.Extensions.Http`) for standalone SDK — enables `CallHttpAsync` without Azure Functions host ([#697](https://github.com/microsoft/durabletask-dotnet/pull/697))
 
 ## v1.23.2
 - fix: improve large payload error handling — better error message and prevent infinite retry and fix conflict with auto chunking ([#691](https://github.com/microsoft/durabletask-dotnet/pull/691))

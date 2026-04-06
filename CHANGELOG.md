@@ -4,6 +4,11 @@
 
 
 
+
+## v1.23.3
+- fix: revert shared framework packages to 8.x for net8 Functions host compatibility ([#698](https://github.com/microsoft/durabletask-dotnet/pull/698))
+- Release v1.23.2 ([#693](https://github.com/microsoft/durabletask-dotnet/pull/693))
+
 ## v1.23.2
 - fix: improve large payload error handling — better error message and prevent infinite retry and fix conflict with auto chunking ([#691](https://github.com/microsoft/durabletask-dotnet/pull/691))
 - Bump dotnet-sdk from 10.0.103 to 10.0.201 ([#673](https://github.com/microsoft/durabletask-dotnet/pull/673))

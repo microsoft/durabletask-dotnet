@@ -684,11 +684,6 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                 else if (state.IsCompleted)
                 {
                     // Drop the message since we're completed
-                    // GOOD: The user-provided the instanceId
-                    // logger.LogWarning(
-                    //     "Dropped {eventType} message for instance '{instanceId}' because the orchestration has already completed.",
-                    //     message.Event.EventType,
-                    //     instanceId);
                     return;
                 }
 
@@ -701,12 +696,12 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
 
                 state.MessagesJson.Add(message);
 
-                if (!state.IsLoaded)
-                {
-                    // The orchestration isn't running, so schedule it to run now.
-                    // If it is running, it will be scheduled again automatically when it's released.
-                    this.readyToRunQueue.Schedule(state);
-                }
+                // Always schedule the instance when a message arrives. If the instance is
+                // currently loaded (being processed by the orchestrator), TakeNextAsync will
+                // gracefully skip it and ReleaseLock will re-schedule. This prevents a race
+                // where the message arrives between SaveState and ReleaseLock, causing the
+                // orchestration to hang indefinitely after ContinueAsNew.
+                this.readyToRunQueue.Schedule(state);
             }
         }
 
@@ -728,10 +723,8 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
             lock (state)
             {
                 state.IsLoaded = false;
-                if (state.MessagesJson.Count > 0)
+                if (state.MessagesJson.Count > 0 && !state.IsCompleted)
                 {
-                    // More messages came in while we were running. Or, messages were abandoned.
-                    // Put this back into the read-to-run queue!
                     this.readyToRunQueue.Schedule(state);
                 }
             }
@@ -897,7 +890,11 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                         {
                             if (state.IsLoaded)
                             {
-                                throw new InvalidOperationException("Should never load state that is already loaded.");
+                                // The instance is still being processed by the orchestrator
+                                // dispatcher. This can happen when AddMessage schedules an
+                                // instance that is currently loaded. Skip it — ReleaseLock
+                                // will re-schedule once the dispatcher releases the lock.
+                                continue;
                             }
 
                             state.IsLoaded = true;

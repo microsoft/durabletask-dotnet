@@ -1,0 +1,338 @@
+# ================================================================================================
+# Dependency Version Validation Pipeline
+# ================================================================================================
+# Validates that changes to dependency versions (Directory.Packages.props) do not break
+# the DurableTask SDK NuGet packages at build or runtime when consumed by Azure Functions.
+#
+# This pipeline:
+#   1. Packs all DurableTask SDK NuGet packages from source into a local feed
+#   2. Builds an Azure Functions v4 (.NET isolated) app using those local packages
+#   3. Starts Azurite (Azure Storage emulator)
+#   4. Runs the Function App and triggers a HelloCities orchestration
+#   5. Validates orchestration output and loaded SDK assembly versions
+# ================================================================================================
+
+name: Dependency Version Validation
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+    paths:
+      - 'Directory.Packages.props'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'eng/targets/Release.props'
+      - 'test/SmokeTests/DepValidation/**'
+  pull_request:
+    paths:
+      - 'Directory.Packages.props'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'eng/targets/Release.props'
+      - 'test/SmokeTests/DepValidation/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dep-validation-smoke-test:
+    name: '.NET Isolated Smoke Test (NuGet Packages)'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # ---- Checkout & SDK Setup ----
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET from global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Setup .NET 8.0 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # ---- Parse SDK Version ----
+      - name: Parse SDK version
+        id: version
+        run: |
+          set -e
+          PROPS_FILE="eng/targets/Release.props"
+          VERSION_PREFIX=$(grep -oP '<VersionPrefix>\K[^<]+' "$PROPS_FILE")
+          VERSION_SUFFIX=$(grep -oP '<VersionSuffix>\K[^<]+' "$PROPS_FILE" || true)
+
+          # Bump patch version to distinguish local build from published
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_PREFIX"
+          LOCAL_PATCH=$((PATCH + 1))
+          LOCAL_VERSION="${MAJOR}.${MINOR}.${LOCAL_PATCH}"
+          if [ -n "$VERSION_SUFFIX" ]; then
+            LOCAL_VERSION="${LOCAL_VERSION}-${VERSION_SUFFIX}"
+          fi
+
+          # Update the version in source so assembly versions are consistent
+          sed -i "s|<VersionPrefix>${VERSION_PREFIX}</VersionPrefix>|<VersionPrefix>${MAJOR}.${MINOR}.${LOCAL_PATCH}</VersionPrefix>|" "$PROPS_FILE"
+
+          echo "Published version: ${VERSION_PREFIX}"
+          echo "Local version: ${LOCAL_VERSION}"
+          echo "sdk_version=${LOCAL_VERSION}" >> "$GITHUB_OUTPUT"
+
+      # ---- Pack SDK Packages from Source ----
+      - name: Pack SDK packages from source
+        run: |
+          set -e
+          LOCAL_PACKAGES="test/SmokeTests/DepValidation/local-packages"
+          mkdir -p "$LOCAL_PACKAGES"
+
+          # Projects to pack (order matters for dependency resolution)
+          PROJECTS=(
+            "src/Abstractions/Abstractions.csproj"
+            "src/Client/Core/Client.csproj"
+            "src/Worker/Core/Worker.csproj"
+            "src/Grpc/Grpc.csproj"
+            "src/Client/Grpc/Client.Grpc.csproj"
+            "src/Worker/Grpc/Worker.Grpc.csproj"
+          )
+
+          # Build all projects first
+          for project in "${PROJECTS[@]}"; do
+            echo "Building $project..."
+            dotnet build "$project" -c Release
+          done
+
+          # Pack from build output
+          for project in "${PROJECTS[@]}"; do
+            echo "Packing $project..."
+            dotnet pack "$project" -c Release --no-build --output "$LOCAL_PACKAGES"
+          done
+
+          echo "Local packages:"
+          ls -la "$LOCAL_PACKAGES"
+
+      # ---- Verify Packed Packages ----
+      - name: Verify packed packages
+        env:
+          SDK_VERSION: ${{ steps.version.outputs.sdk_version }}
+        run: |
+          set -e
+          LOCAL_PACKAGES="test/SmokeTests/DepValidation/local-packages"
+          EXPECTED_PACKAGES=(
+            "Microsoft.DurableTask.Abstractions"
+            "Microsoft.DurableTask.Client"
+            "Microsoft.DurableTask.Client.Grpc"
+            "Microsoft.DurableTask.Worker"
+            "Microsoft.DurableTask.Worker.Grpc"
+            "Microsoft.DurableTask.Grpc"
+          )
+          MISSING=0
+          for pkg in "${EXPECTED_PACKAGES[@]}"; do
+            NUPKG="${pkg}.${SDK_VERSION}.nupkg"
+            if [ ! -f "$LOCAL_PACKAGES/$NUPKG" ]; then
+              echo "FAIL: Missing expected package: $NUPKG"
+              MISSING=$((MISSING + 1))
+            else
+              echo "  OK: $NUPKG"
+            fi
+          done
+          if [ $MISSING -gt 0 ]; then
+            echo "FAIL: $MISSING expected SDK package(s) missing for version $SDK_VERSION"
+            echo "Available packages:"
+            ls -1 "$LOCAL_PACKAGES"
+            exit 1
+          fi
+          echo "PASS: All ${#EXPECTED_PACKAGES[@]} SDK packages verified for version $SDK_VERSION"
+
+      # ---- Build Smoke Test App ----
+      - name: Build smoke test app
+        env:
+          SDK_VERSION: ${{ steps.version.outputs.sdk_version }}
+        run: |
+          set -e
+          cd test/SmokeTests/DepValidation
+          dotnet build DepValidationApp.csproj -c Release -p:SmokeTestSdkVersion=$SDK_VERSION -v normal
+
+      # ---- Verify SDK packages resolved from local-packages ----
+      - name: Verify SDK packages from local source
+        run: |
+          set -e
+          echo "Verifying SDK packages were restored from local-packages..."
+          ASSETS_FILE="test/SmokeTests/DepValidation/obj/project.assets.json"
+          for pkg in "Microsoft.DurableTask.Abstractions" "Microsoft.DurableTask.Client.Grpc" "Microsoft.DurableTask.Worker.Grpc"; do
+            if grep -qi "$pkg" "$ASSETS_FILE"; then
+              echo "  OK: $pkg found in project.assets.json"
+            else
+              echo "  FAIL: $pkg NOT found"
+              exit 1
+            fi
+          done
+          echo "PASS: SDK packages verified in build output."
+
+      # ---- Publish Smoke Test App ----
+      - name: Publish smoke test app
+        env:
+          SDK_VERSION: ${{ steps.version.outputs.sdk_version }}
+        run: |
+          set -e
+          cd test/SmokeTests/DepValidation
+          dotnet publish DepValidationApp.csproj -c Release -o ./publish -p:SmokeTestSdkVersion=$SDK_VERSION
+
+      # ---- Build Docker Image ----
+      - name: Build Docker image
+        run: |
+          docker build -t dep-validation-smoketest test/SmokeTests/DepValidation
+
+      # ---- Start Azurite ----
+      - name: Start Azurite
+        run: |
+          npm install -g azurite
+          docker network create smoketest-network 2>/dev/null || true
+          docker run -d \
+            --name azurite-smoketest \
+            --network smoketest-network \
+            -p 10000:10000 -p 10001:10001 -p 10002:10002 \
+            mcr.microsoft.com/azure-storage/azurite
+          # Wait for Azurite
+          for i in $(seq 1 30); do
+            if timeout 1 bash -c "echo > /dev/tcp/127.0.0.1/10000" 2>/dev/null; then
+              echo "Azurite is ready."
+              break
+            fi
+            if [ $i -eq 30 ]; then echo "FAIL: Azurite did not start"; exit 1; fi
+            sleep 1
+          done
+
+      # ---- Start Function App ----
+      - name: Start Function App and run smoke test
+        env:
+          SDK_VERSION: ${{ steps.version.outputs.sdk_version }}
+        run: |
+          set -e
+          CONTAINER_NAME="dep-validation-smoketest-app"
+          TIMEOUT=120
+
+          docker run -d \
+            --name $CONTAINER_NAME \
+            --network smoketest-network \
+            -p 8080:80 \
+            -e AzureWebJobsStorage="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite-smoketest:10000/devstoreaccount1;QueueEndpoint=http://azurite-smoketest:10001/devstoreaccount1;TableEndpoint=http://azurite-smoketest:10002/devstoreaccount1;" \
+            -e FUNCTIONS_WORKER_RUNTIME=dotnet-isolated \
+            dep-validation-smoketest
+
+          # Wait for the Function App to be ready
+          echo "Waiting for Function App to be ready..."
+          for i in $(seq 1 60); do
+            if curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/api/HelloCitiesOrchestration_HttpStart" 2>/dev/null | grep -qE "200|202|404"; then
+              echo "Function App is ready."
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "FAIL: Function App did not start within 120s"
+              docker logs $CONTAINER_NAME
+              exit 1
+            fi
+            sleep 2
+          done
+
+          # Give it a few more seconds to fully initialize
+          sleep 5
+
+          # Trigger orchestration
+          echo "Triggering HelloCities orchestration..."
+          HTTP_CODE=$(curl -s -o /tmp/start-response.json -w "%{http_code}" -X POST "http://localhost:8080/api/HelloCitiesOrchestration_HttpStart")
+          RESPONSE=$(cat /tmp/start-response.json)
+          echo "HTTP status: $HTTP_CODE"
+          echo "Start response: $RESPONSE"
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "202" ]; then
+            echo "FAIL: Orchestration start returned HTTP $HTTP_CODE"
+            docker logs $CONTAINER_NAME
+            exit 1
+          fi
+          STATUS_URL=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('statusQueryGetUri') or d.get('StatusQueryGetUri'))")
+          # Replace localhost references in status URL to work from host
+          STATUS_URL=$(echo "$STATUS_URL" | sed 's|localhost|localhost:8080|g' | sed 's|:80/|:8080/|g')
+          INSTANCE_ID=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id') or d.get('Id'))")
+          echo "Instance ID: $INSTANCE_ID"
+          echo "Status URL: $STATUS_URL"
+
+          # Poll for completion
+          ELAPSED=0
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            sleep 2
+            ELAPSED=$((ELAPSED + 2))
+            STATUS_RESPONSE=$(curl -s "$STATUS_URL")
+            RUNTIME_STATUS=$(echo "$STATUS_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('runtimeStatus') or d.get('RuntimeStatus') or '')")
+
+            if [ "$RUNTIME_STATUS" = "Completed" ]; then
+              OUTPUT=$(echo "$STATUS_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('output') or d.get('Output') or '')")
+              echo "Orchestration completed in ${ELAPSED}s. Output: $OUTPUT"
+              if echo "$OUTPUT" | grep -q "Hello, Tokyo!" && echo "$OUTPUT" | grep -q "Hello, London!" && echo "$OUTPUT" | grep -q "Hello, Seattle!"; then
+                echo "PASS: HelloCities orchestration returned expected output."
+
+                # Verify loaded SDK assembly versions
+                echo "Verifying loaded SDK assembly versions..."
+                VERSION_JSON=$(curl -s "http://localhost:8080/api/SdkVersionCheck")
+                echo "Loaded SDK assembly versions: $VERSION_JSON"
+                VERSION_MISMATCH=0
+                for asm_name in $(echo "$VERSION_JSON" | python3 -c "import sys,json; [print(k) for k in json.load(sys.stdin).keys()]"); do
+                  asm_version=$(echo "$VERSION_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['$asm_name'])")
+                  if [ "$asm_version" != "$SDK_VERSION" ]; then
+                    echo "FAIL: Version mismatch for $asm_name: expected $SDK_VERSION, got $asm_version"
+                    VERSION_MISMATCH=1
+                  else
+                    echo "  OK: $asm_name = $asm_version"
+                  fi
+                done
+                if [ $VERSION_MISMATCH -ne 0 ]; then
+                  echo "FAIL: SDK assembly version mismatch detected."
+                  docker logs $CONTAINER_NAME
+                  exit 1
+                fi
+                echo "PASS: All loaded SDK assemblies match expected version $SDK_VERSION."
+                exit 0
+              else
+                echo "FAIL: Output did not contain expected greetings."
+                docker logs $CONTAINER_NAME
+                exit 1
+              fi
+            elif [ "$RUNTIME_STATUS" = "Failed" ] || [ "$RUNTIME_STATUS" = "Terminated" ]; then
+              echo "FAIL: Orchestration $RUNTIME_STATUS"
+              echo "$STATUS_RESPONSE"
+              docker logs $CONTAINER_NAME
+              exit 1
+            fi
+          done
+
+          echo "FAIL: Orchestration did not complete within ${TIMEOUT}s (last status: $RUNTIME_STATUS)"
+          docker logs $CONTAINER_NAME
+          exit 1
+
+      # ---- Collect Logs on Failure ----
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          mkdir -p smoke-test-logs
+          docker logs dep-validation-smoketest-app > smoke-test-logs/function-app.log 2>&1 || true
+          docker logs azurite-smoketest > smoke-test-logs/azurite.log 2>&1 || true
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dep-validation-smoke-test-logs
+          path: smoke-test-logs/
+          if-no-files-found: ignore
+
+      # ---- Cleanup ----
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop dep-validation-smoketest-app 2>/dev/null || true
+          docker rm dep-validation-smoketest-app 2>/dev/null || true
+          docker stop azurite-smoketest 2>/dev/null || true
+          docker rm azurite-smoketest 2>/dev/null || true
+          docker network rm smoketest-network 2>/dev/null || true

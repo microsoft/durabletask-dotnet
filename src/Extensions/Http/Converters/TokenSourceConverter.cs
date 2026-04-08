@@ -7,17 +7,19 @@ using System.Text.Json.Serialization;
 namespace Microsoft.DurableTask.Http.Converters;
 
 /// <summary>
-/// JSON converter for <see cref="TokenSource"/>.
-/// Supports serialization of <see cref="TokenSource"/> instances and deserialization of managed identity
-/// token source payloads into <see cref="ManagedIdentityTokenSource"/>. Unrecognized payloads
-/// deserialize as <c>null</c>.
+/// JSON converter for <see cref="TokenSource"/> — wire compatibility only.
+/// Deserializes managed identity token source payloads so that JSON from the Azure Functions
+/// extension round-trips without parse errors. Token acquisition is <b>not supported</b>
+/// in standalone mode — <see cref="BuiltInHttpActivity"/> will throw
+/// <see cref="NotSupportedException"/> at runtime if a <see cref="TokenSource"/> is present.
+/// Unrecognized payloads deserialize as <c>null</c>.
 /// </summary>
 internal sealed class TokenSourceConverter : JsonConverter<TokenSource>
 {
     /// <inheritdoc/>
     public override TokenSource? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        // Handle null values directly. Unrecognized token source payloads are deserialized as null.
+        // Deserialize for wire-compat; the activity will reject non-null TokenSource at runtime.
         if (reader.TokenType == JsonTokenType.Null)
         {
             return null;

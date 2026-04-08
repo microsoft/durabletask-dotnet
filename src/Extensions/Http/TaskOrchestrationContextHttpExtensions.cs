@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using Microsoft.DurableTask.Http;
@@ -18,11 +19,16 @@ public static class TaskOrchestrationContextHttpExtensions
     /// <summary>
     /// Makes a durable HTTP call. When <see cref="DurableHttpRequest.AsynchronousPatternEnabled"/> is
     /// <c>true</c> and the target returns HTTP 202 with a Location header, the framework will
-    /// automatically poll until a non-202 response is received.
+    /// automatically poll until a non-202 response is received or the <see cref="DurableHttpRequest.Timeout"/>
+    /// is exceeded.
     /// </summary>
     /// <param name="context">The orchestration context.</param>
     /// <param name="request">The HTTP request to execute.</param>
     /// <returns>The HTTP response.</returns>
+    /// <exception cref="TimeoutException">
+    /// Thrown when <see cref="DurableHttpRequest.Timeout"/> is set and the total time (including
+    /// asynchronous 202 polling) exceeds the specified timeout.
+    /// </exception>
     public static async Task<DurableHttpResponse> CallHttpAsync(
         this TaskOrchestrationContext context, DurableHttpRequest request)
     {
@@ -38,12 +44,30 @@ public static class TaskOrchestrationContextHttpExtensions
 
         ILogger logger = context.CreateReplaySafeLogger("Microsoft.DurableTask.Http.CallHttp");
 
+        // Compute deadline for the entire operation (initial call + polling).
+        // Uses orchestrator time (context.CurrentUtcDateTime) so it is replay-safe.
+        DateTime deadline = request.Timeout.HasValue && request.Timeout.Value < TimeSpan.MaxValue
+            ? context.CurrentUtcDateTime + request.Timeout.Value
+            : DateTime.MaxValue;
+
         DurableHttpResponse response = await context.CallActivityAsync<DurableHttpResponse>(
             DurableTaskBuilderHttpExtensions.HttpTaskActivityName, request);
 
         // Handle 202 async polling pattern
         while (response.StatusCode == HttpStatusCode.Accepted && request.AsynchronousPatternEnabled)
         {
+            // Check timeout before polling
+            if (deadline != DateTime.MaxValue && context.CurrentUtcDateTime >= deadline)
+            {
+                logger.LogWarning(
+                    "HTTP 202 polling timed out after {Timeout} for {Uri}.",
+                    request.Timeout,
+                    request.Uri);
+                throw new TimeoutException(
+                    $"The HTTP request to '{request.Uri}' did not complete within the specified " +
+                    $"timeout of {request.Timeout}. The last response was HTTP 202 (Accepted).");
+            }
+
             if (response.Headers == null)
             {
                 logger.LogWarning(
@@ -55,14 +79,37 @@ public static class TaskOrchestrationContextHttpExtensions
             DateTime fireAt;
             var headers = new Dictionary<string, string>(response.Headers, StringComparer.OrdinalIgnoreCase);
 
-            if (headers.TryGetValue("Retry-After", out string? retryAfterStr)
-                && int.TryParse(retryAfterStr, out int retryAfterSeconds))
+            if (headers.TryGetValue("Retry-After", out string? retryAfterStr))
             {
-                fireAt = context.CurrentUtcDateTime.AddSeconds(retryAfterSeconds);
+                if (int.TryParse(retryAfterStr, out int retryAfterSeconds))
+                {
+                    // Retry-After: <delay-seconds>
+                    fireAt = context.CurrentUtcDateTime.AddSeconds(retryAfterSeconds);
+                }
+                else if (DateTimeOffset.TryParseExact(
+                    retryAfterStr,
+                    "r",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out DateTimeOffset retryDate))
+                {
+                    // Retry-After: <http-date> (RFC 7231 §7.1.3)
+                    fireAt = retryDate.UtcDateTime;
+                }
+                else
+                {
+                    fireAt = context.CurrentUtcDateTime.AddMilliseconds(DefaultPollingIntervalMs);
+                }
             }
             else
             {
                 fireAt = context.CurrentUtcDateTime.AddMilliseconds(DefaultPollingIntervalMs);
+            }
+
+            // Cap fireAt to deadline so we don't sleep past the timeout
+            if (deadline != DateTime.MaxValue && fireAt > deadline)
+            {
+                fireAt = deadline;
             }
 
             await context.CreateTimer(fireAt, CancellationToken.None);
@@ -75,10 +122,26 @@ public static class TaskOrchestrationContextHttpExtensions
                 break;
             }
 
-            logger.LogInformation("Polling HTTP status at location: {LocationUrl}", locationUrl);
+            // Resolve relative URIs against the original request URI
+            Uri pollUri;
+            if (!Uri.TryCreate(locationUrl, UriKind.Absolute, out pollUri!))
+            {
+                if (request.Uri == null || !request.Uri.IsAbsoluteUri)
+                {
+                    logger.LogWarning(
+                        "HTTP 202 response returned relative 'Location' header '{LocationUrl}', " +
+                        "but the original request URI is missing or relative; unable to poll for status.",
+                        locationUrl);
+                    break;
+                }
+
+                pollUri = new Uri(request.Uri, locationUrl);
+            }
+
+            logger.LogInformation("Polling HTTP status at location: {LocationUrl}", pollUri);
 
             // Build poll request: GET to Location URL with original headers
-            var pollRequest = new DurableHttpRequest(HttpMethod.Get, new Uri(locationUrl))
+            var pollRequest = new DurableHttpRequest(HttpMethod.Get, pollUri)
             {
                 Headers = request.Headers,
                 AsynchronousPatternEnabled = request.AsynchronousPatternEnabled,

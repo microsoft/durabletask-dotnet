@@ -198,6 +198,84 @@ public class BuiltInHttpActivityTests
             () => activity.RunAsync(CreateContext().Object, null!));
     }
 
+    [Fact]
+    public async Task RunAsync_CustomContentType_HonorsUserHeader()
+    {
+        MockHttpHandler handler = new MockHttpHandler(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("ok"),
+            });
+
+        BuiltInHttpActivity activity = CreateActivity(handler);
+        DurableHttpRequest request = new DurableHttpRequest(HttpMethod.Post, new Uri("https://example.com/api"))
+        {
+            Content = "name=test&value=123",
+            Headers = new Dictionary<string, string>
+            {
+                ["Content-Type"] = "application/x-www-form-urlencoded",
+            },
+        };
+
+        DurableHttpResponse response = await activity.RunAsync(CreateContext().Object, request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        handler.RequestsSent.Should().HaveCount(1);
+
+        HttpRequestMessage sent = handler.RequestsSent[0];
+        sent.Content.Should().NotBeNull();
+        sent.Content!.Headers.ContentType!.MediaType.Should().Be("application/x-www-form-urlencoded");
+    }
+
+    [Fact]
+    public async Task RunAsync_NoContentTypeHeader_DefaultsToApplicationJson()
+    {
+        MockHttpHandler handler = new MockHttpHandler(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("ok"),
+            });
+
+        BuiltInHttpActivity activity = CreateActivity(handler);
+        DurableHttpRequest request = new DurableHttpRequest(HttpMethod.Post, new Uri("https://example.com/api"))
+        {
+            Content = "{\"key\":\"value\"}",
+        };
+
+        await activity.RunAsync(CreateContext().Object, request);
+
+        HttpRequestMessage sent = handler.RequestsSent[0];
+        sent.Content!.Headers.ContentType!.MediaType.Should().Be("application/json");
+    }
+
+    [Fact]
+    public async Task RunAsync_ZeroRetryInterval_UsesMinimumDelay()
+    {
+        // When FirstRetryInterval is not set (zero), the retry loop should not
+        // hammer the server with no delay. Verify it still retries (not stuck).
+        MockHttpHandler handler = new MockHttpHandler(
+            new HttpResponseMessage(HttpStatusCode.ServiceUnavailable),
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("success"),
+            });
+
+        BuiltInHttpActivity activity = CreateActivity(handler);
+        DurableHttpRequest request = new DurableHttpRequest(HttpMethod.Get, new Uri("https://example.com/api"))
+        {
+            HttpRetryOptions = new HttpRetryOptions
+            {
+                MaxNumberOfAttempts = 2,
+                // FirstRetryInterval intentionally not set — should default to 1s floor
+            },
+        };
+
+        DurableHttpResponse response = await activity.RunAsync(CreateContext().Object, request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        handler.RequestsSent.Should().HaveCount(2);
+    }
+
     sealed class MockHttpHandler : HttpMessageHandler
     {
         readonly Queue<HttpResponseMessage> responses;

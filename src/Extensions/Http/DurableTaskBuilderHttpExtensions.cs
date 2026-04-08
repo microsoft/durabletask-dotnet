@@ -28,8 +28,16 @@ public static class DurableTaskBuilderHttpExtensions
     /// <remarks>
     /// <para>
     /// This registers an internal activity named <c>"BuiltIn::HttpActivity"</c> that uses
-    /// <see cref="System.Net.Http.HttpClient"/> to execute HTTP requests. If an <c>IHttpClientFactory</c>
-    /// is registered in the service collection, a named client <c>"DurableHttp"</c> is used.
+    /// <see cref="System.Net.Http.HttpClient"/> to execute HTTP requests. This extension also registers
+    /// and uses a named <see cref="IHttpClientFactory"/> client named <c>"DurableHttp"</c>.
+    /// </para>
+    /// <para>
+    /// The built-in activity resolves <see cref="IHttpClientFactory"/> from the service provider and
+    /// creates the <c>"DurableHttp"</c> client at runtime. Removing or overriding that DI registration
+    /// in a way that makes <see cref="IHttpClientFactory"/> unavailable will cause this extension to fail.
+    /// </para>
+    /// <para>
+    /// Calling this method multiple times is safe — the second and subsequent calls are no-ops.
     /// </para>
     /// <para>
     /// Example usage:
@@ -49,16 +57,24 @@ public static class DurableTaskBuilderHttpExtensions
 
         builder.AddTasks(registry =>
         {
-            registry.AddActivity(
-                new TaskName(HttpTaskActivityName),
-                sp =>
-                {
-                    IHttpClientFactory httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
-                    HttpClient client = httpClientFactory.CreateClient("DurableHttp");
-                    ILogger logger = sp.GetRequiredService<ILoggerFactory>()
-                        .CreateLogger("Microsoft.DurableTask.Http.BuiltInHttpActivity");
-                    return new BuiltInHttpActivity(client, logger);
-                });
+            try
+            {
+                registry.AddActivity(
+                    new TaskName(HttpTaskActivityName),
+                    sp =>
+                    {
+                        IHttpClientFactory httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+                        HttpClient client = httpClientFactory.CreateClient("DurableHttp");
+                        ILogger logger = sp.GetRequiredService<ILoggerFactory>()
+                            .CreateLogger("Microsoft.DurableTask.Http.BuiltInHttpActivity");
+                        return new BuiltInHttpActivity(client, logger);
+                    });
+            }
+            catch (ArgumentException)
+            {
+                // Activity already registered (e.g. UseHttpActivities() called twice or user
+                // registered their own "BuiltIn::HttpActivity"). This is a safe no-op.
+            }
         });
 
         return builder;

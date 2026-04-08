@@ -152,4 +152,35 @@ public class SerializationTests
         deserialized.MaxNumberOfAttempts.Should().Be(10);
         deserialized.StatusCodesToRetry.Should().HaveCount(2);
     }
+
+    [Fact]
+    public void DurableHttpResponse_NullHeaders_DeserializesAsNull()
+    {
+        // Arrange — explicit null in JSON
+        string json = "{\"statusCode\":200,\"headers\":null}";
+
+        // Act
+        DurableHttpResponse? response = JsonSerializer.Deserialize<DurableHttpResponse>(json, Options);
+
+        // Assert
+        response.Should().NotBeNull();
+        response!.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Headers.Should().BeNull("null JSON should deserialize as null, not empty dictionary");
+    }
+
+    [Fact]
+    public void Headers_MultiValueArray_JoinsWithComma()
+    {
+        // Arrange — header value is an array (some wire formats produce this)
+        string json = "{\"statusCode\":200,\"headers\":{\"Accept\":[\"text/html\",\"application/json\"]}}";
+
+        // Act
+        DurableHttpResponse? response = JsonSerializer.Deserialize<DurableHttpResponse>(json, Options);
+
+        // Assert
+        response.Should().NotBeNull();
+        response!.Headers.Should().NotBeNull();
+        response.Headers!["Accept"].Should().Be("text/html, application/json",
+            "multi-value arrays should be joined with ', ' to match HTTP header semantics");
+    }
 }

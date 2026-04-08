@@ -44,4 +44,21 @@ public class RegistrationTests
         var httpClientFactory = sp.GetService<IHttpClientFactory>();
         httpClientFactory.Should().NotBeNull("UseHttpActivities should register IHttpClientFactory");
     }
+
+    [Fact]
+    public void UseHttpActivities_CalledTwice_DoesNotThrow()
+    {
+        // Verify idempotency — calling UseHttpActivities() twice should be safe
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        FluentActions.Invoking(() =>
+        {
+            services.AddDurableTaskWorker(builder =>
+            {
+                builder.UseHttpActivities();
+                builder.UseHttpActivities(); // second call should be no-op
+            });
+        }).Should().NotThrow();
+    }
 }

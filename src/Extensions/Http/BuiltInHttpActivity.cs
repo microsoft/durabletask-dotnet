@@ -49,7 +49,7 @@ internal sealed class BuiltInHttpActivity : TaskActivity<DurableHttpRequest, Dur
             request.Method,
             request.Uri);
 
-        HttpResponseMessage response = await this.ExecuteWithRetryAsync(request);
+        using HttpResponseMessage response = await this.ExecuteWithRetryAsync(request);
 
         string? body = response.Content != null
             ? await response.Content.ReadAsStringAsync()
@@ -80,6 +80,11 @@ internal sealed class BuiltInHttpActivity : TaskActivity<DurableHttpRequest, Dur
         }
 
         TimeSpan delay = retryOptions?.FirstRetryInterval ?? TimeSpan.Zero;
+        if (maxAttempts > 1 && delay <= TimeSpan.Zero)
+        {
+            delay = TimeSpan.FromSeconds(1);
+        }
+
         DateTime deadline = retryOptions != null && retryOptions.RetryTimeout < TimeSpan.MaxValue
             ? DateTime.UtcNow + retryOptions.RetryTimeout
             : DateTime.MaxValue;
@@ -139,13 +144,34 @@ internal sealed class BuiltInHttpActivity : TaskActivity<DurableHttpRequest, Dur
 
         if (request.Content != null)
         {
-            httpRequest.Content = new StringContent(request.Content, Encoding.UTF8, "application/json");
+            // Determine the media type from user-provided headers, defaulting to application/json.
+            string mediaType = "application/json";
+            if (request.Headers != null)
+            {
+                // Case-insensitive lookup for Content-Type
+                foreach (KeyValuePair<string, string> header in request.Headers)
+                {
+                    if (string.Equals(header.Key, "Content-Type", StringComparison.OrdinalIgnoreCase))
+                    {
+                        mediaType = header.Value;
+                        break;
+                    }
+                }
+            }
+
+            httpRequest.Content = new StringContent(request.Content, Encoding.UTF8, mediaType);
         }
 
         if (request.Headers != null)
         {
             foreach (KeyValuePair<string, string> header in request.Headers)
             {
+                // Skip Content-Type — already set via StringContent constructor above
+                if (string.Equals(header.Key, "Content-Type", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 // Try request headers first, then content headers
                 if (!httpRequest.Headers.TryAddWithoutValidation(header.Key, header.Value))
                 {

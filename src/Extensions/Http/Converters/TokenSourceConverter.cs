@@ -7,15 +7,17 @@ using System.Text.Json.Serialization;
 namespace Microsoft.DurableTask.Http.Converters;
 
 /// <summary>
-/// JSON converter for <see cref="TokenSource"/> — handles serialization only.
-/// Deserialization is not supported since token acquisition is not available in standalone mode.
+/// JSON converter for <see cref="TokenSource"/>.
+/// Supports serialization of <see cref="TokenSource"/> instances and deserialization of managed identity
+/// token source payloads into <see cref="ManagedIdentityTokenSource"/>. Unrecognized payloads
+/// deserialize as <c>null</c>.
 /// </summary>
 internal sealed class TokenSourceConverter : JsonConverter<TokenSource>
 {
     /// <inheritdoc/>
     public override TokenSource? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        // Skip the token source object during deserialization — token acquisition is not supported.
+        // Handle null values directly. Unrecognized token source payloads are deserialized as null.
         if (reader.TokenType == JsonTokenType.Null)
         {
             return null;

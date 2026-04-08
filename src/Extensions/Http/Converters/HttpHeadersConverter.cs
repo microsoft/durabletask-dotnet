@@ -8,15 +8,21 @@ namespace Microsoft.DurableTask.Http.Converters;
 
 /// <summary>
 /// JSON converter for HTTP header dictionaries. Handles both single-value strings and
-/// string arrays (takes the last value for simplicity since <see cref="DurableHttpResponse.Headers"/>
-/// is <c>IDictionary&lt;string, string&gt;</c>).
+/// string arrays (joins with ", " to match HTTP header semantics).
+/// Returns <c>null</c> when the JSON value is <c>null</c> so callers can distinguish
+/// null headers from empty headers.
 /// </summary>
-internal sealed class HttpHeadersConverter : JsonConverter<IDictionary<string, string>>
+internal sealed class HttpHeadersConverter : JsonConverter<IDictionary<string, string>?>
 {
     /// <inheritdoc/>
-    public override IDictionary<string, string> Read(
+    public override IDictionary<string, string>? Read(
         ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
+        if (reader.TokenType == JsonTokenType.Null)
+        {
+            return null;
+        }
+
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         if (reader.TokenType != JsonTokenType.StartObject)
@@ -35,15 +41,19 @@ internal sealed class HttpHeadersConverter : JsonConverter<IDictionary<string, s
             }
             else if (reader.TokenType == JsonTokenType.StartArray)
             {
-                string? lastValue = null;
+                var values = new List<string>();
                 while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                 {
-                    lastValue = reader.GetString();
+                    string? val = reader.GetString();
+                    if (val != null)
+                    {
+                        values.Add(val);
+                    }
                 }
 
-                if (lastValue != null)
+                if (values.Count > 0)
                 {
-                    headers[propertyName] = lastValue;
+                    headers[propertyName] = string.Join(", ", values);
                 }
             }
         }
@@ -53,8 +63,14 @@ internal sealed class HttpHeadersConverter : JsonConverter<IDictionary<string, s
 
     /// <inheritdoc/>
     public override void Write(
-        Utf8JsonWriter writer, IDictionary<string, string> value, JsonSerializerOptions options)
+        Utf8JsonWriter writer, IDictionary<string, string>? value, JsonSerializerOptions options)
     {
+        if (value == null)
+        {
+            writer.WriteNullValue();
+            return;
+        }
+
         writer.WriteStartObject();
 
         foreach (KeyValuePair<string, string> pair in value)

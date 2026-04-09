@@ -502,6 +502,14 @@ sealed partial class GrpcDurableTaskWorker
                     return taskScheduledEvent;
                 }
 
+                P.HistoryEvent? GetEntityOperationCalledEvent(string requestId)
+                {
+                    return request
+                        .PastEvents
+                        .Where(x => x.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.EntityOperationCalled)
+                        .FirstOrDefault(x => x.EntityOperationCalled.RequestId == requestId);
+                }
+
                 foreach (var newEvent in request.NewEvents)
                 {
                     switch (newEvent.EventTypeCase)
@@ -565,6 +573,33 @@ sealed partial class GrpcDurableTaskWorker
                                 newEvent.Timestamp.ToDateTime(),
                                 newEvent.TimerFired);
                             break;
+
+                        case P.HistoryEvent.EventTypeOneofCase.EntityOperationCompleted:
+                            {
+                                P.HistoryEvent? entityCalledEvent =
+                                    GetEntityOperationCalledEvent(
+                                        newEvent.EntityOperationCompleted.RequestId);
+
+                                TraceHelper.EmitTraceActivityForEntityOperationCompleted(
+                                    request.InstanceId,
+                                    entityCalledEvent,
+                                    entityCalledEvent?.EntityOperationCalled);
+                                break;
+                            }
+
+                        case P.HistoryEvent.EventTypeOneofCase.EntityOperationFailed:
+                            {
+                                P.HistoryEvent? entityCalledEvent =
+                                    GetEntityOperationCalledEvent(
+                                        newEvent.EntityOperationFailed.RequestId);
+
+                                TraceHelper.EmitTraceActivityForEntityOperationFailed(
+                                    request.InstanceId,
+                                    entityCalledEvent,
+                                    entityCalledEvent?.EntityOperationCalled,
+                                    newEvent.EntityOperationFailed);
+                                break;
+                            }
                     }
                 }
             }
@@ -865,6 +900,20 @@ sealed partial class GrpcDurableTaskWorker
             var coreEntityId = DTCore.Entities.EntityId.FromString(batchRequest.InstanceId!);
             EntityId entityId = new(coreEntityId.Name, coreEntityId.Key);
 
+            // Start a Server trace span for each entity operation in the batch.
+            // Each operation may come from a different orchestration with its own trace context,
+            // so we create individual spans to preserve correct parent-child relationships.
+            List<Activity> traceActivities = batchRequest.Operations?
+                .Select(op => TraceHelper.StartTraceActivityForEntityOperation(
+                    entityId.Name,
+                    op.Operation,
+                    batchRequest.InstanceId!,
+                    op.TraceContext?.TraceParent,
+                    op.TraceContext?.TraceState))
+                .OfType<Activity>()
+                .ToList()
+                ?? [];
+
             TaskName name = new(entityId.Name);
 
             EntityBatchResult? batchResult;
@@ -885,6 +934,9 @@ sealed partial class GrpcDurableTaskWorker
                 {
                     // we could not find the entity. This is considered an application error,
                     // so we return a non-retriable error-OperationResult for each operation in the batch.
+                    string errorMessage = $"No entity task named '{name}' was found.";
+                    traceActivities.ForEach(a => a.SetStatus(ActivityStatusCode.Error, errorMessage));
+
                     batchResult = new EntityBatchResult()
                     {
                         Actions = [], // no actions
@@ -894,7 +946,7 @@ sealed partial class GrpcDurableTaskWorker
                             {
                                 FailureDetails = new FailureDetails(
                                     errorType: "EntityTaskNotFound",
-                                    errorMessage: $"No entity task named '{name}' was found.",
+                                    errorMessage: errorMessage,
                                     stackTrace: null,
                                     innerFailure: null,
                                     isNonRetriable: true),
@@ -913,6 +965,12 @@ sealed partial class GrpcDurableTaskWorker
                 {
                     FailureDetails = new FailureDetails(frameworkException),
                 };
+
+                traceActivities.ForEach(a => a.SetStatus(ActivityStatusCode.Error, frameworkException.Message));
+            }
+            finally
+            {
+                traceActivities.ForEach(a => a.Dispose());
             }
 
             P.EntityBatchResult response = batchResult.ToEntityBatchResult(

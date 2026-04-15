@@ -173,6 +173,56 @@ public class ContinueAsNewTests
         this.output.WriteLine($"All {orchestrationCount} completed");
     }
 
+    /// <summary>
+    /// Schedules 200 ContinueAsNew orchestrations in 10 waves of 20, with 100ms delays
+    /// between waves. The staggered scheduling creates overlapping lifecycle phases —
+    /// earlier orchestrations may be mid-ContinueAsNew (waiting on timer or activity)
+    /// when later waves arrive, producing varied timing patterns that exercise the
+    /// interplay between lock release, message delivery, and queue re-scheduling.
+    /// </summary>
+    [Fact]
+    public async Task Staggered_ContinueAsNew_AllComplete()
+    {
+        const int wavesCount = 10;
+        const int perWave = 20;
+
+        await using DurableTaskTestHost host = await DurableTaskTestHost.StartAsync(RegisterTestFunctions);
+
+        List<string> allInstanceIds = new();
+
+        for (int wave = 0; wave < wavesCount; wave++)
+        {
+            for (int i = 0; i < perWave; i++)
+            {
+                var input = new AsyncOperation { Status = Status.NotStarted, Closed = false, IterationCount = 0 };
+                string id = await host.Client.ScheduleNewOrchestrationInstanceAsync("TestOrchestrator", input);
+                allInstanceIds.Add(id);
+            }
+
+            this.output.WriteLine($"Wave {wave + 1}/{wavesCount}: scheduled {perWave} orchestrations");
+            await Task.Delay(100);
+        }
+
+        this.output.WriteLine($"Total scheduled: {allInstanceIds.Count}");
+
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(180));
+
+        Task<OrchestrationMetadata>[] waitTasks = allInstanceIds
+            .Select(id => host.Client.WaitForInstanceCompletionAsync(
+                id, getInputsAndOutputs: true, cts.Token))
+            .ToArray();
+
+        OrchestrationMetadata[] results = await Task.WhenAll(waitTasks);
+
+        for (int i = 0; i < results.Length; i++)
+        {
+            Assert.NotNull(results[i]);
+            Assert.Equal(OrchestrationRuntimeStatus.Completed, results[i].RuntimeStatus);
+        }
+
+        this.output.WriteLine($"All {allInstanceIds.Count} completed");
+    }
+
     #region Models
 
     public enum Status

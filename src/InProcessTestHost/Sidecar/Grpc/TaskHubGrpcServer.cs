@@ -911,6 +911,19 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         {
             await outputStream.WriteAsync(workItem);
         }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("request is complete", StringComparison.OrdinalIgnoreCase))
+        {
+            // The client disconnected or canceled the GetWorkItems stream.
+            // Reset the connection state so the dispatcher stops trying to write
+            // to this dead stream and waits for a new client connection instead.
+            lock (this.isConnectedSignal)
+            {
+                this.workerToClientStream = null;
+                this.isConnectedSignal.Reset();
+            }
+
+            throw new OperationCanceledException("Work-item stream closed by client.", ex);
+        }
         finally
         {
             this.sendWorkItemLock.Release();
@@ -919,7 +932,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
 
     TaskCompletionSource<GrpcOrchestratorExecutionResult> CreateTaskCompletionSourceForOrchestrator(string instanceId)
     {
-        TaskCompletionSource<GrpcOrchestratorExecutionResult> tcs = new();
+        TaskCompletionSource<GrpcOrchestratorExecutionResult> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         this.pendingOrchestratorTasks.TryAdd(instanceId, tcs);
         return tcs;
     }
@@ -933,7 +946,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     TaskCompletionSource<ActivityExecutionResult> CreateTaskCompletionSourceForActivity(string instanceId, int taskId)
     {
         string taskIdKey = GetTaskIdKey(instanceId, taskId);
-        TaskCompletionSource<ActivityExecutionResult> tcs = new();
+        TaskCompletionSource<ActivityExecutionResult> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         this.pendingActivityTasks.TryAdd(taskIdKey, tcs);
         return tcs;
     }

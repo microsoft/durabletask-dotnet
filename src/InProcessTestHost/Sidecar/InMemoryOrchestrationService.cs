@@ -742,7 +742,7 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
             // First, add the waiter before checking completion to avoid a race condition.
             // This ensures we don't miss a completion notification that happens between
             // checking the status and adding the waiter.
-            var tcs = this.waiters.GetOrAdd(instanceId, _ => new TaskCompletionSource<OrchestrationState>());
+            var tcs = this.waiters.GetOrAdd(instanceId, _ => new TaskCompletionSource<OrchestrationState>(TaskCreationOptions.RunContinuationsAsynchronously));
 
             // Now check if already completed - if so, complete the waiter immediately
             if (this.store.TryGetValue(instanceId, out SerializedInstanceState? state))

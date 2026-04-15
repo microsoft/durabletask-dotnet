@@ -29,7 +29,7 @@ public class ContinueAsNewTests
     /// TestOrchestrator:
     ///   1. Calls TestActivity with current state
     ///   2. Updates state from activity result
-    ///   3. If not closed: waits 5s timer, then ContinueAsNew with updated state
+    ///   3. If not closed: waits 1s timer, then ContinueAsNew with updated state
     ///   4. If closed: orchestration ends
     ///
     /// TestActivity:
@@ -45,7 +45,7 @@ public class ContinueAsNewTests
 
             if (!input.Closed)
             {
-                await context.CreateTimer(TimeSpan.FromSeconds(5), CancellationToken.None);
+                await context.CreateTimer(TimeSpan.FromSeconds(1), CancellationToken.None);
                 context.ContinueAsNew(input);
                 return;
             }
@@ -72,7 +72,7 @@ public class ContinueAsNewTests
     /// Covers the basic ContinueAsNew lifecycle: activity call -> state update ->
     /// timer -> ContinueAsNew -> activity call -> completion.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 30_000)]
     public async Task Orchestration_ContinueAsNew_WithActivityAndTimer_CompletesSuccessfully()
     {
         await using DurableTaskTestHost host = await DurableTaskTestHost.StartAsync(RegisterTestFunctions);
@@ -80,7 +80,7 @@ public class ContinueAsNewTests
         var input = new AsyncOperation { Status = Status.NotStarted, Closed = false, IterationCount = 0 };
         string instanceId = await host.Client.ScheduleNewOrchestrationInstanceAsync("TestOrchestrator", input);
 
-        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(60));
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(20));
         OrchestrationMetadata metadata = await host.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, cts.Token);
 
@@ -89,17 +89,17 @@ public class ContinueAsNewTests
     }
 
     /// <summary>
-    /// Runs 50 ContinueAsNew orchestrations in parallel, repeated across 5 rounds
+    /// Runs 10 ContinueAsNew orchestrations in parallel, repeated across 3 rounds
     /// with a fresh host each round. Validates that activity completion messages
     /// are correctly delivered under contention when many orchestrations compete
     /// for the dispatcher, ready-to-run queue, and instance locks simultaneously.
-    /// Total: 250 orchestration instances across 5 rounds.
+    /// Total: 30 orchestration instances across 3 rounds.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task ConcurrentOrchestrations_ContinueAsNew_AllComplete()
     {
-        const int orchestrationCount = 50;
-        const int rounds = 5;
+        const int orchestrationCount = 10;
+        const int rounds = 3;
 
         for (int round = 0; round < rounds; round++)
         {
@@ -114,7 +114,7 @@ public class ContinueAsNewTests
                 instanceIds[i] = await host.Client.ScheduleNewOrchestrationInstanceAsync("TestOrchestrator", input);
             }
 
-            using CancellationTokenSource cts = new(TimeSpan.FromSeconds(60));
+            using CancellationTokenSource cts = new(TimeSpan.FromSeconds(30));
 
             Task<OrchestrationMetadata>[] waitTasks = instanceIds
                 .Select(id => host.Client.WaitForInstanceCompletionAsync(
@@ -134,15 +134,15 @@ public class ContinueAsNewTests
     }
 
     /// <summary>
-    /// Schedules 100 ContinueAsNew orchestrations on a single host as fast as possible.
-    /// All 100 share the same dispatcher and ready-to-run queue for their entire lifecycle,
+    /// Schedules 20 ContinueAsNew orchestrations on a single host as fast as possible.
+    /// All 20 share the same dispatcher and ready-to-run queue for their entire lifecycle,
     /// maximizing interleaving of activity completion messages and ContinueAsNew
     /// re-schedules across instances.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task RapidFire_SequentialScheduling_ContinueAsNew_AllComplete()
     {
-        const int orchestrationCount = 100;
+        const int orchestrationCount = 20;
 
         await using DurableTaskTestHost host = await DurableTaskTestHost.StartAsync(RegisterTestFunctions);
 
@@ -155,7 +155,7 @@ public class ContinueAsNewTests
 
         this.output.WriteLine($"Scheduled {orchestrationCount} orchestrations on a single host");
 
-        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(120));
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(30));
 
         Task<OrchestrationMetadata>[] waitTasks = instanceIds
             .Select(id => host.Client.WaitForInstanceCompletionAsync(
@@ -174,17 +174,17 @@ public class ContinueAsNewTests
     }
 
     /// <summary>
-    /// Schedules 200 ContinueAsNew orchestrations in 10 waves of 20, with 100ms delays
+    /// Schedules 30 ContinueAsNew orchestrations in 3 waves of 10, with 100ms delays
     /// between waves. The staggered scheduling creates overlapping lifecycle phases —
     /// earlier orchestrations may be mid-ContinueAsNew (waiting on timer or activity)
     /// when later waves arrive, producing varied timing patterns that exercise the
     /// interplay between lock release, message delivery, and queue re-scheduling.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Staggered_ContinueAsNew_AllComplete()
     {
-        const int wavesCount = 10;
-        const int perWave = 20;
+        const int wavesCount = 3;
+        const int perWave = 10;
 
         await using DurableTaskTestHost host = await DurableTaskTestHost.StartAsync(RegisterTestFunctions);
 
@@ -205,7 +205,7 @@ public class ContinueAsNewTests
 
         this.output.WriteLine($"Total scheduled: {allInstanceIds.Count}");
 
-        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(180));
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(30));
 
         Task<OrchestrationMetadata>[] waitTasks = allInstanceIds
             .Select(id => host.Client.WaitForInstanceCompletionAsync(

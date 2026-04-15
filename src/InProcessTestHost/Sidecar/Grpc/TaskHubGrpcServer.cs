@@ -902,7 +902,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         lock (this.isConnectedSignal)
         {
             outputStream = this.workerToClientStream ??
-                throw new OperationCanceledException("No client is connected.");
+                throw new RpcException(new Status(StatusCode.Unavailable, "No client is connected."));
         }
 
         // The gRPC channel can only handle one message at a time, so we need to serialize access to it.
@@ -922,7 +922,10 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                 this.isConnectedSignal.Reset();
             }
 
-            this.log.LogWarning(ex, "Work-item stream closed by client. Dispatcher will pause until reconnection.");
+            // Must throw so callers (ExecuteOrchestrator/ExecuteActivity) can clean up
+            // their pending TCS. The dispatcher catches this, abandons the work item,
+            // and releases it back to the queue for retry.
+            throw new OperationCanceledException("Work-item stream closed by client.", ex);
         }
         finally
         {

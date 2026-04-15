@@ -815,7 +815,8 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                 totalBytes += ev.CalculateSize();
             }
 
-            if (this.supportsHistoryStreaming && totalBytes > (1024))
+            const int HistoryStreamingThresholdBytes = 1024 * 1024; // 1 MiB
+            if (this.supportsHistoryStreaming && totalBytes > HistoryStreamingThresholdBytes)
             {
                 orkRequest.RequiresHistoryStreaming = true;
                 // Store past events to serve via StreamInstanceHistory
@@ -901,8 +902,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         lock (this.isConnectedSignal)
         {
             outputStream = this.workerToClientStream ??
-                // CA2201: Use specific exception types
-                throw new InvalidOperationException("No client is connected. Need to wait until a client connects before executing.");
+                throw new OperationCanceledException("No client is connected.");
         }
 
         // The gRPC channel can only handle one message at a time, so we need to serialize access to it.
@@ -914,15 +914,15 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
         catch (InvalidOperationException ex) when (ex.Message.Contains("request is complete", StringComparison.OrdinalIgnoreCase))
         {
             // The client disconnected or canceled the GetWorkItems stream.
-            // Reset the connection state so the dispatcher stops trying to write
-            // to this dead stream and waits for a new client connection instead.
+            // Reset the connection state so the dispatcher pauses naturally
+            // (via the traffic signal) until a new client connects.
             lock (this.isConnectedSignal)
             {
                 this.workerToClientStream = null;
                 this.isConnectedSignal.Reset();
             }
 
-            throw new OperationCanceledException("Work-item stream closed by client.", ex);
+            this.log.LogWarning(ex, "Work-item stream closed by client. Dispatcher will pause until reconnection.");
         }
         finally
         {

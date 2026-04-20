@@ -79,5 +79,8 @@ namespace Microsoft.DurableTask.Worker.Grpc
 
         [LoggerMessage(EventId = 65, Level = LogLevel.Information, Message = "{instanceId}: Abandoned entity work item. Completion token = '{completionToken}'")]
         public static partial void AbandonedEntityWorkItem(this ILogger logger, string instanceId, string completionToken);
+
+        [LoggerMessage(EventId = 66, Level = LogLevel.Warning, Message = "Transient gRPC error for '{OperationName}'. Attempt {Attempt} of {MaxAttempts}. Retrying in {BackoffMs} ms. StatusCode={StatusCode}")]
+        public static partial void TransientGrpcRetry(this ILogger logger, string operationName, int attempt, int maxAttempts, double backoffMs, int statusCode, Exception exception);
     }
 }

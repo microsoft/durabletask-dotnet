@@ -4,6 +4,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using Azure.Core;
 using Grpc.Net.Client;
 using Microsoft.DurableTask.Client.Grpc;
@@ -157,7 +158,7 @@ public static class DurableTaskSchedulerClientExtensions
             string cacheKey = $"{optionsName}\u001F{source.EndpointAddress}\u001F{source.TaskHubName}\u001F{source.ResourceId}\u001F{credentialType}\u001F{source.AllowInsecureCredentials}\u001F{retryOptionsKey}";
             options.Channel = this.channels.GetOrAdd(
                 cacheKey,
-                _ => new Lazy<GrpcChannel>(source.CreateChannel)).Value;
+                _ => new Lazy<GrpcChannel>(source.CreateChannel, LazyThreadSafetyMode.PublicationOnly)).Value;
             options.SetChannelRecreator((oldChannel, ct) => this.RecreateChannelAsync(cacheKey, source, oldChannel, ct));
         }
 
@@ -181,7 +182,8 @@ public static class DurableTaskSchedulerClientExtensions
 
             if (!this.channels.TryGetValue(cacheKey, out Lazy<GrpcChannel>? currentLazy))
             {
-                Lazy<GrpcChannel> created = new(source.CreateChannel);
+                // PublicationOnly avoids permanently caching a transient CreateChannel exception.
+                Lazy<GrpcChannel> created = new(source.CreateChannel, LazyThreadSafetyMode.PublicationOnly);
                 if (this.channels.TryAdd(cacheKey, created))
                 {
                     return created.Value;
@@ -201,7 +203,7 @@ public static class DurableTaskSchedulerClientExtensions
                 return currentLazy.Value;
             }
 
-            Lazy<GrpcChannel> newLazy = new(source.CreateChannel);
+            Lazy<GrpcChannel> newLazy = new(source.CreateChannel, LazyThreadSafetyMode.PublicationOnly);
             if (!this.channels.TryUpdate(cacheKey, newLazy, currentLazy))
             {
                 this.channels.TryGetValue(cacheKey, out Lazy<GrpcChannel>? winner);

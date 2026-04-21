@@ -38,6 +38,10 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
     readonly bool ownsChannel;
     readonly ILogger logger;
 
+    // Cancelled in DisposeAsync so an in-flight RecreateAsync stops promptly and does not leak the
+    // freshly created channel back into our state after we've disposed.
+    readonly CancellationTokenSource disposalCts = new();
+
     // Accessed from call-site threads (reads) and the background recreate task (writes).
     // Read/written with Volatile.Read / Volatile.Write to prevent torn reads and to publish
     // the new reference so that callers on other threads observe it without additional
@@ -47,6 +51,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
     int consecutiveFailures;
     int recreateInFlight;
     long lastRecreateTicks;
+    int disposed;
 
     public ChannelRecreatingCallInvoker(
         GrpcChannel initialChannel,
@@ -116,8 +121,26 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref this.disposed, 1) != 0)
+        {
+            return;
+        }
+
+        // Signal any in-flight RecreateAsync to abort. We do this BEFORE shutting down the channel so
+        // the recreator's cancellation token is observed and the recreate task does not race to
+        // Volatile.Write a freshly created channel into our state after we've torn it down.
+        try
+        {
+            this.disposalCts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Already disposed by a racing caller; nothing more to do for cancellation.
+        }
+
         if (!this.ownsChannel)
         {
+            this.disposalCts.Dispose();
             return;
         }
 
@@ -134,6 +157,10 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
         {
             // Best-effort disposal.
+        }
+        finally
+        {
+            this.disposalCts.Dispose();
         }
     }
 
@@ -222,12 +249,43 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
     {
         try
         {
+            if (Volatile.Read(ref this.disposed) != 0)
+            {
+                return;
+            }
+
             TransportState current = Volatile.Read(ref this.state);
-            using CancellationTokenSource cts = new(TimeSpan.FromSeconds(30));
+
+            // Link to the disposal CTS so DisposeAsync can promptly abort an in-flight recreate.
+            // The 30s timeout keeps a wedged recreator from holding the single-flight slot indefinitely.
+            using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(this.disposalCts.Token);
+            cts.CancelAfter(TimeSpan.FromSeconds(30));
             GrpcChannel newChannel = await this.recreator(current.Channel, cts.Token).ConfigureAwait(false);
 
             if (!ReferenceEquals(newChannel, current.Channel))
             {
+                // Re-check disposal before publishing the new channel into state. Otherwise we could
+                // race with DisposeAsync and leak the new channel (its socket handlers + DNS resolver
+                // would never be torn down).
+                if (Volatile.Read(ref this.disposed) != 0)
+                {
+                    if (this.ownsChannel)
+                    {
+                        try
+                        {
+                            await newChannel.ShutdownAsync().ConfigureAwait(false);
+                        }
+                        catch (Exception shutdownEx) when (shutdownEx is not OutOfMemoryException
+                                                            and not StackOverflowException
+                                                            and not ThreadAbortException)
+                        {
+                            // Best-effort cleanup.
+                        }
+                    }
+
+                    return;
+                }
+
                 Volatile.Write(ref this.state, new TransportState(newChannel, newChannel.CreateCallInvoker()));
                 this.logger.ChannelRecreated(GetEndpointDescription(newChannel));
 
@@ -244,6 +302,10 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
             // Successful recreate (even if a peer beat us to it) → reset the failure counter.
             Volatile.Write(ref this.consecutiveFailures, 0);
             Volatile.Write(ref this.lastRecreateTicks, Stopwatch.GetTimestamp());
+        }
+        catch (OperationCanceledException) when (Volatile.Read(ref this.disposed) != 0)
+        {
+            // We were disposed mid-recreate; nothing to log.
         }
         catch (Exception ex) when (ex is not OutOfMemoryException
                                     and not StackOverflowException

@@ -58,6 +58,14 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         AsyncDisposable workerOwnedChannelDisposable = this.GetCallInvoker(out CallInvoker callInvoker, out string address);
+
+        // Track the most recently observed channel so the recreator can compare it against the
+        // currently-cached channel and skip the swap when a peer worker has already recreated it.
+        // We must NOT use this.grpcOptions.Channel here: that field is set once when options are
+        // configured and is never updated when the AzureManaged extension swaps the cached channel.
+        // Passing the stale field would cause the recreator's "peer already swapped" branch to be
+        // skipped, producing redundant ChannelRecreated logs and wasted recreate attempts.
+        GrpcChannel? latestObservedChannel = this.grpcOptions.Channel;
         try
         {
             this.logger.StartingTaskHubWorker(address);
@@ -73,11 +81,12 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
                 }
 
                 // ChannelRecreateRequested: try to obtain a fresh channel before re-entering the loop.
-                ChannelRecreateResult result = await this.TryRecreateChannelAsync(stoppingToken, workerOwnedChannelDisposable);
+                ChannelRecreateResult result = await this.TryRecreateChannelAsync(stoppingToken, workerOwnedChannelDisposable, latestObservedChannel);
                 if (result.Recreated)
                 {
                     callInvoker = result.NewCallInvoker!;
                     address = result.NewAddress!;
+                    latestObservedChannel = result.NewChannel;
                     AsyncDisposable previousDisposable = workerOwnedChannelDisposable;
                     workerOwnedChannelDisposable = result.NewWorkerOwnedDisposable;
                     this.logger.ChannelRecreated(address);
@@ -101,11 +110,12 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 
     async Task<ChannelRecreateResult> TryRecreateChannelAsync(
         CancellationToken cancellation,
-        AsyncDisposable currentWorkerOwnedDisposable)
+        AsyncDisposable currentWorkerOwnedDisposable,
+        GrpcChannel? currentChannel)
     {
         // Path 1: caller (or extension method like ConfigureGrpcChannel) supplied a recreator.
         Func<GrpcChannel, CancellationToken, Task<GrpcChannel>>? recreator = this.grpcOptions.Internal.ChannelRecreator;
-        if (recreator is not null && this.grpcOptions.Channel is GrpcChannel currentChannel)
+        if (recreator is not null && currentChannel is not null)
         {
             try
             {
@@ -113,7 +123,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
                 if (!ReferenceEquals(newChannel, currentChannel))
                 {
                     // The recreator owns disposal of the old channel; we don't dispose here.
-                    return new ChannelRecreateResult(true, newChannel.CreateCallInvoker(), newChannel.Target, currentWorkerOwnedDisposable);
+                    return new ChannelRecreateResult(true, newChannel.CreateCallInvoker(), newChannel.Target, currentWorkerOwnedDisposable, newChannel);
                 }
 
                 // Recreator returned the same instance — nothing to swap.
@@ -139,7 +149,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
             {
                 GrpcChannel newChannel = GetChannel(this.grpcOptions.Address);
                 AsyncDisposable newDisposable = new(() => new(newChannel.ShutdownAsync()));
-                return new ChannelRecreateResult(true, newChannel.CreateCallInvoker(), newChannel.Target, newDisposable);
+                return new ChannelRecreateResult(true, newChannel.CreateCallInvoker(), newChannel.Target, newDisposable, newChannel);
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
             {
@@ -164,12 +174,13 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 
     readonly struct ChannelRecreateResult
     {
-        public ChannelRecreateResult(bool recreated, CallInvoker? newCallInvoker, string? newAddress, AsyncDisposable newWorkerOwnedDisposable)
+        public ChannelRecreateResult(bool recreated, CallInvoker? newCallInvoker, string? newAddress, AsyncDisposable newWorkerOwnedDisposable, GrpcChannel? newChannel)
         {
             this.Recreated = recreated;
             this.NewCallInvoker = newCallInvoker;
             this.NewAddress = newAddress;
             this.NewWorkerOwnedDisposable = newWorkerOwnedDisposable;
+            this.NewChannel = newChannel;
         }
 
         public bool Recreated { get; }
@@ -180,8 +191,10 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 
         public AsyncDisposable NewWorkerOwnedDisposable { get; }
 
+        public GrpcChannel? NewChannel { get; }
+
         public static ChannelRecreateResult NotRecreated(AsyncDisposable currentDisposable)
-            => new(false, null, null, currentDisposable);
+            => new(false, null, null, currentDisposable, null);
     }
 
 #if NET6_0_OR_GREATER

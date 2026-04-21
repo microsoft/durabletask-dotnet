@@ -4,6 +4,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using Azure.Core;
 using Grpc.Net.Client;
 using Microsoft.DurableTask.Worker.Grpc;
@@ -155,7 +156,7 @@ public static class DurableTaskSchedulerWorkerExtensions
             string cacheKey = $"{optionsName}\u001F{source.EndpointAddress}\u001F{source.TaskHubName}\u001F{source.ResourceId}\u001F{credentialType}\u001F{source.AllowInsecureCredentials}\u001F{source.WorkerId}";
             options.Channel = this.channels.GetOrAdd(
                 cacheKey,
-                _ => new Lazy<GrpcChannel>(source.CreateChannel)).Value;
+                _ => new Lazy<GrpcChannel>(source.CreateChannel, LazyThreadSafetyMode.PublicationOnly)).Value;
             options.SetChannelRecreator((oldChannel, ct) => this.RecreateChannelAsync(cacheKey, source, oldChannel, ct));
             options.ConfigureForAzureManaged();
         }
@@ -177,8 +178,10 @@ public static class DurableTaskSchedulerWorkerExtensions
             // CAS swap: only replace if the cached lazy still holds the channel the caller observed.
             if (!this.channels.TryGetValue(cacheKey, out Lazy<GrpcChannel>? currentLazy))
             {
-                // No entry — create one and return it.
-                Lazy<GrpcChannel> created = new(source.CreateChannel);
+                // No entry — create one and return it. PublicationOnly ensures a transient
+                // CreateChannel failure doesn't permanently poison the cache slot (the default
+                // ExecutionAndPublication mode caches exceptions for the lifetime of the Lazy).
+                Lazy<GrpcChannel> created = new(source.CreateChannel, LazyThreadSafetyMode.PublicationOnly);
                 if (this.channels.TryAdd(cacheKey, created))
                 {
                     return created.Value;
@@ -199,7 +202,7 @@ public static class DurableTaskSchedulerWorkerExtensions
                 return currentLazy.Value;
             }
 
-            Lazy<GrpcChannel> newLazy = new(source.CreateChannel);
+            Lazy<GrpcChannel> newLazy = new(source.CreateChannel, LazyThreadSafetyMode.PublicationOnly);
             if (!this.channels.TryUpdate(cacheKey, newLazy, currentLazy))
             {
                 // Lost the race; whoever won has the freshest entry.

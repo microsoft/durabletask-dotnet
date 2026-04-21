@@ -107,8 +107,12 @@ sealed partial class GrpcDurableTaskWorker
                 catch (RpcException ex) when (ex.StatusCode == StatusCode.Unauthenticated)
                 {
                     // Auth rejection — log distinctly so it's diagnosable. Do not count toward channel
-                    // recreate: a fresh channel won't fix bad credentials.
+                    // recreate: a fresh channel won't fix bad credentials. Reset the consecutive-failure
+                    // counters: a status reply is proof the transport itself is healthy, so prior
+                    // transport failures should not combine with later ones to trip the recreate.
                     this.Logger.AuthenticationFailed(ex);
+                    consecutiveChannelFailures = 0;
+                    reconnectAttempt = 0;
                 }
                 catch (RpcException ex) when (ex.StatusCode == StatusCode.NotFound)
                 {
@@ -346,8 +350,10 @@ sealed partial class GrpcDurableTaskWorker
             // false forever and re-entering await foreach would tight-spin with no yield until the
             // silent-disconnect timer eventually fires. See the end-of-stream handling below for
             // the behavior we want in that case.
-            await foreach (P.WorkItem workItem in stream.ResponseStream.ReadAllAsync(tokenSource.Token))
+            try
             {
+                await foreach (P.WorkItem workItem in stream.ResponseStream.ReadAllAsync(tokenSource.Token))
+                {
                 if (silentDisconnectEnabled)
                 {
                     timeoutSource.CancelAfter(silentDisconnectTimeout);
@@ -412,6 +418,28 @@ sealed partial class GrpcDurableTaskWorker
                 {
                     this.Logger.UnexpectedWorkItemType(workItem.RequestCase.ToString());
                 }
+                }
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            {
+                // Worker is shutting down - fall through to the shutdown branch below.
+            }
+            catch (OperationCanceledException) when (timeoutSource.IsCancellationRequested)
+            {
+                // Silent-disconnect timer fired and the underlying gRPC channel surfaced cancellation
+                // as OperationCanceledException (this happens when GrpcChannelOptions.ThrowOperationCanceledOnCancellation
+                // is set to true). Fall through to the silent-disconnect branch below.
+            }
+            catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled
+                && timeoutSource.IsCancellationRequested
+                && !cancellation.IsCancellationRequested)
+            {
+                // Silent-disconnect timer fired mid-MoveNext. By default
+                // (GrpcChannelOptions.ThrowOperationCanceledOnCancellation == false), grpc-dotnet
+                // surfaces the linked cancellation as RpcException(Cancelled) rather than OCE. Without
+                // this catch the exception would propagate to ExecuteAsync's generic Cancelled handler
+                // and the silent-disconnect → channel-recreate path would never fire. Fall through to
+                // the silent-disconnect branch below.
             }
 
             if (cancellation.IsCancellationRequested)
@@ -420,7 +448,7 @@ sealed partial class GrpcDurableTaskWorker
                 return;
             }
 
-            if (tokenSource.Token.IsCancellationRequested)
+            if (timeoutSource.IsCancellationRequested)
             {
                 // Our silent-disconnect timer fired: the stream stopped producing messages (including
                 // health pings) for longer than the configured window. Treat as a poisoned channel.
@@ -431,12 +459,18 @@ sealed partial class GrpcDurableTaskWorker
 
             // The stream terminated cleanly (no exception, no cancellation). This is the canonical
             // signal sent by the backend during a graceful drain (HTTP/2 GOAWAY with OK trailers
-            // when a DTS instance is being replaced). We explicitly log and count this toward the
-            // channel-poisoned threshold: although a single drain is benign, repeated drains on
-            // the same cached channel usually mean the channel is latched onto a dead/evacuated
-            // backend and needs to be recreated to pick up fresh DNS/routing.
+            // when a DTS instance is being replaced). Log it explicitly so operators can see it.
+            // Only count it toward the channel-poisoned threshold when the stream produced no
+            // messages: a stream that successfully delivered work and was then closed by the server
+            // is healthy behavior (e.g. routine rolling upgrade), and counting those would let a
+            // long-lived process accumulate spurious "poison" credits across many healthy drains.
+            // An empty drain, on the other hand, is a strong signal the channel is latched onto a
+            // dead/evacuated backend and needs to be recreated to pick up fresh DNS/routing.
             this.Logger.StreamEndedByPeer();
-            onSilentDisconnect?.Invoke();
+            if (!firstMessageObserved)
+            {
+                onSilentDisconnect?.Invoke();
+            }
         }
 
         void RunBackgroundTask(P.WorkItem? workItem, Func<Task> handler, CancellationToken cancellation)

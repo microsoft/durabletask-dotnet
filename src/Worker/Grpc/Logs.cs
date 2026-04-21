@@ -52,6 +52,24 @@ namespace Microsoft.DurableTask.Worker.Grpc
         [LoggerMessage(EventId = 56, Level = LogLevel.Warning, Message = "Channel to backend has stopped receiving traffic, will attempt to reconnect.")]
         public static partial void ConnectionTimeout(this ILogger logger);
 
+        [LoggerMessage(EventId = 70, Level = LogLevel.Warning, Message = "Hello handshake to backend timed out after {timeoutSeconds}s. Will retry.")]
+        public static partial void HelloTimeout(this ILogger logger, int timeoutSeconds);
+
+        [LoggerMessage(EventId = 71, Level = LogLevel.Warning, Message = "Authentication failed when connecting to backend. Will retry.")]
+        public static partial void AuthenticationFailed(this ILogger logger, Exception ex);
+
+        [LoggerMessage(EventId = 72, Level = LogLevel.Warning, Message = "Recreating gRPC channel to backend after {failureCount} consecutive connect failures.")]
+        public static partial void RecreatingChannel(this ILogger logger, int failureCount);
+
+        [LoggerMessage(EventId = 73, Level = LogLevel.Information, Message = "gRPC channel to backend has been recreated. New target: {endpoint}.")]
+        public static partial void ChannelRecreated(this ILogger logger, string endpoint);
+
+        [LoggerMessage(EventId = 74, Level = LogLevel.Debug, Message = "Reconnect attempt {attempt} will retry after {delayMs} ms.")]
+        public static partial void ReconnectBackoff(this ILogger logger, int attempt, int delayMs);
+
+        [LoggerMessage(EventId = 75, Level = LogLevel.Trace, Message = "Received health ping from the backend.")]
+        public static partial void ReceivedHealthPing(this ILogger logger);
+
         [LoggerMessage(EventId = 57, Level = LogLevel.Warning, Message = "Orchestration version did not meet worker versioning requirements. Error action = '{errorAction}'. Version error = '{versionError}'")]
         public static partial void OrchestrationVersionFailure(this ILogger logger, string errorAction, string versionError);
 

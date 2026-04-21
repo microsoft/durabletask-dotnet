@@ -52,7 +52,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     {
         this.logger = Check.NotNull(logger);
         this.options = Check.NotNull(options);
-        this.asyncDisposable = GetCallInvoker(options, out CallInvoker callInvoker);
+        this.asyncDisposable = GetCallInvoker(options, logger, out CallInvoker callInvoker);
         this.sidecarClient = new TaskHubSidecarServiceClient(callInvoker);
 
         if (this.options.EnableEntitySupport)
@@ -624,21 +624,43 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
     }
 
-    static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, out CallInvoker callInvoker)
+    static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, ILogger logger, out CallInvoker callInvoker)
     {
+        Func<GrpcChannel, CancellationToken, Task<GrpcChannel>>? recreator = options.Internal.ChannelRecreator;
+        int threshold = options.Internal.ChannelRecreateFailureThreshold;
+        TimeSpan cooldown = options.Internal.MinRecreateInterval;
+        bool recreateEnabled = recreator != null && threshold > 0;
+
         if (options.Channel is GrpcChannel c)
         {
+            if (recreateEnabled)
+            {
+                ChannelRecreatingCallInvoker wrapper = new(c, recreator!, threshold, cooldown, ownsChannel: false, logger);
+                callInvoker = wrapper;
+                return default;
+            }
+
             callInvoker = c.CreateCallInvoker();
             return default;
         }
 
         if (options.CallInvoker is CallInvoker invoker)
         {
+            // Externally supplied invoker — we do not own the underlying channel and cannot recreate it.
             callInvoker = invoker;
             return default;
         }
 
+        // Self-owned address path: create the channel ourselves so we own its lifecycle.
         c = GetChannel(options.Address);
+
+        if (recreateEnabled)
+        {
+            ChannelRecreatingCallInvoker wrapper = new(c, recreator!, threshold, cooldown, ownsChannel: true, logger);
+            callInvoker = wrapper;
+            return new AsyncDisposable(() => wrapper.DisposeAsync());
+        }
+
         callInvoker = c.CreateCallInvoker();
         return new AsyncDisposable(() => new(c.ShutdownAsync()));
     }

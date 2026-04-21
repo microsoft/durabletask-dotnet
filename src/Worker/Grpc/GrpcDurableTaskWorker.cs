@@ -57,9 +57,123 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await using AsyncDisposable disposable = this.GetCallInvoker(out CallInvoker callInvoker, out string address);
-        this.logger.StartingTaskHubWorker(address);
-        await new Processor(this, new(callInvoker), this.orchestrationFilter, this.ExceptionPropertiesProvider).ExecuteAsync(stoppingToken);
+        AsyncDisposable workerOwnedChannelDisposable = this.GetCallInvoker(out CallInvoker callInvoker, out string address);
+        try
+        {
+            this.logger.StartingTaskHubWorker(address);
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                Processor processor = new(this, new(callInvoker), this.orchestrationFilter, this.ExceptionPropertiesProvider);
+                ProcessorExitReason reason = await processor.ExecuteAsync(stoppingToken);
+
+                if (reason == ProcessorExitReason.Shutdown || stoppingToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                // ChannelRecreateRequested: try to obtain a fresh channel before re-entering the loop.
+                ChannelRecreateResult result = await this.TryRecreateChannelAsync(stoppingToken, workerOwnedChannelDisposable);
+                if (result.Recreated)
+                {
+                    callInvoker = result.NewCallInvoker!;
+                    address = result.NewAddress!;
+                    AsyncDisposable previousDisposable = workerOwnedChannelDisposable;
+                    workerOwnedChannelDisposable = result.NewWorkerOwnedDisposable;
+                    this.logger.ChannelRecreated(address);
+
+                    // Dispose the prior worker-owned channel (if any) AFTER swapping in the new one.
+                    // For caller-supplied channels this is a no-op (default AsyncDisposable).
+                    if (!ReferenceEquals(previousDisposable, workerOwnedChannelDisposable))
+                    {
+                        await previousDisposable.DisposeAsync();
+                    }
+                }
+
+                // If we couldn't recreate (e.g., caller-owned CallInvoker), fall through and retry on the
+                // existing transport. The Processor's outer backoff already waited before returning.
+            }
+        }
+        finally
+        {
+            await workerOwnedChannelDisposable.DisposeAsync();
+        }
+    }
+
+    async Task<ChannelRecreateResult> TryRecreateChannelAsync(
+        CancellationToken cancellation,
+        AsyncDisposable currentWorkerOwnedDisposable)
+    {
+        // Path 1: caller (or extension method like ConfigureGrpcChannel) supplied a recreator.
+        Func<GrpcChannel, CancellationToken, Task<GrpcChannel>>? recreator = this.grpcOptions.Internal.ChannelRecreator;
+        if (recreator is not null && this.grpcOptions.Channel is GrpcChannel currentChannel)
+        {
+            try
+            {
+                GrpcChannel newChannel = await recreator(currentChannel, cancellation).ConfigureAwait(false);
+                if (!ReferenceEquals(newChannel, currentChannel))
+                {
+                    // The recreator owns disposal of the old channel; we don't dispose here.
+                    return new ChannelRecreateResult(true, newChannel.CreateCallInvoker(), newChannel.Target, currentWorkerOwnedDisposable);
+                }
+
+                // Recreator returned the same instance — nothing to swap.
+                return ChannelRecreateResult.NotRecreated(currentWorkerOwnedDisposable);
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Don't crash the worker if recreate fails; just keep using the existing transport.
+                this.logger.UnexpectedError(ex, string.Empty);
+                return ChannelRecreateResult.NotRecreated(currentWorkerOwnedDisposable);
+            }
+        }
+
+        // Path 2: worker-owned channel created from Address. We can rebuild it ourselves.
+        if (this.grpcOptions.Channel is null
+            && this.grpcOptions.CallInvoker is null)
+        {
+            try
+            {
+                GrpcChannel newChannel = GetChannel(this.grpcOptions.Address);
+                AsyncDisposable newDisposable = new(() => new(newChannel.ShutdownAsync()));
+                return new ChannelRecreateResult(true, newChannel.CreateCallInvoker(), newChannel.Target, newDisposable);
+            }
+            catch (Exception ex)
+            {
+                this.logger.UnexpectedError(ex, string.Empty);
+                return ChannelRecreateResult.NotRecreated(currentWorkerOwnedDisposable);
+            }
+        }
+
+        // Path 3: caller-owned CallInvoker or externally-supplied Channel without a recreator.
+        // No safe way to recreate; let the inner loop continue trying on the existing transport.
+        return ChannelRecreateResult.NotRecreated(currentWorkerOwnedDisposable);
+    }
+
+    readonly struct ChannelRecreateResult
+    {
+        public ChannelRecreateResult(bool recreated, CallInvoker? newCallInvoker, string? newAddress, AsyncDisposable newWorkerOwnedDisposable)
+        {
+            this.Recreated = recreated;
+            this.NewCallInvoker = newCallInvoker;
+            this.NewAddress = newAddress;
+            this.NewWorkerOwnedDisposable = newWorkerOwnedDisposable;
+        }
+
+        public bool Recreated { get; }
+
+        public CallInvoker? NewCallInvoker { get; }
+
+        public string? NewAddress { get; }
+
+        public AsyncDisposable NewWorkerOwnedDisposable { get; }
+
+        public static ChannelRecreateResult NotRecreated(AsyncDisposable currentDisposable)
+            => new(false, null, null, currentDisposable);
     }
 
 #if NET6_0_OR_GREATER

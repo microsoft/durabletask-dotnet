@@ -39,6 +39,15 @@ namespace Microsoft.DurableTask.Client.Grpc
         [LoggerMessage(EventId = 46, Level = LogLevel.Information, Message = "Purging instances with filter: {{ CreatedFrom = {createdFrom}, CreatedTo = {createdTo}, Statuses = {statuses} }}")]
         public static partial void PurgingInstances(this ILogger logger, DateTimeOffset? createdFrom, DateTimeOffset? createdTo, string? statuses);
 
+        [LoggerMessage(EventId = 80, Level = LogLevel.Warning, Message = "Recreating gRPC channel to backend after {failureCount} consecutive transport failures.")]
+        public static partial void RecreatingChannel(this ILogger logger, int failureCount);
+
+        [LoggerMessage(EventId = 81, Level = LogLevel.Information, Message = "gRPC channel to backend has been recreated. New target: {endpoint}.")]
+        public static partial void ChannelRecreated(this ILogger logger, string endpoint);
+
+        [LoggerMessage(EventId = 82, Level = LogLevel.Warning, Message = "gRPC channel recreation failed.")]
+        public static partial void ChannelRecreateFailed(this ILogger logger, Exception exception);
+
         /// <summary>
         /// <see cref="PurgingInstances(ILogger, DateTimeOffset?, DateTimeOffset?, string?)" />.
         /// </summary>

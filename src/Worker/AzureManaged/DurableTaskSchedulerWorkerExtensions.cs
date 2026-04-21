@@ -210,11 +210,17 @@ public static class DurableTaskSchedulerWorkerExtensions
             Lazy<GrpcChannel> newLazy = new(newChannel);
             if (!this.channels.TryUpdate(cacheKey, newLazy, currentLazy))
             {
-                // Lost the race; whoever won has the freshest entry. Dispose the channel we just
-                // created so it doesn't leak.
-                this.channels.TryGetValue(cacheKey, out Lazy<GrpcChannel>? winner);
+                // Lost the race. Always queue the freshly-created channel for deferred disposal so
+                // it does not leak. Then return the winning entry — but if the cache slot has been
+                // removed entirely (e.g. concurrent DisposeAsync cleared the dictionary), do NOT
+                // hand back the doomed `newChannel`: it has already been scheduled for shutdown.
                 _ = ScheduleDeferredDisposeAsync(newChannel);
-                return Task.FromResult(winner?.Value ?? newChannel);
+                if (this.channels.TryGetValue(cacheKey, out Lazy<GrpcChannel>? winner) && winner is not null)
+                {
+                    return Task.FromResult(winner.Value);
+                }
+
+                throw new ObjectDisposedException(this.GetType().FullName);
             }
 
             // Successful swap. Schedule graceful disposal of the old channel after a grace period

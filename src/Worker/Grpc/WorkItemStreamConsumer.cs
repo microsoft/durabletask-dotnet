@@ -65,10 +65,19 @@ internal static class WorkItemStreamConsumer
         CancellationToken cancellation)
     {
         bool silentDisconnectEnabled = silentDisconnectTimeout > TimeSpan.Zero;
+
+        // CancellationTokenSource.CancelAfter rejects values larger than int.MaxValue ms (~24.8d).
+        // Defensively clamp so a misconfigured SilentDisconnectTimeout cannot crash the consume loop.
+        TimeSpan effectiveTimeout = silentDisconnectTimeout;
+        if (silentDisconnectEnabled && silentDisconnectTimeout.TotalMilliseconds > int.MaxValue)
+        {
+            effectiveTimeout = TimeSpan.FromMilliseconds(int.MaxValue);
+        }
+
         using CancellationTokenSource timeoutSource = new();
         if (silentDisconnectEnabled)
         {
-            timeoutSource.CancelAfter(silentDisconnectTimeout);
+            timeoutSource.CancelAfter(effectiveTimeout);
         }
 
         using CancellationTokenSource tokenSource = CancellationTokenSource.CreateLinkedTokenSource(
@@ -82,7 +91,7 @@ internal static class WorkItemStreamConsumer
             {
                 if (silentDisconnectEnabled)
                 {
-                    timeoutSource.CancelAfter(silentDisconnectTimeout);
+                    timeoutSource.CancelAfter(effectiveTimeout);
                 }
 
                 if (!firstMessageObserved)

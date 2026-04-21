@@ -78,7 +78,7 @@ sealed partial class GrpcDurableTaskWorker
                             consecutiveChannelFailures = 0;
                             reconnectAttempt = 0;
                         },
-                        onSilentDisconnect: () => channelLikelyPoisoned = true);
+                        onChannelLikelyPoisoned: () => channelLikelyPoisoned = true);
                 }
                 catch (RpcException) when (cancellation.IsCancellationRequested)
                 {
@@ -153,7 +153,7 @@ sealed partial class GrpcDurableTaskWorker
                         this.internalOptions.ReconnectBackoffBase,
                         this.internalOptions.ReconnectBackoffCap,
                         backoffRandom);
-                    this.Logger.ReconnectBackoff(reconnectAttempt, (int)delay.TotalMilliseconds);
+                    this.Logger.ReconnectBackoff(reconnectAttempt, (int)Math.Min(int.MaxValue, delay.TotalMilliseconds));
                     reconnectAttempt = Math.Min(reconnectAttempt + 1, 30); // cap to avoid overflow in 2^attempt
                     await Task.Delay(delay, cancellation);
                 }
@@ -299,7 +299,16 @@ sealed partial class GrpcDurableTaskWorker
         async Task<AsyncServerStreamingCall<P.WorkItem>> ConnectAsync(CancellationToken cancellation)
         {
             TimeSpan helloDeadline = this.internalOptions.HelloDeadline;
-            DateTime? deadline = helloDeadline > TimeSpan.Zero ? DateTime.UtcNow.Add(helloDeadline) : null;
+            DateTime? deadline = null;
+
+            if (helloDeadline > TimeSpan.Zero)
+            {
+                // Clamp to DateTime.MaxValue so a misconfigured (very large) HelloDeadline cannot
+                // throw ArgumentOutOfRangeException out of DateTime.Add and crash the connect loop.
+                DateTime now = DateTime.UtcNow;
+                TimeSpan maxOffset = DateTime.MaxValue - now;
+                deadline = helloDeadline >= maxOffset ? DateTime.MaxValue : now.Add(helloDeadline);
+            }
 
             await this.client!.HelloAsync(EmptyMessage, deadline: deadline, cancellationToken: cancellation);
             this.Logger.EstablishedWorkItemConnection();
@@ -326,7 +335,7 @@ sealed partial class GrpcDurableTaskWorker
             AsyncServerStreamingCall<P.WorkItem> stream,
             CancellationToken cancellation,
             Action? onFirstMessage = null,
-            Action? onSilentDisconnect = null)
+            Action? onChannelLikelyPoisoned = null)
         {
             // The timeout token (managed by WorkItemStreamConsumer) detects when no messages —
             // including health pings sent periodically by the server — arrive within the configured
@@ -353,7 +362,7 @@ sealed partial class GrpcDurableTaskWorker
                     // Stream stopped producing messages (including health pings) for longer than the
                     // configured window. Treat as a poisoned channel.
                     this.Logger.ConnectionTimeout();
-                    onSilentDisconnect?.Invoke();
+                    onChannelLikelyPoisoned?.Invoke();
                     return;
 
                 case WorkItemStreamOutcome.GracefulDrain:
@@ -369,7 +378,7 @@ sealed partial class GrpcDurableTaskWorker
                     this.Logger.StreamEndedByPeer();
                     if (!result.FirstMessageObserved)
                     {
-                        onSilentDisconnect?.Invoke();
+                        onChannelLikelyPoisoned?.Invoke();
                     }
 
                     return;

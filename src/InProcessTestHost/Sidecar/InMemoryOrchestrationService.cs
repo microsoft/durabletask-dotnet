@@ -684,11 +684,14 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                 else if (state.IsCompleted)
                 {
                     // Drop the message since we're completed
-                    // GOOD: The user-provided the instanceId
-                    // logger.LogWarning(
-                    //     "Dropped {eventType} message for instance '{instanceId}' because the orchestration has already completed.",
-                    //     message.Event.EventType,
-                    //     instanceId);
+                    return;
+                }
+                else if (isRestart)
+                {
+                    // Drop messages that belong to a previous execution (stale activity
+                    // completions, timer fires, etc.). These can arrive when a
+                    // ContinueAsNew created a new execution but work items from the
+                    // old execution are still in flight.
                     return;
                 }
 

@@ -653,7 +653,7 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
             SerializedInstanceState state = this.store.GetOrAdd(instanceId, id => new SerializedInstanceState(id, executionId));
             lock (state)
             {
-                bool isRestart = state.ExecutionId != null && state.ExecutionId != executionId;
+                bool isRestart = executionId != null && state.ExecutionId != null && state.ExecutionId != executionId;
                 
                 if (message.Event is ExecutionStartedEvent startEvent)
                 {

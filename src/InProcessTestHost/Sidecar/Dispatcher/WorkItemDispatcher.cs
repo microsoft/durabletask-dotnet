@@ -156,8 +156,8 @@ abstract class WorkItemDispatcher<T> : IDisposable where T : class
     {
         TimeSpan logInterval = TimeSpan.FromMinutes(1);
 
-        // IMPORTANT: This logic assumes only a single logical "thread" is executing the receive loop,
-        //            and that there's no possible race condition when comparing work-item counts.
+        // IMPORTANT: The receive loop is expected to have a single logical execution path, but the
+        //            work-item count can still change concurrently and must be read using thread-safe access.
         DateTime nextLogTime = DateTime.MinValue;
         while (Volatile.Read(ref this.currentWorkItems) >= this.MaxWorkItems)
         {

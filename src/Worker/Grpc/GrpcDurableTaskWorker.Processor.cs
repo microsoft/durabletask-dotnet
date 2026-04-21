@@ -328,148 +328,109 @@ sealed partial class GrpcDurableTaskWorker
             Action? onFirstMessage = null,
             Action? onSilentDisconnect = null)
         {
-            // Create a new token source for timing out and a final token source that keys off of them both.
-            // The timeout token is used to detect when we are no longer getting any messages, including health
-            // pings sent periodically by the server. If this is the case, it signifies the connection has been
-            // dropped silently and we need to reconnect.
+            // The timeout token (managed by WorkItemStreamConsumer) detects when no messages —
+            // including health pings sent periodically by the server — arrive within the configured
+            // window. If that fires we treat the stream as silently disconnected and reconnect.
             TimeSpan silentDisconnectTimeout = this.internalOptions.SilentDisconnectTimeout;
-            bool silentDisconnectEnabled = silentDisconnectTimeout > TimeSpan.Zero;
-            using var timeoutSource = new CancellationTokenSource();
-            if (silentDisconnectEnabled)
+
+            // NOTE: the consumer deliberately does NOT wrap its await foreach in an outer loop.
+            // The underlying IAsyncStreamReader is single-use — once the server terminates the stream
+            // (e.g. via a graceful HTTP/2 GOAWAY with OK trailers during a rolling upgrade), MoveNext
+            // returns false forever and re-entering await foreach would tight-spin with no yield.
+            WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
+                ct => stream.ResponseStream.ReadAllAsync(ct),
+                silentDisconnectTimeout,
+                workItem => this.DispatchWorkItem(workItem, cancellation),
+                onFirstMessage,
+                cancellation);
+
+            switch (result.Outcome)
             {
-                timeoutSource.CancelAfter(silentDisconnectTimeout);
+                case WorkItemStreamOutcome.Shutdown:
+                    return;
+
+                case WorkItemStreamOutcome.SilentDisconnect:
+                    // Stream stopped producing messages (including health pings) for longer than the
+                    // configured window. Treat as a poisoned channel.
+                    this.Logger.ConnectionTimeout();
+                    onSilentDisconnect?.Invoke();
+                    return;
+
+                case WorkItemStreamOutcome.GracefulDrain:
+                    // Canonical signal sent by the backend during a graceful drain (HTTP/2 GOAWAY +
+                    // OK trailers when a DTS instance is being replaced). Log it explicitly so
+                    // operators can see it. Only count it toward the channel-poisoned threshold when
+                    // the stream produced no messages: a stream that successfully delivered work and
+                    // was then closed by the server is healthy behavior (e.g. routine rolling
+                    // upgrade), and counting those would let a long-lived process accumulate spurious
+                    // "poison" credits across many healthy drains. An empty drain, on the other hand,
+                    // is a strong signal the channel is latched onto a dead/evacuated backend and
+                    // needs to be recreated to pick up fresh DNS/routing.
+                    this.Logger.StreamEndedByPeer();
+                    if (!result.FirstMessageObserved)
+                    {
+                        onSilentDisconnect?.Invoke();
+                    }
+
+                    return;
             }
+        }
 
-            using var tokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellation, timeoutSource.Token);
-
-            bool firstMessageObserved = false;
-
-            // NOTE: we deliberately do NOT wrap the await foreach in an outer loop. The underlying
-            // IAsyncStreamReader is single-use — once the server terminates the stream (e.g. via a
-            // graceful HTTP/2 GOAWAY with OK trailers during a rolling upgrade), MoveNext returns
-            // false forever and re-entering await foreach would tight-spin with no yield until the
-            // silent-disconnect timer eventually fires. See the end-of-stream handling below for
-            // the behavior we want in that case.
-            try
+        void DispatchWorkItem(P.WorkItem workItem, CancellationToken cancellation)
+        {
+            if (workItem.RequestCase == P.WorkItem.RequestOneofCase.OrchestratorRequest)
             {
-                await foreach (P.WorkItem workItem in stream.ResponseStream.ReadAllAsync(tokenSource.Token))
-                {
-                if (silentDisconnectEnabled)
-                {
-                    timeoutSource.CancelAfter(silentDisconnectTimeout);
-                }
-
-                if (!firstMessageObserved)
-                {
-                    firstMessageObserved = true;
-                    onFirstMessage?.Invoke();
-                }
-
-                if (workItem.RequestCase == P.WorkItem.RequestOneofCase.OrchestratorRequest)
-                {
-                    this.RunBackgroundTask(
-                        workItem,
-                        () => this.OnRunOrchestratorAsync(
-                            workItem.OrchestratorRequest,
-                            workItem.CompletionToken,
-                            cancellation),
-                        cancellation);
-                }
-                else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
-                {
-                    this.RunBackgroundTask(
-                        workItem,
-                        () => this.OnRunActivityAsync(
-                            workItem.ActivityRequest,
-                            workItem.CompletionToken,
-                            cancellation),
-                        cancellation);
-                }
-                else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
-                {
-                    this.RunBackgroundTask(
-                        workItem,
-                        () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation),
-                        cancellation);
-                }
-                else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequestV2)
-                {
-                    workItem.EntityRequestV2.ToEntityBatchRequest(
-                        out EntityBatchRequest batchRequest,
-                        out List<P.OperationInfo> operationInfos);
-
-                    this.RunBackgroundTask(
-                         workItem,
-                         () => this.OnRunEntityBatchAsync(
-                            batchRequest,
-                            cancellation,
-                            workItem.CompletionToken,
-                            operationInfos),
-                         cancellation);
-                }
-                else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
-                {
-                    // Health pings are heartbeat-only signals from the backend; the silent-disconnect
-                    // timer reset above is the actionable behavior. Logging at Trace allows operators
-                    // to confirm liveness without flooding info-level telemetry.
-                    this.Logger.ReceivedHealthPing();
-                }
-                else
-                {
-                    this.Logger.UnexpectedWorkItemType(workItem.RequestCase.ToString());
-                }
-                }
+                this.RunBackgroundTask(
+                    workItem,
+                    () => this.OnRunOrchestratorAsync(
+                        workItem.OrchestratorRequest,
+                        workItem.CompletionToken,
+                        cancellation),
+                    cancellation);
             }
-            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
             {
-                // Worker is shutting down - fall through to the shutdown branch below.
+                this.RunBackgroundTask(
+                    workItem,
+                    () => this.OnRunActivityAsync(
+                        workItem.ActivityRequest,
+                        workItem.CompletionToken,
+                        cancellation),
+                    cancellation);
             }
-            catch (OperationCanceledException) when (timeoutSource.IsCancellationRequested)
+            else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
             {
-                // Silent-disconnect timer fired and the underlying gRPC channel surfaced cancellation
-                // as OperationCanceledException (this happens when GrpcChannelOptions.ThrowOperationCanceledOnCancellation
-                // is set to true). Fall through to the silent-disconnect branch below.
+                this.RunBackgroundTask(
+                    workItem,
+                    () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation),
+                    cancellation);
             }
-            catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled
-                && timeoutSource.IsCancellationRequested
-                && !cancellation.IsCancellationRequested)
+            else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequestV2)
             {
-                // Silent-disconnect timer fired mid-MoveNext. By default
-                // (GrpcChannelOptions.ThrowOperationCanceledOnCancellation == false), grpc-dotnet
-                // surfaces the linked cancellation as RpcException(Cancelled) rather than OCE. Without
-                // this catch the exception would propagate to ExecuteAsync's generic Cancelled handler
-                // and the silent-disconnect → channel-recreate path would never fire. Fall through to
-                // the silent-disconnect branch below.
-            }
+                workItem.EntityRequestV2.ToEntityBatchRequest(
+                    out EntityBatchRequest batchRequest,
+                    out List<P.OperationInfo> operationInfos);
 
-            if (cancellation.IsCancellationRequested)
-            {
-                // Worker is shutting down - exit gracefully.
-                return;
+                this.RunBackgroundTask(
+                     workItem,
+                     () => this.OnRunEntityBatchAsync(
+                        batchRequest,
+                        cancellation,
+                        workItem.CompletionToken,
+                        operationInfos),
+                     cancellation);
             }
-
-            if (timeoutSource.IsCancellationRequested)
+            else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
             {
-                // Our silent-disconnect timer fired: the stream stopped producing messages (including
-                // health pings) for longer than the configured window. Treat as a poisoned channel.
-                this.Logger.ConnectionTimeout();
-                onSilentDisconnect?.Invoke();
-                return;
+                // Health pings are heartbeat-only signals from the backend; the silent-disconnect
+                // timer reset (handled inside WorkItemStreamConsumer) is the actionable behavior.
+                // Logging at Trace allows operators to confirm liveness without flooding info-level
+                // telemetry.
+                this.Logger.ReceivedHealthPing();
             }
-
-            // The stream terminated cleanly (no exception, no cancellation). This is the canonical
-            // signal sent by the backend during a graceful drain (HTTP/2 GOAWAY with OK trailers
-            // when a DTS instance is being replaced). Log it explicitly so operators can see it.
-            // Only count it toward the channel-poisoned threshold when the stream produced no
-            // messages: a stream that successfully delivered work and was then closed by the server
-            // is healthy behavior (e.g. routine rolling upgrade), and counting those would let a
-            // long-lived process accumulate spurious "poison" credits across many healthy drains.
-            // An empty drain, on the other hand, is a strong signal the channel is latched onto a
-            // dead/evacuated backend and needs to be recreated to pick up fresh DNS/routing.
-            this.Logger.StreamEndedByPeer();
-            if (!firstMessageObserved)
+            else
             {
-                onSilentDisconnect?.Invoke();
+                this.Logger.UnexpectedWorkItemType(workItem.RequestCase.ToString());
             }
         }
 

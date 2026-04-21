@@ -97,5 +97,8 @@ namespace Microsoft.DurableTask.Worker.Grpc
 
         [LoggerMessage(EventId = 75, Level = LogLevel.Trace, Message = "Received health ping from the backend.")]
         public static partial void ReceivedHealthPing(this ILogger logger);
+
+        [LoggerMessage(EventId = 76, Level = LogLevel.Information, Message = "Work-item stream ended by the backend (graceful close). Will reconnect.")]
+        public static partial void StreamEndedByPeer(this ILogger logger);
     }
 }

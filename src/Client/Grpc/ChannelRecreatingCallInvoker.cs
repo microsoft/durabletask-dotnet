@@ -38,6 +38,11 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
     readonly bool ownsChannel;
     readonly ILogger logger;
 
+    // Accessed from call-site threads (reads) and the background recreate task (writes).
+    // Read/written with Volatile.Read / Volatile.Write to prevent torn reads and to publish
+    // the new reference so that callers on other threads observe it without additional
+    // synchronization. The TransportState itself is immutable so readers see a consistent
+    // (Channel, Invoker) pair once Volatile.Read returns.
     TransportState state;
     int consecutiveFailures;
     int recreateInFlight;
@@ -65,7 +70,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
     public override TResponse BlockingUnaryCall<TRequest, TResponse>(
         Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
     {
-        TransportState current = this.state;
+        TransportState current = Volatile.Read(ref this.state);
         try
         {
             TResponse response = current.Invoker.BlockingUnaryCall(method, host, options, request);
@@ -82,7 +87,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
     public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(
         Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
     {
-        TransportState current = this.state;
+        TransportState current = Volatile.Read(ref this.state);
         AsyncUnaryCall<TResponse> call = current.Invoker.AsyncUnaryCall(method, host, options, request);
         this.ObserveOutcome(call.ResponseAsync, method.FullName);
         return call;
@@ -94,19 +99,19 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         // Streaming calls are forwarded without outcome observation. The streaming methods used by the
         // DurableTask client are bounded snapshots (e.g. StreamInstanceHistory) where errors surface as
         // exceptions to user code, so global failure counting on these would create false positives.
-        return this.state.Invoker.AsyncServerStreamingCall(method, host, options, request);
+        return Volatile.Read(ref this.state).Invoker.AsyncServerStreamingCall(method, host, options, request);
     }
 
     public override AsyncClientStreamingCall<TRequest, TResponse> AsyncClientStreamingCall<TRequest, TResponse>(
         Method<TRequest, TResponse> method, string? host, CallOptions options)
     {
-        return this.state.Invoker.AsyncClientStreamingCall(method, host, options);
+        return Volatile.Read(ref this.state).Invoker.AsyncClientStreamingCall(method, host, options);
     }
 
     public override AsyncDuplexStreamingCall<TRequest, TResponse> AsyncDuplexStreamingCall<TRequest, TResponse>(
         Method<TRequest, TResponse> method, string? host, CallOptions options)
     {
-        return this.state.Invoker.AsyncDuplexStreamingCall(method, host, options);
+        return Volatile.Read(ref this.state).Invoker.AsyncDuplexStreamingCall(method, host, options);
     }
 
     public async ValueTask DisposeAsync()
@@ -116,7 +121,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
             return;
         }
 
-        TransportState current = this.state;
+        TransportState current = Volatile.Read(ref this.state);
         try
         {
 #if NET6_0_OR_GREATER
@@ -217,14 +222,23 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
     {
         try
         {
-            TransportState current = this.state;
+            TransportState current = Volatile.Read(ref this.state);
             using CancellationTokenSource cts = new(TimeSpan.FromSeconds(30));
             GrpcChannel newChannel = await this.recreator(current.Channel, cts.Token).ConfigureAwait(false);
 
             if (!ReferenceEquals(newChannel, current.Channel))
             {
-                this.state = new TransportState(newChannel, newChannel.CreateCallInvoker());
+                Volatile.Write(ref this.state, new TransportState(newChannel, newChannel.CreateCallInvoker()));
                 this.logger.ChannelRecreated(GetEndpointDescription(newChannel));
+
+                // When we own the channel, no external party is responsible for tearing down the old
+                // one. Defer disposal briefly so any in-flight RPCs issued against the previous
+                // CallInvoker before the swap can still complete (they already captured the old
+                // TransportState before Volatile.Write).
+                if (this.ownsChannel)
+                {
+                    _ = ScheduleDeferredDisposeAsync(current.Channel);
+                }
             }
 
             // Successful recreate (even if a peer beat us to it) → reset the failure counter.
@@ -243,6 +257,38 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         finally
         {
             Interlocked.Exchange(ref this.recreateInFlight, 0);
+        }
+    }
+
+    static async Task ScheduleDeferredDisposeAsync(GrpcChannel channel)
+    {
+        try
+        {
+            // Grace period to let in-flight RPCs captured against the old invoker drain before we
+            // tear down the channel's HTTP handler / sockets.
+            await Task.Delay(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+            try
+            {
+                await channel.ShutdownAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+            {
+                // Expected during process shutdown; nothing to do.
+            }
+#if NET6_0_OR_GREATER
+            channel.Dispose();
+#endif
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException
+                                    and not StackOverflowException
+                                    and not ThreadAbortException)
+        {
+            if (ex is not OperationCanceledException and not ObjectDisposedException)
+            {
+                Trace.TraceError(
+                    "Unexpected exception while deferred-disposing gRPC channel in ChannelRecreatingCallInvoker.ScheduleDeferredDisposeAsync: {0}",
+                    ex);
+            }
         }
     }
 

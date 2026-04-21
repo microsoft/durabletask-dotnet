@@ -340,91 +340,103 @@ sealed partial class GrpcDurableTaskWorker
 
             bool firstMessageObserved = false;
 
-            while (!cancellation.IsCancellationRequested)
+            // NOTE: we deliberately do NOT wrap the await foreach in an outer loop. The underlying
+            // IAsyncStreamReader is single-use — once the server terminates the stream (e.g. via a
+            // graceful HTTP/2 GOAWAY with OK trailers during a rolling upgrade), MoveNext returns
+            // false forever and re-entering await foreach would tight-spin with no yield until the
+            // silent-disconnect timer eventually fires. See the end-of-stream handling below for
+            // the behavior we want in that case.
+            await foreach (P.WorkItem workItem in stream.ResponseStream.ReadAllAsync(tokenSource.Token))
             {
-                await foreach (P.WorkItem workItem in stream.ResponseStream.ReadAllAsync(tokenSource.Token))
+                if (silentDisconnectEnabled)
                 {
-                    if (silentDisconnectEnabled)
-                    {
-                        timeoutSource.CancelAfter(silentDisconnectTimeout);
-                    }
-
-                    if (!firstMessageObserved)
-                    {
-                        firstMessageObserved = true;
-                        onFirstMessage?.Invoke();
-                    }
-
-                    if (workItem.RequestCase == P.WorkItem.RequestOneofCase.OrchestratorRequest)
-                    {
-                        this.RunBackgroundTask(
-                            workItem,
-                            () => this.OnRunOrchestratorAsync(
-                                workItem.OrchestratorRequest,
-                                workItem.CompletionToken,
-                                cancellation),
-                            cancellation);
-                    }
-                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
-                    {
-                        this.RunBackgroundTask(
-                            workItem,
-                            () => this.OnRunActivityAsync(
-                                workItem.ActivityRequest,
-                                workItem.CompletionToken,
-                                cancellation),
-                            cancellation);
-                    }
-                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
-                    {
-                        this.RunBackgroundTask(
-                            workItem,
-                            () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation),
-                            cancellation);
-                    }
-                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequestV2)
-                    {
-                        workItem.EntityRequestV2.ToEntityBatchRequest(
-                            out EntityBatchRequest batchRequest,
-                            out List<P.OperationInfo> operationInfos);
-
-                        this.RunBackgroundTask(
-                             workItem,
-                             () => this.OnRunEntityBatchAsync(
-                                batchRequest,
-                                cancellation,
-                                workItem.CompletionToken,
-                                operationInfos),
-                             cancellation);
-                    }
-                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
-                    {
-                        // Health pings are heartbeat-only signals from the backend; the silent-disconnect
-                        // timer reset above is the actionable behavior. Logging at Trace allows operators
-                        // to confirm liveness without flooding info-level telemetry.
-                        this.Logger.ReceivedHealthPing();
-                    }
-                    else
-                    {
-                        this.Logger.UnexpectedWorkItemType(workItem.RequestCase.ToString());
-                    }
+                    timeoutSource.CancelAfter(silentDisconnectTimeout);
                 }
 
-                if (tokenSource.IsCancellationRequested || tokenSource.Token.IsCancellationRequested)
+                if (!firstMessageObserved)
                 {
-                    // The token has cancelled, this means either:
-                    // 1. The broader 'cancellation' was triggered, return here to start a graceful shutdown.
-                    // 2. The timeoutSource was triggered, return here to trigger a reconnect to the backend.
-                    if (!cancellation.IsCancellationRequested)
-                    {
-                        // Since the cancellation came from the timeout, log a warning.
-                        this.Logger.ConnectionTimeout();
-                        onSilentDisconnect?.Invoke();
-                    }
+                    firstMessageObserved = true;
+                    onFirstMessage?.Invoke();
+                }
 
-                    return;
+                if (workItem.RequestCase == P.WorkItem.RequestOneofCase.OrchestratorRequest)
+                {
+                    this.RunBackgroundTask(
+                        workItem,
+                        () => this.OnRunOrchestratorAsync(
+                            workItem.OrchestratorRequest,
+                            workItem.CompletionToken,
+                            cancellation),
+                        cancellation);
+                }
+                else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
+                {
+                    this.RunBackgroundTask(
+                        workItem,
+                        () => this.OnRunActivityAsync(
+                            workItem.ActivityRequest,
+                            workItem.CompletionToken,
+                            cancellation),
+                        cancellation);
+                }
+                else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
+                {
+                    this.RunBackgroundTask(
+                        workItem,
+                        () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation),
+                        cancellation);
+                }
+                else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequestV2)
+                {
+                    workItem.EntityRequestV2.ToEntityBatchRequest(
+                        out EntityBatchRequest batchRequest,
+                        out List<P.OperationInfo> operationInfos);
+
+                    this.RunBackgroundTask(
+                         workItem,
+                         () => this.OnRunEntityBatchAsync(
+                            batchRequest,
+                            cancellation,
+                            workItem.CompletionToken,
+                            operationInfos),
+                         cancellation);
+                }
+                else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
+                {
+                    // Health pings are heartbeat-only signals from the backend; the silent-disconnect
+                    // timer reset above is the actionable behavior. Logging at Trace allows operators
+                    // to confirm liveness without flooding info-level telemetry.
+                    this.Logger.ReceivedHealthPing();
+                }
+                else
+                {
+                    this.Logger.UnexpectedWorkItemType(workItem.RequestCase.ToString());
                 }
             }
+
+            if (cancellation.IsCancellationRequested)
+            {
+                // Worker is shutting down - exit gracefully.
+                return;
+            }
+
+            if (tokenSource.Token.IsCancellationRequested)
+            {
+                // Our silent-disconnect timer fired: the stream stopped producing messages (including
+                // health pings) for longer than the configured window. Treat as a poisoned channel.
+                this.Logger.ConnectionTimeout();
+                onSilentDisconnect?.Invoke();
+                return;
+            }
+
+            // The stream terminated cleanly (no exception, no cancellation). This is the canonical
+            // signal sent by the backend during a graceful drain (HTTP/2 GOAWAY with OK trailers
+            // when a DTS instance is being replaced). We explicitly log and count this toward the
+            // channel-poisoned threshold: although a single drain is benign, repeated drains on
+            // the same cached channel usually mean the channel is latched onto a dead/evacuated
+            // backend and needs to be recreated to pick up fresh DNS/routing.
+            this.Logger.StreamEndedByPeer();
+            onSilentDisconnect?.Invoke();
         }
 
         void RunBackgroundTask(P.WorkItem? workItem, Func<Task> handler, CancellationToken cancellation)

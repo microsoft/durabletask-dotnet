@@ -202,12 +202,19 @@ public static class DurableTaskSchedulerWorkerExtensions
                 return Task.FromResult(currentLazy.Value);
             }
 
-            Lazy<GrpcChannel> newLazy = new(source.CreateChannel, LazyThreadSafetyMode.PublicationOnly);
+            // Materialize the new channel BEFORE swapping the dictionary so a CreateChannel failure
+            // leaves the existing entry intact. If we swapped a not-yet-materialized Lazy and then
+            // CreateChannel threw, the dictionary would point to a permanently-failing Lazy and the
+            // old channel would have already been queued for disposal — an unrecoverable state.
+            GrpcChannel newChannel = source.CreateChannel();
+            Lazy<GrpcChannel> newLazy = new(newChannel);
             if (!this.channels.TryUpdate(cacheKey, newLazy, currentLazy))
             {
-                // Lost the race; whoever won has the freshest entry.
+                // Lost the race; whoever won has the freshest entry. Dispose the channel we just
+                // created so it doesn't leak.
                 this.channels.TryGetValue(cacheKey, out Lazy<GrpcChannel>? winner);
-                return Task.FromResult(winner?.Value ?? newLazy.Value);
+                _ = ScheduleDeferredDisposeAsync(newChannel);
+                return Task.FromResult(winner?.Value ?? newChannel);
             }
 
             // Successful swap. Schedule graceful disposal of the old channel after a grace period
@@ -217,7 +224,7 @@ public static class DurableTaskSchedulerWorkerExtensions
                 _ = ScheduleDeferredDisposeAsync(currentLazy.Value);
             }
 
-            return Task.FromResult(newLazy.Value);
+            return Task.FromResult(newChannel);
         }
 
         static async Task ScheduleDeferredDisposeAsync(GrpcChannel channel)

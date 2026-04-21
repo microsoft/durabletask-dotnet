@@ -33,7 +33,7 @@ static class ReconnectBackoff
         // Cap the exponent to avoid overflow in 2^attempt for pathological attempt values.
         int safeAttempt = Math.Min(attempt, 30);
 
-        double capMs = Math.Max(baseDelay.TotalMilliseconds, cap.TotalMilliseconds);
+        double capMs = Math.Max(0, cap.TotalMilliseconds);
         double exp = baseDelay.TotalMilliseconds * Math.Pow(2, safeAttempt);
         double bound = Math.Min(capMs, exp);
         double jittered = random.NextDouble() * bound;

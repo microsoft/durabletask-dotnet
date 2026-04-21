@@ -21,6 +21,7 @@ public class GrpcDurableTaskWorkerOptionsInternalTests
         internalOptions.ChannelRecreateFailureThreshold.Should().Be(5);
         internalOptions.ReconnectBackoffBase.Should().Be(TimeSpan.FromSeconds(1));
         internalOptions.ReconnectBackoffCap.Should().Be(TimeSpan.FromSeconds(30));
+        internalOptions.SilentDisconnectTimeout.Should().Be(TimeSpan.FromSeconds(120));
         internalOptions.ChannelRecreator.Should().BeNull();
     }
 

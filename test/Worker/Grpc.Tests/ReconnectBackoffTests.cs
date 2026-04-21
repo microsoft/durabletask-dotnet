@@ -100,6 +100,37 @@ public class ReconnectBackoffTests
         delay.TotalMilliseconds.Should().BeApproximately(1000, 1);
     }
 
+    [Fact]
+    public void Compute_CapSmallerThanBase_ClampsToCap()
+    {
+        // Arrange: cap is intentionally smaller than baseDelay; the cap must still be honored.
+        DeterministicRandom random = new(0.999999);
+        TimeSpan baseDelay = TimeSpan.FromSeconds(5);
+        TimeSpan cap = TimeSpan.FromSeconds(1);
+
+        // Act
+        TimeSpan delay = ReconnectBackoff.Compute(attempt: 3, baseDelay, cap, random);
+
+        // Assert: with random ~ 1 the result is the bound, which must equal the cap.
+        delay.TotalMilliseconds.Should().BeApproximately(1000, 1);
+        delay.Should().BeLessThanOrEqualTo(cap);
+    }
+
+    [Fact]
+    public void Compute_NonPositiveCap_ReturnsZero()
+    {
+        // Arrange
+        DeterministicRandom random = new(0.999999);
+
+        // Act
+        TimeSpan zero = ReconnectBackoff.Compute(attempt: 3, baseDelay: TimeSpan.FromSeconds(1), cap: TimeSpan.Zero, random);
+        TimeSpan negative = ReconnectBackoff.Compute(attempt: 3, baseDelay: TimeSpan.FromSeconds(1), cap: TimeSpan.FromSeconds(-1), random);
+
+        // Assert
+        zero.Should().Be(TimeSpan.Zero);
+        negative.Should().Be(TimeSpan.Zero);
+    }
+
     sealed class DeterministicRandom : Random
     {
         readonly double value;

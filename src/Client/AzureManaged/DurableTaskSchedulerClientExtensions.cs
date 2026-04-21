@@ -167,7 +167,7 @@ public static class DurableTaskSchedulerClientExtensions
         /// graceful disposal of the old channel after a grace period so any in-flight RPCs from peer
         /// clients can drain. Returns the currently cached channel if a peer client has already recreated it.
         /// </summary>
-        async Task<GrpcChannel> RecreateChannelAsync(
+        Task<GrpcChannel> RecreateChannelAsync(
             string cacheKey,
             DurableTaskSchedulerClientOptions source,
             GrpcChannel oldChannel,
@@ -186,7 +186,7 @@ public static class DurableTaskSchedulerClientExtensions
                 Lazy<GrpcChannel> created = new(source.CreateChannel, LazyThreadSafetyMode.PublicationOnly);
                 if (this.channels.TryAdd(cacheKey, created))
                 {
-                    return created.Value;
+                    return Task.FromResult(created.Value);
                 }
 
                 this.channels.TryGetValue(cacheKey, out currentLazy);
@@ -200,14 +200,14 @@ public static class DurableTaskSchedulerClientExtensions
             if (currentLazy.IsValueCreated && !ReferenceEquals(currentLazy.Value, oldChannel))
             {
                 // A peer client already swapped in a new channel; reuse it.
-                return currentLazy.Value;
+                return Task.FromResult(currentLazy.Value);
             }
 
             Lazy<GrpcChannel> newLazy = new(source.CreateChannel, LazyThreadSafetyMode.PublicationOnly);
             if (!this.channels.TryUpdate(cacheKey, newLazy, currentLazy))
             {
                 this.channels.TryGetValue(cacheKey, out Lazy<GrpcChannel>? winner);
-                return winner?.Value ?? newLazy.Value;
+                return Task.FromResult(winner?.Value ?? newLazy.Value);
             }
 
             if (currentLazy.IsValueCreated)
@@ -215,8 +215,7 @@ public static class DurableTaskSchedulerClientExtensions
                 _ = ScheduleDeferredDisposeAsync(currentLazy.Value);
             }
 
-            await Task.Yield();
-            return newLazy.Value;
+            return Task.FromResult(newLazy.Value);
         }
 
         static async Task ScheduleDeferredDisposeAsync(GrpcChannel channel)

@@ -50,4 +50,37 @@ public static class InternalOptionsExtensions
     {
         options.Internal.ChannelRecreator = recreator ?? throw new ArgumentNullException(nameof(recreator));
     }
+
+    /// <summary>
+    /// Sets the deadline applied to the initial <c>Hello</c> RPC during worker connect. A wedged
+    /// handshake on a half-open HTTP/2 connection no longer hangs the reconnect loop indefinitely.
+    /// </summary>
+    /// <param name="options">The gRPC worker options.</param>
+    /// <param name="deadline">The deadline; non-positive disables the deadline.</param>
+    /// <remarks>
+    /// This is an internal API that supports the DurableTask infrastructure and not subject to
+    /// the same compatibility standards as public APIs. It may be changed or removed without notice in
+    /// any release.
+    /// </remarks>
+    public static void SetHelloDeadline(this GrpcDurableTaskWorkerOptions options, TimeSpan deadline)
+    {
+        options.Internal.HelloDeadline = deadline;
+    }
+
+    /// <summary>
+    /// Sets the silent-disconnect timeout. If no message (including health pings) arrives on the
+    /// work-item stream within this window, the worker treats the stream as silently disconnected
+    /// and reconnects.
+    /// </summary>
+    /// <param name="options">The gRPC worker options.</param>
+    /// <param name="timeout">The timeout; non-positive disables silent-disconnect detection.</param>
+    /// <remarks>
+    /// This is an internal API that supports the DurableTask infrastructure and not subject to
+    /// the same compatibility standards as public APIs. It may be changed or removed without notice in
+    /// any release.
+    /// </remarks>
+    public static void SetSilentDisconnectTimeout(this GrpcDurableTaskWorkerOptions options, TimeSpan timeout)
+    {
+        options.Internal.SilentDisconnectTimeout = timeout;
+    }
 }

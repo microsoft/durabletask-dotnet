@@ -196,6 +196,15 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
 
     void RecordFailure(StatusCode status, string methodFullName)
     {
+        // Only count statuses that indicate an actual transport problem, not application-level errors:
+        //   * Unavailable     — half-open connection, peer reset, or dead routing target.
+        //   * DeadlineExceeded — the call exceeded the *client-supplied* deadline. This is a
+        //                       transport hint EXCEPT for long-poll RPCs (e.g. WaitForInstance*)
+        //                       where a deadline timeout is expected behavior, so those are
+        //                       excluded explicitly.
+        // Other statuses (NotFound, InvalidArgument, FailedPrecondition, etc.) are application
+        // failures that a fresh channel won't fix and would otherwise produce false-positive
+        // recreates.
         bool counts = status switch
         {
             StatusCode.Unavailable => true,

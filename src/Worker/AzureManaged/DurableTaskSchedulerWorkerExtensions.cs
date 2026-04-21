@@ -166,7 +166,7 @@ public static class DurableTaskSchedulerWorkerExtensions
         /// graceful disposal of the old channel after a grace period so any in-flight RPCs from peer workers
         /// can drain. Returns the currently cached channel if a peer worker has already recreated it.
         /// </summary>
-        async Task<GrpcChannel> RecreateChannelAsync(string cacheKey, DurableTaskSchedulerWorkerOptions source, GrpcChannel oldChannel, CancellationToken cancellation)
+        Task<GrpcChannel> RecreateChannelAsync(string cacheKey, DurableTaskSchedulerWorkerOptions source, GrpcChannel oldChannel, CancellationToken cancellation)
         {
             cancellation.ThrowIfCancellationRequested();
 
@@ -184,7 +184,7 @@ public static class DurableTaskSchedulerWorkerExtensions
                 Lazy<GrpcChannel> created = new(source.CreateChannel, LazyThreadSafetyMode.PublicationOnly);
                 if (this.channels.TryAdd(cacheKey, created))
                 {
-                    return created.Value;
+                    return Task.FromResult(created.Value);
                 }
 
                 // Another thread added one; fall through to read it.
@@ -199,7 +199,7 @@ public static class DurableTaskSchedulerWorkerExtensions
             if (currentLazy.IsValueCreated && !ReferenceEquals(currentLazy.Value, oldChannel))
             {
                 // A peer worker already swapped in a new channel; reuse it.
-                return currentLazy.Value;
+                return Task.FromResult(currentLazy.Value);
             }
 
             Lazy<GrpcChannel> newLazy = new(source.CreateChannel, LazyThreadSafetyMode.PublicationOnly);
@@ -207,7 +207,7 @@ public static class DurableTaskSchedulerWorkerExtensions
             {
                 // Lost the race; whoever won has the freshest entry.
                 this.channels.TryGetValue(cacheKey, out Lazy<GrpcChannel>? winner);
-                return winner?.Value ?? newLazy.Value;
+                return Task.FromResult(winner?.Value ?? newLazy.Value);
             }
 
             // Successful swap. Schedule graceful disposal of the old channel after a grace period
@@ -217,8 +217,7 @@ public static class DurableTaskSchedulerWorkerExtensions
                 _ = ScheduleDeferredDisposeAsync(currentLazy.Value);
             }
 
-            await Task.Yield();
-            return newLazy.Value;
+            return Task.FromResult(newLazy.Value);
         }
 
         static async Task ScheduleDeferredDisposeAsync(GrpcChannel channel)

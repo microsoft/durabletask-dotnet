@@ -82,12 +82,11 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
                     workerOwnedChannelDisposable = result.NewWorkerOwnedDisposable;
                     this.logger.ChannelRecreated(address);
 
-                    // Dispose the prior worker-owned channel (if any) AFTER swapping in the new one.
-                    // For caller-supplied channels this is a no-op (default AsyncDisposable).
-                    if (!ReferenceEquals(previousDisposable, workerOwnedChannelDisposable))
-                    {
-                        await previousDisposable.DisposeAsync();
-                    }
+                    // Dispose the prior worker-owned channel (if any). For Path 1 (caller-supplied recreator)
+                    // and Path 3 (caller-owned), the previous disposable is a default AsyncDisposable whose
+                    // DisposeAsync is a no-op, so this is always safe. We do not use ReferenceEquals here
+                    // because AsyncDisposable is a value type and reference comparison is meaningless.
+                    await previousDisposable.DisposeAsync();
                 }
 
                 // If we couldn't recreate (e.g., caller-owned CallInvoker), fall through and retry on the
@@ -124,7 +123,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
             {
                 throw;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!IsFatal(ex))
             {
                 // Don't crash the worker if recreate fails; just keep using the existing transport.
                 this.logger.UnexpectedError(ex, string.Empty);
@@ -142,7 +141,11 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
                 AsyncDisposable newDisposable = new(() => new(newChannel.ShutdownAsync()));
                 return new ChannelRecreateResult(true, newChannel.CreateCallInvoker(), newChannel.Target, newDisposable);
             }
-            catch (Exception ex)
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex) when (!IsFatal(ex))
             {
                 this.logger.UnexpectedError(ex, string.Empty);
                 return ChannelRecreateResult.NotRecreated(currentWorkerOwnedDisposable);
@@ -152,6 +155,11 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         // Path 3: caller-owned CallInvoker or externally-supplied Channel without a recreator.
         // No safe way to recreate; let the inner loop continue trying on the existing transport.
         return ChannelRecreateResult.NotRecreated(currentWorkerOwnedDisposable);
+
+        static bool IsFatal(Exception ex) => ex is OutOfMemoryException
+            or StackOverflowException
+            or AccessViolationException
+            or ThreadAbortException;
     }
 
     readonly struct ChannelRecreateResult

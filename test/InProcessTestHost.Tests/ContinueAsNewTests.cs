@@ -254,3 +254,253 @@ public class ContinueAsNewTests
 
     #endregion
 }
+
+/// <summary>
+/// Tests targeting the ContinueAsNew race condition fix where stale messages from
+/// prior ContinueAsNew iterations (activities, timers) could corrupt the new execution's
+/// message queue or cause instances to get permanently stuck.
+/// </summary>
+public class ContinueAsNewRaceConditionTests
+{
+    readonly ITestOutputHelper output;
+
+    public ContinueAsNewRaceConditionTests(ITestOutputHelper output)
+    {
+        this.output = output;
+    }
+
+    /// <summary>
+    /// Reproduces the original stuck-instance scenario: 4+ orchestrations running
+    /// concurrently, each calling an activity, waiting on a timer, then ContinueAsNew,
+    /// repeated for multiple iterations. Without the fix, some instances would stop
+    /// making progress after 2-3 ContinueAsNew iterations because stale activity/timer
+    /// messages from prior iterations would corrupt the message queue.
+    /// </summary>
+    [Fact(Timeout = 120_000)]
+    public async Task ConcurrentContinueAsNew_MultipleIterations_NoneGetStuck()
+    {
+        const int instanceCount = 6;
+        const int targetIterations = 5;
+
+        await using DurableTaskTestHost host = await DurableTaskTestHost.StartAsync(tasks =>
+        {
+            tasks.AddOrchestratorFunc<int, int>("IteratingOrchestrator", async (context, iteration) =>
+            {
+                // Call activity
+                await context.CallActivityAsync<string>("NoOpActivity", iteration);
+
+                // Wait on timer (short delay to exercise timer message path)
+                await context.CreateTimer(TimeSpan.FromMilliseconds(500), CancellationToken.None);
+
+                if (iteration < targetIterations)
+                {
+                    context.ContinueAsNew(iteration + 1);
+                    return -1; // unreachable
+                }
+
+                return iteration;
+            });
+
+            tasks.AddActivityFunc<int, string>("NoOpActivity", (context, iteration) =>
+            {
+                return $"done-{iteration}";
+            });
+        });
+
+        // Schedule all instances concurrently
+        string[] instanceIds = new string[instanceCount];
+        for (int i = 0; i < instanceCount; i++)
+        {
+            instanceIds[i] = await host.Client.ScheduleNewOrchestrationInstanceAsync(
+                "IteratingOrchestrator", 1);
+        }
+
+        this.output.WriteLine($"Scheduled {instanceCount} orchestrations, each targeting {targetIterations} iterations");
+
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(90));
+
+        Task<OrchestrationMetadata>[] waitTasks = instanceIds
+            .Select(id => host.Client.WaitForInstanceCompletionAsync(
+                id, getInputsAndOutputs: true, cts.Token))
+            .ToArray();
+
+        OrchestrationMetadata[] results = await Task.WhenAll(waitTasks);
+
+        for (int i = 0; i < instanceCount; i++)
+        {
+            Assert.NotNull(results[i]);
+            Assert.Equal(OrchestrationRuntimeStatus.Completed, results[i].RuntimeStatus);
+            int output = results[i].ReadOutputAs<int>();
+            Assert.Equal(targetIterations, output);
+            this.output.WriteLine($"Instance[{i}] ({instanceIds[i]}): completed at iteration {output}");
+        }
+    }
+
+    /// <summary>
+    /// Tests that an orchestration performing many ContinueAsNew iterations with
+    /// both activities and timers on each iteration completes correctly. This exercises
+    /// the fix that clears accumulated message lists between iterations — without it,
+    /// stale timer/activity messages would accumulate and cause duplicate scheduling.
+    /// </summary>
+    [Fact(Timeout = 60_000)]
+    public async Task SingleInstance_ManyContinueAsNewIterations_CompletesCorrectly()
+    {
+        const int targetIterations = 8;
+
+        await using DurableTaskTestHost host = await DurableTaskTestHost.StartAsync(tasks =>
+        {
+            tasks.AddOrchestratorFunc<int, int>("MultiIterationOrchestrator", async (context, iteration) =>
+            {
+                // Each iteration: activity + timer + ContinueAsNew
+                await context.CallActivityAsync<string>("EchoActivity", $"iter-{iteration}");
+                await context.CreateTimer(TimeSpan.FromMilliseconds(100), CancellationToken.None);
+
+                if (iteration < targetIterations)
+                {
+                    context.ContinueAsNew(iteration + 1);
+                    return -1;
+                }
+
+                return iteration;
+            });
+
+            tasks.AddActivityFunc<string, string>("EchoActivity", (context, input) => $"echo:{input}");
+        });
+
+        string instanceId = await host.Client.ScheduleNewOrchestrationInstanceAsync(
+            "MultiIterationOrchestrator", 1);
+
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(30));
+        OrchestrationMetadata metadata = await host.Client.WaitForInstanceCompletionAsync(
+            instanceId, getInputsAndOutputs: true, cts.Token);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
+        Assert.Equal(targetIterations, metadata.ReadOutputAs<int>());
+    }
+
+    /// <summary>
+    /// Verifies that ContinueAsNew works correctly when orchestrations call multiple
+    /// activities per iteration. This amplifies the stale-message problem because each
+    /// iteration generates more activity messages that must be properly discarded.
+    /// </summary>
+    [Fact(Timeout = 60_000)]
+    public async Task ContinueAsNew_MultipleActivitiesPerIteration_AllComplete()
+    {
+        const int instanceCount = 4;
+        const int activitiesPerIteration = 3;
+        const int targetIterations = 4;
+
+        await using DurableTaskTestHost host = await DurableTaskTestHost.StartAsync(tasks =>
+        {
+            tasks.AddOrchestratorFunc<int, int>("MultiActivityOrchestrator", async (context, iteration) =>
+            {
+                // Call multiple activities per iteration
+                List<Task<string>> activityTasks = new();
+                for (int i = 0; i < activitiesPerIteration; i++)
+                {
+                    activityTasks.Add(context.CallActivityAsync<string>(
+                        "IndexedActivity", $"iter{iteration}-act{i}"));
+                }
+
+                await Task.WhenAll(activityTasks);
+                await context.CreateTimer(TimeSpan.FromMilliseconds(200), CancellationToken.None);
+
+                if (iteration < targetIterations)
+                {
+                    context.ContinueAsNew(iteration + 1);
+                    return -1;
+                }
+
+                return iteration;
+            });
+
+            tasks.AddActivityFunc<string, string>("IndexedActivity", (context, input) => $"result:{input}");
+        });
+
+        string[] instanceIds = new string[instanceCount];
+        for (int i = 0; i < instanceCount; i++)
+        {
+            instanceIds[i] = await host.Client.ScheduleNewOrchestrationInstanceAsync(
+                "MultiActivityOrchestrator", 1);
+        }
+
+        this.output.WriteLine($"Scheduled {instanceCount} orchestrations with {activitiesPerIteration} activities per iteration");
+
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(45));
+        Task<OrchestrationMetadata>[] waitTasks = instanceIds
+            .Select(id => host.Client.WaitForInstanceCompletionAsync(
+                id, getInputsAndOutputs: true, cts.Token))
+            .ToArray();
+
+        OrchestrationMetadata[] results = await Task.WhenAll(waitTasks);
+
+        for (int i = 0; i < instanceCount; i++)
+        {
+            Assert.NotNull(results[i]);
+            Assert.Equal(OrchestrationRuntimeStatus.Completed, results[i].RuntimeStatus);
+            Assert.Equal(targetIterations, results[i].ReadOutputAs<int>());
+        }
+    }
+
+    /// <summary>
+    /// Runs the reproduction scenario from the original bug report repeatedly to ensure
+    /// reliability: 4+ concurrent instances, each doing activity + 5s timer + ContinueAsNew,
+    /// across multiple independent rounds with fresh hosts.
+    /// </summary>
+    [Fact(Timeout = 120_000)]
+    public async Task ReproScenario_RepeatedRounds_AllComplete()
+    {
+        const int instanceCount = 4;
+        const int rounds = 3;
+        const int targetIterations = 3;
+
+        for (int round = 0; round < rounds; round++)
+        {
+            this.output.WriteLine($"=== Round {round + 1}/{rounds} ===");
+
+            await using DurableTaskTestHost host = await DurableTaskTestHost.StartAsync(tasks =>
+            {
+                tasks.AddOrchestratorFunc<int, int>("ReproOrchestrator", async (context, iteration) =>
+                {
+                    await context.CallActivityAsync<string>("ReproActivity", iteration);
+                    await context.CreateTimer(TimeSpan.FromSeconds(5), CancellationToken.None);
+
+                    if (iteration < targetIterations)
+                    {
+                        context.ContinueAsNew(iteration + 1);
+                        return -1;
+                    }
+
+                    return iteration;
+                });
+
+                tasks.AddActivityFunc<int, string>("ReproActivity", (context, input) => $"ok-{input}");
+            });
+
+            string[] instanceIds = new string[instanceCount];
+            for (int i = 0; i < instanceCount; i++)
+            {
+                instanceIds[i] = await host.Client.ScheduleNewOrchestrationInstanceAsync(
+                    "ReproOrchestrator", 1);
+            }
+
+            using CancellationTokenSource cts = new(TimeSpan.FromSeconds(45)); 
+            Task<OrchestrationMetadata>[] waitTasks = instanceIds
+                .Select(id => host.Client.WaitForInstanceCompletionAsync(
+                    id, getInputsAndOutputs: true, cts.Token))
+                .ToArray();
+
+            OrchestrationMetadata[] results = await Task.WhenAll(waitTasks);
+
+            for (int i = 0; i < instanceCount; i++)
+            {
+                Assert.NotNull(results[i]);
+                Assert.Equal(OrchestrationRuntimeStatus.Completed, results[i].RuntimeStatus);
+                Assert.Equal(targetIterations, results[i].ReadOutputAs<int>());
+            }
+
+            this.output.WriteLine($"Round {round + 1}: all {instanceCount} completed");
+        }
+    }
+}

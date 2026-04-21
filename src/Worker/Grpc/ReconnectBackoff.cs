@@ -10,8 +10,8 @@ static class ReconnectBackoff
 {
     /// <summary>
     /// Computes a full-jitter exponential backoff delay: a uniformly random TimeSpan in
-    /// <c>[0, min(cap, base * 2^attempt)]</c>. Returns <see cref="TimeSpan.Zero"/> when the base delay
-    /// is non-positive.
+    /// <c>[0, min(cap, base * 2^attempt)]</c>. Returns <see cref="TimeSpan.Zero"/> when
+    /// <paramref name="baseDelay"/> or <paramref name="cap"/> is non-positive.
     /// </summary>
     /// <param name="attempt">The retry attempt index, starting at 0.</param>
     /// <param name="baseDelay">The base delay used for the exponential growth.</param>

@@ -214,6 +214,11 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
 
         if (!counts)
         {
+            // Any gRPC status reply (even an application-level error) is proof that the transport
+            // is healthy enough to deliver round-trips, so reset the failure counter. This prevents
+            // unrelated app-level failures from silently accumulating between transport blips and
+            // tripping a false-positive recreate.
+            Volatile.Write(ref this.consecutiveFailures, 0);
             return;
         }
 

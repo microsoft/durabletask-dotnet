@@ -637,7 +637,12 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             {
                 ChannelRecreatingCallInvoker wrapper = new(c, recreator!, threshold, cooldown, ownsChannel: false, logger);
                 callInvoker = wrapper;
-                return default;
+
+                // We do not own the externally-supplied channel, but we DO own the wrapper. Without
+                // disposing the wrapper its CancellationTokenSource and any in-flight recreate task
+                // would outlive the client. The wrapper's DisposeAsync is a no-op for the channel
+                // itself when ownsChannel == false.
+                return new AsyncDisposable(() => wrapper.DisposeAsync());
             }
 
             callInvoker = c.CreateCallInvoker();

@@ -916,10 +916,19 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
             // The client disconnected or canceled the GetWorkItems stream.
             // Reset the connection state so the dispatcher pauses naturally
             // (via the traffic signal) until a new client connects.
+            //
+            // IMPORTANT: only clear our cached stream/signal if it still refers to
+            // the stream that just failed. A new client may have already connected
+            // (and set workerToClientStream / signaled isConnectedSignal) between
+            // the failed WriteAsync and this catch block. Unconditionally clearing
+            // would silently kill that new connection's state, hanging the dispatcher.
             lock (this.isConnectedSignal)
             {
-                this.workerToClientStream = null;
-                this.isConnectedSignal.Reset();
+                if (ReferenceEquals(this.workerToClientStream, outputStream))
+                {
+                    this.workerToClientStream = null;
+                    this.isConnectedSignal.Reset();
+                }
             }
 
             // Must throw so callers (ExecuteOrchestrator/ExecuteActivity) can clean up

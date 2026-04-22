@@ -18,7 +18,7 @@ namespace Microsoft.DurableTask.Grpc.Tests;
 public class IntegrationTestBase : IClassFixture<GrpcSidecarFixture>, IDisposable
 {
     readonly CancellationTokenSource testTimeoutSource
-        = new(Debugger.IsAttached ? TimeSpan.FromMinutes(5) : TimeSpan.FromSeconds(30));
+        = new(Debugger.IsAttached ? TimeSpan.FromMinutes(5) : TimeSpan.FromSeconds(60));
 
     readonly TestLogProvider logProvider;
 

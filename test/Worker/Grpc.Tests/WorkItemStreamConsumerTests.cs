@@ -139,22 +139,33 @@ public class WorkItemStreamConsumerTests
     [Fact]
     public async Task PerItem_HeartbeatReset_KeepsTimerAlive()
     {
-        // Feed one item, wait ~2x the timeout, then complete. Without a heartbeat reset on the
-        // delivered item the timer would fire mid-wait and the outcome would be SilentDisconnect.
+        // Feed one item, wait long enough that the original timer would have expired, then complete.
+        // Synchronize on the first item actually being processed so the second delay is measured from
+        // the consumer's timer reset instead of from the test thread's write timing.
         Channel<P.WorkItem> channel = Channel.CreateUnbounded<P.WorkItem>();
-        TimeSpan timeout = TimeSpan.FromMilliseconds(200);
+        TimeSpan timeout = TimeSpan.FromMilliseconds(500);
+        TaskCompletionSource firstItemProcessed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int itemCount = 0;
 
         Task<WorkItemStreamResult> consumeTask = WorkItemStreamConsumer.ConsumeAsync(
             openStream: ct => channel.Reader.ReadAllAsync(ct),
             silentDisconnectTimeout: timeout,
-            onItem: _ => { },
+            onItem: _ =>
+            {
+                if (Interlocked.Increment(ref itemCount) == 1)
+                {
+                    firstItemProcessed.TrySetResult();
+                }
+            },
             onFirstMessage: null,
             cancellation: CancellationToken.None);
 
-        // Deliver an item just before each timer would fire to keep the stream "alive".
-        await Task.Delay(timeout / 2);
+        await Task.Delay(TimeSpan.FromMilliseconds(150));
         await channel.Writer.WriteAsync(new P.WorkItem { HealthPing = new P.HealthPing() });
-        await Task.Delay(timeout / 2);
+        await firstItemProcessed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Without the per-item reset, the original timer would fire before this second item arrives.
+        await Task.Delay(TimeSpan.FromMilliseconds(400));
         await channel.Writer.WriteAsync(new P.WorkItem { HealthPing = new P.HealthPing() });
         channel.Writer.Complete();
 

@@ -167,7 +167,7 @@ public static class DurableTaskSchedulerClientExtensions
         /// graceful disposal of the old channel after a grace period so any in-flight RPCs from peer
         /// clients can drain. Returns the currently cached channel if a peer client has already recreated it.
         /// </summary>
-        Task<GrpcChannel> RecreateChannelAsync(
+        async Task<GrpcChannel> RecreateChannelAsync(
             string cacheKey,
             DurableTaskSchedulerClientOptions source,
             GrpcChannel oldChannel,
@@ -175,18 +175,30 @@ public static class DurableTaskSchedulerClientExtensions
         {
             cancellation.ThrowIfCancellationRequested();
 
+            // Recreate callbacks can outlive Configure(...) because clients keep the delegate on their
+            // options. Best-effort check for disposal before publishing anything back into the shared cache.
             if (this.disposed == 1)
             {
                 throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
             }
 
+            // Shared-cache recreation has four relevant states:
+            // 1. No entry exists anymore. Create one and use it.
+            // 2. The entry already materialized a different channel. A peer client already refreshed it.
+            // 3. The entry still represents what this client observed. Win TryUpdate and publish the new channel.
+            // 4. The entry changes between our read and TryUpdate. Lose the race, dispose ours, and reuse the winner.
             if (!this.channels.TryGetValue(cacheKey, out Lazy<GrpcChannel>? currentLazy))
             {
                 // PublicationOnly avoids permanently caching a transient CreateChannel exception.
                 Lazy<GrpcChannel> created = new(source.CreateChannel, LazyThreadSafetyMode.PublicationOnly);
+                if (this.disposed == 1)
+                {
+                    throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
+                }
+
                 if (this.channels.TryAdd(cacheKey, created))
                 {
-                    return Task.FromResult(created.Value);
+                    return created.Value;
                 }
 
                 this.channels.TryGetValue(cacheKey, out currentLazy);
@@ -197,10 +209,12 @@ public static class DurableTaskSchedulerClientExtensions
                 throw new InvalidOperationException("Failed to obtain a cached gRPC channel after recreation attempt.");
             }
 
+            // Only a materialized Lazy can be compared against oldChannel by reference. If the cache slot
+            // has not created its channel yet, let TryUpdate decide whether this recreate attempt still owns it.
             if (currentLazy.IsValueCreated && !ReferenceEquals(currentLazy.Value, oldChannel))
             {
                 // A peer client already swapped in a new channel; reuse it.
-                return Task.FromResult(currentLazy.Value);
+                return currentLazy.Value;
             }
 
             // Materialize the new channel BEFORE swapping the dictionary so a CreateChannel failure
@@ -208,6 +222,15 @@ public static class DurableTaskSchedulerClientExtensions
             // CreateChannel threw, the dictionary would point to a permanently-failing Lazy and the
             // old channel would have already been queued for disposal — an unrecoverable state.
             GrpcChannel newChannel = source.CreateChannel();
+            if (this.disposed == 1)
+            {
+                await DisposeChannelAsync(newChannel).ConfigureAwait(false);
+                throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
+            }
+
+            // The cache always stores Lazy<GrpcChannel> so the steady-state Configure path and the
+            // recreate path use the same dictionary value shape. Recreate materializes first only to
+            // avoid publishing a lazy that could fault before we know channel creation succeeded.
             Lazy<GrpcChannel> newLazy = new(newChannel);
             if (!this.channels.TryUpdate(cacheKey, newLazy, currentLazy))
             {
@@ -218,7 +241,7 @@ public static class DurableTaskSchedulerClientExtensions
                 _ = ScheduleDeferredDisposeAsync(newChannel);
                 if (this.channels.TryGetValue(cacheKey, out Lazy<GrpcChannel>? winner) && winner is not null)
                 {
-                    return Task.FromResult(winner.Value);
+                    return winner.Value;
                 }
 
                 throw new ObjectDisposedException(this.GetType().FullName);
@@ -229,7 +252,7 @@ public static class DurableTaskSchedulerClientExtensions
                 _ = ScheduleDeferredDisposeAsync(currentLazy.Value);
             }
 
-            return Task.FromResult(newChannel);
+            return newChannel;
         }
 
         static async Task ScheduleDeferredDisposeAsync(GrpcChannel channel)

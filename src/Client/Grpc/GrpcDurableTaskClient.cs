@@ -667,7 +667,26 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
 
         callInvoker = c.CreateCallInvoker();
-        return new AsyncDisposable(() => new(c.ShutdownAsync()));
+        return CreateOwnedChannelDisposable(c);
+    }
+
+    static AsyncDisposable CreateOwnedChannelDisposable(GrpcChannel channel)
+    {
+        return new AsyncDisposable(() => ShutdownAndDisposeChannelAsync(channel));
+    }
+
+    static async ValueTask ShutdownAndDisposeChannelAsync(GrpcChannel channel)
+    {
+        try
+        {
+            await channel.ShutdownAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+#if NET6_0_OR_GREATER
+            channel.Dispose();
+#endif
+        }
     }
 
 #if NET6_0_OR_GREATER

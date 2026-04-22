@@ -34,9 +34,12 @@ static class ReconnectBackoff
         int safeAttempt = Math.Min(attempt, 30);
 
         double capMs = Math.Max(0, cap.TotalMilliseconds);
-        double exp = baseDelay.TotalMilliseconds * Math.Pow(2, safeAttempt);
-        double bound = Math.Min(capMs, exp);
-        double jittered = random.NextDouble() * bound;
-        return TimeSpan.FromMilliseconds(jittered);
+        double exponentialMs = baseDelay.TotalMilliseconds * Math.Pow(2, safeAttempt);
+        double upperBoundMs = Math.Min(capMs, exponentialMs);
+
+        // Full jitter intentionally allows any value in the retry window. The wide spread keeps many
+        // workers that saw the same outage from reconnecting in lockstep against the backend.
+        double jitteredMs = random.NextDouble() * upperBoundMs;
+        return TimeSpan.FromMilliseconds(jitteredMs);
     }
 }

@@ -36,6 +36,10 @@ internal readonly record struct WorkItemStreamResult(WorkItemStreamOutcome Outco
 /// </remarks>
 internal static class WorkItemStreamConsumer
 {
+    // Stay just below the historical CancelAfter(TimeSpan) ceiling so extremely large configuration
+    // values are still treated as "effectively infinite" without depending on framework-specific edge cases.
+    static readonly TimeSpan MaxSupportedCancelAfterTimeout = TimeSpan.FromMilliseconds(int.MaxValue - 1d);
+
     /// <summary>
     /// Consume a work-item stream until shutdown, silent disconnect, or graceful drain.
     /// </summary>
@@ -66,19 +70,20 @@ internal static class WorkItemStreamConsumer
     {
         bool silentDisconnectEnabled = silentDisconnectTimeout > TimeSpan.Zero;
 
-        // CancellationTokenSource.CancelAfter rejects values larger than int.MaxValue ms (~24.8d).
-        // Defensively clamp so a misconfigured SilentDisconnectTimeout cannot crash the consume loop.
-        TimeSpan effectiveTimeout = silentDisconnectTimeout;
-        if (silentDisconnectEnabled && silentDisconnectTimeout.TotalMilliseconds > int.MaxValue)
-        {
-            effectiveTimeout = TimeSpan.FromMilliseconds(int.MaxValue);
-        }
+        // Clamp enormous values once up-front so the timer-reset path can simply re-arm the same window.
+        TimeSpan effectiveTimeout = ClampCancelAfterTimeout(silentDisconnectTimeout);
 
         using CancellationTokenSource timeoutSource = new();
-        if (silentDisconnectEnabled)
+        void ArmSilentDisconnectTimer()
         {
-            timeoutSource.CancelAfter(effectiveTimeout);
+            if (silentDisconnectEnabled)
+            {
+                timeoutSource.CancelAfter(effectiveTimeout);
+            }
         }
+
+        // Arm once before reading so the initial gap before the first message is also bounded.
+        ArmSilentDisconnectTimer();
 
         using CancellationTokenSource tokenSource = CancellationTokenSource.CreateLinkedTokenSource(
             cancellation, timeoutSource.Token);
@@ -89,10 +94,7 @@ internal static class WorkItemStreamConsumer
         {
             await foreach (P.WorkItem workItem in openStream(tokenSource.Token).ConfigureAwait(false))
             {
-                if (silentDisconnectEnabled)
-                {
-                    timeoutSource.CancelAfter(effectiveTimeout);
-                }
+                ArmSilentDisconnectTimer();
 
                 if (!firstMessageObserved)
                 {
@@ -134,5 +136,17 @@ internal static class WorkItemStreamConsumer
         }
 
         return new WorkItemStreamResult(WorkItemStreamOutcome.GracefulDrain, firstMessageObserved);
+    }
+
+    static TimeSpan ClampCancelAfterTimeout(TimeSpan timeout)
+    {
+        if (timeout <= TimeSpan.Zero)
+        {
+            return timeout;
+        }
+
+        return timeout <= MaxSupportedCancelAfterTimeout
+            ? timeout
+            : MaxSupportedCancelAfterTimeout;
     }
 }

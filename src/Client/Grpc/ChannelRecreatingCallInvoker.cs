@@ -50,7 +50,9 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
     TransportState state;
     int consecutiveFailures;
     int recreateInFlight;
-    long lastRecreateTicks;
+    // Stopwatch timestamps are monotonic, so backend-recreate cooldowns cannot be shortened or
+    // extended by wall-clock jumps.
+    long lastRecreateTimestamp;
     int disposed;
 
     public ChannelRecreatingCallInvoker(
@@ -68,8 +70,10 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         this.logger = logger;
         this.state = new TransportState(initialChannel, initialChannel.CreateCallInvoker());
 
-        // Seed lastRecreateTicks so cooldown does not block the very first recreate attempt.
-        this.lastRecreateTicks = Stopwatch.GetTimestamp() - StopwatchTicksFor(minRecreateInterval);
+        // Backdate the initial timestamp so the first recreate is never blocked by the cooldown.
+        // Leaving the field at 0 would make the first attempt depend on how long the current process
+        // has been running since machine startup.
+        this.lastRecreateTimestamp = CreateInitialRecreateTimestamp(minRecreateInterval);
     }
 
     public override TResponse BlockingUnaryCall<TRequest, TResponse>(
@@ -140,6 +144,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
 
         if (!this.ownsChannel)
         {
+            // The wrapper still owns disposalCts and background recreate state, but the caller owns the channel.
             this.disposalCts.Dispose();
             return;
         }
@@ -147,16 +152,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         TransportState current = Volatile.Read(ref this.state);
         try
         {
-#if NET6_0_OR_GREATER
-            await current.Channel.ShutdownAsync().ConfigureAwait(false);
-            current.Channel.Dispose();
-#else
-            await current.Channel.ShutdownAsync().ConfigureAwait(false);
-#endif
-        }
-        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
-        {
-            // Best-effort disposal.
+            await ShutdownAndDisposeOwnedChannelAsync(current.Channel).ConfigureAwait(false);
         }
         finally
         {
@@ -164,8 +160,17 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         }
     }
 
-    static long StopwatchTicksFor(TimeSpan ts) =>
+    static long CreateInitialRecreateTimestamp(TimeSpan minRecreateInterval) =>
+        Stopwatch.GetTimestamp() - ToStopwatchTicks(minRecreateInterval);
+
+    static long ToStopwatchTicks(TimeSpan ts) =>
         (long)(ts.TotalSeconds * Stopwatch.Frequency);
+
+    static TimeSpan ElapsedSince(long previousTimestamp, long nowTimestamp)
+    {
+        long elapsedTicks = Math.Max(0, nowTimestamp - previousTimestamp);
+        return TimeSpan.FromSeconds((double)elapsedTicks / Stopwatch.Frequency);
+    }
 
     void ObserveOutcome<TResponse>(Task<TResponse> responseAsync, string methodFullName)
     {
@@ -233,10 +238,9 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
 
     void MaybeTriggerRecreate(int observedCount)
     {
-        long nowTicks = Stopwatch.GetTimestamp();
-        long elapsedTicks = nowTicks - Volatile.Read(ref this.lastRecreateTicks);
-        long cooldownTicks = StopwatchTicksFor(this.minRecreateInterval);
-        if (elapsedTicks < cooldownTicks)
+        // This method runs on application call threads, so keep the hot path lock-free and only serialize
+        // the actual recreate work behind the single-flight gate below.
+        if (!this.HasReachedRecreateCooldown(Stopwatch.GetTimestamp()))
         {
             return;
         }
@@ -248,8 +252,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         }
 
         // Re-check elapsed under the guard to avoid back-to-back recreates that won the CAS race.
-        elapsedTicks = Stopwatch.GetTimestamp() - Volatile.Read(ref this.lastRecreateTicks);
-        if (elapsedTicks < cooldownTicks)
+        if (!this.HasReachedRecreateCooldown(Stopwatch.GetTimestamp()))
         {
             Interlocked.Exchange(ref this.recreateInFlight, 0);
             return;
@@ -287,7 +290,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
                     {
                         try
                         {
-                            await newChannel.ShutdownAsync().ConfigureAwait(false);
+                            await ShutdownAndDisposeOwnedChannelAsync(newChannel).ConfigureAwait(false);
                         }
                         catch (Exception shutdownEx) when (shutdownEx is not OutOfMemoryException
                                                             and not StackOverflowException
@@ -312,10 +315,16 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
                     _ = ScheduleDeferredDisposeAsync(current.Channel);
                 }
             }
+            else
+            {
+                // Returning the same channel means no swap was needed (for example, because a peer
+                // already refreshed a shared cache). Keep using the published state and reset the
+                // failure counter below.
+            }
 
             // Successful recreate (even if a peer beat us to it) → reset the failure counter.
             Volatile.Write(ref this.consecutiveFailures, 0);
-            Volatile.Write(ref this.lastRecreateTicks, Stopwatch.GetTimestamp());
+            Volatile.Write(ref this.lastRecreateTimestamp, Stopwatch.GetTimestamp());
         }
         catch (OperationCanceledException) when (Volatile.Read(ref this.disposed) != 0)
         {
@@ -327,8 +336,8 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         {
             this.logger.ChannelRecreateFailed(ex);
 
-            // Update lastRecreateTicks even on failure so the cooldown applies to failed attempts too.
-            Volatile.Write(ref this.lastRecreateTicks, Stopwatch.GetTimestamp());
+            // Update the last-attempt timestamp even on failure so the cooldown applies to failed attempts too.
+            Volatile.Write(ref this.lastRecreateTimestamp, Stopwatch.GetTimestamp());
         }
         finally
         {
@@ -343,17 +352,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
             // Grace period to let in-flight RPCs captured against the old invoker drain before we
             // tear down the channel's HTTP handler / sockets.
             await Task.Delay(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
-            try
-            {
-                await channel.ShutdownAsync().ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
-            {
-                // Expected during process shutdown; nothing to do.
-            }
-#if NET6_0_OR_GREATER
-            channel.Dispose();
-#endif
+            await ShutdownAndDisposeOwnedChannelAsync(channel).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException
                                     and not StackOverflowException
@@ -370,10 +369,27 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
 
     static string GetEndpointDescription(GrpcChannel channel)
     {
+        return channel.Target ?? "(unknown)";
+    }
+
+    bool HasReachedRecreateCooldown(long nowTimestamp)
+    {
+        TimeSpan elapsed = ElapsedSince(Volatile.Read(ref this.lastRecreateTimestamp), nowTimestamp);
+        return elapsed >= this.minRecreateInterval;
+    }
+
+    static async Task ShutdownAndDisposeOwnedChannelAsync(GrpcChannel channel)
+    {
+        try
+        {
+            await channel.ShutdownAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+            // Expected during shutdown races; nothing more to do.
+        }
 #if NET6_0_OR_GREATER
-        return channel.Target ?? "(unknown)";
-#else
-        return channel.Target ?? "(unknown)";
+        channel.Dispose();
 #endif
     }
 

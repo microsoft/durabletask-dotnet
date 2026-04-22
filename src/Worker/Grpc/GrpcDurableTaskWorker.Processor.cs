@@ -69,7 +69,7 @@ sealed partial class GrpcDurableTaskWorker
                 bool channelLikelyPoisoned = false;
                 try
                 {
-                    AsyncServerStreamingCall<P.WorkItem> stream = await this.ConnectAsync(cancellation);
+                    using AsyncServerStreamingCall<P.WorkItem> stream = await this.ConnectAsync(cancellation);
                     await this.ProcessWorkItemsAsync(
                         stream,
                         cancellation,
@@ -93,7 +93,9 @@ sealed partial class GrpcDurableTaskWorker
                 }
                 catch (RpcException ex) when (ex.StatusCode == StatusCode.DeadlineExceeded)
                 {
-                    // HelloAsync hung — most plausibly a half-open HTTP/2 connection / stale routing.
+                    // Only HelloAsync carries a deadline. Once the work-item stream is established,
+                    // ProcessWorkItemsAsync relies on the silent-disconnect timer instead of per-read deadlines.
+                    // A DeadlineExceeded here therefore means the handshake hung on a stale or half-open channel.
                     int seconds = Math.Max(1, (int)this.internalOptions.HelloDeadline.TotalSeconds);
                     this.Logger.HelloTimeout(seconds);
                     channelLikelyPoisoned = true;

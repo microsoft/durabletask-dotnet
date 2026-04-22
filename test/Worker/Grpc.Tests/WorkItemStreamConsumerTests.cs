@@ -49,6 +49,20 @@ public class WorkItemStreamConsumerTests
     }
 
     [Fact]
+    public async Task VeryLargeSilentDisconnectTimeout_IsClamped_AndStreamCanStillComplete()
+    {
+        WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
+            openStream: _ => EmptyStream(),
+            silentDisconnectTimeout: TimeSpan.FromDays(365),
+            onItem: _ => throw new InvalidOperationException("onItem should not be invoked"),
+            onFirstMessage: null,
+            cancellation: CancellationToken.None);
+
+        result.Outcome.Should().Be(WorkItemStreamOutcome.GracefulDrain);
+        result.FirstMessageObserved.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task HangingStream_SurfacingOce_ReturnsSilentDisconnect()
     {
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(

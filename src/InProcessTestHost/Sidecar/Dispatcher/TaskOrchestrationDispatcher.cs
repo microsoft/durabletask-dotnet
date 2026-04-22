@@ -149,6 +149,16 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                 out bool continueAsNew);
             if (continueAsNew)
             {
+                // The previous execution is being replaced by a new one. Clear any
+                // accumulated messages from the old execution so they are not
+                // re-enqueued when the work item completes. Without this, stale
+                // activity/timer/orchestrator messages from prior iterations would
+                // be committed alongside the new execution, causing duplicate
+                // activities, stale timer fires, and ultimately stuck instances.
+                activityMessages.Clear();
+                timerMessages.Clear();
+                orchestratorMessages.Clear();
+
                 // Continue running the orchestration with a new history.
                 // Renew the lock if we're getting close to its expiration.
                 if (workItem.LockedUntilUtc != default && DateTime.UtcNow.AddMinutes(1) > workItem.LockedUntilUtc)

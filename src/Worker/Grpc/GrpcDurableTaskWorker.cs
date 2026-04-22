@@ -91,7 +91,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 
                     // Dispose the prior worker-owned channel if we had one. Path 1 keeps ownership with the
                     // recreator, and Path 3 never recreates at all, so only Path 2 ever installs a non-default
-                    // AsyncDisposable here. We do not use ReferenceEquals because AsyncDisposable is a value type.
+                    // AsyncDisposable here.
                     await previousDisposable.DisposeAsync();
                 }
 

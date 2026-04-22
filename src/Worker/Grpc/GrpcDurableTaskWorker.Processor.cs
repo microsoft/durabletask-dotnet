@@ -96,8 +96,7 @@ sealed partial class GrpcDurableTaskWorker
                     // Only HelloAsync carries a deadline. Once the work-item stream is established,
                     // ProcessWorkItemsAsync relies on the silent-disconnect timer instead of per-read deadlines.
                     // A DeadlineExceeded here therefore means the handshake hung on a stale or half-open channel.
-                    int seconds = Math.Max(1, (int)this.internalOptions.HelloDeadline.TotalSeconds);
-                    this.Logger.HelloTimeout(seconds);
+                    this.Logger.HelloTimeout(this.internalOptions.HelloDeadline);
                     channelLikelyPoisoned = true;
                 }
                 catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)

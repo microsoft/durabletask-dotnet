@@ -238,8 +238,6 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
 
     void MaybeTriggerRecreate(int observedCount)
     {
-        // This method runs on application call threads, so keep the hot path lock-free and only serialize
-        // the actual recreate work behind the single-flight gate below.
         if (!this.HasReachedRecreateCooldown(Stopwatch.GetTimestamp()))
         {
             return;
@@ -251,7 +249,8 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
             return;
         }
 
-        // Re-check elapsed under the guard to avoid back-to-back recreates that won the CAS race.
+        // A previous recreate can finish after the fast-path cooldown check but before we acquire the
+        // single-flight slot. Re-check after taking the slot so we don't immediately recreate again.
         if (!this.HasReachedRecreateCooldown(Stopwatch.GetTimestamp()))
         {
             Interlocked.Exchange(ref this.recreateInFlight, 0);
@@ -259,6 +258,8 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         }
 
         this.logger.RecreatingChannel(observedCount);
+
+        // Keep recreate work off the caller's RPC-failure path.
         _ = Task.Run(() => this.RecreateAsync(observedCount));
     }
 

@@ -177,19 +177,24 @@ public class WorkItemStreamConsumerTests
         await act.Should().ThrowAsync<RpcException>().Where(e => e.StatusCode == StatusCode.Unavailable);
     }
 
-    [Fact]
-    public async Task DisabledSilentDisconnect_OnlyShutdownEndsLoop()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task NonPositiveSilentDisconnectTimeout_OnlyShutdownEndsLoop(int timeoutMilliseconds)
     {
+        // Arrange
         using CancellationTokenSource outer = new();
         outer.CancelAfter(ShortTimeout);
 
+        // Act
         WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
             openStream: ct => HangingStream(ct, throwAsRpc: false),
-            silentDisconnectTimeout: TimeSpan.Zero, // disabled
+            silentDisconnectTimeout: TimeSpan.FromMilliseconds(timeoutMilliseconds),
             onItem: _ => { },
             onFirstMessage: null,
             cancellation: outer.Token);
 
+        // Assert
         result.Outcome.Should().Be(WorkItemStreamOutcome.Shutdown);
     }
 
@@ -207,13 +212,7 @@ public class WorkItemStreamConsumerTests
         }
     }
 
-    static async IAsyncEnumerable<P.WorkItem> ThrowingStream(Exception ex)
-    {
-        throw ex;
-#pragma warning disable CS0162 // Unreachable code detected
-        yield break;
-#pragma warning restore CS0162
-    }
+    static IAsyncEnumerable<P.WorkItem> ThrowingStream(Exception ex) => new ThrowingAsyncEnumerable(ex);
 #pragma warning restore CS1998
 
     static async IAsyncEnumerable<P.WorkItem> HangingStream(
@@ -231,5 +230,23 @@ public class WorkItemStreamConsumerTests
         }
 
         yield break;
+    }
+
+    sealed class ThrowingAsyncEnumerable : IAsyncEnumerable<P.WorkItem>, IAsyncEnumerator<P.WorkItem>
+    {
+        readonly Exception exception;
+
+        public ThrowingAsyncEnumerable(Exception exception)
+        {
+            this.exception = exception;
+        }
+
+        public P.WorkItem Current => throw new InvalidOperationException("No current item is available for a throwing stream.");
+
+        public IAsyncEnumerator<P.WorkItem> GetAsyncEnumerator(CancellationToken cancellationToken = default) => this;
+
+        public ValueTask DisposeAsync() => default;
+
+        public ValueTask<bool> MoveNextAsync() => ValueTask.FromException<bool>(this.exception);
     }
 }

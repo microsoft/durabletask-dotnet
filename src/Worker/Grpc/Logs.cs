@@ -80,8 +80,8 @@ namespace Microsoft.DurableTask.Worker.Grpc
         [LoggerMessage(EventId = 65, Level = LogLevel.Information, Message = "{instanceId}: Abandoned entity work item. Completion token = '{completionToken}'")]
         public static partial void AbandonedEntityWorkItem(this ILogger logger, string instanceId, string completionToken);
 
-        [LoggerMessage(EventId = 70, Level = LogLevel.Warning, Message = "Hello handshake to backend timed out after {timeoutSeconds}s. Will retry.")]
-        public static partial void HelloTimeout(this ILogger logger, int timeoutSeconds);
+        [LoggerMessage(EventId = 70, Level = LogLevel.Warning, Message = "Hello handshake to backend timed out after {timeout}. Will retry.")]
+        public static partial void HelloTimeout(this ILogger logger, TimeSpan timeout);
 
         [LoggerMessage(EventId = 71, Level = LogLevel.Warning, Message = "Authentication failed when connecting to backend. Will retry.")]
         public static partial void AuthenticationFailed(this ILogger logger, Exception ex);

@@ -32,9 +32,9 @@ public static class InternalOptionsExtensions
     /// Sets a callback that the worker invokes when the underlying gRPC channel needs to be recreated
     /// after repeated connect failures (e.g., because the backend was replaced and the existing channel
     /// is wedged on a half-open HTTP/2 connection). The callback receives the channel the worker last
-    /// observed and must return either a freshly created channel or the currently cached channel if a
-    /// peer worker has already swapped it. Implementations are responsible for atomic swap and deferred
-    /// disposal of the old channel so in-flight RPCs from peer workers are not interrupted.
+    /// observed and must return either a freshly created channel or the currently cached channel if another
+    /// caller has already swapped it. Implementations are responsible for atomic swap and deferred disposal
+    /// of the old channel so in-flight RPCs already using it are not interrupted.
     /// </summary>
     /// <param name="options">The gRPC worker options.</param>
     /// <param name="recreator">The recreate callback.</param>

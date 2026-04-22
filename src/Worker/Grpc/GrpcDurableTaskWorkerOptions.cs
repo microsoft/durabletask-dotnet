@@ -138,9 +138,9 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
         /// <summary>
         /// Gets or sets an optional callback invoked when the worker requests a fresh gRPC channel after
         /// repeated connect failures. The callback receives the previously-used channel and should return
-        /// either a freshly created channel or the currently cached channel if a peer worker has already
+        /// either a freshly created channel or the currently cached channel if another caller has already
         /// recreated it. Implementations are responsible for atomic swap and deferred disposal of the old
-        /// channel so in-flight RPCs from peer workers are not interrupted.
+        /// channel so in-flight RPCs already using it are not interrupted.
         /// </summary>
         public Func<GrpcChannel, CancellationToken, Task<GrpcChannel>>? ChannelRecreator { get; set; }
     }

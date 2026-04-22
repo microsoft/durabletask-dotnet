@@ -448,15 +448,12 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
     {
         string errorMessage = "Kah-BOOOOOM!!!"; // Use an obviously fake error message to avoid confusion when debugging
 
-        int retryHandlerCalls = 0;
+        // NOTE: We don't track retry-handler invocation counts here. The sub-orchestration retry path
+        // currently invokes the user's retry handler more times than the documented attempt count
+        // (replay reaches the catch site after IsReplaying has flipped, so the handler runs again).
+        // That bug is tracked separately; until it's fixed we can only assert on activity-side counters.
         TaskOptions retryOptions = TaskOptions.FromRetryHandler(retryContext =>
         {
-            // This is technically orchestrator code that gets replayed, like everything else
-            if (!retryContext.OrchestrationContext.IsReplaying)
-            {
-                retryHandlerCalls++;
-            }
-
             // IsCausedBy is supposed to handle exception inheritance; fail if it doesn't
             if (!retryContext.LastFailure.IsCausedBy<Exception>())
             {
@@ -497,8 +494,6 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
-        // More calls to retry handler than expected.
-        //Assert.Equal(expectedNumberOfAttempts, retryHandlerCalls);
         Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
 
         // The root orchestration failed due to a failure with the sub-orchestration, resulting in a TaskFailedException

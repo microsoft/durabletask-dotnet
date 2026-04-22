@@ -316,8 +316,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(expRuntimeStatus, metadata.RuntimeStatus);
-        // More calls to retry handler than expected.
-        //Assert.Equal(expectedNumberOfAttempts, retryHandlerCalls);
+        Assert.Equal(expectedNumberOfAttempts, retryHandlerCalls);
         Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
     }
 
@@ -424,8 +423,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.NotNull(metadata);
         Assert.Equal(instanceId, metadata.InstanceId);
         Assert.Equal(expRuntimeStatus, metadata.RuntimeStatus);
-        // More calls to retry handler than expected.
-        //Assert.Equal(expectedNumberOfAttempts, retryHandlerCalls);
+        Assert.Equal(expectedNumberOfAttempts, retryHandlerCalls);
         Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
 
         // The root orchestration failed due to a failure with the sub-orchestration, resulting in a TaskFailedException
@@ -505,9 +503,7 @@ public class OrchestrationErrorHandling(ITestOutputHelper output, GrpcSidecarFix
         Assert.Equal(expectedNumberOfAttempts, actualNumberOfAttempts);
         // Lower-bound assertion: the handler must run at least once per documented attempt.
         // Strict equality is unreliable due to the known over-invocation bug noted above.
-        Assert.True(
-            retryHandlerCalls >= expectedNumberOfAttempts,
-            $"Expected retry handler to be invoked at least {expectedNumberOfAttempts} time(s), but was invoked {retryHandlerCalls} time(s).");
+        Assert.Equal(expectedNumberOfAttempts, retryHandlerCalls);
 
         // The root orchestration failed due to a failure with the sub-orchestration, resulting in a TaskFailedException
         Assert.NotNull(metadata.FailureDetails);

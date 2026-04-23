@@ -264,6 +264,7 @@ public static class DurableTaskSchedulerClientExtensions
             }
             catch (Exception ex) when (ex is not OutOfMemoryException
                                         and not StackOverflowException
+                                        and not AccessViolationException
                                         and not ThreadAbortException)
             {
                 if (ex is not OperationCanceledException and not ObjectDisposedException)
@@ -291,6 +292,7 @@ public static class DurableTaskSchedulerClientExtensions
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException
                                             and not StackOverflowException
+                                            and not AccessViolationException
                                             and not ThreadAbortException)
                 {
                     // Swallow disposal exceptions - disposal should be best-effort to ensure

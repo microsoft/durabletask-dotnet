@@ -356,6 +356,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         }
         catch (Exception ex) when (ex is not OutOfMemoryException
                                     and not StackOverflowException
+                                    and not AccessViolationException
                                     and not ThreadAbortException)
         {
             this.logger.ChannelRecreateFailed(ex);
@@ -380,6 +381,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         }
         catch (Exception ex) when (ex is not OutOfMemoryException
                                     and not StackOverflowException
+                                    and not AccessViolationException
                                     and not ThreadAbortException)
         {
             if (ex is not OperationCanceledException and not ObjectDisposedException)

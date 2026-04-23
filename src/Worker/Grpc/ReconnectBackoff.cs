@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Security.Cryptography;
+
 namespace Microsoft.DurableTask.Worker.Grpc;
 
 /// <summary>
@@ -8,6 +10,19 @@ namespace Microsoft.DurableTask.Worker.Grpc;
 /// </summary>
 static class ReconnectBackoff
 {
+    /// <summary>
+    /// Creates a random source for reconnect jitter using an explicit random seed so multiple workers on
+    /// older runtimes don't converge on the same time-based seed.
+    /// </summary>
+    /// <returns>A random source suitable for reconnect jitter.</returns>
+    public static Random CreateRandom()
+    {
+        byte[] seedBytes = new byte[sizeof(int)];
+        using RandomNumberGenerator randomNumberGenerator = RandomNumberGenerator.Create();
+        randomNumberGenerator.GetBytes(seedBytes);
+        return new Random(BitConverter.ToInt32(seedBytes, 0));
+    }
+
     /// <summary>
     /// Computes a full-jitter exponential backoff delay: a uniformly random TimeSpan in
     /// <c>[0, min(cap, base * 2^attempt)]</c>. Returns <see cref="TimeSpan.Zero"/> when

@@ -62,7 +62,7 @@ sealed partial class GrpcDurableTaskWorker
 
             // Tracks consecutive retry attempts for backoff calculation. Reset on first stream message.
             int reconnectAttempt = 0;
-            Random backoffRandom = new();
+            Random backoffRandom = ReconnectBackoff.CreateRandom();
 
             while (!cancellation.IsCancellationRequested)
             {

@@ -317,6 +317,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
                         }
                         catch (Exception shutdownEx) when (shutdownEx is not OutOfMemoryException
                                                             and not StackOverflowException
+                                                            and not AccessViolationException
                                                             and not ThreadAbortException)
                         {
                             // Best-effort cleanup.

@@ -3,6 +3,7 @@
 
 using System.Reflection;
 using DurableTask.Core;
+using DurableTask.Core.Serializing.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Microsoft.DurableTask.Worker.Shims;
@@ -10,7 +11,8 @@ namespace Microsoft.DurableTask.Worker.Shims;
 public class TaskOrchestrationContextWrapperTests
 {
     static readonly MethodInfo CompleteExternalEventMethod = typeof(TaskOrchestrationContextWrapper)
-        .GetMethod("CompleteExternalEvent", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        .GetMethod(nameof(TaskOrchestrationContextWrapper.CompleteExternalEvent), BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException($"{nameof(TaskOrchestrationContextWrapper)}.{nameof(TaskOrchestrationContextWrapper.CompleteExternalEvent)} was not found.");
 
     [Fact]
     public void Ctor_NullParent_Populates()
@@ -123,6 +125,7 @@ public class TaskOrchestrationContextWrapperTests
         innerContext.SentEvents.Should().ContainSingle();
         innerContext.SentEvents[0].InstanceId.Should().Be(wrapper.InstanceId);
         innerContext.SentEvents[0].EventName.Should().Be("Event");
+        innerContext.SentEvents[0].EventData.Should().BeOfType<RawInput>().Which.Value.Should().Be("\"payload\"");
         innerContext.LastContinueAsNewInput.Should().Be("new-input");
     }
 

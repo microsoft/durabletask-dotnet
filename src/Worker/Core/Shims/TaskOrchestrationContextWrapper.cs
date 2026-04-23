@@ -374,7 +374,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             // Send all the buffered external events to ourself.
             foreach ((string eventName, string eventPayload) in this.externalEventBuffer.TakeAll())
             {
-                this.ForwardBufferedExternalEvent(eventName, eventPayload);
+                this.ForwardRawExternalEvent(eventName, eventPayload);
             }
         }
     }
@@ -490,7 +490,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                 // ContinueAsNew has already been scheduled with event preservation enabled.
                 // Forward late-arriving events directly to the next execution instead of buffering
                 // them on the current wrapper instance, which is about to be discarded.
-                this.ForwardBufferedExternalEvent(eventName, rawEventPayload);
+                this.ForwardRawExternalEvent(eventName, rawEventPayload);
             }
             else
             {
@@ -501,11 +501,11 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         }
     }
 
-    void ForwardBufferedExternalEvent(string eventName, string eventPayload)
+    void ForwardRawExternalEvent(string eventName, string rawEventPayload)
     {
         OrchestrationInstance instance = new() { InstanceId = this.InstanceId };
 #pragma warning disable CS0618 // Type or member is obsolete -- 'internal' usage.
-        this.innerContext.SendEvent(instance, eventName, new RawInput(eventPayload));
+        this.innerContext.SendEvent(instance, eventName, new RawInput(rawEventPayload));
 #pragma warning restore CS0618 // Type or member is obsolete
     }
 

@@ -299,8 +299,7 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
 
             // Link to the disposal CTS so DisposeAsync can promptly abort an in-flight recreate.
             // The 30s timeout keeps a wedged recreator from holding the single-flight slot indefinitely.
-            using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(this.disposalCts.Token);
-            cts.CancelAfter(TimeSpan.FromSeconds(30));
+            using CancellationTokenSource cts = this.CreateRecreateCancellationSource();
             GrpcChannel newChannel = await this.recreator(current.Channel, cts.Token).ConfigureAwait(false);
 
             if (!ReferenceEquals(newChannel, current.Channel))
@@ -367,6 +366,22 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
         finally
         {
             Interlocked.Exchange(ref this.recreateInFlight, 0);
+        }
+    }
+
+    CancellationTokenSource CreateRecreateCancellationSource()
+    {
+        try
+        {
+            CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(this.disposalCts.Token);
+            cts.CancelAfter(TimeSpan.FromSeconds(30));
+            return cts;
+        }
+        catch (ObjectDisposedException) when (Volatile.Read(ref this.disposed) != 0)
+        {
+            CancellationTokenSource cts = new();
+            cts.Cancel();
+            return cts;
         }
     }
 

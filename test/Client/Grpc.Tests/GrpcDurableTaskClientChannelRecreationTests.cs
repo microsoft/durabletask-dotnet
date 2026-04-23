@@ -117,6 +117,50 @@ public class GrpcDurableTaskClientChannelRecreationTests
         }
     }
 
+    [Fact]
+    public async Task CreateRecreateCancellationSource_WhenDisposedDuringRecreateWindow_ReturnsCanceledTokenSource()
+    {
+        // Arrange
+        GrpcChannel channel = GrpcChannel.ForAddress("http://disposed-race.client.test");
+        GrpcDurableTaskClientOptions options = new()
+        {
+            Channel = channel,
+        };
+        options.SetChannelRecreator((existingChannel, ct) => Task.FromResult(existingChannel));
+
+        try
+        {
+            (AsyncDisposable disposable, CallInvoker callInvoker) = InvokeGetCallInvoker(options);
+
+            try
+            {
+                ChannelRecreatingCallInvoker wrapper = callInvoker.Should().BeOfType<ChannelRecreatingCallInvoker>().Subject;
+                MethodInfo? method = typeof(ChannelRecreatingCallInvoker).GetMethod(
+                    "CreateRecreateCancellationSource",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                method.Should().NotBeNull();
+
+                SetDisposed(wrapper, 1);
+                GetDisposalCancellationSource(wrapper).Dispose();
+
+                // Act
+                using CancellationTokenSource recreateCts =
+                    (CancellationTokenSource)method!.Invoke(wrapper, Array.Empty<object>())!;
+
+                // Assert
+                recreateCts.IsCancellationRequested.Should().BeTrue();
+            }
+            finally
+            {
+                await disposable.DisposeAsync();
+            }
+        }
+        finally
+        {
+            await DisposeChannelAsync(channel);
+        }
+    }
+
     [Theory]
     [InlineData(0, 0)]
     [InlineData(-1, 0)]
@@ -158,6 +202,20 @@ public class GrpcDurableTaskClientChannelRecreationTests
         return (bool)typeof(ChannelRecreatingCallInvoker)
             .GetField("ownsChannel", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(callInvoker)!;
+    }
+
+    static CancellationTokenSource GetDisposalCancellationSource(CallInvoker callInvoker)
+    {
+        return (CancellationTokenSource)typeof(ChannelRecreatingCallInvoker)
+            .GetField("disposalCts", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(callInvoker)!;
+    }
+
+    static void SetDisposed(CallInvoker callInvoker, int value)
+    {
+        typeof(ChannelRecreatingCallInvoker)
+            .GetField("disposed", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(callInvoker, value);
     }
 
     static long InvokeToStopwatchTicks(TimeSpan interval)

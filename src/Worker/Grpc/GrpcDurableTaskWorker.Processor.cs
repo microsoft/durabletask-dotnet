@@ -54,29 +54,66 @@ sealed partial class GrpcDurableTaskWorker
 
         ILogger Logger => this.worker.logger;
 
-        public async Task ExecuteAsync(CancellationToken cancellation)
+        public async Task<ProcessorExitReason> ExecuteAsync(CancellationToken cancellation)
         {
+            // Tracks consecutive failures against the same channel. Reset only after the stream
+            // has actually delivered a message (HelloAsync alone is not proof the channel is healthy).
+            int consecutiveChannelFailures = 0;
+
+            // Tracks consecutive retry attempts for backoff calculation. Reset on first stream message.
+            int reconnectAttempt = 0;
+            Random backoffRandom = ReconnectBackoff.CreateRandom();
+
             while (!cancellation.IsCancellationRequested)
             {
+                bool channelLikelyPoisoned = false;
                 try
                 {
-                    AsyncServerStreamingCall<P.WorkItem> stream = await this.ConnectAsync(cancellation);
-                    await this.ProcessWorkItemsAsync(stream, cancellation);
+                    using AsyncServerStreamingCall<P.WorkItem> stream = await this.ConnectAsync(cancellation);
+                    await this.ProcessWorkItemsAsync(
+                        stream,
+                        cancellation,
+                        onFirstMessage: () =>
+                        {
+                            consecutiveChannelFailures = 0;
+                            reconnectAttempt = 0;
+                        },
+                        onChannelLikelyPoisoned: () => channelLikelyPoisoned = true);
                 }
                 catch (RpcException) when (cancellation.IsCancellationRequested)
                 {
                     // Worker is shutting down - let the method exit gracefully
-                    break;
+                    return ProcessorExitReason.Shutdown;
                 }
                 catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
                 {
-                    // Sidecar is shutting down - retry
+                    // Sidecar is shutting down - retry. Don't count toward channel-poisoned threshold:
+                    // Cancelled is ambiguous and shouldn't drive recreate storms.
                     this.Logger.SidecarDisconnected();
+                }
+                catch (RpcException ex) when (ex.StatusCode == StatusCode.DeadlineExceeded)
+                {
+                    // Only HelloAsync carries a deadline. Once the work-item stream is established,
+                    // ProcessWorkItemsAsync relies on the silent-disconnect timer instead of per-read deadlines.
+                    // A DeadlineExceeded here therefore means the handshake hung on a stale or half-open channel.
+                    this.Logger.HelloTimeout(this.internalOptions.HelloDeadline);
+                    channelLikelyPoisoned = true;
                 }
                 catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
                 {
-                    // Sidecar is down - keep retrying
+                    // Sidecar is down - keep retrying.
                     this.Logger.SidecarUnavailable();
+                    channelLikelyPoisoned = true;
+                }
+                catch (RpcException ex) when (ex.StatusCode == StatusCode.Unauthenticated)
+                {
+                    // Auth rejection — log distinctly so it's diagnosable. Do not count toward channel
+                    // recreate: a fresh channel won't fix bad credentials. Reset the consecutive-failure
+                    // counters: a status reply is proof the transport itself is healthy, so prior
+                    // transport failures should not combine with later ones to trip the recreate.
+                    this.Logger.AuthenticationFailed(ex);
+                    consecutiveChannelFailures = 0;
+                    reconnectAttempt = 0;
                 }
                 catch (RpcException ex) when (ex.StatusCode == StatusCode.NotFound)
                 {
@@ -91,7 +128,7 @@ sealed partial class GrpcDurableTaskWorker
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
                 {
                     // Shutting down, lets exit gracefully.
-                    break;
+                    return ProcessorExitReason.Shutdown;
                 }
                 catch (Exception ex)
                 {
@@ -99,18 +136,38 @@ sealed partial class GrpcDurableTaskWorker
                     this.Logger.UnexpectedError(ex, string.Empty);
                 }
 
+                if (channelLikelyPoisoned)
+                {
+                    consecutiveChannelFailures++;
+                    int threshold = this.internalOptions.ChannelRecreateFailureThreshold;
+                    if (threshold > 0 && consecutiveChannelFailures >= threshold)
+                    {
+                        this.Logger.RecreatingChannel(consecutiveChannelFailures);
+                        return ProcessorExitReason.ChannelRecreateRequested;
+                    }
+                }
+
                 try
                 {
-                    // CONSIDER: Exponential backoff
-                    await Task.Delay(TimeSpan.FromSeconds(5), cancellation);
+                    TimeSpan delay = ReconnectBackoff.Compute(
+                        reconnectAttempt,
+                        this.internalOptions.ReconnectBackoffBase,
+                        this.internalOptions.ReconnectBackoffCap,
+                        backoffRandom);
+                    this.Logger.ReconnectBackoff(reconnectAttempt, (int)Math.Min(int.MaxValue, delay.TotalMilliseconds));
+                    reconnectAttempt = Math.Min(reconnectAttempt + 1, 30); // cap to avoid overflow in 2^attempt
+                    await Task.Delay(delay, cancellation);
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
                 {
                     // Worker is shutting down - let the method exit gracefully
-                    break;
+                    return ProcessorExitReason.Shutdown;
                 }
             }
+
+            return ProcessorExitReason.Shutdown;
         }
+
 
         static string GetActionsListForLogging(IReadOnlyList<P.OrchestratorAction> actions)
         {
@@ -242,7 +299,21 @@ sealed partial class GrpcDurableTaskWorker
 
         async Task<AsyncServerStreamingCall<P.WorkItem>> ConnectAsync(CancellationToken cancellation)
         {
-            await this.client!.HelloAsync(EmptyMessage, cancellationToken: cancellation);
+            TimeSpan helloDeadline = this.internalOptions.HelloDeadline;
+            DateTime? deadline = null;
+
+            if (helloDeadline > TimeSpan.Zero)
+            {
+                // Clamp to a UTC DateTime.MaxValue so a misconfigured (very large) HelloDeadline cannot
+                // throw ArgumentOutOfRangeException out of DateTime.Add and so the gRPC deadline remains
+                // unambiguous during internal normalization.
+                DateTime now = DateTime.UtcNow;
+                DateTime maxDeadlineUtc = DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc);
+                TimeSpan maxOffset = maxDeadlineUtc - now;
+                deadline = helloDeadline >= maxOffset ? maxDeadlineUtc : now.Add(helloDeadline);
+            }
+
+            await this.client!.HelloAsync(EmptyMessage, deadline: deadline, cancellationToken: cancellation);
             this.Logger.EstablishedWorkItemConnection();
 
             DurableTaskWorkerOptions workerOptions = this.worker.workerOptions;
@@ -263,85 +334,115 @@ sealed partial class GrpcDurableTaskWorker
                 cancellationToken: cancellation);
         }
 
-        async Task ProcessWorkItemsAsync(AsyncServerStreamingCall<P.WorkItem> stream, CancellationToken cancellation)
+        async Task ProcessWorkItemsAsync(
+            AsyncServerStreamingCall<P.WorkItem> stream,
+            CancellationToken cancellation,
+            Action? onFirstMessage = null,
+            Action? onChannelLikelyPoisoned = null)
         {
-            // Create a new token source for timing out and a final token source that keys off of them both.
-            // The timeout token is used to detect when we are no longer getting any messages, including health checks.
-            // If this is the case, it signifies the connection has been dropped silently and we need to reconnect.
-            using var timeoutSource = new CancellationTokenSource();
-            timeoutSource.CancelAfter(TimeSpan.FromSeconds(60));
-            using var tokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellation, timeoutSource.Token);
+            // The timeout token (managed by WorkItemStreamConsumer) detects when no messages —
+            // including health pings sent periodically by the server — arrive within the configured
+            // window. If that fires we treat the stream as silently disconnected and reconnect.
+            TimeSpan silentDisconnectTimeout = this.internalOptions.SilentDisconnectTimeout;
 
-            while (!cancellation.IsCancellationRequested)
+            // NOTE: the consumer deliberately does NOT wrap its await foreach in an outer loop.
+            // The underlying IAsyncStreamReader is single-use — once the server terminates the stream
+            // (e.g. via a graceful HTTP/2 GOAWAY with OK trailers during a rolling upgrade), MoveNext
+            // returns false forever and re-entering await foreach would tight-spin with no yield.
+            WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
+                ct => stream.ResponseStream.ReadAllAsync(ct),
+                silentDisconnectTimeout,
+                workItem => this.DispatchWorkItem(workItem, cancellation),
+                onFirstMessage,
+                cancellation);
+
+            switch (result.Outcome)
             {
-                await foreach (P.WorkItem workItem in stream.ResponseStream.ReadAllAsync(tokenSource.Token))
-                {
-                    timeoutSource.CancelAfter(TimeSpan.FromSeconds(60));
-                    if (workItem.RequestCase == P.WorkItem.RequestOneofCase.OrchestratorRequest)
-                    {
-                        this.RunBackgroundTask(
-                            workItem,
-                            () => this.OnRunOrchestratorAsync(
-                                workItem.OrchestratorRequest,
-                                workItem.CompletionToken,
-                                cancellation),
-                            cancellation);
-                    }
-                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
-                    {
-                        this.RunBackgroundTask(
-                            workItem,
-                            () => this.OnRunActivityAsync(
-                                workItem.ActivityRequest,
-                                workItem.CompletionToken,
-                                cancellation),
-                            cancellation);
-                    }
-                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
-                    {
-                        this.RunBackgroundTask(
-                            workItem,
-                            () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation),
-                            cancellation);
-                    }
-                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequestV2)
-                    {
-                        workItem.EntityRequestV2.ToEntityBatchRequest(
-                            out EntityBatchRequest batchRequest,
-                            out List<P.OperationInfo> operationInfos);
+                case WorkItemStreamOutcome.Shutdown:
+                    return;
 
-                        this.RunBackgroundTask(
-                             workItem,
-                             () => this.OnRunEntityBatchAsync(
-                                batchRequest,
-                                cancellation,
-                                workItem.CompletionToken,
-                                operationInfos),
-                             cancellation);
-                    }
-                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
-                    {
-                        // No-op
-                    }
-                    else
-                    {
-                        this.Logger.UnexpectedWorkItemType(workItem.RequestCase.ToString());
-                    }
-                }
+                case WorkItemStreamOutcome.SilentDisconnect:
+                    // Stream stopped producing messages (including health pings) for longer than the
+                    // configured window. Treat as a poisoned channel.
+                    this.Logger.ConnectionTimeout();
+                    onChannelLikelyPoisoned?.Invoke();
+                    return;
 
-                if (tokenSource.IsCancellationRequested || tokenSource.Token.IsCancellationRequested)
-                {
-                    // The token has cancelled, this means either:
-                    // 1. The broader 'cancellation' was triggered, return here to start a graceful shutdown.
-                    // 2. The timeoutSource was triggered, return here to trigger a reconnect to the backend.
-                    if (!cancellation.IsCancellationRequested)
+                case WorkItemStreamOutcome.GracefulDrain:
+                    // Canonical signal sent by the backend during a graceful drain (HTTP/2 GOAWAY +
+                    // OK trailers when a DTS instance is being replaced). Log it explicitly so
+                    // operators can see it. Only count it toward the channel-poisoned threshold when
+                    // the stream produced no messages: a stream that successfully delivered work and
+                    // was then closed by the server is healthy behavior (e.g. routine rolling
+                    // upgrade), and counting those would let a long-lived process accumulate spurious
+                    // "poison" credits across many healthy drains. An empty drain, on the other hand,
+                    // is a strong signal the channel is latched onto a dead/evacuated backend and
+                    // needs to be recreated to pick up fresh DNS/routing.
+                    this.Logger.StreamEndedByPeer();
+                    if (!result.FirstMessageObserved)
                     {
-                        // Since the cancellation came from the timeout, log a warning.
-                        this.Logger.ConnectionTimeout();
+                        onChannelLikelyPoisoned?.Invoke();
                     }
 
                     return;
-                }
+            }
+        }
+
+        void DispatchWorkItem(P.WorkItem workItem, CancellationToken cancellation)
+        {
+            if (workItem.RequestCase == P.WorkItem.RequestOneofCase.OrchestratorRequest)
+            {
+                this.RunBackgroundTask(
+                    workItem,
+                    () => this.OnRunOrchestratorAsync(
+                        workItem.OrchestratorRequest,
+                        workItem.CompletionToken,
+                        cancellation),
+                    cancellation);
+            }
+            else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
+            {
+                this.RunBackgroundTask(
+                    workItem,
+                    () => this.OnRunActivityAsync(
+                        workItem.ActivityRequest,
+                        workItem.CompletionToken,
+                        cancellation),
+                    cancellation);
+            }
+            else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
+            {
+                this.RunBackgroundTask(
+                    workItem,
+                    () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation),
+                    cancellation);
+            }
+            else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequestV2)
+            {
+                workItem.EntityRequestV2.ToEntityBatchRequest(
+                    out EntityBatchRequest batchRequest,
+                    out List<P.OperationInfo> operationInfos);
+
+                this.RunBackgroundTask(
+                     workItem,
+                     () => this.OnRunEntityBatchAsync(
+                        batchRequest,
+                        cancellation,
+                        workItem.CompletionToken,
+                        operationInfos),
+                     cancellation);
+            }
+            else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
+            {
+                // Health pings are heartbeat-only signals from the backend; the silent-disconnect
+                // timer reset (handled inside WorkItemStreamConsumer) is the actionable behavior.
+                // Logging at Trace allows operators to confirm liveness without flooding info-level
+                // telemetry.
+                this.Logger.ReceivedHealthPing();
+            }
+            else
+            {
+                this.Logger.UnexpectedWorkItemType(workItem.RequestCase.ToString());
             }
         }
 

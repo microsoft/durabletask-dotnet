@@ -1,9 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using Azure.Core;
 using Grpc.Net.Client;
 using Microsoft.DurableTask.Worker.Grpc;
@@ -110,7 +111,8 @@ public static class DurableTaskSchedulerWorkerExtensions
     sealed class ConfigureGrpcChannel : IConfigureNamedOptions<GrpcDurableTaskWorkerOptions>, IAsyncDisposable
     {
         readonly IOptionsMonitor<DurableTaskSchedulerWorkerOptions> schedulerOptions;
-        readonly ConcurrentDictionary<string, Lazy<GrpcChannel>> channels = new();
+        readonly Dictionary<string, GrpcChannel> channels = new();
+        readonly object syncRoot = new();
         volatile int disposed;
 
         /// <summary>
@@ -135,15 +137,6 @@ public static class DurableTaskSchedulerWorkerExtensions
         /// <param name="options">The options instance to configure.</param>
         public void Configure(string? name, GrpcDurableTaskWorkerOptions options)
         {
-#if NET7_0_OR_GREATER
-            ObjectDisposedException.ThrowIf(this.disposed == 1, this);
-#else
-            if (this.disposed == 1)
-            {
-                throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
-            }
-#endif
-
             string optionsName = name ?? Options.DefaultName;
             DurableTaskSchedulerWorkerOptions source = this.schedulerOptions.Get(optionsName);
 
@@ -153,10 +146,122 @@ public static class DurableTaskSchedulerWorkerExtensions
             // Use a delimiter character (\u001F) that will not appear in typical endpoint URIs.
             string credentialType = source.Credential?.GetType().FullName ?? "null";
             string cacheKey = $"{optionsName}\u001F{source.EndpointAddress}\u001F{source.TaskHubName}\u001F{source.ResourceId}\u001F{credentialType}\u001F{source.AllowInsecureCredentials}\u001F{source.WorkerId}";
-            options.Channel = this.channels.GetOrAdd(
-                cacheKey,
-                _ => new Lazy<GrpcChannel>(source.CreateChannel)).Value;
+            GrpcChannel? newChannel = null;
+            bool disposeNewChannel = false;
+            lock (this.syncRoot)
+            {
+#if NET7_0_OR_GREATER
+                ObjectDisposedException.ThrowIf(this.disposed == 1, this);
+#else
+                if (this.disposed == 1)
+                {
+                    throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
+                }
+#endif
+
+                if (!this.channels.TryGetValue(cacheKey, out GrpcChannel? channel))
+                {
+                    newChannel = source.CreateChannel();
+                    if (this.disposed == 1)
+                    {
+                        disposeNewChannel = true;
+                    }
+                    else
+                    {
+                        channel = newChannel;
+                        this.channels.Add(cacheKey, channel);
+                    }
+                }
+
+                options.Channel = channel;
+            }
+
+            if (disposeNewChannel)
+            {
+                newChannel!.Dispose();
+                throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
+            }
+
+            options.SetChannelRecreator((oldChannel, ct) => this.RecreateChannelAsync(cacheKey, source, oldChannel, ct));
             options.ConfigureForAzureManaged();
+        }
+
+        /// <summary>
+        /// Replaces the cached worker channel for the given key with a freshly created one and schedules
+        /// graceful disposal of the old channel after a grace period so any in-flight RPCs that already
+        /// captured the previous channel can drain.
+        /// </summary>
+        async Task<GrpcChannel> RecreateChannelAsync(string cacheKey, DurableTaskSchedulerWorkerOptions source, GrpcChannel oldChannel, CancellationToken cancellation)
+        {
+            cancellation.ThrowIfCancellationRequested();
+
+            GrpcChannel? cachedChannel = null;
+            GrpcChannel? newChannel = null;
+            bool disposeNewChannel = false;
+            lock (this.syncRoot)
+            {
+#if NET7_0_OR_GREATER
+                ObjectDisposedException.ThrowIf(this.disposed == 1, this);
+#else
+                if (this.disposed == 1)
+                {
+                    throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
+                }
+#endif
+
+                // Worker cache keys include WorkerId, so a single worker normally owns each cached entry.
+                // Still guard against a stale recreate callback that is racing a more recent successful swap.
+                if (this.channels.TryGetValue(cacheKey, out cachedChannel)
+                    && !ReferenceEquals(cachedChannel, oldChannel))
+                {
+                    return cachedChannel;
+                }
+
+                // Materialize the replacement channel only after we've established that this callback still
+                // corresponds to the currently cached worker channel.
+                newChannel = source.CreateChannel();
+                if (this.disposed == 1)
+                {
+                    disposeNewChannel = true;
+                }
+                else
+                {
+                    this.channels[cacheKey] = newChannel;
+                }
+            }
+
+            if (disposeNewChannel)
+            {
+                await DisposeChannelAsync(newChannel!).ConfigureAwait(false);
+                throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
+            }
+
+            // Successful swap. Schedule graceful disposal of the old channel after a grace period
+            // so any in-flight RPCs that already captured it can drain.
+            _ = ScheduleDeferredDisposeAsync(oldChannel);
+            return newChannel!;
+        }
+
+        static async Task ScheduleDeferredDisposeAsync(GrpcChannel channel)
+        {
+            try
+            {
+                // Grace period to let in-flight RPCs using the previous channel complete before draining it.
+                await Task.Delay(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                await DisposeChannelAsync(channel).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException
+                                        and not StackOverflowException
+                                        and not AccessViolationException
+                                        and not ThreadAbortException)
+            {
+                if (ex is not OperationCanceledException and not ObjectDisposedException)
+                {
+                    Trace.TraceError(
+                        "Unexpected exception while deferred-disposing gRPC channel in DurableTaskSchedulerWorkerExtensions.ScheduleDeferredDisposeAsync: {0}",
+                        ex);
+                }
+            }
         }
 
         /// <inheritdoc/>
@@ -167,14 +272,22 @@ public static class DurableTaskSchedulerWorkerExtensions
                 return;
             }
 
-            foreach (Lazy<GrpcChannel> channel in this.channels.Values.Where(lazy => lazy.IsValueCreated))
+            List<GrpcChannel> channelsToDispose;
+            lock (this.syncRoot)
+            {
+                channelsToDispose = this.channels.Values.ToList();
+                this.channels.Clear();
+            }
+
+            foreach (GrpcChannel channel in channelsToDispose)
             {
                 try
                 {
-                    await DisposeChannelAsync(channel.Value).ConfigureAwait(false);
+                    await DisposeChannelAsync(channel).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException
                                             and not StackOverflowException
+                                            and not AccessViolationException
                                             and not ThreadAbortException)
                 {
                     // Swallow disposal exceptions - disposal should be best-effort to ensure
@@ -187,8 +300,6 @@ public static class DurableTaskSchedulerWorkerExtensions
                     }
                 }
             }
-
-            this.channels.Clear();
             GC.SuppressFinalize(this);
         }
 

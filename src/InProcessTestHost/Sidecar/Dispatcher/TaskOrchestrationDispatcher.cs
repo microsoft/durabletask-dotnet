@@ -149,6 +149,22 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                 out bool continueAsNew);
             if (continueAsNew)
             {
+                // Self-targeted external events emitted during ContinueAsNew (for example by
+                // preserveUnprocessedEvents) must be carried into the new runtime state before
+                // we clear the per-iteration message lists. Otherwise they are dropped here and
+                // the next generation starts without the buffered events it is expecting.
+                foreach (TaskMessage message in orchestratorMessages)
+                {
+                    if (message.Event is EventRaisedEvent eventRaised
+                        && string.Equals(
+                            message.OrchestrationInstance.InstanceId,
+                            workItem.InstanceId,
+                            StringComparison.Ordinal))
+                    {
+                        workItem.OrchestrationRuntimeState.AddEvent(eventRaised);
+                    }
+                }
+
                 // The previous execution is being replaced by a new one. Clear any
                 // accumulated messages from the old execution so they are not
                 // re-enqueued when the work item completes. Without this, stale

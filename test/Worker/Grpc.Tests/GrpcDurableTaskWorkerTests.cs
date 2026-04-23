@@ -21,8 +21,6 @@ public class GrpcDurableTaskWorkerTests
         .GetMethod("ExecuteAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
     static readonly MethodInfo ApplySuccessfulRecreateMethod = typeof(GrpcDurableTaskWorker)
         .GetMethod("ApplySuccessfulRecreate", BindingFlags.Instance | BindingFlags.NonPublic)!;
-    static readonly FieldInfo DeferredDisposeGracePeriodField = typeof(GrpcDurableTaskWorker)
-        .GetField("deferredDisposeGracePeriod", BindingFlags.Static | BindingFlags.NonPublic)!;
     static readonly MethodInfo ProcessorConnectAsyncMethod = typeof(GrpcDurableTaskWorker)
         .GetNestedType("Processor", BindingFlags.NonPublic)!
         .GetMethod("ConnectAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -192,7 +190,6 @@ public class GrpcDurableTaskWorkerTests
             return ValueTask.CompletedTask;
         });
 
-        TimeSpan originalGracePeriod = (TimeSpan)DeferredDisposeGracePeriodField.GetValue(null)!;
         CallInvoker callInvoker = currentChannel.CreateCallInvoker();
         string address = currentChannel.Target;
         GrpcChannel? latestObservedChannel = currentChannel;
@@ -200,7 +197,6 @@ public class GrpcDurableTaskWorkerTests
 
         try
         {
-            DeferredDisposeGracePeriodField.SetValue(null, TimeSpan.FromMilliseconds(100));
             object result = await InvokeTryRecreateChannelAsync(worker, disposable, currentChannel);
 
             // Act
@@ -210,7 +206,8 @@ public class GrpcDurableTaskWorkerTests
                 ref callInvoker,
                 ref address,
                 ref latestObservedChannel,
-                ref workerOwnedChannelDisposable);
+                ref workerOwnedChannelDisposable,
+                TimeSpan.FromMilliseconds(100));
 
             // Assert
             disposalObserved.Task.IsCompleted.Should().BeFalse();
@@ -222,7 +219,6 @@ public class GrpcDurableTaskWorkerTests
         }
         finally
         {
-            DeferredDisposeGracePeriodField.SetValue(null, originalGracePeriod);
             await DisposeChannelAsync(currentChannel);
             await DisposeChannelAsync(recreatedChannel);
         }
@@ -301,9 +297,10 @@ public class GrpcDurableTaskWorkerTests
         ref CallInvoker callInvoker,
         ref string address,
         ref GrpcChannel? latestObservedChannel,
-        ref AsyncDisposable workerOwnedChannelDisposable)
+        ref AsyncDisposable workerOwnedChannelDisposable,
+        TimeSpan deferredDisposeGracePeriod)
     {
-        object?[] args = { result, callInvoker, address, latestObservedChannel, workerOwnedChannelDisposable };
+        object?[] args = { result, callInvoker, address, latestObservedChannel, workerOwnedChannelDisposable, deferredDisposeGracePeriod };
         ApplySuccessfulRecreateMethod.Invoke(worker, args);
         callInvoker = (CallInvoker)args[1]!;
         address = (string)args[2]!;

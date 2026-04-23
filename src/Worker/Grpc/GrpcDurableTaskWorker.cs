@@ -13,7 +13,7 @@ namespace Microsoft.DurableTask.Worker.Grpc;
 /// </summary>
 sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 {
-    static TimeSpan deferredDisposeGracePeriod = TimeSpan.FromSeconds(30);
+    static readonly TimeSpan DeferredDisposeGracePeriod = TimeSpan.FromSeconds(30);
 
     readonly GrpcDurableTaskWorkerOptions grpcOptions;
     readonly DurableTaskWorkerOptions workerOptions;
@@ -90,7 +90,8 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
                         ref callInvoker,
                         ref address,
                         ref latestObservedChannel,
-                        ref workerOwnedChannelDisposable);
+                        ref workerOwnedChannelDisposable,
+                        DeferredDisposeGracePeriod);
                 }
 
                 // If we couldn't recreate (e.g., caller-owned CallInvoker), fall through and retry on the
@@ -249,7 +250,8 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         ref CallInvoker callInvoker,
         ref string address,
         ref GrpcChannel? latestObservedChannel,
-        ref AsyncDisposable workerOwnedChannelDisposable)
+        ref AsyncDisposable workerOwnedChannelDisposable,
+        TimeSpan deferredDisposeGracePeriod)
     {
         callInvoker = result.NewCallInvoker!;
         address = result.NewAddress!;

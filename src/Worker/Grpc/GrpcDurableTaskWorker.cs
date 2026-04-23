@@ -89,9 +89,9 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
                     workerOwnedChannelDisposable = result.NewWorkerOwnedDisposable;
                     this.logger.ChannelRecreated(address);
 
-                    // Dispose the prior worker-owned channel if we had one. Path 1 keeps ownership with the
-                    // recreator, and Path 3 never recreates at all, so only Path 2 ever installs a non-default
-                    // AsyncDisposable here.
+                    // Dispose the prior worker-owned channel if we had one. Path 1 hands ownership of the
+                    // replacement channel to the recreator, Path 2 installs a fresh worker-owned disposable,
+                    // and Path 3 never recreates at all.
                     await previousDisposable.DisposeAsync();
                 }
 
@@ -124,9 +124,10 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
                 GrpcChannel newChannel = await recreator(currentChannel, cancellation).ConfigureAwait(false);
                 if (!ReferenceEquals(newChannel, currentChannel))
                 {
-                    // The recreator may return a shared cached channel. It also owns disposal of the
-                    // previous channel, so the outer worker keeps its existing AsyncDisposable.
-                    return new ChannelRecreateResult(true, newChannel.CreateCallInvoker(), newChannel.Target, currentWorkerOwnedDisposable, newChannel);
+                    // The recreator owns the replacement channel lifetime. Return a default disposable
+                    // so the caller disposes the previous worker-owned channel exactly once without
+                    // carrying that ownership forward to the recreated state.
+                    return new ChannelRecreateResult(true, newChannel.CreateCallInvoker(), newChannel.Target, default, newChannel);
                 }
 
                 // Recreator returned the same instance — nothing to swap.

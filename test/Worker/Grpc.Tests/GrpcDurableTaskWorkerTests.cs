@@ -125,6 +125,48 @@ public class GrpcDurableTaskWorkerTests
     }
 
     [Fact]
+    public async Task TryRecreateChannelAsync_ConfiguredRecreatorReturningDifferentChannel_DoesNotCarryForwardOldDisposable()
+    {
+        // Arrange
+        GrpcChannel currentChannel = GrpcChannel.ForAddress("http://localhost:5004");
+        GrpcChannel recreatedChannel = GrpcChannel.ForAddress("http://localhost:5005");
+        GrpcDurableTaskWorkerOptions grpcOptions = new()
+        {
+            Channel = currentChannel,
+        };
+        grpcOptions.SetChannelRecreator((channel, ct) => Task.FromResult(recreatedChannel));
+
+        GrpcDurableTaskWorker worker = CreateWorker(grpcOptions);
+        int disposeCalls = 0;
+        AsyncDisposable currentWorkerOwnedDisposable = new(() =>
+        {
+            Interlocked.Increment(ref disposeCalls);
+            return ValueTask.CompletedTask;
+        });
+
+        try
+        {
+            // Act
+            object result = await InvokeTryRecreateChannelAsync(worker, currentWorkerOwnedDisposable, currentChannel);
+            AsyncDisposable newDisposable = GetResultProperty<AsyncDisposable>(result, "NewWorkerOwnedDisposable");
+
+            // Simulate the outer worker handoff.
+            await currentWorkerOwnedDisposable.DisposeAsync();
+            await newDisposable.DisposeAsync();
+
+            // Assert
+            GetResultProperty<bool>(result, "Recreated").Should().BeTrue();
+            GetResultProperty<GrpcChannel?>(result, "NewChannel").Should().BeSameAs(recreatedChannel);
+            Volatile.Read(ref disposeCalls).Should().Be(1);
+        }
+        finally
+        {
+            await DisposeChannelAsync(currentChannel);
+            await DisposeChannelAsync(recreatedChannel);
+        }
+    }
+
+    [Fact]
     public async Task ConnectAsync_VeryLargeHelloDeadline_UsesUtcMaxValueDeadline()
     {
         // Arrange
@@ -193,7 +235,15 @@ public class GrpcDurableTaskWorkerTests
 
     static async Task<object> InvokeTryRecreateChannelAsync(GrpcDurableTaskWorker worker, GrpcChannel currentChannel)
     {
-        object?[] args = { CancellationToken.None, default(AsyncDisposable), currentChannel };
+        return await InvokeTryRecreateChannelAsync(worker, default, currentChannel);
+    }
+
+    static async Task<object> InvokeTryRecreateChannelAsync(
+        GrpcDurableTaskWorker worker,
+        AsyncDisposable currentWorkerOwnedDisposable,
+        GrpcChannel currentChannel)
+    {
+        object?[] args = { CancellationToken.None, currentWorkerOwnedDisposable, currentChannel };
         Task task = (Task)TryRecreateChannelAsyncMethod.Invoke(worker, args)!;
         await task;
         return task.GetType().GetProperty("Result")!.GetValue(task)!;

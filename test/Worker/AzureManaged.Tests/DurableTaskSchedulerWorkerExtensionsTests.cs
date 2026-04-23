@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Reflection;
 using Azure.Core;
 using Azure.Identity;
 using FluentAssertions;
@@ -293,6 +294,37 @@ public class DurableTaskSchedulerWorkerExtensionsTests
     }
 
     [Fact]
+    public async Task UseDurableTaskScheduler_ChannelRecreator_ReplacesCachedChannel()
+    {
+        // Arrange
+        ServiceCollection services = new ServiceCollection();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new Mock<IDurableTaskWorkerBuilder>();
+        mockBuilder.Setup(b => b.Services).Returns(services);
+        DefaultAzureCredential credential = new DefaultAzureCredential();
+        mockBuilder.Object.UseDurableTaskScheduler(ValidEndpoint, ValidTaskHub, credential, options =>
+        {
+            options.WorkerId = "worker-id-1";
+        });
+
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsFactory<GrpcDurableTaskWorkerOptions> optionsFactory = provider.GetRequiredService<IOptionsFactory<GrpcDurableTaskWorkerOptions>>();
+        GrpcDurableTaskWorkerOptions options = optionsFactory.Create(Options.DefaultName);
+        GrpcChannel originalChannel = options.Channel!;
+
+        // Act
+        Func<GrpcChannel, CancellationToken, Task<GrpcChannel>>? recreator = GetChannelRecreator(options);
+        recreator.Should().NotBeNull();
+        GrpcChannel recreatedChannel = await recreator!(originalChannel, CancellationToken.None);
+        GrpcChannel staleRecreateResult = await recreator(originalChannel, CancellationToken.None);
+        GrpcDurableTaskWorkerOptions refreshedOptions = optionsFactory.Create(Options.DefaultName);
+
+        // Assert
+        recreatedChannel.Should().NotBeSameAs(originalChannel);
+        staleRecreateResult.Should().BeSameAs(recreatedChannel, "a stale recreate callback should keep the already-cached replacement channel");
+        refreshedOptions.Channel.Should().BeSameAs(recreatedChannel, "the worker recreator should replace the cached channel for the same worker entry");
+    }
+
+    [Fact]
     public async Task UseDurableTaskScheduler_ConfigureAfterDispose_ThrowsObjectDisposedException()
     {
         // Arrange
@@ -447,6 +479,17 @@ public class DurableTaskSchedulerWorkerExtensionsTests
         options1.Channel.Should().NotBeNull();
         options2.Channel.Should().NotBeNull();
         options1.Channel.Should().NotBeSameAs(options2.Channel, "different WorkerId should use different channels");
+    }
+
+    static Func<GrpcChannel, CancellationToken, Task<GrpcChannel>>? GetChannelRecreator(GrpcDurableTaskWorkerOptions options)
+    {
+        object internalOptions = typeof(GrpcDurableTaskWorkerOptions)
+            .GetProperty("Internal", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(options)!;
+
+        return (Func<GrpcChannel, CancellationToken, Task<GrpcChannel>>?)internalOptions.GetType()
+            .GetProperty("ChannelRecreator", BindingFlags.Instance | BindingFlags.Public)!
+            .GetValue(internalOptions);
     }
 }
 

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
@@ -112,6 +113,7 @@ public static class DurableTaskSchedulerWorkerExtensions
     {
         readonly IOptionsMonitor<DurableTaskSchedulerWorkerOptions> schedulerOptions;
         readonly ConcurrentDictionary<string, Lazy<GrpcChannel>> channels = new();
+        readonly object syncRoot = new();
         volatile int disposed;
 
         /// <summary>
@@ -162,97 +164,63 @@ public static class DurableTaskSchedulerWorkerExtensions
         }
 
         /// <summary>
-        /// Atomically swaps the cached channel for the given key with a freshly created one and schedules
+        /// Replaces the cached worker channel for the given key with a freshly created one and schedules
         /// graceful disposal of the old channel after a grace period so any in-flight RPCs that already
-        /// captured the previous channel can drain. Returns the currently cached channel if another recreate
-        /// attempt has already refreshed the shared entry.
+        /// captured the previous channel can drain.
         /// </summary>
         async Task<GrpcChannel> RecreateChannelAsync(string cacheKey, DurableTaskSchedulerWorkerOptions source, GrpcChannel oldChannel, CancellationToken cancellation)
         {
             cancellation.ThrowIfCancellationRequested();
 
-            // Recreate callbacks can outlive Configure(...) because workers keep the delegate on their
-            // options. Best-effort check for disposal before publishing anything back into the shared cache.
+            // Worker cache keys include WorkerId, so a single worker normally owns each cached entry.
+            // Recreate callbacks can outlive Configure(...), however, so still guard against disposal
+            // racing with channel publication back into the shared cache owner.
             if (this.disposed == 1)
             {
                 throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
             }
 
-            // Shared-cache recreation has four relevant states:
-            // 1. No entry exists anymore. Create one and use it.
-            // 2. The entry already materialized a different channel. Another recreate attempt already refreshed it.
-            // 3. The entry still represents what this worker observed. Win TryUpdate and publish the new channel.
-            // 4. The entry changes between our read and TryUpdate. Lose the race, dispose ours, and reuse the winner.
-            if (!this.channels.TryGetValue(cacheKey, out Lazy<GrpcChannel>? currentLazy))
+            // Materialize the replacement channel BEFORE publishing it so a CreateChannel failure leaves
+            // the current cache entry intact.
+            GrpcChannel newChannel = source.CreateChannel();
+            Lazy<GrpcChannel> newLazy = new(newChannel);
+            bool disposeNewChannel = false;
+            GrpcChannel? cachedChannel = null;
+            lock (this.syncRoot)
             {
-                // No entry — create one and return it. PublicationOnly ensures a transient
-                // CreateChannel failure doesn't permanently poison the cache slot (the default
-                // ExecutionAndPublication mode caches exceptions for the lifetime of the Lazy).
-                Lazy<GrpcChannel> created = new(source.CreateChannel, LazyThreadSafetyMode.PublicationOnly);
                 if (this.disposed == 1)
                 {
-                    throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
+                    disposeNewChannel = true;
                 }
-
-                if (this.channels.TryAdd(cacheKey, created))
+                else if (this.channels.TryGetValue(cacheKey, out Lazy<GrpcChannel>? currentLazy)
+                    && currentLazy.IsValueCreated
+                    && !ReferenceEquals(currentLazy.Value, oldChannel))
                 {
-                    return created.Value;
+                    // The cache already moved past oldChannel (for example because this callback is stale).
+                    // Keep the current winner and discard the newly-created replacement.
+                    disposeNewChannel = true;
+                    cachedChannel = currentLazy.Value;
                 }
-
-                // Another thread added one; fall through to read it.
-                this.channels.TryGetValue(cacheKey, out currentLazy);
+                else
+                {
+                    this.channels[cacheKey] = newLazy;
+                }
             }
 
-            if (currentLazy is null)
-            {
-                throw new InvalidOperationException("Failed to obtain a cached gRPC channel after recreation attempt.");
-            }
-
-            // Only a materialized Lazy can be compared against oldChannel by reference. If the cache slot
-            // has not created its channel yet, let TryUpdate decide whether this recreate attempt still owns it.
-            if (currentLazy.IsValueCreated && !ReferenceEquals(currentLazy.Value, oldChannel))
-            {
-                // Another recreate attempt already swapped in a new channel; reuse it.
-                return currentLazy.Value;
-            }
-
-            // Materialize the new channel BEFORE swapping the dictionary so a CreateChannel failure
-            // leaves the existing entry intact. If we swapped a not-yet-materialized Lazy and then
-            // CreateChannel threw, the dictionary would point to a permanently-failing Lazy and the
-            // old channel would have already been queued for disposal — an unrecoverable state.
-            GrpcChannel newChannel = source.CreateChannel();
-            if (this.disposed == 1)
+            if (disposeNewChannel)
             {
                 await DisposeChannelAsync(newChannel).ConfigureAwait(false);
-                throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
-            }
-
-            // The cache always stores Lazy<GrpcChannel> so the steady-state Configure path and the
-            // recreate path use the same dictionary value shape. Recreate materializes first only to
-            // avoid publishing a lazy that could fault before we know channel creation succeeded.
-            Lazy<GrpcChannel> newLazy = new(newChannel);
-            if (!this.channels.TryUpdate(cacheKey, newLazy, currentLazy))
-            {
-                // Lost the race. Always queue the freshly-created channel for deferred disposal so
-                // it does not leak. Then return the winning entry — but if the cache slot has been
-                // removed entirely (e.g. concurrent DisposeAsync cleared the dictionary), do NOT
-                // hand back the doomed `newChannel`: it has already been scheduled for shutdown.
-                _ = ScheduleDeferredDisposeAsync(newChannel);
-                if (this.channels.TryGetValue(cacheKey, out Lazy<GrpcChannel>? winner) && winner is not null)
+                if (cachedChannel is not null)
                 {
-                    return winner.Value;
+                    return cachedChannel;
                 }
 
-                throw new ObjectDisposedException(this.GetType().FullName);
+                throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
             }
 
             // Successful swap. Schedule graceful disposal of the old channel after a grace period
             // so any in-flight RPCs that already captured it can drain.
-            if (currentLazy.IsValueCreated)
-            {
-                _ = ScheduleDeferredDisposeAsync(currentLazy.Value);
-            }
-
+            _ = ScheduleDeferredDisposeAsync(oldChannel);
             return newChannel;
         }
 
@@ -285,7 +253,14 @@ public static class DurableTaskSchedulerWorkerExtensions
                 return;
             }
 
-            foreach (Lazy<GrpcChannel> channel in this.channels.Values.Where(lazy => lazy.IsValueCreated))
+            List<Lazy<GrpcChannel>> channelsToDispose;
+            lock (this.syncRoot)
+            {
+                channelsToDispose = this.channels.Values.Where(lazy => lazy.IsValueCreated).ToList();
+                this.channels.Clear();
+            }
+
+            foreach (Lazy<GrpcChannel> channel in channelsToDispose)
             {
                 try
                 {
@@ -305,8 +280,6 @@ public static class DurableTaskSchedulerWorkerExtensions
                     }
                 }
             }
-
-            this.channels.Clear();
             GC.SuppressFinalize(this);
         }
 

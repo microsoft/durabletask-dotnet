@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 using Grpc.Core;
@@ -23,6 +24,8 @@ public class GrpcDurableTaskClientChannelRecreationTests
         StringMarshaller);
     static readonly MethodInfo GetCallInvokerMethod = typeof(GrpcDurableTaskClient)
         .GetMethod("GetCallInvoker", BindingFlags.Static | BindingFlags.NonPublic)!;
+    static readonly MethodInfo ToStopwatchTicksMethod = typeof(ChannelRecreatingCallInvoker)
+        .GetMethod("ToStopwatchTicks", BindingFlags.Static | BindingFlags.NonPublic)!;
 
     [Fact]
     public async Task GetCallInvoker_WithProvidedChannel_RecreatesTransportAfterUnaryFailure()
@@ -114,6 +117,34 @@ public class GrpcDurableTaskClientChannelRecreationTests
         }
     }
 
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(-1, 0)]
+    public void ToStopwatchTicks_NonPositiveInterval_ReturnsZero(long ticks, long expected)
+    {
+        // Arrange
+        TimeSpan interval = TimeSpan.FromTicks(ticks);
+
+        // Act
+        long stopwatchTicks = InvokeToStopwatchTicks(interval);
+
+        // Assert
+        stopwatchTicks.Should().Be(expected);
+    }
+
+    [Fact]
+    public void ToStopwatchTicks_VeryLargeInterval_SaturatesAtLongMaxValue()
+    {
+        // Arrange
+        TimeSpan interval = TimeSpan.MaxValue;
+
+        // Act
+        long stopwatchTicks = InvokeToStopwatchTicks(interval);
+
+        // Assert
+        stopwatchTicks.Should().Be(long.MaxValue);
+    }
+
     static (AsyncDisposable Disposable, CallInvoker CallInvoker) InvokeGetCallInvoker(GrpcDurableTaskClientOptions options)
     {
         object?[] args = { options, NullLogger.Instance, null };
@@ -127,6 +158,11 @@ public class GrpcDurableTaskClientChannelRecreationTests
         return (bool)typeof(ChannelRecreatingCallInvoker)
             .GetField("ownsChannel", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(callInvoker)!;
+    }
+
+    static long InvokeToStopwatchTicks(TimeSpan interval)
+    {
+        return (long)ToStopwatchTicksMethod.Invoke(null, new object?[] { interval })!;
     }
 
     static async Task AssertRpcFailureAsync(CallInvoker callInvoker)

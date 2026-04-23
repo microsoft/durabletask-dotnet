@@ -163,8 +163,31 @@ sealed class ChannelRecreatingCallInvoker : CallInvoker, IAsyncDisposable
     static long CreateInitialRecreateTimestamp(TimeSpan minRecreateInterval) =>
         Stopwatch.GetTimestamp() - ToStopwatchTicks(minRecreateInterval);
 
-    static long ToStopwatchTicks(TimeSpan ts) =>
-        (long)(ts.TotalSeconds * Stopwatch.Frequency);
+    static long ToStopwatchTicks(TimeSpan ts)
+    {
+        if (ts <= TimeSpan.Zero)
+        {
+            return 0;
+        }
+
+        long timeSpanTicks = ts.Ticks;
+        long wholeSeconds = timeSpanTicks / TimeSpan.TicksPerSecond;
+        long remainingTimeSpanTicks = timeSpanTicks % TimeSpan.TicksPerSecond;
+        if (wholeSeconds > long.MaxValue / Stopwatch.Frequency)
+        {
+            return long.MaxValue;
+        }
+
+        long wholeSecondStopwatchTicks = wholeSeconds * Stopwatch.Frequency;
+        long partialSecondStopwatchTicks =
+            (long)(((decimal)remainingTimeSpanTicks * Stopwatch.Frequency) / TimeSpan.TicksPerSecond);
+        if (wholeSecondStopwatchTicks > long.MaxValue - partialSecondStopwatchTicks)
+        {
+            return long.MaxValue;
+        }
+
+        return wholeSecondStopwatchTicks + partialSecondStopwatchTicks;
+    }
 
     static TimeSpan ElapsedSince(long previousTimestamp, long nowTimestamp)
     {

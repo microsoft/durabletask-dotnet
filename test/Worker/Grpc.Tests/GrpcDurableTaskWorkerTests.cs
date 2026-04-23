@@ -136,19 +136,13 @@ public class GrpcDurableTaskWorkerTests
         object processor = CreateProcessor(worker, client);
 
         // Act
-        AsyncServerStreamingCall<P.WorkItem> stream = await InvokeProcessorConnectAsync(processor);
+        using AsyncServerStreamingCall<P.WorkItem> stream = await InvokeProcessorConnectAsync(processor);
 
-        try
-        {
-            // Assert
-            callInvoker.HelloDeadline.Should().HaveValue();
-            callInvoker.HelloDeadline!.Value.Kind.Should().Be(DateTimeKind.Utc);
-            callInvoker.HelloDeadline.Value.Should().Be(DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc));
-        }
-        finally
-        {
-            stream.Dispose();
-        }
+        // Assert
+        callInvoker.HelloDeadline.Should().HaveValue();
+        DateTime deadline = callInvoker.HelloDeadline!.Value;
+        deadline.Kind.Should().Be(DateTimeKind.Utc);
+        deadline.Should().Be(DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc));
     }
 
     static GrpcDurableTaskWorker CreateWorker(GrpcDurableTaskWorkerOptions grpcOptions)

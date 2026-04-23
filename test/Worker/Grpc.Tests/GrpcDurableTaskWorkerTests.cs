@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Reflection;
+using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Tests.Logging;
@@ -9,6 +10,7 @@ using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 
@@ -17,6 +19,9 @@ public class GrpcDurableTaskWorkerTests
     const string Category = "Microsoft.DurableTask.Worker.Grpc";
     static readonly MethodInfo ExecuteAsyncMethod = typeof(GrpcDurableTaskWorker)
         .GetMethod("ExecuteAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+    static readonly MethodInfo ProcessorConnectAsyncMethod = typeof(GrpcDurableTaskWorker)
+        .GetNestedType("Processor", BindingFlags.NonPublic)!
+        .GetMethod("ConnectAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
     static readonly MethodInfo TryRecreateChannelAsyncMethod = typeof(GrpcDurableTaskWorker)
         .GetMethod("TryRecreateChannelAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
@@ -119,6 +124,33 @@ public class GrpcDurableTaskWorkerTests
         }
     }
 
+    [Fact]
+    public async Task ConnectAsync_VeryLargeHelloDeadline_UsesUtcMaxValueDeadline()
+    {
+        // Arrange
+        GrpcDurableTaskWorkerOptions grpcOptions = new();
+        grpcOptions.SetHelloDeadline(TimeSpan.MaxValue);
+        GrpcDurableTaskWorker worker = CreateWorker(grpcOptions);
+        RecordingCallInvoker callInvoker = new();
+        P.TaskHubSidecarService.TaskHubSidecarServiceClient client = new(callInvoker);
+        object processor = CreateProcessor(worker, client);
+
+        // Act
+        AsyncServerStreamingCall<P.WorkItem> stream = await InvokeProcessorConnectAsync(processor);
+
+        try
+        {
+            // Assert
+            callInvoker.HelloDeadline.Should().HaveValue();
+            callInvoker.HelloDeadline!.Value.Kind.Should().Be(DateTimeKind.Utc);
+            callInvoker.HelloDeadline.Value.Should().Be(DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc));
+        }
+        finally
+        {
+            stream.Dispose();
+        }
+    }
+
     static GrpcDurableTaskWorker CreateWorker(GrpcDurableTaskWorkerOptions grpcOptions)
     {
         return CreateWorker(grpcOptions, new DurableTaskWorkerOptions(), NullLoggerFactory.Instance);
@@ -145,6 +177,24 @@ public class GrpcDurableTaskWorkerTests
     static Task InvokeExecuteAsync(GrpcDurableTaskWorker worker, CancellationToken cancellationToken)
     {
         return (Task)ExecuteAsyncMethod.Invoke(worker, new object?[] { cancellationToken })!;
+    }
+
+    static object CreateProcessor(GrpcDurableTaskWorker worker, P.TaskHubSidecarService.TaskHubSidecarServiceClient client)
+    {
+        System.Type processorType = typeof(GrpcDurableTaskWorker).GetNestedType("Processor", BindingFlags.NonPublic)!;
+        return Activator.CreateInstance(
+            processorType,
+            BindingFlags.Public | BindingFlags.Instance,
+            binder: null,
+            args: new object?[] { worker, client, null, null },
+            culture: null)!;
+    }
+
+    static async Task<AsyncServerStreamingCall<P.WorkItem>> InvokeProcessorConnectAsync(object processor)
+    {
+        Task task = (Task)ProcessorConnectAsyncMethod.Invoke(processor, new object?[] { CancellationToken.None })!;
+        await task;
+        return (AsyncServerStreamingCall<P.WorkItem>)task.GetType().GetProperty("Result")!.GetValue(task)!;
     }
 
     static async Task<object> InvokeTryRecreateChannelAsync(GrpcDurableTaskWorker worker, GrpcChannel currentChannel)
@@ -205,5 +255,64 @@ public class GrpcDurableTaskWorkerTests
             Interlocked.Increment(ref this.callCount);
             return this.callback(request, cancellationToken);
         }
+    }
+
+    sealed class RecordingCallInvoker : CallInvoker
+    {
+        public DateTime? HelloDeadline { get; private set; }
+
+        public override TResponse BlockingUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
+        {
+            if (method.FullName == "/TaskHubSidecarService/Hello")
+            {
+                this.HelloDeadline = options.Deadline;
+                TResponse response = (TResponse)(object)new Empty();
+                return new AsyncUnaryCall<TResponse>(
+                    Task.FromResult(response),
+                    Task.FromResult(new Metadata()),
+                    () => new Status(StatusCode.OK, string.Empty),
+                    () => new Metadata(),
+                    () => { });
+            }
+
+            throw new NotSupportedException($"Unexpected unary method {method.FullName}.");
+        }
+
+        public override AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
+        {
+            if (method.FullName == "/TaskHubSidecarService/GetWorkItems")
+            {
+                return new AsyncServerStreamingCall<TResponse>(
+                    new EmptyAsyncStreamReader<TResponse>(),
+                    Task.FromResult(new Metadata()),
+                    () => new Status(StatusCode.OK, string.Empty),
+                    () => new Metadata(),
+                    () => { });
+            }
+
+            throw new NotSupportedException($"Unexpected server-streaming method {method.FullName}.");
+        }
+
+        public override AsyncClientStreamingCall<TRequest, TResponse> AsyncClientStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override AsyncDuplexStreamingCall<TRequest, TResponse> AsyncDuplexStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
+        {
+            throw new NotSupportedException();
+        }
+    }
+
+    sealed class EmptyAsyncStreamReader<T> : IAsyncStreamReader<T>
+    {
+        public T Current => default!;
+
+        public Task<bool> MoveNext(CancellationToken cancellationToken) => Task.FromResult(false);
     }
 }

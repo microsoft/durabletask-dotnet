@@ -304,11 +304,13 @@ sealed partial class GrpcDurableTaskWorker
 
             if (helloDeadline > TimeSpan.Zero)
             {
-                // Clamp to DateTime.MaxValue so a misconfigured (very large) HelloDeadline cannot
-                // throw ArgumentOutOfRangeException out of DateTime.Add and crash the connect loop.
+                // Clamp to a UTC DateTime.MaxValue so a misconfigured (very large) HelloDeadline cannot
+                // throw ArgumentOutOfRangeException out of DateTime.Add and so the gRPC deadline remains
+                // unambiguous during internal normalization.
                 DateTime now = DateTime.UtcNow;
-                TimeSpan maxOffset = DateTime.MaxValue - now;
-                deadline = helloDeadline >= maxOffset ? DateTime.MaxValue : now.Add(helloDeadline);
+                DateTime maxDeadlineUtc = DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc);
+                TimeSpan maxOffset = maxDeadlineUtc - now;
+                deadline = helloDeadline >= maxOffset ? maxDeadlineUtc : now.Add(helloDeadline);
             }
 
             await this.client!.HelloAsync(EmptyMessage, deadline: deadline, cancellationToken: cancellation);

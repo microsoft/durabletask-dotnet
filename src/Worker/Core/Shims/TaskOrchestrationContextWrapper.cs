@@ -30,7 +30,6 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
     int newGuidCounter;
     object? customStatus;
-    bool preserveUnprocessedEventsOnContinueAsNew;
     TaskOrchestrationEntityContext? entityFeature;
 
     /// <summary>
@@ -350,31 +349,24 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     {
         Check.NotNull(options);
 
-        this.preserveUnprocessedEventsOnContinueAsNew = options.PreserveUnprocessedEvents;
-
-        try
+        if (!string.IsNullOrWhiteSpace(options.NewVersion))
         {
-            if (!string.IsNullOrWhiteSpace(options.NewVersion))
-            {
-                this.innerContext.ContinueAsNew(options.NewVersion, options.NewInput);
-            }
-            else
-            {
-                this.innerContext.ContinueAsNew(options.NewInput);
-            }
+            this.innerContext.ContinueAsNew(options.NewVersion, options.NewInput);
         }
-        catch
+        else
         {
-            this.preserveUnprocessedEventsOnContinueAsNew = false;
-            throw;
+            this.innerContext.ContinueAsNew(options.NewInput);
         }
 
         if (options.PreserveUnprocessedEvents)
         {
             // Send all the buffered external events to ourself.
+            OrchestrationInstance instance = new() { InstanceId = this.InstanceId };
             foreach ((string eventName, string eventPayload) in this.externalEventBuffer.TakeAll())
             {
-                this.ForwardBufferedExternalEvent(eventName, eventPayload);
+#pragma warning disable CS0618 // Type or member is obsolete -- 'internal' usage.
+                this.innerContext.SendEvent(instance, eventName, new RawInput(eventPayload));
+#pragma warning restore CS0618 // Type or member is obsolete
             }
         }
     }
@@ -485,28 +477,10 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         }
         else
         {
-            if (this.preserveUnprocessedEventsOnContinueAsNew)
-            {
-                // ContinueAsNew has already been scheduled with event preservation enabled.
-                // Forward late-arriving events directly to the next execution instead of buffering
-                // them on the current wrapper instance, which is about to be discarded.
-                this.ForwardBufferedExternalEvent(eventName, rawEventPayload);
-            }
-            else
-            {
-                // The orchestrator isn't waiting for this event (yet?). Save it in case
-                // the orchestrator wants it later.
-                this.externalEventBuffer.Add(eventName, rawEventPayload);
-            }
+            // The orchestrator isn't waiting for this event (yet?). Save it in case
+            // the orchestrator wants it later.
+            this.externalEventBuffer.Add(eventName, rawEventPayload);
         }
-    }
-
-    void ForwardBufferedExternalEvent(string eventName, string eventPayload)
-    {
-        OrchestrationInstance instance = new() { InstanceId = this.InstanceId };
-#pragma warning disable CS0618 // Type or member is obsolete -- 'internal' usage.
-        this.innerContext.SendEvent(instance, eventName, new RawInput(eventPayload));
-#pragma warning restore CS0618 // Type or member is obsolete
     }
 
     /// <summary>

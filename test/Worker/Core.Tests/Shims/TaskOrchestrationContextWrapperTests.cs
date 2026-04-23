@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Reflection;
 using DurableTask.Core;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -9,9 +8,6 @@ namespace Microsoft.DurableTask.Worker.Shims;
 
 public class TaskOrchestrationContextWrapperTests
 {
-    static readonly MethodInfo CompleteExternalEventMethod = typeof(TaskOrchestrationContextWrapper)
-        .GetMethod("CompleteExternalEvent", BindingFlags.Instance | BindingFlags.NonPublic)!;
-
     [Fact]
     public void Ctor_NullParent_Populates()
     {
@@ -107,30 +103,6 @@ public class TaskOrchestrationContextWrapperTests
         innerContext.LastContinueAsNewVersion.Should().BeNull();
     }
 
-    [Fact]
-    public void ContinueAsNew_WithPreserveUnprocessedEvents_ForwardsLateArrivingEventsToNextExecution()
-    {
-        // Arrange
-        TrackingOrchestrationContext innerContext = new();
-        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
-        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
-
-        // Act
-        wrapper.ContinueAsNew("new-input", preserveUnprocessedEvents: true);
-        InvokeCompleteExternalEvent(wrapper, "Event", "\"payload\"");
-
-        // Assert
-        innerContext.SentEvents.Should().ContainSingle();
-        innerContext.SentEvents[0].InstanceId.Should().Be(wrapper.InstanceId);
-        innerContext.SentEvents[0].EventName.Should().Be("Event");
-        innerContext.LastContinueAsNewInput.Should().Be("new-input");
-    }
-
-    static void InvokeCompleteExternalEvent(TaskOrchestrationContextWrapper wrapper, string eventName, string rawEventPayload)
-    {
-        CompleteExternalEventMethod.Invoke(wrapper, [eventName, rawEventPayload]);
-    }
-
     sealed class TrackingOrchestrationContext : OrchestrationContext
     {
         public TrackingOrchestrationContext()
@@ -145,8 +117,6 @@ public class TaskOrchestrationContextWrapperTests
         public object? LastContinueAsNewInput { get; private set; }
 
         public string? LastContinueAsNewVersion { get; private set; }
-
-        public List<(string InstanceId, string EventName, object EventData)> SentEvents { get; } = [];
 
         public override void ContinueAsNew(object input)
         {
@@ -179,9 +149,7 @@ public class TaskOrchestrationContextWrapperTests
             => throw new NotImplementedException();
 
         public override void SendEvent(OrchestrationInstance orchestrationInstance, string eventName, object eventData)
-        {
-            this.SentEvents.Add((orchestrationInstance.InstanceId, eventName, eventData));
-        }
+            => throw new NotImplementedException();
     }
 
     class TestOrchestrationContext : OrchestrationContext

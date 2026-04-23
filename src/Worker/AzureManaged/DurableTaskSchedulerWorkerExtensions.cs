@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -112,7 +111,7 @@ public static class DurableTaskSchedulerWorkerExtensions
     sealed class ConfigureGrpcChannel : IConfigureNamedOptions<GrpcDurableTaskWorkerOptions>, IAsyncDisposable
     {
         readonly IOptionsMonitor<DurableTaskSchedulerWorkerOptions> schedulerOptions;
-        readonly ConcurrentDictionary<string, Lazy<GrpcChannel>> channels = new();
+        readonly Dictionary<string, GrpcChannel> channels = new();
         readonly object syncRoot = new();
         volatile int disposed;
 
@@ -138,15 +137,6 @@ public static class DurableTaskSchedulerWorkerExtensions
         /// <param name="options">The options instance to configure.</param>
         public void Configure(string? name, GrpcDurableTaskWorkerOptions options)
         {
-#if NET7_0_OR_GREATER
-            ObjectDisposedException.ThrowIf(this.disposed == 1, this);
-#else
-            if (this.disposed == 1)
-            {
-                throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
-            }
-#endif
-
             string optionsName = name ?? Options.DefaultName;
             DurableTaskSchedulerWorkerOptions source = this.schedulerOptions.Get(optionsName);
 
@@ -156,9 +146,42 @@ public static class DurableTaskSchedulerWorkerExtensions
             // Use a delimiter character (\u001F) that will not appear in typical endpoint URIs.
             string credentialType = source.Credential?.GetType().FullName ?? "null";
             string cacheKey = $"{optionsName}\u001F{source.EndpointAddress}\u001F{source.TaskHubName}\u001F{source.ResourceId}\u001F{credentialType}\u001F{source.AllowInsecureCredentials}\u001F{source.WorkerId}";
-            options.Channel = this.channels.GetOrAdd(
-                cacheKey,
-                _ => new Lazy<GrpcChannel>(source.CreateChannel, LazyThreadSafetyMode.PublicationOnly)).Value;
+            GrpcChannel? newChannel = null;
+            bool disposeNewChannel = false;
+            lock (this.syncRoot)
+            {
+#if NET7_0_OR_GREATER
+                ObjectDisposedException.ThrowIf(this.disposed == 1, this);
+#else
+                if (this.disposed == 1)
+                {
+                    throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
+                }
+#endif
+
+                if (!this.channels.TryGetValue(cacheKey, out GrpcChannel? channel))
+                {
+                    newChannel = source.CreateChannel();
+                    if (this.disposed == 1)
+                    {
+                        disposeNewChannel = true;
+                    }
+                    else
+                    {
+                        channel = newChannel;
+                        this.channels.Add(cacheKey, channel);
+                    }
+                }
+
+                options.Channel = channel;
+            }
+
+            if (disposeNewChannel)
+            {
+                newChannel!.Dispose();
+                throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
+            }
+
             options.SetChannelRecreator((oldChannel, ct) => this.RecreateChannelAsync(cacheKey, source, oldChannel, ct));
             options.ConfigureForAzureManaged();
         }
@@ -172,56 +195,51 @@ public static class DurableTaskSchedulerWorkerExtensions
         {
             cancellation.ThrowIfCancellationRequested();
 
-            // Worker cache keys include WorkerId, so a single worker normally owns each cached entry.
-            // Recreate callbacks can outlive Configure(...), however, so still guard against disposal
-            // racing with channel publication back into the shared cache owner.
-            if (this.disposed == 1)
-            {
-                throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
-            }
-
-            // Materialize the replacement channel BEFORE publishing it so a CreateChannel failure leaves
-            // the current cache entry intact.
-            GrpcChannel newChannel = source.CreateChannel();
-            Lazy<GrpcChannel> newLazy = new(newChannel);
-            bool disposeNewChannel = false;
             GrpcChannel? cachedChannel = null;
+            GrpcChannel? newChannel = null;
+            bool disposeNewChannel = false;
             lock (this.syncRoot)
             {
+#if NET7_0_OR_GREATER
+                ObjectDisposedException.ThrowIf(this.disposed == 1, this);
+#else
+                if (this.disposed == 1)
+                {
+                    throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
+                }
+#endif
+
+                // Worker cache keys include WorkerId, so a single worker normally owns each cached entry.
+                // Still guard against a stale recreate callback that is racing a more recent successful swap.
+                if (this.channels.TryGetValue(cacheKey, out cachedChannel)
+                    && !ReferenceEquals(cachedChannel, oldChannel))
+                {
+                    return cachedChannel;
+                }
+
+                // Materialize the replacement channel only after we've established that this callback still
+                // corresponds to the currently cached worker channel.
+                newChannel = source.CreateChannel();
                 if (this.disposed == 1)
                 {
                     disposeNewChannel = true;
                 }
-                else if (this.channels.TryGetValue(cacheKey, out Lazy<GrpcChannel>? currentLazy)
-                    && currentLazy.IsValueCreated
-                    && !ReferenceEquals(currentLazy.Value, oldChannel))
-                {
-                    // The cache already moved past oldChannel (for example because this callback is stale).
-                    // Keep the current winner and discard the newly-created replacement.
-                    disposeNewChannel = true;
-                    cachedChannel = currentLazy.Value;
-                }
                 else
                 {
-                    this.channels[cacheKey] = newLazy;
+                    this.channels[cacheKey] = newChannel;
                 }
             }
 
             if (disposeNewChannel)
             {
-                await DisposeChannelAsync(newChannel).ConfigureAwait(false);
-                if (cachedChannel is not null)
-                {
-                    return cachedChannel;
-                }
-
+                await DisposeChannelAsync(newChannel!).ConfigureAwait(false);
                 throw new ObjectDisposedException(nameof(ConfigureGrpcChannel));
             }
 
             // Successful swap. Schedule graceful disposal of the old channel after a grace period
             // so any in-flight RPCs that already captured it can drain.
             _ = ScheduleDeferredDisposeAsync(oldChannel);
-            return newChannel;
+            return newChannel!;
         }
 
         static async Task ScheduleDeferredDisposeAsync(GrpcChannel channel)
@@ -253,18 +271,18 @@ public static class DurableTaskSchedulerWorkerExtensions
                 return;
             }
 
-            List<Lazy<GrpcChannel>> channelsToDispose;
+            List<GrpcChannel> channelsToDispose;
             lock (this.syncRoot)
             {
-                channelsToDispose = this.channels.Values.Where(lazy => lazy.IsValueCreated).ToList();
+                channelsToDispose = this.channels.Values.ToList();
                 this.channels.Clear();
             }
 
-            foreach (Lazy<GrpcChannel> channel in channelsToDispose)
+            foreach (GrpcChannel channel in channelsToDispose)
             {
                 try
                 {
-                    await DisposeChannelAsync(channel.Value).ConfigureAwait(false);
+                    await DisposeChannelAsync(channel).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException
                                             and not StackOverflowException

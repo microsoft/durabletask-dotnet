@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -12,6 +13,8 @@ namespace Microsoft.DurableTask.Worker.Grpc;
 /// </summary>
 sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 {
+    static TimeSpan deferredDisposeGracePeriod = TimeSpan.FromSeconds(30);
+
     readonly GrpcDurableTaskWorkerOptions grpcOptions;
     readonly DurableTaskWorkerOptions workerOptions;
     readonly IServiceProvider services;
@@ -82,17 +85,12 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
                 ChannelRecreateResult result = await this.TryRecreateChannelAsync(stoppingToken, workerOwnedChannelDisposable, latestObservedChannel);
                 if (result.Recreated)
                 {
-                    callInvoker = result.NewCallInvoker!;
-                    address = result.NewAddress!;
-                    latestObservedChannel = result.NewChannel;
-                    AsyncDisposable previousDisposable = workerOwnedChannelDisposable;
-                    workerOwnedChannelDisposable = result.NewWorkerOwnedDisposable;
-                    this.logger.ChannelRecreated(address);
-
-                    // Dispose the prior worker-owned channel if we had one. Path 1 hands ownership of the
-                    // replacement channel to the recreator, Path 2 installs a fresh worker-owned disposable,
-                    // and Path 3 never recreates at all.
-                    await previousDisposable.DisposeAsync();
+                    this.ApplySuccessfulRecreate(
+                        result,
+                        ref callInvoker,
+                        ref address,
+                        ref latestObservedChannel,
+                        ref workerOwnedChannelDisposable);
                 }
 
                 // If we couldn't recreate (e.g., caller-owned CallInvoker), fall through and retry on the
@@ -243,6 +241,52 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
 #if NET6_0_OR_GREATER
             channel.Dispose();
 #endif
+        }
+    }
+
+    void ApplySuccessfulRecreate(
+        ChannelRecreateResult result,
+        ref CallInvoker callInvoker,
+        ref string address,
+        ref GrpcChannel? latestObservedChannel,
+        ref AsyncDisposable workerOwnedChannelDisposable)
+    {
+        callInvoker = result.NewCallInvoker!;
+        address = result.NewAddress!;
+        latestObservedChannel = result.NewChannel;
+        AsyncDisposable previousDisposable = workerOwnedChannelDisposable;
+        workerOwnedChannelDisposable = result.NewWorkerOwnedDisposable;
+        this.logger.ChannelRecreated(address);
+
+        // Defer disposal of the prior worker-owned channel so background completion/abandon RPCs
+        // from the previous processor instance can drain before the transport is torn down.
+        // Path 1 hands ownership of the replacement channel to the recreator, Path 2 installs a
+        // fresh worker-owned disposable, and Path 3 never recreates at all.
+        _ = ScheduleDeferredDisposeAsync(previousDisposable, deferredDisposeGracePeriod);
+    }
+
+    static async Task ScheduleDeferredDisposeAsync(AsyncDisposable disposable, TimeSpan delay)
+    {
+        try
+        {
+            if (delay > TimeSpan.Zero)
+            {
+                await Task.Delay(delay).ConfigureAwait(false);
+            }
+
+            await disposable.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException
+                                    and not StackOverflowException
+                                    and not AccessViolationException
+                                    and not ThreadAbortException)
+        {
+            if (ex is not OperationCanceledException and not ObjectDisposedException)
+            {
+                Trace.TraceError(
+                    "Unexpected exception while deferred-disposing gRPC channel in GrpcDurableTaskWorker.ScheduleDeferredDisposeAsync: {0}",
+                    ex);
+            }
         }
     }
 

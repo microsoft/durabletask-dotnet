@@ -2,8 +2,12 @@
 
 ## Unreleased
 
-
-
+## v1.24.0
+- Harden grpc worker and client against silent disconnects by berndverst ([#708](https://github.com/microsoft/durabletask-dotnet/pull/708))
+- Preserve late events after continue-as-new by berndverst ([#711](https://github.com/microsoft/durabletask-dotnet/pull/711))
+- Fix inprocesstesthost continueasnew stuck-instance race condition by bachuv ([#707](https://github.com/microsoft/durabletask-dotnet/pull/707))
+- Fix continue-as-new race condition at inprocesstesthost by nytian ([#703](https://github.com/microsoft/durabletask-dotnet/pull/703))
+- Add opt-in timeout to purgeinstancesfilter for partial purge by yunchuwang ([#680](https://github.com/microsoft/durabletask-dotnet/pull/680))
 
 ## v1.23.3
 - fix: revert shared framework packages to 8.x for net8 Functions host compatibility ([#698](https://github.com/microsoft/durabletask-dotnet/pull/698))

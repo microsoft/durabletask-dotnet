@@ -157,8 +157,8 @@ sealed partial class GrpcDurableTaskWorker
                         this.internalOptions.ReconnectBackoffCap,
                         backoffRandom,
                         fullJitter: true);
-                    this.Logger.ReconnectBackoff(reconnectAttempt, (int)delay.TotalMilliseconds);
                     reconnectAttempt++;
+                    this.Logger.ReconnectBackoff(reconnectAttempt, (int)delay.TotalMilliseconds);
                     await Task.Delay(delay, cancellation);
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -1227,7 +1227,7 @@ sealed partial class GrpcDurableTaskWorker
             retryRandom = new Random();
 #endif
 
-            for (int attempt = 0; ; attempt++)
+            for (int attempt = 1; ; attempt++)
             {
                 try
                 {
@@ -1242,8 +1242,9 @@ sealed partial class GrpcDurableTaskWorker
                     attempt < maxAttempts)
                 {
                     // Don't use full jitter  since we want to keep the retry interval fairly fixed and increasing with
-                    // each attempt. We don't have lockstep concerns in this case
-                    TimeSpan backoff = GrpcBackoff.Compute(attempt, baseDelay, cap, retryRandom, fullJitter: false);
+                    // each attempt. We don't have lockstep concerns in this case.
+                    // Also make sure to zero-index the attempts
+                    TimeSpan backoff = GrpcBackoff.Compute(attempt - 1, baseDelay, cap, retryRandom, fullJitter: false);
 
                     this.Logger.TransientGrpcRetry(
                         operationName,

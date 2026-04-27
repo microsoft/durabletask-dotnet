@@ -484,6 +484,7 @@ sealed partial class GrpcDurableTaskWorker
                                     cancellationToken: cancellation),
                                 nameof(this.client.AbandonTaskOrchestratorWorkItemAsync),
                                 cancellation);
+                            this.Logger.AbandonedOrchestratorWorkItem(instanceId, workItem.CompletionToken ?? string.Empty);
                         }
                         catch (Exception abandonException)
                         {
@@ -498,16 +499,21 @@ sealed partial class GrpcDurableTaskWorker
                                 instanceId,
                                 workItem.ActivityRequest.Name,
                                 workItem.ActivityRequest.TaskId,
-                                workItem?.CompletionToken ?? string.Empty);
+                                workItem.CompletionToken ?? string.Empty);
                             await this.ExecuteWithRetryAsync(
                                 async () => await this.client.AbandonTaskActivityWorkItemAsync(
                                     new P.AbandonActivityTaskRequest
                                     {
-                                        CompletionToken = workItem?.CompletionToken,
+                                        CompletionToken = workItem.CompletionToken,
                                     },
                                     cancellationToken: cancellation),
                                 nameof(this.client.AbandonTaskActivityWorkItemAsync),
                                 cancellation);
+                            this.Logger.AbandonedActivityWorkItem(
+                               instanceId,
+                               workItem.ActivityRequest.Name,
+                               workItem.ActivityRequest.TaskId,
+                               workItem.CompletionToken ?? string.Empty);
                         }
                         catch (Exception abandonException)
                         {
@@ -520,7 +526,7 @@ sealed partial class GrpcDurableTaskWorker
                         {
                             this.Logger.AbandoningEntityWorkItem(
                                 workItem.EntityRequest.InstanceId,
-                                workItem?.CompletionToken ?? string.Empty);
+                                workItem.CompletionToken ?? string.Empty);
                             await this.ExecuteWithRetryAsync(
                                 async () => await this.client.AbandonTaskEntityWorkItemAsync(
                                     new P.AbandonEntityTaskRequest
@@ -530,6 +536,9 @@ sealed partial class GrpcDurableTaskWorker
                                     cancellationToken: cancellation),
                                 nameof(this.client.AbandonTaskEntityWorkItemAsync),
                                 cancellation);
+                            this.Logger.AbandonedEntityWorkItem(
+                                workItem.EntityRequest.InstanceId,
+                                workItem.CompletionToken ?? string.Empty);
                         }
                         catch (Exception abandonException)
                         {
@@ -542,16 +551,19 @@ sealed partial class GrpcDurableTaskWorker
                         {
                             this.Logger.AbandoningEntityWorkItem(
                                 workItem.EntityRequestV2.InstanceId,
-                                workItem?.CompletionToken ?? string.Empty);
+                                workItem.CompletionToken ?? string.Empty);
                             await this.ExecuteWithRetryAsync(
                                 async () => await this.client.AbandonTaskEntityWorkItemAsync(
                                     new P.AbandonEntityTaskRequest
                                     {
-                                        CompletionToken = workItem?.CompletionToken,
+                                        CompletionToken = workItem.CompletionToken,
                                     },
                                     cancellationToken: cancellation),
                                 nameof(this.client.AbandonTaskEntityWorkItemAsync),
                                 cancellation);
+                            this.Logger.AbandonedEntityWorkItem(
+                                workItem.EntityRequestV2.InstanceId,
+                                workItem.CompletionToken ?? string.Empty);
                         }
                         catch (Exception abandonException)
                         {

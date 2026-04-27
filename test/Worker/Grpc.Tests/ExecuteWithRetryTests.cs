@@ -213,8 +213,7 @@ public class ExecuteWithRetryTests
                 throw new RpcException(new Status(lastStatusCode, "persistent transient error"));
             },
             "TestOperation",
-            CancellationToken.None,
-            initialDelay: TimeSpan.Zero);
+            CancellationToken.None);
 
         // Assert - the last RpcException should be surfaced after max attempts
         await act.Should().ThrowAsync<RpcException>().Where(e => e.StatusCode == lastStatusCode);
@@ -260,12 +259,11 @@ public class ExecuteWithRetryTests
         object processor,
         Func<Task> action,
         string operationName,
-        CancellationToken cancellationToken,
-        TimeSpan? initialDelay = null)
+        CancellationToken cancellationToken)
     {
         return (Task)ExecuteWithRetryAsyncMethod.Invoke(
             processor,
-            new object?[] { action, operationName, cancellationToken, initialDelay })!;
+            new object?[] { action, operationName, cancellationToken })!;
     }
 
     sealed class OptionsMonitorStub<T> : IOptionsMonitor<T> where T : class, new()

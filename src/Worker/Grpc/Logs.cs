@@ -93,7 +93,7 @@ namespace Microsoft.DurableTask.Worker.Grpc
         public static partial void ChannelRecreated(this ILogger logger, string endpoint);
 
         [LoggerMessage(EventId = 74, Level = LogLevel.Debug, Message = "Reconnect attempt {attempt} will retry after {delayMs} ms.")]
-        public static partial void GrpcBackoff(this ILogger logger, int attempt, int delayMs);
+        public static partial void ReconnectBackoff(this ILogger logger, int attempt, int delayMs);
 
         [LoggerMessage(EventId = 75, Level = LogLevel.Trace, Message = "Received health ping from the backend.")]
         public static partial void ReceivedHealthPing(this ILogger logger);

@@ -72,7 +72,6 @@ sealed partial class GrpcDurableTaskWorker
                     using AsyncServerStreamingCall<P.WorkItem> stream = await this.ConnectAsync(cancellation);
                     await this.ProcessWorkItemsAsync(
                         stream,
-                        random,
                         cancellation,
                         onFirstMessage: () =>
                         {
@@ -339,7 +338,6 @@ sealed partial class GrpcDurableTaskWorker
 
         async Task ProcessWorkItemsAsync(
             AsyncServerStreamingCall<P.WorkItem> stream,
-            Random retryRandom,
             CancellationToken cancellation,
             Action? onFirstMessage = null,
             Action? onChannelLikelyPoisoned = null)
@@ -356,7 +354,7 @@ sealed partial class GrpcDurableTaskWorker
             WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
                 ct => stream.ResponseStream.ReadAllAsync(ct),
                 silentDisconnectTimeout,
-                workItem => this.DispatchWorkItem(workItem, retryRandom, cancellation),
+                workItem => this.DispatchWorkItem(workItem, cancellation),
                 onFirstMessage,
                 cancellation);
 
@@ -392,7 +390,7 @@ sealed partial class GrpcDurableTaskWorker
             }
         }
 
-        void DispatchWorkItem(P.WorkItem workItem, Random retryRandom, CancellationToken cancellation)
+        void DispatchWorkItem(P.WorkItem workItem, CancellationToken cancellation)
         {
             if (workItem.RequestCase == P.WorkItem.RequestOneofCase.OrchestratorRequest)
             {
@@ -401,9 +399,7 @@ sealed partial class GrpcDurableTaskWorker
                     () => this.OnRunOrchestratorAsync(
                         workItem.OrchestratorRequest,
                         workItem.CompletionToken,
-                        retryRandom,
                         cancellation),
-                    retryRandom,
                     cancellation);
             }
             else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
@@ -413,17 +409,14 @@ sealed partial class GrpcDurableTaskWorker
                     () => this.OnRunActivityAsync(
                         workItem.ActivityRequest,
                         workItem.CompletionToken,
-                        retryRandom,
                         cancellation),
-                    retryRandom,
                     cancellation);
             }
             else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
             {
                 this.RunBackgroundTask(
                     workItem,
-                    () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), retryRandom, cancellation),
-                    retryRandom,
+                    () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation),
                     cancellation);
             }
             else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequestV2)
@@ -436,11 +429,9 @@ sealed partial class GrpcDurableTaskWorker
                      workItem,
                      () => this.OnRunEntityBatchAsync(
                         batchRequest,
-                        retryRandom,
                         cancellation,
                         workItem.CompletionToken,
                         operationInfos),
-                     retryRandom,
                      cancellation);
             }
             else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
@@ -457,7 +448,7 @@ sealed partial class GrpcDurableTaskWorker
             }
         }
 
-        void RunBackgroundTask(P.WorkItem? workItem, Func<Task> handler, Random retryRandom, CancellationToken cancellation)
+        void RunBackgroundTask(P.WorkItem? workItem, Func<Task> handler, CancellationToken cancellation)
         {
             // TODO: is Task.Run appropriate here? Should we have finer control over the tasks and their threads?
             _ = Task.Run(
@@ -494,7 +485,6 @@ sealed partial class GrpcDurableTaskWorker
                                     },
                                     cancellationToken: cancellation),
                                 nameof(this.client.AbandonTaskOrchestratorWorkItemAsync),
-                                retryRandom,
                                 cancellation);
                             this.Logger.AbandonedOrchestratorWorkItem(instanceId, workItem.CompletionToken ?? string.Empty);
                         }
@@ -520,7 +510,6 @@ sealed partial class GrpcDurableTaskWorker
                                     },
                                     cancellationToken: cancellation),
                                 nameof(this.client.AbandonTaskActivityWorkItemAsync),
-                                retryRandom,
                                 cancellation);
                             this.Logger.AbandonedActivityWorkItem(
                                instanceId,
@@ -548,7 +537,6 @@ sealed partial class GrpcDurableTaskWorker
                                     },
                                     cancellationToken: cancellation),
                                 nameof(this.client.AbandonTaskEntityWorkItemAsync),
-                                retryRandom,
                                 cancellation);
                             this.Logger.AbandonedEntityWorkItem(
                                 workItem.EntityRequest.InstanceId,
@@ -574,7 +562,6 @@ sealed partial class GrpcDurableTaskWorker
                                     },
                                     cancellationToken: cancellation),
                                 nameof(this.client.AbandonTaskEntityWorkItemAsync),
-                                retryRandom,
                                 cancellation);
                             this.Logger.AbandonedEntityWorkItem(
                                 workItem.EntityRequestV2.InstanceId,
@@ -592,7 +579,6 @@ sealed partial class GrpcDurableTaskWorker
         async Task OnRunOrchestratorAsync(
             P.OrchestratorRequest request,
             string completionToken,
-            Random retryRandom,
             CancellationToken cancellationToken)
         {
             var executionStartedEvent =
@@ -739,7 +725,6 @@ sealed partial class GrpcDurableTaskWorker
                             },
                             cancellationToken: cancellationToken),
                         nameof(this.client.AbandonTaskOrchestratorWorkItemAsync),
-                        retryRandom,
                         cancellationToken);
 
                     return;
@@ -844,7 +829,6 @@ sealed partial class GrpcDurableTaskWorker
                             },
                             cancellationToken: cancellationToken),
                         nameof(this.client.AbandonTaskOrchestratorWorkItemAsync),
-                        retryRandom,
                         cancellationToken);
 
                     return;
@@ -899,11 +883,10 @@ sealed partial class GrpcDurableTaskWorker
             await this.CompleteOrchestratorTaskWithChunkingAsync(
                 response,
                 this.worker.grpcOptions.CompleteOrchestrationWorkItemChunkSizeInBytes,
-                retryRandom,
                 cancellationToken);
         }
 
-        async Task OnRunActivityAsync(P.ActivityRequest request, string completionToken, Random retryRandom, CancellationToken cancellation)
+        async Task OnRunActivityAsync(P.ActivityRequest request, string completionToken, CancellationToken cancellation)
         {
             using Activity? traceActivity = TraceHelper.StartTraceActivityForTaskExecution(request);
 
@@ -960,7 +943,6 @@ sealed partial class GrpcDurableTaskWorker
                             },
                             cancellationToken: cancellation),
                         nameof(this.client.AbandonTaskActivityWorkItemAsync),
-                        retryRandom,
                         cancellation);
                 }
 
@@ -998,13 +980,11 @@ sealed partial class GrpcDurableTaskWorker
             await this.ExecuteWithRetryAsync(
                 async () => await this.client.CompleteActivityTaskAsync(response, cancellationToken: cancellation),
                 nameof(this.client.CompleteActivityTaskAsync),
-                retryRandom,
                 cancellation);
         }
 
         async Task OnRunEntityBatchAsync(
             EntityBatchRequest batchRequest,
-            Random retryRandom,
             CancellationToken cancellation,
             string? completionToken = null,
             List<P.OperationInfo>? operationInfos = null)
@@ -1069,7 +1049,6 @@ sealed partial class GrpcDurableTaskWorker
             await this.ExecuteWithRetryAsync(
                 async () => await this.client.CompleteEntityTaskAsync(response, cancellationToken: cancellation),
                 nameof(this.client.CompleteEntityTaskAsync),
-                retryRandom,
                 cancellation);
         }
 
@@ -1082,7 +1061,6 @@ sealed partial class GrpcDurableTaskWorker
         async Task CompleteOrchestratorTaskWithChunkingAsync(
             P.OrchestratorResponse response,
             int maxChunkBytes,
-            Random retryRandom,
             CancellationToken cancellationToken)
         {
             // Validate that no single action exceeds the maximum chunk size
@@ -1136,7 +1114,6 @@ sealed partial class GrpcDurableTaskWorker
                 await this.ExecuteWithRetryAsync(
                     async () => await this.client.CompleteOrchestratorTaskAsync(failureResponse, cancellationToken: cancellationToken),
                     nameof(this.client.CompleteOrchestratorTaskAsync),
-                    retryRandom,
                     cancellationToken);
                 return;
             }
@@ -1167,7 +1144,6 @@ sealed partial class GrpcDurableTaskWorker
                 await this.ExecuteWithRetryAsync(
                     async () => await this.client.CompleteOrchestratorTaskAsync(response, cancellationToken: cancellationToken),
                     nameof(this.client.CompleteOrchestratorTaskAsync),
-                    retryRandom,
                     cancellationToken);
                 return;
             }
@@ -1231,7 +1207,6 @@ sealed partial class GrpcDurableTaskWorker
                 await this.ExecuteWithRetryAsync(
                     async () => await this.client.CompleteOrchestratorTaskAsync(chunkedResponse, cancellationToken: cancellationToken),
                     nameof(this.client.CompleteOrchestratorTaskAsync),
-                    retryRandom,
                     cancellationToken);
             }
         }
@@ -1239,12 +1214,13 @@ sealed partial class GrpcDurableTaskWorker
         async Task ExecuteWithRetryAsync(
             Func<Task> action,
             string operationName,
-            Random retryRandom,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            TimeSpan? initialDelay = null)
         {
             int maxAttempts = this.internalOptions.TransientRetryMaxAttempts;
-            TimeSpan baseDelay = this.internalOptions.TransientRetryBackoffBase;
+            TimeSpan baseDelay = initialDelay ?? this.internalOptions.TransientRetryBackoffBase;
             TimeSpan cap = this.internalOptions.TransientRetryBackoffCap;
+            Random retryRandom = GrpcBackoff.CreateRandom();
 
             for (int attempt = 1; ; attempt++)
             {

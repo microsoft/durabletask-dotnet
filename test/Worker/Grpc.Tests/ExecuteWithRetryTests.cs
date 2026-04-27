@@ -174,7 +174,8 @@ public class ExecuteWithRetryTests
         logProvider.TryGetLogs(Category, out IReadOnlyCollection<LogEntry>? logs).Should().BeTrue();
         logs!.Should().Contain(log =>
             log.Message.Contains($"Transient gRPC error for '{operationName}'") &&
-            log.Message.Contains("Attempt 1 of 10"));
+            log.Message.Contains("Attempt 1 of 10") &&
+            log.Message.Contains($"StatusCode={(int)StatusCode.Unavailable}"));
     }
 
     [Fact]

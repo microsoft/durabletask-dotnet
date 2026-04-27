@@ -1212,10 +1212,11 @@ sealed partial class GrpcDurableTaskWorker
         async Task ExecuteWithRetryAsync(
             Func<Task> action,
             string operationName,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            TimeSpan? initialDelay = null)
         {
             const int maxAttempts = 10;
-            TimeSpan delay = TimeSpan.FromMilliseconds(200);
+            TimeSpan delay = initialDelay ?? TimeSpan.FromMilliseconds(200);
 
             for (int attempt = 1; ; attempt++)
             {

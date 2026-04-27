@@ -28,10 +28,11 @@ public class ExecuteWithRetryTests
                 .Any(method =>
                     method.ReturnType == typeof(Task) &&
                     method.GetParameters() is var parameters &&
-                    parameters.Length == 3 &&
+                    parameters.Length == 4 &&
                     parameters[0].ParameterType == typeof(Func<Task>) &&
                     parameters[1].ParameterType == typeof(string) &&
-                    parameters[2].ParameterType == typeof(CancellationToken)));
+                    parameters[2].ParameterType == typeof(CancellationToken) &&
+                    parameters[3].ParameterType == typeof(TimeSpan?)));
     }
 
     static MethodInfo FindExecuteWithRetryAsyncMethod()
@@ -41,10 +42,11 @@ public class ExecuteWithRetryTests
             .Single(method =>
                 method.ReturnType == typeof(Task) &&
                 method.GetParameters() is var parameters &&
-                parameters.Length == 3 &&
+                parameters.Length == 4 &&
                 parameters[0].ParameterType == typeof(Func<Task>) &&
                 parameters[1].ParameterType == typeof(string) &&
-                parameters[2].ParameterType == typeof(CancellationToken));
+                parameters[2].ParameterType == typeof(CancellationToken) &&
+                parameters[3].ParameterType == typeof(TimeSpan?));
     }
     [Fact]
     public async Task ExecuteWithRetryAsync_SucceedsOnFirstAttempt_DoesNotRetry()
@@ -211,6 +213,32 @@ public class ExecuteWithRetryTests
         callCount.Should().Be(3);
     }
 
+    [Fact]
+    public async Task ExecuteWithRetryAsync_TransientErrorExceedsMaxAttempts_ThrowsLastRpcException()
+    {
+        // Arrange
+        object processor = CreateProcessor();
+        const int maxAttempts = 10;
+        int callCount = 0;
+        StatusCode lastStatusCode = StatusCode.Unavailable;
+
+        // Act - always fail with a transient error
+        Func<Task> act = () => InvokeExecuteWithRetryAsync(
+            processor,
+            () =>
+            {
+                callCount++;
+                throw new RpcException(new Status(lastStatusCode, "persistent transient error"));
+            },
+            "TestOperation",
+            CancellationToken.None,
+            initialDelay: TimeSpan.Zero);
+
+        // Assert - the last RpcException should be surfaced after max attempts
+        await act.Should().ThrowAsync<RpcException>().Where(e => e.StatusCode == lastStatusCode);
+        callCount.Should().Be(maxAttempts);
+    }
+
     static object CreateProcessor(TestLogProvider? logProvider = null)
     {
         ILoggerFactory loggerFactory = logProvider is null
@@ -250,11 +278,12 @@ public class ExecuteWithRetryTests
         object processor,
         Func<Task> action,
         string operationName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? initialDelay = null)
     {
         return (Task)ExecuteWithRetryAsyncMethod.Invoke(
             processor,
-            new object?[] { action, operationName, cancellationToken })!;
+            new object?[] { action, operationName, cancellationToken, initialDelay })!;
     }
 
     sealed class OptionsMonitorStub<T> : IOptionsMonitor<T> where T : class, new()

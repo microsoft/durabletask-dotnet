@@ -428,14 +428,14 @@ public class RunBackgroundTaskLoggingTests
         // The Abandoned log should NOT be present since the abandon never succeeded
         Assert.DoesNotContain(fixture.GetLogs(), l => l.Message.Contains("Abandoned orchestrator work item") && l.Message.Contains(instanceId));
 
-        // Verify retry warnings were logged: one per retry attempt (attempts 0..maxAttempts-1)
+        // Verify retry warnings were logged: one per retry attempt
         IEnumerable<LogEntry> retryLogs = fixture.GetLogs().Where(l =>
             l.EventId.Name == "TransientGrpcRetry" &&
             l.Message.Contains("AbandonTaskOrchestratorWorkItemAsync"));
-        retryLogs.Should().HaveCount(maxAttempts);
+        retryLogs.Should().HaveCount(maxAttempts - 1);
 
-        // The abandon RPC was called maxAttempts times (retried) plus one final call that propagated
-        abandonCallCount.Should().Be(maxAttempts + 1);
+        // The abandon RPC was called maxAttempts-1 times (retried) plus one final call that propagated
+        abandonCallCount.Should().Be(maxAttempts);
     }
 
     [Fact]

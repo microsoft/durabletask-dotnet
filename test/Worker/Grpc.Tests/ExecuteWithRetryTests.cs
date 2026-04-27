@@ -216,10 +216,8 @@ public class ExecuteWithRetryTests
             CancellationToken.None);
 
         // Assert - the last RpcException should be surfaced after max attempts.
-        // The loop makes maxAttempts retries (attempts 0..maxAttempts-1 are retried) and
-        // then one final call at attempt=maxAttempts that is not retried, for maxAttempts+1 total calls.
         await act.Should().ThrowAsync<RpcException>().Where(e => e.StatusCode == lastStatusCode);
-        callCount.Should().Be(maxAttempts + 1);
+        callCount.Should().Be(maxAttempts);
     }
 
     static object CreateProcessor(

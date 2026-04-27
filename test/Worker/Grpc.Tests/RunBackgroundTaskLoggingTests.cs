@@ -419,10 +419,10 @@ public class RunBackgroundTaskLoggingTests
 
         fixture.InvokeRunBackgroundTask(workItem, () => Task.FromException(new Exception("boom")));
 
-        // Wait for all retries to be exhausted. The background task logs an "Unexpected error" (for the
+        // Wait for all retries to be exhausted. The ExecuteAsync loop in the worker logs an "Unexpected error" (for the
         // abandon exception) after the retry loop gives up, which signals the task has completed.
         await AssertEventually(
-            () => fixture.GetLogs().Count(l => l.EventId.Name == "UnexpectedError") >= 2,
+            () => fixture.GetLogs().Count(l => l.EventId.Name == "UnexpectedError") >= 1,
             timeoutMs: 10000);
 
         // The Abandoned log should NOT be present since the abandon never succeeded (but the abandoning should be present)

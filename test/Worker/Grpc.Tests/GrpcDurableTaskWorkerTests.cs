@@ -52,7 +52,7 @@ public class GrpcDurableTaskWorkerTests
             Channel = currentChannel,
         };
         grpcOptions.Internal.ChannelRecreateFailureThreshold = 2;
-        grpcOptions.Internal.ReconnectBackoffBase    = TimeSpan.Zero;
+        grpcOptions.Internal.ReconnectBackoffBase = TimeSpan.Zero;
         grpcOptions.Internal.ReconnectBackoffCap = TimeSpan.Zero;
 
         DurableTaskWorkerOptions workerOptions = new()

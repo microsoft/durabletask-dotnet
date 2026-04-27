@@ -49,5 +49,14 @@ namespace Microsoft.DurableTask.Client.Grpc
             string? statuses = filter?.Statuses is null ? null : string.Join("|", filter.Statuses);
             PurgingInstances(logger, filter?.CreatedFrom, filter?.CreatedTo, statuses);
         }
+
+        [LoggerMessage(EventId = 80, Level = LogLevel.Warning, Message = "Recreating gRPC channel to backend after {failureCount} consecutive transport failures.")]
+        public static partial void RecreatingChannel(this ILogger logger, int failureCount);
+
+        [LoggerMessage(EventId = 81, Level = LogLevel.Information, Message = "gRPC channel to backend has been recreated. New target: {endpoint}.")]
+        public static partial void ChannelRecreated(this ILogger logger, string endpoint);
+
+        [LoggerMessage(EventId = 82, Level = LogLevel.Warning, Message = "gRPC channel recreation failed.")]
+        public static partial void ChannelRecreateFailed(this ILogger logger, Exception exception);
     }
 }

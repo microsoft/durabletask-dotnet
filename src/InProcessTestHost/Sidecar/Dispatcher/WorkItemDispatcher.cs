@@ -156,10 +156,10 @@ abstract class WorkItemDispatcher<T> : IDisposable where T : class
     {
         TimeSpan logInterval = TimeSpan.FromMinutes(1);
 
-        // IMPORTANT: This logic assumes only a single logical "thread" is executing the receive loop,
-        //            and that there's no possible race condition when comparing work-item counts.
+        // IMPORTANT: The receive loop is expected to have a single logical execution path, but the
+        //            work-item count can still change concurrently and must be read using thread-safe access.
         DateTime nextLogTime = DateTime.MinValue;
-        while (this.currentWorkItems >= this.MaxWorkItems)
+        while (Volatile.Read(ref this.currentWorkItems) >= this.MaxWorkItems)
         {
             // Periodically log that we're waiting for available concurrency.
             // No need to use UTC for this. Local time is a bit easier to debug.
@@ -169,7 +169,7 @@ abstract class WorkItemDispatcher<T> : IDisposable where T : class
                 this.log.FetchingThrottled(
                     dispatcher: this.name,
                     details: "The current active work-item count has reached the allowed maximum.",
-                    this.currentWorkItems,
+                    Volatile.Read(ref this.currentWorkItems),
                     this.MaxWorkItems);
                 nextLogTime = now.Add(logInterval);
             }
@@ -192,14 +192,14 @@ abstract class WorkItemDispatcher<T> : IDisposable where T : class
     async Task WaitForOutstandingWorkItems(CancellationToken cancellationToken)
     {
         DateTime nextLogTime = DateTime.MinValue;
-        while (this.currentWorkItems > 0)
+        while (Volatile.Read(ref this.currentWorkItems) > 0)
         {
             // Periodically log that we're waiting for outstanding work items to complete.
             // No need to use UTC for this. Local time is a bit easier to debug.
             DateTime now = DateTime.Now;
             if (now >= nextLogTime)
             {
-                this.log.DispatcherStopping(this.name, this.currentWorkItems);
+                this.log.DispatcherStopping(this.name, Volatile.Read(ref this.currentWorkItems));
                 nextLogTime = now.AddMinutes(1);
             }
 
@@ -265,7 +265,7 @@ abstract class WorkItemDispatcher<T> : IDisposable where T : class
 
                     if (workItem != null)
                     {
-                        this.currentWorkItems++;
+                        Interlocked.Increment(ref this.currentWorkItems);
                         this.log.FetchWorkItemCompleted(
                             this.name,
                             this.GetWorkItemId(workItem),
@@ -334,7 +334,7 @@ abstract class WorkItemDispatcher<T> : IDisposable where T : class
                     details: ex.ToString());
             }
 
-            this.currentWorkItems--;
+            Interlocked.Decrement(ref this.currentWorkItems);
         }
     }
 }

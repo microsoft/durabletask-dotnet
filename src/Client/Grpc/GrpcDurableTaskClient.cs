@@ -52,7 +52,7 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     {
         this.logger = Check.NotNull(logger);
         this.options = Check.NotNull(options);
-        this.asyncDisposable = GetCallInvoker(options, out CallInvoker callInvoker);
+        this.asyncDisposable = GetCallInvoker(options, logger, out CallInvoker callInvoker);
         this.sidecarClient = new TaskHubSidecarServiceClient(callInvoker);
 
         if (this.options.EnableEntitySupport)
@@ -624,23 +624,69 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
     }
 
-    static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, out CallInvoker callInvoker)
+    static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, ILogger logger, out CallInvoker callInvoker)
     {
+        Func<GrpcChannel, CancellationToken, Task<GrpcChannel>>? recreator = options.Internal.ChannelRecreator;
+        int threshold = options.Internal.ChannelRecreateFailureThreshold;
+        TimeSpan cooldown = options.Internal.MinRecreateInterval;
+        bool recreateEnabled = recreator != null && threshold > 0;
+
         if (options.Channel is GrpcChannel c)
         {
+            if (recreateEnabled)
+            {
+                ChannelRecreatingCallInvoker wrapper = new(c, recreator!, threshold, cooldown, ownsChannel: false, logger);
+                callInvoker = wrapper;
+
+                // We do not own the externally-supplied channel, but we DO own the wrapper. Without
+                // disposing the wrapper its CancellationTokenSource and any in-flight recreate task
+                // would outlive the client. The wrapper's DisposeAsync is a no-op for the channel
+                // itself when ownsChannel == false.
+                return new AsyncDisposable(() => wrapper.DisposeAsync());
+            }
+
             callInvoker = c.CreateCallInvoker();
             return default;
         }
 
         if (options.CallInvoker is CallInvoker invoker)
         {
+            // Externally supplied invoker — we do not own the underlying channel and cannot recreate it.
             callInvoker = invoker;
             return default;
         }
 
+        // Self-owned address path: create the channel ourselves so we own its lifecycle.
         c = GetChannel(options.Address);
+
+        if (recreateEnabled)
+        {
+            ChannelRecreatingCallInvoker wrapper = new(c, recreator!, threshold, cooldown, ownsChannel: true, logger);
+            callInvoker = wrapper;
+            return new AsyncDisposable(() => wrapper.DisposeAsync());
+        }
+
         callInvoker = c.CreateCallInvoker();
-        return new AsyncDisposable(() => new(c.ShutdownAsync()));
+        return CreateOwnedChannelDisposable(c);
+    }
+
+    static AsyncDisposable CreateOwnedChannelDisposable(GrpcChannel channel)
+    {
+        return new AsyncDisposable(() => ShutdownAndDisposeChannelAsync(channel));
+    }
+
+    static async ValueTask ShutdownAndDisposeChannelAsync(GrpcChannel channel)
+    {
+        try
+        {
+            await channel.ShutdownAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+#if NET6_0_OR_GREATER
+            channel.Dispose();
+#endif
+        }
     }
 
 #if NET6_0_OR_GREATER

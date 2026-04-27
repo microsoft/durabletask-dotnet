@@ -62,7 +62,7 @@ sealed partial class GrpcDurableTaskWorker
 
             // Tracks consecutive retry attempts for backoff calculation. Reset on first stream message.
             int reconnectAttempt = 0;
-            Random random = GrpcBackoff.CreateRandom();
+            Random backoffRandom = GrpcBackoff.CreateRandom();
 
             while (!cancellation.IsCancellationRequested)
             {
@@ -155,7 +155,7 @@ sealed partial class GrpcDurableTaskWorker
                         reconnectAttempt,
                         this.internalOptions.ReconnectBackoffBase,
                         this.internalOptions.ReconnectBackoffCap,
-                        random,
+                        backoffRandom,
                         fullJitter: true);
                     this.Logger.ReconnectBackoff(reconnectAttempt, (int)delay.TotalMilliseconds);
                     reconnectAttempt++;
@@ -1215,13 +1215,17 @@ sealed partial class GrpcDurableTaskWorker
         async Task ExecuteWithRetryAsync(
             Func<Task> action,
             string operationName,
-            CancellationToken cancellationToken,
-            TimeSpan? initialDelay = null)
+            CancellationToken cancellationToken)
         {
             int maxAttempts = this.internalOptions.TransientRetryMaxAttempts;
-            TimeSpan baseDelay = initialDelay ?? this.internalOptions.TransientRetryBackoffBase;
+            TimeSpan baseDelay = this.internalOptions.TransientRetryBackoffBase;
             TimeSpan cap = this.internalOptions.TransientRetryBackoffCap;
-            Random retryRandom = GrpcBackoff.CreateRandom();
+            Random retryRandom;
+#if NET6_0_OR_GREATER
+            retryRandom = Random.Shared;
+#else
+            retryRandom = new Random();
+#endif
 
             for (int attempt = 0; ; attempt++)
             {

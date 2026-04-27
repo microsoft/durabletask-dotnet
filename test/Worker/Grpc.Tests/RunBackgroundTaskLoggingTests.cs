@@ -286,6 +286,159 @@ public class RunBackgroundTaskLoggingTests
     }
 
     [Fact]
+    public async Task Retries_Abandon_Orchestrator_On_Transient_Error_Eventually_Succeeds()
+    {
+        await using var fixture = await TestFixture.CreateAsync(transientRetryBackoffBase: TimeSpan.FromMilliseconds(1));
+
+        string instanceId = Guid.NewGuid().ToString("N");
+        string completionToken = Guid.NewGuid().ToString("N");
+
+        int abandonCallCount = 0;
+        var tcs = new TaskCompletionSource<bool>();
+        fixture.ClientMock
+            .Setup(c => c.AbandonTaskOrchestratorWorkItemAsync(
+                It.IsAny<P.AbandonOrchestrationTaskRequest>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((P.AbandonOrchestrationTaskRequest r, Metadata h, DateTime? d, CancellationToken ct) =>
+            {
+                abandonCallCount++;
+                if (abandonCallCount == 1)
+                {
+                    // First call: simulate a transient gRPC error
+                    return RpcExceptionAsyncUnaryCall<P.AbandonOrchestrationTaskResponse>(StatusCode.Unavailable);
+                }
+
+                // Second call: succeed
+                return CompletedAsyncUnaryCall(new P.AbandonOrchestrationTaskResponse(), () => tcs.TrySetResult(true));
+            });
+
+        P.WorkItem workItem = new()
+        {
+            OrchestratorRequest = new P.OrchestratorRequest { InstanceId = instanceId },
+            CompletionToken = completionToken,
+        };
+
+        fixture.InvokeRunBackgroundTask(workItem, () => Task.FromException(new Exception("boom")));
+
+        await WaitAsync(tcs.Task);
+
+        // Verify the call was retried (called twice total)
+        abandonCallCount.Should().Be(2);
+
+        // Verify the Abandoned log is present (retry succeeded)
+        await AssertEventually(() => fixture.GetLogs().Any(l => l.Message.Contains("Abandoned orchestrator work item") && l.Message.Contains(instanceId)));
+
+        // Verify a retry warning was logged
+        await AssertEventually(() => fixture.GetLogs().Any(l =>
+            l.EventId.Name == "TransientGrpcRetry" &&
+            l.Message.Contains("AbandonTaskOrchestratorWorkItemAsync")));
+    }
+
+    [Fact]
+    public async Task Retries_Abandon_Activity_On_Transient_Error_Eventually_Succeeds()
+    {
+        await using var fixture = await TestFixture.CreateAsync(transientRetryBackoffBase: TimeSpan.FromMilliseconds(1));
+
+        string instanceId = Guid.NewGuid().ToString("N");
+        string completionToken = Guid.NewGuid().ToString("N");
+
+        int abandonCallCount = 0;
+        var tcs = new TaskCompletionSource<bool>();
+        fixture.ClientMock
+            .Setup(c => c.AbandonTaskActivityWorkItemAsync(
+                It.IsAny<P.AbandonActivityTaskRequest>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((P.AbandonActivityTaskRequest r, Metadata h, DateTime? d, CancellationToken ct) =>
+            {
+                abandonCallCount++;
+                if (abandonCallCount == 1)
+                {
+                    // First call: simulate a transient gRPC error
+                    return RpcExceptionAsyncUnaryCall<P.AbandonActivityTaskResponse>(StatusCode.Unavailable);
+                }
+
+                // Second call: succeed
+                return CompletedAsyncUnaryCall(new P.AbandonActivityTaskResponse(), () => tcs.TrySetResult(true));
+            });
+
+        P.WorkItem workItem = new()
+        {
+            ActivityRequest = new P.ActivityRequest
+            {
+                Name = "MyActivity",
+                TaskId = 42,
+                OrchestrationInstance = new P.OrchestrationInstance { InstanceId = instanceId },
+            },
+            CompletionToken = completionToken,
+        };
+
+        fixture.InvokeRunBackgroundTask(workItem, () => Task.FromException(new Exception("boom")));
+
+        await WaitAsync(tcs.Task);
+
+        abandonCallCount.Should().Be(2);
+        await AssertEventually(() => fixture.GetLogs().Any(l => l.Message.Contains("Abandoned activity work item") && l.Message.Contains(instanceId)));
+        await AssertEventually(() => fixture.GetLogs().Any(l =>
+            l.EventId.Name == "TransientGrpcRetry" &&
+            l.Message.Contains("AbandonTaskActivityWorkItemAsync")));
+    }
+
+    [Fact]
+    public async Task Retries_Abandon_Orchestrator_Until_MaxAttempts_Then_Fails()
+    {
+        const int maxAttempts = 3;
+        await using var fixture = await TestFixture.CreateAsync(
+            transientRetryMaxAttempts: maxAttempts,
+            transientRetryBackoffBase: TimeSpan.FromMilliseconds(1));
+
+        string instanceId = Guid.NewGuid().ToString("N");
+        string completionToken = Guid.NewGuid().ToString("N");
+
+        int abandonCallCount = 0;
+        fixture.ClientMock
+            .Setup(c => c.AbandonTaskOrchestratorWorkItemAsync(
+                It.IsAny<P.AbandonOrchestrationTaskRequest>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((P.AbandonOrchestrationTaskRequest r, Metadata h, DateTime? d, CancellationToken ct) =>
+            {
+                abandonCallCount++;
+                return RpcExceptionAsyncUnaryCall<P.AbandonOrchestrationTaskResponse>(StatusCode.Unavailable);
+            });
+
+        P.WorkItem workItem = new()
+        {
+            OrchestratorRequest = new P.OrchestratorRequest { InstanceId = instanceId },
+            CompletionToken = completionToken,
+        };
+
+        fixture.InvokeRunBackgroundTask(workItem, () => Task.FromException(new Exception("boom")));
+
+        // Wait for all retries to be exhausted. The background task logs an "Unexpected error" (for the
+        // abandon exception) after the retry loop gives up, which signals the task has completed.
+        await AssertEventually(
+            () => fixture.GetLogs().Count(l => l.EventId.Name == "UnexpectedError") >= 2,
+            timeoutMs: 10000);
+
+        // The Abandoned log should NOT be present since the abandon never succeeded
+        Assert.DoesNotContain(fixture.GetLogs(), l => l.Message.Contains("Abandoned orchestrator work item") && l.Message.Contains(instanceId));
+
+        // Verify retry warnings were logged: one per retry attempt (attempts 0..maxAttempts-1)
+        IEnumerable<LogEntry> retryLogs = fixture.GetLogs().Where(l =>
+            l.EventId.Name == "TransientGrpcRetry" &&
+            l.Message.Contains("AbandonTaskOrchestratorWorkItemAsync"));
+        retryLogs.Should().HaveCount(maxAttempts);
+
+        // The abandon RPC was called maxAttempts times (retried) plus one final call that propagated
+        abandonCallCount.Should().Be(maxAttempts + 1);
+    }
+
+    [Fact]
     public async Task Forwards_CancellationToken_To_Abandon_Orchestrator()
     {
         await using var fixture = await TestFixture.CreateAsync();
@@ -366,7 +519,9 @@ public class RunBackgroundTaskLoggingTests
             this.RunBackgroundTaskMethod = runBackgroundTaskMethod;
         }
 
-        public static async Task<TestFixture> CreateAsync()
+        public static async Task<TestFixture> CreateAsync(
+            int? transientRetryMaxAttempts = null,
+            TimeSpan? transientRetryBackoffBase = null)
         {
             // Logging
             var logProvider = new TestLogProvider(new NullOutput());
@@ -375,7 +530,18 @@ public class RunBackgroundTaskLoggingTests
             var loggerFactory = new SimpleLoggerFactory(logProvider);
 
             // Options
-            var grpcOptions = new OptionsMonitorStub<GrpcDurableTaskWorkerOptions>(new GrpcDurableTaskWorkerOptions());
+            GrpcDurableTaskWorkerOptions grpcOptionsValue = new();
+            if (transientRetryMaxAttempts.HasValue)
+            {
+                grpcOptionsValue.Internal.TransientRetryMaxAttempts = transientRetryMaxAttempts.Value;
+            }
+
+            if (transientRetryBackoffBase.HasValue)
+            {
+                grpcOptionsValue.Internal.TransientRetryBackoffBase = transientRetryBackoffBase.Value;
+            }
+
+            var grpcOptions = new OptionsMonitorStub<GrpcDurableTaskWorkerOptions>(grpcOptionsValue);
             var workerOptions = new OptionsMonitorStub<DurableTaskWorkerOptions>(new DurableTaskWorkerOptions());
 
             // Factory (not used in these tests)
@@ -446,6 +612,18 @@ public class RunBackgroundTaskLoggingTests
             respTask,
             Task.FromResult(new Metadata()),
             () => new Status(StatusCode.Unknown, ex.Message),
+            () => new Metadata(),
+            () => { });
+    }
+
+    static AsyncUnaryCall<T> RpcExceptionAsyncUnaryCall<T>(StatusCode statusCode, string detail = "transient error")
+    {
+        RpcException ex = new(new Status(statusCode, detail));
+        var respTask = Task.FromException<T>(ex);
+        return new AsyncUnaryCall<T>(
+            respTask,
+            Task.FromResult(new Metadata()),
+            () => new Status(statusCode, detail),
             () => new Metadata(),
             () => { });
     }

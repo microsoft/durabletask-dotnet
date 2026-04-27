@@ -198,9 +198,9 @@ public class ExecuteWithRetryTests
     [Fact]
     public async Task ExecuteWithRetryAsync_TransientErrorExceedsMaxAttempts_ThrowsLastRpcException()
     {
-        // Arrange
-        object processor = CreateProcessor();
+        // Arrange - use a small backoff base to avoid long delays in the test
         const int maxAttempts = 10;
+        object processor = CreateProcessor(transientRetryMaxAttempts: maxAttempts, transientRetryBackoffBase: TimeSpan.FromMilliseconds(1));
         int callCount = 0;
         StatusCode lastStatusCode = StatusCode.Unavailable;
 
@@ -215,12 +215,17 @@ public class ExecuteWithRetryTests
             "TestOperation",
             CancellationToken.None);
 
-        // Assert - the last RpcException should be surfaced after max attempts
+        // Assert - the last RpcException should be surfaced after max attempts.
+        // The loop makes maxAttempts retries (attempts 0..maxAttempts-1 are retried) and
+        // then one final call at attempt=maxAttempts that is not retried, for maxAttempts+1 total calls.
         await act.Should().ThrowAsync<RpcException>().Where(e => e.StatusCode == lastStatusCode);
-        callCount.Should().Be(maxAttempts);
+        callCount.Should().Be(maxAttempts + 1);
     }
 
-    static object CreateProcessor(TestLogProvider? logProvider = null)
+    static object CreateProcessor(
+        TestLogProvider? logProvider = null,
+        int? transientRetryMaxAttempts = null,
+        TimeSpan? transientRetryBackoffBase = null)
     {
         ILoggerFactory loggerFactory = logProvider is null
             ? NullLoggerFactory.Instance
@@ -228,6 +233,16 @@ public class ExecuteWithRetryTests
 
         Mock<IDurableTaskFactory> factoryMock = new(MockBehavior.Strict);
         GrpcDurableTaskWorkerOptions grpcOptions = new();
+        if (transientRetryMaxAttempts.HasValue)
+        {
+            grpcOptions.Internal.TransientRetryMaxAttempts = transientRetryMaxAttempts.Value;
+        }
+
+        if (transientRetryBackoffBase.HasValue)
+        {
+            grpcOptions.Internal.TransientRetryBackoffBase = transientRetryBackoffBase.Value;
+        }
+
         DurableTaskWorkerOptions workerOptions = new()
         {
             Logging = { UseLegacyCategories = false },

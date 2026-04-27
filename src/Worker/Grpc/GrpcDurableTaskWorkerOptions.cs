@@ -144,14 +144,17 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
 
         /// <summary>
         /// Gets or sets the initial delay used when computing exponential backoff between retries of a
-        /// transient gRPC call. The delay doubles after each failed attempt, with a small uniform jitter
-        /// added on top, until <see cref="TransientRetryBackoffCap"/> is reached. Defaults to 200 ms.
+        /// transient gRPC call. The delay doubles after each failed attempt, and the exponential component
+        /// is capped at <see cref="TransientRetryBackoffCap"/> before jitter is applied. In the default
+        /// biased-jitter mode, the final delay may therefore slightly exceed
+        /// <see cref="TransientRetryBackoffCap"/>. Defaults to 200 ms.
         /// </summary>
         public TimeSpan TransientRetryBackoffBase { get; set; } = TimeSpan.FromMilliseconds(200);
 
         /// <summary>
-        /// Gets or sets the maximum delay between retries of a transient gRPC call. The exponentially
-        /// increasing delay is clamped to this value. Defaults to 15 second.
+        /// Gets or sets the cap applied to the exponential backoff component between retries of a transient
+        /// gRPC call before jitter is applied. In the default biased-jitter mode, the final computed delay
+        /// may be slightly greater than this value. Defaults to 15 seconds.
         /// </summary>
         public TimeSpan TransientRetryBackoffCap { get; set; } = TimeSpan.FromSeconds(15);
 

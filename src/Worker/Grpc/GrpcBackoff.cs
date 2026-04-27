@@ -52,15 +52,9 @@ static class GrpcBackoff
         double exponentialMs = baseDelay.TotalMilliseconds * Math.Pow(2, safeAttempt);
         double upperBoundMs = Math.Min(cap.TotalMilliseconds, exponentialMs);
 
-        double jitteredMs = 0;
-        if (fullJitter)
-        {
-            jitteredMs = random.NextDouble() * upperBoundMs;
-        }
-        else
-        {
-            jitteredMs = upperBoundMs + (random.NextDouble() * (upperBoundMs * .2));
-        }
+        double jitteredMs = fullJitter
+            ? random.NextDouble() * upperBoundMs
+            : upperBoundMs + (random.NextDouble() * (upperBoundMs * .2));
 
         return TimeSpan.FromMilliseconds(jitteredMs);
     }

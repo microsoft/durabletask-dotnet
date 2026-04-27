@@ -1253,7 +1253,7 @@ sealed partial class GrpcDurableTaskWorker
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                     {
-                        // If shutting down, propagate original exception
+                        // If shutting down during the retry delay, propagate the cancellation exception
                         throw;
                     }
 

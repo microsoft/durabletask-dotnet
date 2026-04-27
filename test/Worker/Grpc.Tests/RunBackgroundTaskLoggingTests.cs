@@ -425,7 +425,9 @@ public class RunBackgroundTaskLoggingTests
             () => fixture.GetLogs().Count(l => l.EventId.Name == "UnexpectedError") >= 2,
             timeoutMs: 10000);
 
-        // The Abandoned log should NOT be present since the abandon never succeeded
+        // The Abandoned log should NOT be present since the abandon never succeeded (but the abandoning should be present)
+        await AssertEventually(() => fixture.GetLogs().Any(l => l.Message.Contains("Abandoning orchestrator work item") && l.Message.Contains(instanceId)));
+        await AssertEventually(() => fixture.GetLogs().Any(l => l.Message.Contains("Unexpected error") && l.Message.Contains(instanceId)));
         Assert.DoesNotContain(fixture.GetLogs(), l => l.Message.Contains("Abandoned orchestrator work item") && l.Message.Contains(instanceId));
 
         // Verify retry warnings were logged: one per retry attempt
@@ -485,7 +487,9 @@ public class RunBackgroundTaskLoggingTests
         // No retry warning should have been logged
         Assert.DoesNotContain(fixture.GetLogs(), l => l.EventId.Name == "TransientGrpcRetry");
 
-        // The Abandoned log must not be present since the RPC failed without retry
+        // The Abandoned log must not be present since the RPC failed without retry (but the abandoning should be present)
+        await AssertEventually(() => fixture.GetLogs().Any(l => l.Message.Contains("Abandoning orchestrator work item") && l.Message.Contains(instanceId)));
+        await AssertEventually(() => fixture.GetLogs().Any(l => l.Message.Contains("Unexpected error") && l.Message.Contains(instanceId)));
         Assert.DoesNotContain(fixture.GetLogs(), l => l.Message.Contains("Abandoned orchestrator work item") && l.Message.Contains(instanceId));
     }
 

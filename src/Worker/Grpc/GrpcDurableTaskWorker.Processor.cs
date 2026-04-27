@@ -531,7 +531,7 @@ sealed partial class GrpcDurableTaskWorker
                                 async () => await this.client.AbandonTaskEntityWorkItemAsync(
                                     new P.AbandonEntityTaskRequest
                                     {
-                                        CompletionToken = workItem?.CompletionToken,
+                                        CompletionToken = workItem.CompletionToken,
                                     },
                                     cancellationToken: cancellation),
                                 nameof(this.client.AbandonTaskEntityWorkItemAsync),

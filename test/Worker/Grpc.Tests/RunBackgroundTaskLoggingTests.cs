@@ -438,6 +438,57 @@ public class RunBackgroundTaskLoggingTests
         abandonCallCount.Should().Be(maxAttempts);
     }
 
+    [Theory]
+    [InlineData(StatusCode.InvalidArgument)]
+    [InlineData(StatusCode.PermissionDenied)]
+    [InlineData(StatusCode.NotFound)]
+    public async Task Non_Transient_Abandon_Orchestrator_Error_Is_Not_Retried(StatusCode statusCode)
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+
+        string instanceId = Guid.NewGuid().ToString("N");
+        string completionToken = Guid.NewGuid().ToString("N");
+
+        // Signal fires after the (single) abandon call, giving us a reliable completion signal
+        var callDoneTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        int abandonCallCount = 0;
+        fixture.ClientMock
+            .Setup(c => c.AbandonTaskOrchestratorWorkItemAsync(
+                It.IsAny<P.AbandonOrchestrationTaskRequest>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((P.AbandonOrchestrationTaskRequest r, Metadata h, DateTime? d, CancellationToken ct) =>
+            {
+                Interlocked.Increment(ref abandonCallCount);
+                callDoneTcs.TrySetResult(true);
+                return RpcExceptionAsyncUnaryCall<P.AbandonOrchestrationTaskResponse>(statusCode);
+            });
+
+        P.WorkItem workItem = new()
+        {
+            OrchestratorRequest = new P.OrchestratorRequest { InstanceId = instanceId },
+            CompletionToken = completionToken,
+        };
+
+        fixture.InvokeRunBackgroundTask(workItem, () => Task.FromException(new Exception("boom")));
+
+        // Wait for the single abandon call to complete
+        await WaitAsync(callDoneTcs.Task);
+
+        // Give a brief moment for the final log lines to flush
+        await Task.Delay(100);
+
+        // The non-transient error must not have been retried – exactly one abandon call
+        abandonCallCount.Should().Be(1);
+
+        // No retry warning should have been logged
+        Assert.DoesNotContain(fixture.GetLogs(), l => l.EventId.Name == "TransientGrpcRetry");
+
+        // The Abandoned log must not be present since the RPC failed without retry
+        Assert.DoesNotContain(fixture.GetLogs(), l => l.Message.Contains("Abandoned orchestrator work item") && l.Message.Contains(instanceId));
+    }
+
     [Fact]
     public async Task Forwards_CancellationToken_To_Abandon_Orchestrator()
     {

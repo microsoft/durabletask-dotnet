@@ -6,9 +6,9 @@ using System.Security.Cryptography;
 namespace Microsoft.DurableTask.Worker.Grpc;
 
 /// <summary>
-/// Helpers for computing reconnect backoff delays in the gRPC worker.
+/// Helpers for computing reconnect and retry backoff delays in the gRPC worker.
 /// </summary>
-static class ReconnectBackoff
+static class GrpcBackoff
 {
     /// <summary>
     /// Creates a random source for reconnect jitter using an explicit random seed so multiple workers on
@@ -32,10 +32,11 @@ static class ReconnectBackoff
     /// <param name="baseDelay">The base delay used for the exponential growth.</param>
     /// <param name="cap">The maximum delay before jitter is applied.</param>
     /// <param name="random">The random source used for jitter.</param>
+    /// <param name="fullJitter">If true, applies full jitter. If false, applies a smaller jitter that is biased towards the upper bound.</param>
     /// <returns>The computed jittered delay.</returns>
-    public static TimeSpan Compute(int attempt, TimeSpan baseDelay, TimeSpan cap, Random random)
+    public static TimeSpan Compute(int attempt, TimeSpan baseDelay, TimeSpan cap, Random random, bool fullJitter)
     {
-        if (baseDelay <= TimeSpan.Zero)
+        if (baseDelay <= TimeSpan.Zero || cap <= TimeSpan.Zero)
         {
             return TimeSpan.Zero;
         }
@@ -48,13 +49,19 @@ static class ReconnectBackoff
         // Cap the exponent to avoid overflow in 2^attempt for pathological attempt values.
         int safeAttempt = Math.Min(attempt, 30);
 
-        double capMs = Math.Max(0, cap.TotalMilliseconds);
         double exponentialMs = baseDelay.TotalMilliseconds * Math.Pow(2, safeAttempt);
-        double upperBoundMs = Math.Min(capMs, exponentialMs);
+        double upperBoundMs = Math.Min(cap.TotalMilliseconds, exponentialMs);
 
-        // Full jitter intentionally allows any value in the retry window. The wide spread keeps many
-        // workers that saw the same outage from reconnecting in lockstep against the backend.
-        double jitteredMs = random.NextDouble() * upperBoundMs;
+        double jitteredMs = 0;
+        if (fullJitter)
+        {
+            jitteredMs = random.NextDouble() * upperBoundMs;
+        }
+        else
+        {
+            jitteredMs = upperBoundMs + (random.NextDouble() * (upperBoundMs * .2));
+        }
+
         return TimeSpan.FromMilliseconds(jitteredMs);
     }
 }

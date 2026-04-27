@@ -136,6 +136,26 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
         public TimeSpan ReconnectBackoffCap { get; set; } = TimeSpan.FromSeconds(30);
 
         /// <summary>
+        /// Gets or sets the maximum number of attempts the worker will make when retrying a transient
+        /// gRPC call (such as completing or abandoning a work item). Once this many attempts have failed,
+        /// the most recent exception is rethrown. Defaults to 10.
+        /// </summary>
+        public int TransientRetryMaxAttempts { get; set; } = 10;
+
+        /// <summary>
+        /// Gets or sets the initial delay used when computing exponential backoff between retries of a
+        /// transient gRPC call. The delay doubles after each failed attempt, with a small uniform jitter
+        /// added on top, until <see cref="TransientRetryBackoffCap"/> is reached. Defaults to 200 ms.
+        /// </summary>
+        public TimeSpan TransientRetryBackoffBase { get; set; } = TimeSpan.FromMilliseconds(200);
+
+        /// <summary>
+        /// Gets or sets the maximum delay between retries of a transient gRPC call. The exponentially
+        /// increasing delay is clamped to this value. Defaults to 15 second.
+        /// </summary>
+        public TimeSpan TransientRetryBackoffCap { get; set; } = TimeSpan.FromSeconds(15);
+
+        /// <summary>
         /// Gets or sets an optional callback invoked when the worker requests a fresh gRPC channel after
         /// repeated connect failures. The callback receives the previously-used channel and should return
         /// its replacement. Implementations are responsible for publishing the replacement channel and

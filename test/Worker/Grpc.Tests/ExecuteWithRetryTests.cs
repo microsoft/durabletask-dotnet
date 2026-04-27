@@ -282,7 +282,7 @@ public class ExecuteWithRetryTests
 
         public SimpleLoggerFactory(ILoggerProvider provider) => this.provider = provider;
 
-        public void AddProvider(ILoggerProvider provider) { }
+        public void AddProvider(ILoggerProvider loggerProvider) { }
 
         public ILogger CreateLogger(string categoryName) => this.provider.CreateLogger(categoryName);
 

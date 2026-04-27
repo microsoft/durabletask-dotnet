@@ -18,10 +18,34 @@ public class ExecuteWithRetryTests
 {
     const string Category = "Microsoft.DurableTask.Worker.Grpc";
 
-    static readonly MethodInfo ExecuteWithRetryAsyncMethod = typeof(GrpcDurableTaskWorker)
-        .GetNestedType("Processor", BindingFlags.NonPublic)!
-        .GetMethod("ExecuteWithRetryAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+    static readonly MethodInfo ExecuteWithRetryAsyncMethod = FindExecuteWithRetryAsyncMethod();
 
+    static Type FindProcessorType()
+    {
+        return typeof(GrpcDurableTaskWorker)
+            .GetNestedTypes(BindingFlags.NonPublic)
+            .Single(type => type.GetMethods(BindingFlags.Instance | BindingFlags.NonPublic)
+                .Any(method =>
+                    method.ReturnType == typeof(Task) &&
+                    method.GetParameters() is var parameters &&
+                    parameters.Length == 3 &&
+                    parameters[0].ParameterType == typeof(Func<Task>) &&
+                    parameters[1].ParameterType == typeof(string) &&
+                    parameters[2].ParameterType == typeof(CancellationToken)));
+    }
+
+    static MethodInfo FindExecuteWithRetryAsyncMethod()
+    {
+        return FindProcessorType()
+            .GetMethods(BindingFlags.Instance | BindingFlags.NonPublic)
+            .Single(method =>
+                method.ReturnType == typeof(Task) &&
+                method.GetParameters() is var parameters &&
+                parameters.Length == 3 &&
+                parameters[0].ParameterType == typeof(Func<Task>) &&
+                parameters[1].ParameterType == typeof(string) &&
+                parameters[2].ParameterType == typeof(CancellationToken));
+    }
     [Fact]
     public async Task ExecuteWithRetryAsync_SucceedsOnFirstAttempt_DoesNotRetry()
     {

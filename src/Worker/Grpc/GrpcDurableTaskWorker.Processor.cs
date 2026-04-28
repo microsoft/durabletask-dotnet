@@ -157,8 +157,8 @@ sealed partial class GrpcDurableTaskWorker
                         this.internalOptions.ReconnectBackoffCap,
                         backoffRandom,
                         fullJitter: true);
-                    reconnectAttempt++;
                     this.Logger.ReconnectBackoff(reconnectAttempt, (int)delay.TotalMilliseconds);
+                    reconnectAttempt++;
                     await Task.Delay(delay, cancellation);
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)

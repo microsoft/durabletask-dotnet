@@ -100,5 +100,8 @@ namespace Microsoft.DurableTask.Worker.Grpc
 
         [LoggerMessage(EventId = 76, Level = LogLevel.Information, Message = "Work-item stream ended by the backend (graceful close). Will reconnect.")]
         public static partial void StreamEndedByPeer(this ILogger logger);
+
+        [LoggerMessage(EventId = 77, Level = LogLevel.Warning, Message = "Transient gRPC error for '{OperationName}'. Attempt {Attempt} of {MaxAttempts}. Retrying in {BackoffMs} ms. StatusCode={StatusCode}")]
+        public static partial void TransientGrpcRetry(this ILogger logger, string operationName, int attempt, int maxAttempts, double backoffMs, int statusCode, Exception exception);
     }
 }

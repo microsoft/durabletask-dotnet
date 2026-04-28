@@ -699,7 +699,7 @@ sealed partial class GrpcDurableTaskWorker
                             cancellationToken: cancellationToken),
                         nameof(this.client.AbandonTaskOrchestratorWorkItemAsync),
                         cancellationToken);
-
+                    this.Logger.AbandonedOrchestratorWorkItem(request.InstanceId, completionToken);
                     return;
                 }
 
@@ -803,7 +803,7 @@ sealed partial class GrpcDurableTaskWorker
                             cancellationToken: cancellationToken),
                         nameof(this.client.AbandonTaskOrchestratorWorkItemAsync),
                         cancellationToken);
-
+                    this.Logger.AbandonedOrchestratorWorkItem(request.InstanceId, completionToken);
                     return;
                 }
             }
@@ -917,6 +917,7 @@ sealed partial class GrpcDurableTaskWorker
                             cancellationToken: cancellation),
                         nameof(this.client.AbandonTaskActivityWorkItemAsync),
                         cancellation);
+                    this.Logger.AbandonedActivityWorkItem(instance.InstanceId, request.Name, request.TaskId, completionToken);
                 }
 
                 return;

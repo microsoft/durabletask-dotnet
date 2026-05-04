@@ -3,6 +3,7 @@
 
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using static Microsoft.DurableTask.Worker.DurableTaskWorkerOptions;
 
@@ -180,24 +181,15 @@ public static class DurableTaskWorkerBuilderExtensions
                 }
             });
 
-        // Register a validator that fails fast at worker build time if any filter references a task
-        // name that isn't registered with this worker. This runs after all PostConfigure callbacks,
-        // so later overwrites (e.g., a subsequent UseWorkItemFilters call) are validated as the
-        // final state. Skip registration when nothing was supplied to validate, and ensure
-        // registration is idempotent per builder name so repeated calls do not produce duplicate
-        // validators (which would otherwise yield order-/call-count-dependent failure messages).
-        if (workItemFilters is not null
-            && (workItemFilters.Orchestrations.Count > 0
-                || workItemFilters.Activities.Count > 0
-                || workItemFilters.Entities.Count > 0)
-            && !HasWorkItemFiltersValidatorMarker(builder.Services, builder.Name))
-        {
-            builder.Services.AddSingleton(new WorkItemFiltersValidatorRegistrationMarker(builder.Name));
-            builder.Services.AddSingleton<IValidateOptions<DurableTaskWorkerWorkItemFilters>>(sp =>
-                new DurableTaskWorkerWorkItemFiltersValidator(
-                    builder.Name,
-                    sp.GetRequiredService<IOptionsMonitor<DurableTaskRegistry>>()));
-        }
+        // Register a single global validator that fails fast at worker build time if any filter
+        // references a task name that isn't registered with the corresponding worker. The validator
+        // dispatches per named-options instance via the 'name' parameter that the Options framework
+        // passes to IValidateOptions.Validate, so a single registration covers every named worker.
+        // TryAddEnumerable de-duplicates by implementation type, making repeat calls idempotent
+        // across all UseWorkItemFilters invocations.
+        builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<
+            IValidateOptions<DurableTaskWorkerWorkItemFilters>,
+            DurableTaskWorkerWorkItemFiltersValidator>());
 
         return builder;
     }
@@ -239,34 +231,5 @@ public static class DurableTaskWorkerBuilderExtensions
                 });
 
         return builder;
-    }
-
-    static bool HasWorkItemFiltersValidatorMarker(IServiceCollection services, string builderName)
-    {
-        foreach (ServiceDescriptor descriptor in services)
-        {
-            if (descriptor.ImplementationInstance is WorkItemFiltersValidatorRegistrationMarker marker
-                && string.Equals(marker.BuilderName, builderName, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Marker registered alongside <see cref="DurableTaskWorkerWorkItemFiltersValidator"/> so that
-    /// repeated calls to <see cref="UseWorkItemFilters(IDurableTaskWorkerBuilder, DurableTaskWorkerWorkItemFilters?)"/>
-    /// for the same builder name do not register multiple validator singletons.
-    /// </summary>
-    sealed class WorkItemFiltersValidatorRegistrationMarker
-    {
-        public WorkItemFiltersValidatorRegistrationMarker(string builderName)
-        {
-            this.BuilderName = builderName;
-        }
-
-        public string BuilderName { get; }
     }
 }

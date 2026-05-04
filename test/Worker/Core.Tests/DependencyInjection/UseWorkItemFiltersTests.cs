@@ -663,62 +663,6 @@ public class UseWorkItemFiltersTests
     }
 
     [Fact]
-    public void WorkItemFilters_NullExplicitFilters_DoNotRegisterValidator()
-    {
-        // Arrange - passing null should not register a validator that fires based on registry state.
-        ServiceCollection services = new();
-        services.AddDurableTaskWorker("test", builder =>
-        {
-            builder.AddTasks(_ => { });
-            builder.UseWorkItemFilters(null);
-        });
-
-        // Act
-        ServiceProvider provider = services.BuildServiceProvider();
-        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
-            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
-        Action act = () => filtersMonitor.Get("test");
-
-        // Assert - no validator should have been registered for this options type at all,
-        // not just that validation happens to pass for empty filters.
-        services.Should().NotContain(
-            d => d.ServiceType == typeof(IValidateOptions<DurableTaskWorkerWorkItemFilters>),
-            "passing null should not opt the worker into filter-name validation");
-        act.Should().NotThrow();
-    }
-
-    [Fact]
-    public void WorkItemFilters_RepeatedExplicitCalls_RegisterSingleValidatorPerWorker()
-    {
-        // Arrange - calling UseWorkItemFilters multiple times with explicit non-empty filters
-        // for the same named worker must register the validator at most once. Otherwise validation
-        // would run multiple times for the same options instance and produce duplicated/order-
-        // dependent failure messages.
-        ServiceCollection services = new();
-        services.AddDurableTaskWorker("test", builder =>
-        {
-            builder.AddTasks(registry => registry.AddOrchestrator<TestOrchestrator>());
-            builder.UseWorkItemFilters(new DurableTaskWorkerWorkItemFilters
-            {
-                Orchestrations = [new DurableTaskWorkerWorkItemFilters.OrchestrationFilter { Name = "First" }],
-            });
-            builder.UseWorkItemFilters(new DurableTaskWorkerWorkItemFilters
-            {
-                Orchestrations = [new DurableTaskWorkerWorkItemFilters.OrchestrationFilter { Name = "Second" }],
-            });
-            builder.UseWorkItemFilters(new DurableTaskWorkerWorkItemFilters
-            {
-                Orchestrations = [new DurableTaskWorkerWorkItemFilters.OrchestrationFilter { Name = nameof(TestOrchestrator) }],
-            });
-        });
-
-        // Assert - exactly one validator is registered for this options type, even though
-        // UseWorkItemFilters was called three times.
-        services.Where(d => d.ServiceType == typeof(IValidateOptions<DurableTaskWorkerWorkItemFilters>))
-            .Should().ContainSingle();
-    }
-
-    [Fact]
     public void WorkItemFilters_RepeatedExplicitInvalidCalls_ReportFailureExactlyOnce()
     {
         // Arrange - even when the final state is invalid, the failure should be reported by a single

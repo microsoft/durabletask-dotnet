@@ -53,7 +53,8 @@ sealed class DurableTaskWorkerWorkItemFiltersValidator : IValidateOptions<Durabl
         }
 
         StringBuilder sb = new();
-        sb.Append("Cannot configure work item filters for worker '").Append(name)
+        string displayName = string.IsNullOrEmpty(name) ? "<default>" : name!;
+        sb.Append("Cannot configure work item filters for worker '").Append(displayName)
           .Append("': the following filter names do not match any registered task. ")
           .Append("Register them on the worker (via AddTasks/AddOrchestrator/AddActivity/AddEntity) ")
           .Append("or remove them from the filters.");

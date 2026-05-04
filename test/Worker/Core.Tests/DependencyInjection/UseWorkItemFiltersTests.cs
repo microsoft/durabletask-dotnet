@@ -663,6 +663,71 @@ public class UseWorkItemFiltersTests
     }
 
     [Fact]
+    public void WorkItemFilters_NullExplicitFilters_DoNotRegisterValidator()
+    {
+        // Arrange - passing null is an explicit opt-out; no validator should be registered because
+        // there is nothing to validate (and the worker should not pull DurableTaskRegistry into the
+        // resolution chain when filtering is disabled).
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(_ => { });
+            builder.UseWorkItemFilters(null);
+        });
+
+        // Assert - no validator registered.
+        services.Should().NotContain(
+            d => d.ServiceType == typeof(IValidateOptions<DurableTaskWorkerWorkItemFilters>),
+            "passing null should not opt the worker into filter-name validation");
+    }
+
+    [Fact]
+    public void WorkItemFilters_EmptyExplicitFilters_DoNotRegisterValidator()
+    {
+        // Arrange - an explicit but empty filter set has nothing to validate, so the validator
+        // should not be registered.
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(_ => { });
+            builder.UseWorkItemFilters(new DurableTaskWorkerWorkItemFilters());
+        });
+
+        // Assert
+        services.Should().NotContain(
+            d => d.ServiceType == typeof(IValidateOptions<DurableTaskWorkerWorkItemFilters>),
+            "empty filters have nothing to validate");
+    }
+
+    [Fact]
+    public void WorkItemFilters_DefaultNamedWorkerInvalidFilter_FailureMessageUsesDefaultPlaceholder()
+    {
+        // Arrange - default-name worker (Options.DefaultName == string.Empty) with an invalid filter.
+        // The failure message should display "<default>" instead of an empty quoted name so the
+        // misconfigured worker is identifiable.
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker(builder =>
+        {
+            builder.AddTasks(registry => registry.AddOrchestrator<TestOrchestrator>());
+            builder.UseWorkItemFilters(new DurableTaskWorkerWorkItemFilters
+            {
+                Orchestrations = [new DurableTaskWorkerWorkItemFilters.OrchestrationFilter { Name = "DoesNotExist" }],
+            });
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        Action act = () => filtersMonitor.Get(Options.DefaultName);
+
+        // Assert
+        act.Should().Throw<OptionsValidationException>()
+            .Which.Failures.Should().ContainSingle()
+            .Which.Should().Contain("worker '<default>'");
+    }
+
+    [Fact]
     public void WorkItemFilters_RepeatedExplicitInvalidCalls_ReportFailureExactlyOnce()
     {
         // Arrange - even when the final state is invalid, the failure should be reported by a single

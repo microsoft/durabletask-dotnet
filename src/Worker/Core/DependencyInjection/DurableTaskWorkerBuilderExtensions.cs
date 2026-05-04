@@ -187,9 +187,19 @@ public static class DurableTaskWorkerBuilderExtensions
         // passes to IValidateOptions.Validate, so a single registration covers every named worker.
         // TryAddEnumerable de-duplicates by implementation type, making repeat calls idempotent
         // across all UseWorkItemFilters invocations.
-        builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<
-            IValidateOptions<DurableTaskWorkerWorkItemFilters>,
-            DurableTaskWorkerWorkItemFiltersValidator>());
+        //
+        // Skip registration when the caller passed null (opt-out) or an empty filter set: there is
+        // nothing to validate, and registering would otherwise pull IOptionsMonitor<DurableTaskRegistry>
+        // into the resolution chain for workers that have explicitly opted out of filtering.
+        if (workItemFilters is not null
+            && (workItemFilters.Orchestrations.Count > 0
+                || workItemFilters.Activities.Count > 0
+                || workItemFilters.Entities.Count > 0))
+        {
+            builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<
+                IValidateOptions<DurableTaskWorkerWorkItemFilters>,
+                DurableTaskWorkerWorkItemFiltersValidator>());
+        }
 
         return builder;
     }

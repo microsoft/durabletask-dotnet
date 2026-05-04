@@ -145,8 +145,18 @@ public static class DurableTaskWorkerBuilderExtensions
     /// <param name="workItemFilters">The instance of a <see cref="DurableTaskWorkerWorkItemFilters"/> to use.
     /// If <c>null</c>, any previously configured filters will be cleared and filtering will be disabled.</param>
     /// <returns>The same <see cref="IDurableTaskWorkerBuilder"/> instance, allowing for method chaining.</returns>
-    /// <remarks>By default, no work item filters are applied and the worker processes all work items.
-    /// Use this method with explicit filters to enable filtering, or with <c>null</c> to disable filtering.</remarks>
+    /// <remarks>
+    /// <para>
+    /// By default, no work item filters are applied and the worker processes all work items.
+    /// Use this method with explicit filters to enable filtering, or with <c>null</c> to disable filtering.
+    /// </para>
+    /// <para>
+    /// The supplied filter names are validated against the worker's <see cref="DurableTaskRegistry"/>
+    /// when the worker is built. If any filter references an orchestration, activity, or entity name
+    /// that is not registered with this worker, an <see cref="OptionsValidationException"/> is thrown
+    /// at startup. This prevents the worker from silently waiting on work items it cannot handle.
+    /// </para>
+    /// </remarks>
     public static IDurableTaskWorkerBuilder UseWorkItemFilters(this IDurableTaskWorkerBuilder builder, DurableTaskWorkerWorkItemFilters? workItemFilters)
     {
         Check.NotNull(builder);
@@ -169,6 +179,21 @@ public static class DurableTaskWorkerBuilderExtensions
                     opts.Entities = workItemFilters.Entities;
                 }
             });
+
+        // Register a validator that fails fast at worker build time if any filter references a task
+        // name that isn't registered with this worker. This runs after all PostConfigure callbacks,
+        // so later overwrites (e.g., a subsequent UseWorkItemFilters call) are validated as the
+        // final state. Skip registration when nothing was supplied to validate.
+        if (workItemFilters is not null
+            && (workItemFilters.Orchestrations.Count > 0
+                || workItemFilters.Activities.Count > 0
+                || workItemFilters.Entities.Count > 0))
+        {
+            builder.Services.AddSingleton<IValidateOptions<DurableTaskWorkerWorkItemFilters>>(sp =>
+                new DurableTaskWorkerWorkItemFiltersValidator(
+                    builder.Name,
+                    sp.GetRequiredService<IOptionsMonitor<DurableTaskRegistry>>()));
+        }
 
         return builder;
     }

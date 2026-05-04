@@ -84,7 +84,9 @@ sealed class DurableTaskWorkerWorkItemFiltersValidator : IValidateOptions<Durabl
             }
 
             // TaskName equality is OrdinalIgnoreCase, mirroring how registered keys are compared.
-            if (!isRegistered(name))
+            // Construct the TaskName explicitly so the conversion is not dependent on the implicit
+            // string -> TaskName operator (which could be removed/changed independently).
+            if (!isRegistered(new TaskName(name)))
             {
                 unknown.Add(name);
             }

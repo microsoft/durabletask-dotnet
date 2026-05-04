@@ -101,6 +101,7 @@ public sealed class LoggerOrchestrationAnalyzer : OrchestrationAnalyzer<LoggerOr
 
         readonly HashSet<IMethodSymbol> walked = new(SymbolEqualityComparer.Default);
         readonly Dictionary<IParameterSymbol, List<IOperation>> callSites = new(SymbolEqualityComparer.Default);
+        readonly Dictionary<ISymbol, List<IOperation>> assignments = new(SymbolEqualityComparer.Default);
         readonly List<Candidate> candidates = new();
 
         IMethodSymbol? entryMethod;
@@ -163,6 +164,16 @@ public sealed class LoggerOrchestrationAnalyzer : OrchestrationAnalyzer<LoggerOr
         }
 
         static HashSet<ISymbol> NewVisitingSet() => new(SymbolEqualityComparer.Default);
+
+        // True iff the reference is the target of a simple assignment (e.g. LHS of `x = ...`).
+        // Such references are write-only and shouldn't be analyzed as logger usages.
+        // Compound assignments (`+=`), increments, ref/out passes, and reads are intentionally
+        // not treated as write-only because they all observe the current value.
+        static bool IsWriteOnlyTarget(IOperation reference)
+        {
+            return reference.Parent is ISimpleAssignmentOperation assignment
+                && ReferenceEquals(assignment.Target, reference);
+        }
 
         static IOperation Unwrap(IOperation operation)
         {
@@ -232,22 +243,21 @@ public sealed class LoggerOrchestrationAnalyzer : OrchestrationAnalyzer<LoggerOr
                         this.candidates.Add(new Candidate(methodName, lr.Syntax, lr.Local));
                         break;
 
+                    case IVariableDeclaratorOperation declarator
+                        when this.IsILoggerType(declarator.Symbol.Type) && declarator.Initializer?.Value is IOperation initValue:
+                        this.AddAssignment(declarator.Symbol, initValue);
+                        break;
+
+                    case ISimpleAssignmentOperation assignment:
+                        this.RecordAssignmentToLocalOrParameter(assignment);
+                        break;
+
                     case IInvocationOperation invocation:
                         this.RecordCallSiteArguments(invocation);
                         this.RecurseIntoCallee(semanticModel, invocation.TargetMethod);
                         break;
                 }
             }
-        }
-
-        // True iff the reference is the target of a simple assignment (e.g. LHS of `x = ...`).
-        // Such references are write-only and shouldn't be analyzed as logger usages.
-        // Compound assignments (`+=`), increments, ref/out passes, and reads are intentionally
-        // not treated as write-only because they all observe the current value.
-        static bool IsWriteOnlyTarget(IOperation reference)
-        {
-            return reference.Parent is ISimpleAssignmentOperation assignment
-                && ReferenceEquals(assignment.Target, reference);
         }
 
         void RecordCallSiteArguments(IInvocationOperation invocation)
@@ -289,6 +299,33 @@ public sealed class LoggerOrchestrationAnalyzer : OrchestrationAnalyzer<LoggerOr
             }
         }
 
+        void RecordAssignmentToLocalOrParameter(ISimpleAssignmentOperation assignment)
+        {
+            // Track reassignments to locals and parameters of ILogger type. Field/property targets
+            // are intentionally ignored — those are handled by the always-unsafe rule for fields/properties.
+            switch (assignment.Target)
+            {
+                case ILocalReferenceOperation lr when this.IsILoggerType(lr.Local.Type):
+                    this.AddAssignment(lr.Local, assignment.Value);
+                    break;
+
+                case IParameterReferenceOperation pr when this.IsILoggerType(pr.Parameter.Type):
+                    this.AddAssignment(pr.Parameter, assignment.Value);
+                    break;
+            }
+        }
+
+        void AddAssignment(ISymbol symbol, IOperation value)
+        {
+            if (!this.assignments.TryGetValue(symbol, out List<IOperation>? values))
+            {
+                values = new List<IOperation>();
+                this.assignments[symbol] = values;
+            }
+
+            values.Add(value);
+        }
+
         // Phase 2: demand-driven safety resolution.
         // A symbol is "safe" iff its value is provably derived from CreateReplaySafeLogger.
         // The visiting set guards against cycles in the call graph; on revisit we return optimistic
@@ -318,23 +355,24 @@ public sealed class LoggerOrchestrationAnalyzer : OrchestrationAnalyzer<LoggerOr
 
         bool IsLocalSafe(ILocalSymbol local, HashSet<ISymbol> visiting)
         {
-            // Resolve the local's origin from its declarator's initializer. This is flow-insensitive:
-            // re-assignments after the initial declaration are not tracked. The common pattern
-            // `var logger = context.CreateReplaySafeLogger(...);` is fully supported.
-            if (local.DeclaringSyntaxReferences.Length == 0)
+            // A local is safe iff every assignment to it (initializer + reassignments) has a safe value.
+            // This is flow-insensitive: we don't reason about which assignment is "current" at any
+            // particular use site. Using OR semantics here would be unsound — a single reassignment
+            // to an unsafe value reaches every subsequent read.
+            if (!this.assignments.TryGetValue(local, out List<IOperation>? values) || values.Count == 0)
             {
                 return false;
             }
 
-            SyntaxNode declSyntax = local.DeclaringSyntaxReferences[0].GetSyntax();
-            if (declSyntax is not VariableDeclaratorSyntax declarator || declarator.Initializer is null)
+            foreach (IOperation value in values)
             {
-                return false;
+                if (!this.IsExpressionSafe(value, visiting))
+                {
+                    return false;
+                }
             }
 
-            SemanticModel semanticModel = this.compilation.GetSemanticModel(declarator.SyntaxTree);
-            IOperation? initOperation = semanticModel.GetOperation(declarator.Initializer.Value);
-            return initOperation != null && this.IsExpressionSafe(initOperation, visiting);
+            return true;
         }
 
         bool IsParameterSafe(IParameterSymbol parameter, HashSet<ISymbol> visiting)
@@ -345,23 +383,36 @@ public sealed class LoggerOrchestrationAnalyzer : OrchestrationAnalyzer<LoggerOr
                 return false;
             }
 
-            // For helper parameters we require every observed call site to pass a safe value.
-            // No observed call sites means the helper isn't called from this orchestration's
-            // reachable graph — be conservative and treat as unsafe.
-            if (!this.callSites.TryGetValue(parameter, out List<IOperation>? args) || args.Count == 0)
-            {
-                return false;
-            }
+            // For helper parameters we require every observed call site AND every internal
+            // reassignment to be safe. No observed sources at all means the helper isn't called
+            // from this orchestration's reachable graph — be conservative and treat as unsafe.
+            bool hasObservedSource = false;
 
-            foreach (IOperation arg in args)
+            if (this.callSites.TryGetValue(parameter, out List<IOperation>? callArgs))
             {
-                if (!this.IsExpressionSafe(arg, visiting))
+                hasObservedSource = true;
+                foreach (IOperation arg in callArgs)
                 {
-                    return false;
+                    if (!this.IsExpressionSafe(arg, visiting))
+                    {
+                        return false;
+                    }
                 }
             }
 
-            return true;
+            if (this.assignments.TryGetValue(parameter, out List<IOperation>? reassignments))
+            {
+                hasObservedSource = true;
+                foreach (IOperation value in reassignments)
+                {
+                    if (!this.IsExpressionSafe(value, visiting))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return hasObservedSource;
         }
 
         bool IsExpressionSafe(IOperation expression, HashSet<ISymbol> visiting)

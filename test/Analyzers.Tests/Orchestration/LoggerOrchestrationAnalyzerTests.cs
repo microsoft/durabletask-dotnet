@@ -451,6 +451,64 @@ public class MyOrchestrator : TaskOrchestrator<string, string>
     }
 
     [Fact]
+    public async Task TaskOrchestratorLocalReassignedToUnsafeValueHasDiag()
+    {
+        // Even when a local is initialized from CreateReplaySafeLogger, a later reassignment to a
+        // non-replay-safe value must flip the local to unsafe (flow-insensitive: any reassignment
+        // reaches every subsequent read).
+        string code = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, string>
+{
+    readonly ILogger field;
+
+    public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        ILogger logger = context.CreateReplaySafeLogger<MyOrchestrator>();
+        logger = {|#0:this.field|};
+        {|#1:logger|}.LogInformation(""Test"");
+        return Task.FromResult(""result"");
+    }
+}
+");
+
+        DiagnosticResult expected1 = BuildDiagnostic().WithLocation(0).WithArguments("RunAsync", "MyOrchestrator");
+        DiagnosticResult expected2 = BuildDiagnostic().WithLocation(1).WithArguments("RunAsync", "MyOrchestrator");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected1, expected2);
+    }
+
+    [Fact]
+    public async Task TaskOrchestratorHelperParameterReassignedToUnsafeValueHasDiag()
+    {
+        // Even when every call site passes a safe logger, a reassignment of the parameter inside
+        // the helper to a non-replay-safe value must flip the parameter to unsafe.
+        string code = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, string>
+{
+    readonly ILogger field;
+
+    public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        ILogger logger = context.CreateReplaySafeLogger<MyOrchestrator>();
+        this.Helper(logger);
+        return Task.FromResult(""result"");
+    }
+
+    private void Helper(ILogger logger)
+    {
+        logger = {|#0:this.field|};
+        {|#1:logger|}.LogInformation(""Test"");
+    }
+}
+");
+
+        DiagnosticResult expected1 = BuildDiagnostic().WithLocation(0).WithArguments("Helper", "MyOrchestrator");
+        DiagnosticResult expected2 = BuildDiagnostic().WithLocation(1).WithArguments("Helper", "MyOrchestrator");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected1, expected2);
+    }
+
+    [Fact]
     public async Task FuncOrchestratorWithLoggerHasDiag()
     {
         string code = @"

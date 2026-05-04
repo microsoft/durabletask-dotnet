@@ -188,6 +188,269 @@ public class MyOrchestrator : TaskOrchestrator<string, string>
     }
 
     [Fact]
+    public async Task TaskOrchestratorPassingReplaySafeLoggerToHelperHasNoDiag()
+    {
+        // Repro for https://github.com/microsoft/durabletask-dotnet/issues/717:
+        // a replay-safe logger passed to a helper method should not trigger DURABLE0010.
+        string code = Wrapper.WrapTaskOrchestrator(@"
+public record DemoInput(string Value);
+public record DemoResult(string Value);
+
+public class DemoOrchestrator : TaskOrchestrator<DemoInput, DemoResult>
+{
+    public override async Task<DemoResult> RunAsync(TaskOrchestrationContext context, DemoInput input)
+    {
+        var logger = context.CreateReplaySafeLogger(nameof(DemoOrchestrator));
+        LogData(logger);
+        return new DemoResult($""Processed: {input.Value}"");
+    }
+
+    private static void LogData(ILogger logger)
+    {
+        logger.LogInformation(""Logging some data for demonstration purposes."");
+    }
+}
+");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
+    }
+
+    [Fact]
+    public async Task TaskOrchestratorPassingReplaySafeLoggerThroughLocalAliasHasNoDiag()
+    {
+        string code = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, string>
+{
+    public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        ILogger logger = context.CreateReplaySafeLogger<MyOrchestrator>();
+        ILogger alias = logger;
+        Helper(alias);
+        return Task.FromResult(""result"");
+    }
+
+    private static void Helper(ILogger logger)
+    {
+        logger.LogInformation(""Test"");
+    }
+}
+");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
+    }
+
+    [Fact]
+    public async Task TaskOrchestratorPassingFieldLoggerToHelperHasDiag()
+    {
+        string code = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, string>
+{
+    readonly ILogger logger;
+
+    public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        Helper({|#0:this.logger|});
+        return Task.FromResult(""result"");
+    }
+
+    private static void Helper(ILogger logger)
+    {
+        {|#1:logger|}.LogInformation(""Test"");
+    }
+}
+");
+
+        DiagnosticResult expectedFieldRef = BuildDiagnostic().WithLocation(0).WithArguments("RunAsync", "MyOrchestrator");
+        DiagnosticResult expectedParamRef = BuildDiagnostic().WithLocation(1).WithArguments("Helper", "MyOrchestrator");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expectedFieldRef, expectedParamRef);
+    }
+
+    [Fact]
+    public async Task DurableFunctionOrchestrationPassingReplaySafeLoggerToHelperHasNoDiag()
+    {
+        string code = Wrapper.WrapDurableFunctionOrchestration(@"
+[Function(""Run"")]
+void Run([OrchestrationTrigger] TaskOrchestrationContext context)
+{
+    ILogger logger = context.CreateReplaySafeLogger(nameof(Run));
+    Helper(logger);
+}
+
+void Helper(ILogger logger)
+{
+    logger.LogInformation(""Test"");
+}
+");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
+    }
+
+    [Fact]
+    public async Task TaskOrchestratorReplaySafeLoggerIntoLocalFunctionHelperHasNoDiag()
+    {
+        string code = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, string>
+{
+    public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        ILogger logger = context.CreateReplaySafeLogger<MyOrchestrator>();
+        LogData(logger);
+        return Task.FromResult(""result"");
+
+        static void LogData(ILogger logger)
+        {
+            logger.LogInformation(""Test"");
+        }
+    }
+}
+");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
+    }
+
+    [Fact]
+    public async Task TaskOrchestratorHelperCalledWithMixedSafeAndUnsafeArgsHasDiag()
+    {
+        string code = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, string>
+{
+    readonly ILogger field;
+
+    public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        ILogger safe = context.CreateReplaySafeLogger<MyOrchestrator>();
+        Helper(safe);
+        Helper({|#0:this.field|});
+        return Task.FromResult(""result"");
+    }
+
+    private static void Helper(ILogger logger)
+    {
+        {|#1:logger|}.LogInformation(""Test"");
+    }
+}
+");
+
+        DiagnosticResult expectedFieldRef = BuildDiagnostic().WithLocation(0).WithArguments("RunAsync", "MyOrchestrator");
+        DiagnosticResult expectedParamRef = BuildDiagnostic().WithLocation(1).WithArguments("Helper", "MyOrchestrator");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expectedFieldRef, expectedParamRef);
+    }
+
+    [Fact]
+    public async Task TaskOrchestratorTransitiveHelperChainHasNoDiag()
+    {
+        string code = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, string>
+{
+    public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        ILogger logger = context.CreateReplaySafeLogger<MyOrchestrator>();
+        Outer(logger);
+        return Task.FromResult(""result"");
+    }
+
+    private static void Outer(ILogger logger)
+    {
+        Inner(logger);
+    }
+
+    private static void Inner(ILogger logger)
+    {
+        logger.LogInformation(""Test"");
+    }
+}
+");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
+    }
+
+    [Fact]
+    public async Task TaskOrchestratorRecursiveHelperWithSafeLoggerHasNoDiag()
+    {
+        string code = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, string>
+{
+    public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        ILogger logger = context.CreateReplaySafeLogger<MyOrchestrator>();
+        Log(logger, 3);
+        return Task.FromResult(""result"");
+    }
+
+    private static void Log(ILogger logger, int depth)
+    {
+        logger.LogInformation(""Test"");
+        if (depth > 0)
+        {
+            Log(logger, depth - 1);
+        }
+    }
+}
+");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code);
+    }
+
+    [Fact]
+    public async Task TaskOrchestratorConditionalAndCoalesceExpressionsForLoggerInitializer()
+    {
+        // Conditional with both branches safe → no diag.
+        // Coalesce with a non-safe LHS → flagged (we cannot prove the LHS is null at runtime).
+        string code = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, string>
+{
+    readonly ILogger? maybeNull;
+
+    public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        ILogger a = context.CreateReplaySafeLogger<MyOrchestrator>();
+        ILogger b = context.CreateReplaySafeLogger(nameof(MyOrchestrator));
+        ILogger conditional = input.Length > 0 ? a : b;
+        conditional.LogInformation(""ok"");
+
+        ILogger coalesced = {|#0:this.maybeNull|} ?? a;
+        {|#1:coalesced|}.LogInformation(""flagged"");
+
+        return Task.FromResult(""result"");
+    }
+}
+");
+
+        DiagnosticResult expectedFieldRef = BuildDiagnostic().WithLocation(0).WithArguments("RunAsync", "MyOrchestrator");
+        DiagnosticResult expectedLocalRef = BuildDiagnostic().WithLocation(1).WithArguments("RunAsync", "MyOrchestrator");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expectedFieldRef, expectedLocalRef);
+    }
+
+    [Fact]
+    public async Task TaskOrchestratorFieldAssignedFromCreateReplaySafeLoggerIsStillFlagged()
+    {
+        // Documents an intentional limitation: even when a field is assigned from CreateReplaySafeLogger,
+        // we treat field reads as unsafe because subsequent replays would re-execute the assignment
+        // (potentially with a different context) and the field may also be mutated from elsewhere.
+        // The assignment LHS itself is not flagged because it is write-only.
+        string code = Wrapper.WrapTaskOrchestrator(@"
+public class MyOrchestrator : TaskOrchestrator<string, string>
+{
+    ILogger? logger;
+
+    public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+    {
+        this.logger = context.CreateReplaySafeLogger<MyOrchestrator>();
+        {|#0:this.logger|}.LogInformation(""Test"");
+        return Task.FromResult(""result"");
+    }
+}
+");
+
+        DiagnosticResult expected = BuildDiagnostic().WithLocation(0).WithArguments("RunAsync", "MyOrchestrator");
+
+        await VerifyCS.VerifyDurableTaskAnalyzerAsync(code, expected);
+    }
+
+    [Fact]
     public async Task FuncOrchestratorWithLoggerHasDiag()
     {
         string code = @"

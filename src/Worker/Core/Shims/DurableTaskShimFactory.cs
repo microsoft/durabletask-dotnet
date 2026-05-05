@@ -150,6 +150,41 @@ public class DurableTaskShimFactory
     }
 
     /// <summary>
+    /// Runs an activity through the Durable Task activity middleware pipeline and returns the raw activity result.
+    /// </summary>
+    /// <param name="name">
+    /// The name of the activity. This should be the name the activity was invoked with.
+    /// </param>
+    /// <param name="activity">The activity to run.</param>
+    /// <param name="context">The Durable Task Framework activity context.</param>
+    /// <param name="rawInput">The raw serialized activity input.</param>
+    /// <param name="services">
+    /// The service provider for this activity invocation. If <c>null</c>, the factory service provider is used.
+    /// </param>
+    /// <param name="features">The middleware features for this activity invocation.</param>
+    /// <returns>The raw activity result after middleware has run.</returns>
+    public Task<object?> RunActivityAsync(
+        TaskName name,
+        ITaskActivity activity,
+        TaskContext context,
+        string? rawInput,
+        IServiceProvider? services = null,
+        IMiddlewareFeatures? features = null)
+    {
+        Check.NotDefault(name);
+        Check.NotNull(activity);
+        Check.NotNull(context);
+        return new TaskActivityShim(
+            this.loggerFactory,
+            this.options.DataConverter,
+            name,
+            activity,
+            services ?? this.services,
+            features,
+            this.activityMiddlewarePipeline).RunAndGetResultAsync(context, rawInput);
+    }
+
+    /// <summary>
     /// Creates a <see cref="TaskActivity" /> from a delegate.
     /// </summary>
     /// <param name="name">

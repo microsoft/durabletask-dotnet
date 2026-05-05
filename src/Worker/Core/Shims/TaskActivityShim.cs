@@ -72,9 +72,40 @@ class TaskActivityShim : TaskActivity
     }
 
     /// <inheritdoc/>
-    public override async Task<string?> RunAsync(TaskContext coreContext, string? rawInput)
+    public override Task<string?> RunAsync(TaskContext coreContext, string? rawInput)
+        => this.RunCoreAsync(coreContext, rawInput, output => this.dataConverter.Serialize(output));
+
+    /// <inheritdoc/>
+    /// <remarks>Not used/called.</remarks>
+    public override string Run(TaskContext context, string input) => throw new NotImplementedException();
+
+    /// <summary>
+    /// Runs the activity and returns the raw activity result after middleware has run.
+    /// </summary>
+    /// <param name="coreContext">The Durable Task Framework activity context.</param>
+    /// <param name="rawInput">The raw serialized activity input.</param>
+    /// <returns>The raw activity result after middleware has run.</returns>
+    internal Task<object?> RunAndGetResultAsync(TaskContext coreContext, string? rawInput)
+        => this.RunCoreAsync<object?>(coreContext, rawInput, output => output);
+
+    static string? StripArrayCharacters(string? input)
+    {
+        if (input != null && input.StartsWith('[') && input.EndsWith(']'))
+        {
+            // Strip the outer bracket characters
+            return input[1..^1];
+        }
+
+        return input;
+    }
+
+    async Task<TResult> RunCoreAsync<TResult>(
+        TaskContext coreContext,
+        string? rawInput,
+        Func<object?, TResult> resultSelector)
     {
         Check.NotNull(coreContext);
+        Check.NotNull(resultSelector);
         string? strippedRawInput = StripArrayCharacters(rawInput);
         object? deserializedInput = this.dataConverter.Deserialize(strippedRawInput, this.implementation.InputType);
         TaskActivityContextWrapper contextWrapper = new(coreContext, this.name);
@@ -96,33 +127,16 @@ class TaskActivityShim : TaskActivity
                 () => this.implementation.RunAsync(contextWrapper, deserializedInput));
             await this.middlewarePipeline.RunAsync(middlewareContext);
             object? output = middlewareContext.Result;
-
-            // Return the output (if any) as a serialized string.
-            string? serializedOutput = this.dataConverter.Serialize(output);
+            TResult result = resultSelector(output);
             this.logger.ActivityCompleted(instanceId, this.name);
 
-            return serializedOutput;
+            return result;
         }
         catch (Exception e)
         {
             this.logger.ActivityFailed(e, instanceId, this.name);
             throw;
         }
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>Not used/called.</remarks>
-    public override string Run(TaskContext context, string input) => throw new NotImplementedException();
-
-    static string? StripArrayCharacters(string? input)
-    {
-        if (input != null && input.StartsWith('[') && input.EndsWith(']'))
-        {
-            // Strip the outer bracket characters
-            return input[1..^1];
-        }
-
-        return input;
     }
 
     sealed class TaskActivityContextWrapper : TaskActivityContext

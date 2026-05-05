@@ -123,6 +123,37 @@ public class TaskActivityShimMiddlewareTests
     }
 
     [Fact]
+    public async Task RunActivityAsync_WithMiddleware_ReturnsRawResult()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
+        object expected = new { Message = "from-body" };
+        builder.UseActivityMiddleware(async (context, next) =>
+        {
+            await next(context);
+            context.Result.Should().BeSameAs(expected);
+        });
+        using ServiceProvider provider = services.BuildServiceProvider();
+        DurableTaskShimFactory factory = new(
+            workerName: "test",
+            services: provider,
+            options: null,
+            loggerFactory: NullLoggerFactory.Instance);
+        TaskContext innerContext = new(new OrchestrationInstance { InstanceId = "instance" });
+
+        // Act
+        object? result = await factory.RunActivityAsync(
+            "TestActivity",
+            FuncTaskActivity.Create<string, object?>((context, input) => Task.FromResult<object?>(expected)),
+            innerContext,
+            "\"input\"");
+
+        // Assert
+        result.Should().BeSameAs(expected);
+    }
+
+    [Fact]
     public async Task RunAsync_TypeMiddleware_ResolvesFromInvocationScope()
     {
         // Arrange

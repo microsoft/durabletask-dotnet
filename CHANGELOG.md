@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Add Durable Task worker middleware for orchestrations and activities.
 
 ## 1.24.1
 - Add retry to grpc calls that failed due to transient errors by @sophiatev ([#714](https://github.com/microsoft/durabletask-dotnet/pull/714))

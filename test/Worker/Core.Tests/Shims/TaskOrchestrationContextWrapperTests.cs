@@ -4,6 +4,7 @@
 using System.Reflection;
 using DurableTask.Core;
 using DurableTask.Core.Serializing.Internal;
+using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Microsoft.DurableTask.Worker.Shims;
@@ -151,6 +152,128 @@ public class TaskOrchestrationContextWrapperTests
     }
 
     [Fact]
+    public void EntitiesInCriticalSection_WhenCachedFeatureAccessedOffOrchestratorThreadAfterChecksEnabled_ThrowsIllegalAwaitError()
+    {
+        // Arrange
+        (TrackingOrchestrationContext innerContext, TaskOrchestrationEntityFeature feature) =
+            CreateCachedEntityFeatureWithChecksEnabled();
+
+        // Act
+        Action act = () => feature.InCriticalSection(out _);
+
+        // Assert
+        OrchestrationContext.IsOrchestratorThread.Should().BeFalse();
+        act.Should().ThrowExactly<InvalidOperationException>().WithMessage(IllegalAwaitErrorMessage);
+        innerContext.SentEvents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task LockEntitiesAsync_WhenCachedFeatureAccessedOffOrchestratorThreadAfterChecksEnabled_ThrowsIllegalAwaitError()
+    {
+        // Arrange
+        (TrackingOrchestrationContext innerContext, TaskOrchestrationEntityFeature feature) =
+            CreateCachedEntityFeatureWithChecksEnabled();
+
+        // Act
+        Func<Task> act = async () => await feature.LockEntitiesAsync(null!);
+
+        // Assert
+        OrchestrationContext.IsOrchestratorThread.Should().BeFalse();
+        await act.Should().ThrowExactlyAsync<InvalidOperationException>().WithMessage(IllegalAwaitErrorMessage);
+        innerContext.SentEvents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CallEntityAsyncWithResult_WhenCachedFeatureAccessedOffOrchestratorThreadAfterChecksEnabled_ThrowsIllegalAwaitError()
+    {
+        // Arrange
+        (TrackingOrchestrationContext innerContext, TaskOrchestrationEntityFeature feature) =
+            CreateCachedEntityFeatureWithChecksEnabled();
+
+        // Act
+        Func<Task> act = async () => await feature.CallEntityAsync<string>(default, "Get");
+
+        // Assert
+        OrchestrationContext.IsOrchestratorThread.Should().BeFalse();
+        await act.Should().ThrowExactlyAsync<InvalidOperationException>().WithMessage(IllegalAwaitErrorMessage);
+        innerContext.SentEvents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CallEntityAsync_WhenCachedFeatureAccessedOffOrchestratorThreadAfterChecksEnabled_ThrowsIllegalAwaitError()
+    {
+        // Arrange
+        (TrackingOrchestrationContext innerContext, TaskOrchestrationEntityFeature feature) =
+            CreateCachedEntityFeatureWithChecksEnabled();
+
+        // Act
+        Func<Task> act = async () => await feature.CallEntityAsync(default, "Set", 42);
+
+        // Assert
+        OrchestrationContext.IsOrchestratorThread.Should().BeFalse();
+        await act.Should().ThrowExactlyAsync<InvalidOperationException>().WithMessage(IllegalAwaitErrorMessage);
+        innerContext.SentEvents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SignalEntityAsync_WhenCachedFeatureAccessedOffOrchestratorThreadAfterChecksEnabled_ThrowsIllegalAwaitError()
+    {
+        // Arrange
+        (TrackingOrchestrationContext innerContext, TaskOrchestrationEntityFeature feature) =
+            CreateCachedEntityFeatureWithChecksEnabled();
+
+        // Act
+        Func<Task> act = async () => await feature.SignalEntityAsync(default, "Set", 42);
+
+        // Assert
+        OrchestrationContext.IsOrchestratorThread.Should().BeFalse();
+        await act.Should().ThrowExactlyAsync<InvalidOperationException>().WithMessage(IllegalAwaitErrorMessage);
+        innerContext.SentEvents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task LockReleaserDisposeAsync_WhenCachedFeatureAccessedOffOrchestratorThreadAfterChecksEnabled_ThrowsIllegalAwaitError()
+    {
+        // Arrange
+        (TrackingOrchestrationContext innerContext, TaskOrchestrationEntityFeature feature) =
+            CreateCachedEntityFeatureWithChecksEnabled();
+        Type entityContextType = feature.GetType();
+        Type lockReleaserType = entityContextType.GetNestedType("LockReleaser", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("The lock releaser type was not found.");
+        ConstructorInfo lockReleaserConstructor = lockReleaserType.GetConstructor(
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            types: [entityContextType, typeof(Guid)],
+            modifiers: null)
+            ?? throw new InvalidOperationException("The lock releaser constructor was not found.");
+        IAsyncDisposable lockReleaser = (IAsyncDisposable)lockReleaserConstructor.Invoke([feature, Guid.NewGuid()]);
+
+        // Act
+        Func<Task> act = async () => await lockReleaser.DisposeAsync();
+
+        // Assert
+        OrchestrationContext.IsOrchestratorThread.Should().BeFalse();
+        await act.Should().ThrowExactlyAsync<InvalidOperationException>().WithMessage(IllegalAwaitErrorMessage);
+        innerContext.SentEvents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ExitCriticalSectionIfNeeded_WhenCachedFeatureAccessedOffOrchestratorThreadAfterChecksEnabled_ThrowsIllegalAwaitError()
+    {
+        // Arrange
+        (TrackingOrchestrationContext innerContext, TaskOrchestrationContextWrapper wrapper) =
+            CreateCachedEntityFeatureWrapperWithChecksEnabled();
+
+        // Act
+        Action act = wrapper.ExitCriticalSectionIfNeeded;
+
+        // Assert
+        OrchestrationContext.IsOrchestratorThread.Should().BeFalse();
+        act.Should().ThrowExactly<InvalidOperationException>().WithMessage(IllegalAwaitErrorMessage);
+        innerContext.SentEvents.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task CallActivityAsync_MarksContextAccessed()
     {
         // Arrange
@@ -262,6 +385,40 @@ public class TaskOrchestrationContextWrapperTests
     static void InvokeCompleteExternalEvent(TaskOrchestrationContextWrapper wrapper, string eventName, string rawEventPayload)
     {
         CompleteExternalEventMethod.Invoke(wrapper, [eventName, rawEventPayload]);
+    }
+
+    static (TrackingOrchestrationContext InnerContext, TaskOrchestrationEntityFeature Feature) CreateCachedEntityFeatureWithChecksEnabled()
+    {
+        (TrackingOrchestrationContext innerContext, _, TaskOrchestrationEntityFeature feature) =
+            CreateCachedEntityFeatureStateWithChecksEnabled();
+
+        return (innerContext, feature);
+    }
+
+    static (TrackingOrchestrationContext InnerContext, TaskOrchestrationContextWrapper Wrapper) CreateCachedEntityFeatureWrapperWithChecksEnabled()
+    {
+        (TrackingOrchestrationContext innerContext, TaskOrchestrationContextWrapper wrapper, _) =
+            CreateCachedEntityFeatureStateWithChecksEnabled();
+
+        return (innerContext, wrapper);
+    }
+
+    static (
+        TrackingOrchestrationContext InnerContext,
+        TaskOrchestrationContextWrapper Wrapper,
+        TaskOrchestrationEntityFeature Feature) CreateCachedEntityFeatureStateWithChecksEnabled()
+    {
+        TrackingOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new(
+            "Test",
+            new DurableTaskWorkerOptions { EnableEntitySupport = true },
+            NullLoggerFactory.Instance,
+            null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "test-input");
+        TaskOrchestrationEntityFeature feature = wrapper.Entities;
+        wrapper.EnableIllegalAccessChecks();
+
+        return (innerContext, wrapper, feature);
     }
 
     sealed class TrackingOrchestrationContext : OrchestrationContext

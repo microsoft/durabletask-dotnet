@@ -331,6 +331,32 @@ public class TaskOrchestrationShimMiddlewareTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_WhenOrchestratorThreadFastNonDurableAwaitBeforeContextAccess_ThrowsIllegalAwaitError()
+    {
+        // Arrange
+        TaskCompletionSource<string> nonDurableTask = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TestOrchestrationContext innerContext = new();
+        TaskOrchestration shim = DurableTaskShimFactory.Default.CreateOrchestration(
+            "TestOrchestrator",
+            FuncTaskOrchestrator.Create<string, string>(async (context, input) =>
+            {
+                string result = await nonDurableTask.Task;
+                _ = context.CurrentUtcDateTime;
+                return result;
+            }));
+        Task<string?> executeTask = RunOnOrchestratorThread(() => shim.Execute(innerContext, "\"input\""));
+
+        // Act
+        nonDurableTask.SetResult("input");
+        Func<Task> act = async () => await executeTask;
+
+        // Assert
+        await act.Should()
+            .ThrowExactlyAsync<InvalidOperationException>()
+            .WithMessage(IllegalAwaitErrorMessage);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WhenOrchestratorAwaitsDurableActivity_Completes()
     {
         // Arrange

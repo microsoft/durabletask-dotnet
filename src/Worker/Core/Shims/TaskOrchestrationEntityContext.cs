@@ -46,6 +46,7 @@ sealed partial class TaskOrchestrationContextWrapper
         /// <inheritdoc/>
         public override async Task<IAsyncDisposable> LockEntitiesAsync(IEnumerable<EntityInstanceId> entityIds)
         {
+            this.EnsureLegalAccess();
             Check.NotNull(entityIds);
 
             EntityId[] dtEntities = entityIds.Select(x => new DurableTaskCore.Entities.EntityId(x.Name, x.Key)).ToArray();
@@ -89,6 +90,7 @@ sealed partial class TaskOrchestrationContextWrapper
         /// <inheritdoc/>
         public override async Task<TResult> CallEntityAsync<TResult>(EntityInstanceId id, string operationName, object? input = null, CallEntityOptions? options = null)
         {
+            this.EnsureLegalAccess();
             Check.NotDefault(id);
             OperationResult operationResult = await this.CallEntityInternalAsync(id, operationName, input);
 
@@ -105,6 +107,7 @@ sealed partial class TaskOrchestrationContextWrapper
         /// <inheritdoc/>
         public override async Task CallEntityAsync(EntityInstanceId id, string operationName, object? input = null, CallEntityOptions? options = null)
         {
+            this.EnsureLegalAccess();
             Check.NotDefault(id);
             OperationResult operationResult = await this.CallEntityInternalAsync(id, operationName, input);
 
@@ -117,6 +120,7 @@ sealed partial class TaskOrchestrationContextWrapper
         /// <inheritdoc/>
         public override Task SignalEntityAsync(EntityInstanceId id, string operationName, object? input = null, SignalEntityOptions? options = null)
         {
+            this.EnsureLegalAccess();
             Check.NotDefault(id);
             this.SendOperationMessage(id.ToString(), operationName, input, oneWay: true, scheduledTime: options?.SignalTime);
             return Task.CompletedTask;
@@ -125,6 +129,7 @@ sealed partial class TaskOrchestrationContextWrapper
         /// <inheritdoc/>
         public override bool InCriticalSection([NotNullWhen(true)] out IReadOnlyList<EntityInstanceId>? entityIds)
         {
+            this.EnsureLegalAccess();
             if (this.EntityContext.IsInsideCriticalSection)
             {
                 entityIds = this.EntityContext.GetAvailableEntities().Select(x => new EntityInstanceId(x.Name, x.Key)).ToList();
@@ -143,6 +148,7 @@ sealed partial class TaskOrchestrationContextWrapper
         /// <param name="matchCriticalSectionId">exit the critical section only if the critical section ID matches.</param>
         public void ExitCriticalSection(Guid? matchCriticalSectionId = null)
         {
+            this.EnsureLegalAccess();
             if (this.EntityContext.IsInsideCriticalSection
                 && (matchCriticalSectionId == null || matchCriticalSectionId == this.EntityContext.CurrentCriticalSectionId))
             {
@@ -170,6 +176,11 @@ sealed partial class TaskOrchestrationContextWrapper
              failureDetails.StackTrace,
              failureDetails.InnerFailure != null ? ConvertFailureDetails(failureDetails.InnerFailure) : null,
              failureDetails.Properties);
+
+        void EnsureLegalAccess()
+        {
+            this.wrapper.EnsureLegalAccess();
+        }
 
         async Task<OperationResult> CallEntityInternalAsync(EntityInstanceId id, string operationName, object? input)
         {
@@ -223,7 +234,7 @@ sealed partial class TaskOrchestrationContextWrapper
             return guid;
         }
 
-        class LockReleaser : IAsyncDisposable
+        sealed class LockReleaser : IAsyncDisposable
         {
             readonly TaskOrchestrationEntityContext context;
             readonly Guid criticalSectionId;
@@ -236,6 +247,7 @@ sealed partial class TaskOrchestrationContextWrapper
 
             public ValueTask DisposeAsync()
             {
+                this.context.EnsureLegalAccess();
                 this.context.ExitCriticalSection(this.criticalSectionId);
                 return default;
             }

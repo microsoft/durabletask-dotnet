@@ -398,6 +398,50 @@ public class GrpcOrchestrationRunnerTests
     }
 
     [Fact]
+    public void LoadAndRun_WithMiddleware_PopulatesFeatures()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var capturedFeature = new CapturedOrchestrationFeature();
+        services.AddSingleton(capturedFeature);
+        services.AddDurableTaskWorker(
+            builder => builder.UseOrchestrationMiddleware<CapturingOrchestrationFeatureMiddleware>());
+        using ServiceProvider provider = services.BuildServiceProvider();
+        var expectedFeature = new TestFeature();
+        MiddlewareFeatureCollection features = new();
+        features.Set(expectedFeature);
+        var historyEvent = new Protobuf.HistoryEvent
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new Protobuf.ExecutionStartedEvent()
+            {
+                OrchestrationInstance = new Protobuf.OrchestrationInstance
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+            },
+        };
+        Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludeState", Value.ForBool(true) } });
+        byte[] requestBytes = orchestratorRequest.ToByteArray();
+        string requestString = Convert.ToBase64String(requestBytes);
+
+        // Act
+        GrpcOrchestrationRunner.LoadAndRun(
+            requestString,
+            new SimpleOrchestrator(),
+            extendedSessionsCache: null,
+            services: provider,
+            features: features);
+
+        // Assert
+        capturedFeature.Feature.Should().BeSameAs(expectedFeature);
+    }
+
+    [Fact]
     public void LoadAndRun_WithRegisteredShimFactory_UsesRegisteredFactory()
     {
         // Arrange
@@ -803,6 +847,33 @@ public class GrpcOrchestrationRunnerTests
     sealed class CapturedOrchestrationTags
     {
         public IReadOnlyDictionary<string, string>? Tags { get; set; }
+    }
+
+    sealed class CapturingOrchestrationFeatureMiddleware : ITaskOrchestrationMiddleware
+    {
+        readonly CapturedOrchestrationFeature capturedFeature;
+
+        public CapturingOrchestrationFeatureMiddleware(CapturedOrchestrationFeature capturedFeature)
+        {
+            this.capturedFeature = capturedFeature;
+        }
+
+        public Task InvokeAsync(
+            TaskOrchestrationMiddlewareContext context,
+            TaskOrchestrationMiddlewareDelegate next)
+        {
+            this.capturedFeature.Feature = context.Features.Get<TestFeature>();
+            return next(context);
+        }
+    }
+
+    sealed class CapturedOrchestrationFeature
+    {
+        public TestFeature? Feature { get; set; }
+    }
+
+    sealed class TestFeature
+    {
     }
 
     sealed class ProviderMarkerOrchestrationMiddleware : ITaskOrchestrationMiddleware

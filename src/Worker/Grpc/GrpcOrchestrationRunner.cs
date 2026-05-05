@@ -4,6 +4,7 @@
 using DurableTask.Core;
 using DurableTask.Core.History;
 using Google.Protobuf;
+using Microsoft.DurableTask.Worker.Middleware;
 using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
@@ -119,6 +120,44 @@ public static class GrpcOrchestrationRunner
         ExtendedSessionsCache? extendedSessionsCache,
         IServiceProvider? services = null)
     {
+        return LoadAndRun(encodedOrchestratorRequest, implementation, extendedSessionsCache, services, features: null);
+    }
+
+    /// <summary>
+    /// Deserializes orchestration history from <paramref name="encodedOrchestratorRequest"/> and uses it to resume the
+    /// orchestrator implemented by <paramref name="implementation"/>.
+    /// </summary>
+    /// <param name="encodedOrchestratorRequest">
+    /// The encoded protobuf payload representing an orchestration execution request. This is a base64-encoded string.
+    /// </param>
+    /// <param name="implementation">
+    /// An <see cref="ITaskOrchestrator"/> implementation that defines the orchestrator logic.
+    /// </param>
+    /// <param name="extendedSessionsCache">
+    /// The cache of extended sessions which can be used to retrieve the <see cref="ExtendedSessionState"/> if this orchestration request is from within an extended session.
+    /// </param>
+    /// <param name="services">
+    /// Optional <see cref="IServiceProvider"/> from which injected dependencies can be retrieved.
+    /// </param>
+    /// <param name="features">
+    /// Optional middleware features for this orchestration invocation.
+    /// </param>
+    /// <returns>
+    /// Returns a serialized set of orchestrator actions that should be used as the return value of the orchestrator function trigger.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown if <paramref name="encodedOrchestratorRequest"/> or <paramref name="implementation"/> is <c>null</c>.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown if <paramref name="encodedOrchestratorRequest"/> contains invalid data.
+    /// </exception>
+    public static string LoadAndRun(
+        string encodedOrchestratorRequest,
+        ITaskOrchestrator implementation,
+        ExtendedSessionsCache? extendedSessionsCache,
+        IServiceProvider? services,
+        IMiddlewareFeatures? features)
+    {
         Check.NotNullOrEmpty(encodedOrchestratorRequest);
         Check.NotNull(implementation);
 
@@ -209,7 +248,7 @@ public static class GrpcOrchestrationRunner
                         properties,
                         services,
                         parent,
-                        features: null,
+                        features,
                         tags: tags);
 
                 TaskOrchestrationExecutor executor = new(

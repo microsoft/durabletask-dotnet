@@ -214,6 +214,12 @@ public class DurableTaskWorkerBuilderMiddlewareExtensionsTests
         using IServiceScope scope = provider.CreateScope();
 
         // Assert
+        services.Should().Contain(descriptor =>
+            descriptor.ServiceType == typeof(TestOrchestrationMiddleware)
+            && descriptor.Lifetime == ServiceLifetime.Scoped);
+        services.Should().Contain(descriptor =>
+            descriptor.ServiceType == typeof(TestActivityMiddleware)
+            && descriptor.Lifetime == ServiceLifetime.Scoped);
         scope.ServiceProvider.GetRequiredService<TestOrchestrationMiddleware>().Should().NotBeNull();
         scope.ServiceProvider.GetRequiredService<TestActivityMiddleware>().Should().NotBeNull();
     }

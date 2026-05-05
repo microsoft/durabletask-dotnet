@@ -11,7 +11,7 @@ namespace Microsoft.DurableTask.Worker;
 /// <summary>
 /// Extensions for <see cref="IDurableTaskWorkerBuilder" />.
 /// </summary>
-public static class DurableTaskWorkerBuilderExtensions
+public static partial class DurableTaskWorkerBuilderExtensions
 {
     /// <summary>
     /// Adds tasks to the current builder.

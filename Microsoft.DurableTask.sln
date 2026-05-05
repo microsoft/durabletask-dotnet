@@ -115,6 +115,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NamespaceGenerationSample",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReplaySafeLoggerFactorySample", "samples\ReplaySafeLoggerFactorySample\ReplaySafeLoggerFactorySample.csproj", "{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiddlewareConsoleApp", "samples\MiddlewareConsoleApp\MiddlewareConsoleApp.csproj", "{57852771-4C98-4F7D-9372-ADFE6F84EE8F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -701,7 +703,18 @@ Global
 		{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4}.Release|x64.Build.0 = Release|Any CPU
 		{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4}.Release|x86.ActiveCfg = Release|Any CPU
 		{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4}.Release|x86.Build.0 = Release|Any CPU
-
+		{57852771-4C98-4F7D-9372-ADFE6F84EE8F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{57852771-4C98-4F7D-9372-ADFE6F84EE8F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{57852771-4C98-4F7D-9372-ADFE6F84EE8F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{57852771-4C98-4F7D-9372-ADFE6F84EE8F}.Debug|x64.Build.0 = Debug|Any CPU
+		{57852771-4C98-4F7D-9372-ADFE6F84EE8F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{57852771-4C98-4F7D-9372-ADFE6F84EE8F}.Debug|x86.Build.0 = Debug|Any CPU
+		{57852771-4C98-4F7D-9372-ADFE6F84EE8F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{57852771-4C98-4F7D-9372-ADFE6F84EE8F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{57852771-4C98-4F7D-9372-ADFE6F84EE8F}.Release|x64.ActiveCfg = Release|Any CPU
+		{57852771-4C98-4F7D-9372-ADFE6F84EE8F}.Release|x64.Build.0 = Release|Any CPU
+		{57852771-4C98-4F7D-9372-ADFE6F84EE8F}.Release|x86.ActiveCfg = Release|Any CPU
+		{57852771-4C98-4F7D-9372-ADFE6F84EE8F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -759,7 +772,7 @@ Global
 		{4A7305AE-AAAE-43AE-AAB2-DA58DACC6FA8} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
 		{5A69FD28-D814-490E-A76B-B0A5F88C25B2} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
 		{8E7BECBC-7226-4778-B8F2-8EBDFF0D3BA4} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
-
+		{57852771-4C98-4F7D-9372-ADFE6F84EE8F} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AB41CB55-35EA-4986-A522-387AB3402E71}

@@ -202,7 +202,12 @@ public static class GrpcOrchestrationRunner
                     ? new(new(p.Name), p.OrchestrationInstance.InstanceId)
                     : null;
 
-                TaskOrchestration shim = factory.CreateOrchestration(orchestratorName, implementation, properties, parent);
+                TaskOrchestration shim = factory.CreateOrchestration(
+                    orchestratorName,
+                    implementation,
+                    properties,
+                    parent,
+                    runtimeState.Tags != null ? new Dictionary<string, string>(runtimeState.Tags) : null);
 
                 TaskOrchestrationExecutor executor = new(
                     runtimeState,

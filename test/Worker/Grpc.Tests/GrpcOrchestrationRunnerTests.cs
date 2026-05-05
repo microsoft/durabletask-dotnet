@@ -219,10 +219,10 @@ public class GrpcOrchestrationRunnerTests
     }
 
     /// <summary>
-    /// These tests verify that a malformed/nonexistent "IncludeState" parameter means that the worker will attempt to 
-    /// fulfill the orchestration request and not request a history for it. However, it is of course very undesirable that a 
+    /// These tests verify that a malformed/nonexistent "IncludeState" parameter means that the worker will attempt to
+    /// fulfill the orchestration request and not request a history for it. However, it is of course very undesirable that a
     /// history is not attached to the request, but no history is requested by the worker due to a malformed "IncludeState" parameter
-    /// even when it needs one to fulfill the request. This would need to be checked on whatever side is calling this SDK. 
+    /// even when it needs one to fulfill the request. This would need to be checked on whatever side is calling this SDK.
     /// </summary>
     [Fact]
     public void MalformedIncludeStateParameter_Means_NoHistoryRequired()
@@ -351,6 +351,52 @@ public class GrpcOrchestrationRunnerTests
     }
 
     [Fact]
+    public void LoadAndRun_WithMiddleware_PopulatesContextTagsFromExecutionStartedEvent()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var capturedTags = new CapturedOrchestrationTags();
+        services.AddSingleton(capturedTags);
+        services.AddDurableTaskWorker(
+            builder => builder.UseOrchestrationMiddleware<CapturingOrchestrationTagsMiddleware>());
+        using ServiceProvider provider = services.BuildServiceProvider();
+        var historyEvent = new Protobuf.HistoryEvent
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new Protobuf.ExecutionStartedEvent()
+            {
+                OrchestrationInstance = new Protobuf.OrchestrationInstance
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+                Tags =
+                {
+                    { "source", "grpc" },
+                    { "tenant", "contoso" },
+                },
+            },
+        };
+        Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludeState", Value.ForBool(true) } });
+        byte[] requestBytes = orchestratorRequest.ToByteArray();
+        string requestString = Convert.ToBase64String(requestBytes);
+
+        // Act
+        GrpcOrchestrationRunner.LoadAndRun(requestString, new SimpleOrchestrator(), services: provider);
+
+        // Assert
+        capturedTags.Tags.Should().NotBeNull();
+        capturedTags.Tags.Should().Equal(new Dictionary<string, string>
+        {
+            ["source"] = "grpc",
+            ["tenant"] = "contoso",
+        });
+    }
+
+    [Fact]
     public void Complete_Orchestration_NotStored()
     {
         using var extendedSessions = new ExtendedSessionsCache();
@@ -449,7 +495,7 @@ public class GrpcOrchestrationRunnerTests
         Assert.True(extendedSessions.IsInitialized);
         Assert.True(extendedSessions.GetOrInitializeCache(extendedSessionIdleTimeout).TryGetValue(TestInstanceId, out object? extendedSession));
 
-        // Wait for longer than the timeout to account for finite cache scan for stale items frequency 
+        // Wait for longer than the timeout to account for finite cache scan for stale items frequency
         await Task.Delay(extendedSessionIdleTimeout * 1000 * 2);
         Assert.False(extendedSessions.GetOrInitializeCache(extendedSessionIdleTimeout).TryGetValue(TestInstanceId, out extendedSession));
 
@@ -581,5 +627,28 @@ public class GrpcOrchestrationRunnerTests
             TaskOrchestrationMiddlewareContext context,
             TaskOrchestrationMiddlewareDelegate next)
             => next(context);
+    }
+
+    sealed class CapturingOrchestrationTagsMiddleware : ITaskOrchestrationMiddleware
+    {
+        readonly CapturedOrchestrationTags capturedTags;
+
+        public CapturingOrchestrationTagsMiddleware(CapturedOrchestrationTags capturedTags)
+        {
+            this.capturedTags = capturedTags;
+        }
+
+        public Task InvokeAsync(
+            TaskOrchestrationMiddlewareContext context,
+            TaskOrchestrationMiddlewareDelegate next)
+        {
+            this.capturedTags.Tags = context.Tags;
+            return next(context);
+        }
+    }
+
+    sealed class CapturedOrchestrationTags
+    {
+        public IReadOnlyDictionary<string, string>? Tags { get; set; }
     }
 }

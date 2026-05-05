@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.ObjectModel;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
 using Microsoft.DurableTask.Entities;
@@ -187,7 +188,8 @@ public class DurableTaskShimFactory
             parent,
             this.services,
             null,
-            this.orchestrationMiddlewarePipeline);
+            this.orchestrationMiddlewarePipeline,
+            Tags: null);
         return new TaskOrchestrationShim(context, orchestrator);
     }
 
@@ -209,6 +211,29 @@ public class DurableTaskShimFactory
         ParentOrchestrationInstance? parent,
         IMiddlewareFeatures? features)
     {
+        return this.CreateOrchestration(name, orchestrator, services, parent, features, tags: null);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="TaskOrchestration" /> from a <see cref="ITaskOrchestrator" />.
+    /// </summary>
+    /// <param name="name">
+    /// The name of the orchestration. This should be the name the orchestration was invoked with.
+    /// </param>
+    /// <param name="orchestrator">The orchestration to wrap.</param>
+    /// <param name="services">The service provider for this orchestration invocation.</param>
+    /// <param name="parent">The orchestration parent details or <c>null</c> if no parent.</param>
+    /// <param name="features">The middleware features for this orchestration invocation.</param>
+    /// <param name="tags">The orchestration tags, when provided by a reliable source.</param>
+    /// <returns>A new <see cref="TaskOrchestration" />.</returns>
+    public TaskOrchestration CreateOrchestration(
+        TaskName name,
+        ITaskOrchestrator orchestrator,
+        IServiceProvider services,
+        ParentOrchestrationInstance? parent,
+        IMiddlewareFeatures? features,
+        IReadOnlyDictionary<string, string>? tags)
+    {
         Check.NotDefault(name);
         Check.NotNull(orchestrator);
         Check.NotNull(services);
@@ -219,7 +244,8 @@ public class DurableTaskShimFactory
             parent,
             services,
             features,
-            this.orchestrationMiddlewarePipeline);
+            this.orchestrationMiddlewarePipeline,
+            CopyTags(tags));
         return new TaskOrchestrationShim(context, orchestrator);
     }
 
@@ -250,6 +276,27 @@ public class DurableTaskShimFactory
     /// </param>
     /// <param name="orchestrator">The orchestration to wrap.</param>
     /// <param name="properties">Configuration for the orchestration.</param>
+    /// <param name="parent">The orchestration parent details or <c>null</c> if no parent.</param>
+    /// <param name="tags">The orchestration tags, when provided by a reliable source.</param>
+    /// <returns>A new <see cref="TaskOrchestration" />.</returns>
+    public TaskOrchestration CreateOrchestration(
+        TaskName name,
+        ITaskOrchestrator orchestrator,
+        IReadOnlyDictionary<string, object?> properties,
+        ParentOrchestrationInstance? parent,
+        IReadOnlyDictionary<string, string>? tags)
+    {
+        return this.CreateOrchestration(name, orchestrator, properties, this.services, parent, features: null, tags);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="TaskOrchestration" /> from a <see cref="ITaskOrchestrator" />.
+    /// </summary>
+    /// <param name="name">
+    /// The name of the orchestration. This should be the name the orchestration was invoked with.
+    /// </param>
+    /// <param name="orchestrator">The orchestration to wrap.</param>
+    /// <param name="properties">Configuration for the orchestration.</param>
     /// <param name="services">The service provider for this orchestration invocation.</param>
     /// <param name="parent">The orchestration parent details or <c>null</c> if no parent.</param>
     /// <param name="features">The middleware features for this orchestration invocation.</param>
@@ -262,6 +309,31 @@ public class DurableTaskShimFactory
         ParentOrchestrationInstance? parent,
         IMiddlewareFeatures? features)
     {
+        return this.CreateOrchestration(name, orchestrator, properties, services, parent, features, tags: null);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="TaskOrchestration" /> from a <see cref="ITaskOrchestrator" />.
+    /// </summary>
+    /// <param name="name">
+    /// The name of the orchestration. This should be the name the orchestration was invoked with.
+    /// </param>
+    /// <param name="orchestrator">The orchestration to wrap.</param>
+    /// <param name="properties">Configuration for the orchestration.</param>
+    /// <param name="services">The service provider for this orchestration invocation.</param>
+    /// <param name="parent">The orchestration parent details or <c>null</c> if no parent.</param>
+    /// <param name="features">The middleware features for this orchestration invocation.</param>
+    /// <param name="tags">The orchestration tags, when provided by a reliable source.</param>
+    /// <returns>A new <see cref="TaskOrchestration" />.</returns>
+    public TaskOrchestration CreateOrchestration(
+        TaskName name,
+        ITaskOrchestrator orchestrator,
+        IReadOnlyDictionary<string, object?> properties,
+        IServiceProvider services,
+        ParentOrchestrationInstance? parent,
+        IMiddlewareFeatures? features,
+        IReadOnlyDictionary<string, string>? tags)
+    {
         Check.NotDefault(name);
         Check.NotNull(orchestrator);
         Check.NotNull(properties);
@@ -273,7 +345,8 @@ public class DurableTaskShimFactory
             parent,
             services,
             features,
-            this.orchestrationMiddlewarePipeline);
+            this.orchestrationMiddlewarePipeline,
+            CopyTags(tags));
         return new TaskOrchestrationShim(context, orchestrator, properties);
     }
 
@@ -317,5 +390,21 @@ public class DurableTaskShimFactory
         // deserialization and allocation overheads.
         ILogger logger = this.loggerFactory.CreateLogger(entity.GetType());
         return new TaskEntityShim(this.options.DataConverter, entity, entityId, logger);
+    }
+
+    static ReadOnlyDictionary<string, string>? CopyTags(IReadOnlyDictionary<string, string>? tags)
+    {
+        if (tags is null)
+        {
+            return null;
+        }
+
+        Dictionary<string, string> copy = new();
+        foreach (KeyValuePair<string, string> tag in tags)
+        {
+            copy.Add(tag.Key, tag.Value);
+        }
+
+        return new ReadOnlyDictionary<string, string>(copy);
     }
 }

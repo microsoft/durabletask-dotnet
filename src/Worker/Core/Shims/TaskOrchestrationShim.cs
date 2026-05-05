@@ -80,6 +80,7 @@ partial class TaskOrchestrationShim : TaskOrchestration
                 instanceId,
                 this.wrapperContext.Version,
                 this.invocationContext.Parent,
+                this.invocationContext.Tags,
                 innerContext.IsReplaying,
                 this.implementation.InputType,
                 input,

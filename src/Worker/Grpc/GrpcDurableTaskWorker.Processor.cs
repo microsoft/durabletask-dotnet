@@ -738,7 +738,8 @@ sealed partial class GrpcDurableTaskWorker
                             orchestrator,
                             scope.ServiceProvider,
                             parent,
-                            features: null);
+                            features: null,
+                            tags: runtimeState.Tags != null ? new Dictionary<string, string>(runtimeState.Tags) : null);
                         TaskOrchestrationExecutor executor = new(
                             runtimeState,
                             shim,

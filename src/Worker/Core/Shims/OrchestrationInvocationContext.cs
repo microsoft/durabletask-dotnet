@@ -16,6 +16,7 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// <param name="Services">The service provider for this orchestration invocation.</param>
 /// <param name="Features">The middleware features for this orchestration invocation.</param>
 /// <param name="MiddlewarePipeline">The orchestration middleware pipeline.</param>
+/// <param name="Tags">The orchestration tags, when provided by a reliable source.</param>
 record OrchestrationInvocationContext(
     TaskName Name,
     DurableTaskWorkerOptions Options,
@@ -23,4 +24,5 @@ record OrchestrationInvocationContext(
     ParentOrchestrationInstance? Parent = null,
     IServiceProvider? Services = null,
     IMiddlewareFeatures? Features = null,
-    TaskOrchestrationMiddlewarePipeline? MiddlewarePipeline = null);
+    TaskOrchestrationMiddlewarePipeline? MiddlewarePipeline = null,
+    IReadOnlyDictionary<string, string>? Tags = null);

@@ -88,6 +88,58 @@ public class TaskOrchestrationShimMiddlewareTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_WithMiddlewareAndTags_PopulatesContextTagsFromDefensiveCopy()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        IReadOnlyDictionary<string, string>? observedTags = null;
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
+        builder.UseOrchestrationMiddleware(async (context, next) =>
+        {
+            observedTags = context.Tags;
+            await next(context);
+        });
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+        DurableTaskShimFactory factory = new(
+            workerName: "test",
+            services: provider,
+            options: null,
+            loggerFactory: NullLoggerFactory.Instance);
+        Dictionary<string, string> tags = new()
+        {
+            ["source"] = "grpc",
+            ["tenant"] = "contoso",
+        };
+        TaskOrchestration shim = factory.CreateOrchestration(
+            "TestOrchestrator",
+            FuncTaskOrchestrator.Create<string, string>((context, input) => Task.FromResult("output")),
+            provider,
+            parent: null,
+            features: null,
+            tags: tags);
+        tags["source"] = "mutated";
+        tags["extra"] = "not-copied";
+
+        // Act
+        string? output = await shim.Execute(new TestOrchestrationContext(), "\"input\"");
+
+        // Assert
+        output.Should().Be("\"output\"");
+        observedTags.Should().NotBeNull();
+        observedTags.Should().Equal(new Dictionary<string, string>
+        {
+            ["source"] = "grpc",
+            ["tenant"] = "contoso",
+        });
+        if (observedTags is IDictionary<string, string> mutableTags)
+        {
+            Action mutate = () => mutableTags["source"] = "changed";
+            mutate.Should().Throw<NotSupportedException>();
+        }
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WhenOrchestrationMiddlewareDoesNotCallNext_Throws()
     {
         // Arrange

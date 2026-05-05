@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.ObjectModel;
+
 namespace Microsoft.DurableTask.Worker.Middleware;
 
 /// <summary>
@@ -18,6 +20,7 @@ internal sealed class DefaultTaskOrchestrationMiddlewareContext : TaskOrchestrat
     /// <param name="instanceId">The orchestration instance ID.</param>
     /// <param name="version">The orchestration version.</param>
     /// <param name="parent">The parent orchestration instance.</param>
+    /// <param name="tags">The orchestration tags, when provided by a reliable source.</param>
     /// <param name="isReplaying">A value indicating whether the orchestration is replaying.</param>
     /// <param name="inputType">The declared orchestration input type.</param>
     /// <param name="input">The deserialized orchestration input.</param>
@@ -31,6 +34,7 @@ internal sealed class DefaultTaskOrchestrationMiddlewareContext : TaskOrchestrat
         string instanceId,
         string version,
         ParentOrchestrationInstance? parent,
+        IReadOnlyDictionary<string, string>? tags,
         bool isReplaying,
         Type inputType,
         object? input,
@@ -44,6 +48,7 @@ internal sealed class DefaultTaskOrchestrationMiddlewareContext : TaskOrchestrat
         this.InstanceId = Check.NotNull(instanceId);
         this.Version = version;
         this.Parent = parent;
+        this.Tags = CopyTags(tags);
         this.IsReplaying = isReplaying;
         this.InputType = Check.NotNull(inputType);
         this.Input = input;
@@ -67,7 +72,7 @@ internal sealed class DefaultTaskOrchestrationMiddlewareContext : TaskOrchestrat
     public override ParentOrchestrationInstance? Parent { get; }
 
     /// <inheritdoc/>
-    public override IReadOnlyDictionary<string, string>? Tags => null;
+    public override IReadOnlyDictionary<string, string>? Tags { get; }
 
     /// <inheritdoc/>
     public override bool IsReplaying { get; }
@@ -111,5 +116,21 @@ internal sealed class DefaultTaskOrchestrationMiddlewareContext : TaskOrchestrat
     {
         this.BodyInvoked = true;
         this.result = await this.body();
+    }
+
+    static ReadOnlyDictionary<string, string>? CopyTags(IReadOnlyDictionary<string, string>? tags)
+    {
+        if (tags is null)
+        {
+            return null;
+        }
+
+        Dictionary<string, string> copy = new();
+        foreach (KeyValuePair<string, string> tag in tags)
+        {
+            copy.Add(tag.Key, tag.Value);
+        }
+
+        return new ReadOnlyDictionary<string, string>(copy);
     }
 }

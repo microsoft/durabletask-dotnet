@@ -27,10 +27,12 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     readonly OrchestrationInvocationContext invocationContext;
     readonly ILogger logger;
     readonly object? deserializedInput;
+    readonly IReadOnlyDictionary<string, object?> properties;
 
     int newGuidCounter;
     object? customStatus;
     bool preserveUnprocessedEventsOnContinueAsNew;
+    bool validateOrchestratorThreadOnAccess;
     TaskOrchestrationEntityContext? entityFeature;
 
     /// <summary>
@@ -54,45 +56,91 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <param name="invocationContext">The invocation context.</param>
     /// <param name="deserializedInput">The deserialized input.</param>
     /// <param name="properties">The configuration for context.</param>
+    /// <param name="validateOrchestratorThreadOnAccess">Whether context access should validate the orchestrator thread.</param>
     public TaskOrchestrationContextWrapper(
         OrchestrationContext innerContext,
         OrchestrationInvocationContext invocationContext,
         object? deserializedInput,
-        IReadOnlyDictionary<string, object?> properties)
+        IReadOnlyDictionary<string, object?> properties,
+        bool validateOrchestratorThreadOnAccess = false)
     {
         this.innerContext = Check.NotNull(innerContext);
         this.invocationContext = Check.NotNull(invocationContext);
-        this.Properties = Check.NotNull(properties);
+        this.properties = Check.NotNull(properties);
+        this.validateOrchestratorThreadOnAccess = validateOrchestratorThreadOnAccess;
 
-        this.logger = this.CreateReplaySafeLogger("Microsoft.DurableTask");
+        this.logger = base.CreateReplaySafeLogger("Microsoft.DurableTask");
         this.deserializedInput = deserializedInput;
     }
 
     /// <inheritdoc/>
-    public override TaskName Name => this.invocationContext.Name;
+    public override TaskName Name
+    {
+        get
+        {
+            this.EnsureLegalAccess();
+            return this.invocationContext.Name;
+        }
+    }
 
     /// <inheritdoc/>
-    public override string InstanceId => this.innerContext.OrchestrationInstance.InstanceId;
+    public override string InstanceId
+    {
+        get
+        {
+            this.EnsureLegalAccess();
+            return this.innerContext.OrchestrationInstance.InstanceId;
+        }
+    }
 
     /// <inheritdoc/>
-    public override ParentOrchestrationInstance? Parent => this.invocationContext.Parent;
+    public override ParentOrchestrationInstance? Parent
+    {
+        get
+        {
+            this.EnsureLegalAccess();
+            return this.invocationContext.Parent;
+        }
+    }
 
     /// <inheritdoc/>
-    public override bool IsReplaying => this.innerContext.IsReplaying;
+    public override bool IsReplaying
+    {
+        get
+        {
+            this.EnsureLegalAccess();
+            return this.innerContext.IsReplaying;
+        }
+    }
 
     /// <inheritdoc/>
-    public override DateTime CurrentUtcDateTime => this.innerContext.CurrentUtcDateTime;
+    public override DateTime CurrentUtcDateTime
+    {
+        get
+        {
+            this.EnsureLegalAccess();
+            return this.innerContext.CurrentUtcDateTime;
+        }
+    }
 
     /// <summary>
     /// Gets the configuration settings for the orchestration.
     /// </summary>
-    public override IReadOnlyDictionary<string, object?> Properties { get; }
+    public override IReadOnlyDictionary<string, object?> Properties
+    {
+        get
+        {
+            this.EnsureLegalAccess();
+            return this.properties;
+        }
+    }
 
     /// <inheritdoc/>
     public override TaskOrchestrationEntityFeature Entities
     {
         get
         {
+            this.EnsureLegalAccess();
             if (this.entityFeature == null)
             {
                 if (this.invocationContext.Options.EnableEntitySupport)
@@ -110,7 +158,29 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     }
 
     /// <inheritdoc/>
-    public override string Version => this.innerContext.Version;
+    public override string Version
+    {
+        get
+        {
+            this.EnsureLegalAccess();
+            return this.innerContext.Version;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override ILoggerFactory ReplaySafeLoggerFactory
+    {
+        get
+        {
+            this.EnsureLegalAccess();
+            return base.ReplaySafeLoggerFactory;
+        }
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether user code accessed a durable orchestration context member.
+    /// </summary>
+    internal bool IsAccessed { get; private set; }
 
     /// <summary>
     /// Gets the DataConverter to use for inputs, outputs, and entity states.
@@ -121,7 +191,11 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     protected override ILoggerFactory LoggerFactory => this.invocationContext.LoggerFactory;
 
     /// <inheritdoc/>
-    public override T GetInput<T>() => (T)this.deserializedInput!;
+    public override T GetInput<T>()
+    {
+        this.EnsureLegalAccess();
+        return (T)this.deserializedInput!;
+    }
 
     /// <inheritdoc/>
     public override async Task<T> CallActivityAsync<T>(
@@ -129,6 +203,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         object? input = null,
         TaskOptions? options = null)
     {
+        this.EnsureLegalAccess();
+
         // Since the input parameter takes any object, it's possible that callers may accidentally provide a
         // TaskOptions parameter here when the actually meant to provide TaskOptions for the optional options
         // parameter.
@@ -204,6 +280,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         object? input = null,
         TaskOptions? options = null)
     {
+        this.EnsureLegalAccess();
+
         // TODO: Check to see if this orchestrator is defined
         static string? GetInstanceId(TaskOptions? options)
             => options is SubOrchestrationOptions derived ? derived.InstanceId : null;
@@ -266,6 +344,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override async Task CreateTimer(DateTime fireAt, CancellationToken cancellationToken)
     {
+        this.EnsureLegalAccess();
+
         // Make sure we're always operating in UTC
         DateTime finalFireAtUtc = fireAt.ToUniversalTime();
 
@@ -287,6 +367,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override Task<T> WaitForExternalEvent<T>(string eventName, CancellationToken cancellationToken = default)
     {
+        this.EnsureLegalAccess();
+
         // Create a task completion source that will be set when the external event arrives.
         EventTaskCompletionSource<T> eventSource = new();
 
@@ -324,6 +406,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override void SendEvent(string instanceId, string eventName, object eventData)
     {
+        this.EnsureLegalAccess();
         Check.NotEntity(this.invocationContext.Options.EnableEntitySupport, instanceId);
 
         this.innerContext.SendEvent(new OrchestrationInstance { InstanceId = instanceId }, eventName, eventData);
@@ -332,12 +415,14 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override void SetCustomStatus(object? customStatus)
     {
+        this.EnsureLegalAccess();
         this.customStatus = customStatus;
     }
 
     /// <inheritdoc/>
     public override void ContinueAsNew(object? newInput = null, bool preserveUnprocessedEvents = true)
     {
+        this.EnsureLegalAccess();
         this.ContinueAsNew(new ContinueAsNewOptions
         {
             NewInput = newInput,
@@ -348,6 +433,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override void ContinueAsNew(ContinueAsNewOptions options)
     {
+        this.EnsureLegalAccess();
         Check.NotNull(options);
 
         this.preserveUnprocessedEventsOnContinueAsNew = options.PreserveUnprocessedEvents;
@@ -382,6 +468,8 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override Guid NewGuid()
     {
+        this.EnsureLegalAccess();
+
         static void SwapByteArrayValues(byte[] byteArray)
         {
             SwapByteArrayElements(byteArray, 0, 3);
@@ -438,12 +526,53 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         return new Guid(newGuidByteArray);
     }
 
+    /// <inheritdoc/>
+    public override ILogger CreateReplaySafeLogger(string categoryName)
+    {
+        this.EnsureLegalAccess();
+        return base.CreateReplaySafeLogger(categoryName);
+    }
+
+    /// <inheritdoc/>
+    public override ILogger CreateReplaySafeLogger(Type type)
+    {
+        this.EnsureLegalAccess();
+        return base.CreateReplaySafeLogger(type);
+    }
+
+    /// <inheritdoc/>
+    public override ILogger CreateReplaySafeLogger<T>()
+    {
+        this.EnsureLegalAccess();
+        return base.CreateReplaySafeLogger<T>();
+    }
+
     /// <summary>
     /// exits the critical section, if currently within a critical section. Otherwise, this has no effect.
     /// </summary>
     internal void ExitCriticalSectionIfNeeded()
     {
         this.entityFeature?.ExitCriticalSection();
+    }
+
+    /// <summary>
+    /// Enables orchestrator-thread validation for subsequent context member accesses.
+    /// </summary>
+    internal void EnableIllegalAccessChecks()
+    {
+        this.validateOrchestratorThreadOnAccess = true;
+    }
+
+    /// <summary>
+    /// Throws if the current thread is not the Durable Task orchestrator thread.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Performance",
+        "CA1822:Mark members as static",
+        Justification = "Kept as an instance method to match the context access pattern used by callers.")]
+    internal void ThrowIfIllegalAccess()
+    {
+        OrchestrationRuntimeGuard.ThrowIfIllegalAccess();
     }
 
     /// <summary>
@@ -501,14 +630,6 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         }
     }
 
-    void ForwardRawExternalEvent(string eventName, string rawEventPayload)
-    {
-        OrchestrationInstance instance = new() { InstanceId = this.InstanceId };
-#pragma warning disable CS0618 // Type or member is obsolete -- 'internal' usage.
-        this.innerContext.SendEvent(instance, eventName, new RawInput(rawEventPayload));
-#pragma warning restore CS0618 // Type or member is obsolete
-    }
-
     /// <summary>
     /// Gets the serialized custom status.
     /// </summary>
@@ -516,6 +637,24 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     internal string? GetSerializedCustomStatus()
     {
         return this.DataConverter.Serialize(this.customStatus);
+    }
+
+    void EnsureLegalAccess()
+    {
+        if (this.validateOrchestratorThreadOnAccess)
+        {
+            this.ThrowIfIllegalAccess();
+        }
+
+        this.IsAccessed = true;
+    }
+
+    void ForwardRawExternalEvent(string eventName, string rawEventPayload)
+    {
+        OrchestrationInstance instance = new() { InstanceId = this.innerContext.OrchestrationInstance.InstanceId };
+#pragma warning disable CS0618 // Type or member is obsolete -- 'internal' usage.
+        this.innerContext.SendEvent(instance, eventName, new RawInput(rawEventPayload));
+#pragma warning restore CS0618 // Type or member is obsolete
     }
 
     async Task<T> InvokeWithCustomRetryHandler<T>(

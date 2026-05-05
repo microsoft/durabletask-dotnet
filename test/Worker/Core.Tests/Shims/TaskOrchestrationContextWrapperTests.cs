@@ -8,8 +8,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Microsoft.DurableTask.Worker.Shims;
 
+[Collection(OrchestrationThreadTestCollection.Name)]
 public class TaskOrchestrationContextWrapperTests
 {
+    const string IllegalAwaitErrorMessage = "An invalid asynchronous invocation was detected. This can be caused by"
+        + " awaiting non-durable tasks in an orchestrator function's implementation or by middleware that invokes"
+        + " asynchronous code.";
+
     static readonly MethodInfo CompleteExternalEventMethod = typeof(TaskOrchestrationContextWrapper)
         .GetMethod(nameof(TaskOrchestrationContextWrapper.CompleteExternalEvent), BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new InvalidOperationException($"{nameof(TaskOrchestrationContextWrapper)}.{nameof(TaskOrchestrationContextWrapper.CompleteExternalEvent)} was not found.");
@@ -50,6 +55,131 @@ public class TaskOrchestrationContextWrapperTests
         wrapper.Parent.Should().Be(invocationContext.Parent);
         wrapper.IsReplaying.Should().Be(false);
         wrapper.GetInput<T>().Should().Be(input);
+    }
+
+    [Fact]
+    public void GetInput_MarksContextAccessed()
+    {
+        // Arrange
+        TestOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "test-input");
+
+        // Act
+        string? input = wrapper.GetInput<string>();
+
+        // Assert
+        input.Should().Be("test-input");
+        wrapper.IsAccessed.Should().BeTrue();
+    }
+
+    [Fact]
+    public void CurrentUtcDateTime_MarksContextAccessed()
+    {
+        // Arrange
+        TestOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "test-input");
+
+        // Act
+        _ = wrapper.CurrentUtcDateTime;
+
+        // Assert
+        wrapper.IsAccessed.Should().BeTrue();
+    }
+
+    [Fact]
+    public void NewGuid_MarksContextAccessed()
+    {
+        // Arrange
+        TestOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "test-input");
+
+        // Act
+        _ = wrapper.NewGuid();
+
+        // Assert
+        wrapper.IsAccessed.Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateReplaySafeLogger_MarksContextAccessed()
+    {
+        // Arrange
+        TestOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "test-input");
+
+        // Act
+        _ = wrapper.CreateReplaySafeLogger("Test");
+
+        // Assert
+        wrapper.IsAccessed.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ReplaySafeLoggerFactory_MarksContextAccessed()
+    {
+        // Arrange
+        TestOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "test-input");
+
+        // Act
+        _ = wrapper.ReplaySafeLoggerFactory;
+
+        // Assert
+        wrapper.IsAccessed.Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateReplaySafeLogger_WhenAccessChecksEnabledAndNotOnOrchestratorThread_ThrowsIllegalAwaitError()
+    {
+        // Arrange
+        TestOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "test-input");
+        wrapper.EnableIllegalAccessChecks();
+
+        // Act
+        Action act = () => wrapper.CreateReplaySafeLogger("Test");
+
+        // Assert
+        OrchestrationContext.IsOrchestratorThread.Should().BeFalse();
+        act.Should().ThrowExactly<InvalidOperationException>().WithMessage(IllegalAwaitErrorMessage);
+    }
+
+    [Fact]
+    public async Task CallActivityAsync_MarksContextAccessed()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "test-input");
+
+        // Act
+        _ = await wrapper.CallActivityAsync<string>("Activity");
+
+        // Assert
+        wrapper.IsAccessed.Should().BeTrue();
+        innerContext.ScheduledTasks.Should().ContainSingle().Which.Name.Should().Be("Activity");
+    }
+
+    [Fact]
+    public void ThrowIfIllegalAccess_WhenNotOnOrchestratorThread_ThrowsIllegalAwaitError()
+    {
+        // Arrange
+        TestOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "test-input");
+
+        // Act
+        Action act = wrapper.ThrowIfIllegalAccess;
+
+        // Assert
+        OrchestrationContext.IsOrchestratorThread.Should().BeFalse();
+        act.Should().ThrowExactly<InvalidOperationException>().WithMessage(IllegalAwaitErrorMessage);
     }
 
     [Fact]
@@ -151,6 +281,8 @@ public class TaskOrchestrationContextWrapperTests
 
         public List<(string InstanceId, string EventName, object EventData)> SentEvents { get; } = [];
 
+        public List<(string Name, string Version, object[] Parameters)> ScheduledTasks { get; } = [];
+
         public override void ContinueAsNew(object input)
         {
             this.LastContinueAsNewInput = input;
@@ -179,7 +311,20 @@ public class TaskOrchestrationContextWrapperTests
             => throw new NotImplementedException();
 
         public override Task<TResult> ScheduleTask<TResult>(string name, string version, params object[] parameters)
-            => throw new NotImplementedException();
+        {
+            this.ScheduledTasks.Add((name, version, parameters));
+            return Task.FromResult(default(TResult)!);
+        }
+
+        public override Task<TResult> ScheduleTask<TResult>(
+            string name,
+            string version,
+            ScheduleTaskOptions options,
+            params object[] parameters)
+        {
+            this.ScheduledTasks.Add((name, version, parameters));
+            return Task.FromResult(default(TResult)!);
+        }
 
         public override void SendEvent(OrchestrationInstance orchestrationInstance, string eventName, object eventData)
         {

@@ -8,8 +8,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Microsoft.DurableTask.Worker.Shims;
 
+[Collection(OrchestrationThreadTestCollection.Name)]
 public class TaskOrchestrationShimMiddlewareTests
 {
+    const string IllegalAwaitErrorMessage = "An invalid asynchronous invocation was detected. This can be caused by"
+        + " awaiting non-durable tasks in an orchestrator function's implementation or by middleware that invokes"
+        + " asynchronous code.";
+
     [Fact]
     public async Task ExecuteAsync_WithMiddleware_RunsInRegistrationOrderAndPopulatesContext()
     {
@@ -237,6 +242,120 @@ public class TaskOrchestrationShimMiddlewareTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_WhenOrchestrationMiddlewareAwaitsBeforeAccessingContext_ThrowsIllegalAwaitError()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
+        builder.UseOrchestrationMiddleware(async (context, next) =>
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(10));
+        });
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+        DurableTaskShimFactory factory = new(
+            workerName: "test",
+            services: provider,
+            options: null,
+            loggerFactory: NullLoggerFactory.Instance);
+        bool bodyCalled = false;
+        TaskOrchestration shim = factory.CreateOrchestration(
+            "TestOrchestrator",
+            FuncTaskOrchestrator.Create<string, string>((context, input) =>
+            {
+                bodyCalled = true;
+                return Task.FromResult("output");
+            }));
+
+        // Act
+        Func<Task> act = async () => await shim.Execute(new TestOrchestrationContext(), "\"input\"");
+
+        // Assert
+        await act.Should()
+            .ThrowExactlyAsync<InvalidOperationException>()
+            .WithMessage(IllegalAwaitErrorMessage);
+        bodyCalled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenOrchestratorAwaitsBeforeAccessingContext_ThrowsIllegalAwaitError()
+    {
+        // Arrange
+        TaskOrchestration shim = DurableTaskShimFactory.Default.CreateOrchestration(
+            "TestOrchestrator",
+            FuncTaskOrchestrator.Create<string, string>(async (context, input) =>
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(10));
+                return "output";
+            }));
+
+        // Act
+        Func<Task> act = async () => await shim.Execute(new TestOrchestrationContext(), "\"input\"");
+
+        // Assert
+        await act.Should()
+            .ThrowExactlyAsync<InvalidOperationException>()
+            .WithMessage(IllegalAwaitErrorMessage);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenMiddlewareAccessesContextBeforeNonDurableAwait_ThrowsIllegalAwaitError()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
+        builder.UseOrchestrationMiddleware(async (context, next) =>
+        {
+            _ = context.OrchestrationContext.CurrentUtcDateTime;
+            await Task.Delay(TimeSpan.FromMilliseconds(10));
+            await next(context);
+        });
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+        DurableTaskShimFactory factory = new(
+            workerName: "test",
+            services: provider,
+            options: null,
+            loggerFactory: NullLoggerFactory.Instance);
+        TaskOrchestration shim = factory.CreateOrchestration(
+            "TestOrchestrator",
+            FuncTaskOrchestrator.Create<string, string>((context, input) => Task.FromResult("output")));
+
+        // Act
+        Func<Task> act = async () => await shim.Execute(new TestOrchestrationContext(), "\"input\"");
+
+        // Assert
+        await act.Should()
+            .ThrowExactlyAsync<InvalidOperationException>()
+            .WithMessage(IllegalAwaitErrorMessage);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenOrchestratorAwaitsDurableActivity_Completes()
+    {
+        // Arrange
+        TestOrchestrationContext innerContext = new();
+        TaskOrchestration shim = DurableTaskShimFactory.Default.CreateOrchestration(
+            "TestOrchestrator",
+            FuncTaskOrchestrator.Create<string, string>(async (context, input) =>
+            {
+                string result = await context.CallActivityAsync<string>("Activity", input);
+                return $"{result}-body";
+            }));
+
+        // Act
+        Task<string?> executeTask = RunOnOrchestratorThread(() => shim.Execute(innerContext, "\"input\""));
+
+        // Assert
+        executeTask.IsCompleted.Should().BeFalse();
+        innerContext.ScheduledTaskName.Should().Be("Activity");
+
+        innerContext.CompleteScheduledTaskOnOrchestratorThread("activity-output");
+        string? output = await executeTask;
+        output.Should().Be("\"activity-output-body\"");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WithNoMiddleware_PreservesExistingBehavior()
     {
         // Arrange
@@ -319,6 +438,8 @@ public class TaskOrchestrationShimMiddlewareTests
 
     sealed class TestOrchestrationContext : OrchestrationContext
     {
+        TaskCompletionSource<object?>? scheduledTaskCompletionSource;
+
         public TestOrchestrationContext()
         {
             this.OrchestrationInstance = new()
@@ -374,12 +495,71 @@ public class TaskOrchestrationShimMiddlewareTests
 
         public override Task<TResult> ScheduleTask<TResult>(string name, string version, params object[] parameters)
         {
-            throw new NotImplementedException();
+            return this.ScheduleTask<TResult>(name, version, null!, parameters);
+        }
+
+        public override Task<TResult> ScheduleTask<TResult>(
+            string name,
+            string version,
+            ScheduleTaskOptions options,
+            params object[] parameters)
+        {
+            if (this.scheduledTaskCompletionSource is not null)
+            {
+                throw new InvalidOperationException("A task has already been scheduled.");
+            }
+
+            this.ScheduledTaskName = name;
+            this.scheduledTaskCompletionSource = new();
+            return AwaitScheduledTaskAsync<TResult>(this.scheduledTaskCompletionSource.Task);
         }
 
         public override void SendEvent(OrchestrationInstance orchestrationInstance, string eventName, object eventData)
         {
             throw new NotImplementedException();
         }
+
+        public string? ScheduledTaskName { get; private set; }
+
+        public void CompleteScheduledTaskOnOrchestratorThread(object? result)
+        {
+            TaskCompletionSource<object?> tcs = this.scheduledTaskCompletionSource
+                ?? throw new InvalidOperationException("No task has been scheduled.");
+            RunOnOrchestratorThread(() => tcs.SetResult(result));
+        }
+
+        static async Task<TResult> AwaitScheduledTaskAsync<TResult>(Task<object?> task)
+        {
+            return (TResult)(await task)!;
+        }
     }
+
+    static T RunOnOrchestratorThread<T>(Func<T> action)
+    {
+        bool originalIsOrchestratorThread = OrchestrationContext.IsOrchestratorThread;
+        OrchestrationContext.IsOrchestratorThread = true;
+        try
+        {
+            return action();
+        }
+        finally
+        {
+            OrchestrationContext.IsOrchestratorThread = originalIsOrchestratorThread;
+        }
+    }
+
+    static void RunOnOrchestratorThread(Action action)
+    {
+        RunOnOrchestratorThread<object?>(() =>
+        {
+            action();
+            return null;
+        });
+    }
+}
+
+[CollectionDefinition(OrchestrationThreadTestCollection.Name, DisableParallelization = true)]
+public sealed class OrchestrationThreadTestCollection
+{
+    public const string Name = "Orchestration thread test collection";
 }

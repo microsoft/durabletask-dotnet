@@ -65,7 +65,13 @@ partial class TaskOrchestrationShim : TaskOrchestration
         innerContext.ErrorDataConverter = converterShim;
 
         object? input = this.DataConverter.Deserialize(rawInput, this.implementation.InputType);
-        this.wrapperContext = new(innerContext, this.invocationContext, input, this.properties);
+        bool validateRuntimeGuard = OrchestrationContext.IsOrchestratorThread;
+        this.wrapperContext = new(
+            innerContext,
+            this.invocationContext,
+            input,
+            this.properties,
+            validateRuntimeGuard);
 
         string instanceId = innerContext.OrchestrationInstance.InstanceId;
         if (!innerContext.IsReplaying)
@@ -78,7 +84,7 @@ partial class TaskOrchestrationShim : TaskOrchestration
             DefaultTaskOrchestrationMiddlewareContext middlewareContext = new(
                 this.invocationContext.Name,
                 instanceId,
-                this.wrapperContext.Version,
+                innerContext.Version,
                 this.invocationContext.Parent,
                 this.invocationContext.Tags,
                 innerContext.IsReplaying,
@@ -92,7 +98,24 @@ partial class TaskOrchestrationShim : TaskOrchestration
 
             TaskOrchestrationMiddlewarePipeline pipeline =
                 this.invocationContext.MiddlewarePipeline ?? TaskOrchestrationMiddlewarePipeline.Empty;
-            await pipeline.RunAsync(middlewareContext);
+            Task pipelineTask = pipeline.RunAsync(middlewareContext);
+            bool pipelineIncomplete = !pipelineTask.IsCompleted;
+            bool validateAfterAwait = validateRuntimeGuard || pipelineIncomplete;
+            if (pipelineIncomplete)
+            {
+                this.wrapperContext.EnableIllegalAccessChecks();
+                if (!this.wrapperContext.IsAccessed)
+                {
+                    throw new InvalidOperationException(OrchestrationRuntimeGuard.IllegalAwaitErrorMessage);
+                }
+            }
+
+            await pipelineTask;
+            if (validateAfterAwait)
+            {
+                this.wrapperContext.ThrowIfIllegalAccess();
+            }
+
             if (!middlewareContext.BodyInvoked)
             {
                 throw new InvalidOperationException(

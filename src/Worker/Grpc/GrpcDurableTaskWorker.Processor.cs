@@ -44,7 +44,11 @@ sealed partial class GrpcDurableTaskWorker
         {
             this.worker = worker;
             this.client = client;
-            this.shimFactory = new DurableTaskShimFactory(this.worker.grpcOptions, this.worker.loggerFactory);
+            this.shimFactory = new DurableTaskShimFactory(
+                this.worker.Name,
+                this.worker.services,
+                this.worker.grpcOptions,
+                this.worker.loggerFactory);
             this.internalOptions = this.worker.grpcOptions.Internal;
             this.orchestrationFilter = orchestrationFilter;
             this.exceptionPropertiesProvider = exceptionPropertiesProvider is not null
@@ -729,7 +733,12 @@ sealed partial class GrpcDurableTaskWorker
                             _ => null,
                         };
 
-                        TaskOrchestration shim = this.shimFactory.CreateOrchestration(name, orchestrator, parent);
+                        TaskOrchestration shim = this.shimFactory.CreateOrchestration(
+                            name,
+                            orchestrator,
+                            scope.ServiceProvider,
+                            parent,
+                            features: null);
                         TaskOrchestrationExecutor executor = new(
                             runtimeState,
                             shim,
@@ -885,7 +894,7 @@ sealed partial class GrpcDurableTaskWorker
                     {
                         // Both the factory invocation and the RunAsync could involve user code and need to be handled as
                         // part of try/catch.
-                        TaskActivity shim = this.shimFactory.CreateActivity(name, activity);
+                        TaskActivity shim = this.shimFactory.CreateActivity(name, activity, scope.ServiceProvider);
                         output = await shim.RunAsync(innerContext, request.Input);
                     }
                     else

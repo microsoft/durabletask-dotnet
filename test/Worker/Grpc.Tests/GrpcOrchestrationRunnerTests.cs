@@ -4,7 +4,9 @@
 using Google.Protobuf;
 using Google.Protobuf.Collections;
 using Google.Protobuf.WellKnownTypes;
+using Microsoft.DurableTask.Worker.Middleware;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Tests;
 
@@ -306,6 +308,49 @@ public class GrpcOrchestrationRunnerTests
     }
 
     [Fact]
+    public void MiddlewareEnabledIncompleteOrchestration_NotStoredInExtendedSessions()
+    {
+        // Arrange
+        using var extendedSessions = new ExtendedSessionsCache();
+        var services = new ServiceCollection();
+        services.AddDurableTaskWorker(builder => builder.UseOrchestrationMiddleware<TestOrchestrationMiddleware>());
+        using ServiceProvider provider = services.BuildServiceProvider();
+        var historyEvent = new Protobuf.HistoryEvent
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new Protobuf.ExecutionStartedEvent()
+            {
+                OrchestrationInstance = new Protobuf.OrchestrationInstance
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+            }
+        };
+        Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludeState", Value.ForBool(true) },
+            { "IsExtendedSession", Value.ForBool(true) },
+            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
+        byte[] requestBytes = orchestratorRequest.ToByteArray();
+        string requestString = Convert.ToBase64String(requestBytes);
+
+        // Act
+        GrpcOrchestrationRunner.LoadAndRun(
+            requestString,
+            new CallSubOrchestrationOrchestrator(),
+            extendedSessions,
+            provider);
+
+        // Assert
+        Assert.True(extendedSessions.IsInitialized);
+        Assert.False(
+            extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds)
+                .TryGetValue(TestInstanceId, out object? extendedSession));
+    }
+
+    [Fact]
     public void Complete_Orchestration_NotStored()
     {
         using var extendedSessions = new ExtendedSessionsCache();
@@ -528,5 +573,13 @@ public class GrpcOrchestrationRunnerTests
             await context.CallSubOrchestratorAsync(nameof(SimpleOrchestrator));
             return input;
         }
+    }
+
+    sealed class TestOrchestrationMiddleware : ITaskOrchestrationMiddleware
+    {
+        public Task InvokeAsync(
+            TaskOrchestrationMiddlewareContext context,
+            TaskOrchestrationMiddlewareDelegate next)
+            => next(context);
     }
 }

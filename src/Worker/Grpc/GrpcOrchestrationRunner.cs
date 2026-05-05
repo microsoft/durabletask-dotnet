@@ -6,7 +6,6 @@ using DurableTask.Core.History;
 using Google.Protobuf;
 using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.DependencyInjection;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc;
@@ -129,6 +128,14 @@ public static class GrpcOrchestrationRunner
         Dictionary<string, object?> properties = request.Properties.ToDictionary(
                 pair => pair.Key,
                 pair => ProtoUtils.ConvertValueToObject(pair.Value));
+        DurableTaskShimFactory factory = services is null
+            ? DurableTaskShimFactory.Default
+            : new DurableTaskShimFactory(
+                Microsoft.Extensions.Options.Options.DefaultName,
+                services,
+                options: null,
+                loggerFactory: null);
+        bool canUseExtendedSessions = !factory.HasOrchestrationMiddleware;
 
         OrchestratorExecutionResult? result = null;
 
@@ -146,7 +153,10 @@ public static class GrpcOrchestrationRunner
         {
             // If a history was provided, even if we already have an extended session stored, we always want to evict whatever state is in the cache and replace it with a new extended
             // session based on the provided history
-            if (!pastEventsIncluded && extendedSessions.TryGetValue(request.InstanceId, out ExtendedSessionState? extendedSessionState) && extendedSessionState is not null)
+            if (canUseExtendedSessions
+                && !pastEventsIncluded
+                && extendedSessions.TryGetValue(request.InstanceId, out ExtendedSessionState? extendedSessionState)
+                && extendedSessionState is not null)
             {
                 OrchestrationRuntimeState runtimeState = extendedSessionState!.RuntimeState;
                 runtimeState.NewEvents.Clear();
@@ -164,7 +174,7 @@ public static class GrpcOrchestrationRunner
             else
             {
                 extendedSessions.Remove(request.InstanceId);
-                addToExtendedSessions = true;
+                addToExtendedSessions = canUseExtendedSessions;
             }
         }
 
@@ -192,9 +202,6 @@ public static class GrpcOrchestrationRunner
                     ? new(new(p.Name), p.OrchestrationInstance.InstanceId)
                     : null;
 
-                DurableTaskShimFactory factory = services is null
-                    ? DurableTaskShimFactory.Default
-                    : ActivatorUtilities.GetServiceOrCreateInstance<DurableTaskShimFactory>(services);
                 TaskOrchestration shim = factory.CreateOrchestration(orchestratorName, implementation, properties, parent);
 
                 TaskOrchestrationExecutor executor = new(

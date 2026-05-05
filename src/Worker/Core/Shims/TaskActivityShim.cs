@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using DurableTask.Core;
+using Microsoft.DurableTask.Worker.Middleware;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.Worker.Shims;
@@ -15,6 +16,9 @@ class TaskActivityShim : TaskActivity
     readonly ILogger logger;
     readonly DataConverter dataConverter;
     readonly TaskName name;
+    readonly IServiceProvider services;
+    readonly IMiddlewareFeatures? features;
+    readonly TaskActivityMiddlewarePipeline middlewarePipeline;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskActivityShim"/> class.
@@ -28,11 +32,43 @@ class TaskActivityShim : TaskActivity
         DataConverter dataConverter,
         TaskName name,
         ITaskActivity implementation)
+        : this(
+            loggerFactory,
+            dataConverter,
+            name,
+            implementation,
+            EmptyServiceProvider.Instance,
+            null,
+            TaskActivityMiddlewarePipeline.Empty)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TaskActivityShim"/> class.
+    /// </summary>
+    /// <param name="loggerFactory">The logger factory.</param>
+    /// <param name="dataConverter">The data converter.</param>
+    /// <param name="name">The name of the activity.</param>
+    /// <param name="implementation">The activity implementation to wrap.</param>
+    /// <param name="services">The service provider for this activity invocation.</param>
+    /// <param name="features">The middleware features for this activity invocation.</param>
+    /// <param name="middlewarePipeline">The activity middleware pipeline.</param>
+    internal TaskActivityShim(
+        ILoggerFactory loggerFactory,
+        DataConverter dataConverter,
+        TaskName name,
+        ITaskActivity implementation,
+        IServiceProvider services,
+        IMiddlewareFeatures? features,
+        TaskActivityMiddlewarePipeline middlewarePipeline)
     {
         this.logger = Logs.CreateWorkerLogger(Check.NotNull(loggerFactory), "Activities");
         this.dataConverter = Check.NotNull(dataConverter);
         this.name = Check.NotDefault(name);
         this.implementation = Check.NotNull(implementation);
+        this.services = Check.NotNull(services);
+        this.features = features;
+        this.middlewarePipeline = Check.NotNull(middlewarePipeline);
     }
 
     /// <inheritdoc/>
@@ -48,7 +84,18 @@ class TaskActivityShim : TaskActivity
 
         try
         {
-            object? output = await this.implementation.RunAsync(contextWrapper, deserializedInput);
+            DefaultTaskActivityMiddlewareContext middlewareContext = new(
+                this.name,
+                instanceId,
+                this.implementation.InputType,
+                deserializedInput,
+                strippedRawInput,
+                contextWrapper,
+                this.features ?? new MiddlewareFeatureCollection(),
+                this.services,
+                () => this.implementation.RunAsync(contextWrapper, deserializedInput));
+            await this.middlewarePipeline.RunAsync(middlewareContext);
+            object? output = middlewareContext.Result;
 
             // Return the output (if any) as a serialized string.
             string? serializedOutput = this.dataConverter.Serialize(output);

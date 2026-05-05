@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using DurableTask.Core;
+using Microsoft.DurableTask.Worker.Middleware;
 using Microsoft.Extensions.Logging;
 using CoreTaskFailedException = DurableTask.Core.Exceptions.TaskFailedException;
 
@@ -74,7 +75,31 @@ partial class TaskOrchestrationShim : TaskOrchestration
 
         try
         {
-            object? output = await this.implementation.RunAsync(this.wrapperContext, input);
+            DefaultTaskOrchestrationMiddlewareContext middlewareContext = new(
+                this.invocationContext.Name,
+                instanceId,
+                this.wrapperContext.Version,
+                this.invocationContext.Parent,
+                innerContext.IsReplaying,
+                this.implementation.InputType,
+                input,
+                rawInput,
+                this.wrapperContext,
+                this.invocationContext.Features ?? new MiddlewareFeatureCollection(),
+                this.invocationContext.Services ?? EmptyServiceProvider.Instance,
+                () => this.implementation.RunAsync(this.wrapperContext, input));
+
+            TaskOrchestrationMiddlewarePipeline pipeline =
+                this.invocationContext.MiddlewarePipeline ?? TaskOrchestrationMiddlewarePipeline.Empty;
+            await pipeline.RunAsync(middlewareContext);
+            if (!middlewareContext.BodyInvoked)
+            {
+                throw new InvalidOperationException(
+                    "Orchestration middleware must call the next delegate. Short-circuiting orchestration execution"
+                    + " is not supported.");
+            }
+
+            object? output = middlewareContext.Result;
 
             if (!innerContext.IsReplaying)
             {
@@ -95,7 +120,8 @@ partial class TaskOrchestrationShim : TaskOrchestration
             // failure details are correctly propagated.
             throw new CoreTaskFailedException(e.Message, e.InnerException)
             {
-                FailureDetails = new FailureDetails(e,
+                FailureDetails = new FailureDetails(
+                    e,
                     e.FailureDetails.ToCoreFailureDetails(),
                     properties: e.FailureDetails.Properties),
             };

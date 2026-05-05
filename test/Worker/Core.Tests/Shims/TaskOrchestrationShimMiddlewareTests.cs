@@ -173,6 +173,43 @@ public class TaskOrchestrationShimMiddlewareTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_WhenOrchestrationMiddlewareCallsNextTwice_Throws()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
+        builder.UseOrchestrationMiddleware(async (context, next) =>
+        {
+            await next(context);
+            await next(context);
+        });
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+        DurableTaskShimFactory factory = new(
+            workerName: "test",
+            services: provider,
+            options: null,
+            loggerFactory: NullLoggerFactory.Instance);
+        int bodyCallCount = 0;
+        TaskOrchestration shim = factory.CreateOrchestration(
+            "TestOrchestrator",
+            FuncTaskOrchestrator.Create<string, string>((context, input) =>
+            {
+                bodyCallCount++;
+                return Task.FromResult("output");
+            }));
+
+        // Act
+        Func<Task> act = async () => await shim.Execute(new TestOrchestrationContext(), "\"input\"");
+
+        // Assert
+        await act.Should()
+            .ThrowExactlyAsync<InvalidOperationException>()
+            .WithMessage("*next*exactly once*");
+        bodyCallCount.Should().Be(1);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WhenMiddlewareThrows_PropagatesException()
     {
         // Arrange

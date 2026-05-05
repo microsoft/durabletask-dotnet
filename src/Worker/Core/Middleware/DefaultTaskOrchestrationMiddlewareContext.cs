@@ -11,6 +11,7 @@ namespace Microsoft.DurableTask.Worker.Middleware;
 internal sealed class DefaultTaskOrchestrationMiddlewareContext : TaskOrchestrationMiddlewareContext
 {
     readonly Func<Task<object?>> body;
+    int bodyInvoked;
     object? result;
 
     /// <summary>
@@ -106,7 +107,7 @@ internal sealed class DefaultTaskOrchestrationMiddlewareContext : TaskOrchestrat
     /// <summary>
     /// Gets a value indicating whether the orchestration body was invoked.
     /// </summary>
-    internal bool BodyInvoked { get; private set; }
+    internal bool BodyInvoked => Volatile.Read(ref this.bodyInvoked) != 0;
 
     /// <summary>
     /// Invokes the orchestration body.
@@ -114,7 +115,12 @@ internal sealed class DefaultTaskOrchestrationMiddlewareContext : TaskOrchestrat
     /// <returns>A task that completes when the body finishes.</returns>
     internal async Task InvokeBodyAsync()
     {
-        this.BodyInvoked = true;
+        if (Interlocked.Exchange(ref this.bodyInvoked, 1) != 0)
+        {
+            throw new InvalidOperationException(
+                "Orchestration middleware must call the next delegate exactly once.");
+        }
+
         this.result = await this.body();
     }
 

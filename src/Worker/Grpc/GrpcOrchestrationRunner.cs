@@ -6,6 +6,7 @@ using DurableTask.Core.History;
 using Google.Protobuf;
 using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc;
@@ -130,11 +131,12 @@ public static class GrpcOrchestrationRunner
                 pair => ProtoUtils.ConvertValueToObject(pair.Value));
         DurableTaskShimFactory factory = services is null
             ? DurableTaskShimFactory.Default
-            : new DurableTaskShimFactory(
-                Microsoft.Extensions.Options.Options.DefaultName,
-                services,
-                options: null,
-                loggerFactory: null);
+            : services.GetService<DurableTaskShimFactory>()
+                ?? new DurableTaskShimFactory(
+                    Microsoft.Extensions.Options.Options.DefaultName,
+                    services,
+                    options: null,
+                    loggerFactory: null);
         bool canUseExtendedSessions = !factory.HasOrchestrationMiddleware;
 
         OrchestratorExecutionResult? result = null;

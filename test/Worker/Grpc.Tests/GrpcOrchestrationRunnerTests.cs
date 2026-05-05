@@ -5,6 +5,7 @@ using Google.Protobuf;
 using Google.Protobuf.Collections;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.DurableTask.Worker.Middleware;
+using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -397,6 +398,52 @@ public class GrpcOrchestrationRunnerTests
     }
 
     [Fact]
+    public void LoadAndRun_WithRegisteredShimFactory_UsesRegisteredFactory()
+    {
+        // Arrange
+        RecordingDataConverter converter = new();
+        DurableTaskWorkerOptions options = new() { DataConverter = converter };
+        DurableTaskShimFactory registeredFactory = new(options);
+        var services = new ServiceCollection();
+        services.AddSingleton(registeredFactory);
+        using ServiceProvider provider = services.BuildServiceProvider();
+        var historyEvent = new Protobuf.HistoryEvent
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new Protobuf.ExecutionStartedEvent()
+            {
+                Name = nameof(SimpleOrchestrator),
+                Input = "\"original-input\"",
+                OrchestrationInstance = new Protobuf.OrchestrationInstance
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+            },
+        };
+        Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludeState", Value.ForBool(true) } });
+        byte[] requestBytes = orchestratorRequest.ToByteArray();
+        string requestString = Convert.ToBase64String(requestBytes);
+
+        // Act
+        string responseString = GrpcOrchestrationRunner.LoadAndRun(
+            requestString,
+            new SimpleOrchestrator(),
+            services: provider);
+
+        // Assert
+        Protobuf.OrchestratorResponse response =
+            Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].CompleteOrchestration.Result.Should().Be("registered:registered-input");
+        converter.DeserializeCalls.Should().Be(1);
+        converter.SerializedValues.Should().Contain("registered-input");
+    }
+
+    [Fact]
     public void Complete_Orchestration_NotStored()
     {
         using var extendedSessions = new ExtendedSessionsCache();
@@ -650,5 +697,24 @@ public class GrpcOrchestrationRunnerTests
     sealed class CapturedOrchestrationTags
     {
         public IReadOnlyDictionary<string, string>? Tags { get; set; }
+    }
+
+    sealed class RecordingDataConverter : DataConverter
+    {
+        public int DeserializeCalls { get; private set; }
+
+        public List<object?> SerializedValues { get; } = [];
+
+        public override object? Deserialize(string? data, System.Type targetType)
+        {
+            this.DeserializeCalls++;
+            return targetType == typeof(string) ? "registered-input" : null;
+        }
+
+        public override string? Serialize(object? value)
+        {
+            this.SerializedValues.Add(value);
+            return value is null ? null : $"registered:{value}";
+        }
     }
 }

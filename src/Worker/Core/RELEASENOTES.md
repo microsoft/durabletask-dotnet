@@ -1,2 +1,3 @@
 - Add new `IDurableTaskWorkerBuilder AddDurableTaskWorker(IServiceCollection, string?)` API
 - Add Durable Task worker middleware support for orchestration and activity execution.
+- Expose activity middleware registration state for host integrations.

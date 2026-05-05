@@ -89,6 +89,7 @@ public class DurableTaskShimFactory
             services?.GetService<IOptionsMonitor<DurableTaskWorkerMiddlewareOptions>>()?.Get(workerName)
             ?? new DurableTaskWorkerMiddlewareOptions();
         this.HasOrchestrationMiddleware = middlewareOptions.OrchestrationMiddleware.Count > 0;
+        this.HasActivityMiddleware = middlewareOptions.ActivityMiddleware.Count > 0;
         this.orchestrationMiddlewarePipeline = new TaskOrchestrationMiddlewarePipeline(
             middlewareOptions.OrchestrationMiddleware.ToArray());
         this.activityMiddlewarePipeline = new TaskActivityMiddlewarePipeline(
@@ -104,6 +105,11 @@ public class DurableTaskShimFactory
     /// Gets a value indicating whether this factory has orchestration middleware registrations.
     /// </summary>
     public bool HasOrchestrationMiddleware { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this factory has activity middleware registrations.
+    /// </summary>
+    public bool HasActivityMiddleware { get; }
 
     /// <summary>
     /// Creates a <see cref="TaskActivity" /> from a <see cref="ITaskActivity" />.

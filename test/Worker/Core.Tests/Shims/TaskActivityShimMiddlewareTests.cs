@@ -154,6 +154,45 @@ public class TaskActivityShimMiddlewareTests
     }
 
     [Fact]
+    public void DurableTaskShimFactory_WithActivityMiddleware_HasActivityMiddlewareIsTrue()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
+        builder.UseActivityMiddleware((context, next) => next(context));
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act
+        DurableTaskShimFactory factory = new(
+            workerName: "test",
+            services: provider,
+            options: null,
+            loggerFactory: NullLoggerFactory.Instance);
+
+        // Assert
+        factory.HasActivityMiddleware.Should().BeTrue();
+    }
+
+    [Fact]
+    public void DurableTaskShimFactory_WithoutActivityMiddleware_HasActivityMiddlewareIsFalse()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        DefaultDurableTaskWorkerBuilder builder = new("test", services);
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act
+        DurableTaskShimFactory factory = new(
+            workerName: "test",
+            services: provider,
+            options: null,
+            loggerFactory: NullLoggerFactory.Instance);
+
+        // Assert
+        factory.HasActivityMiddleware.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task RunAsync_TypeMiddleware_ResolvesFromInvocationScope()
     {
         // Arrange

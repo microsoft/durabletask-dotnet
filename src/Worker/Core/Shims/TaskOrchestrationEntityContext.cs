@@ -148,7 +148,29 @@ sealed partial class TaskOrchestrationContextWrapper
         /// <param name="matchCriticalSectionId">exit the critical section only if the critical section ID matches.</param>
         public void ExitCriticalSection(Guid? matchCriticalSectionId = null)
         {
-            this.EnsureLegalAccess();
+            this.ExitCriticalSection(matchCriticalSectionId, validateAccess: true);
+        }
+
+        internal void ExitCriticalSectionIfNeeded()
+        {
+            this.ExitCriticalSection(matchCriticalSectionId: null, validateAccess: false);
+        }
+
+        static TaskFailureDetails ConvertFailureDetails(FailureDetails failureDetails)
+         => new(
+             failureDetails.ErrorType,
+             failureDetails.ErrorMessage,
+             failureDetails.StackTrace,
+             failureDetails.InnerFailure != null ? ConvertFailureDetails(failureDetails.InnerFailure) : null,
+             failureDetails.Properties);
+
+        void ExitCriticalSection(Guid? matchCriticalSectionId, bool validateAccess)
+        {
+            if (validateAccess)
+            {
+                this.EnsureLegalAccess();
+            }
+
             if (this.EntityContext.IsInsideCriticalSection
                 && (matchCriticalSectionId == null || matchCriticalSectionId == this.EntityContext.CurrentCriticalSectionId))
             {
@@ -168,14 +190,6 @@ sealed partial class TaskOrchestrationContextWrapper
                 }
             }
         }
-
-        static TaskFailureDetails ConvertFailureDetails(FailureDetails failureDetails)
-         => new(
-             failureDetails.ErrorType,
-             failureDetails.ErrorMessage,
-             failureDetails.StackTrace,
-             failureDetails.InnerFailure != null ? ConvertFailureDetails(failureDetails.InnerFailure) : null,
-             failureDetails.Properties);
 
         void EnsureLegalAccess()
         {

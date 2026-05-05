@@ -258,7 +258,7 @@ public class TaskOrchestrationContextWrapperTests
     }
 
     [Fact]
-    public void ExitCriticalSectionIfNeeded_WhenCachedFeatureAccessedOffOrchestratorThreadAfterChecksEnabled_ThrowsIllegalAwaitError()
+    public void ExitCriticalSectionIfNeeded_WhenCachedFeatureAccessedOffOrchestratorThreadAfterChecksEnabled_DoesNotThrow()
     {
         // Arrange
         (TrackingOrchestrationContext innerContext, TaskOrchestrationContextWrapper wrapper) =
@@ -269,7 +269,7 @@ public class TaskOrchestrationContextWrapperTests
 
         // Assert
         OrchestrationContext.IsOrchestratorThread.Should().BeFalse();
-        act.Should().ThrowExactly<InvalidOperationException>().WithMessage(IllegalAwaitErrorMessage);
+        act.Should().NotThrow();
         innerContext.SentEvents.Should().BeEmpty();
     }
 

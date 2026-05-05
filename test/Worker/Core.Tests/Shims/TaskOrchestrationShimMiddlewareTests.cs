@@ -357,6 +357,34 @@ public class TaskOrchestrationShimMiddlewareTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_WhenOrchestratorThrowsAfterCachingEntityFeature_DoesNotMaskOriginalException()
+    {
+        // Arrange
+        InvalidOperationException expected = new("orchestrator failure");
+        TaskCompletionSource<object?> nonDurableTask = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        DurableTaskShimFactory factory = new(
+            new DurableTaskWorkerOptions { EnableEntitySupport = true },
+            NullLoggerFactory.Instance);
+        TaskOrchestration shim = factory.CreateOrchestration(
+            "TestOrchestrator",
+            FuncTaskOrchestrator.Create<string, string>(async (context, input) =>
+            {
+                _ = context.Entities;
+                await nonDurableTask.Task;
+                throw expected;
+            }));
+        Task<string?> executeTask = RunOnOrchestratorThread(() => shim.Execute(new TestOrchestrationContext(), "\"input\""));
+
+        // Act
+        nonDurableTask.SetResult(null);
+        Func<Task> act = async () => await executeTask;
+
+        // Assert
+        (await act.Should().ThrowExactlyAsync<InvalidOperationException>())
+            .Which.Should().BeSameAs(expected);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WhenOrchestratorAwaitsDurableActivity_Completes()
     {
         // Arrange

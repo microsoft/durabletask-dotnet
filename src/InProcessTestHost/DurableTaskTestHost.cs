@@ -127,6 +127,7 @@ public sealed class DurableTaskTestHost : IAsyncDisposable
                 services.AddDurableTaskWorker(builder =>
                 {
                     builder.UseGrpc(grpcChannel);
+                    options.ConfigureWorker?.Invoke(builder);
                     builder.AddTasks(registry);
                 });
 
@@ -186,4 +187,10 @@ public class DurableTaskTestHostOptions
     /// Use this to register services that your activities and orchestrators depend on.
     /// </summary>
     public Action<IServiceCollection>? ConfigureServices { get; set; }
+
+    /// <summary>
+    /// Gets or sets an optional callback to configure the durable task worker builder.
+    /// Use this to register worker middleware or other worker-level options for tests.
+    /// </summary>
+    public Action<IDurableTaskWorkerBuilder>? ConfigureWorker { get; set; }
 }

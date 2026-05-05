@@ -7,6 +7,7 @@ using Google.Protobuf;
 using Microsoft.DurableTask.Worker.Shims;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc;
@@ -129,14 +130,7 @@ public static class GrpcOrchestrationRunner
         Dictionary<string, object?> properties = request.Properties.ToDictionary(
                 pair => pair.Key,
                 pair => ProtoUtils.ConvertValueToObject(pair.Value));
-        DurableTaskShimFactory factory = services is null
-            ? DurableTaskShimFactory.Default
-            : services.GetService<DurableTaskShimFactory>()
-                ?? new DurableTaskShimFactory(
-                    Microsoft.Extensions.Options.Options.DefaultName,
-                    services,
-                    options: null,
-                    loggerFactory: null);
+        DurableTaskShimFactory factory = GetShimFactory(services);
         bool canUseExtendedSessions = !factory.HasOrchestrationMiddleware;
 
         OrchestratorExecutionResult? result = null;
@@ -204,12 +198,19 @@ public static class GrpcOrchestrationRunner
                     ? new(new(p.Name), p.OrchestrationInstance.InstanceId)
                     : null;
 
-                TaskOrchestration shim = factory.CreateOrchestration(
-                    orchestratorName,
-                    implementation,
-                    properties,
-                    parent,
-                    runtimeState.Tags != null ? new Dictionary<string, string>(runtimeState.Tags) : null);
+                IReadOnlyDictionary<string, string>? tags = runtimeState.Tags != null
+                    ? new Dictionary<string, string>(runtimeState.Tags)
+                    : null;
+                TaskOrchestration shim = services is null
+                    ? factory.CreateOrchestration(orchestratorName, implementation, properties, parent, tags)
+                    : factory.CreateOrchestration(
+                        orchestratorName,
+                        implementation,
+                        properties,
+                        services,
+                        parent,
+                        features: null,
+                        tags: tags);
 
                 TaskOrchestrationExecutor executor = new(
                     runtimeState,
@@ -245,5 +246,20 @@ public static class GrpcOrchestrationRunner
             requiresHistory: requiresHistory);
         byte[] responseBytes = response.ToByteArray();
         return Convert.ToBase64String(responseBytes);
+    }
+
+    static DurableTaskShimFactory GetShimFactory(IServiceProvider? services)
+    {
+        if (services is null)
+        {
+            return DurableTaskShimFactory.Default;
+        }
+
+        return services.GetService<DurableTaskShimFactory>()
+            ?? new DurableTaskShimFactory(
+                Microsoft.Extensions.Options.Options.DefaultName,
+                services,
+                services.GetService<DurableTaskWorkerOptions>(),
+                services.GetService<ILoggerFactory>());
     }
 }

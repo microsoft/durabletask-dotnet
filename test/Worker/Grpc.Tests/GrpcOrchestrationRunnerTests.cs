@@ -444,6 +444,112 @@ public class GrpcOrchestrationRunnerTests
     }
 
     [Fact]
+    public void LoadAndRun_WithRegisteredShimFactory_UsesInvocationServicesForMiddlewareResolution()
+    {
+        // Arrange
+        var factoryServices = new ServiceCollection();
+        factoryServices.AddDurableTaskWorker(
+            builder => builder.UseOrchestrationMiddleware<ProviderMarkerOrchestrationMiddleware>());
+        using ServiceProvider factoryProvider = factoryServices.BuildServiceProvider();
+        DurableTaskShimFactory registeredFactory = new(
+            Microsoft.Extensions.Options.Options.DefaultName,
+            factoryProvider,
+            options: null,
+            loggerFactory: null);
+        registeredFactory.HasOrchestrationMiddleware.Should().BeTrue();
+
+        var invocationServices = new ServiceCollection();
+        invocationServices.AddSingleton(registeredFactory);
+        invocationServices.AddScoped<ProviderMarker>();
+        invocationServices.AddScoped<ProviderMarkerOrchestrationMiddleware>();
+        using ServiceProvider invocationProvider = invocationServices.BuildServiceProvider();
+        using IServiceScope invocationScope = invocationProvider.CreateScope();
+        invocationScope.ServiceProvider.GetRequiredService<DurableTaskShimFactory>()
+            .Should().BeSameAs(registeredFactory);
+        ProviderMarker marker = invocationScope.ServiceProvider.GetRequiredService<ProviderMarker>();
+        var historyEvent = new Protobuf.HistoryEvent
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new Protobuf.ExecutionStartedEvent()
+            {
+                Name = nameof(SimpleOrchestrator),
+                Input = "\"original-input\"",
+                OrchestrationInstance = new Protobuf.OrchestrationInstance
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+            },
+        };
+        Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludeState", Value.ForBool(true) } });
+        byte[] requestBytes = orchestratorRequest.ToByteArray();
+        string requestString = Convert.ToBase64String(requestBytes);
+
+        // Act
+        string responseString = GrpcOrchestrationRunner.LoadAndRun(
+            requestString,
+            new SimpleOrchestrator(),
+            services: invocationScope.ServiceProvider);
+
+        // Assert
+        Protobuf.OrchestratorResponse response =
+            Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].CompleteOrchestration.Should().NotBeNull();
+        response.Actions[0].CompleteOrchestration.OrchestrationStatus.Should()
+            .Be(Protobuf.OrchestrationStatus.Completed);
+        marker.Invoked.Should().BeTrue();
+    }
+
+    [Fact]
+    public void LoadAndRun_WithoutRegisteredShimFactory_UsesDirectWorkerOptions()
+    {
+        // Arrange
+        RecordingDataConverter converter = new();
+        DurableTaskWorkerOptions options = new() { DataConverter = converter };
+        var services = new ServiceCollection();
+        services.AddSingleton(options);
+        using ServiceProvider provider = services.BuildServiceProvider();
+        var historyEvent = new Protobuf.HistoryEvent
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new Protobuf.ExecutionStartedEvent()
+            {
+                Name = nameof(SimpleOrchestrator),
+                Input = "\"original-input\"",
+                OrchestrationInstance = new Protobuf.OrchestrationInstance
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+            },
+        };
+        Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludeState", Value.ForBool(true) } });
+        byte[] requestBytes = orchestratorRequest.ToByteArray();
+        string requestString = Convert.ToBase64String(requestBytes);
+
+        // Act
+        string responseString = GrpcOrchestrationRunner.LoadAndRun(
+            requestString,
+            new SimpleOrchestrator(),
+            services: provider);
+
+        // Assert
+        Protobuf.OrchestratorResponse response =
+            Protobuf.OrchestratorResponse.Parser.ParseFrom(Convert.FromBase64String(responseString));
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].CompleteOrchestration.Result.Should().Be("registered:registered-input");
+        converter.DeserializeCalls.Should().Be(1);
+        converter.SerializedValues.Should().Contain("registered-input");
+    }
+
+    [Fact]
     public void Complete_Orchestration_NotStored()
     {
         using var extendedSessions = new ExtendedSessionsCache();
@@ -697,6 +803,29 @@ public class GrpcOrchestrationRunnerTests
     sealed class CapturedOrchestrationTags
     {
         public IReadOnlyDictionary<string, string>? Tags { get; set; }
+    }
+
+    sealed class ProviderMarkerOrchestrationMiddleware : ITaskOrchestrationMiddleware
+    {
+        readonly ProviderMarker marker;
+
+        public ProviderMarkerOrchestrationMiddleware(ProviderMarker marker)
+        {
+            this.marker = marker;
+        }
+
+        public Task InvokeAsync(
+            TaskOrchestrationMiddlewareContext context,
+            TaskOrchestrationMiddlewareDelegate next)
+        {
+            this.marker.Invoked = true;
+            return next(context);
+        }
+    }
+
+    sealed class ProviderMarker
+    {
+        public bool Invoked { get; set; }
     }
 
     sealed class RecordingDataConverter : DataConverter

@@ -17,6 +17,18 @@ This sample can run against either:
 1. **Durable Task Scheduler (DTS)**: set the `DURABLE_TASK_SCHEDULER_CONNECTION_STRING` environment variable.
 2. **Local gRPC endpoint**: if the environment variable is not set, the sample uses the default local gRPC configuration.
 
+### Local gRPC
+
+Leave `DURABLE_TASK_SCHEDULER_CONNECTION_STRING` unset and run the sample.
+
+```cmd
+dotnet run --project samples/MiddlewareConsoleApp/MiddlewareConsoleApp.csproj
+```
+
+```bash
+dotnet run --project samples/MiddlewareConsoleApp/MiddlewareConsoleApp.csproj
+```
+
 ### DTS
 
 Set `DURABLE_TASK_SCHEDULER_CONNECTION_STRING` and run the sample.

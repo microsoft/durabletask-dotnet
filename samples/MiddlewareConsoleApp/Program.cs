@@ -177,13 +177,23 @@ sealed class GreetingOrchestrationMiddleware : ITaskOrchestrationMiddleware
     {
         ILogger logger = context.OrchestrationContext.CreateReplaySafeLogger<GreetingOrchestrationMiddleware>();
         GreetingRequest? input = context.GetInput<GreetingRequest>();
+        string? tenantTag = null;
+        string? scenarioTag = null;
+        if (context.Tags is not null)
+        {
+            context.Tags.TryGetValue("tenant", out tenantTag);
+            context.Tags.TryGetValue("scenario", out scenarioTag);
+        }
 
         logger.LogInformation(
-            "Starting orchestration middleware for {Name}, instance {InstanceId}, tenant {TenantId}, tags {TagCount}.",
+            "Starting orchestration middleware for {Name}, instance {InstanceId}, input type {InputType}, " +
+            "tenant {TenantId}, tenant tag {TenantTag}, scenario tag {ScenarioTag}.",
             context.Name.Name,
             context.InstanceId,
+            context.InputType.Name,
             input?.TenantId,
-            context.Tags?.Count ?? 0);
+            tenantTag,
+            scenarioTag);
 
         await next(context);
 

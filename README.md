@@ -159,6 +159,12 @@ You can find the full sample file, including detailed comments, at [samples/Azur
 
 This SDK is *not* compatible with Durable Functions for the .NET *in-process* worker. It only works with the newer out-of-process .NET Isolated worker.
 
+## Durable Task middleware
+
+Durable Task middleware runs cross-cutting logic around orchestration and activity invocation. It works in standalone Durable Task workers and .NET isolated Durable Functions. Standalone workers register middleware with `AddDurableTaskWorker().UseOrchestrationMiddleware<T>().UseActivityMiddleware<T>()`; Functions apps use `ConfigureDurableWorker()` with the same middleware registration APIs.
+
+See the [Durable Task middleware guide](doc/durable-task-middleware.md) and the [standalone middleware sample](samples/MiddlewareConsoleApp/README.md) for details.
+
 ## Usage with the Durable Task Scheduler
 
 The Durable Task Scheduler for Azure Functions is a managed backend that is currently in preview. Durable Functions apps can use the Durable Task Scheduler as one of its [supported storage providers](https://learn.microsoft.com/azure/azure-functions/durable/durable-functions-storage-providers).

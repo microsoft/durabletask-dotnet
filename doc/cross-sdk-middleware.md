@@ -3,6 +3,8 @@
 > **Status:** Draft canonical cross-SDK guidance. The .NET v1 implementation in
 > `Microsoft.DurableTask.Worker.Middleware` is the reference implementation for this slice; other SDKs should use idiomatic names and shapes while preserving the contracts below.
 
+> For end-user .NET guidance, see [Durable Task middleware](durable-task-middleware.md).
+
 ## Background and goals
 
 Durable Task applications need a host-agnostic way to run cross-cutting logic around durable task execution. The immediate motivation was Azure Functions Durable Extension issue #3054, where Durable Functions users needed durable-task-aware access to host invocation context. The generalized requirement is broader: standalone Durable Task workers and hosted Durable Functions workers should share one SDK-level middleware model instead of relying on Azure Functions worker middleware.

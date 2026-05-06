@@ -626,9 +626,11 @@ public class UseWorkItemFiltersTests
         ServiceProvider provider = services.BuildServiceProvider();
         IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
             provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
-        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+        DurableTaskWorkerWorkItemFilters actual = null!;
+        Action act = () => actual = filtersMonitor.Get("test");
 
         // Assert
+        act.Should().NotThrow();
         actual.Orchestrations.Should().BeEmpty();
         actual.Activities.Should().BeEmpty();
         actual.Entities.Should().BeEmpty();

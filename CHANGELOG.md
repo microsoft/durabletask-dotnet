@@ -1,7 +1,7 @@
 # Changelog
 
 ## Unreleased
-- Validate explicit `UseWorkItemFilters(filters)` filter names against the worker's `DurableTaskRegistry`. Filters that reference an orchestration, activity, or entity name not registered with the worker now throw `OptionsValidationException` at worker startup instead of silently waiting for work items that will never arrive. No customer-side validation call is required.
+- Validate explicit `UseWorkItemFilters(filters)` filter names against the worker's `DurableTaskRegistry`. Filters that reference an orchestration, activity, or entity name not registered with the worker now throw `OptionsValidationException` at worker startup instead of silently waiting for work items that will never arrive. No customer-side validation call is required. ([#719](https://github.com/microsoft/durabletask-dotnet/pull/719))
 
 ## 1.24.1
 - Add retry to grpc calls that failed due to transient errors by @sophiatev ([#714](https://github.com/microsoft/durabletask-dotnet/pull/714))

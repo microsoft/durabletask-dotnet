@@ -36,6 +36,17 @@ sealed class DurableTaskWorkerWorkItemFiltersValidator : IValidateOptions<Durabl
     {
         Check.NotNull(options);
 
+        // The validator is registered globally, so the Options framework dispatches every named
+        // worker's filter options through it -- including workers that never opted into filtering
+        // and therefore have no filter entries to validate. Skip those cases so the validator only
+        // reports a verdict for workers that actually configured filters.
+        if (options.Orchestrations.Count == 0
+            && options.Activities.Count == 0
+            && options.Entities.Count == 0)
+        {
+            return ValidateOptionsResult.Skip;
+        }
+
         DurableTaskRegistry registry = this.registryMonitor.Get(name);
 
         List<string> unknownOrchestrations = FindUnknown(

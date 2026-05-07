@@ -1,7 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
@@ -126,6 +128,11 @@ class GrpcDurableEntityClient : DurableEntityClient
             }
             while (continueUntilComplete && continuationToken != null);
 
+            if (continueUntilComplete && req.RemoveEmptyEntities)
+            {
+                emptyEntitiesRemoved += await this.PurgeTransientEntitiesAsync(cancellation);
+            }
+
             return new CleanEntityStorageResult
             {
                 ContinuationToken = continuationToken,
@@ -220,12 +227,24 @@ class GrpcDurableEntityClient : DurableEntityClient
     {
         var coreEntityId = DTCore.Entities.EntityId.FromString(metadata.InstanceId);
         EntityInstanceId entityId = new(coreEntityId.Name, coreEntityId.Key);
-        bool hasState = metadata.SerializedState != null;
+        bool hasState = !string.IsNullOrEmpty(metadata.SerializedState);
 
-        SerializedData? data = (includeState && hasState) ? new(metadata.SerializedState!, this.dataConverter) : null;
-        return new EntityMetadata(entityId, data)
+        DateTimeOffset lastModified = metadata.LastModifiedTime?.ToDateTimeOffset() ?? default;
+
+        if (includeState && hasState)
         {
-            LastModifiedTime = metadata.LastModifiedTime.ToDateTimeOffset(),
+            SerializedData data = new(metadata.SerializedState!, this.dataConverter);
+            return new EntityMetadata(entityId, data)
+            {
+                LastModifiedTime = lastModified,
+                BacklogQueueSize = metadata.BacklogQueueSize,
+                LockedBy = metadata.LockedBy,
+            };
+        }
+
+        return new EntityMetadata(entityId, null, includesState: includeState)
+        {
+            LastModifiedTime = lastModified,
             BacklogQueueSize = metadata.BacklogQueueSize,
             LockedBy = metadata.LockedBy,
         };
@@ -235,12 +254,12 @@ class GrpcDurableEntityClient : DurableEntityClient
     {
         var coreEntityId = DTCore.Entities.EntityId.FromString(metadata.InstanceId);
         EntityInstanceId entityId = new(coreEntityId.Name, coreEntityId.Key);
-        DateTimeOffset lastModified = metadata.LastModifiedTime.ToDateTimeOffset();
-        bool hasState = metadata.SerializedState != null;
+        DateTimeOffset lastModified = metadata.LastModifiedTime?.ToDateTimeOffset() ?? default;
+        bool hasState = !string.IsNullOrEmpty(metadata.SerializedState);
 
         if (includeState && hasState)
         {
-            T? data = includeState ? this.dataConverter.Deserialize<T>(metadata.SerializedState) : default;
+            T? data = this.dataConverter.Deserialize<T>(metadata.SerializedState);
             return new EntityMetadata<T>(entityId, data)
             {
                 LastModifiedTime = lastModified,
@@ -248,14 +267,78 @@ class GrpcDurableEntityClient : DurableEntityClient
                 LockedBy = metadata.LockedBy,
             };
         }
-        else
-        {
-            return new EntityMetadata<T>(entityId)
+
+        return includeState
+            ? new EntityMetadata<T>(entityId, state: default, includesState: true)
+            {
+                LastModifiedTime = lastModified,
+                BacklogQueueSize = metadata.BacklogQueueSize,
+                LockedBy = metadata.LockedBy,
+            }
+            : new EntityMetadata<T>(entityId)
             {
                 LastModifiedTime = lastModified,
                 BacklogQueueSize = metadata.BacklogQueueSize,
                 LockedBy = metadata.LockedBy,
             };
-        }
     }
+
+    /// <summary>
+    /// Iterates transient entity metadata and purges empty entities to fully clean storage.
+    /// </summary>
+    /// <param name="cancellation">The cancellation token.</param>
+    /// <returns>The number of entities removed.</returns>
+    async Task<int> PurgeTransientEntitiesAsync(CancellationToken cancellation)
+    {
+        int removed = 0;
+        string? continuation = null;
+
+        do
+        {
+            P.QueryEntitiesResponse response = await this.sidecarClient.QueryEntitiesAsync(
+                new P.QueryEntitiesRequest
+                {
+                    Query = new P.EntityQuery
+                    {
+                        IncludeState = true,
+                        IncludeTransient = true,
+                        ContinuationToken = continuation,
+                    },
+                },
+                cancellationToken: cancellation);
+
+            List<string> transientIds = response.Entities
+                .Where(IsEmptyTransientEntity)
+                .Select(e => e.InstanceId)
+                .ToList();
+
+            if (transientIds.Count > 0)
+            {
+                P.PurgeInstancesResponse purgeResponse = await this.sidecarClient.PurgeInstancesAsync(
+                    new P.PurgeInstancesRequest
+                    {
+                        InstanceBatch = new P.InstanceBatch
+                        {
+                            InstanceIds = { transientIds },
+                        },
+                    },
+                    cancellationToken: cancellation);
+
+                removed += purgeResponse.DeletedInstanceCount;
+            }
+
+            continuation = response.ContinuationToken;
+        }
+        while (continuation != null);
+
+        return removed;
+    }
+
+    /// <summary>
+    /// Determines whether an entity is transient and contains no persisted state or locks.
+    /// </summary>
+    /// <param name="entity">The entity metadata.</param>
+    /// <returns><c>true</c> when the entity is empty and transient; otherwise, <c>false</c>.</returns>
+    static bool IsEmptyTransientEntity(P.EntityMetadata entity) =>
+        string.IsNullOrEmpty(entity.SerializedState) && string.IsNullOrEmpty(entity.LockedBy);
 }

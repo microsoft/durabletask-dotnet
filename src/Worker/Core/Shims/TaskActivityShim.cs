@@ -44,6 +44,10 @@ class TaskActivityShim : TaskActivity
         TaskActivityContextWrapper contextWrapper = new(coreContext, this.name);
 
         string instanceId = coreContext.OrchestrationInstance.InstanceId;
+        using IDisposable? scope = this.logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["InstanceId"] = instanceId,
+        });
         this.logger.ActivityStarted(instanceId, this.name);
 
         try

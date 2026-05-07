@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+
+
+## v1.24.2
+- Bump DI.Abstractions and Bcl.AsyncInterfaces to 9.0.1 ([#3433](https://github.com/microsoft/durabletask-dotnet/pull/3433)) (#723)
+- Validate UseWorkItemFilters names against registered tasks at worker build time ([#719](https://github.com/microsoft/durabletask-dotnet/pull/719))
 - Bump `Microsoft.Extensions.DependencyInjection.Abstractions` from 8.0.2 to 9.0.1 (and `Microsoft.Bcl.AsyncInterfaces` from 8.0.0 to 9.0.1, which the former transitively floors at 9.0.1) to align with the floor declared by `Microsoft.Azure.WebJobs 3.0.45 -> Microsoft.Extensions.Logging.Abstractions 9.0.1`. Fixes NU1605 in downstream Azure Functions Worker isolated apps consuming `Microsoft.DurableTask.Extensions.AzureBlobPayloads` ([Azure/azure-functions-durable-extension#3433](https://github.com/Azure/azure-functions-durable-extension/issues/3433)).
 - Validate explicit `UseWorkItemFilters(filters)` filter names against the worker's `DurableTaskRegistry`. Filters that reference an orchestration, activity, or entity name not registered with the worker now throw `OptionsValidationException` at worker startup instead of silently waiting for work items that will never arrive. No customer-side validation call is required. ([#719](https://github.com/microsoft/durabletask-dotnet/pull/719))
 

@@ -4,12 +4,17 @@
 using System.Collections.Generic;
 using System.Reflection;
 using DurableTask.Core;
+using DurableTask.Core.Serializing.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Microsoft.DurableTask.Worker.Shims;
 
 public class TaskOrchestrationContextWrapperTests
 {
+    static readonly MethodInfo CompleteExternalEventMethod = typeof(TaskOrchestrationContextWrapper)
+        .GetMethod(nameof(TaskOrchestrationContextWrapper.CompleteExternalEvent), BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException($"{nameof(TaskOrchestrationContextWrapper)}.{nameof(TaskOrchestrationContextWrapper.CompleteExternalEvent)} was not found.");
+
     [Fact]
     public void Ctor_NullParent_Populates()
     {
@@ -103,6 +108,26 @@ public class TaskOrchestrationContextWrapperTests
         // Assert
         innerContext.LastContinueAsNewInput.Should().Be("new-input");
         innerContext.LastContinueAsNewVersion.Should().BeNull();
+    }
+
+    [Fact]
+    public void ContinueAsNew_WithPreserveUnprocessedEvents_ForwardsLateArrivingEventsToNextExecution()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        wrapper.ContinueAsNew("new-input", preserveUnprocessedEvents: true);
+        InvokeCompleteExternalEvent(wrapper, "Event", "\"payload\"");
+
+        // Assert
+        innerContext.SentEvents.Should().ContainSingle();
+        innerContext.SentEvents[0].InstanceId.Should().Be(wrapper.InstanceId);
+        innerContext.SentEvents[0].EventName.Should().Be("Event");
+        innerContext.SentEvents[0].EventData.Should().BeOfType<RawInput>().Which.Value.Should().Be("\"payload\"");
+        innerContext.LastContinueAsNewInput.Should().Be("new-input");
     }
 
     [Fact]
@@ -274,6 +299,11 @@ public class TaskOrchestrationContextWrapperTests
         return (IReadOnlyDictionary<string, string>)tagsProperty.GetValue(innerContext.LastScheduledTaskOptions)!;
     }
 
+    static void InvokeCompleteExternalEvent(TaskOrchestrationContextWrapper wrapper, string eventName, string rawEventPayload)
+    {
+        CompleteExternalEventMethod.Invoke(wrapper, [eventName, rawEventPayload]);
+    }
+
     sealed class TrackingOrchestrationContext : OrchestrationContext
     {
         public TrackingOrchestrationContext(string? version = null)
@@ -297,6 +327,8 @@ public class TaskOrchestrationContextWrapperTests
         public object? LastScheduledTaskInput { get; private set; }
 
         public ScheduleTaskOptions? LastScheduledTaskOptions { get; private set; }
+
+        public List<(string InstanceId, string EventName, object EventData)> SentEvents { get; } = [];
 
         public override void ContinueAsNew(object input)
         {
@@ -355,7 +387,9 @@ public class TaskOrchestrationContextWrapperTests
         }
 
         public override void SendEvent(OrchestrationInstance orchestrationInstance, string eventName, object eventData)
-            => throw new NotImplementedException();
+        {
+            this.SentEvents.Add((orchestrationInstance.InstanceId, eventName, eventData));
+        }
     }
 
     class TestOrchestrationContext : OrchestrationContext

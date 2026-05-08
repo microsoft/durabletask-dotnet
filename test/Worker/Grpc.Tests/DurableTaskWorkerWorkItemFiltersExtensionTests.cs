@@ -340,7 +340,7 @@ public class DurableTaskWorkerWorkItemFiltersExtensionTests
 
         DurableTaskWorkerWorkItemFilters customFilters = new()
         {
-            Orchestrations = [new DurableTaskWorkerWorkItemFilters.OrchestrationFilter { Name = "CustomOrch", Versions = ["2.0"] }],
+            Orchestrations = [new DurableTaskWorkerWorkItemFilters.OrchestrationFilter { Name = nameof(TestOrchestrator), Versions = ["2.0"] }],
             Activities = [],
             Entities = [],
         };
@@ -367,7 +367,7 @@ public class DurableTaskWorkerWorkItemFiltersExtensionTests
 
         // Assert
         filters.Should().NotBeNull();
-        filters!.Orchestrations.Should().ContainSingle(o => o.Name == "CustomOrch" && o.Versions.Contains("2.0"));
+        filters!.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.Contains("2.0"));
         filters.Activities.Should().BeEmpty();
         filters.Entities.Should().BeEmpty();
     }

@@ -127,5 +127,44 @@ public class GrpcDurableTaskClientTests
         var exception = await act.Should().ThrowAsync<Exception>();
         exception.Which.Should().NotBeOfType<ArgumentException>();
     }
+
+    [Fact]
+    public async Task PurgeAllInstancesAsync_NegativeTimeout_ThrowsArgumentOutOfRangeException()
+    {
+        // Arrange
+        var client = this.CreateClient();
+        var filter = new PurgeInstancesFilter { Timeout = TimeSpan.FromSeconds(-1) };
+
+        // Act & Assert
+        Func<Task> act = async () => await client.PurgeAllInstancesAsync(filter);
+        var exception = await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
+        exception.Which.Message.Should().Contain("Timeout must be a positive TimeSpan.");
+    }
+
+    [Fact]
+    public async Task PurgeAllInstancesAsync_ZeroTimeout_ThrowsArgumentOutOfRangeException()
+    {
+        // Arrange
+        var client = this.CreateClient();
+        var filter = new PurgeInstancesFilter { Timeout = TimeSpan.Zero };
+
+        // Act & Assert
+        Func<Task> act = async () => await client.PurgeAllInstancesAsync(filter);
+        var exception = await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
+        exception.Which.Message.Should().Contain("Timeout must be a positive TimeSpan.");
+    }
+
+    [Fact]
+    public async Task PurgeAllInstancesAsync_PositiveTimeout_DoesNotThrowValidationError()
+    {
+        // Arrange
+        var client = this.CreateClient();
+        var filter = new PurgeInstancesFilter { Timeout = TimeSpan.FromSeconds(30) };
+
+        // Act & Assert - validation should pass; the call will fail at gRPC level, not validation
+        Func<Task> act = async () => await client.PurgeAllInstancesAsync(filter);
+        var exception = await act.Should().ThrowAsync<Exception>();
+        exception.Which.Should().NotBeOfType<ArgumentOutOfRangeException>();
+    }
 }
 

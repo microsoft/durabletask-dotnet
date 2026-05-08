@@ -3,6 +3,25 @@
 ## Unreleased
 
 
+## v1.24.2
+- Bump DI.Abstractions and Bcl.AsyncInterfaces to 9.0.1 ([#3433](https://github.com/microsoft/durabletask-dotnet/pull/3433)) (#723)
+- Validate UseWorkItemFilters names against registered tasks at worker build time ([#719](https://github.com/microsoft/durabletask-dotnet/pull/719))
+- Bump `Microsoft.Extensions.DependencyInjection.Abstractions` from 8.0.2 to 9.0.1 (and `Microsoft.Bcl.AsyncInterfaces` from 8.0.0 to 9.0.1, which the former transitively floors at 9.0.1) to align with the floor declared by `Microsoft.Azure.WebJobs 3.0.45 -> Microsoft.Extensions.Logging.Abstractions 9.0.1`. Fixes NU1605 in downstream Azure Functions Worker isolated apps consuming `Microsoft.DurableTask.Extensions.AzureBlobPayloads` ([Azure/azure-functions-durable-extension#3433](https://github.com/Azure/azure-functions-durable-extension/issues/3433)).
+- Validate explicit `UseWorkItemFilters(filters)` filter names against the worker's `DurableTaskRegistry`. Filters that reference an orchestration, activity, or entity name not registered with the worker now throw `OptionsValidationException` at worker startup instead of silently waiting for work items that will never arrive. No customer-side validation call is required. ([#719](https://github.com/microsoft/durabletask-dotnet/pull/719))
+
+## 1.24.1
+- Add retry to grpc calls that failed due to transient errors by @sophiatev ([#714](https://github.com/microsoft/durabletask-dotnet/pull/714))
+
+## v1.24.0
+- Harden grpc worker and client against silent disconnects by @berndverst ([#708](https://github.com/microsoft/durabletask-dotnet/pull/708))
+- Preserve late events after continue-as-new by @berndverst ([#711](https://github.com/microsoft/durabletask-dotnet/pull/711))
+- Fix inprocesstesthost continueasnew stuck-instance race condition by @bachuv ([#707](https://github.com/microsoft/durabletask-dotnet/pull/707))
+- Fix continue-as-new race condition at inprocesstesthost by @nytian ([#703](https://github.com/microsoft/durabletask-dotnet/pull/703))
+- Add opt-in timeout to purgeinstancesfilter for partial purge by @yunchuwang ([#680](https://github.com/microsoft/durabletask-dotnet/pull/680))
+
+## v1.23.3
+- fix: revert shared framework packages to 8.x for net8 Functions host compatibility ([#698](https://github.com/microsoft/durabletask-dotnet/pull/698))
+- Release v1.23.2 ([#693](https://github.com/microsoft/durabletask-dotnet/pull/693))
 
 ## v1.23.2
 - fix: improve large payload error handling — better error message and prevent infinite retry and fix conflict with auto chunking ([#691](https://github.com/microsoft/durabletask-dotnet/pull/691))

@@ -18,4 +18,32 @@ static class DurableTaskRegistryExtensions
         Check.NotNull(registry);
         return new DurableTaskFactory(registry.Activities, registry.Orchestrators, registry.Entities);
     }
+
+    /// <summary>
+    /// Returns a value indicating whether any orchestrator or activity in the registry has been
+    /// registered with an explicit (non-empty) <see cref="DurableTaskVersionAttribute"/>-style version.
+    /// </summary>
+    /// <param name="registry">The registry to inspect.</param>
+    /// <returns><c>true</c> if any registration carries a non-empty version; otherwise, <c>false</c>.</returns>
+    internal static bool HasAnyVersionedRegistration(this DurableTaskRegistry registry)
+    {
+        Check.NotNull(registry);
+        foreach (OrchestratorVersionKey key in registry.Orchestrators.Keys)
+        {
+            if (!string.IsNullOrWhiteSpace(key.Version))
+            {
+                return true;
+            }
+        }
+
+        foreach (ActivityVersionKey key in registry.Activities.Keys)
+        {
+            if (!string.IsNullOrWhiteSpace(key.Version))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

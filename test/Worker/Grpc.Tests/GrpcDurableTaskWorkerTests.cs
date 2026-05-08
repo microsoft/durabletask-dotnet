@@ -489,6 +489,87 @@ public class GrpcDurableTaskWorkerTests
         deadline.Should().Be(DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc));
     }
 
+    [Fact]
+    public void Constructor_PerTaskVersioningCombinedWithStrictWorkerVersioning_LogsWarning()
+    {
+        // Arrange
+        DurableTaskRegistry registry = new();
+        registry.AddOrchestrator(new TaskName("MyOrch"), new TaskVersion("1"), () => Mock.Of<ITaskOrchestrator>());
+        registry.AddOrchestrator(new TaskName("MyOrch"), new TaskVersion("2"), () => Mock.Of<ITaskOrchestrator>());
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Versioning = new DurableTaskWorkerOptions.VersioningOptions
+            {
+                Version = "1",
+                MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+            },
+            Logging = { UseLegacyCategories = false },
+        };
+        TestLogProvider logProvider = new(new NullOutput());
+
+        // Act
+        _ = CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, new SimpleLoggerFactory(logProvider), registry);
+
+        // Assert
+        logProvider.TryGetLogs(Category, out IReadOnlyCollection<LogEntry>? logs).Should().BeTrue();
+        logs!.Should().Contain(log =>
+            log.LogLevel == LogLevel.Warning
+            && log.Message.Contains("Per-task versioning")
+            && log.Message.Contains("worker-level versioning")
+            && log.Message.Contains("Strict"));
+    }
+
+    [Fact]
+    public void Constructor_PerTaskVersioningWithoutWorkerVersioning_DoesNotLogWarning()
+    {
+        // Arrange
+        DurableTaskRegistry registry = new();
+        registry.AddOrchestrator(new TaskName("MyOrch"), new TaskVersion("1"), () => Mock.Of<ITaskOrchestrator>());
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Logging = { UseLegacyCategories = false },
+        };
+        TestLogProvider logProvider = new(new NullOutput());
+
+        // Act
+        _ = CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, new SimpleLoggerFactory(logProvider), registry);
+
+        // Assert
+        if (logProvider.TryGetLogs(Category, out IReadOnlyCollection<LogEntry>? logs))
+        {
+            logs!.Should().NotContain(log =>
+                log.Message.Contains("Per-task versioning"));
+        }
+    }
+
+    [Fact]
+    public void Constructor_WorkerVersioningWithoutPerTaskVersions_DoesNotLogWarning()
+    {
+        // Arrange
+        DurableTaskRegistry registry = new();
+        registry.AddOrchestrator(new TaskName("MyOrch"), () => Mock.Of<ITaskOrchestrator>());
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Versioning = new DurableTaskWorkerOptions.VersioningOptions
+            {
+                Version = "1",
+                MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+            },
+            Logging = { UseLegacyCategories = false },
+        };
+        TestLogProvider logProvider = new(new NullOutput());
+
+        // Act
+        _ = CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, new SimpleLoggerFactory(logProvider), registry);
+
+        // Assert
+        if (logProvider.TryGetLogs(Category, out IReadOnlyCollection<LogEntry>? logs))
+        {
+            logs!.Should().NotContain(log =>
+                log.Message.Contains("Per-task versioning"));
+        }
+    }
+
     static GrpcDurableTaskWorker CreateWorker(GrpcDurableTaskWorkerOptions grpcOptions)
     {
         return CreateWorker(grpcOptions, new DurableTaskWorkerOptions(), NullLoggerFactory.Instance);
@@ -500,16 +581,37 @@ public class GrpcDurableTaskWorkerTests
         ILoggerFactory loggerFactory)
     {
         Mock<IDurableTaskFactory> factoryMock = new(MockBehavior.Strict);
+        return CreateWorker(grpcOptions, workerOptions, loggerFactory, factoryMock.Object, registry: null);
+    }
 
+    static GrpcDurableTaskWorker CreateWorker(
+        GrpcDurableTaskWorkerOptions grpcOptions,
+        DurableTaskWorkerOptions workerOptions,
+        ILoggerFactory loggerFactory,
+        DurableTaskRegistry registry)
+    {
+        Mock<IDurableTaskFactory> factoryMock = new(MockBehavior.Strict);
+        return CreateWorker(grpcOptions, workerOptions, loggerFactory, factoryMock.Object, registry);
+    }
+
+    static GrpcDurableTaskWorker CreateWorker(
+        GrpcDurableTaskWorkerOptions grpcOptions,
+        DurableTaskWorkerOptions workerOptions,
+        ILoggerFactory loggerFactory,
+        IDurableTaskFactory factory,
+        DurableTaskRegistry? registry)
+    {
         return new GrpcDurableTaskWorker(
             name: "Test",
-            factory: factoryMock.Object,
+            factory: factory,
             grpcOptions: new OptionsMonitorStub<GrpcDurableTaskWorkerOptions>(grpcOptions),
             workerOptions: new OptionsMonitorStub<DurableTaskWorkerOptions>(workerOptions),
             services: Mock.Of<IServiceProvider>(),
             loggerFactory: loggerFactory,
             orchestrationFilter: null,
-            exceptionPropertiesProvider: null);
+            exceptionPropertiesProvider: null,
+            workItemFiltersMonitor: null,
+            registryMonitor: registry is null ? null : new OptionsMonitorStub<DurableTaskRegistry>(registry));
     }
 
     static Task InvokeExecuteAsync(GrpcDurableTaskWorker worker, CancellationToken cancellationToken)

@@ -47,6 +47,12 @@ static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string v
         && activityOptions.Version is TaskVersion explicitVersion
         && !string.IsNullOrWhiteSpace(explicitVersion.Version))
     {
+        if (!string.Equals(explicitVersion.Version, version, System.StringComparison.OrdinalIgnoreCase))
+        {
+            throw new System.InvalidOperationException(
+                $""The generated activity helper targets version '{version}' but ActivityOptions.Version was set to '{explicitVersion.Version}'. Use the unqualified CallActivityAsync overload to call a different version."");
+        }
+
         return options;
     }
 
@@ -133,6 +139,12 @@ static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string v
         && activityOptions.Version is TaskVersion explicitVersion
         && !string.IsNullOrWhiteSpace(explicitVersion.Version))
     {
+        if (!string.Equals(explicitVersion.Version, version, System.StringComparison.OrdinalIgnoreCase))
+        {
+            throw new System.InvalidOperationException(
+                $""The generated activity helper targets version '{version}' but ActivityOptions.Version was set to '{explicitVersion.Version}'. Use the unqualified CallActivityAsync overload to call a different version."");
+        }
+
         return options;
     }
 
@@ -211,6 +223,12 @@ static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string v
         && activityOptions.Version is TaskVersion explicitVersion
         && !string.IsNullOrWhiteSpace(explicitVersion.Version))
     {
+        if (!string.Equals(explicitVersion.Version, version, System.StringComparison.OrdinalIgnoreCase))
+        {
+            throw new System.InvalidOperationException(
+                $""The generated activity helper targets version '{version}' but ActivityOptions.Version was set to '{explicitVersion.Version}'. Use the unqualified CallActivityAsync overload to call a different version."");
+        }
+
         return options;
     }
 

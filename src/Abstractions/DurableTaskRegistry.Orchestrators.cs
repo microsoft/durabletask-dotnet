@@ -54,6 +54,7 @@ public partial class DurableTaskRegistry
     {
         Check.NotDefault(name);
         Check.NotNull(factory);
+        ValidateRegistrationVersion(version);
 
         OrchestratorVersionKey key = new(name, version);
         if (this.Orchestrators.ContainsKey(key))

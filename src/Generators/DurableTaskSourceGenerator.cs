@@ -62,6 +62,11 @@ namespace Microsoft.DurableTask.Generators
         /// </summary>
         const string DuplicateAzureFunctionsOrchestratorNameDiagnosticId = "DURABLE3004";
 
+        /// <summary>
+        /// Diagnostic ID for whitespace-only [DurableTaskVersion] arguments.
+        /// </summary>
+        const string WhitespaceTaskVersionDiagnosticId = "DURABLE3005";
+
         static readonly DiagnosticDescriptor InvalidTaskNameRule = new(
             InvalidTaskNameDiagnosticId,
             title: "Invalid task name",
@@ -90,6 +95,14 @@ namespace Microsoft.DurableTask.Generators
             DuplicateAzureFunctionsOrchestratorNameDiagnosticId,
             title: "Azure Functions multi-version class-based tasks are not supported",
             messageFormat: "Azure Functions projects cannot generate multiple class-based orchestrators or activities with the durable task name '{0}'. Use the standalone worker or keep a single logical task per name.",
+            category: "DurableTask.Design",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        static readonly DiagnosticDescriptor WhitespaceTaskVersionRule = new(
+            WhitespaceTaskVersionDiagnosticId,
+            title: "Whitespace-only [DurableTaskVersion] argument",
+            messageFormat: "The [DurableTaskVersion] argument on '{0}' must not be whitespace-only. Provide a non-empty version string or omit the attribute argument to declare an unversioned task.",
             category: "DurableTask.Design",
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -243,18 +256,32 @@ namespace Microsoft.DurableTask.Generators
             }
 
             string taskVersion = string.Empty;
+            Location? taskVersionLocation = null;
+            bool hasWhitespaceVersion = false;
             foreach (AttributeData attributeData in classType.GetAttributes())
             {
                 if (attributeData.AttributeClass?.ToDisplayString() == "Microsoft.DurableTask.DurableTaskVersionAttribute"
                     && attributeData.ConstructorArguments.Length > 0
                     && attributeData.ConstructorArguments[0].Value is string version)
                 {
-                    taskVersion = version;
+                    if (version.Length > 0 && string.IsNullOrWhiteSpace(version))
+                    {
+                        hasWhitespaceVersion = true;
+                        taskVersionLocation = attributeData.ApplicationSyntaxReference?.GetSyntax().GetLocation();
+                        // Treat as unversioned for downstream emission so we don't generate code referencing
+                        // a whitespace literal; the diagnostic below will fail the build.
+                        taskVersion = string.Empty;
+                    }
+                    else
+                    {
+                        taskVersion = version;
+                    }
+
                     break;
                 }
             }
 
-            return new DurableTaskTypeInfo(className, classNamespace, taskName, inputType, outputType, kind, taskVersion, taskNameLocation);
+            return new DurableTaskTypeInfo(className, classNamespace, taskName, inputType, outputType, kind, taskVersion, taskNameLocation, taskVersionLocation, hasWhitespaceVersion);
         }
 
         static DurableEventTypeInfo? GetDurableEventTypeInfo(GeneratorSyntaxContext context)
@@ -377,6 +404,19 @@ namespace Microsoft.DurableTask.Generators
 
             IEnumerable<DurableTaskTypeInfo> validTasks = allTasks
                 .Where(task => IsValidCSharpIdentifier(task.TaskName));
+
+            // Surface whitespace-only [DurableTaskVersion] as an error before we partition by name+version.
+            foreach (DurableTaskTypeInfo task in allTasks)
+            {
+                if (task.HasWhitespaceVersion)
+                {
+                    Location location = task.TaskVersionLocation ?? task.TaskNameLocation ?? Location.None;
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        WhitespaceTaskVersionRule,
+                        location,
+                        task.TaskName));
+                }
+            }
 
             Dictionary<string, DurableTaskTypeInfo> standaloneOrchestratorRegistrations = new(StringComparer.OrdinalIgnoreCase);
             Dictionary<string, DurableTaskTypeInfo> standaloneActivityRegistrations = new(StringComparer.OrdinalIgnoreCase);
@@ -801,11 +841,15 @@ namespace {targetNamespace}
                 return string.Empty;
             }
 
+            // Encode the version as a method-name suffix that is collision-free with respect to any other input.
+            // Letters and digits pass through; '_' and every other character are encoded as "_xHHHH_". Escaping
+            // '_' itself is what prevents collisions like "1.0" (-> "_1_x002E_0") vs "1_x002E_0" which would
+            // otherwise both produce "_1_x002E_0".
             StringBuilder suffixBuilder = new(version.Length + 1);
             suffixBuilder.Append('_');
             foreach (char c in version)
             {
-                if (char.IsLetterOrDigit(c) || c == '_')
+                if (char.IsLetterOrDigit(c))
                 {
                     suffixBuilder.Append(c);
                 }
@@ -897,8 +941,14 @@ namespace {targetNamespace}
                 sourceBuilder.AppendLine(@"
         static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
         {
-            if (options?.Version is { Version: not null and not """" })
+            if (options?.Version is { Version: { Length: > 0 } existingVersion })
             {
+                if (!string.Equals(existingVersion, version, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new System.InvalidOperationException(
+                        $""The generated helper targets version '{version}' but options.Version was set to '{existingVersion}'. Use the unqualified ScheduleNewOrchestrationInstanceAsync overload to schedule a different version."");
+                }
+
                 return options;
             }
 
@@ -918,8 +968,14 @@ namespace {targetNamespace}
 
         static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
         {
-            if (options is SubOrchestrationOptions { Version: { Version: not null and not """" } })
+            if (options is SubOrchestrationOptions { Version: { Version: { Length: > 0 } existingSubVersion } })
             {
+                if (!string.Equals(existingSubVersion, version, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new System.InvalidOperationException(
+                        $""The generated sub-orchestrator helper targets version '{version}' but options.Version was set to '{existingSubVersion}'. Use the unqualified CallSubOrchestratorAsync overload to call a different version."");
+                }
+
                 return options;
             }
 
@@ -955,6 +1011,12 @@ namespace {targetNamespace}
                 && activityOptions.Version is TaskVersion explicitVersion
                 && !string.IsNullOrWhiteSpace(explicitVersion.Version))
             {
+                if (!string.Equals(explicitVersion.Version, version, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new System.InvalidOperationException(
+                        $""The generated activity helper targets version '{version}' but ActivityOptions.Version was set to '{explicitVersion.Version}'. Use the unqualified CallActivityAsync overload to call a different version."");
+                }
+
                 return options;
             }
 
@@ -1181,7 +1243,9 @@ namespace {targetNamespace}
                 ITypeSymbol? outputType,
                 DurableTaskKind kind,
                 string taskVersion,
-                Location? taskNameLocation = null)
+                Location? taskNameLocation = null,
+                Location? taskVersionLocation = null,
+                bool hasWhitespaceVersion = false)
             {
                 this.TypeName = taskType;
                 this.Namespace = taskNamespace;
@@ -1189,6 +1253,8 @@ namespace {targetNamespace}
                 this.Kind = kind;
                 this.TaskVersion = taskVersion;
                 this.TaskNameLocation = taskNameLocation;
+                this.TaskVersionLocation = taskVersionLocation;
+                this.HasWhitespaceVersion = hasWhitespaceVersion;
                 this.InputTypeSymbol = inputType;
                 this.OutputTypeSymbol = outputType;
             }
@@ -1199,6 +1265,8 @@ namespace {targetNamespace}
             public string TaskVersion { get; }
             public DurableTaskKind Kind { get; }
             public Location? TaskNameLocation { get; }
+            public Location? TaskVersionLocation { get; }
+            public bool HasWhitespaceVersion { get; }
             ITypeSymbol? InputTypeSymbol { get; }
             ITypeSymbol? OutputTypeSymbol { get; }
 

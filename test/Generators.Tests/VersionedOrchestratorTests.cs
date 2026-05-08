@@ -52,8 +52,14 @@ public static Task<string> CallInvoiceWorkflowAsync(
 
 static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
 {
-    if (options?.Version is { Version: not null and not """" })
+    if (options?.Version is { Version: { Length: > 0 } existingVersion })
     {
+        if (!string.Equals(existingVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        {
+            throw new System.InvalidOperationException(
+                $""The generated helper targets version '{version}' but options.Version was set to '{existingVersion}'. Use the unqualified ScheduleNewOrchestrationInstanceAsync overload to schedule a different version."");
+        }
+
         return options;
     }
 
@@ -73,8 +79,14 @@ static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOption
 
 static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
 {
-    if (options is SubOrchestrationOptions { Version: { Version: not null and not """" } })
+    if (options is SubOrchestrationOptions { Version: { Version: { Length: > 0 } existingSubVersion } })
     {
+        if (!string.Equals(existingSubVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        {
+            throw new System.InvalidOperationException(
+                $""The generated sub-orchestrator helper targets version '{version}' but options.Version was set to '{existingSubVersion}'. Use the unqualified CallSubOrchestratorAsync overload to call a different version."");
+        }
+
         return options;
     }
 
@@ -179,8 +191,14 @@ public static Task<string> CallInvoiceWorkflow_v2Async(
 
 static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
 {
-    if (options?.Version is { Version: not null and not """" })
+    if (options?.Version is { Version: { Length: > 0 } existingVersion })
     {
+        if (!string.Equals(existingVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        {
+            throw new System.InvalidOperationException(
+                $""The generated helper targets version '{version}' but options.Version was set to '{existingVersion}'. Use the unqualified ScheduleNewOrchestrationInstanceAsync overload to schedule a different version."");
+        }
+
         return options;
     }
 
@@ -200,8 +218,14 @@ static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOption
 
 static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
 {
-    if (options is SubOrchestrationOptions { Version: { Version: not null and not """" } })
+    if (options is SubOrchestrationOptions { Version: { Version: { Length: > 0 } existingSubVersion } })
     {
+        if (!string.Equals(existingSubVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        {
+            throw new System.InvalidOperationException(
+                $""The generated sub-orchestrator helper targets version '{version}' but options.Version was set to '{existingSubVersion}'. Use the unqualified CallSubOrchestratorAsync overload to call a different version."");
+        }
+
         return options;
     }
 
@@ -307,8 +331,14 @@ public static Task<string> Callinvoiceworkflow_v2Async(
 
 static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
 {
-    if (options?.Version is { Version: not null and not """" })
+    if (options?.Version is { Version: { Length: > 0 } existingVersion })
     {
+        if (!string.Equals(existingVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        {
+            throw new System.InvalidOperationException(
+                $""The generated helper targets version '{version}' but options.Version was set to '{existingVersion}'. Use the unqualified ScheduleNewOrchestrationInstanceAsync overload to schedule a different version."");
+        }
+
         return options;
     }
 
@@ -328,8 +358,14 @@ static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOption
 
 static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
 {
-    if (options is SubOrchestrationOptions { Version: { Version: not null and not """" } })
+    if (options is SubOrchestrationOptions { Version: { Version: { Length: > 0 } existingSubVersion } })
     {
+        if (!string.Equals(existingSubVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        {
+            throw new System.InvalidOperationException(
+                $""The generated sub-orchestrator helper targets version '{version}' but options.Version was set to '{existingSubVersion}'. Use the unqualified CallSubOrchestratorAsync overload to call a different version."");
+        }
+
         return options;
     }
 
@@ -415,8 +451,14 @@ public static Task<string> CallInvoiceWorkflowAsync(
 
 static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
 {
-    if (options?.Version is { Version: not null and not """" })
+    if (options?.Version is { Version: { Length: > 0 } existingVersion })
     {
+        if (!string.Equals(existingVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        {
+            throw new System.InvalidOperationException(
+                $""The generated helper targets version '{version}' but options.Version was set to '{existingVersion}'. Use the unqualified ScheduleNewOrchestrationInstanceAsync overload to schedule a different version."");
+        }
+
         return options;
     }
 
@@ -436,8 +478,14 @@ static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOption
 
 static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
 {
-    if (options is SubOrchestrationOptions { Version: { Version: not null and not """" } })
+    if (options is SubOrchestrationOptions { Version: { Version: { Length: > 0 } existingSubVersion } })
     {
+        if (!string.Equals(existingSubVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        {
+            throw new System.InvalidOperationException(
+                $""The generated sub-orchestrator helper targets version '{version}' but options.Version was set to '{existingSubVersion}'. Use the unqualified CallSubOrchestratorAsync overload to call a different version."");
+        }
+
         return options;
     }
 
@@ -539,8 +587,14 @@ public static Task<string> CallInvoiceWorkflowAsync(
 
 static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
 {
-    if (options?.Version is { Version: not null and not """" })
+    if (options?.Version is { Version: { Length: > 0 } existingVersion })
     {
+        if (!string.Equals(existingVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        {
+            throw new System.InvalidOperationException(
+                $""The generated helper targets version '{version}' but options.Version was set to '{existingVersion}'. Use the unqualified ScheduleNewOrchestrationInstanceAsync overload to schedule a different version."");
+        }
+
         return options;
     }
 
@@ -560,8 +614,14 @@ static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOption
 
 static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
 {
-    if (options is SubOrchestrationOptions { Version: { Version: not null and not """" } })
+    if (options is SubOrchestrationOptions { Version: { Version: { Length: > 0 } existingSubVersion } })
     {
+        if (!string.Equals(existingSubVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        {
+            throw new System.InvalidOperationException(
+                $""The generated sub-orchestrator helper targets version '{version}' but options.Version was set to '{existingSubVersion}'. Use the unqualified CallSubOrchestratorAsync overload to call a different version."");
+        }
+
         return options;
     }
 

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Collections.Generic;
+using Microsoft.DurableTask.Worker;
 
 namespace Microsoft.DurableTask.Grpc.Tests;
 
@@ -10,8 +11,6 @@ namespace Microsoft.DurableTask.Grpc.Tests;
 /// </summary>
 public static class VersionedClassSyntaxTestOrchestration
 {
-    public const string ExplicitVersionTagName = "microsoft.durabletask.activity.explicit-version";
-
     /// <summary>
     /// Version 1 of the explicit version routing orchestration.
     /// </summary>
@@ -131,7 +130,8 @@ public static class VersionedClassSyntaxTestOrchestration
     }
 
     /// <summary>
-    /// Version 2 of the orchestration that passes the reserved explicit-version tag in user-supplied task options.
+    /// Version 2 of the orchestration that attempts to spoof the version-source tag in user-supplied
+    /// task options. The SDK must strip the reserved key and re-stamp it based on the actual options.
     /// </summary>
     [DurableTask("SpoofedActivityVersionTagFallbackOrchestration")]
     [DurableTaskVersion("v2")]
@@ -144,7 +144,11 @@ public static class VersionedClassSyntaxTestOrchestration
                 input,
                 new TaskOptions(tags: new Dictionary<string, string>
                 {
-                    [ExplicitVersionTagName] = bool.FalseString,
+                    // Caller tries to lie that the activity version is "explicit" so the worker would
+                    // refuse the unversioned-fallback. The SDK must strip this reserved key on the
+                    // outbound path and re-stamp the source as "inherited" (since no ActivityOptions
+                    // explicit version was set), preserving the inherited-fallback path.
+                    [ActivityVersioning.VersionSourceTagName] = ActivityVersioning.ExplicitSource,
                 }));
     }
 

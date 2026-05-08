@@ -44,13 +44,17 @@ public static Task<string> CallInvoiceActivityAsync(this TaskOrchestrationContex
 static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
 {
     if (options is ActivityOptions activityOptions
-        && activityOptions.Version is TaskVersion explicitVersion
-        && !string.IsNullOrWhiteSpace(explicitVersion.Version))
+        && activityOptions.Version is TaskVersion explicitVersion)
     {
-        if (!string.Equals(explicitVersion.Version, version, System.StringComparison.OrdinalIgnoreCase))
+        // Any non-null ActivityOptions.Version is an explicit caller selection — including
+        // TaskVersion.Unversioned and the empty-string equivalent. Disagreement with the helper-
+        // baked version is always a contradiction, so we throw rather than silently override.
+        string explicitValue = explicitVersion.Version ?? string.Empty;
+        if (!string.Equals(explicitValue, version, System.StringComparison.OrdinalIgnoreCase))
         {
+            string requested = string.IsNullOrEmpty(explicitValue) ? ""<unversioned>"" : ""'"" + explicitValue + ""'"";
             throw new System.InvalidOperationException(
-                $""The generated activity helper targets version '{version}' but ActivityOptions.Version was set to '{explicitVersion.Version}'. Use the unqualified CallActivityAsync overload to call a different version."");
+                $""The generated activity helper targets version '{version}' but ActivityOptions.Version was set to {requested}. Use the unqualified CallActivityAsync overload to call a different version."");
         }
 
         return options;
@@ -136,13 +140,17 @@ public static Task<string> CallInvoiceActivity_v2Async(this TaskOrchestrationCon
 static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
 {
     if (options is ActivityOptions activityOptions
-        && activityOptions.Version is TaskVersion explicitVersion
-        && !string.IsNullOrWhiteSpace(explicitVersion.Version))
+        && activityOptions.Version is TaskVersion explicitVersion)
     {
-        if (!string.Equals(explicitVersion.Version, version, System.StringComparison.OrdinalIgnoreCase))
+        // Any non-null ActivityOptions.Version is an explicit caller selection — including
+        // TaskVersion.Unversioned and the empty-string equivalent. Disagreement with the helper-
+        // baked version is always a contradiction, so we throw rather than silently override.
+        string explicitValue = explicitVersion.Version ?? string.Empty;
+        if (!string.Equals(explicitValue, version, System.StringComparison.OrdinalIgnoreCase))
         {
+            string requested = string.IsNullOrEmpty(explicitValue) ? ""<unversioned>"" : ""'"" + explicitValue + ""'"";
             throw new System.InvalidOperationException(
-                $""The generated activity helper targets version '{version}' but ActivityOptions.Version was set to '{explicitVersion.Version}'. Use the unqualified CallActivityAsync overload to call a different version."");
+                $""The generated activity helper targets version '{version}' but ActivityOptions.Version was set to {requested}. Use the unqualified CallActivityAsync overload to call a different version."");
         }
 
         return options;
@@ -220,13 +228,17 @@ public static Task<string> CallInvoiceActivityAsync(this TaskOrchestrationContex
 static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
 {
     if (options is ActivityOptions activityOptions
-        && activityOptions.Version is TaskVersion explicitVersion
-        && !string.IsNullOrWhiteSpace(explicitVersion.Version))
+        && activityOptions.Version is TaskVersion explicitVersion)
     {
-        if (!string.Equals(explicitVersion.Version, version, System.StringComparison.OrdinalIgnoreCase))
+        // Any non-null ActivityOptions.Version is an explicit caller selection — including
+        // TaskVersion.Unversioned and the empty-string equivalent. Disagreement with the helper-
+        // baked version is always a contradiction, so we throw rather than silently override.
+        string explicitValue = explicitVersion.Version ?? string.Empty;
+        if (!string.Equals(explicitValue, version, System.StringComparison.OrdinalIgnoreCase))
         {
+            string requested = string.IsNullOrEmpty(explicitValue) ? ""<unversioned>"" : ""'"" + explicitValue + ""'"";
             throw new System.InvalidOperationException(
-                $""The generated activity helper targets version '{version}' but ActivityOptions.Version was set to '{explicitVersion.Version}'. Use the unqualified CallActivityAsync overload to call a different version."");
+                $""The generated activity helper targets version '{version}' but ActivityOptions.Version was set to {requested}. Use the unqualified CallActivityAsync overload to call a different version."");
         }
 
         return options;

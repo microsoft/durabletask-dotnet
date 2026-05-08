@@ -181,10 +181,11 @@ public class VersionedClassSyntaxIntegrationTests : IntegrationTestBase
     }
 
     /// <summary>
-    /// Verifies the in-proc task-scheduled serializer preserves activity tags.
+    /// Verifies the in-proc task-scheduled serializer preserves the version-source tag end-to-end so the
+    /// worker can distinguish explicit-version dispatch from inherited-version dispatch.
     /// </summary>
     [Fact]
-    public void TaskScheduledEventSerialization_PreservesExplicitVersionMarker()
+    public void TaskScheduledEventSerialization_PreservesVersionSourceTag()
     {
         TaskScheduledEvent scheduledEvent = new(
             eventId: 7,
@@ -194,7 +195,7 @@ public class VersionedClassSyntaxIntegrationTests : IntegrationTestBase
         {
             Tags = new Dictionary<string, string>
             {
-                [ExplicitVersionTagName] = bool.TrueString,
+                [ActivityVersioning.VersionSourceTagName] = ActivityVersioning.ExplicitSource,
             },
         };
 
@@ -203,9 +204,9 @@ public class VersionedClassSyntaxIntegrationTests : IntegrationTestBase
         Assert.Equal("VersionedActivityOverrideActivity", proto.TaskScheduled.Name);
         Assert.Equal("v1", proto.TaskScheduled.Version);
         Assert.True(
-            proto.TaskScheduled.Tags.TryGetValue(ExplicitVersionTagName, out string? tagValue),
-            $"Expected tag '{ExplicitVersionTagName}' to be present.");
-        Assert.Equal(bool.TrueString, tagValue);
+            proto.TaskScheduled.Tags.TryGetValue(ActivityVersioning.VersionSourceTagName, out string? tagValue),
+            $"Expected tag '{ActivityVersioning.VersionSourceTagName}' to be present.");
+        Assert.Equal(ActivityVersioning.ExplicitSource, tagValue);
     }
 
     /// <summary>

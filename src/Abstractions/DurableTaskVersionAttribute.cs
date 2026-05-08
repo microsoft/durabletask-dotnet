@@ -19,14 +19,9 @@ public sealed class DurableTaskVersionAttribute : Attribute
     /// <param name="version">The version string for the orchestrator or activity.</param>
     public DurableTaskVersionAttribute(string? version = null)
     {
-        if (version is not null && version.Length > 0 && string.IsNullOrWhiteSpace(version))
-        {
-            throw new ArgumentException(
-                "Version must not be whitespace-only. Provide a non-empty version string or omit the attribute argument to declare an unversioned task.",
-                nameof(version));
-        }
-
-        this.Version = string.IsNullOrEmpty(version) ? default : new TaskVersion(version!);
+        // TaskVersion's constructor itself rejects whitespace-only strings and normalizes null/empty to
+        // TaskVersion.Unversioned, so a single delegation here covers all three cases.
+        this.Version = string.IsNullOrEmpty(version) ? TaskVersion.Unversioned : new TaskVersion(version!);
     }
 
     /// <summary>

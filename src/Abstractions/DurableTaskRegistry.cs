@@ -79,7 +79,6 @@ public sealed partial class DurableTaskRegistry
     {
         Check.NotDefault(name);
         Check.NotNull(factory);
-        ValidateRegistrationVersion(version);
 
         ActivityVersionKey key = new(name, version);
         if (this.Activities.ContainsKey(key))
@@ -92,19 +91,5 @@ public sealed partial class DurableTaskRegistry
 
         this.Activities.Add(key, factory);
         return this;
-    }
-
-    static void ValidateRegistrationVersion(TaskVersion version)
-    {
-        // An empty/null version is the unversioned/default registration. Whitespace-only is rejected because
-        // it would be silently coerced to "no version" by some code paths and to a non-empty version by others,
-        // making the registration unreachable.
-        string? value = version.Version;
-        if (value is not null && value.Length > 0 && string.IsNullOrWhiteSpace(value))
-        {
-            throw new ArgumentException(
-                "Version must not be whitespace-only. Provide a non-empty version string or pass default(TaskVersion) to register an unversioned task.",
-                nameof(version));
-        }
     }
 }

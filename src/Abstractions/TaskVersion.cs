@@ -9,7 +9,8 @@ namespace Microsoft.DurableTask;
 public readonly struct TaskVersion : IEquatable<TaskVersion>
 {
     /// <summary>
-    /// A sentinel value representing an unversioned task. Equivalent to <c>default(TaskVersion)</c>.
+    /// A sentinel value representing an unversioned task. Equivalent to <c>default(TaskVersion)</c> and
+    /// <c>new TaskVersion(string.Empty)</c>.
     /// </summary>
     /// <remarks>
     /// Use this on <see cref="ActivityOptions.Version"/> to explicitly request the unversioned activity
@@ -21,21 +22,38 @@ public readonly struct TaskVersion : IEquatable<TaskVersion>
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskVersion"/> struct.
     /// </summary>
-    /// <param name="version">The version of the task. Providing <c>null</c> will result in the default struct.</param>
+    /// <param name="version">The version of the task. <c>null</c> or <see cref="string.Empty"/> produces
+    /// an unversioned <see cref="TaskVersion"/> equal to <see cref="Unversioned"/>.</param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="version"/> is non-empty but contains only whitespace. Pass <c>null</c>,
+    /// <see cref="string.Empty"/>, or use <see cref="Unversioned"/> to represent an unversioned task.
+    /// </exception>
     public TaskVersion(string version)
     {
-        if (version == null)
+        // Normalize null/empty to string.Empty so default(TaskVersion), TaskVersion.Unversioned, and
+        // new TaskVersion("") all compare and hash identically. Without this normalization the struct's
+        // Version field can be null, which makes Equals(null, "") return false and causes
+        // StringComparer.OrdinalIgnoreCase.GetHashCode to throw at runtime when the struct is used as a
+        // dictionary key.
+        if (string.IsNullOrEmpty(version))
         {
-            this.Version = null!;
+            this.Version = string.Empty;
+            return;
         }
-        else
+
+        if (string.IsNullOrWhiteSpace(version))
         {
-            this.Version = version;
+            throw new ArgumentException(
+                "Version must not be whitespace-only. Pass null, an empty string, or use TaskVersion.Unversioned to represent an unversioned task.",
+                nameof(version));
         }
+
+        this.Version = version;
     }
 
     /// <summary>
-    /// Gets the version of a task.
+    /// Gets the version of a task. Returns <see cref="string.Empty"/> for an unversioned task; never
+    /// returns <c>null</c>.
     /// </summary>
     public string Version { get; }
 
@@ -81,7 +99,12 @@ public readonly struct TaskVersion : IEquatable<TaskVersion>
     /// <returns><c>true</c> if the two <see cref="TaskVersion"/> are equal using value semantics; otherwise <c>false</c>.</returns>
     public bool Equals(TaskVersion other)
     {
-        return string.Equals(this.Version, other.Version, StringComparison.OrdinalIgnoreCase);
+        // Treat null and empty Version as the same unversioned identity. Combined with normalization in
+        // the constructor, both default(TaskVersion) and new TaskVersion("") compare equal and hash to
+        // the same value as TaskVersion.Unversioned.
+        string left = this.Version ?? string.Empty;
+        string right = other.Version ?? string.Empty;
+        return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -106,6 +129,9 @@ public readonly struct TaskVersion : IEquatable<TaskVersion>
     /// <returns>A 32-bit hash code value.</returns>
     public override int GetHashCode()
     {
-        return StringComparer.OrdinalIgnoreCase.GetHashCode(this.Version);
+        // Null-safe: a default-constructed TaskVersion (or one created via the implicit conversion from
+        // null) must not crash when used as a dictionary key. Treats null and empty as the same key.
+        string value = this.Version ?? string.Empty;
+        return StringComparer.OrdinalIgnoreCase.GetHashCode(value);
     }
 }

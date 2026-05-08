@@ -52,12 +52,18 @@ public static Task<string> CallInvoiceWorkflowAsync(
 
 static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
 {
-    if (options?.Version is { Version: { Length: > 0 } existingVersion })
+    if (options?.Version is TaskVersion existingStart)
     {
-        if (!string.Equals(existingVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        // Any non-null Version on the options is an explicit caller selection — including
+        // TaskVersion.Unversioned and the empty-string equivalent. The generated helper bakes a
+        // specific version into its method name, so a disagreement is always a contradiction;
+        // the silently-overridden case is precisely what we are trying to prevent.
+        string existingValue = existingStart.Version ?? string.Empty;
+        if (!string.Equals(existingValue, version, System.StringComparison.OrdinalIgnoreCase))
         {
+            string requested = string.IsNullOrEmpty(existingValue) ? ""<unversioned>"" : ""'"" + existingValue + ""'"";
             throw new System.InvalidOperationException(
-                $""The generated helper targets version '{version}' but options.Version was set to '{existingVersion}'. Use the unqualified ScheduleNewOrchestrationInstanceAsync overload to schedule a different version."");
+                $""The generated helper targets version '{version}' but options.Version was set to {requested}. Use the unqualified ScheduleNewOrchestrationInstanceAsync overload to schedule a different version."");
         }
 
         return options;
@@ -79,12 +85,14 @@ static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOption
 
 static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
 {
-    if (options is SubOrchestrationOptions { Version: { Version: { Length: > 0 } existingSubVersion } })
+    if (options is SubOrchestrationOptions { Version: TaskVersion existingSub })
     {
-        if (!string.Equals(existingSubVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        string existingValue = existingSub.Version ?? string.Empty;
+        if (!string.Equals(existingValue, version, System.StringComparison.OrdinalIgnoreCase))
         {
+            string requested = string.IsNullOrEmpty(existingValue) ? ""<unversioned>"" : ""'"" + existingValue + ""'"";
             throw new System.InvalidOperationException(
-                $""The generated sub-orchestrator helper targets version '{version}' but options.Version was set to '{existingSubVersion}'. Use the unqualified CallSubOrchestratorAsync overload to call a different version."");
+                $""The generated sub-orchestrator helper targets version '{version}' but options.Version was set to {requested}. Use the unqualified CallSubOrchestratorAsync overload to call a different version."");
         }
 
         return options;
@@ -191,12 +199,18 @@ public static Task<string> CallInvoiceWorkflow_v2Async(
 
 static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
 {
-    if (options?.Version is { Version: { Length: > 0 } existingVersion })
+    if (options?.Version is TaskVersion existingStart)
     {
-        if (!string.Equals(existingVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        // Any non-null Version on the options is an explicit caller selection — including
+        // TaskVersion.Unversioned and the empty-string equivalent. The generated helper bakes a
+        // specific version into its method name, so a disagreement is always a contradiction;
+        // the silently-overridden case is precisely what we are trying to prevent.
+        string existingValue = existingStart.Version ?? string.Empty;
+        if (!string.Equals(existingValue, version, System.StringComparison.OrdinalIgnoreCase))
         {
+            string requested = string.IsNullOrEmpty(existingValue) ? ""<unversioned>"" : ""'"" + existingValue + ""'"";
             throw new System.InvalidOperationException(
-                $""The generated helper targets version '{version}' but options.Version was set to '{existingVersion}'. Use the unqualified ScheduleNewOrchestrationInstanceAsync overload to schedule a different version."");
+                $""The generated helper targets version '{version}' but options.Version was set to {requested}. Use the unqualified ScheduleNewOrchestrationInstanceAsync overload to schedule a different version."");
         }
 
         return options;
@@ -218,12 +232,14 @@ static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOption
 
 static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
 {
-    if (options is SubOrchestrationOptions { Version: { Version: { Length: > 0 } existingSubVersion } })
+    if (options is SubOrchestrationOptions { Version: TaskVersion existingSub })
     {
-        if (!string.Equals(existingSubVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        string existingValue = existingSub.Version ?? string.Empty;
+        if (!string.Equals(existingValue, version, System.StringComparison.OrdinalIgnoreCase))
         {
+            string requested = string.IsNullOrEmpty(existingValue) ? ""<unversioned>"" : ""'"" + existingValue + ""'"";
             throw new System.InvalidOperationException(
-                $""The generated sub-orchestrator helper targets version '{version}' but options.Version was set to '{existingSubVersion}'. Use the unqualified CallSubOrchestratorAsync overload to call a different version."");
+                $""The generated sub-orchestrator helper targets version '{version}' but options.Version was set to {requested}. Use the unqualified CallSubOrchestratorAsync overload to call a different version."");
         }
 
         return options;
@@ -331,12 +347,18 @@ public static Task<string> Callinvoiceworkflow_v2Async(
 
 static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
 {
-    if (options?.Version is { Version: { Length: > 0 } existingVersion })
+    if (options?.Version is TaskVersion existingStart)
     {
-        if (!string.Equals(existingVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        // Any non-null Version on the options is an explicit caller selection — including
+        // TaskVersion.Unversioned and the empty-string equivalent. The generated helper bakes a
+        // specific version into its method name, so a disagreement is always a contradiction;
+        // the silently-overridden case is precisely what we are trying to prevent.
+        string existingValue = existingStart.Version ?? string.Empty;
+        if (!string.Equals(existingValue, version, System.StringComparison.OrdinalIgnoreCase))
         {
+            string requested = string.IsNullOrEmpty(existingValue) ? ""<unversioned>"" : ""'"" + existingValue + ""'"";
             throw new System.InvalidOperationException(
-                $""The generated helper targets version '{version}' but options.Version was set to '{existingVersion}'. Use the unqualified ScheduleNewOrchestrationInstanceAsync overload to schedule a different version."");
+                $""The generated helper targets version '{version}' but options.Version was set to {requested}. Use the unqualified ScheduleNewOrchestrationInstanceAsync overload to schedule a different version."");
         }
 
         return options;
@@ -358,12 +380,14 @@ static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOption
 
 static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
 {
-    if (options is SubOrchestrationOptions { Version: { Version: { Length: > 0 } existingSubVersion } })
+    if (options is SubOrchestrationOptions { Version: TaskVersion existingSub })
     {
-        if (!string.Equals(existingSubVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        string existingValue = existingSub.Version ?? string.Empty;
+        if (!string.Equals(existingValue, version, System.StringComparison.OrdinalIgnoreCase))
         {
+            string requested = string.IsNullOrEmpty(existingValue) ? ""<unversioned>"" : ""'"" + existingValue + ""'"";
             throw new System.InvalidOperationException(
-                $""The generated sub-orchestrator helper targets version '{version}' but options.Version was set to '{existingSubVersion}'. Use the unqualified CallSubOrchestratorAsync overload to call a different version."");
+                $""The generated sub-orchestrator helper targets version '{version}' but options.Version was set to {requested}. Use the unqualified CallSubOrchestratorAsync overload to call a different version."");
         }
 
         return options;
@@ -451,12 +475,18 @@ public static Task<string> CallInvoiceWorkflowAsync(
 
 static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
 {
-    if (options?.Version is { Version: { Length: > 0 } existingVersion })
+    if (options?.Version is TaskVersion existingStart)
     {
-        if (!string.Equals(existingVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        // Any non-null Version on the options is an explicit caller selection — including
+        // TaskVersion.Unversioned and the empty-string equivalent. The generated helper bakes a
+        // specific version into its method name, so a disagreement is always a contradiction;
+        // the silently-overridden case is precisely what we are trying to prevent.
+        string existingValue = existingStart.Version ?? string.Empty;
+        if (!string.Equals(existingValue, version, System.StringComparison.OrdinalIgnoreCase))
         {
+            string requested = string.IsNullOrEmpty(existingValue) ? ""<unversioned>"" : ""'"" + existingValue + ""'"";
             throw new System.InvalidOperationException(
-                $""The generated helper targets version '{version}' but options.Version was set to '{existingVersion}'. Use the unqualified ScheduleNewOrchestrationInstanceAsync overload to schedule a different version."");
+                $""The generated helper targets version '{version}' but options.Version was set to {requested}. Use the unqualified ScheduleNewOrchestrationInstanceAsync overload to schedule a different version."");
         }
 
         return options;
@@ -478,12 +508,14 @@ static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOption
 
 static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
 {
-    if (options is SubOrchestrationOptions { Version: { Version: { Length: > 0 } existingSubVersion } })
+    if (options is SubOrchestrationOptions { Version: TaskVersion existingSub })
     {
-        if (!string.Equals(existingSubVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        string existingValue = existingSub.Version ?? string.Empty;
+        if (!string.Equals(existingValue, version, System.StringComparison.OrdinalIgnoreCase))
         {
+            string requested = string.IsNullOrEmpty(existingValue) ? ""<unversioned>"" : ""'"" + existingValue + ""'"";
             throw new System.InvalidOperationException(
-                $""The generated sub-orchestrator helper targets version '{version}' but options.Version was set to '{existingSubVersion}'. Use the unqualified CallSubOrchestratorAsync overload to call a different version."");
+                $""The generated sub-orchestrator helper targets version '{version}' but options.Version was set to {requested}. Use the unqualified CallSubOrchestratorAsync overload to call a different version."");
         }
 
         return options;
@@ -587,12 +619,18 @@ public static Task<string> CallInvoiceWorkflowAsync(
 
 static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
 {
-    if (options?.Version is { Version: { Length: > 0 } existingVersion })
+    if (options?.Version is TaskVersion existingStart)
     {
-        if (!string.Equals(existingVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        // Any non-null Version on the options is an explicit caller selection — including
+        // TaskVersion.Unversioned and the empty-string equivalent. The generated helper bakes a
+        // specific version into its method name, so a disagreement is always a contradiction;
+        // the silently-overridden case is precisely what we are trying to prevent.
+        string existingValue = existingStart.Version ?? string.Empty;
+        if (!string.Equals(existingValue, version, System.StringComparison.OrdinalIgnoreCase))
         {
+            string requested = string.IsNullOrEmpty(existingValue) ? ""<unversioned>"" : ""'"" + existingValue + ""'"";
             throw new System.InvalidOperationException(
-                $""The generated helper targets version '{version}' but options.Version was set to '{existingVersion}'. Use the unqualified ScheduleNewOrchestrationInstanceAsync overload to schedule a different version."");
+                $""The generated helper targets version '{version}' but options.Version was set to {requested}. Use the unqualified ScheduleNewOrchestrationInstanceAsync overload to schedule a different version."");
         }
 
         return options;
@@ -614,12 +652,14 @@ static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOption
 
 static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
 {
-    if (options is SubOrchestrationOptions { Version: { Version: { Length: > 0 } existingSubVersion } })
+    if (options is SubOrchestrationOptions { Version: TaskVersion existingSub })
     {
-        if (!string.Equals(existingSubVersion, version, System.StringComparison.OrdinalIgnoreCase))
+        string existingValue = existingSub.Version ?? string.Empty;
+        if (!string.Equals(existingValue, version, System.StringComparison.OrdinalIgnoreCase))
         {
+            string requested = string.IsNullOrEmpty(existingValue) ? ""<unversioned>"" : ""'"" + existingValue + ""'"";
             throw new System.InvalidOperationException(
-                $""The generated sub-orchestrator helper targets version '{version}' but options.Version was set to '{existingSubVersion}'. Use the unqualified CallSubOrchestratorAsync overload to call a different version."");
+                $""The generated sub-orchestrator helper targets version '{version}' but options.Version was set to {requested}. Use the unqualified CallSubOrchestratorAsync overload to call a different version."");
         }
 
         return options;

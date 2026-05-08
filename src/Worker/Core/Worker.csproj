@@ -21,6 +21,7 @@ The worker is responsible for processing durable task work items.</PackageDescri
 
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.DurableTask.Worker.Grpc" Key="$(StrongNamePublicKey)" />
+    <InternalsVisibleTo Include="Microsoft.DurableTask.Grpc.IntegrationTests" Key="$(StrongNamePublicKey)" />
   </ItemGroup>
 
   <ItemGroup>

@@ -9,6 +9,16 @@ namespace Microsoft.DurableTask;
 public readonly struct TaskVersion : IEquatable<TaskVersion>
 {
     /// <summary>
+    /// A sentinel value representing an unversioned task. Equivalent to <c>default(TaskVersion)</c>.
+    /// </summary>
+    /// <remarks>
+    /// Use this on <see cref="ActivityOptions.Version"/> to explicitly request the unversioned activity
+    /// implementation from a versioned orchestration. <c>null</c> on the same property means the activity
+    /// inherits the orchestration instance version.
+    /// </remarks>
+    public static readonly TaskVersion Unversioned = default;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="TaskVersion"/> struct.
     /// </summary>
     /// <param name="version">The version of the task. Providing <c>null</c> will result in the default struct.</param>

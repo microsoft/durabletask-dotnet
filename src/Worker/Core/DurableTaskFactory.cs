@@ -14,6 +14,8 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedActivityFactor
     readonly IDictionary<ActivityVersionKey, Func<IServiceProvider, ITaskActivity>> activities;
     readonly IDictionary<OrchestratorVersionKey, Func<IServiceProvider, ITaskOrchestrator>> orchestrators;
     readonly IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities;
+    readonly HashSet<string> versionedOrchestratorNames;
+    readonly HashSet<string> versionedActivityNames;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DurableTaskFactory" /> class.
@@ -29,6 +31,21 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedActivityFactor
         this.activities = Check.NotNull(activities);
         this.orchestrators = Check.NotNull(orchestrators);
         this.entities = Check.NotNull(entities);
+
+        // Snapshot the set of logical names that have at least one versioned registration. Used to gate the
+        // unversioned-fallback path: when a logical name has any versioned registration, we refuse to fall
+        // back to its unversioned registration for an unmatched versioned request — that would silently
+        // route the call to a different implementation than the caller asked for.
+        this.versionedOrchestratorNames = new HashSet<string>(
+            this.orchestrators.Keys
+                .Where(k => !string.IsNullOrWhiteSpace(k.Version))
+                .Select(k => k.Name),
+            StringComparer.OrdinalIgnoreCase);
+        this.versionedActivityNames = new HashSet<string>(
+            this.activities.Keys
+                .Where(k => !string.IsNullOrWhiteSpace(k.Version))
+                .Select(k => k.Name),
+            StringComparer.OrdinalIgnoreCase);
     }
 
     /// <inheritdoc/>
@@ -49,6 +66,7 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedActivityFactor
 
         if (allowVersionFallback
             && !string.IsNullOrWhiteSpace(version.Version)
+            && !this.versionedActivityNames.Contains(name.Name)
             && this.activities.TryGetValue(new ActivityVersionKey(name, default(TaskVersion)), out factory))
         {
             activity = factory.Invoke(serviceProvider);
@@ -79,9 +97,12 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedActivityFactor
             return true;
         }
 
-        // Unversioned registrations remain the compatibility fallback when a caller requests a version that has
-        // no exact match for the logical orchestrator name.
+        // Unversioned registrations remain the compatibility fallback for a versioned request, but ONLY when
+        // no versioned registration exists for the same logical name. If any versioned registration is present
+        // (e.g., v1 and v2 are registered, request asks for v3), we refuse to silently route the call to a
+        // catch-all registration the caller did not ask for.
         if (!string.IsNullOrWhiteSpace(version.Version)
+            && !this.versionedOrchestratorNames.Contains(name.Name)
             && this.orchestrators.TryGetValue(new OrchestratorVersionKey(name, default(TaskVersion)), out factory))
         {
             orchestrator = factory.Invoke(serviceProvider);

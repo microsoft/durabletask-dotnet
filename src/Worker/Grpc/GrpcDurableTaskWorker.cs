@@ -58,18 +58,9 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         this.ExceptionPropertiesProvider = exceptionPropertiesProvider;
         this.workItemFilters = workItemFiltersMonitor?.Get(name);
 
-        // Surface the misconfiguration of combining worker-level versioning (which gates work items by
-        // instance version) with per-task [DurableTaskVersion] routing (which expects multiple versions
-        // of the same logical task to coexist in one worker). The two features both consume the
-        // orchestration instance version field, so combining them silently masks per-task versions.
-        if (this.workerOptions.Versioning is DurableTaskWorkerOptions.VersioningOptions versioning
-            && versioning.MatchStrategy != DurableTaskWorkerOptions.VersionMatchStrategy.None
-            && registryMonitor is not null
-            && registryMonitor.Get(name) is DurableTaskRegistry registry
-            && registry.HasAnyVersionedRegistration())
-        {
-            this.logger.CombinedWorkerAndTaskVersioningWarning(versioning.MatchStrategy.ToString());
-        }
+        // Fail fast when worker-level versioning is combined with per-task [DurableTaskVersion] registrations.
+        // The two features are not designed to coexist (see WorkerVersioningPolicy for details).
+        WorkerVersioningPolicy.EnsureNotCombined(name, this.workerOptions, registryMonitor?.Get(name));
     }
 
     /// <inheritdoc />

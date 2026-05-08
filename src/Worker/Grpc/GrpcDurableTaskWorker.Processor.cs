@@ -903,30 +903,22 @@ sealed partial class GrpcDurableTaskWorker
                     bool found;
                     if (this.worker.Factory is IVersionedActivityFactory versionedFactory)
                     {
+                        // Read the version-source tag from the request to decide between strict and inherited
+                        // dispatch. Fail-closed semantics: missing tag on a versioned request is treated as
+                        // explicit (no fallback), so a sidecar that drops tags cannot silently downgrade
+                        // strict-explicit semantics to inherited-with-fallback.
+                        bool tagPresent = request.Tags.TryGetValue(
+                            ActivityVersioning.VersionSourceTagName, out string? tagValue);
+                        bool tagSaysInherited = tagPresent
+                            && string.Equals(tagValue, ActivityVersioning.InheritedSource, StringComparison.Ordinal);
+                        bool allowVersionFallback = tagSaysInherited;
+
                         found = versionedFactory.TryCreateActivity(
                             name,
                             requestedVersion,
                             scope.ServiceProvider,
-                            allowVersionFallback: false,
+                            allowVersionFallback,
                             out activity);
-
-                        if (!found && !string.IsNullOrWhiteSpace(requestedVersion.Version))
-                        {
-                            bool explicitVersionRequested =
-                                request.Tags.TryGetValue(ActivityVersioning.ExplicitVersionTagName, out string? tagValue)
-                                && bool.TryParse(tagValue, out bool parsedTagValue)
-                                && parsedTagValue;
-                            bool allowVersionFallback = !explicitVersionRequested;
-                            if (allowVersionFallback)
-                            {
-                                found = versionedFactory.TryCreateActivity(
-                                    name,
-                                    requestedVersion,
-                                    scope.ServiceProvider,
-                                    allowVersionFallback: true,
-                                    out activity);
-                            }
-                        }
                     }
                     else
                     {

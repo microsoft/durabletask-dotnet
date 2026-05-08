@@ -89,9 +89,11 @@ public class DurableTaskFactoryVersioningTests
     }
 
     [Fact]
-    public void TryCreateOrchestrator_WithMixedRegistrations_UsesUnversionedFallbackForUnknownVersion()
+    public void TryCreateOrchestrator_WithMixedRegistrations_DoesNotFallBackForUnknownVersion()
     {
-        // Arrange
+        // Arrange — name "InvoiceWorkflow" has both versioned (v1, v2) and unversioned registrations.
+        // A request for v3 (no exact match) must NOT silently fall back to the unversioned registration:
+        // doing so would route the call to a different implementation than the caller asked for.
         DurableTaskRegistry registry = new();
         registry.AddOrchestrator<InvoiceWorkflowV1>();
         registry.AddOrchestrator<InvoiceWorkflowV2>();
@@ -102,6 +104,28 @@ public class DurableTaskFactoryVersioningTests
         bool found = ((IVersionedOrchestratorFactory)factory).TryCreateOrchestrator(
             new TaskName("InvoiceWorkflow"),
             new TaskVersion("v3"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskOrchestrator? orchestrator);
+
+        // Assert
+        found.Should().BeFalse();
+        orchestrator.Should().BeNull();
+    }
+
+    [Fact]
+    public void TryCreateOrchestrator_WithOnlyUnversionedRegistration_FallsBackForVersionedRequest()
+    {
+        // Arrange — name "InvoiceWorkflow" has only the unversioned registration. A versioned request
+        // is allowed to fall back to it (migration path: pre-versioning instances scheduled with
+        // a specific version against a registry that hasn't migrated yet).
+        DurableTaskRegistry registry = new();
+        registry.AddOrchestrator<UnversionedInvoiceWorkflow>();
+        IDurableTaskFactory factory = registry.BuildFactory();
+
+        // Act
+        bool found = ((IVersionedOrchestratorFactory)factory).TryCreateOrchestrator(
+            new TaskName("InvoiceWorkflow"),
+            new TaskVersion("v1"),
             Mock.Of<IServiceProvider>(),
             out ITaskOrchestrator? orchestrator);
 

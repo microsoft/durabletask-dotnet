@@ -52,9 +52,6 @@ namespace Microsoft.DurableTask.Worker.Grpc
         [LoggerMessage(EventId = 56, Level = LogLevel.Warning, Message = "Channel to backend has stopped receiving traffic, will attempt to reconnect.")]
         public static partial void ConnectionTimeout(this ILogger logger);
 
-        [LoggerMessage(EventId = 78, Level = LogLevel.Warning, Message = "Per-task versioning ([DurableTaskVersion]) is configured together with worker-level versioning (UseVersioning with MatchStrategy = '{matchStrategy}'). Worker-level version checks run before per-task dispatch and may reject orchestrations whose instance version does not match the worker version. These features are not designed to be combined; pick one. See https://aka.ms/durabletask-versioning for guidance.")]
-        public static partial void CombinedWorkerAndTaskVersioningWarning(this ILogger logger, string matchStrategy);
-
         [LoggerMessage(EventId = 57, Level = LogLevel.Warning, Message = "Orchestration version did not meet worker versioning requirements. Error action = '{errorAction}'. Version error = '{versionError}'")]
         public static partial void OrchestrationVersionFailure(this ILogger logger, string errorAction, string versionError);
 

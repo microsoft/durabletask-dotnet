@@ -490,7 +490,7 @@ public class GrpcDurableTaskWorkerTests
     }
 
     [Fact]
-    public void Constructor_PerTaskVersioningCombinedWithStrictWorkerVersioning_LogsWarning()
+    public void Constructor_PerTaskVersioningCombinedWithStrictWorkerVersioning_Throws()
     {
         // Arrange
         DurableTaskRegistry registry = new();
@@ -505,22 +505,19 @@ public class GrpcDurableTaskWorkerTests
             },
             Logging = { UseLegacyCategories = false },
         };
-        TestLogProvider logProvider = new(new NullOutput());
 
         // Act
-        _ = CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, new SimpleLoggerFactory(logProvider), registry);
+        Action act = () => CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, NullLoggerFactory.Instance, registry);
 
-        // Assert
-        logProvider.TryGetLogs(Category, out IReadOnlyCollection<LogEntry>? logs).Should().BeTrue();
-        logs!.Should().Contain(log =>
-            log.LogLevel == LogLevel.Warning
-            && log.Message.Contains("Per-task versioning")
-            && log.Message.Contains("worker-level versioning")
-            && log.Message.Contains("Strict"));
+        // Assert — combined configuration fails fast at worker construction.
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*per-task [DurableTaskVersion]*")
+            .WithMessage("*worker-level versioning*")
+            .WithMessage("*Strict*");
     }
 
     [Fact]
-    public void Constructor_PerTaskVersioningWithoutWorkerVersioning_DoesNotLogWarning()
+    public void Constructor_PerTaskVersioningWithoutWorkerVersioning_DoesNotThrow()
     {
         // Arrange
         DurableTaskRegistry registry = new();
@@ -529,21 +526,16 @@ public class GrpcDurableTaskWorkerTests
         {
             Logging = { UseLegacyCategories = false },
         };
-        TestLogProvider logProvider = new(new NullOutput());
 
         // Act
-        _ = CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, new SimpleLoggerFactory(logProvider), registry);
+        Action act = () => CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, NullLoggerFactory.Instance, registry);
 
         // Assert
-        if (logProvider.TryGetLogs(Category, out IReadOnlyCollection<LogEntry>? logs))
-        {
-            logs!.Should().NotContain(log =>
-                log.Message.Contains("Per-task versioning"));
-        }
+        act.Should().NotThrow();
     }
 
     [Fact]
-    public void Constructor_WorkerVersioningWithoutPerTaskVersions_DoesNotLogWarning()
+    public void Constructor_WorkerVersioningWithoutPerTaskVersions_DoesNotThrow()
     {
         // Arrange
         DurableTaskRegistry registry = new();
@@ -557,17 +549,12 @@ public class GrpcDurableTaskWorkerTests
             },
             Logging = { UseLegacyCategories = false },
         };
-        TestLogProvider logProvider = new(new NullOutput());
 
         // Act
-        _ = CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, new SimpleLoggerFactory(logProvider), registry);
+        Action act = () => CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, NullLoggerFactory.Instance, registry);
 
         // Assert
-        if (logProvider.TryGetLogs(Category, out IReadOnlyCollection<LogEntry>? logs))
-        {
-            logs!.Should().NotContain(log =>
-                log.Message.Contains("Per-task versioning"));
-        }
+        act.Should().NotThrow();
     }
 
     static GrpcDurableTaskWorker CreateWorker(GrpcDurableTaskWorkerOptions grpcOptions)

@@ -129,21 +129,30 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         object? input = null,
         TaskOptions? options = null)
     {
-        static (string RequestedVersion, bool ExplicitVersionRequested) GetRequestedActivityVersion(
+        // Returns (effective version string, whether the caller-supplied an explicit version, whether the
+        // call should be tagged at all). The "tag the call" decision is separate from "explicit": even a
+        // pure inherited call needs a tag so the worker can fail-closed on a missing tag for a versioned
+        // request.
+        static (string RequestedVersion, bool ExplicitVersionRequested, bool StampVersionTag) GetRequestedActivityVersion(
             TaskOptions? taskOptions,
             string inheritedVersion)
         {
             if (taskOptions is ActivityOptions activityOptions
-                && activityOptions.Version is TaskVersion explicitVersion
-                && !string.IsNullOrWhiteSpace(explicitVersion.Version))
+                && activityOptions.Version is TaskVersion explicitVersion)
             {
-                return (explicitVersion.Version, true);
+                // Any non-null ActivityOptions.Version — including an explicit-unversioned request
+                // (TaskVersion.Unversioned / default) — is treated as an explicit selection. Strict
+                // dispatch will be used.
+                return (explicitVersion.Version ?? string.Empty, true, true);
             }
 
-            return (inheritedVersion, false);
+            return (inheritedVersion, false, !string.IsNullOrWhiteSpace(inheritedVersion));
         }
 
-        static IDictionary<string, string> GetActivityTags(TaskOptions? taskOptions, bool explicitVersionRequested)
+        static IDictionary<string, string> GetActivityTags(
+            TaskOptions? taskOptions,
+            bool explicitVersionRequested,
+            bool stampVersionTag)
         {
             Dictionary<string, string> tags = new(StringComparer.Ordinal);
 
@@ -151,16 +160,28 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             {
                 foreach ((string key, string value) in taskOptions.Tags)
                 {
-                    if (key != ActivityVersioning.ExplicitVersionTagName)
+                    bool isReserved = false;
+                    foreach (string reserved in ActivityVersioning.ReservedTagKeys)
+                    {
+                        if (string.Equals(key, reserved, StringComparison.Ordinal))
+                        {
+                            isReserved = true;
+                            break;
+                        }
+                    }
+
+                    if (!isReserved)
                     {
                         tags[key] = value;
                     }
                 }
             }
 
-            if (explicitVersionRequested)
+            if (stampVersionTag)
             {
-                tags[ActivityVersioning.ExplicitVersionTagName] = bool.TrueString;
+                tags[ActivityVersioning.VersionSourceTagName] = explicitVersionRequested
+                    ? ActivityVersioning.ExplicitSource
+                    : ActivityVersioning.InheritedSource;
             }
 
             return tags;
@@ -180,9 +201,9 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
         try
         {
-            (string requestedVersion, bool explicitVersionRequested) =
+            (string requestedVersion, bool explicitVersionRequested, bool stampVersionTag) =
                 GetRequestedActivityVersion(options, this.innerContext.Version);
-            IDictionary<string, string> tags = GetActivityTags(options, explicitVersionRequested);
+            IDictionary<string, string> tags = GetActivityTags(options, explicitVersionRequested, stampVersionTag);
 
             // TODO: Cancellation (https://github.com/microsoft/durabletask-dotnet/issues/7)
 #pragma warning disable 0618

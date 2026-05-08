@@ -152,8 +152,8 @@ public class TaskOrchestrationContextWrapperTests
         innerContext.LastScheduledTaskVersion.Should().Be("v1");
         innerContext.LastScheduledTaskInput.Should().Be(123);
         GetLastScheduledTaskTags(innerContext).Should().Contain(
-            ActivityVersioning.ExplicitVersionTagName,
-            bool.TrueString);
+            ActivityVersioning.VersionSourceTagName,
+            ActivityVersioning.ExplicitSource);
     }
 
     [Fact]
@@ -215,31 +215,38 @@ public class TaskOrchestrationContextWrapperTests
         innerContext.LastScheduledTaskName.Should().Be("TestActivity");
         innerContext.LastScheduledTaskVersion.Should().Be("v2");
         innerContext.LastScheduledTaskInput.Should().Be(123);
-        GetLastScheduledTaskTags(innerContext).Should().NotContainKey(ActivityVersioning.ExplicitVersionTagName);
+        // An inherited non-empty version stamps the source as Inherited so the worker can fail-closed
+        // when a sidecar drops tags rather than silently degrading strict-explicit semantics.
+        GetLastScheduledTaskTags(innerContext).Should().Contain(
+            ActivityVersioning.VersionSourceTagName,
+            ActivityVersioning.InheritedSource);
     }
 
     [Fact]
-    public async Task CallActivityAsync_UserSuppliedReservedExplicitVersionTagIsIgnoredWhenVersionIsInherited()
+    public async Task CallActivityAsync_UserSuppliedReservedVersionSourceTagIsStripped()
     {
         // Arrange
         TrackingOrchestrationContext innerContext = new("v2");
         OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
 
-        // Act
+        // Act — the user attempts to spoof "explicit" via Tags. The SDK strips the reserved key and
+        // re-stamps according to the actual options (inherited here).
         await wrapper.CallActivityAsync<string>(
             "TestActivity",
             123,
             new TaskOptions(tags: new Dictionary<string, string>
             {
-                [ActivityVersioning.ExplicitVersionTagName] = bool.FalseString,
+                [ActivityVersioning.VersionSourceTagName] = ActivityVersioning.ExplicitSource,
             }));
 
         // Assert
         innerContext.LastScheduledTaskName.Should().Be("TestActivity");
         innerContext.LastScheduledTaskVersion.Should().Be("v2");
         innerContext.LastScheduledTaskInput.Should().Be(123);
-        GetLastScheduledTaskTags(innerContext).Should().NotContainKey(ActivityVersioning.ExplicitVersionTagName);
+        GetLastScheduledTaskTags(innerContext).Should().Contain(
+            ActivityVersioning.VersionSourceTagName,
+            ActivityVersioning.InheritedSource);
     }
 
     [Fact]
@@ -257,40 +264,69 @@ public class TaskOrchestrationContextWrapperTests
         innerContext.LastScheduledTaskName.Should().Be("TestActivity");
         innerContext.LastScheduledTaskVersion.Should().Be("v2");
         innerContext.LastScheduledTaskInput.Should().Be(123);
-        GetLastScheduledTaskTags(innerContext).Should().NotContainKey(ActivityVersioning.ExplicitVersionTagName);
+        GetLastScheduledTaskTags(innerContext).Should().Contain(
+            ActivityVersioning.VersionSourceTagName,
+            ActivityVersioning.InheritedSource);
     }
 
-    [Theory]
-    [InlineData(false, null)]
-    [InlineData(true, null)]
-    [InlineData(true, "")]
-    [InlineData(true, "   ")]
-    public async Task CallActivityAsync_MissingOrEmptyActivityVersionUsesInheritedOrchestrationVersion(
-        bool setVersion,
-        string? explicitVersion)
+    [Fact]
+    public async Task CallActivityAsync_NullOptionsAndUnversionedOrchestration_StampsNoTag()
     {
-        // Arrange
+        // Arrange — orchestration is unversioned (no instance version). No explicit option either.
+        TrackingOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        await wrapper.CallActivityAsync<string>("TestActivity", 123);
+
+        // Assert — no version, no tag stamped (matches pre-versioning behavior).
+        innerContext.LastScheduledTaskName.Should().Be("TestActivity");
+        innerContext.LastScheduledTaskVersion.Should().Be(string.Empty);
+        innerContext.LastScheduledTaskInput.Should().Be(123);
+        GetLastScheduledTaskTags(innerContext).Should().NotContainKey(ActivityVersioning.VersionSourceTagName);
+    }
+
+    [Fact]
+    public async Task CallActivityAsync_NullActivityOptionsVersion_InheritsOrchestrationVersion()
+    {
+        // Arrange — ActivityOptions present but Version not set => inherit (same as plain TaskOptions).
         TrackingOrchestrationContext innerContext = new("v2");
         OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
-        ActivityOptions options = new();
-
-        if (setVersion)
-        {
-            options = options with
-            {
-                Version = explicitVersion is null ? default(TaskVersion?) : new TaskVersion(explicitVersion),
-            };
-        }
 
         // Act
-        await wrapper.CallActivityAsync<string>("TestActivity", 123, options);
+        await wrapper.CallActivityAsync<string>("TestActivity", 123, new ActivityOptions());
 
         // Assert
         innerContext.LastScheduledTaskName.Should().Be("TestActivity");
         innerContext.LastScheduledTaskVersion.Should().Be("v2");
-        innerContext.LastScheduledTaskInput.Should().Be(123);
-        GetLastScheduledTaskTags(innerContext).Should().NotContainKey(ActivityVersioning.ExplicitVersionTagName);
+        GetLastScheduledTaskTags(innerContext).Should().Contain(
+            ActivityVersioning.VersionSourceTagName,
+            ActivityVersioning.InheritedSource);
+    }
+
+    [Fact]
+    public async Task CallActivityAsync_ExplicitUnversionedActivityOption_BypassesInherit()
+    {
+        // Arrange — from a v2 orchestration the caller explicitly requests the unversioned activity.
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        await wrapper.CallActivityAsync<string>(
+            "TestActivity",
+            123,
+            new ActivityOptions { Version = TaskVersion.Unversioned });
+
+        // Assert — empty version is sent (the unversioned activity), but the tag identifies it as explicit
+        // so the worker uses strict dispatch instead of inheriting the orchestration's v2 version.
+        innerContext.LastScheduledTaskName.Should().Be("TestActivity");
+        innerContext.LastScheduledTaskVersion.Should().Be(string.Empty);
+        GetLastScheduledTaskTags(innerContext).Should().Contain(
+            ActivityVersioning.VersionSourceTagName,
+            ActivityVersioning.ExplicitSource);
     }
 
     static IReadOnlyDictionary<string, string> GetLastScheduledTaskTags(TrackingOrchestrationContext innerContext)

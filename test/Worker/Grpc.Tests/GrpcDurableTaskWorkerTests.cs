@@ -490,9 +490,12 @@ public class GrpcDurableTaskWorkerTests
     }
 
     [Fact]
-    public void Constructor_PerTaskVersioningCombinedWithStrictWorkerVersioning_Throws()
+    public void Constructor_PerTaskVersioningCombinedWithStrictWorkerVersioning_DoesNotThrow()
     {
-        // Arrange
+        // Arrange — combine UseVersioning(Strict) with multi-version registrations. Both are now part of
+        // the same versioning feature: UseVersioning's match strategy decides which instance versions to
+        // accept off the wire, and the per-task registry decides which implementation handles a surviving
+        // work item. They no longer fail-fast at construction.
         DurableTaskRegistry registry = new();
         registry.AddOrchestrator(new TaskName("MyOrch"), new TaskVersion("1"), () => Mock.Of<ITaskOrchestrator>());
         registry.AddOrchestrator(new TaskName("MyOrch"), new TaskVersion("2"), () => Mock.Of<ITaskOrchestrator>());
@@ -509,11 +512,8 @@ public class GrpcDurableTaskWorkerTests
         // Act
         Action act = () => CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, NullLoggerFactory.Instance, registry);
 
-        // Assert — combined configuration fails fast at worker construction.
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*per-task [DurableTaskVersion]*")
-            .WithMessage("*worker-level versioning*")
-            .WithMessage("*Strict*");
+        // Assert
+        act.Should().NotThrow();
     }
 
     [Fact]

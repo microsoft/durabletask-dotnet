@@ -57,10 +57,6 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         this.orchestrationFilter = orchestrationFilter;
         this.ExceptionPropertiesProvider = exceptionPropertiesProvider;
         this.workItemFilters = workItemFiltersMonitor?.Get(name);
-
-        // Fail fast when worker-level versioning is combined with per-task [DurableTaskVersion] registrations.
-        // The two features are not designed to coexist (see WorkerVersioningPolicy for details).
-        WorkerVersioningPolicy.EnsureNotCombined(name, this.workerOptions, registryMonitor?.Get(name));
     }
 
     /// <inheritdoc />

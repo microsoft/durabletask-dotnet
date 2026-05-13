@@ -6,11 +6,25 @@ using System.Diagnostics.CodeAnalysis;
 namespace Microsoft.DurableTask.Worker;
 
 /// <summary>
-/// Creates activity instances by logical name and requested version.
-/// Callers can choose whether an unversioned registration may satisfy a versioned request when no exact match exists.
+/// Creates orchestrator and activity instances by logical name and requested version.
+/// Implemented by the default factory when the registry contains versioned registrations.
 /// </summary>
-internal interface IVersionedActivityFactory
+internal interface IVersionedTaskFactory
 {
+    /// <summary>
+    /// Tries to create an orchestrator that matches the provided logical name and version.
+    /// </summary>
+    /// <param name="name">The orchestrator name.</param>
+    /// <param name="version">The orchestrator version.</param>
+    /// <param name="serviceProvider">The service provider.</param>
+    /// <param name="orchestrator">The created orchestrator, if found.</param>
+    /// <returns><c>true</c> if a matching orchestrator was created; otherwise <c>false</c>.</returns>
+    bool TryCreateOrchestrator(
+        TaskName name,
+        TaskVersion version,
+        IServiceProvider serviceProvider,
+        [NotNullWhen(true)] out ITaskOrchestrator? orchestrator);
+
     /// <summary>
     /// Tries to create an activity that matches the provided logical name and version.
     /// </summary>

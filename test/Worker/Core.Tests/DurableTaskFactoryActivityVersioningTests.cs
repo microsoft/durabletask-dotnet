@@ -15,7 +15,7 @@ public class DurableTaskFactoryActivityVersioningTests
         IDurableTaskFactory factory = registry.BuildFactory();
 
         // Act
-        bool found = ((IVersionedActivityFactory)factory).TryCreateActivity(
+        bool found = ((IVersionedTaskFactory)factory).TryCreateActivity(
             new TaskName("InvoiceActivity"),
             new TaskVersion("v2"),
             Mock.Of<IServiceProvider>(),
@@ -36,7 +36,7 @@ public class DurableTaskFactoryActivityVersioningTests
         IDurableTaskFactory factory = registry.BuildFactory();
 
         // Act
-        bool found = ((IVersionedActivityFactory)factory).TryCreateActivity(
+        bool found = ((IVersionedTaskFactory)factory).TryCreateActivity(
             new TaskName("InvoiceActivity"),
             new TaskVersion("v2"),
             Mock.Of<IServiceProvider>(),
@@ -57,7 +57,7 @@ public class DurableTaskFactoryActivityVersioningTests
         IDurableTaskFactory factory = registry.BuildFactory();
 
         // Act
-        bool found = ((IVersionedActivityFactory)factory).TryCreateActivity(
+        bool found = ((IVersionedTaskFactory)factory).TryCreateActivity(
             new TaskName("InvoiceActivity"),
             new TaskVersion("v2"),
             Mock.Of<IServiceProvider>(),
@@ -80,7 +80,7 @@ public class DurableTaskFactoryActivityVersioningTests
         IDurableTaskFactory factory = registry.BuildFactory();
 
         // Act
-        bool found = ((IVersionedActivityFactory)factory).TryCreateActivity(
+        bool found = ((IVersionedTaskFactory)factory).TryCreateActivity(
             new TaskName("InvoiceActivity"),
             new TaskVersion("v1"),
             Mock.Of<IServiceProvider>(),
@@ -120,7 +120,7 @@ public class DurableTaskFactoryActivityVersioningTests
         IDurableTaskFactory factory = registry.BuildFactory();
 
         // Act
-        bool found = ((IVersionedActivityFactory)factory).TryCreateActivity(
+        bool found = ((IVersionedTaskFactory)factory).TryCreateActivity(
             new TaskName("InvoiceActivity"),
             new TaskVersion("v2"),
             Mock.Of<IServiceProvider>(),

@@ -15,7 +15,7 @@ public class DurableTaskFactoryVersioningTests
         IDurableTaskFactory factory = registry.BuildFactory();
 
         // Act
-        bool found = ((IVersionedOrchestratorFactory)factory).TryCreateOrchestrator(
+        bool found = ((IVersionedTaskFactory)factory).TryCreateOrchestrator(
             new TaskName("InvoiceWorkflow"),
             new TaskVersion("v2"),
             Mock.Of<IServiceProvider>(),
@@ -35,7 +35,7 @@ public class DurableTaskFactoryVersioningTests
         IDurableTaskFactory factory = registry.BuildFactory();
 
         // Act
-        bool found = ((IVersionedOrchestratorFactory)factory).TryCreateOrchestrator(
+        bool found = ((IVersionedTaskFactory)factory).TryCreateOrchestrator(
             new TaskName("InvoiceWorkflow"),
             new TaskVersion("v2"),
             Mock.Of<IServiceProvider>(),
@@ -55,7 +55,7 @@ public class DurableTaskFactoryVersioningTests
         IDurableTaskFactory factory = registry.BuildFactory();
 
         // Act
-        bool found = ((IVersionedOrchestratorFactory)factory).TryCreateOrchestrator(
+        bool found = ((IVersionedTaskFactory)factory).TryCreateOrchestrator(
             new TaskName("InvoiceWorkflow"),
             new TaskVersion("v2"),
             Mock.Of<IServiceProvider>(),
@@ -77,7 +77,7 @@ public class DurableTaskFactoryVersioningTests
         IDurableTaskFactory factory = registry.BuildFactory();
 
         // Act
-        bool found = ((IVersionedOrchestratorFactory)factory).TryCreateOrchestrator(
+        bool found = ((IVersionedTaskFactory)factory).TryCreateOrchestrator(
             new TaskName("InvoiceWorkflow"),
             new TaskVersion("v1"),
             Mock.Of<IServiceProvider>(),
@@ -101,7 +101,7 @@ public class DurableTaskFactoryVersioningTests
         IDurableTaskFactory factory = registry.BuildFactory();
 
         // Act
-        bool found = ((IVersionedOrchestratorFactory)factory).TryCreateOrchestrator(
+        bool found = ((IVersionedTaskFactory)factory).TryCreateOrchestrator(
             new TaskName("InvoiceWorkflow"),
             new TaskVersion("v3"),
             Mock.Of<IServiceProvider>(),
@@ -123,7 +123,7 @@ public class DurableTaskFactoryVersioningTests
         IDurableTaskFactory factory = registry.BuildFactory();
 
         // Act
-        bool found = ((IVersionedOrchestratorFactory)factory).TryCreateOrchestrator(
+        bool found = ((IVersionedTaskFactory)factory).TryCreateOrchestrator(
             new TaskName("InvoiceWorkflow"),
             new TaskVersion("v1"),
             Mock.Of<IServiceProvider>(),

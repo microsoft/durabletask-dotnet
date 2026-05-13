@@ -721,7 +721,7 @@ sealed partial class GrpcDurableTaskWorker
                         runtimeState.NewEvents.Count);
 
                     await using AsyncServiceScope scope = this.worker.services.CreateAsyncScope();
-                    bool found = this.worker.Factory is IVersionedOrchestratorFactory versionedFactory
+                    bool found = this.worker.Factory is IVersionedTaskFactory versionedFactory
                         ? versionedFactory.TryCreateOrchestrator(
                             name,
                             requestedVersion,
@@ -901,7 +901,7 @@ sealed partial class GrpcDurableTaskWorker
                         : new TaskVersion(request.Version);
                     ITaskActivity? activity;
                     bool found;
-                    if (this.worker.Factory is IVersionedActivityFactory versionedFactory)
+                    if (this.worker.Factory is IVersionedTaskFactory versionedFactory)
                     {
                         // Read the version-source tag from the request to decide between strict and inherited
                         // dispatch. Fail-closed semantics: missing tag on a versioned request is treated as
@@ -938,7 +938,7 @@ sealed partial class GrpcDurableTaskWorker
                         failureDetails = new P.TaskFailureDetails
                         {
                             ErrorType = "ActivityTaskNotFound",
-                            ErrorMessage = string.IsNullOrEmpty(versionText) || this.worker.Factory is not IVersionedActivityFactory
+                            ErrorMessage = string.IsNullOrEmpty(versionText) || this.worker.Factory is not IVersionedTaskFactory
                                 ? $"No activity task named '{name}' was found."
                                 : $"No activity task named '{name}' with version '{versionText}' was found.",
                             IsNonRetriable = true,

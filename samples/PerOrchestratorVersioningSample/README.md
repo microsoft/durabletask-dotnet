@@ -46,6 +46,11 @@ Scheduling OrderWorkflow v2 ...
   Result: Order total: $40 (v2 — with discount)
 
 Done! Both versions ran in the same worker process.
+
+Scheduling MigratingWorkflow v1 → v2 (ContinueAsNew migration) ...
+  Result: Migrated order total: $80 (v2 — after migration from v1)
+
+Sample completed successfully!
 ```
 
 ### 4. Clean up
@@ -64,4 +69,4 @@ Per-orchestrator versioning is useful when:
 
 For simpler deployment-based versioning, see the [WorkerVersioningSample](../WorkerVersioningSample/README.md).
 
-> **Note:** Do not combine `[DurableTaskVersion]` routing with worker-level `UseVersioning()` in the same worker. Both features use the orchestration instance version field.
+> **Note:** `[DurableTaskVersion]` routing and worker-level `UseVersioning()` now compose. `UseVersioning()` filters which instance versions the worker accepts (via `MatchStrategy`), and the per-class registry dispatches each accepted work item to the implementation that exactly matches its `(name, version)`. Use them together if you need both deployment-level gating and same-process multi-version routing.

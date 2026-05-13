@@ -184,7 +184,7 @@ string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
 
 Use `ContinueAsNewOptions.NewVersion` to migrate long-running orchestrations at a replay-safe boundary.
 
-> Do not combine per-orchestrator `[DurableTaskVersion]` routing with `DurableTaskWorkerOptions.Versioning` (or `UseVersioning(...)`). Both features use the orchestration instance version field, so worker-level version checks can reject per-orchestrator versions before class-based routing occurs.
+> Per-class `[DurableTaskVersion]` routing composes with `DurableTaskWorkerOptions.Versioning` (or `UseVersioning(...)`). The worker-level `MatchStrategy` gates which instance versions are accepted off the wire, and the registry then dispatches each accepted work item to the implementation that exactly matches its `(name, version)`. Use them together when a single worker needs to host multiple versions of the same name.
 >
 > Azure Functions projects do not support same-name multi-version class-based orchestrators in v1. The source generator reports a diagnostic instead of generating colliding triggers.
 

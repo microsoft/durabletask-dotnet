@@ -13,7 +13,7 @@ public readonly struct TaskVersion : IEquatable<TaskVersion>
     /// <c>new TaskVersion(string.Empty)</c>.
     /// </summary>
     /// <remarks>
-    /// Use this on <see cref="ActivityOptions.Version"/> to explicitly request the unversioned activity
+    /// Use this on <see cref="TaskOptions.Version"/> to explicitly request the unversioned task
     /// implementation from a versioned orchestration. <c>null</c> on the same property means the activity
     /// inherits the orchestration instance version.
     /// </remarks>

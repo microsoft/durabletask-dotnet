@@ -129,16 +129,14 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         object? input = null,
         TaskOptions? options = null)
     {
-        // Returns the version to schedule the activity with. If the caller passed ActivityOptions.Version,
+        // Returns the version to schedule the activity with. If the caller passed TaskOptions.Version,
         // use that (including TaskVersion.Unversioned for an explicit unversioned request); otherwise inherit
         // the orchestration instance version. The unified dispatch rule on the worker side (exact match;
         // fallback to unversioned only when the name has no versioned registration) applies regardless of
-        // how the version was selected, so the SDK no longer needs to communicate "explicit vs inherited"
-        // separately.
+        // how the version was selected.
         static string GetRequestedActivityVersion(TaskOptions? taskOptions, string inheritedVersion)
         {
-            if (taskOptions is ActivityOptions activityOptions
-                && activityOptions.Version is TaskVersion explicitVersion)
+            if (taskOptions?.Version is TaskVersion explicitVersion)
             {
                 return explicitVersion.Version ?? string.Empty;
             }
@@ -223,7 +221,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             => options is SubOrchestrationOptions derived ? derived.InstanceId : null;
         string instanceId = GetInstanceId(options) ?? this.NewGuid().ToString("N");
         string defaultVersion = this.GetDefaultVersion();
-        string version = options is SubOrchestrationOptions { Version: { } v } ? v.Version : defaultVersion;
+        string version = options?.Version is { } v ? v.Version : defaultVersion;
         Check.NotEntity(this.invocationContext.Options.EnableEntitySupport, instanceId);
 
         // if this orchestration uses entities, first validate that the suborchestration call is allowed in the current context

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.Collections.Immutable;
@@ -39,6 +39,7 @@ public record TaskOptions
         Check.NotNull(options);
         this.Retry = options.Retry;
         this.Tags = options.Tags;
+        this.Version = options.Version;
     }
 
     /// <summary>
@@ -50,6 +51,23 @@ public record TaskOptions
     /// Gets the tags to associate with the task.
     /// </summary>
     public IDictionary<string, string>? Tags { get; init; }
+
+    /// <summary>
+    /// Gets the version to associate with the scheduled task.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When <c>null</c> (the default), the task inherits the version of the orchestration instance that is
+    /// scheduling it.
+    /// </para>
+    /// <para>
+    /// When non-<c>null</c> (including <see cref="TaskVersion.Unversioned"/>), the task is scheduled with the
+    /// specified version explicitly. The worker dispatches to the registered <c>(name, version)</c> exactly;
+    /// when no exact match exists, it falls back to an unversioned registration only when the name has no
+    /// versioned registrations at all.
+    /// </para>
+    /// </remarks>
+    public TaskVersion? Version { get; init; }
 
     /// <summary>
     /// Returns a new <see cref="TaskOptions" /> from the provided <see cref="RetryPolicy" />.
@@ -82,51 +100,6 @@ public record TaskOptions
 }
 
 /// <summary>
-/// Options that can be used to control the behavior of activity task execution. This derived type can be used to
-/// supply extra options for activities.
-/// </summary>
-public record ActivityOptions : TaskOptions
-{
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ActivityOptions"/> class.
-    /// </summary>
-    /// <param name="retry">The task retry options.</param>
-    public ActivityOptions(TaskRetryOptions? retry = null)
-        : base(retry)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ActivityOptions"/> class.
-    /// </summary>
-    /// <param name="options">The task options to wrap.</param>
-    public ActivityOptions(TaskOptions options)
-        : base(options)
-    {
-        if (options is ActivityOptions derived)
-        {
-            this.Version = derived.Version;
-        }
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ActivityOptions"/> class by copying from another instance.
-    /// </summary>
-    /// <param name="options">The activity options to copy from.</param>
-    public ActivityOptions(ActivityOptions options)
-        : base(options)
-    {
-        Check.NotNull(options);
-        this.Version = options.Version;
-    }
-
-    /// <summary>
-    /// Gets the version to associate with the activity.
-    /// </summary>
-    public TaskVersion? Version { get; init; }
-}
-
-/// <summary>
 /// Options that can be used to control the behavior of orchestrator task execution. This derived type can be used to
 /// supply extra options for orchestrations.
 /// </summary>
@@ -152,14 +125,9 @@ public record SubOrchestrationOptions : TaskOptions
         : base(options)
     {
         this.InstanceId = instanceId;
-        if (options is SubOrchestrationOptions derived)
+        if (options is SubOrchestrationOptions derived && instanceId is null)
         {
-            if (instanceId is null)
-            {
-                this.InstanceId = derived.InstanceId;
-            }
-
-            this.Version = derived.Version;
+            this.InstanceId = derived.InstanceId;
         }
     }
 
@@ -172,18 +140,12 @@ public record SubOrchestrationOptions : TaskOptions
     {
         Check.NotNull(options);
         this.InstanceId = options.InstanceId;
-        this.Version = options.Version;
     }
 
     /// <summary>
     /// Gets the orchestration instance ID.
     /// </summary>
     public string? InstanceId { get; init; }
-
-    /// <summary>
-    /// Gets the version to associate with the sub-orchestration instance.
-    /// </summary>
-    public TaskVersion? Version { get; init; }
 }
 
 /// <summary>

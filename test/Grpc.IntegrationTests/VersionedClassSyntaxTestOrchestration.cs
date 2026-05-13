@@ -47,7 +47,7 @@ public static class VersionedClassSyntaxTestOrchestration
             => context.CallActivityAsync<string>(
                 "VersionedActivityOverrideActivity",
                 input,
-                new ActivityOptions
+                new TaskOptions
                 {
                     Version = "v1",
                 });

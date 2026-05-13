@@ -43,10 +43,9 @@ public static Task<string> CallInvoiceActivityAsync(this TaskOrchestrationContex
 
 static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
 {
-    if (options is ActivityOptions activityOptions
-        && activityOptions.Version is TaskVersion explicitVersion)
+    if (options?.Version is TaskVersion explicitVersion)
     {
-        // Any non-null ActivityOptions.Version is an explicit caller selection — including
+        // Any non-null TaskOptions.Version is an explicit caller selection — including
         // TaskVersion.Unversioned and the empty-string equivalent. Disagreement with the helper-
         // baked version is always a contradiction, so we throw rather than silently override.
         string explicitValue = explicitVersion.Version ?? string.Empty;
@@ -54,29 +53,21 @@ static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string v
         {
             string requested = string.IsNullOrEmpty(explicitValue) ? ""<unversioned>"" : ""'"" + explicitValue + ""'"";
             throw new System.InvalidOperationException(
-                $""The generated activity helper targets version '{version}' but ActivityOptions.Version was set to {requested}. Use the unqualified CallActivityAsync overload to call a different version."");
+                $""The generated activity helper targets version '{version}' but TaskOptions.Version was set to {requested}. Use the unqualified CallActivityAsync overload to call a different version."");
         }
 
         return options;
     }
 
-    if (options is ActivityOptions existingActivityOptions)
-    {
-        return new ActivityOptions(existingActivityOptions)
-        {
-            Version = version,
-        };
-    }
-
     if (options is null)
     {
-        return new ActivityOptions
+        return new TaskOptions
         {
             Version = version,
         };
     }
 
-    return new ActivityOptions(options)
+    return new TaskOptions(options)
     {
         Version = version,
     };
@@ -139,10 +130,9 @@ public static Task<string> CallInvoiceActivity_v2Async(this TaskOrchestrationCon
 
 static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
 {
-    if (options is ActivityOptions activityOptions
-        && activityOptions.Version is TaskVersion explicitVersion)
+    if (options?.Version is TaskVersion explicitVersion)
     {
-        // Any non-null ActivityOptions.Version is an explicit caller selection — including
+        // Any non-null TaskOptions.Version is an explicit caller selection — including
         // TaskVersion.Unversioned and the empty-string equivalent. Disagreement with the helper-
         // baked version is always a contradiction, so we throw rather than silently override.
         string explicitValue = explicitVersion.Version ?? string.Empty;
@@ -150,29 +140,21 @@ static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string v
         {
             string requested = string.IsNullOrEmpty(explicitValue) ? ""<unversioned>"" : ""'"" + explicitValue + ""'"";
             throw new System.InvalidOperationException(
-                $""The generated activity helper targets version '{version}' but ActivityOptions.Version was set to {requested}. Use the unqualified CallActivityAsync overload to call a different version."");
+                $""The generated activity helper targets version '{version}' but TaskOptions.Version was set to {requested}. Use the unqualified CallActivityAsync overload to call a different version."");
         }
 
         return options;
     }
 
-    if (options is ActivityOptions existingActivityOptions)
-    {
-        return new ActivityOptions(existingActivityOptions)
-        {
-            Version = version,
-        };
-    }
-
     if (options is null)
     {
-        return new ActivityOptions
+        return new TaskOptions
         {
             Version = version,
         };
     }
 
-    return new ActivityOptions(options)
+    return new TaskOptions(options)
     {
         Version = version,
     };
@@ -227,10 +209,9 @@ public static Task<string> CallInvoiceActivityAsync(this TaskOrchestrationContex
 
 static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
 {
-    if (options is ActivityOptions activityOptions
-        && activityOptions.Version is TaskVersion explicitVersion)
+    if (options?.Version is TaskVersion explicitVersion)
     {
-        // Any non-null ActivityOptions.Version is an explicit caller selection — including
+        // Any non-null TaskOptions.Version is an explicit caller selection — including
         // TaskVersion.Unversioned and the empty-string equivalent. Disagreement with the helper-
         // baked version is always a contradiction, so we throw rather than silently override.
         string explicitValue = explicitVersion.Version ?? string.Empty;
@@ -238,29 +219,21 @@ static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string v
         {
             string requested = string.IsNullOrEmpty(explicitValue) ? ""<unversioned>"" : ""'"" + explicitValue + ""'"";
             throw new System.InvalidOperationException(
-                $""The generated activity helper targets version '{version}' but ActivityOptions.Version was set to {requested}. Use the unqualified CallActivityAsync overload to call a different version."");
+                $""The generated activity helper targets version '{version}' but TaskOptions.Version was set to {requested}. Use the unqualified CallActivityAsync overload to call a different version."");
         }
 
         return options;
     }
 
-    if (options is ActivityOptions existingActivityOptions)
-    {
-        return new ActivityOptions(existingActivityOptions)
-        {
-            Version = version,
-        };
-    }
-
     if (options is null)
     {
-        return new ActivityOptions
+        return new TaskOptions
         {
             Version = version,
         };
     }
 
-    return new ActivityOptions(options)
+    return new TaskOptions(options)
     {
         Version = version,
     };

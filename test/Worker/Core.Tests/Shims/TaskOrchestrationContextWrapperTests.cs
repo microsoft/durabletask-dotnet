@@ -131,7 +131,7 @@ public class TaskOrchestrationContextWrapperTests
     }
 
     [Fact]
-    public async Task CallActivityAsync_ActivityOptionsVersionOverridesInheritedOrchestrationVersion()
+    public async Task CallActivityAsync_TaskOptionsVersionOverridesInheritedOrchestrationVersion()
     {
         // Arrange
         TrackingOrchestrationContext innerContext = new("v2");
@@ -142,7 +142,7 @@ public class TaskOrchestrationContextWrapperTests
         await wrapper.CallActivityAsync<string>(
             "TestActivity",
             123,
-            new ActivityOptions
+            new TaskOptions
             {
                 Version = "v1",
             });
@@ -154,7 +154,7 @@ public class TaskOrchestrationContextWrapperTests
     }
 
     [Fact]
-    public async Task CallActivityAsync_ActivityOptionsVersionOverridesInheritedOrchestrationVersion_WithRetryPolicy()
+    public async Task CallActivityAsync_TaskOptionsVersionOverridesInheritedOrchestrationVersion_WithRetryPolicy()
     {
         // Arrange
         TrackingOrchestrationContext innerContext = new("v2");
@@ -165,7 +165,7 @@ public class TaskOrchestrationContextWrapperTests
         await wrapper.CallActivityAsync<string>(
             "TestActivity",
             123,
-            new ActivityOptions(new RetryPolicy(1, TimeSpan.FromSeconds(1)))
+            new TaskOptions(new RetryPolicy(1, TimeSpan.FromSeconds(1)))
             {
                 Version = "v1",
             });
@@ -177,13 +177,13 @@ public class TaskOrchestrationContextWrapperTests
     }
 
     [Fact]
-    public async Task CallActivityAsync_ActivityOptionsVersionOverridesInheritedOrchestrationVersion_WithRetryHandler()
+    public async Task CallActivityAsync_TaskOptionsVersionOverridesInheritedOrchestrationVersion_WithRetryHandler()
     {
         // Arrange
         TrackingOrchestrationContext innerContext = new("v2");
         OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
-        ActivityOptions options = new(TaskOptions.FromRetryHandler(_ => false))
+        TaskOptions options = new(TaskOptions.FromRetryHandler(_ => false))
         {
             Version = "v1",
         };
@@ -256,15 +256,15 @@ public class TaskOrchestrationContextWrapperTests
     }
 
     [Fact]
-    public async Task CallActivityAsync_NullActivityOptionsVersion_InheritsOrchestrationVersion()
+    public async Task CallActivityAsync_NullTaskOptionsVersion_InheritsOrchestrationVersion()
     {
-        // Arrange — ActivityOptions present but Version not set => inherit (same as plain TaskOptions).
+        // Arrange — TaskOptions present but Version not set => inherit (same as plain TaskOptions).
         TrackingOrchestrationContext innerContext = new("v2");
         OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
 
         // Act
-        await wrapper.CallActivityAsync<string>("TestActivity", 123, new ActivityOptions());
+        await wrapper.CallActivityAsync<string>("TestActivity", 123, new TaskOptions());
 
         // Assert
         innerContext.LastScheduledTaskName.Should().Be("TestActivity");
@@ -283,7 +283,7 @@ public class TaskOrchestrationContextWrapperTests
         await wrapper.CallActivityAsync<string>(
             "TestActivity",
             123,
-            new ActivityOptions { Version = TaskVersion.Unversioned });
+            new TaskOptions { Version = TaskVersion.Unversioned });
 
         // Assert — empty version is sent (the unversioned activity), instead of inheriting v2.
         innerContext.LastScheduledTaskName.Should().Be("TestActivity");

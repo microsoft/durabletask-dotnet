@@ -16,14 +16,14 @@ public sealed partial class DurableTaskRegistry
     /// <summary>
     /// Gets the currently registered activities.
     /// </summary>
-    internal IDictionary<ActivityVersionKey, Func<IServiceProvider, ITaskActivity>> Activities { get; }
-        = new Dictionary<ActivityVersionKey, Func<IServiceProvider, ITaskActivity>>();
+    internal IDictionary<TaskVersionKey, Func<IServiceProvider, ITaskActivity>> Activities { get; }
+        = new Dictionary<TaskVersionKey, Func<IServiceProvider, ITaskActivity>>();
 
     /// <summary>
     /// Gets the currently registered orchestrators.
     /// </summary>
-    internal IDictionary<OrchestratorVersionKey, Func<IServiceProvider, ITaskOrchestrator>> Orchestrators { get; }
-        = new Dictionary<OrchestratorVersionKey, Func<IServiceProvider, ITaskOrchestrator>>();
+    internal IDictionary<TaskVersionKey, Func<IServiceProvider, ITaskOrchestrator>> Orchestrators { get; }
+        = new Dictionary<TaskVersionKey, Func<IServiceProvider, ITaskOrchestrator>>();
 
     /// <summary>
     /// Gets the currently registered entities.
@@ -80,7 +80,7 @@ public sealed partial class DurableTaskRegistry
         Check.NotDefault(name);
         Check.NotNull(factory);
 
-        ActivityVersionKey key = new(name, version);
+        TaskVersionKey key = new(name, version);
         if (this.Activities.ContainsKey(key))
         {
             string message = string.IsNullOrEmpty(version.Version)

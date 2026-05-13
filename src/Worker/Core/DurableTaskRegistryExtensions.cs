@@ -28,7 +28,7 @@ static class DurableTaskRegistryExtensions
     internal static bool HasAnyVersionedRegistration(this DurableTaskRegistry registry)
     {
         Check.NotNull(registry);
-        foreach (OrchestratorVersionKey key in registry.Orchestrators.Keys)
+        foreach (TaskVersionKey key in registry.Orchestrators.Keys)
         {
             if (!string.IsNullOrWhiteSpace(key.Version))
             {
@@ -36,7 +36,7 @@ static class DurableTaskRegistryExtensions
             }
         }
 
-        foreach (ActivityVersionKey key in registry.Activities.Keys)
+        foreach (TaskVersionKey key in registry.Activities.Keys)
         {
             if (!string.IsNullOrWhiteSpace(key.Version))
             {

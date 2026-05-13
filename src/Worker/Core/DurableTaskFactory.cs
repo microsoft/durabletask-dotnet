@@ -11,8 +11,8 @@ namespace Microsoft.DurableTask.Worker;
 /// </summary>
 sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedActivityFactory, IVersionedOrchestratorFactory
 {
-    readonly IDictionary<ActivityVersionKey, Func<IServiceProvider, ITaskActivity>> activities;
-    readonly IDictionary<OrchestratorVersionKey, Func<IServiceProvider, ITaskOrchestrator>> orchestrators;
+    readonly IDictionary<TaskVersionKey, Func<IServiceProvider, ITaskActivity>> activities;
+    readonly IDictionary<TaskVersionKey, Func<IServiceProvider, ITaskOrchestrator>> orchestrators;
     readonly IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities;
     readonly HashSet<string> versionedOrchestratorNames;
     readonly HashSet<string> versionedActivityNames;
@@ -24,8 +24,8 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedActivityFactor
     /// <param name="orchestrators">The orchestrator factories.</param>
     /// <param name="entities">The entity factories.</param>
     internal DurableTaskFactory(
-        IDictionary<ActivityVersionKey, Func<IServiceProvider, ITaskActivity>> activities,
-        IDictionary<OrchestratorVersionKey, Func<IServiceProvider, ITaskOrchestrator>> orchestrators,
+        IDictionary<TaskVersionKey, Func<IServiceProvider, ITaskActivity>> activities,
+        IDictionary<TaskVersionKey, Func<IServiceProvider, ITaskOrchestrator>> orchestrators,
         IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities)
     {
         this.activities = Check.NotNull(activities);
@@ -57,7 +57,7 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedActivityFactor
         [NotNullWhen(true)] out ITaskActivity? activity)
     {
         Check.NotNull(serviceProvider);
-        ActivityVersionKey key = new(name, version);
+        TaskVersionKey key = new(name, version);
         if (this.activities.TryGetValue(key, out Func<IServiceProvider, ITaskActivity>? factory))
         {
             activity = factory.Invoke(serviceProvider);
@@ -67,7 +67,7 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedActivityFactor
         if (allowVersionFallback
             && !string.IsNullOrWhiteSpace(version.Version)
             && !this.versionedActivityNames.Contains(name.Name)
-            && this.activities.TryGetValue(new ActivityVersionKey(name, default(TaskVersion)), out factory))
+            && this.activities.TryGetValue(new TaskVersionKey(name, default(TaskVersion)), out factory))
         {
             activity = factory.Invoke(serviceProvider);
             return true;
@@ -90,7 +90,7 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedActivityFactor
         [NotNullWhen(true)] out ITaskOrchestrator? orchestrator)
     {
         Check.NotNull(serviceProvider);
-        OrchestratorVersionKey key = new(name, version);
+        TaskVersionKey key = new(name, version);
         if (this.orchestrators.TryGetValue(key, out Func<IServiceProvider, ITaskOrchestrator>? factory))
         {
             orchestrator = factory.Invoke(serviceProvider);
@@ -103,7 +103,7 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedActivityFactor
         // catch-all registration the caller did not ask for.
         if (!string.IsNullOrWhiteSpace(version.Version)
             && !this.versionedOrchestratorNames.Contains(name.Name)
-            && this.orchestrators.TryGetValue(new OrchestratorVersionKey(name, default(TaskVersion)), out factory))
+            && this.orchestrators.TryGetValue(new TaskVersionKey(name, default(TaskVersion)), out factory))
         {
             orchestrator = factory.Invoke(serviceProvider);
             return true;

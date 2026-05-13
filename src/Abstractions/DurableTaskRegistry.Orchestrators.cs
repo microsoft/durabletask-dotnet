@@ -55,7 +55,7 @@ public partial class DurableTaskRegistry
         Check.NotDefault(name);
         Check.NotNull(factory);
 
-        OrchestratorVersionKey key = new(name, version);
+        TaskVersionKey key = new(name, version);
         if (this.Orchestrators.ContainsKey(key))
         {
             throw new ArgumentException(

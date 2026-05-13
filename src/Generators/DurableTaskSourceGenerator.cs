@@ -258,10 +258,10 @@ namespace Microsoft.DurableTask.Generators
             string taskVersion = string.Empty;
             Location? taskVersionLocation = null;
             bool hasWhitespaceVersion = false;
-            foreach (AttributeData attributeData in classType.GetAttributes())
+            foreach (AttributeData attributeData in classType.GetAttributes()
+                .Where(a => a.AttributeClass?.ToDisplayString() == "Microsoft.DurableTask.DurableTaskVersionAttribute"))
             {
-                if (attributeData.AttributeClass?.ToDisplayString() == "Microsoft.DurableTask.DurableTaskVersionAttribute"
-                    && attributeData.ConstructorArguments.Length > 0
+                if (attributeData.ConstructorArguments.Length > 0
                     && attributeData.ConstructorArguments[0].Value is string version)
                 {
                     if (version.Length > 0 && string.IsNullOrWhiteSpace(version))
@@ -406,16 +406,13 @@ namespace Microsoft.DurableTask.Generators
                 .Where(task => IsValidCSharpIdentifier(task.TaskName));
 
             // Surface whitespace-only [DurableTaskVersion] as an error before we partition by name+version.
-            foreach (DurableTaskTypeInfo task in allTasks)
+            foreach (DurableTaskTypeInfo task in allTasks.Where(t => t.HasWhitespaceVersion))
             {
-                if (task.HasWhitespaceVersion)
-                {
-                    Location location = task.TaskVersionLocation ?? task.TaskNameLocation ?? Location.None;
-                    context.ReportDiagnostic(Diagnostic.Create(
-                        WhitespaceTaskVersionRule,
-                        location,
-                        task.TaskName));
-                }
+                Location location = task.TaskVersionLocation ?? task.TaskNameLocation ?? Location.None;
+                context.ReportDiagnostic(Diagnostic.Create(
+                    WhitespaceTaskVersionRule,
+                    location,
+                    task.TaskName));
             }
 
             Dictionary<string, DurableTaskTypeInfo> standaloneOrchestratorRegistrations = new(StringComparer.OrdinalIgnoreCase);

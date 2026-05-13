@@ -831,15 +831,20 @@ namespace {targetNamespace}
                 return task.TaskName;
             }
 
-            return GetSimpleClassName(task.TypeName);
+            return GetClassRelativeName(task.TypeName, task.Namespace);
         }
 
-        static string GetSimpleClassName(string fullyQualifiedTypeName)
+        static string GetClassRelativeName(string fullyQualifiedTypeName, string classNamespace)
         {
-            // Strip namespaces and any outer-class prefixes. For "MyApp.Workflows.OrderWorkflowV2" returns
-            // "OrderWorkflowV2". For nested "Outer.Inner" returns "Inner".
-            int lastDot = fullyQualifiedTypeName.LastIndexOf('.');
-            return lastDot < 0 ? fullyQualifiedTypeName : fullyQualifiedTypeName.Substring(lastDot + 1);
+            // Strips the containing-namespace prefix and joins any outer-class chain with '_' so the
+            // result is a valid C# identifier. For "MyApp.OrderWorkflowV2" (top-level) returns
+            // "OrderWorkflowV2"; for "MyApp.Outer.Inner" (nested) returns "Outer_Inner". This makes
+            // the derived helper-name root unique across nested-type pairs that share a simple name.
+            string relative = !string.IsNullOrEmpty(classNamespace)
+                && fullyQualifiedTypeName.StartsWith(classNamespace + ".", StringComparison.Ordinal)
+                    ? fullyQualifiedTypeName.Substring(classNamespace.Length + 1)
+                    : fullyQualifiedTypeName;
+            return relative.Replace('.', '_');
         }
 
         static string GetStandaloneTaskRegistrationKey(string taskName, string taskVersion)
@@ -876,11 +881,15 @@ namespace {targetNamespace}
             string optionsExpression = applyGeneratedVersion
                 ? $"ApplyGeneratedVersion(options, {ToCSharpStringLiteral(orchestrator.TaskVersion)})"
                 : "options";
+            string versionRemarks = applyGeneratedVersion
+                ? $@"
+        /// <remarks>Stamps version <c>{orchestrator.TaskVersion}</c> on the started instance. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>"
+                : string.Empty;
 
             sourceBuilder.AppendLine($@"
         /// <summary>
         /// Schedules a new instance of the <see cref=""{simplifiedTypeName}""/> orchestrator.
-        /// </summary>
+        /// </summary>{versionRemarks}
         /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
         public static Task<string> ScheduleNew{helperRoot}InstanceAsync(
             this IOrchestrationSubmitter client, {inputParameter}, StartOrchestrationOptions? options = null)
@@ -903,11 +912,15 @@ namespace {targetNamespace}
             string optionsExpression = applyGeneratedVersion
                 ? $"ApplyGeneratedVersion(options, {ToCSharpStringLiteral(orchestrator.TaskVersion)})"
                 : "options";
+            string versionRemarks = applyGeneratedVersion
+                ? $@"
+        /// <remarks>Stamps version <c>{orchestrator.TaskVersion}</c> on the sub-orchestration. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>"
+                : string.Empty;
 
             sourceBuilder.AppendLine($@"
         /// <summary>
         /// Calls the <see cref=""{simplifiedTypeName}""/> sub-orchestrator.
-        /// </summary>
+        /// </summary>{versionRemarks}
         /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
         public static Task<{outputType}> Call{helperRoot}Async(
             this TaskOrchestrationContext context, {inputParameter}, TaskOptions? options = null)
@@ -1005,11 +1018,15 @@ namespace {targetNamespace}
             string optionsExpression = applyGeneratedVersion
                 ? $"ApplyGeneratedActivityVersion(options, {ToCSharpStringLiteral(activity.TaskVersion)})"
                 : "options";
+            string versionRemarks = applyGeneratedVersion
+                ? $@"
+        /// <remarks>Stamps version <c>{activity.TaskVersion}</c> on the activity call. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>"
+                : string.Empty;
 
             sourceBuilder.AppendLine($@"
         /// <summary>
         /// Calls the <see cref=""{simplifiedTypeName}""/> activity.
-        /// </summary>
+        /// </summary>{versionRemarks}
         /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
         public static Task<{outputType}> Call{helperRoot}Async(this TaskOrchestrationContext ctx, {inputParameter}, TaskOptions? options = null)
         {{

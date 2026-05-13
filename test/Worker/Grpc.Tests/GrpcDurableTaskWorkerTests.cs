@@ -490,7 +490,7 @@ public class GrpcDurableTaskWorkerTests
     }
 
     [Fact]
-    public void Constructor_PerTaskVersioningCombinedWithStrictWorkerVersioning_DoesNotThrow()
+    public void Constructor_MultiVersionRegistryWithStrictWorkerVersioning_DoesNotThrow()
     {
         // Arrange — combine UseVersioning(Strict) with multi-version registrations. Both are now part of
         // the same versioning feature: UseVersioning's match strategy decides which instance versions to
@@ -517,7 +517,7 @@ public class GrpcDurableTaskWorkerTests
     }
 
     [Fact]
-    public void Constructor_PerTaskVersioningWithoutWorkerVersioning_DoesNotThrow()
+    public void Constructor_MultiVersionRegistryWithoutWorkerVersioning_DoesNotThrow()
     {
         // Arrange
         DurableTaskRegistry registry = new();
@@ -535,7 +535,7 @@ public class GrpcDurableTaskWorkerTests
     }
 
     [Fact]
-    public void Constructor_WorkerVersioningWithoutPerTaskVersions_DoesNotThrow()
+    public void Constructor_WorkerVersioningWithoutMultiVersionRegistry_DoesNotThrow()
     {
         // Arrange
         DurableTaskRegistry registry = new();
@@ -588,6 +588,11 @@ public class GrpcDurableTaskWorkerTests
         IDurableTaskFactory factory,
         DurableTaskRegistry? registry)
     {
+        // The registry parameter is preserved on the helper signature for callers that build a factory
+        // from a registry below; the worker itself no longer reads registry contents at construction time
+        // since multi-version registration is just (name, version) keys in the registry it already
+        // consumes via factory.
+        _ = registry;
         return new GrpcDurableTaskWorker(
             name: "Test",
             factory: factory,
@@ -597,8 +602,7 @@ public class GrpcDurableTaskWorkerTests
             loggerFactory: loggerFactory,
             orchestrationFilter: null,
             exceptionPropertiesProvider: null,
-            workItemFiltersMonitor: null,
-            registryMonitor: registry is null ? null : new OptionsMonitorStub<DurableTaskRegistry>(registry));
+            workItemFiltersMonitor: null);
     }
 
     static Task InvokeExecuteAsync(GrpcDurableTaskWorker worker, CancellationToken cancellationToken)

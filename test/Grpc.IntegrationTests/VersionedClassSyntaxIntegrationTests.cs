@@ -172,4 +172,60 @@ public class VersionedClassSyntaxIntegrationTests : IntegrationTestBase
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.Equal("v2:5", metadata.ReadOutputAs<string>());
     }
+
+    /// <summary>
+    /// Verifies UseVersioning(MatchStrategy = CurrentOrOlder) composes with multi-version registrations:
+    /// the per-task registry picks the implementation that exactly matches the inbound instance version,
+    /// while UseVersioning's strategy still gates which instance versions the worker accepts. This is
+    /// the central composition property of the simplification — the two features are not mutually
+    /// exclusive.
+    /// </summary>
+    [Fact]
+    public async Task UseVersioning_CurrentOrOlder_WithMultiVersionRegistry_RoutesEachVersionToItsImplementation()
+    {
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.UseVersioning(new DurableTaskWorkerOptions.VersioningOptions
+            {
+                Version = "v2",
+                DefaultVersion = "v2",
+                MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.CurrentOrOlder,
+            });
+            b.AddTasks(tasks =>
+            {
+                tasks.AddOrchestrator<VersionedClassSyntaxV1>();
+                tasks.AddOrchestrator<VersionedClassSyntaxV2>();
+            });
+        });
+
+        // v1 instance is accepted (<= worker v2) and dispatched to V1.
+        string v1Id = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            "VersionedClassSyntax",
+            input: 5,
+            new StartOrchestrationOptions
+            {
+                Version = new TaskVersion("v1"),
+            });
+        OrchestrationMetadata v1Metadata = await server.Client.WaitForInstanceCompletionAsync(
+            v1Id, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(v1Metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, v1Metadata.RuntimeStatus);
+        Assert.Equal("v1:5", v1Metadata.ReadOutputAs<string>());
+
+        // v2 instance is accepted and dispatched to V2.
+        string v2Id = await server.Client.ScheduleNewOrchestrationInstanceAsync(
+            "VersionedClassSyntax",
+            input: 5,
+            new StartOrchestrationOptions
+            {
+                Version = new TaskVersion("v2"),
+            });
+        OrchestrationMetadata v2Metadata = await server.Client.WaitForInstanceCompletionAsync(
+            v2Id, getInputsAndOutputs: true, this.TimeoutToken);
+
+        Assert.NotNull(v2Metadata);
+        Assert.Equal(OrchestrationRuntimeStatus.Completed, v2Metadata.RuntimeStatus);
+        Assert.Equal("v2:5", v2Metadata.ReadOutputAs<string>());
+    }
 }

@@ -927,7 +927,7 @@ sealed partial class GrpcDurableTaskWorker
                         failureDetails = new P.TaskFailureDetails
                         {
                             ErrorType = "ActivityTaskNotFound",
-                            ErrorMessage = string.IsNullOrEmpty(versionText) || this.worker.Factory is not IVersionedTaskFactory
+                            ErrorMessage = string.IsNullOrEmpty(versionText)
                                 ? $"No activity task named '{name}' was found."
                                 : $"No activity task named '{name}' with version '{versionText}' was found.",
                             IsNonRetriable = true,

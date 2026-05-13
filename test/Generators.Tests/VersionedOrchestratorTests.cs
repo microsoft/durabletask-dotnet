@@ -33,6 +33,7 @@ class InvoiceWorkflow : TaskOrchestrator<int, string>
 /// <summary>
 /// Schedules a new instance of the <see cref=""InvoiceWorkflow""/> orchestrator.
 /// </summary>
+/// <remarks>Stamps version <c>v1</c> on the started instance. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewInvoiceWorkflowInstanceAsync(
     this IOrchestrationSubmitter client, int input, StartOrchestrationOptions? options = null)
@@ -43,6 +44,7 @@ public static Task<string> ScheduleNewInvoiceWorkflowInstanceAsync(
 /// <summary>
 /// Calls the <see cref=""InvoiceWorkflow""/> sub-orchestrator.
 /// </summary>
+/// <remarks>Stamps version <c>v1</c> on the sub-orchestration. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallInvoiceWorkflowAsync(
     this TaskOrchestrationContext context, int input, TaskOptions? options = null)
@@ -134,6 +136,7 @@ class InvoiceWorkflowV2 : TaskOrchestrator<int, string>
 /// <summary>
 /// Schedules a new instance of the <see cref=""InvoiceWorkflowV1""/> orchestrator.
 /// </summary>
+/// <remarks>Stamps version <c>v1</c> on the started instance. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewInvoiceWorkflowV1InstanceAsync(
     this IOrchestrationSubmitter client, int input, StartOrchestrationOptions? options = null)
@@ -144,6 +147,7 @@ public static Task<string> ScheduleNewInvoiceWorkflowV1InstanceAsync(
 /// <summary>
 /// Calls the <see cref=""InvoiceWorkflowV1""/> sub-orchestrator.
 /// </summary>
+/// <remarks>Stamps version <c>v1</c> on the sub-orchestration. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallInvoiceWorkflowV1Async(
     this TaskOrchestrationContext context, int input, TaskOptions? options = null)
@@ -154,6 +158,7 @@ public static Task<string> CallInvoiceWorkflowV1Async(
 /// <summary>
 /// Schedules a new instance of the <see cref=""InvoiceWorkflowV2""/> orchestrator.
 /// </summary>
+/// <remarks>Stamps version <c>v2</c> on the started instance. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewInvoiceWorkflowV2InstanceAsync(
     this IOrchestrationSubmitter client, int input, StartOrchestrationOptions? options = null)
@@ -164,6 +169,7 @@ public static Task<string> ScheduleNewInvoiceWorkflowV2InstanceAsync(
 /// <summary>
 /// Calls the <see cref=""InvoiceWorkflowV2""/> sub-orchestrator.
 /// </summary>
+/// <remarks>Stamps version <c>v2</c> on the sub-orchestration. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallInvoiceWorkflowV2Async(
     this TaskOrchestrationContext context, int input, TaskOptions? options = null)
@@ -256,6 +262,7 @@ class InvoiceWorkflowV2 : TaskOrchestrator<int, string>
 /// <summary>
 /// Schedules a new instance of the <see cref=""InvoiceWorkflowV1""/> orchestrator.
 /// </summary>
+/// <remarks>Stamps version <c>v1</c> on the started instance. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewInvoiceWorkflowV1InstanceAsync(
     this IOrchestrationSubmitter client, int input, StartOrchestrationOptions? options = null)
@@ -266,6 +273,7 @@ public static Task<string> ScheduleNewInvoiceWorkflowV1InstanceAsync(
 /// <summary>
 /// Calls the <see cref=""InvoiceWorkflowV1""/> sub-orchestrator.
 /// </summary>
+/// <remarks>Stamps version <c>v1</c> on the sub-orchestration. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallInvoiceWorkflowV1Async(
     this TaskOrchestrationContext context, int input, TaskOptions? options = null)
@@ -276,6 +284,7 @@ public static Task<string> CallInvoiceWorkflowV1Async(
 /// <summary>
 /// Schedules a new instance of the <see cref=""InvoiceWorkflowV2""/> orchestrator.
 /// </summary>
+/// <remarks>Stamps version <c>v2</c> on the started instance. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewInvoiceWorkflowV2InstanceAsync(
     this IOrchestrationSubmitter client, int input, StartOrchestrationOptions? options = null)
@@ -286,6 +295,7 @@ public static Task<string> ScheduleNewInvoiceWorkflowV2InstanceAsync(
 /// <summary>
 /// Calls the <see cref=""InvoiceWorkflowV2""/> sub-orchestrator.
 /// </summary>
+/// <remarks>Stamps version <c>v2</c> on the sub-orchestration. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallInvoiceWorkflowV2Async(
     this TaskOrchestrationContext context, int input, TaskOptions? options = null)
@@ -378,6 +388,7 @@ class InvoiceWorkflowV1Duplicate : TaskOrchestrator<int, string>
 /// <summary>
 /// Schedules a new instance of the <see cref=""InvoiceWorkflowV1""/> orchestrator.
 /// </summary>
+/// <remarks>Stamps version <c>v1</c> on the started instance. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewInvoiceWorkflowInstanceAsync(
     this IOrchestrationSubmitter client, int input, StartOrchestrationOptions? options = null)
@@ -388,6 +399,7 @@ public static Task<string> ScheduleNewInvoiceWorkflowInstanceAsync(
 /// <summary>
 /// Calls the <see cref=""InvoiceWorkflowV1""/> sub-orchestrator.
 /// </summary>
+/// <remarks>Stamps version <c>v1</c> on the sub-orchestration. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallInvoiceWorkflowAsync(
     this TaskOrchestrationContext context, int input, TaskOptions? options = null)
@@ -496,6 +508,7 @@ class InvoiceWorkflowV1Duplicate : TaskOrchestrator<int, string>
 /// <summary>
 /// Schedules a new instance of the <see cref=""InvoiceWorkflowV1""/> orchestrator.
 /// </summary>
+/// <remarks>Stamps version <c>v1</c> on the started instance. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
 public static Task<string> ScheduleNewInvoiceWorkflowInstanceAsync(
     this IOrchestrationSubmitter client, int input, StartOrchestrationOptions? options = null)
@@ -506,6 +519,7 @@ public static Task<string> ScheduleNewInvoiceWorkflowInstanceAsync(
 /// <summary>
 /// Calls the <see cref=""InvoiceWorkflowV1""/> sub-orchestrator.
 /// </summary>
+/// <remarks>Stamps version <c>v1</c> on the sub-orchestration. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallInvoiceWorkflowAsync(
     this TaskOrchestrationContext context, int input, TaskOptions? options = null)

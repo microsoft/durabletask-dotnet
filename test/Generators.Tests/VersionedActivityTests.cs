@@ -35,6 +35,7 @@ class InvoiceActivity : TaskActivity<int, string>
 /// <summary>
 /// Calls the <see cref=""InvoiceActivity""/> activity.
 /// </summary>
+/// <remarks>Stamps version <c>v1</c> on the activity call. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallInvoiceActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
@@ -98,6 +99,7 @@ class InvoiceActivityV2 : TaskActivity<int, string>
 /// <summary>
 /// Calls the <see cref=""InvoiceActivityV1""/> activity.
 /// </summary>
+/// <remarks>Stamps version <c>v1</c> on the activity call. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallInvoiceActivityV1Async(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
@@ -107,6 +109,7 @@ public static Task<string> CallInvoiceActivityV1Async(this TaskOrchestrationCont
 /// <summary>
 /// Calls the <see cref=""InvoiceActivityV2""/> activity.
 /// </summary>
+/// <remarks>Stamps version <c>v2</c> on the activity call. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallInvoiceActivityV2Async(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
@@ -171,6 +174,7 @@ class InvoiceActivityV1Duplicate : TaskActivity<int, string>
 /// <summary>
 /// Calls the <see cref=""InvoiceActivityV1""/> activity.
 /// </summary>
+/// <remarks>Stamps version <c>v1</c> on the activity call. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
 public static Task<string> CallInvoiceActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {

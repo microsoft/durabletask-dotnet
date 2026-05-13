@@ -35,7 +35,6 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
     /// <param name="orchestrationFilter">The optional <see cref="IOrchestrationFilter"/> used to filter orchestration execution.</param>
     /// <param name="exceptionPropertiesProvider">The custom exception properties provider that help build failure details.</param>
     /// <param name="workItemFiltersMonitor">The optional <see cref="IOptionsMonitor{DurableTaskWorkerWorkItemFilters}"/> used to filter work items in the backend.</param>
-    /// <param name="registryMonitor">The optional <see cref="IOptionsMonitor{DurableTaskRegistry}"/> used to detect per-task versioning configuration.</param>
     public GrpcDurableTaskWorker(
         string name,
         IDurableTaskFactory factory,
@@ -45,8 +44,7 @@ sealed partial class GrpcDurableTaskWorker : DurableTaskWorker
         ILoggerFactory loggerFactory,
         IOrchestrationFilter? orchestrationFilter = null,
         IExceptionPropertiesProvider? exceptionPropertiesProvider = null,
-        IOptionsMonitor<DurableTaskWorkerWorkItemFilters>? workItemFiltersMonitor = null,
-        IOptionsMonitor<DurableTaskRegistry>? registryMonitor = null)
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters>? workItemFiltersMonitor = null)
         : base(name, factory)
     {
         this.grpcOptions = Check.NotNull(grpcOptions).Get(name);

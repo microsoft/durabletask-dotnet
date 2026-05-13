@@ -141,18 +141,28 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                 nameof(input));
         }
 
-        try
+        IDictionary<string, string> tags = ImmutableDictionary<string, string>.Empty;
+        CancellationToken cancellationToken = default;
+        if (options is TaskOptions callActivityOptions)
         {
-            IDictionary<string, string> tags = ImmutableDictionary<string, string>.Empty;
-            if (options is TaskOptions callActivityOptions)
+            if (callActivityOptions.Tags is not null)
             {
-                if (callActivityOptions.Tags is not null)
-                {
-                    tags = callActivityOptions.Tags;
-                }
+                tags = callActivityOptions.Tags;
             }
 
-            // TODO: Cancellation (https://github.com/microsoft/durabletask-dotnet/issues/7)
+            cancellationToken = callActivityOptions.CancellationToken;
+        }
+
+        // If cancellation was requested before starting, throw immediately
+        // Note: Once the activity is scheduled, the orchestrator yields and cannot respond to
+        // cancellation until it resumes, so this pre-check is the only cancellation point.
+        if (cancellationToken.IsCancellationRequested)
+        {
+            throw new TaskCanceledException("The task was cancelled before it could be scheduled.");
+        }
+
+        try
+        {
 #pragma warning disable 0618
             if (options?.Retry?.Policy is RetryPolicy policy)
             {
@@ -177,7 +187,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                         parameters: input),
                     name.Name,
                     handler,
-                    default);
+                    cancellationToken);
             }
             else
             {
@@ -218,6 +228,16 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             throw new InvalidOperationException(errorMsg);
         }
 
+        CancellationToken cancellationToken = options?.CancellationToken ?? default;
+
+        // If cancellation was requested before starting, throw immediately
+        // Note: Once the sub-orchestrator is scheduled, the orchestrator yields and cannot respond to
+        // cancellation until it resumes, so this pre-check is the only cancellation point.
+        if (cancellationToken.IsCancellationRequested)
+        {
+            throw new TaskCanceledException("The sub-orchestrator was cancelled before it could be scheduled.");
+        }
+
         try
         {
             if (options?.Retry?.Policy is RetryPolicy policy)
@@ -241,7 +261,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                         options?.Tags),
                     orchestratorName.Name,
                     handler,
-                    default);
+                    cancellationToken);
             }
             else
             {

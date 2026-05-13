@@ -19,6 +19,8 @@ public readonly struct TaskVersion : IEquatable<TaskVersion>
     /// </remarks>
     public static readonly TaskVersion Unversioned = default;
 
+    readonly string? versionValue;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskVersion"/> struct.
     /// </summary>
@@ -31,13 +33,11 @@ public readonly struct TaskVersion : IEquatable<TaskVersion>
     public TaskVersion(string version)
     {
         // Normalize null/empty to string.Empty so default(TaskVersion), TaskVersion.Unversioned, and
-        // new TaskVersion("") all compare and hash identically. Without this normalization the struct's
-        // Version field can be null, which makes Equals(null, "") return false and causes
-        // StringComparer.OrdinalIgnoreCase.GetHashCode to throw at runtime when the struct is used as a
-        // dictionary key.
+        // new TaskVersion("") all compare and hash identically. The Version getter additionally coalesces
+        // for default-constructed structs (which skip this constructor and zero-initialize the field).
         if (string.IsNullOrEmpty(version))
         {
-            this.Version = string.Empty;
+            this.versionValue = string.Empty;
             return;
         }
 
@@ -48,14 +48,14 @@ public readonly struct TaskVersion : IEquatable<TaskVersion>
                 nameof(version));
         }
 
-        this.Version = version;
+        this.versionValue = version;
     }
 
     /// <summary>
-    /// Gets the version of a task. Returns <see cref="string.Empty"/> for an unversioned task; never
-    /// returns <c>null</c>.
+    /// Gets the version of a task. Returns <see cref="string.Empty"/> for an unversioned task, including
+    /// <c>default(TaskVersion)</c> and <see cref="Unversioned"/>; never returns <c>null</c>.
     /// </summary>
-    public string Version { get; }
+    public string Version => this.versionValue ?? string.Empty;
 
     /// <summary>
     /// Implicitly converts a <see cref="TaskVersion"/> into a <see cref="string"/> of the <see cref="Version"/> property value.

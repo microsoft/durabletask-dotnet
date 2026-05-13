@@ -2,12 +2,14 @@
 // Licensed under the MIT License.
 
 // This sample demonstrates worker-level versioning. Each worker deployment is pinned
-// to a single version string via UseDefaultVersion(). The client stamps new orchestration
-// instances with that version. To upgrade, you deploy a new worker binary with the
-// updated implementation.
+// to a single version string via UseVersioning(). The worker only accepts orchestration
+// instances stamped with the same version, and the client stamps new instances with
+// that version via UseDefaultVersion(). To upgrade, you deploy a new worker binary
+// with the updated implementation and version string.
 //
 // This sample registers a single orchestration ("GreetingWorkflow") and shows how
-// the version is associated with the orchestration instance.
+// both the client-side stamping and the worker-side acceptance filter are tied to
+// the same WORKER_VERSION value.
 
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
@@ -30,7 +32,8 @@ string connectionString = builder.Configuration.GetValue<string>("DURABLE_TASK_S
 // when deploying a new version of your worker with updated orchestration logic.
 string workerVersion = builder.Configuration.GetValue<string>("WORKER_VERSION") ?? "1.0";
 
-// Configure the worker with an orchestration.
+// Configure the worker. UseVersioning pins the worker to a single version: with
+// MatchStrategy = Strict the worker only processes instances whose version matches.
 builder.Services.AddDurableTaskWorker(wb =>
 {
     wb.AddTasks(tasks =>
@@ -38,6 +41,14 @@ builder.Services.AddDurableTaskWorker(wb =>
         tasks.AddOrchestratorFunc<string, string>(
             "GreetingWorkflow",
             (ctx, name) => Task.FromResult($"Hello, {name}! (worker version: {ctx.Version})"));
+    });
+
+    wb.UseVersioning(new DurableTaskWorkerOptions.VersioningOptions
+    {
+        Version = workerVersion,
+        DefaultVersion = workerVersion,
+        MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+        FailureStrategy = DurableTaskWorkerOptions.VersionFailureStrategy.Reject,
     });
 
     wb.UseDurableTaskScheduler(connectionString);
@@ -59,7 +70,8 @@ await using DurableTaskClient client = host.Services.GetRequiredService<DurableT
 Console.WriteLine($"=== Worker-level versioning (version: {workerVersion}) ===");
 Console.WriteLine();
 
-// Schedule a greeting orchestration. The version is automatically stamped by the client.
+// Schedule a greeting orchestration. The version is automatically stamped by the client
+// and accepted by the worker because both are configured with the same WORKER_VERSION.
 string instanceId = await client.ScheduleNewOrchestrationInstanceAsync("GreetingWorkflow", "World");
 Console.WriteLine($"Started orchestration: {instanceId}");
 

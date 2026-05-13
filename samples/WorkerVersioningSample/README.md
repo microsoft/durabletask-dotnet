@@ -4,9 +4,10 @@ This sample demonstrates worker-level versioning, where each worker deployment i
 
 ## What it shows
 
-- The client uses `UseDefaultVersion()` to stamp every new orchestration instance with a version
-- The orchestration reads `context.Version` to see what version it was scheduled with
-- To "upgrade," you redeploy the worker with a new implementation and change the version string
+- The worker uses `UseVersioning(...)` with `MatchStrategy = Strict` to pin itself to a single version and reject orchestration instances stamped with a different version.
+- The client uses `UseDefaultVersion()` to stamp every new orchestration instance with the same version automatically.
+- The orchestration reads `context.Version` to see what version it was scheduled with.
+- To "upgrade," you redeploy the worker with a new implementation and change the version string.
 
 ## Prerequisites
 

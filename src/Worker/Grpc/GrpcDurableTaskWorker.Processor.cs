@@ -899,20 +899,13 @@ sealed partial class GrpcDurableTaskWorker
                     TaskVersion requestedVersion = string.IsNullOrWhiteSpace(request.Version)
                         ? default
                         : new TaskVersion(request.Version);
-                    ITaskActivity? activity;
-                    bool found;
-                    if (this.worker.Factory is IVersionedTaskFactory versionedFactory)
-                    {
-                        found = versionedFactory.TryCreateActivity(
+                    bool found = this.worker.Factory is IVersionedTaskFactory versionedFactory
+                        ? versionedFactory.TryCreateActivity(
                             name,
                             requestedVersion,
                             scope.ServiceProvider,
-                            out activity);
-                    }
-                    else
-                    {
-                        found = this.worker.Factory.TryCreateActivity(name, scope.ServiceProvider, out activity);
-                    }
+                            out ITaskActivity? activity)
+                        : this.worker.Factory.TryCreateActivity(name, scope.ServiceProvider, out activity);
 
                     if (found)
                     {

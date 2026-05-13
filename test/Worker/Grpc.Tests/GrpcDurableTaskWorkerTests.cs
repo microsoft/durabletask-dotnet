@@ -495,10 +495,8 @@ public class GrpcDurableTaskWorkerTests
         // Arrange — combine UseVersioning(Strict) with multi-version registrations. Both are now part of
         // the same versioning feature: UseVersioning's match strategy decides which instance versions to
         // accept off the wire, and the per-task registry decides which implementation handles a surviving
-        // work item. They no longer fail-fast at construction.
-        DurableTaskRegistry registry = new();
-        registry.AddOrchestrator(new TaskName("MyOrch"), new TaskVersion("1"), () => Mock.Of<ITaskOrchestrator>());
-        registry.AddOrchestrator(new TaskName("MyOrch"), new TaskVersion("2"), () => Mock.Of<ITaskOrchestrator>());
+        // work item. They no longer fail-fast at construction. Registry contents are not inspected here
+        // (see VersionedClassSyntaxIntegrationTests for the runtime composition test).
         DurableTaskWorkerOptions workerOptions = new()
         {
             Versioning = new DurableTaskWorkerOptions.VersioningOptions
@@ -510,7 +508,7 @@ public class GrpcDurableTaskWorkerTests
         };
 
         // Act
-        Action act = () => CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, NullLoggerFactory.Instance, registry);
+        Action act = () => CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, NullLoggerFactory.Instance);
 
         // Assert
         act.Should().NotThrow();
@@ -520,15 +518,13 @@ public class GrpcDurableTaskWorkerTests
     public void Constructor_MultiVersionRegistryWithoutWorkerVersioning_DoesNotThrow()
     {
         // Arrange
-        DurableTaskRegistry registry = new();
-        registry.AddOrchestrator(new TaskName("MyOrch"), new TaskVersion("1"), () => Mock.Of<ITaskOrchestrator>());
         DurableTaskWorkerOptions workerOptions = new()
         {
             Logging = { UseLegacyCategories = false },
         };
 
         // Act
-        Action act = () => CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, NullLoggerFactory.Instance, registry);
+        Action act = () => CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, NullLoggerFactory.Instance);
 
         // Assert
         act.Should().NotThrow();
@@ -538,8 +534,6 @@ public class GrpcDurableTaskWorkerTests
     public void Constructor_WorkerVersioningWithoutMultiVersionRegistry_DoesNotThrow()
     {
         // Arrange
-        DurableTaskRegistry registry = new();
-        registry.AddOrchestrator(new TaskName("MyOrch"), () => Mock.Of<ITaskOrchestrator>());
         DurableTaskWorkerOptions workerOptions = new()
         {
             Versioning = new DurableTaskWorkerOptions.VersioningOptions
@@ -551,7 +545,7 @@ public class GrpcDurableTaskWorkerTests
         };
 
         // Act
-        Action act = () => CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, NullLoggerFactory.Instance, registry);
+        Action act = () => CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, NullLoggerFactory.Instance);
 
         // Assert
         act.Should().NotThrow();
@@ -568,31 +562,15 @@ public class GrpcDurableTaskWorkerTests
         ILoggerFactory loggerFactory)
     {
         Mock<IDurableTaskFactory> factoryMock = new(MockBehavior.Strict);
-        return CreateWorker(grpcOptions, workerOptions, loggerFactory, factoryMock.Object, registry: null);
+        return CreateWorker(grpcOptions, workerOptions, loggerFactory, factoryMock.Object);
     }
 
     static GrpcDurableTaskWorker CreateWorker(
         GrpcDurableTaskWorkerOptions grpcOptions,
         DurableTaskWorkerOptions workerOptions,
         ILoggerFactory loggerFactory,
-        DurableTaskRegistry registry)
+        IDurableTaskFactory factory)
     {
-        Mock<IDurableTaskFactory> factoryMock = new(MockBehavior.Strict);
-        return CreateWorker(grpcOptions, workerOptions, loggerFactory, factoryMock.Object, registry);
-    }
-
-    static GrpcDurableTaskWorker CreateWorker(
-        GrpcDurableTaskWorkerOptions grpcOptions,
-        DurableTaskWorkerOptions workerOptions,
-        ILoggerFactory loggerFactory,
-        IDurableTaskFactory factory,
-        DurableTaskRegistry? registry)
-    {
-        // The registry parameter is preserved on the helper signature for callers that build a factory
-        // from a registry below; the worker itself no longer reads registry contents at construction time
-        // since multi-version registration is just (name, version) keys in the registry it already
-        // consumes via factory.
-        _ = registry;
         return new GrpcDurableTaskWorker(
             name: "Test",
             factory: factory,

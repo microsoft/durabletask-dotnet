@@ -265,6 +265,46 @@ public class UseWorkItemFiltersTests
     }
 
     [Fact]
+    public void WorkItemFilters_StrictWithEmptyWorkerVersion_NarrowsFilterToUnversioned()
+    {
+        // Arrange — Strict + Version="" means the worker only accepts unversioned work items. The filter
+        // must narrow each name to [""] rather than emitting no version constraint (which would match all
+        // versions and leave the worker to reject mismatches after the fact).
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<UnversionedFilterWorkflow>();
+                registry.AddActivity<UnversionedFilterActivity>();
+            });
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    Version = string.Empty,
+                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+                };
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle();
+        actual.Orchestrations[0].Name.Should().Be("FilterWorkflow");
+        actual.Orchestrations[0].Versions.Should().BeEquivalentTo([string.Empty]);
+        actual.Activities.Should().ContainSingle();
+        actual.Activities[0].Name.Should().Be("FilterActivity");
+        actual.Activities[0].Versions.Should().BeEquivalentTo([string.Empty]);
+    }
+
+    [Fact]
     public void WorkItemFilters_VersionedOrchestrators_GroupVersionsByLogicalName()
     {
         // Arrange

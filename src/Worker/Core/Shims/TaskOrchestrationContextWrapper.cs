@@ -160,9 +160,10 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         {
             string requestedVersion = GetRequestedActivityVersion(options, this.innerContext.Version);
 
-            // ScheduleTaskOptions.Builder.WithTags requires a non-null dictionary, so substitute an empty one
-            // when the caller did not supply tags.
-            IDictionary<string, string> tags = options?.Tags ?? new Dictionary<string, string>(StringComparer.Ordinal);
+            // ScheduleTaskOptions.Builder.WithTags requires a non-null dictionary. When the caller did
+            // not supply tags, use the shared empty ImmutableDictionary instance instead of allocating
+            // a fresh Dictionary on every activity call.
+            IDictionary<string, string> tags = options?.Tags ?? ImmutableDictionary<string, string>.Empty;
 
             // TODO: Cancellation (https://github.com/microsoft/durabletask-dotnet/issues/7)
 #pragma warning disable 0618

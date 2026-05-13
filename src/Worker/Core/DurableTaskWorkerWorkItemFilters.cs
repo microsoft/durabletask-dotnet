@@ -35,10 +35,13 @@ public class DurableTaskWorkerWorkItemFilters
     /// <returns>A new instance of <see cref="DurableTaskWorkerWorkItemFilters"/> constructed from the provided registry.</returns>
     internal static DurableTaskWorkerWorkItemFilters FromDurableTaskRegistry(DurableTaskRegistry registry, DurableTaskWorkerOptions? workerOptions)
     {
+        // Under MatchStrategy.Strict the worker accepts only instances whose version matches the
+        // worker's configured Version exactly — including the empty/unversioned case. The filter must
+        // narrow each name's version list to that single value (treating null as empty) so the backend
+        // does not stream work items the worker will then reject after the fact.
         IReadOnlyList<string>? strictWorkerVersions =
             workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict
-            && !string.IsNullOrWhiteSpace(workerOptions.Versioning.Version)
-                ? [workerOptions.Versioning.Version]
+                ? [workerOptions.Versioning.Version ?? string.Empty]
                 : null;
 
         // Orchestration filters now group registrations by logical name. Version lists are only emitted when every

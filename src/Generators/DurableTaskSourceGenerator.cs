@@ -677,17 +677,17 @@ namespace {targetNamespace}
                         AddOrchestratorFunctionDeclaration(sourceBuilder, orchestrator, targetNamespace);
                     }
 
-                    string helperSuffix = GetStandaloneTaskHelperSuffix(orchestrator, isDurableFunctions, standaloneOrchestratorCountsByTaskName);
+                    string helperRoot = GetStandaloneHelperRoot(orchestrator, isDurableFunctions, standaloneOrchestratorCountsByTaskName);
                     bool applyGeneratedVersion = !isDurableFunctions && !string.IsNullOrEmpty(orchestrator.TaskVersion);
-                    AddOrchestratorCallMethod(sourceBuilder, orchestrator, targetNamespace, helperSuffix, applyGeneratedVersion);
-                    AddSubOrchestratorCallMethod(sourceBuilder, orchestrator, targetNamespace, helperSuffix, applyGeneratedVersion);
+                    AddOrchestratorCallMethod(sourceBuilder, orchestrator, targetNamespace, helperRoot, applyGeneratedVersion);
+                    AddSubOrchestratorCallMethod(sourceBuilder, orchestrator, targetNamespace, helperRoot, applyGeneratedVersion);
                 }
 
                 foreach (DurableTaskTypeInfo activity in activitiesInNs)
                 {
-                    string helperSuffix = GetStandaloneTaskHelperSuffix(activity, isDurableFunctions, standaloneActivityCountsByTaskName);
+                    string helperRoot = GetStandaloneHelperRoot(activity, isDurableFunctions, standaloneActivityCountsByTaskName);
                     bool applyGeneratedVersion = !isDurableFunctions && !string.IsNullOrEmpty(activity.TaskVersion);
-                    AddActivityCallMethod(sourceBuilder, activity, targetNamespace, helperSuffix, applyGeneratedVersion);
+                    AddActivityCallMethod(sourceBuilder, activity, targetNamespace, helperRoot, applyGeneratedVersion);
 
                     if (isDurableFunctions)
                     {
@@ -816,50 +816,35 @@ namespace {targetNamespace}
             return fullyQualifiedTypeName;
         }
 
-        static string GetStandaloneTaskHelperSuffix(DurableTaskTypeInfo task, bool isDurableFunctions, Dictionary<string, int> standaloneTaskCountsByTaskName)
+        static string GetStandaloneHelperRoot(DurableTaskTypeInfo task, bool isDurableFunctions, Dictionary<string, int> standaloneTaskCountsByTaskName)
         {
+            // When a logical task name has more than one class-based registration in the same standalone
+            // project, the generator emits one helper per class and derives the helper-name root from the
+            // class's simple name rather than from the (shared) durable task name. This keeps every
+            // generated helper unique without encoding the version into the method name. Single-class and
+            // Azure Functions cases continue to use the durable task name unchanged.
             if (isDurableFunctions
                 || string.IsNullOrEmpty(task.TaskVersion)
                 || !standaloneTaskCountsByTaskName.TryGetValue(task.TaskName, out int count)
                 || count <= 1)
             {
-                return string.Empty;
+                return task.TaskName;
             }
 
-            return ToVersionSuffix(task.TaskVersion);
+            return GetSimpleClassName(task.TypeName);
+        }
+
+        static string GetSimpleClassName(string fullyQualifiedTypeName)
+        {
+            // Strip namespaces and any outer-class prefixes. For "MyApp.Workflows.OrderWorkflowV2" returns
+            // "OrderWorkflowV2". For nested "Outer.Inner" returns "Inner".
+            int lastDot = fullyQualifiedTypeName.LastIndexOf('.');
+            return lastDot < 0 ? fullyQualifiedTypeName : fullyQualifiedTypeName.Substring(lastDot + 1);
         }
 
         static string GetStandaloneTaskRegistrationKey(string taskName, string taskVersion)
         {
             return string.Concat(taskName, "\0", taskVersion);
-        }
-
-        static string ToVersionSuffix(string version)
-        {
-            if (string.IsNullOrEmpty(version))
-            {
-                return string.Empty;
-            }
-
-            // Encode the version as a method-name suffix that is collision-free with respect to any other input.
-            // Letters and digits pass through; '_' and every other character are encoded as "_xHHHH_". Escaping
-            // '_' itself is what prevents collisions like "1.0" (-> "_1_x002E_0") vs "1_x002E_0" which would
-            // otherwise both produce "_1_x002E_0".
-            StringBuilder suffixBuilder = new(version.Length + 1);
-            suffixBuilder.Append('_');
-            foreach (char c in version)
-            {
-                if (char.IsLetterOrDigit(c))
-                {
-                    suffixBuilder.Append(c);
-                }
-                else
-                {
-                    suffixBuilder.Append("_x").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture)).Append('_');
-                }
-            }
-
-            return suffixBuilder.ToString();
         }
 
         static string ToCSharpStringLiteral(string value) => SymbolDisplay.FormatLiteral(value, quote: true);
@@ -878,7 +863,7 @@ namespace {targetNamespace}
         }}");
         }
 
-        static void AddOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator, string targetNamespace, string helperSuffix, bool applyGeneratedVersion)
+        static void AddOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator, string targetNamespace, string helperRoot, bool applyGeneratedVersion)
         {
             string inputType = orchestrator.GetInputTypeForNamespace(targetNamespace);
             string inputParameter = inputType + " input";
@@ -897,14 +882,14 @@ namespace {targetNamespace}
         /// Schedules a new instance of the <see cref=""{simplifiedTypeName}""/> orchestrator.
         /// </summary>
         /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
-        public static Task<string> ScheduleNew{orchestrator.TaskName}{helperSuffix}InstanceAsync(
+        public static Task<string> ScheduleNew{helperRoot}InstanceAsync(
             this IOrchestrationSubmitter client, {inputParameter}, StartOrchestrationOptions? options = null)
         {{
             return client.ScheduleNewOrchestrationInstanceAsync(""{orchestrator.TaskName}"", input, {optionsExpression});
         }}");
         }
 
-        static void AddSubOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator, string targetNamespace, string helperSuffix, bool applyGeneratedVersion)
+        static void AddSubOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator, string targetNamespace, string helperRoot, bool applyGeneratedVersion)
         {
             string inputType = orchestrator.GetInputTypeForNamespace(targetNamespace);
             string outputType = orchestrator.GetOutputTypeForNamespace(targetNamespace);
@@ -924,7 +909,7 @@ namespace {targetNamespace}
         /// Calls the <see cref=""{simplifiedTypeName}""/> sub-orchestrator.
         /// </summary>
         /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
-        public static Task<{outputType}> Call{orchestrator.TaskName}{helperSuffix}Async(
+        public static Task<{outputType}> Call{helperRoot}Async(
             this TaskOrchestrationContext context, {inputParameter}, TaskOptions? options = null)
         {{
             return context.CallSubOrchestratorAsync<{outputType}>(""{orchestrator.TaskName}"", input, {optionsExpression});
@@ -941,23 +926,8 @@ namespace {targetNamespace}
                 sourceBuilder.AppendLine(@"
         static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
         {
-            if (options?.Version is TaskVersion existingStart)
-            {
-                // Any non-null Version on the options is an explicit caller selection — including
-                // TaskVersion.Unversioned and the empty-string equivalent. The generated helper bakes a
-                // specific version into its method name, so a disagreement is always a contradiction;
-                // the silently-overridden case is precisely what we are trying to prevent.
-                string existingValue = existingStart.Version ?? string.Empty;
-                if (!string.Equals(existingValue, version, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    string requested = string.IsNullOrEmpty(existingValue) ? ""<unversioned>"" : ""'"" + existingValue + ""'"";
-                    throw new System.InvalidOperationException(
-                        $""The generated helper targets version '{version}' but options.Version was set to {requested}. Use the unqualified ScheduleNewOrchestrationInstanceAsync overload to schedule a different version."");
-                }
-
-                return options;
-            }
-
+            // Caller-supplied options.Version is preserved as-is — the explicit value wins. Otherwise we
+            // stamp the version that the generated helper was emitted for.
             if (options is null)
             {
                 return new StartOrchestrationOptions
@@ -966,33 +936,23 @@ namespace {targetNamespace}
                 };
             }
 
-            return new StartOrchestrationOptions(options)
+            if (options.Version is not null)
             {
-                Version = version,
-            };
+                return options;
+            }
+
+            return options with { Version = new TaskVersion(version) };
         }
 
         static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
         {
-            if (options is SubOrchestrationOptions { Version: TaskVersion existingSub })
-            {
-                string existingValue = existingSub.Version ?? string.Empty;
-                if (!string.Equals(existingValue, version, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    string requested = string.IsNullOrEmpty(existingValue) ? ""<unversioned>"" : ""'"" + existingValue + ""'"";
-                    throw new System.InvalidOperationException(
-                        $""The generated sub-orchestrator helper targets version '{version}' but options.Version was set to {requested}. Use the unqualified CallSubOrchestratorAsync overload to call a different version."");
-                }
-
-                return options;
-            }
-
+            // Caller-supplied options.Version is preserved as-is — the explicit value wins. Otherwise we
+            // stamp the version that the generated helper was emitted for.
             if (options is SubOrchestrationOptions subOrchestrationOptions)
             {
-                return new SubOrchestrationOptions(subOrchestrationOptions)
-                {
-                    Version = version,
-                };
+                return subOrchestrationOptions.Version is not null
+                    ? subOrchestrationOptions
+                    : subOrchestrationOptions with { Version = new TaskVersion(version) };
             }
 
             if (options is null)
@@ -1003,10 +963,9 @@ namespace {targetNamespace}
                 };
             }
 
-            return new SubOrchestrationOptions(options)
-            {
-                Version = version,
-            };
+            return options.Version is not null
+                ? options
+                : new SubOrchestrationOptions(options) { Version = version };
         }");
             }
 
@@ -1015,22 +974,8 @@ namespace {targetNamespace}
                 sourceBuilder.AppendLine(@"
         static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
         {
-            if (options?.Version is TaskVersion explicitVersion)
-            {
-                // Any non-null TaskOptions.Version is an explicit caller selection — including
-                // TaskVersion.Unversioned and the empty-string equivalent. Disagreement with the helper-
-                // baked version is always a contradiction, so we throw rather than silently override.
-                string explicitValue = explicitVersion.Version ?? string.Empty;
-                if (!string.Equals(explicitValue, version, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    string requested = string.IsNullOrEmpty(explicitValue) ? ""<unversioned>"" : ""'"" + explicitValue + ""'"";
-                    throw new System.InvalidOperationException(
-                        $""The generated activity helper targets version '{version}' but TaskOptions.Version was set to {requested}. Use the unqualified CallActivityAsync overload to call a different version."");
-                }
-
-                return options;
-            }
-
+            // Caller-supplied options.Version is preserved as-is — the explicit value wins. Otherwise we
+            // stamp the version that the generated helper was emitted for.
             if (options is null)
             {
                 return new TaskOptions
@@ -1039,15 +984,14 @@ namespace {targetNamespace}
                 };
             }
 
-            return new TaskOptions(options)
-            {
-                Version = version,
-            };
+            return options.Version is not null
+                ? options
+                : new TaskOptions(options) { Version = version };
         }");
             }
         }
 
-        static void AddActivityCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo activity, string targetNamespace, string helperSuffix, bool applyGeneratedVersion)
+        static void AddActivityCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo activity, string targetNamespace, string helperRoot, bool applyGeneratedVersion)
         {
             string inputType = activity.GetInputTypeForNamespace(targetNamespace);
             string outputType = activity.GetOutputTypeForNamespace(targetNamespace);
@@ -1067,7 +1011,7 @@ namespace {targetNamespace}
         /// Calls the <see cref=""{simplifiedTypeName}""/> activity.
         /// </summary>
         /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
-        public static Task<{outputType}> Call{activity.TaskName}{helperSuffix}Async(this TaskOrchestrationContext ctx, {inputParameter}, TaskOptions? options = null)
+        public static Task<{outputType}> Call{helperRoot}Async(this TaskOrchestrationContext ctx, {inputParameter}, TaskOptions? options = null)
         {{
             return ctx.CallActivityAsync<{outputType}>(""{activity.TaskName}"", input, {optionsExpression});
         }}");

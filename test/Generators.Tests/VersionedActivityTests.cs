@@ -43,22 +43,8 @@ public static Task<string> CallInvoiceActivityAsync(this TaskOrchestrationContex
 
 static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
 {
-    if (options?.Version is TaskVersion explicitVersion)
-    {
-        // Any non-null TaskOptions.Version is an explicit caller selection — including
-        // TaskVersion.Unversioned and the empty-string equivalent. Disagreement with the helper-
-        // baked version is always a contradiction, so we throw rather than silently override.
-        string explicitValue = explicitVersion.Version ?? string.Empty;
-        if (!string.Equals(explicitValue, version, System.StringComparison.OrdinalIgnoreCase))
-        {
-            string requested = string.IsNullOrEmpty(explicitValue) ? ""<unversioned>"" : ""'"" + explicitValue + ""'"";
-            throw new System.InvalidOperationException(
-                $""The generated activity helper targets version '{version}' but TaskOptions.Version was set to {requested}. Use the unqualified CallActivityAsync overload to call a different version."");
-        }
-
-        return options;
-    }
-
+    // Caller-supplied options.Version is preserved as-is — the explicit value wins. Otherwise we
+    // stamp the version that the generated helper was emitted for.
     if (options is null)
     {
         return new TaskOptions
@@ -67,10 +53,9 @@ static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string v
         };
     }
 
-    return new TaskOptions(options)
-    {
-        Version = version,
-    };
+    return options.Version is not null
+        ? options
+        : new TaskOptions(options) { Version = version };
 }
 
 internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
@@ -114,7 +99,7 @@ class InvoiceActivityV2 : TaskActivity<int, string>
 /// Calls the <see cref=""InvoiceActivityV1""/> activity.
 /// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
-public static Task<string> CallInvoiceActivity_v1Async(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
+public static Task<string> CallInvoiceActivityV1Async(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<string>(""InvoiceActivity"", input, ApplyGeneratedActivityVersion(options, ""v1""));
 }
@@ -123,29 +108,15 @@ public static Task<string> CallInvoiceActivity_v1Async(this TaskOrchestrationCon
 /// Calls the <see cref=""InvoiceActivityV2""/> activity.
 /// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
-public static Task<string> CallInvoiceActivity_v2Async(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
+public static Task<string> CallInvoiceActivityV2Async(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
 {
     return ctx.CallActivityAsync<string>(""InvoiceActivity"", input, ApplyGeneratedActivityVersion(options, ""v2""));
 }
 
 static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
 {
-    if (options?.Version is TaskVersion explicitVersion)
-    {
-        // Any non-null TaskOptions.Version is an explicit caller selection — including
-        // TaskVersion.Unversioned and the empty-string equivalent. Disagreement with the helper-
-        // baked version is always a contradiction, so we throw rather than silently override.
-        string explicitValue = explicitVersion.Version ?? string.Empty;
-        if (!string.Equals(explicitValue, version, System.StringComparison.OrdinalIgnoreCase))
-        {
-            string requested = string.IsNullOrEmpty(explicitValue) ? ""<unversioned>"" : ""'"" + explicitValue + ""'"";
-            throw new System.InvalidOperationException(
-                $""The generated activity helper targets version '{version}' but TaskOptions.Version was set to {requested}. Use the unqualified CallActivityAsync overload to call a different version."");
-        }
-
-        return options;
-    }
-
+    // Caller-supplied options.Version is preserved as-is — the explicit value wins. Otherwise we
+    // stamp the version that the generated helper was emitted for.
     if (options is null)
     {
         return new TaskOptions
@@ -154,10 +125,9 @@ static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string v
         };
     }
 
-    return new TaskOptions(options)
-    {
-        Version = version,
-    };
+    return options.Version is not null
+        ? options
+        : new TaskOptions(options) { Version = version };
 }
 
 internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
@@ -209,22 +179,8 @@ public static Task<string> CallInvoiceActivityAsync(this TaskOrchestrationContex
 
 static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string version)
 {
-    if (options?.Version is TaskVersion explicitVersion)
-    {
-        // Any non-null TaskOptions.Version is an explicit caller selection — including
-        // TaskVersion.Unversioned and the empty-string equivalent. Disagreement with the helper-
-        // baked version is always a contradiction, so we throw rather than silently override.
-        string explicitValue = explicitVersion.Version ?? string.Empty;
-        if (!string.Equals(explicitValue, version, System.StringComparison.OrdinalIgnoreCase))
-        {
-            string requested = string.IsNullOrEmpty(explicitValue) ? ""<unversioned>"" : ""'"" + explicitValue + ""'"";
-            throw new System.InvalidOperationException(
-                $""The generated activity helper targets version '{version}' but TaskOptions.Version was set to {requested}. Use the unqualified CallActivityAsync overload to call a different version."");
-        }
-
-        return options;
-    }
-
+    // Caller-supplied options.Version is preserved as-is — the explicit value wins. Otherwise we
+    // stamp the version that the generated helper was emitted for.
     if (options is null)
     {
         return new TaskOptions
@@ -233,10 +189,9 @@ static TaskOptions? ApplyGeneratedActivityVersion(TaskOptions? options, string v
         };
     }
 
-    return new TaskOptions(options)
-    {
-        Version = version,
-    };
+    return options.Version is not null
+        ? options
+        : new TaskOptions(options) { Version = version };
 }
 
 internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)

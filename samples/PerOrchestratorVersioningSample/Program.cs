@@ -43,17 +43,17 @@ Console.WriteLine("=== Per-orchestrator versioning ([DurableTaskVersion]) ===");
 Console.WriteLine();
 
 // 1) Schedule an OrderWorkflow version 1 instance.
-//    The generated helper ScheduleNewOrderWorkflow_1InstanceAsync automatically
+//    The generated helper ScheduleNewOrderWorkflowV1InstanceAsync automatically
 //    stamps the instance with version "1".
 Console.WriteLine("Scheduling OrderWorkflow v1 ...");
-string v1Id = await client.ScheduleNewOrderWorkflow_1InstanceAsync(5);
+string v1Id = await client.ScheduleNewOrderWorkflowV1InstanceAsync(5);
 OrchestrationMetadata v1 = await client.WaitForInstanceCompletionAsync(v1Id, getInputsAndOutputs: true);
 Console.WriteLine($"  Result: {v1.ReadOutputAs<string>()}");
 Console.WriteLine();
 
 // 2) Schedule an OrderWorkflow version 2 instance — same logical name, different logic.
 Console.WriteLine("Scheduling OrderWorkflow v2 ...");
-string v2Id = await client.ScheduleNewOrderWorkflow_2InstanceAsync(5);
+string v2Id = await client.ScheduleNewOrderWorkflowV2InstanceAsync(5);
 OrchestrationMetadata v2 = await client.WaitForInstanceCompletionAsync(v2Id, getInputsAndOutputs: true);
 Console.WriteLine($"  Result: {v2.ReadOutputAs<string>()}");
 Console.WriteLine();
@@ -65,7 +65,7 @@ Console.WriteLine();
 //    to v2 using ContinueAsNewOptions.NewVersion. This is the safest migration point
 //    for eternal orchestrations because the history is fully reset.
 Console.WriteLine("Scheduling MigratingWorkflow v1 → v2 (ContinueAsNew migration) ...");
-string migrateId = await client.ScheduleNewMigratingWorkflow_1InstanceAsync(new MigrationInput(10));
+string migrateId = await client.ScheduleNewMigratingWorkflowV1InstanceAsync(new MigrationInput(10));
 OrchestrationMetadata migrate = await client.WaitForInstanceCompletionAsync(migrateId, getInputsAndOutputs: true);
 Console.WriteLine($"  Result: {migrate.ReadOutputAs<string>()}");
 Console.WriteLine();

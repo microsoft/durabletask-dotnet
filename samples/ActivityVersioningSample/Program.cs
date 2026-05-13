@@ -45,13 +45,13 @@ Console.WriteLine("=== Activity versioning ([DurableTaskVersion]) ===");
 Console.WriteLine();
 
 Console.WriteLine("Scheduling CheckoutWorkflow v1 ...");
-string v1Id = await client.ScheduleNewCheckoutWorkflow_1InstanceAsync(5);
+string v1Id = await client.ScheduleNewCheckoutWorkflowV1InstanceAsync(5);
 OrchestrationMetadata v1 = await client.WaitForInstanceCompletionAsync(v1Id, getInputsAndOutputs: true);
 Console.WriteLine($"  Result: {v1.ReadOutputAs<string>()}");
 Console.WriteLine();
 
 Console.WriteLine("Scheduling CheckoutWorkflow v2 ...");
-string v2Id = await client.ScheduleNewCheckoutWorkflow_2InstanceAsync(5);
+string v2Id = await client.ScheduleNewCheckoutWorkflowV2InstanceAsync(5);
 OrchestrationMetadata v2 = await client.WaitForInstanceCompletionAsync(v2Id, getInputsAndOutputs: true);
 Console.WriteLine($"  Result: {v2.ReadOutputAs<string>()}");
 Console.WriteLine();
@@ -113,7 +113,7 @@ public sealed class ExplicitOverrideCheckoutWorkflowV2 : TaskOrchestrator<int, s
     /// <inheritdoc />
     public override async Task<string> RunAsync(TaskOrchestrationContext context, int itemCount)
     {
-        string quote = await context.CallShippingQuote_1Async(itemCount);
+        string quote = await context.CallShippingQuoteV1Async(itemCount);
         return $"Workflow v2 explicit override -> {quote}";
     }
 }

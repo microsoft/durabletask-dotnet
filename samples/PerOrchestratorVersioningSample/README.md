@@ -5,7 +5,7 @@ This sample demonstrates per-orchestrator versioning with `[DurableTaskVersion]`
 ## What it shows
 
 - Two classes share the same `[DurableTask("OrderWorkflow")]` name but have different `[DurableTaskVersion]` values
-- The source generator produces version-qualified helpers like `ScheduleNewOrderWorkflow_1InstanceAsync()` and `ScheduleNewOrderWorkflow_2InstanceAsync()`
+- The source generator produces version-qualified helpers like `ScheduleNewOrderWorkflowV1InstanceAsync()` and `ScheduleNewOrderWorkflowV2InstanceAsync()`
 - `AddAllGeneratedTasks()` registers both versions automatically
 - Each instance is routed to the correct implementation based on its version
 

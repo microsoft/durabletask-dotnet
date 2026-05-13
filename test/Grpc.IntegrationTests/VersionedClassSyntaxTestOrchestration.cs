@@ -78,35 +78,6 @@ public static class VersionedClassSyntaxTestOrchestration
     }
 
     /// <summary>
-    /// Version 2 of the orchestration that explicitly requests a missing activity version.
-    /// </summary>
-    [DurableTask("ExplicitActivityVersionNoFallbackOrchestration")]
-    [DurableTaskVersion("v2")]
-    public sealed class ExplicitActivityVersionNoFallbackOrchestrationV2 : TaskOrchestrator<int, string>
-    {
-        /// <inheritdoc />
-        public override Task<string> RunAsync(TaskOrchestrationContext context, int input)
-            => context.CallActivityAsync<string>(
-                "ExplicitActivityVersionNoFallbackActivity",
-                input,
-                new ActivityOptions
-                {
-                    Version = "v1",
-                });
-    }
-
-    /// <summary>
-    /// Unversioned activity used to verify explicit version requests do not silently fall back.
-    /// </summary>
-    [DurableTask("ExplicitActivityVersionNoFallbackActivity")]
-    public sealed class UnversionedActivityVersionNoFallbackActivity : TaskActivity<int, string>
-    {
-        /// <inheritdoc />
-        public override Task<string> RunAsync(TaskActivityContext context, int input)
-            => Task.FromResult($"activity-unversioned:{input}");
-    }
-
-    /// <summary>
     /// Version 2 of the orchestration that inherits its version when calling an unversioned activity.
     /// </summary>
     [DurableTask("InheritedActivityVersionFallbackOrchestration")]
@@ -123,40 +94,6 @@ public static class VersionedClassSyntaxTestOrchestration
     /// </summary>
     [DurableTask("InheritedActivityVersionFallbackActivity")]
     public sealed class UnversionedInheritedActivityVersionFallbackActivity : TaskActivity<int, string>
-    {
-        /// <inheritdoc />
-        public override Task<string> RunAsync(TaskActivityContext context, int input)
-            => Task.FromResult($"activity-unversioned:{input}");
-    }
-
-    /// <summary>
-    /// Version 2 of the orchestration that attempts to spoof the version-source tag in user-supplied
-    /// task options. The SDK must strip the reserved key and re-stamp it based on the actual options.
-    /// </summary>
-    [DurableTask("SpoofedActivityVersionTagFallbackOrchestration")]
-    [DurableTaskVersion("v2")]
-    public sealed class SpoofedActivityVersionTagFallbackOrchestrationV2 : TaskOrchestrator<int, string>
-    {
-        /// <inheritdoc />
-        public override Task<string> RunAsync(TaskOrchestrationContext context, int input)
-            => context.CallActivityAsync<string>(
-                "SpoofedActivityVersionTagFallbackActivity",
-                input,
-                new TaskOptions(tags: new Dictionary<string, string>
-                {
-                    // Caller tries to lie that the activity version is "explicit" so the worker would
-                    // refuse the unversioned-fallback. The SDK must strip this reserved key on the
-                    // outbound path and re-stamp the source as "inherited" (since no ActivityOptions
-                    // explicit version was set), preserving the inherited-fallback path.
-                    [ActivityVersioning.VersionSourceTagName] = ActivityVersioning.ExplicitSource,
-                }));
-    }
-
-    /// <summary>
-    /// Unversioned activity used to verify user-supplied reserved tags do not disable compatibility fallback behavior.
-    /// </summary>
-    [DurableTask("SpoofedActivityVersionTagFallbackActivity")]
-    public sealed class UnversionedSpoofedActivityVersionTagFallbackActivity : TaskActivity<int, string>
     {
         /// <inheritdoc />
         public override Task<string> RunAsync(TaskActivityContext context, int input)

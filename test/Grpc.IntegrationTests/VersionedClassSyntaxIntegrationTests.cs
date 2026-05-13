@@ -85,42 +85,6 @@ public class VersionedClassSyntaxIntegrationTests : IntegrationTestBase
     }
 
     /// <summary>
-    /// Verifies explicit activity version selection does not fall back to an unversioned registration.
-    /// </summary>
-    [Fact]
-    public async Task ClassBasedVersionedActivity_ExplicitActivityVersionDoesNotFallBackToUnversionedRegistration()
-    {
-        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
-        {
-            b.AddTasks(tasks =>
-            {
-                tasks.AddOrchestrator<ExplicitActivityVersionNoFallbackOrchestrationV2>();
-                tasks.AddActivity<UnversionedActivityVersionNoFallbackActivity>();
-            });
-        });
-
-        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
-            "ExplicitActivityVersionNoFallbackOrchestration",
-            input: 5,
-            new StartOrchestrationOptions
-            {
-                Version = new TaskVersion("v2"),
-            });
-        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-
-        Assert.NotNull(metadata);
-        Assert.Equal(OrchestrationRuntimeStatus.Failed, metadata.RuntimeStatus);
-        Assert.NotNull(metadata.FailureDetails);
-        Assert.Equal(typeof(TaskFailedException).FullName, metadata.FailureDetails.ErrorType);
-        Assert.NotNull(metadata.FailureDetails.InnerFailure);
-        Assert.Equal("ActivityTaskNotFound", metadata.FailureDetails.InnerFailure.ErrorType);
-        Assert.Contains(
-            "No activity task named 'ExplicitActivityVersionNoFallbackActivity' with version 'v1' was found.",
-            metadata.FailureDetails.InnerFailure.ErrorMessage);
-    }
-
-    /// <summary>
     /// Verifies inherited orchestration-version activity routing still falls back to an unversioned registration.
     /// </summary>
     [Fact]
@@ -148,65 +112,6 @@ public class VersionedClassSyntaxIntegrationTests : IntegrationTestBase
         Assert.NotNull(metadata);
         Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
         Assert.Equal("activity-unversioned:5", metadata.ReadOutputAs<string>());
-    }
-
-    /// <summary>
-    /// Verifies user-supplied tags cannot spoof the internal explicit-version marker.
-    /// </summary>
-    [Fact]
-    public async Task ClassBasedVersionedActivity_UserSuppliedReservedTagDoesNotDisableInheritedFallback()
-    {
-        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
-        {
-            b.AddTasks(tasks =>
-            {
-                tasks.AddOrchestrator<SpoofedActivityVersionTagFallbackOrchestrationV2>();
-                tasks.AddActivity<UnversionedSpoofedActivityVersionTagFallbackActivity>();
-            });
-        });
-
-        string instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync(
-            "SpoofedActivityVersionTagFallbackOrchestration",
-            input: 5,
-            new StartOrchestrationOptions
-            {
-                Version = new TaskVersion("v2"),
-            });
-        OrchestrationMetadata metadata = await server.Client.WaitForInstanceCompletionAsync(
-            instanceId, getInputsAndOutputs: true, this.TimeoutToken);
-
-        Assert.NotNull(metadata);
-        Assert.Equal(OrchestrationRuntimeStatus.Completed, metadata.RuntimeStatus);
-        Assert.Equal("activity-unversioned:5", metadata.ReadOutputAs<string>());
-    }
-
-    /// <summary>
-    /// Verifies the in-proc task-scheduled serializer preserves the version-source tag end-to-end so the
-    /// worker can distinguish explicit-version dispatch from inherited-version dispatch.
-    /// </summary>
-    [Fact]
-    public void TaskScheduledEventSerialization_PreservesVersionSourceTag()
-    {
-        TaskScheduledEvent scheduledEvent = new(
-            eventId: 7,
-            name: "VersionedActivityOverrideActivity",
-            version: "v1",
-            input: "5")
-        {
-            Tags = new Dictionary<string, string>
-            {
-                [ActivityVersioning.VersionSourceTagName] = ActivityVersioning.ExplicitSource,
-            },
-        };
-
-        var proto = ProtobufUtils.ToHistoryEventProto(scheduledEvent);
-
-        Assert.Equal("VersionedActivityOverrideActivity", proto.TaskScheduled.Name);
-        Assert.Equal("v1", proto.TaskScheduled.Version);
-        Assert.True(
-            proto.TaskScheduled.Tags.TryGetValue(ActivityVersioning.VersionSourceTagName, out string? tagValue),
-            $"Expected tag '{ActivityVersioning.VersionSourceTagName}' to be present.");
-        Assert.Equal(ActivityVersioning.ExplicitSource, tagValue);
     }
 
     /// <summary>

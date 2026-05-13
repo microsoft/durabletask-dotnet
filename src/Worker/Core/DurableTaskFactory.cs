@@ -53,7 +53,6 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
         TaskName name,
         TaskVersion version,
         IServiceProvider serviceProvider,
-        bool allowVersionFallback,
         [NotNullWhen(true)] out ITaskActivity? activity)
     {
         Check.NotNull(serviceProvider);
@@ -64,8 +63,11 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
             return true;
         }
 
-        if (allowVersionFallback
-            && !string.IsNullOrWhiteSpace(version.Version)
+        // Unversioned registrations remain the compatibility fallback for a versioned request, but ONLY when
+        // no versioned registration exists for the same logical name. This mirrors the orchestrator rule:
+        // once a name has any versioned registration, an unmatched versioned request returns "not found"
+        // rather than silently routing to a catch-all the caller did not ask for.
+        if (!string.IsNullOrWhiteSpace(version.Version)
             && !this.versionedActivityNames.Contains(name.Name)
             && this.activities.TryGetValue(new TaskVersionKey(name, default(TaskVersion)), out factory))
         {
@@ -80,7 +82,7 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
     /// <inheritdoc/>
     public bool TryCreateActivity(
         TaskName name, IServiceProvider serviceProvider, [NotNullWhen(true)] out ITaskActivity? activity)
-        => this.TryCreateActivity(name, default(TaskVersion), serviceProvider, allowVersionFallback: false, out activity);
+        => this.TryCreateActivity(name, default(TaskVersion), serviceProvider, out activity);
 
     /// <inheritdoc/>
     public bool TryCreateOrchestrator(

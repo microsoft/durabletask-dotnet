@@ -129,62 +129,21 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         object? input = null,
         TaskOptions? options = null)
     {
-        // Returns (effective version string, whether the caller-supplied an explicit version, whether the
-        // call should be tagged at all). The "tag the call" decision is separate from "explicit": even a
-        // pure inherited call needs a tag so the worker can fail-closed on a missing tag for a versioned
-        // request.
-        static (string RequestedVersion, bool ExplicitVersionRequested, bool StampVersionTag) GetRequestedActivityVersion(
-            TaskOptions? taskOptions,
-            string inheritedVersion)
+        // Returns the version to schedule the activity with. If the caller passed ActivityOptions.Version,
+        // use that (including TaskVersion.Unversioned for an explicit unversioned request); otherwise inherit
+        // the orchestration instance version. The unified dispatch rule on the worker side (exact match;
+        // fallback to unversioned only when the name has no versioned registration) applies regardless of
+        // how the version was selected, so the SDK no longer needs to communicate "explicit vs inherited"
+        // separately.
+        static string GetRequestedActivityVersion(TaskOptions? taskOptions, string inheritedVersion)
         {
             if (taskOptions is ActivityOptions activityOptions
                 && activityOptions.Version is TaskVersion explicitVersion)
             {
-                // Any non-null ActivityOptions.Version — including an explicit-unversioned request
-                // (TaskVersion.Unversioned / default) — is treated as an explicit selection. Strict
-                // dispatch will be used.
-                return (explicitVersion.Version ?? string.Empty, true, true);
+                return explicitVersion.Version ?? string.Empty;
             }
 
-            return (inheritedVersion, false, !string.IsNullOrWhiteSpace(inheritedVersion));
-        }
-
-        static IDictionary<string, string> GetActivityTags(
-            TaskOptions? taskOptions,
-            bool explicitVersionRequested,
-            bool stampVersionTag)
-        {
-            Dictionary<string, string> tags = new(StringComparer.Ordinal);
-
-            if (taskOptions?.Tags is not null)
-            {
-                foreach ((string key, string value) in taskOptions.Tags)
-                {
-                    bool isReserved = false;
-                    foreach (string reserved in ActivityVersioning.ReservedTagKeys)
-                    {
-                        if (string.Equals(key, reserved, StringComparison.Ordinal))
-                        {
-                            isReserved = true;
-                            break;
-                        }
-                    }
-
-                    if (!isReserved)
-                    {
-                        tags[key] = value;
-                    }
-                }
-            }
-
-            if (stampVersionTag)
-            {
-                tags[ActivityVersioning.VersionSourceTagName] = explicitVersionRequested
-                    ? ActivityVersioning.ExplicitSource
-                    : ActivityVersioning.InheritedSource;
-            }
-
-            return tags;
+            return inheritedVersion;
         }
 
         // Since the input parameter takes any object, it's possible that callers may accidentally provide a
@@ -201,9 +160,11 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
         try
         {
-            (string requestedVersion, bool explicitVersionRequested, bool stampVersionTag) =
-                GetRequestedActivityVersion(options, this.innerContext.Version);
-            IDictionary<string, string> tags = GetActivityTags(options, explicitVersionRequested, stampVersionTag);
+            string requestedVersion = GetRequestedActivityVersion(options, this.innerContext.Version);
+
+            // ScheduleTaskOptions.Builder.WithTags requires a non-null dictionary, so substitute an empty one
+            // when the caller did not supply tags.
+            IDictionary<string, string> tags = options?.Tags ?? new Dictionary<string, string>(StringComparer.Ordinal);
 
             // TODO: Cancellation (https://github.com/microsoft/durabletask-dotnet/issues/7)
 #pragma warning disable 0618

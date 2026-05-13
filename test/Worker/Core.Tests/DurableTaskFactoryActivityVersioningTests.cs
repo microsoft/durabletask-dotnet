@@ -19,7 +19,6 @@ public class DurableTaskFactoryActivityVersioningTests
             new TaskName("InvoiceActivity"),
             new TaskVersion("v2"),
             Mock.Of<IServiceProvider>(),
-            allowVersionFallback: true,
             out ITaskActivity? activity);
 
         // Assert
@@ -40,7 +39,6 @@ public class DurableTaskFactoryActivityVersioningTests
             new TaskName("InvoiceActivity"),
             new TaskVersion("v2"),
             Mock.Of<IServiceProvider>(),
-            allowVersionFallback: true,
             out ITaskActivity? activity);
 
         // Assert
@@ -61,7 +59,6 @@ public class DurableTaskFactoryActivityVersioningTests
             new TaskName("InvoiceActivity"),
             new TaskVersion("v2"),
             Mock.Of<IServiceProvider>(),
-            allowVersionFallback: true,
             out ITaskActivity? activity);
 
         // Assert
@@ -84,7 +81,6 @@ public class DurableTaskFactoryActivityVersioningTests
             new TaskName("InvoiceActivity"),
             new TaskVersion("v1"),
             Mock.Of<IServiceProvider>(),
-            allowVersionFallback: true,
             out ITaskActivity? activity);
 
         // Assert
@@ -112,10 +108,13 @@ public class DurableTaskFactoryActivityVersioningTests
     }
 
     [Fact]
-    public void TryCreateActivity_WithRequestedVersion_DoesNotUseUnversionedRegistrationWhenFallbackIsDisallowed()
+    public void TryCreateActivity_WithMixedRegistrations_DoesNotFallBackToUnversionedWhenAnotherVersionIsRegistered()
     {
-        // Arrange
+        // Arrange: register an unversioned activity and a v1 activity, then request v2.
+        // Because the name has at least one versioned registration, the unversioned registration must NOT
+        // be used as a fallback for the unmatched v2 request.
         DurableTaskRegistry registry = new();
+        registry.AddActivity<InvoiceActivityV1>();
         registry.AddActivity<UnversionedInvoiceActivity>();
         IDurableTaskFactory factory = registry.BuildFactory();
 
@@ -124,7 +123,6 @@ public class DurableTaskFactoryActivityVersioningTests
             new TaskName("InvoiceActivity"),
             new TaskVersion("v2"),
             Mock.Of<IServiceProvider>(),
-            allowVersionFallback: false,
             out ITaskActivity? activity);
 
         // Assert

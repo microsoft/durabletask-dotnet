@@ -33,9 +33,9 @@ static class TypeExtensions
     {
         // IMPORTANT: This logic needs to be kept consistent with the source generator logic.
         Check.NotNull(type);
-        return Attribute.GetCustomAttribute(type, typeof(DurableTaskVersionAttribute)) switch
+        return Attribute.GetCustomAttribute(type, typeof(DurableTaskAttribute)) switch
         {
-            DurableTaskVersionAttribute { Version.Version: not null and not "" } attr => attr.Version,
+            DurableTaskAttribute { Version: not null and not "" } attr => new TaskVersion(attr.Version),
             _ => default,
         };
     }

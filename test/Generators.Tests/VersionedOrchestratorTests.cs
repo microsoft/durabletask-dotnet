@@ -20,8 +20,7 @@ public class VersionedOrchestratorTests
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
 
-[DurableTask(""InvoiceWorkflow"")]
-[DurableTaskVersion(""v1"")]
+[DurableTask(""InvoiceWorkflow"", Version = ""v1"")]
 class InvoiceWorkflow : TaskOrchestrator<int, string>
 {
     public override Task<string> RunAsync(TaskOrchestrationContext context, int input) => Task.FromResult(string.Empty);
@@ -116,15 +115,13 @@ internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistr
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
 
-[DurableTask(""InvoiceWorkflow"")]
-[DurableTaskVersion(""v1"")]
+[DurableTask(""InvoiceWorkflow"", Version = ""v1"")]
 class InvoiceWorkflowV1 : TaskOrchestrator<int, string>
 {
     public override Task<string> RunAsync(TaskOrchestrationContext context, int input) => Task.FromResult(string.Empty);
 }
 
-[DurableTask(""InvoiceWorkflow"")]
-[DurableTaskVersion(""v2"")]
+[DurableTask(""InvoiceWorkflow"", Version = ""v2"")]
 class InvoiceWorkflowV2 : TaskOrchestrator<int, string>
 {
     public override Task<string> RunAsync(TaskOrchestrationContext context, int input) => Task.FromResult(string.Empty);
@@ -242,15 +239,13 @@ internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistr
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
 
-[DurableTask(""InvoiceWorkflow"")]
-[DurableTaskVersion(""v1"")]
+[DurableTask(""InvoiceWorkflow"", Version = ""v1"")]
 class InvoiceWorkflowV1 : TaskOrchestrator<int, string>
 {
     public override Task<string> RunAsync(TaskOrchestrationContext context, int input) => Task.FromResult(string.Empty);
 }
 
-[DurableTask(""invoiceworkflow"")]
-[DurableTaskVersion(""v2"")]
+[DurableTask(""invoiceworkflow"", Version = ""v2"")]
 class InvoiceWorkflowV2 : TaskOrchestrator<int, string>
 {
     public override Task<string> RunAsync(TaskOrchestrationContext context, int input) => Task.FromResult(string.Empty);
@@ -368,15 +363,13 @@ internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistr
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
 
-[DurableTask(""InvoiceWorkflow"")]
-[DurableTaskVersion(""v1"")]
+[DurableTask(""InvoiceWorkflow"", Version = ""v1"")]
 class InvoiceWorkflowV1 : TaskOrchestrator<int, string>
 {
     public override Task<string> RunAsync(TaskOrchestrationContext context, int input) => Task.FromResult(string.Empty);
 }
 
-[DurableTask(""InvoiceWorkflow"")]
-[DurableTaskVersion(""v1"")]
+[DurableTask(""InvoiceWorkflow"", Version = ""v1"")]
 class InvoiceWorkflowV1Duplicate : TaskOrchestrator<int, string>
 {
     public override Task<string> RunAsync(TaskOrchestrationContext context, int input) => Task.FromResult(string.Empty);
@@ -458,7 +451,7 @@ internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistr
 }");
 
         DiagnosticResult expected = new DiagnosticResult("DURABLE3003", DiagnosticSeverity.Error)
-            .WithSpan("/0/Test0.cs", 12, 14, 12, 31)
+            .WithSpan("/0/Test0.cs", 11, 14, 11, 31)
             .WithArguments("InvoiceWorkflow", "v1");
 
         CSharpSourceGeneratorVerifier<DurableTaskSourceGenerator>.Test test = new()
@@ -488,15 +481,13 @@ internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistr
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
 
-[DurableTask(""InvoiceWorkflow"")]
-[DurableTaskVersion(""v1"")]
+[DurableTask(""InvoiceWorkflow"", Version = ""v1"")]
 class InvoiceWorkflowV1 : TaskOrchestrator<int, string>
 {
     public override Task<string> RunAsync(TaskOrchestrationContext context, int input) => Task.FromResult(string.Empty);
 }
 
-[DurableTask(""invoiceworkflow"")]
-[DurableTaskVersion(""V1"")]
+[DurableTask(""invoiceworkflow"", Version = ""V1"")]
 class InvoiceWorkflowV1Duplicate : TaskOrchestrator<int, string>
 {
     public override Task<string> RunAsync(TaskOrchestrationContext context, int input) => Task.FromResult(string.Empty);
@@ -578,7 +569,7 @@ internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistr
 }");
 
         DiagnosticResult expected = new DiagnosticResult("DURABLE3003", DiagnosticSeverity.Error)
-            .WithSpan("/0/Test0.cs", 12, 14, 12, 31)
+            .WithSpan("/0/Test0.cs", 11, 14, 11, 31)
             .WithArguments("invoiceworkflow", "V1");
 
         CSharpSourceGeneratorVerifier<DurableTaskSourceGenerator>.Test test = new()

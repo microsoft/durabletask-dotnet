@@ -107,64 +107,56 @@ public class DurableTaskRegistryVersioningTests
         act.Should().NotThrow();
     }
 
-    [DurableTask("ShippingWorkflow")]
-    [DurableTaskVersion("v1")]
+    [DurableTask("ShippingWorkflow", Version = "v1")]
     sealed class ShippingWorkflowV1 : TaskOrchestrator<string, string>
     {
         public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
             => Task.FromResult("v1");
     }
 
-    [DurableTask("ShippingWorkflow")]
-    [DurableTaskVersion("v2")]
+    [DurableTask("ShippingWorkflow", Version = "v2")]
     sealed class ShippingWorkflowV2 : TaskOrchestrator<string, string>
     {
         public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
             => Task.FromResult("v2");
     }
 
-    [DurableTask("DuplicateWorkflow")]
-    [DurableTaskVersion("v1")]
+    [DurableTask("DuplicateWorkflow", Version = "v1")]
     sealed class DuplicateShippingWorkflowV1 : TaskOrchestrator<string, string>
     {
         public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
             => Task.FromResult("v1");
     }
 
-    [DurableTask("DuplicateWorkflow")]
-    [DurableTaskVersion("v1")]
+    [DurableTask("DuplicateWorkflow", Version = "v1")]
     sealed class DuplicateShippingWorkflowV1Copy : TaskOrchestrator<string, string>
     {
         public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
             => Task.FromResult("v1-copy");
     }
 
-    [DurableTask("ShippingActivity")]
-    [DurableTaskVersion("v1")]
+    [DurableTask("ShippingActivity", Version = "v1")]
     sealed class ShippingActivityV1 : TaskActivity<string, string>
     {
         public override Task<string> RunAsync(TaskActivityContext context, string input)
             => Task.FromResult("v1");
     }
 
-    [DurableTask("ShippingActivity")]
-    [DurableTaskVersion("v2")]
+    [DurableTask("ShippingActivity", Version = "v2")]
     sealed class ShippingActivityV2 : TaskActivity<string, string>
     {
         public override Task<string> RunAsync(TaskActivityContext context, string input)
             => Task.FromResult("v2");
     }
 
-    [DurableTask("DuplicateActivity")]
-    [DurableTaskVersion("v1")]
+    [DurableTask("DuplicateActivity", Version = "v1")]
     sealed class DuplicateShippingActivityV1 : TaskActivity<string, string>
     {
         public override Task<string> RunAsync(TaskActivityContext context, string input)
             => Task.FromResult("v1");
     }
 
-    [DurableTask("DuplicateActivity")]
-    [DurableTaskVersion("v1")]
+    [DurableTask("DuplicateActivity", Version = "v1")]
     sealed class DuplicateShippingActivityV1Copy : TaskActivity<string, string>
     {
         public override Task<string> RunAsync(TaskActivityContext context, string input)

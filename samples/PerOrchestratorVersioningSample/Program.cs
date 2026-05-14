@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// This sample demonstrates per-orchestrator versioning with [DurableTaskVersion].
+// This sample demonstrates per-orchestrator versioning with [DurableTask(Version = "...")].
 // Multiple implementations of the same logical orchestration name coexist in one
 // worker process. The source generator produces version-qualified helper methods
 // that route each instance to the correct implementation automatically.
@@ -39,7 +39,7 @@ await host.StartAsync();
 
 await using DurableTaskClient client = host.Services.GetRequiredService<DurableTaskClient>();
 
-Console.WriteLine("=== Per-orchestrator versioning ([DurableTaskVersion]) ===");
+Console.WriteLine("=== Per-orchestrator versioning ([DurableTask] Version) ===");
 Console.WriteLine();
 
 // 1) Schedule an OrderWorkflow version 1 instance.
@@ -80,8 +80,7 @@ await host.StopAsync();
 /// <summary>
 /// OrderWorkflow v1 — computes the total with no discount.
 /// </summary>
-[DurableTask("OrderWorkflow")]
-[DurableTaskVersion("1")]
+[DurableTask("OrderWorkflow", Version = "1")]
 public sealed class OrderWorkflowV1 : TaskOrchestrator<int, string>
 {
     public override Task<string> RunAsync(TaskOrchestrationContext context, int itemCount)
@@ -94,8 +93,7 @@ public sealed class OrderWorkflowV1 : TaskOrchestrator<int, string>
 /// <summary>
 /// OrderWorkflow v2 — applies a 20% discount to orders of 5+ items.
 /// </summary>
-[DurableTask("OrderWorkflow")]
-[DurableTaskVersion("2")]
+[DurableTask("OrderWorkflow", Version = "2")]
 public sealed class OrderWorkflowV2 : TaskOrchestrator<int, string>
 {
     public override Task<string> RunAsync(TaskOrchestrationContext context, int itemCount)
@@ -115,8 +113,7 @@ public sealed class OrderWorkflowV2 : TaskOrchestrator<int, string>
 /// The input is an (itemCount, alreadyMigrated) tuple to guard against infinite loops
 /// if the backend does not propagate NewVersion.
 /// </summary>
-[DurableTask("MigratingWorkflow")]
-[DurableTaskVersion("1")]
+[DurableTask("MigratingWorkflow", Version = "1")]
 public sealed class MigratingWorkflowV1 : TaskOrchestrator<MigrationInput, string>
 {
     public override Task<string> RunAsync(TaskOrchestrationContext context, MigrationInput input)
@@ -141,8 +138,7 @@ public sealed class MigratingWorkflowV1 : TaskOrchestrator<MigrationInput, strin
 /// <summary>
 /// MigratingWorkflow v2 — the target of the v1 → v2 migration.
 /// </summary>
-[DurableTask("MigratingWorkflow")]
-[DurableTaskVersion("2")]
+[DurableTask("MigratingWorkflow", Version = "2")]
 public sealed class MigratingWorkflowV2 : TaskOrchestrator<MigrationInput, string>
 {
     public override Task<string> RunAsync(TaskOrchestrationContext context, MigrationInput input)

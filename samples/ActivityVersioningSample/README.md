@@ -1,10 +1,10 @@
 # Activity Versioning Sample
 
-This sample demonstrates activity versioning with `[DurableTaskVersion]`, where multiple implementations of the same logical activity name coexist in one worker process and can be selected either by the orchestration instance version or by an explicit version-qualified helper.
+This sample demonstrates activity versioning with `[DurableTask(Version = "...")]`, where multiple implementations of the same logical activity name coexist in one worker process and can be selected either by the orchestration instance version or by an explicit version-qualified helper.
 
 ## What it shows
 
-- Two classes share the same `[DurableTask("ShippingQuote")]` name but have different `[DurableTaskVersion]` values
+- Two classes share the same `[DurableTask("ShippingQuote", Version = "...")]` declarations with different `Version` values
 - Two versions of `CheckoutWorkflow` call the same logical activity name in one worker process using the default inherited-routing behavior
 - The orchestration instance version is still the default for activity scheduling, so `CheckoutWorkflow` v1 routes to `ShippingQuote` v1 and `CheckoutWorkflow` v2 routes to `ShippingQuote` v2
 - Version-qualified activity helpers like `CallShippingQuoteV1Async()` and `CallShippingQuoteV2Async()` now explicitly select those versions when called from an orchestration
@@ -39,7 +39,7 @@ dotnet run
 Expected output:
 
 ```text
-=== Activity versioning ([DurableTaskVersion]) ===
+=== Activity versioning ([DurableTask] Version) ===
 
 Scheduling CheckoutWorkflow v1 ...
   Result: Workflow v1 -> activity v1 quote: $57 (flat $7 shipping)

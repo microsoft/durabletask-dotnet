@@ -3,23 +3,21 @@
 
 namespace Microsoft.DurableTask.Tests;
 
-public class DurableTaskVersionAttributeTests
+public class DurableTaskAttributeVersionTests
 {
     [Fact]
-    public void Ctor_WithVersion_PreservesTaskVersion()
+    public void DurableTaskAttribute_VersionProperty_PreservesValue()
     {
         // Arrange
-        DurableTaskVersionAttribute attribute = new("v2");
-
-        // Act
-        string? version = attribute.Version.Version;
+        DurableTaskAttribute attribute = new("MyTask") { Version = "v2" };
 
         // Assert
-        version.Should().Be("v2");
+        attribute.Name.Name.Should().Be("MyTask");
+        attribute.Version.Should().Be("v2");
     }
 
     [Fact]
-    public void GetDurableTaskVersion_WithAttribute_ReturnsVersion()
+    public void GetDurableTaskVersion_WithVersionedAttribute_ReturnsVersion()
     {
         // Arrange
         Type type = typeof(VersionedTestOrchestrator);
@@ -32,7 +30,7 @@ public class DurableTaskVersionAttributeTests
     }
 
     [Fact]
-    public void GetDurableTaskVersion_WithoutAttribute_ReturnsDefault()
+    public void GetDurableTaskVersion_WithoutVersion_ReturnsDefault()
     {
         // Arrange
         Type type = typeof(UnversionedTestOrchestrator);
@@ -44,7 +42,7 @@ public class DurableTaskVersionAttributeTests
         version.Should().Be(default(TaskVersion));
     }
 
-    [DurableTaskVersion("v1")]
+    [DurableTask(Version = "v1")]
     sealed class VersionedTestOrchestrator : TaskOrchestrator<string, string>
     {
         public override Task<string> RunAsync(TaskOrchestrationContext context, string input)

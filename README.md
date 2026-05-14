@@ -157,19 +157,17 @@ You can find the full sample file, including detailed comments, at [samples/Azur
 
 ### Versioned class-based orchestrators (standalone worker)
 
-Standalone worker projects can register multiple class-based orchestrators under the same durable task name when each class declares a unique `[DurableTaskVersion]`. Start a specific implementation by setting `StartOrchestrationOptions.Version`.
+Standalone worker projects can register multiple class-based orchestrators under the same durable task name when each class declares a unique `[DurableTask(Version = "...")]`. Start a specific implementation by setting `StartOrchestrationOptions.Version`.
 
 ```csharp
-[DurableTask("OrderWorkflow")]
-[DurableTaskVersion("v1")]
+[DurableTask("OrderWorkflow", Version = "v1")]
 public sealed class OrderWorkflowV1 : TaskOrchestrator<int, string>
 {
     public override Task<string> RunAsync(TaskOrchestrationContext context, int input)
         => Task.FromResult($"v1:{input}");
 }
 
-[DurableTask("OrderWorkflow")]
-[DurableTaskVersion("v2")]
+[DurableTask("OrderWorkflow", Version = "v2")]
 public sealed class OrderWorkflowV2 : TaskOrchestrator<int, string>
 {
     public override Task<string> RunAsync(TaskOrchestrationContext context, int input)
@@ -184,7 +182,7 @@ string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
 
 Use `ContinueAsNewOptions.NewVersion` to migrate long-running orchestrations at a replay-safe boundary.
 
-> Per-class `[DurableTaskVersion]` routing composes with `DurableTaskWorkerOptions.Versioning` (or `UseVersioning(...)`). The worker-level `MatchStrategy` gates which instance versions are accepted off the wire, and the registry then dispatches each accepted work item to the implementation that exactly matches its `(name, version)`. Use them together when a single worker needs to host multiple versions of the same name.
+> Per-class `[DurableTask(Version = "...")]` routing composes with `DurableTaskWorkerOptions.Versioning` (or `UseVersioning(...)`). The worker-level `MatchStrategy` gates which instance versions are accepted off the wire, and the registry then dispatches each accepted work item to the implementation that exactly matches its `(name, version)`. Use them together when a single worker needs to host multiple versions of the same name.
 >
 > Azure Functions projects do not support same-name multi-version class-based orchestrators in v1. The source generator reports a diagnostic instead of generating colliding triggers.
 
@@ -198,7 +196,7 @@ Durable Task Scheduler provides durable execution in Azure. Durable execution is
 
 This SDK can also be used with the Durable Task Scheduler directly, without any Durable Functions dependency. For getting started, you can find documentation and samples [here](https://learn.microsoft.com/en-us/azure/azure-functions/durable/what-is-durable-task).
 
-For runnable DTS emulator examples that demonstrate versioning, see the [WorkerVersioningSample](samples/WorkerVersioningSample/README.md) (deployment-based versioning), the [PerOrchestratorVersioningSample](samples/PerOrchestratorVersioningSample/README.md) (multi-version routing with `[DurableTaskVersion]`), and the [ActivityVersioningSample](samples/ActivityVersioningSample/README.md) (activity versioning with inherited defaults and explicit override support).
+For runnable DTS emulator examples that demonstrate versioning, see the [WorkerVersioningSample](samples/WorkerVersioningSample/README.md) (deployment-based versioning), the [PerOrchestratorVersioningSample](samples/PerOrchestratorVersioningSample/README.md) (multi-version routing with `[DurableTask(Version = "...")]`), and the [ActivityVersioningSample](samples/ActivityVersioningSample/README.md) (activity versioning with inherited defaults and explicit override support).
 
 ## Obtaining the Protobuf definitions
 

@@ -63,7 +63,7 @@ namespace Microsoft.DurableTask.Generators
         const string DuplicateAzureFunctionsOrchestratorNameDiagnosticId = "DURABLE3004";
 
         /// <summary>
-        /// Diagnostic ID for whitespace-only [DurableTaskVersion] arguments.
+        /// Diagnostic ID for whitespace-only [DurableTask(Version = ...)] arguments.
         /// </summary>
         const string WhitespaceTaskVersionDiagnosticId = "DURABLE3005";
 
@@ -101,8 +101,8 @@ namespace Microsoft.DurableTask.Generators
 
         static readonly DiagnosticDescriptor WhitespaceTaskVersionRule = new(
             WhitespaceTaskVersionDiagnosticId,
-            title: "Whitespace-only [DurableTaskVersion] argument",
-            messageFormat: "The [DurableTaskVersion] argument on '{0}' must not be whitespace-only. Provide a non-empty version string or omit the attribute argument to declare an unversioned task.",
+            title: "Whitespace-only [DurableTask] Version argument",
+            messageFormat: "The [DurableTask] Version argument on '{0}' must not be whitespace-only. Provide a non-empty version string or omit the Version argument to declare an unversioned task.",
             category: "DurableTask.Design",
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -258,26 +258,30 @@ namespace Microsoft.DurableTask.Generators
             string taskVersion = string.Empty;
             Location? taskVersionLocation = null;
             bool hasWhitespaceVersion = false;
-            foreach (AttributeData attributeData in classType.GetAttributes()
-                .Where(a => a.AttributeClass?.ToDisplayString() == "Microsoft.DurableTask.DurableTaskVersionAttribute"))
-            {
-                if (attributeData.ConstructorArguments.Length > 0
-                    && attributeData.ConstructorArguments[0].Value is string version)
-                {
-                    if (version.Length > 0 && string.IsNullOrWhiteSpace(version))
-                    {
-                        hasWhitespaceVersion = true;
-                        taskVersionLocation = attributeData.ApplicationSyntaxReference?.GetSyntax().GetLocation();
-                        // Treat as unversioned for downstream emission so we don't generate code referencing
-                        // a whitespace literal; the diagnostic below will fail the build.
-                        taskVersion = string.Empty;
-                    }
-                    else
-                    {
-                        taskVersion = version;
-                    }
 
-                    break;
+            // Read the optional named "Version = ..." argument off the [DurableTask] attribute itself.
+            // Whitespace-only values are kept as empty for downstream emission so we don't generate code
+            // that references the offending literal; DURABLE3005 will fail the build below.
+            if (attribute.ArgumentList?.Arguments is { } argList)
+            {
+                foreach (AttributeArgumentSyntax arg in argList)
+                {
+                    if (arg.NameEquals is { Name.Identifier.ValueText: "Version" }
+                        && context.SemanticModel.GetConstantValue(arg.Expression).Value is string version)
+                    {
+                        if (version.Length > 0 && string.IsNullOrWhiteSpace(version))
+                        {
+                            hasWhitespaceVersion = true;
+                            taskVersionLocation = arg.GetLocation();
+                            taskVersion = string.Empty;
+                        }
+                        else
+                        {
+                            taskVersion = version;
+                        }
+
+                        break;
+                    }
                 }
             }
 
@@ -405,7 +409,7 @@ namespace Microsoft.DurableTask.Generators
             IEnumerable<DurableTaskTypeInfo> validTasks = allTasks
                 .Where(task => IsValidCSharpIdentifier(task.TaskName));
 
-            // Surface whitespace-only [DurableTaskVersion] as an error before we partition by name+version.
+            // Surface whitespace-only [DurableTask] Version arguments as an error before we partition by name+version.
             foreach (DurableTaskTypeInfo task in allTasks.Where(t => t.HasWhitespaceVersion))
             {
                 Location location = task.TaskVersionLocation ?? task.TaskNameLocation ?? Location.None;

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// This sample demonstrates activity versioning with [DurableTaskVersion].
+// This sample demonstrates activity versioning with [DurableTask(Version = "...")].
 // Versioned orchestrators and versioned activities can share the same logical
 // durable task names in one worker process. Plain activity calls inherit the
 // orchestration instance version by default, while version-qualified helpers
@@ -41,7 +41,7 @@ await host.StartAsync();
 
 await using DurableTaskClient client = host.Services.GetRequiredService<DurableTaskClient>();
 
-Console.WriteLine("=== Activity versioning ([DurableTaskVersion]) ===");
+Console.WriteLine("=== Activity versioning ([DurableTask] Version) ===");
 Console.WriteLine();
 
 Console.WriteLine("Scheduling CheckoutWorkflow v1 ...");
@@ -76,8 +76,7 @@ await host.StopAsync();
 /// <summary>
 /// CheckoutWorkflow v1 - default activity calls inherit orchestration version "1".
 /// </summary>
-[DurableTask("CheckoutWorkflow")]
-[DurableTaskVersion("1")]
+[DurableTask("CheckoutWorkflow", Version = "1")]
 public sealed class CheckoutWorkflowV1 : TaskOrchestrator<int, string>
 {
     /// <inheritdoc />
@@ -91,8 +90,7 @@ public sealed class CheckoutWorkflowV1 : TaskOrchestrator<int, string>
 /// <summary>
 /// CheckoutWorkflow v2 - default activity calls inherit orchestration version "2".
 /// </summary>
-[DurableTask("CheckoutWorkflow")]
-[DurableTaskVersion("2")]
+[DurableTask("CheckoutWorkflow", Version = "2")]
 public sealed class CheckoutWorkflowV2 : TaskOrchestrator<int, string>
 {
     /// <inheritdoc />
@@ -106,8 +104,7 @@ public sealed class CheckoutWorkflowV2 : TaskOrchestrator<int, string>
 /// <summary>
 /// CheckoutWorkflow v2 - explicitly overrides the inherited activity version.
 /// </summary>
-[DurableTask("ExplicitOverrideCheckoutWorkflow")]
-[DurableTaskVersion("2")]
+[DurableTask("ExplicitOverrideCheckoutWorkflow", Version = "2")]
 public sealed class ExplicitOverrideCheckoutWorkflowV2 : TaskOrchestrator<int, string>
 {
     /// <inheritdoc />
@@ -121,8 +118,7 @@ public sealed class ExplicitOverrideCheckoutWorkflowV2 : TaskOrchestrator<int, s
 /// <summary>
 /// ShippingQuote v1 - uses a flat shipping charge.
 /// </summary>
-[DurableTask("ShippingQuote")]
-[DurableTaskVersion("1")]
+[DurableTask("ShippingQuote", Version = "1")]
 public sealed class ShippingQuoteV1 : TaskActivity<int, string>
 {
     /// <inheritdoc />
@@ -136,8 +132,7 @@ public sealed class ShippingQuoteV1 : TaskActivity<int, string>
 /// <summary>
 /// ShippingQuote v2 - applies a bulk discount and cheaper shipping.
 /// </summary>
-[DurableTask("ShippingQuote")]
-[DurableTaskVersion("2")]
+[DurableTask("ShippingQuote", Version = "2")]
 public sealed class ShippingQuoteV2 : TaskActivity<int, string>
 {
     /// <inheritdoc />

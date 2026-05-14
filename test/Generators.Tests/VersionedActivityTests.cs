@@ -22,8 +22,7 @@ public class VersionedActivityTests
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
 
-[DurableTask(""InvoiceActivity"")]
-[DurableTaskVersion(""v1"")]
+[DurableTask(""InvoiceActivity"", Version = ""v1"")]
 class InvoiceActivity : TaskActivity<int, string>
 {
     public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
@@ -79,15 +78,13 @@ internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistr
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
 
-[DurableTask(""InvoiceActivity"")]
-[DurableTaskVersion(""v1"")]
+[DurableTask(""InvoiceActivity"", Version = ""v1"")]
 class InvoiceActivityV1 : TaskActivity<int, string>
 {
     public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
 }
 
-[DurableTask(""InvoiceActivity"")]
-[DurableTaskVersion(""v2"")]
+[DurableTask(""InvoiceActivity"", Version = ""v2"")]
 class InvoiceActivityV2 : TaskActivity<int, string>
 {
     public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
@@ -154,15 +151,13 @@ internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistr
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
 
-[DurableTask(""InvoiceActivity"")]
-[DurableTaskVersion(""v1"")]
+[DurableTask(""InvoiceActivity"", Version = ""v1"")]
 class InvoiceActivityV1 : TaskActivity<int, string>
 {
     public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
 }
 
-[DurableTask(""InvoiceActivity"")]
-[DurableTaskVersion(""v1"")]
+[DurableTask(""InvoiceActivity"", Version = ""v1"")]
 class InvoiceActivityV1Duplicate : TaskActivity<int, string>
 {
     public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
@@ -205,7 +200,7 @@ internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistr
 }");
 
         DiagnosticResult expected = new DiagnosticResult("DURABLE3003", DiagnosticSeverity.Error)
-            .WithSpan("/0/Test0.cs", 12, 14, 12, 31)
+            .WithSpan("/0/Test0.cs", 11, 14, 11, 31)
             .WithArguments("InvoiceActivity", "v1");
 
         CSharpSourceGeneratorVerifier<DurableTaskSourceGenerator>.Test test = new()
@@ -239,15 +234,13 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace MyFunctions
 {
-    [DurableTask(""PaymentActivity"")]
-    [DurableTaskVersion(""v1"")]
+    [DurableTask(""PaymentActivity"", Version = ""v1"")]
     class PaymentActivityV1 : TaskActivity<int, string>
     {
         public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
     }
 
-    [DurableTask(""PaymentActivity"")]
-    [DurableTaskVersion(""v2"")]
+    [DurableTask(""PaymentActivity"", Version = ""v2"")]
     class PaymentActivityV2 : TaskActivity<int, string>
     {
         public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
@@ -258,7 +251,7 @@ namespace MyFunctions
             .WithSpan("/0/Test0.cs", 9, 18, 9, 35)
             .WithArguments("PaymentActivity");
         DiagnosticResult secondExpected = new DiagnosticResult("DURABLE3004", DiagnosticSeverity.Error)
-            .WithSpan("/0/Test0.cs", 16, 18, 16, 35)
+            .WithSpan("/0/Test0.cs", 15, 18, 15, 35)
             .WithArguments("PaymentActivity");
 
         CSharpSourceGeneratorVerifier<DurableTaskSourceGenerator>.Test test = new()

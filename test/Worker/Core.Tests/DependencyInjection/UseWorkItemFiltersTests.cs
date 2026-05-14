@@ -1002,8 +1002,7 @@ public class UseWorkItemFiltersTests
         }
     }
 
-    [DurableTask("FilterWorkflow")]
-    [DurableTaskVersion("v1")]
+    [DurableTask("FilterWorkflow", Version = "v1")]
     sealed class VersionedFilterWorkflowV1 : TaskOrchestrator<string, string>
     {
         public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
@@ -1012,8 +1011,7 @@ public class UseWorkItemFiltersTests
         }
     }
 
-    [DurableTask("FilterWorkflow")]
-    [DurableTaskVersion("v2")]
+    [DurableTask("FilterWorkflow", Version = "v2")]
     sealed class VersionedFilterWorkflowV2 : TaskOrchestrator<string, string>
     {
         public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
@@ -1039,8 +1037,7 @@ public class UseWorkItemFiltersTests
         }
     }
 
-    [DurableTask("FilterActivity")]
-    [DurableTaskVersion("v1")]
+    [DurableTask("FilterActivity", Version = "v1")]
     sealed class VersionedFilterActivityV1 : TaskActivity<string, string>
     {
         public override Task<string> RunAsync(TaskActivityContext context, string input)
@@ -1049,8 +1046,7 @@ public class UseWorkItemFiltersTests
         }
     }
 
-    [DurableTask("FilterActivity")]
-    [DurableTaskVersion("v2")]
+    [DurableTask("FilterActivity", Version = "v2")]
     sealed class VersionedFilterActivityV2 : TaskActivity<string, string>
     {
         public override Task<string> RunAsync(TaskActivityContext context, string input)

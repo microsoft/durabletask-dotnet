@@ -130,16 +130,14 @@ public class DurableTaskFactoryActivityVersioningTests
         activity.Should().BeNull();
     }
 
-    [DurableTask("InvoiceActivity")]
-    [DurableTaskVersion("v1")]
+    [DurableTask("InvoiceActivity", Version = "v1")]
     sealed class InvoiceActivityV1 : TaskActivity<string, string>
     {
         public override Task<string> RunAsync(TaskActivityContext context, string input)
             => Task.FromResult("v1");
     }
 
-    [DurableTask("InvoiceActivity")]
-    [DurableTaskVersion("v2")]
+    [DurableTask("InvoiceActivity", Version = "v2")]
     sealed class InvoiceActivityV2 : TaskActivity<string, string>
     {
         public override Task<string> RunAsync(TaskActivityContext context, string input)

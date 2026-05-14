@@ -430,15 +430,13 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace MyFunctions
 {
-    [DurableTask(""PaymentWorkflow"")]
-    [DurableTaskVersion(""v1"")]
+    [DurableTask(""PaymentWorkflow"", Version = ""v1"")]
     class PaymentWorkflowV1 : TaskOrchestrator<int, string>
     {
         public override Task<string> RunAsync(TaskOrchestrationContext context, int input) => Task.FromResult(string.Empty);
     }
 
-    [DurableTask(""PaymentWorkflow"")]
-    [DurableTaskVersion(""v2"")]
+    [DurableTask(""PaymentWorkflow"", Version = ""v2"")]
     class PaymentWorkflowV2 : TaskOrchestrator<int, string>
     {
         public override Task<string> RunAsync(TaskOrchestrationContext context, int input) => Task.FromResult(string.Empty);
@@ -449,7 +447,7 @@ namespace MyFunctions
             .WithSpan("/0/Test0.cs", 9, 18, 9, 35)
             .WithArguments("PaymentWorkflow");
         DiagnosticResult secondExpected = new DiagnosticResult("DURABLE3004", DiagnosticSeverity.Error)
-            .WithSpan("/0/Test0.cs", 16, 18, 16, 35)
+            .WithSpan("/0/Test0.cs", 15, 18, 15, 35)
             .WithArguments("PaymentWorkflow");
 
         CSharpSourceGeneratorVerifier<DurableTaskSourceGenerator>.Test test = new()

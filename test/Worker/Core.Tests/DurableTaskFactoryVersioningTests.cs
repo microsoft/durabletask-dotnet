@@ -153,16 +153,14 @@ public class DurableTaskFactoryVersioningTests
         orchestrator.Should().BeOfType<UnversionedInvoiceWorkflow>();
     }
 
-    [DurableTask("InvoiceWorkflow")]
-    [DurableTaskVersion("v1")]
+    [DurableTask("InvoiceWorkflow", Version = "v1")]
     sealed class InvoiceWorkflowV1 : TaskOrchestrator<string, string>
     {
         public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
             => Task.FromResult("v1");
     }
 
-    [DurableTask("InvoiceWorkflow")]
-    [DurableTaskVersion("v2")]
+    [DurableTask("InvoiceWorkflow", Version = "v2")]
     sealed class InvoiceWorkflowV2 : TaskOrchestrator<string, string>
     {
         public override Task<string> RunAsync(TaskOrchestrationContext context, string input)

@@ -221,8 +221,13 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         static string? GetInstanceId(TaskOptions? options)
             => options is SubOrchestrationOptions derived ? derived.InstanceId : null;
         string instanceId = GetInstanceId(options) ?? this.NewGuid().ToString("N");
-        string defaultVersion = this.GetDefaultVersion();
-        string version = options?.Version is { } v ? v.Version : defaultVersion;
+
+        // Mirror the activity-dispatch rule: a sub-orchestration scheduled without an explicit Version
+        // inherits the version of the currently executing parent instance. This keeps a v2 parent's call
+        // tree on v2 by default and removes the previous asymmetry where activities inherited from the
+        // parent while sub-orchestrations fell through to Versioning.DefaultVersion (which is meant for
+        // newly started top-level instances, not for children spawned mid-flight).
+        string version = options?.Version is { } v ? v.Version : this.innerContext.Version;
         Check.NotEntity(this.invocationContext.Options.EnableEntitySupport, instanceId);
 
         // if this orchestration uses entities, first validate that the suborchestration call is allowed in the current context
@@ -583,21 +588,4 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         }
     }
 
-    // The default version can come from two different places depending on the context of the invocation.
-    string GetDefaultVersion()
-    {
-        // Preferred choice.
-        if (this.invocationContext.Options.Versioning?.DefaultVersion is { } v)
-        {
-            return v;
-        }
-
-        // Secondary choice.
-        if (this.Properties.TryGetValue("defaultVersion", out object? propVersion) && propVersion is string v2)
-        {
-            return v2;
-        }
-
-        return string.Empty;
-    }
 }

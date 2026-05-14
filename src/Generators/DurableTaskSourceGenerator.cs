@@ -267,26 +267,20 @@ namespace Microsoft.DurableTask.Generators
             // Read the optional named "Version = ..." argument off the [DurableTask] attribute itself.
             // Whitespace-only values are kept as empty for downstream emission so we don't generate code
             // that references the offending literal; DURABLE3005 will fail the build below.
-            if (attribute.ArgumentList?.Arguments is { } argList)
+            AttributeArgumentSyntax? versionArg = attribute.ArgumentList?.Arguments
+                .FirstOrDefault(arg => arg.NameEquals is { Name.Identifier.ValueText: "Version" });
+            if (versionArg is not null
+                && context.SemanticModel.GetConstantValue(versionArg.Expression).Value is string version)
             {
-                foreach (AttributeArgumentSyntax arg in argList)
+                if (version.Length > 0 && string.IsNullOrWhiteSpace(version))
                 {
-                    if (arg.NameEquals is { Name.Identifier.ValueText: "Version" }
-                        && context.SemanticModel.GetConstantValue(arg.Expression).Value is string version)
-                    {
-                        if (version.Length > 0 && string.IsNullOrWhiteSpace(version))
-                        {
-                            hasWhitespaceVersion = true;
-                            taskVersionLocation = arg.GetLocation();
-                            taskVersion = string.Empty;
-                        }
-                        else
-                        {
-                            taskVersion = version;
-                        }
-
-                        break;
-                    }
+                    hasWhitespaceVersion = true;
+                    taskVersionLocation = versionArg.GetLocation();
+                    taskVersion = string.Empty;
+                }
+                else
+                {
+                    taskVersion = version;
                 }
             }
 

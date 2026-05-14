@@ -25,6 +25,7 @@ public class RemoteActivitiesTests
         RemoteActivityOptions options = new()
         {
             TaskHub = TaskHub,
+            WorkerProfileId = "profile-a",
             ContainerImage = "mcr.microsoft.com/durabletask/demo-worker:1.0",
             MaxConcurrentActivities = 7,
         };
@@ -42,6 +43,7 @@ public class RemoteActivitiesTests
         // Assert
         RemoteActivityDeclaration declaration = client.Declarations.Should().ContainSingle().Subject;
         declaration.TaskHub.Should().Be(TaskHub);
+        declaration.WorkerProfileId.Should().Be("profile-a");
         declaration.ActivityNames.Should().Equal("RemoteHello");
         declaration.Image.ImageRef.Should().Be("mcr.microsoft.com/durabletask/demo-worker:1.0");
         declaration.Image.PublicPull.Should().BeTrue();
@@ -135,6 +137,7 @@ public class RemoteActivitiesTests
             RemoteActivityWorkerOptions options = new()
             {
                 TaskHub = TaskHub,
+                WorkerProfileId = "profile-a",
                 MaxConcurrentActivities = 3,
                 HeartbeatInterval = TimeSpan.FromDays(1),
             };
@@ -153,6 +156,7 @@ public class RemoteActivitiesTests
             RemoteActivityWorkerMessage message = client.Session.Messages.Should().ContainSingle().Subject;
             RemoteActivityWorkerStart start = message.Start;
             start.TaskHub.Should().Be(TaskHub);
+            start.WorkerProfileId.Should().Be("profile-a");
             start.MaxActivitiesCount.Should().Be(3);
             start.Substrate.Should().Be(SubstrateKind.Sandbox);
             start.SandboxId.Should().Be("sandbox-1");

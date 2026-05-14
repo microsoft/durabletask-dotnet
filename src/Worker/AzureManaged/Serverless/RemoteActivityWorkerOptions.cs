@@ -19,6 +19,11 @@ public sealed class RemoteActivityWorkerOptions
     public string TaskHub { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the worker profile ID this worker registers capacity for.
+    /// </summary>
+    public string WorkerProfileId { get; set; } = RemoteActivityOptions.DefaultWorkerProfileId;
+
+    /// <summary>
     /// Gets the unique worker instance identifier.
     /// </summary>
     public string WorkerInstanceId { get; } = Guid.NewGuid().ToString("N");

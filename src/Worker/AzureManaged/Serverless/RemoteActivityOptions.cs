@@ -24,6 +24,11 @@ public sealed class RemoteActivityOptions
     public string TaskHub { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the worker profile ID that owns this remote activity declaration.
+    /// </summary>
+    public string WorkerProfileId { get; set; } = DefaultWorkerProfileId;
+
+    /// <summary>
     /// Gets or sets the full container image reference for the remote worker image.
     /// </summary>
     public string? ContainerImage { get; set; }

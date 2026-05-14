@@ -33,6 +33,7 @@ message RemoteActivityWorkerStart {
   SubstrateKind substrate = 4;
   // Identifier of the ADC sandbox the worker is running inside. Empty when substrate != SANDBOX.
   string sandbox_id = 5;
+  string worker_profile_id = 6;
 }
 
 message RemoteActivityWorkerHeartbeat {

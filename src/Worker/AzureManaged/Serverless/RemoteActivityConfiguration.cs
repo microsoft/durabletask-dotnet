@@ -45,6 +45,8 @@ static class RemoteActivityConfiguration
             throw new InvalidOperationException("Remote activity declaration requires at least one activity name.");
         }
 
+        string workerProfileId = NormalizeWorkerProfileId(options.WorkerProfileId, "Remote activity declaration requires a worker profile ID.");
+
         if (options.MaxConcurrentActivities <= 0)
         {
             throw new InvalidOperationException("Remote activity max concurrent activities must be greater than zero.");
@@ -53,7 +55,7 @@ static class RemoteActivityConfiguration
         Proto.RemoteActivityDeclaration declaration = new()
         {
             TaskHub = options.TaskHub,
-            WorkerProfileId = RemoteActivityOptions.DefaultWorkerProfileId,
+            WorkerProfileId = workerProfileId,
             Image = BuildImage(options),
             MaxConcurrentActivities = options.MaxConcurrentActivities,
         };
@@ -82,9 +84,12 @@ static class RemoteActivityConfiguration
             throw new InvalidOperationException("Remote activity worker max concurrent activities must be greater than zero.");
         }
 
+        string workerProfileId = NormalizeWorkerProfileId(options.WorkerProfileId, "Remote activity worker registration requires a worker profile ID.");
+
         Proto.RemoteActivityWorkerStart start = new()
         {
             TaskHub = options.TaskHub,
+            WorkerProfileId = workerProfileId,
             WorkerInstanceId = options.WorkerInstanceId,
             MaxActivitiesCount = options.MaxConcurrentActivities,
             Substrate = GetSubstrateFromEnvironment(),
@@ -157,6 +162,16 @@ static class RemoteActivityConfiguration
         }
 
         return Proto.SubstrateKind.Unspecified;
+    }
+
+    static string NormalizeWorkerProfileId(string value, string errorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException(errorMessage);
+        }
+
+        return value.Trim();
     }
 
     static string? BuildImageRef(string? registryServer, string? repository, string? tag, string? digest)

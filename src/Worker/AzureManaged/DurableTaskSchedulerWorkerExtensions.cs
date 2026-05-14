@@ -249,6 +249,7 @@ public static class DurableTaskSchedulerWorkerExtensions
     static void ApplyRemoteActivityEnvironmentOverrides(RemoteActivityOptions options)
     {
         ApplyActivityNameEnvironmentOverride(options.ActivityNames);
+        ApplyWorkerProfileEnvironmentOverride(profile => options.WorkerProfileId = profile);
 
         string? image = Environment.GetEnvironmentVariable("DTS_REMOTE_ACTIVITY_IMAGE");
         if (!string.IsNullOrWhiteSpace(image))
@@ -260,6 +261,7 @@ public static class DurableTaskSchedulerWorkerExtensions
     static void ApplyRemoteActivityWorkerEnvironmentOverrides(RemoteActivityWorkerOptions options)
     {
         ApplyActivityNameEnvironmentOverride(options.ActivityNames);
+        ApplyWorkerProfileEnvironmentOverride(profile => options.WorkerProfileId = profile);
 
         if (int.TryParse(Environment.GetEnvironmentVariable("DTS_SERVERLESS_MAX_ACTIVITIES"), out int maxActivities) && maxActivities > 0)
         {
@@ -281,6 +283,15 @@ public static class DurableTaskSchedulerWorkerExtensions
             .Distinct(StringComparer.Ordinal))
         {
             activityNames.Add(name);
+        }
+    }
+
+    static void ApplyWorkerProfileEnvironmentOverride(Action<string> setWorkerProfileId)
+    {
+        string? workerProfileId = Environment.GetEnvironmentVariable("DTS_WORKER_PROFILE_ID");
+        if (!string.IsNullOrWhiteSpace(workerProfileId))
+        {
+            setWorkerProfileId(workerProfileId.Trim());
         }
     }
 

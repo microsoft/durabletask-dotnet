@@ -49,4 +49,3 @@ public sealed class DurableTaskAttribute : Attribute
     /// </remarks>
     public string? Version { get; set; }
 }
-

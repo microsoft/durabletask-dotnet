@@ -166,10 +166,28 @@ public partial class DurableTaskRegistry
     /// <returns>The same registry, for call chaining.</returns>
     public DurableTaskRegistry AddOrchestratorFunc<TInput, TOutput>(
         TaskName name, Func<TaskOrchestrationContext, TInput, Task<TOutput>> orchestrator)
+        => this.AddOrchestratorFunc(name, default, orchestrator);
+
+    /// <summary>
+    /// Registers an orchestrator factory at the specified version, where the implementation is the
+    /// supplied lambda. This is the canonical version-aware lambda overload that the other
+    /// <c>AddOrchestratorFunc</c> overloads pass through to with an unversioned default.
+    /// </summary>
+    /// <typeparam name="TInput">The orchestrator input type.</typeparam>
+    /// <typeparam name="TOutput">The orchestrator output type.</typeparam>
+    /// <param name="name">The name of the orchestrator to register.</param>
+    /// <param name="version">
+    /// The version of the orchestrator. Pass <see cref="TaskVersion.Unversioned"/> (or
+    /// <c>default(TaskVersion)</c>) to register an unversioned orchestrator.
+    /// </param>
+    /// <param name="orchestrator">The orchestrator implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    public DurableTaskRegistry AddOrchestratorFunc<TInput, TOutput>(
+        TaskName name, TaskVersion version, Func<TaskOrchestrationContext, TInput, Task<TOutput>> orchestrator)
     {
         Check.NotNull(orchestrator);
         ITaskOrchestrator wrapper = FuncTaskOrchestrator.Create(orchestrator);
-        return this.AddOrchestrator(name, wrapper);
+        return this.AddOrchestrator(name, version, () => wrapper);
     }
 
     /// <summary>

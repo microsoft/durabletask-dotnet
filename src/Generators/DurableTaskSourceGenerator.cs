@@ -248,9 +248,14 @@ namespace Microsoft.DurableTask.Generators
 
             string taskName = classType.Name;
             Location? taskNameLocation = null;
-            if (attribute.ArgumentList?.Arguments.Count > 0)
+            // Only treat the first argument as the positional task name when it is NOT a named property
+            // argument (e.g., `Version = "..."` from the new attribute syntax). Otherwise fall through and
+            // let the task name default to the class name.
+            if (attribute.ArgumentList?.Arguments is { Count: > 0 } argList0
+                && argList0[0].NameEquals is null
+                && argList0[0].NameColon is null)
             {
-                ExpressionSyntax expression = attribute.ArgumentList.Arguments[0].Expression;
+                ExpressionSyntax expression = argList0[0].Expression;
                 taskName = context.SemanticModel.GetConstantValue(expression).ToString();
                 taskNameLocation = expression.GetLocation();
             }

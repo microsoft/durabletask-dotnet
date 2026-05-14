@@ -139,10 +139,28 @@ public sealed partial class DurableTaskRegistry
     /// <returns>The same registry, for call chaining.</returns>
     public DurableTaskRegistry AddActivityFunc<TInput, TOutput>(
         TaskName name, Func<TaskActivityContext, TInput, Task<TOutput>> activity)
+        => this.AddActivityFunc(name, default, activity);
+
+    /// <summary>
+    /// Registers an activity factory at the specified version, where the implementation is the supplied
+    /// lambda. This is the canonical version-aware lambda overload that the other
+    /// <c>AddActivityFunc</c> overloads pass through to with an unversioned default.
+    /// </summary>
+    /// <typeparam name="TInput">The activity input type.</typeparam>
+    /// <typeparam name="TOutput">The activity output type.</typeparam>
+    /// <param name="name">The name of the activity to register.</param>
+    /// <param name="version">
+    /// The version of the activity. Pass <see cref="TaskVersion.Unversioned"/> (or
+    /// <c>default(TaskVersion)</c>) to register an unversioned activity.
+    /// </param>
+    /// <param name="activity">The activity implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    public DurableTaskRegistry AddActivityFunc<TInput, TOutput>(
+        TaskName name, TaskVersion version, Func<TaskActivityContext, TInput, Task<TOutput>> activity)
     {
         Check.NotNull(activity);
         ITaskActivity wrapper = FuncTaskActivity.Create(activity);
-        return this.AddActivity(name, wrapper);
+        return this.AddActivity(name, version, () => wrapper);
     }
 
     /// <summary>

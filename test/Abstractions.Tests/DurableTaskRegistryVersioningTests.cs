@@ -107,6 +107,125 @@ public class DurableTaskRegistryVersioningTests
         act.Should().NotThrow();
     }
 
+    [Fact]
+    public void AddOrchestratorFunc_ExplicitVersion_SameLogicalNameDifferentVersions_DoesNotThrow()
+    {
+        // Arrange — exercises the new versioned lambda overload, the function-based equivalent of
+        // AddOrchestrator(name, version, factory).
+        DurableTaskRegistry registry = new();
+
+        // Act
+        Action act = () =>
+        {
+            registry.AddOrchestratorFunc<string, string>(
+                "LambdaWorkflow",
+                new TaskVersion("v1"),
+                (ctx, input) => Task.FromResult($"v1:{input}"));
+            registry.AddOrchestratorFunc<string, string>(
+                "LambdaWorkflow",
+                new TaskVersion("v2"),
+                (ctx, input) => Task.FromResult($"v2:{input}"));
+        };
+
+        // Assert
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void AddOrchestratorFunc_ExplicitVersion_SameLogicalNameAndVersion_Throws()
+    {
+        // Arrange
+        DurableTaskRegistry registry = new();
+
+        // Act
+        Action act = () =>
+        {
+            registry.AddOrchestratorFunc<string, string>(
+                "LambdaWorkflow",
+                new TaskVersion("v1"),
+                (ctx, input) => Task.FromResult($"v1:{input}"));
+            registry.AddOrchestratorFunc<string, string>(
+                "LambdaWorkflow",
+                new TaskVersion("v1"),
+                (ctx, input) => Task.FromResult($"v1-dup:{input}"));
+        };
+
+        // Assert
+        act.Should().ThrowExactly<ArgumentException>().WithParameterName("name");
+    }
+
+    [Fact]
+    public void AddOrchestratorFunc_UnversionedDefault_RegistersAtUnversionedKey()
+    {
+        // Arrange — confirm the existing unversioned overload still routes to the unversioned key
+        // (i.e., the new versioned overload is purely additive and the unversioned default behaves
+        // the same as before).
+        DurableTaskRegistry registry = new();
+
+        // Act
+        Action act = () =>
+        {
+            registry.AddOrchestratorFunc<string, string>(
+                "LambdaWorkflow",
+                (ctx, input) => Task.FromResult(input));
+            // Adding the same name again with no version should collide with the unversioned
+            // registration above.
+            registry.AddOrchestratorFunc<string, string>(
+                "LambdaWorkflow",
+                (ctx, input) => Task.FromResult(input));
+        };
+
+        // Assert
+        act.Should().ThrowExactly<ArgumentException>().WithParameterName("name");
+    }
+
+    [Fact]
+    public void AddActivityFunc_ExplicitVersion_SameLogicalNameDifferentVersions_DoesNotThrow()
+    {
+        // Arrange — exercises the new versioned lambda overload, the function-based equivalent of
+        // AddActivity(name, version, factory).
+        DurableTaskRegistry registry = new();
+
+        // Act
+        Action act = () =>
+        {
+            registry.AddActivityFunc<string, string>(
+                "LambdaActivity",
+                new TaskVersion("v1"),
+                (ctx, input) => Task.FromResult($"v1:{input}"));
+            registry.AddActivityFunc<string, string>(
+                "LambdaActivity",
+                new TaskVersion("v2"),
+                (ctx, input) => Task.FromResult($"v2:{input}"));
+        };
+
+        // Assert
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void AddActivityFunc_ExplicitVersion_SameLogicalNameAndVersion_Throws()
+    {
+        // Arrange
+        DurableTaskRegistry registry = new();
+
+        // Act
+        Action act = () =>
+        {
+            registry.AddActivityFunc<string, string>(
+                "LambdaActivity",
+                new TaskVersion("v1"),
+                (ctx, input) => Task.FromResult($"v1:{input}"));
+            registry.AddActivityFunc<string, string>(
+                "LambdaActivity",
+                new TaskVersion("v1"),
+                (ctx, input) => Task.FromResult($"v1-dup:{input}"));
+        };
+
+        // Assert
+        act.Should().ThrowExactly<ArgumentException>().WithParameterName("name");
+    }
+
     [DurableTask("ShippingWorkflow", Version = "v1")]
     sealed class ShippingWorkflowV1 : TaskOrchestrator<string, string>
     {

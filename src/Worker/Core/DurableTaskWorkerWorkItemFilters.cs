@@ -44,9 +44,11 @@ public class DurableTaskWorkerWorkItemFilters
                 ? [workerOptions.Versioning.Version ?? string.Empty]
                 : null;
 
-        // Orchestration filters now group registrations by logical name. Version lists are only emitted when every
-        // registration for a logical name is explicitly versioned; otherwise, the filter conservatively matches all
-        // versions for that name.
+        // Orchestration filters group registrations by logical name and emit the concrete distinct
+        // version set actually registered (treating null/unversioned as ""). Strict mode overrides this
+        // with the single configured worker version. We never emit a wildcard "match any version" set,
+        // because the factory's dispatch rule refuses unversioned-fallback once a name has any versioned
+        // registration — so the backend would otherwise stream work items the worker would then reject.
         List<OrchestrationFilter> orchestrationFilters = registry.Orchestrators
             .GroupBy(orchestration => orchestration.Key.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group =>

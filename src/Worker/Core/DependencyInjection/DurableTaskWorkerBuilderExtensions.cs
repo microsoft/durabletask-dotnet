@@ -171,12 +171,14 @@ public static class DurableTaskWorkerBuilderExtensions
                 {
                     opts.Orchestrations = [];
                     opts.Activities = [];
+                    opts.ExcludedActivities = [];
                     opts.Entities = [];
                 }
                 else
                 {
                     opts.Orchestrations = workItemFilters.Orchestrations;
                     opts.Activities = workItemFilters.Activities;
+                    opts.ExcludedActivities = workItemFilters.ExcludedActivities;
                     opts.Entities = workItemFilters.Entities;
                 }
             });
@@ -194,6 +196,7 @@ public static class DurableTaskWorkerBuilderExtensions
         if (workItemFilters is not null
             && (workItemFilters.Orchestrations.Count > 0
                 || workItemFilters.Activities.Count > 0
+                || workItemFilters.ExcludedActivities.Count > 0
                 || workItemFilters.Entities.Count > 0))
         {
             builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<

@@ -7,10 +7,14 @@ using System.Linq;
 using System.Threading;
 using Azure.Core;
 using Grpc.Net.Client;
+using Microsoft.DurableTask.Protobuf.Serverless;
+using Microsoft.DurableTask.Worker.AzureManaged.Serverless;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Microsoft.DurableTask.Worker.AzureManaged;
@@ -20,6 +24,87 @@ namespace Microsoft.DurableTask.Worker.AzureManaged;
 /// </summary>
 public static class DurableTaskSchedulerWorkerExtensions
 {
+    /// <summary>
+    /// Declares remote activities and configures the local worker to exclude them from local execution.
+    /// </summary>
+    /// <param name="builder">The Durable Task worker builder to configure.</param>
+    /// <param name="configure">Optional callback to configure remote activity declaration behavior.</param>
+    /// <returns>The original builder, for call chaining.</returns>
+    public static IDurableTaskWorkerBuilder DeclareRemoteActivities(
+        this IDurableTaskWorkerBuilder builder,
+        Action<RemoteActivityOptions>? configure = null)
+    {
+        Check.NotNull(builder);
+
+        builder.Services.AddOptions<RemoteActivityOptions>(builder.Name)
+            .Configure(configure ?? (_ => { }))
+            .PostConfigure<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>((options, schedulerOptions) =>
+            {
+                ApplyTaskHubDefault(options, schedulerOptions.Get(builder.Name).TaskHubName);
+                ApplyRemoteActivityEnvironmentOverrides(options);
+            });
+
+        builder.Services.AddOptions<DurableTaskWorkerWorkItemFilters>(builder.Name)
+            .PostConfigure<IOptionsMonitor<RemoteActivityOptions>>(
+                (filters, remoteActivityOptions) =>
+                {
+                    RemoteActivityOptions options = remoteActivityOptions.Get(builder.Name);
+                    string[] activityNames = RemoteActivityConfiguration.ResolveActivityNames(options.ActivityNames);
+                    if (activityNames.Length == 0)
+                    {
+                        return;
+                    }
+
+                    filters.ExcludedActivities = MergeActivityFilters(filters.ExcludedActivities, activityNames);
+                });
+
+        builder.Services.AddSingleton<IHostedService>(sp => CreateRemoteActivityDeclarationHostedService(sp, builder.Name));
+        return builder;
+    }
+
+    /// <summary>
+    /// Configures this worker as a sandbox remote activity worker and registers live capacity with DTS.
+    /// </summary>
+    /// <param name="builder">The Durable Task worker builder to configure.</param>
+    /// <param name="configure">Optional callback to configure remote activity worker behavior.</param>
+    /// <returns>The original builder, for call chaining.</returns>
+    public static IDurableTaskWorkerBuilder UseRemoteActivityWorker(
+        this IDurableTaskWorkerBuilder builder,
+        Action<RemoteActivityWorkerOptions>? configure = null)
+    {
+        Check.NotNull(builder);
+
+        builder.Services.AddOptions<RemoteActivityWorkerOptions>(builder.Name)
+            .Configure(configure ?? (_ => { }))
+            .PostConfigure<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>((options, schedulerOptions) =>
+            {
+                ApplyTaskHubDefault(options, schedulerOptions.Get(builder.Name).TaskHubName);
+                ApplyRemoteActivityWorkerEnvironmentOverrides(options);
+            });
+
+        builder.Services.AddOptions<DurableTaskWorkerWorkItemFilters>(builder.Name)
+            .PostConfigure<IOptionsMonitor<RemoteActivityWorkerOptions>>(
+                (filters, remoteActivityWorkerOptions) =>
+                {
+                    RemoteActivityWorkerOptions options = remoteActivityWorkerOptions.Get(builder.Name);
+                    string[] activityNames = RemoteActivityConfiguration.ResolveActivityNames(options.ActivityNames);
+                    if (activityNames.Length == 0)
+                    {
+                        return;
+                    }
+
+                    filters.Orchestrations = [];
+                    filters.Activities = activityNames
+                        .Select(static name => new DurableTaskWorkerWorkItemFilters.ActivityFilter { Name = name })
+                        .ToArray();
+                    filters.ExcludedActivities = [];
+                    filters.Entities = [];
+                });
+
+        builder.Services.AddSingleton<IHostedService>(sp => CreateRemoteActivityWorkerRegistrationHostedService(sp, builder.Name));
+        return builder;
+    }
+
     /// <summary>
     /// Configures Durable Task worker to use the Azure Durable Task Scheduler service.
     /// </summary>
@@ -101,6 +186,123 @@ public static class DurableTaskSchedulerWorkerExtensions
         builder.Services.TryAddEnumerable(
             ServiceDescriptor.Singleton<IConfigureOptions<GrpcDurableTaskWorkerOptions>, ConfigureGrpcChannel>());
         builder.UseGrpc(_ => { });
+    }
+
+    static RemoteActivityDeclarationHostedService CreateRemoteActivityDeclarationHostedService(
+        IServiceProvider services,
+        string builderName)
+    {
+        RemoteActivityOptions options = services.GetRequiredService<IOptionsMonitor<RemoteActivityOptions>>().Get(builderName);
+        ILoggerFactory loggerFactory = services.GetRequiredService<ILoggerFactory>();
+
+        return new RemoteActivityDeclarationHostedService(
+            CreateServerlessActivitiesClient(services, builderName),
+            options,
+            loggerFactory.CreateLogger<RemoteActivityDeclarationHostedService>());
+    }
+
+    static RemoteActivityWorkerRegistrationHostedService CreateRemoteActivityWorkerRegistrationHostedService(IServiceProvider services, string builderName)
+    {
+        RemoteActivityWorkerOptions options = services.GetRequiredService<IOptionsMonitor<RemoteActivityWorkerOptions>>().Get(builderName);
+        ILoggerFactory loggerFactory = services.GetRequiredService<ILoggerFactory>();
+        IHostApplicationLifetime? lifetime = services.GetService<IHostApplicationLifetime>();
+
+        return new RemoteActivityWorkerRegistrationHostedService(
+            CreateServerlessActivitiesClient(services, builderName),
+            options,
+            loggerFactory.CreateLogger<RemoteActivityWorkerRegistrationHostedService>(),
+            lifetime);
+    }
+
+    static ServerlessActivitiesClientAdapter CreateServerlessActivitiesClient(IServiceProvider services, string builderName)
+    {
+        GrpcDurableTaskWorkerOptions options = services.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>().Get(builderName);
+        if (options.CallInvoker is { } callInvoker)
+        {
+            return new ServerlessActivitiesClientAdapter(new ServerlessActivities.ServerlessActivitiesClient(callInvoker));
+        }
+
+        if (options.Channel is { } channel)
+        {
+            return new ServerlessActivitiesClientAdapter(new ServerlessActivities.ServerlessActivitiesClient(channel.CreateCallInvoker()));
+        }
+
+        throw new InvalidOperationException("Azure Managed remote activities require a configured gRPC channel or call invoker.");
+    }
+
+    static void ApplyTaskHubDefault(RemoteActivityOptions options, string taskHubName)
+    {
+        if (string.IsNullOrWhiteSpace(options.TaskHub) && !string.IsNullOrWhiteSpace(taskHubName))
+        {
+            options.TaskHub = taskHubName;
+        }
+    }
+
+    static void ApplyTaskHubDefault(RemoteActivityWorkerOptions options, string taskHubName)
+    {
+        if (string.IsNullOrWhiteSpace(options.TaskHub) && !string.IsNullOrWhiteSpace(taskHubName))
+        {
+            options.TaskHub = taskHubName;
+        }
+    }
+
+    static void ApplyRemoteActivityEnvironmentOverrides(RemoteActivityOptions options)
+    {
+        ApplyActivityNameEnvironmentOverride(options.ActivityNames);
+
+        string? image = Environment.GetEnvironmentVariable("DTS_REMOTE_ACTIVITY_IMAGE");
+        if (!string.IsNullOrWhiteSpace(image))
+        {
+            options.ContainerImage = image;
+        }
+    }
+
+    static void ApplyRemoteActivityWorkerEnvironmentOverrides(RemoteActivityWorkerOptions options)
+    {
+        ApplyActivityNameEnvironmentOverride(options.ActivityNames);
+
+        if (int.TryParse(Environment.GetEnvironmentVariable("DTS_SERVERLESS_MAX_ACTIVITIES"), out int maxActivities) && maxActivities > 0)
+        {
+            options.MaxConcurrentActivities = maxActivities;
+        }
+    }
+
+    static void ApplyActivityNameEnvironmentOverride(ICollection<string> activityNames)
+    {
+        string? remoteActivities = Environment.GetEnvironmentVariable("DTS_REMOTE_ACTIVITIES");
+        if (remoteActivities is null)
+        {
+            return;
+        }
+
+        activityNames.Clear();
+        foreach (string name in remoteActivities
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Distinct(StringComparer.Ordinal))
+        {
+            activityNames.Add(name);
+        }
+    }
+
+    static DurableTaskWorkerWorkItemFilters.ActivityFilter[] MergeActivityFilters(
+        IReadOnlyList<DurableTaskWorkerWorkItemFilters.ActivityFilter> existingFilters,
+        IEnumerable<string> activityNames)
+    {
+        Dictionary<string, DurableTaskWorkerWorkItemFilters.ActivityFilter> merged = new(StringComparer.OrdinalIgnoreCase);
+        foreach (DurableTaskWorkerWorkItemFilters.ActivityFilter filter in existingFilters)
+        {
+            if (!string.IsNullOrWhiteSpace(filter.Name))
+            {
+                merged[filter.Name] = filter;
+            }
+        }
+
+        foreach (string activityName in activityNames)
+        {
+            merged[activityName] = new DurableTaskWorkerWorkItemFilters.ActivityFilter { Name = activityName };
+        }
+
+        return merged.Values.ToArray();
     }
 
     /// <summary>
@@ -300,6 +502,7 @@ public static class DurableTaskSchedulerWorkerExtensions
                     }
                 }
             }
+
             GC.SuppressFinalize(this);
         }
 

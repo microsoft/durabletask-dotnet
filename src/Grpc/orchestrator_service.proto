@@ -856,6 +856,11 @@ message WorkItemFilters {
     repeated OrchestrationFilter orchestrations = 1;
     repeated ActivityFilter activities = 2;
     repeated EntityFilter entities = 3;
+    // Activities the worker explicitly does NOT want to process. When set,
+    // matching activity work items are skipped for this connection even if
+    // they would otherwise match `activities`. Mutually exclusive with
+    // `activities` for the same name.
+    repeated ActivityFilter exclude_activities = 4;
 }
 
 message OrchestrationFilter {

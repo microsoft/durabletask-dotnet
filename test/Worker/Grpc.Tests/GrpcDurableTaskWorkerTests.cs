@@ -490,7 +490,7 @@ public class GrpcDurableTaskWorkerTests
     }
 
     [Fact]
-    public void Constructor_MultiVersionRegistryWithStrictWorkerVersioning_DoesNotThrow()
+    public void Constructor_StrictWorkerVersioningWithoutRegistryContents_DoesNotThrow()
     {
         // Arrange — combine UseVersioning(Strict) with multi-version registrations. Both are now part of
         // the same versioning feature: UseVersioning's match strategy decides which instance versions to
@@ -515,7 +515,7 @@ public class GrpcDurableTaskWorkerTests
     }
 
     [Fact]
-    public void Constructor_MultiVersionRegistryWithoutWorkerVersioning_DoesNotThrow()
+    public void Constructor_NoWorkerVersioningWithoutRegistryContents_DoesNotThrow()
     {
         // Arrange
         DurableTaskWorkerOptions workerOptions = new()
@@ -531,7 +531,7 @@ public class GrpcDurableTaskWorkerTests
     }
 
     [Fact]
-    public void Constructor_WorkerVersioningWithoutMultiVersionRegistry_DoesNotThrow()
+    public void Constructor_StrictWorkerVersioningOnly_DoesNotThrow()
     {
         // Arrange
         DurableTaskWorkerOptions workerOptions = new()

@@ -147,9 +147,11 @@ public class UseWorkItemFiltersTests
             provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
         DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
-        // Assert
-        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.Count == 0);
-        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.Count == 0);
+        // Assert — unversioned-only registry produces a single-element [""] version list so the backend
+        // sends only unversioned work items the worker can dispatch (matches the explicit registry
+        // contents instead of streaming everything).
+        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.SequenceEqual(new[] { string.Empty }));
+        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.SequenceEqual(new[] { string.Empty }));
     }
 
     [Fact]
@@ -182,8 +184,8 @@ public class UseWorkItemFiltersTests
         DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
         // Assert
-        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.Count == 0);
-        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.Count == 0);
+        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.SequenceEqual(new[] { string.Empty }));
+        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.SequenceEqual(new[] { string.Empty }));
     }
 
     [Fact]
@@ -332,9 +334,9 @@ public class UseWorkItemFiltersTests
     }
 
     [Fact]
-    public void WorkItemFilters_UnversionedAndVersionedOrchestrators_FallBackToNameOnlyFilter()
+    public void WorkItemFilters_UnversionedAndVersionedOrchestrators_EmitConcreteVersionList()
     {
-        // Arrange
+        // Arrange — register both an unversioned and a v2 orchestration under the same logical name.
         ServiceCollection services = new();
         services.AddDurableTaskWorker("test", builder =>
         {
@@ -352,10 +354,12 @@ public class UseWorkItemFiltersTests
             provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
         DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
-        // Assert
+        // Assert — emit ["", "v2"] (the literal registered set) instead of [] (match all). The factory's
+        // dispatch rule refuses unversioned-fallback once any versioned registration exists, so emitting
+        // [] here would cause the backend to stream unregistered versions the worker would then reject.
         actual.Orchestrations.Should().ContainSingle();
         actual.Orchestrations[0].Name.Should().Be("FilterWorkflow");
-        actual.Orchestrations[0].Versions.Should().BeEmpty();
+        actual.Orchestrations[0].Versions.Should().BeEquivalentTo([string.Empty, "v2"]);
     }
 
     [Fact]
@@ -386,9 +390,9 @@ public class UseWorkItemFiltersTests
     }
 
     [Fact]
-    public void WorkItemFilters_UnversionedAndVersionedActivities_FallBackToNameOnlyFilter()
+    public void WorkItemFilters_UnversionedAndVersionedActivities_EmitConcreteVersionList()
     {
-        // Arrange
+        // Arrange — register both an unversioned and a v2 activity under the same logical name.
         ServiceCollection services = new();
         services.AddDurableTaskWorker("test", builder =>
         {
@@ -406,10 +410,12 @@ public class UseWorkItemFiltersTests
             provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
         DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
-        // Assert
+        // Assert — emit ["", "v2"] (the literal registered set) instead of [] (match all). Same rationale
+        // as the orchestrator-side test: dispatch refuses unversioned-fallback once any versioned
+        // registration exists.
         actual.Activities.Should().ContainSingle();
         actual.Activities[0].Name.Should().Be("FilterActivity");
-        actual.Activities[0].Versions.Should().BeEmpty();
+        actual.Activities[0].Versions.Should().BeEquivalentTo([string.Empty, "v2"]);
     }
 
     [Fact]

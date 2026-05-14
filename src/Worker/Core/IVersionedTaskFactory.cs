@@ -7,7 +7,10 @@ namespace Microsoft.DurableTask.Worker;
 
 /// <summary>
 /// Creates orchestrator and activity instances by logical name and requested version.
-/// Implemented by the default factory when the registry contains versioned registrations.
+/// Implemented by the default <see cref="DurableTaskFactory"/>; the gRPC processor uses this
+/// version-aware overload when the factory exposes it and falls back to the name-only
+/// <see cref="IDurableTaskFactory"/> overload otherwise (for custom factories that only implement
+/// the public interface).
 /// </summary>
 internal interface IVersionedTaskFactory
 {

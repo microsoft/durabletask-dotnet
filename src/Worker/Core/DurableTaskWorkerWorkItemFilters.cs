@@ -88,15 +88,16 @@ public class DurableTaskWorkerWorkItemFilters
 
         static IReadOnlyList<string> GetRegistrationVersions(IEnumerable<string?> versions)
         {
-            bool hasUnversionedRegistration = versions.Any(string.IsNullOrWhiteSpace);
-            return hasUnversionedRegistration
-                ? []
-                : versions
-                    .Where(version => !string.IsNullOrWhiteSpace(version))
-                    .Cast<string>()
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
+            // Distinct, deterministically ordered registered version strings (treating null as empty so
+            // an unversioned registration appears as "" in the filter list). We always emit the concrete
+            // set rather than collapsing to "[]" (match-all), because the factory's dispatch rule refuses
+            // unversioned-fallback once a name has any versioned registration — so a backend that streamed
+            // an unregistered version would be rejected after the fact.
+            return versions
+                .Select(version => version ?? string.Empty)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         }
     }
 

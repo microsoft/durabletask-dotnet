@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Net;
+using System.Net.Sockets;
 using FluentAssertions;
 using Grpc.Core;
 using Microsoft.DurableTask.Protobuf.Serverless;
@@ -216,6 +218,71 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
+    public void ServerlessActivityTracker_TracksInFlightActivityCount()
+    {
+        // Arrange
+        ServerlessActivityTracker activityTracker = new();
+
+        // Act
+        activityTracker.NotifyActivityStarted();
+        activityTracker.NotifyActivityStarted();
+
+        // Assert
+        activityTracker.InFlightCount.Should().Be(2);
+
+        // Act
+        activityTracker.NotifyActivityCompleted();
+
+        // Assert
+        activityTracker.InFlightCount.Should().Be(1);
+
+        // Act
+        activityTracker.NotifyActivityCompleted();
+        activityTracker.NotifyActivityCompleted();
+
+        // Assert
+        activityTracker.InFlightCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ServerlessActivityWorkerRegistrationHostedService_SendsHeartbeatWithCurrentInFlightCount()
+    {
+        // Arrange
+        ServerlessOptions options = new()
+        {
+            Mode = ServerlessMode.ServerlessInclude,
+            TaskHub = TaskHub,
+            WorkerProfileId = "profile-a",
+            MaxConcurrentActivities = 3,
+            HeartbeatInterval = TimeSpan.FromMilliseconds(10),
+        };
+        options.ActivityNames.Add("RemoteHello");
+
+        FakeServerlessActivitiesClient client = new();
+        ServerlessActivityTracker activityTracker = new();
+        activityTracker.NotifyActivityStarted();
+        activityTracker.NotifyActivityStarted();
+
+        ServerlessActivityWorkerRegistrationHostedService service = new(
+            client,
+            options,
+            NullLogger<ServerlessActivityWorkerRegistrationHostedService>.Instance,
+            lifetime: null,
+            activityTracker);
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+        await client.Session.WaitForMessageAsync(message => message.Heartbeat?.ActiveActivitiesCount == 2);
+        activityTracker.NotifyActivityCompleted();
+        await client.Session.WaitForMessageAsync(message => message.Heartbeat?.ActiveActivitiesCount == 1);
+        await service.StopAsync(CancellationToken.None);
+
+        // Assert
+        client.Session.Messages.Should().Contain(message => message.Heartbeat != null && message.Heartbeat.ActiveActivitiesCount == 2);
+        client.Session.Messages.Should().Contain(message => message.Heartbeat != null && message.Heartbeat.ActiveActivitiesCount == 1);
+    }
+
+    [Fact]
     public async Task DeclareServerlessActivities_ConfiguresLocalWorkerExclusionFilter()
     {
         // Arrange
@@ -289,6 +356,59 @@ public class ServerlessActivitiesTests
         filters.Entities.Should().BeEmpty();
     }
 
+    [Fact]
+    public void UseServerlessWorker_RegistersWakeupServerHostedService()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
+        mockBuilder.Setup(builder => builder.Services).Returns(services);
+        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
+
+        // Act
+        mockBuilder.Object.UseServerlessWorker();
+
+        // Assert
+        services.Count(descriptor => descriptor.ServiceType == typeof(IHostedService)).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task ServerlessWakeupServer_RespondsToAdcProbesWhenWorkerIsServerless()
+    {
+        // Arrange
+        int wakeupPort = GetFreeTcpPort();
+        ServerlessOptions options = new()
+        {
+            Mode = ServerlessMode.ServerlessInclude,
+            WakeupPort = wakeupPort,
+        };
+        ServerlessWakeupServer server = new(
+            options,
+            NullLogger<ServerlessWakeupServer>.Instance);
+
+        // Act
+        await server.StartAsync(CancellationToken.None);
+
+        try
+        {
+            using HttpClient httpClient = new();
+
+            // Assert
+            using HttpResponseMessage healthResponse = await httpClient.GetAsync(
+                $"http://127.0.0.1:{wakeupPort}/health");
+            healthResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+            using HttpResponseMessage wakeupResponse = await httpClient.PostAsync(
+                $"http://127.0.0.1:{wakeupPort}/wakeup",
+                new ByteArrayContent([]));
+            wakeupResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+        finally
+        {
+            await server.StopAsync(CancellationToken.None);
+        }
+    }
+
     sealed class FakeServerlessActivitiesClient : IServerlessActivitiesClient
     {
         public int TransientDeclarationFailures { get; init; }
@@ -328,11 +448,36 @@ public class ServerlessActivitiesTests
 
     sealed class FakeServerlessActivityWorkerSession : IServerlessActivityWorkerSession
     {
+        readonly object sync = new();
+
         public List<ServerlessActivityWorkerMessage> Messages { get; } = [];
+
+        public async Task WaitForMessageAsync(Func<ServerlessActivityWorkerMessage, bool> predicate)
+        {
+            using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(5));
+            while (!timeout.IsCancellationRequested)
+            {
+                lock (this.sync)
+                {
+                    if (this.Messages.Any(predicate))
+                    {
+                        return;
+                    }
+                }
+
+                await Task.Delay(TimeSpan.FromMilliseconds(10), timeout.Token);
+            }
+
+            throw new TimeoutException("Timed out waiting for serverless worker message.");
+        }
 
         public Task WriteMessageAsync(ServerlessActivityWorkerMessage message)
         {
-            this.Messages.Add(message.Clone());
+            lock (this.sync)
+            {
+                this.Messages.Add(message.Clone());
+            }
+
             return Task.CompletedTask;
         }
 
@@ -354,5 +499,12 @@ public class ServerlessActivitiesTests
         }
 
         public void Dispose() => Environment.SetEnvironmentVariable(this.name, this.originalValue);
+    }
+
+    static int GetFreeTcpPort()
+    {
+        using TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
+        return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 }

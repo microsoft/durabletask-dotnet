@@ -84,7 +84,23 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
             .PostConfigure<IOptionsMonitor<ServerlessOptions>>(
                 (filters, serverlessOptions) => IncludeOnlyServerlessActivities(filters, serverlessOptions.Get(builder.Name)));
 
+        builder.Services.AddSingleton<ServerlessActivityTracker>();
+        builder.Services.AddOptions<GrpcDurableTaskWorkerOptions>(builder.Name)
+            .Configure<ServerlessActivityTracker>((options, activityTracker) =>
+                options.ConfigureActivityNotification(phase =>
+                {
+                    if (phase == ActivityNotificationPhase.Started)
+                    {
+                        activityTracker.NotifyActivityStarted();
+                    }
+                    else if (phase == ActivityNotificationPhase.Completed)
+                    {
+                        activityTracker.NotifyActivityCompleted();
+                    }
+                }));
+
         builder.Services.AddSingleton<IHostedService>(sp => CreateServerlessActivityWorkerRegistrationHostedService(sp, builder.Name));
+        builder.Services.AddSingleton<IHostedService>(sp => CreateServerlessWakeupServer(sp, builder.Name));
         return builder;
     }
 
@@ -135,12 +151,24 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         ServerlessOptions options = services.GetRequiredService<IOptionsMonitor<ServerlessOptions>>().Get(builderName);
         ILoggerFactory loggerFactory = services.GetRequiredService<ILoggerFactory>();
         IHostApplicationLifetime? lifetime = services.GetService<IHostApplicationLifetime>();
+        ServerlessActivityTracker activityTracker = services.GetRequiredService<ServerlessActivityTracker>();
 
         return new ServerlessActivityWorkerRegistrationHostedService(
             CreateServerlessActivitiesClient(services, builderName),
             options,
             loggerFactory.CreateLogger<ServerlessActivityWorkerRegistrationHostedService>(),
-            lifetime);
+            lifetime,
+            activityTracker);
+    }
+
+    static ServerlessWakeupServer CreateServerlessWakeupServer(IServiceProvider services, string builderName)
+    {
+        ServerlessOptions options = services.GetRequiredService<IOptionsMonitor<ServerlessOptions>>().Get(builderName);
+        ILoggerFactory loggerFactory = services.GetRequiredService<ILoggerFactory>();
+
+        return new ServerlessWakeupServer(
+            options,
+            loggerFactory.CreateLogger<ServerlessWakeupServer>());
     }
 
     static ServerlessActivitiesClientAdapter CreateServerlessActivitiesClient(IServiceProvider services, string builderName)

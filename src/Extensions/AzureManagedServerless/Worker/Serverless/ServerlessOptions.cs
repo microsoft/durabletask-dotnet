@@ -115,6 +115,11 @@ public sealed class ServerlessOptions
     public TimeSpan HeartbeatInterval { get; set; } = TimeSpan.FromSeconds(2);
 
     /// <summary>
+    /// Gets or sets the private HTTP port used by ADC to wake or probe a serverless worker container.
+    /// </summary>
+    public int WakeupPort { get; set; } = 8080;
+
+    /// <summary>
     /// Gets or sets the worker mode for serverless activity execution. Set automatically from the runtime environment.
     /// </summary>
     internal ServerlessMode Mode { get; set; } = ServerlessMode.LocalExclude;

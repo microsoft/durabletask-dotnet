@@ -17,6 +17,7 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
     readonly ServerlessOptions options;
     readonly ILogger<ServerlessActivityWorkerRegistrationHostedService> logger;
     readonly IHostApplicationLifetime? lifetime;
+    readonly ServerlessActivityTracker? activityTracker;
     CancellationTokenSource? cts;
     IServerlessActivityWorkerSession? session;
     Task? pump;
@@ -28,16 +29,19 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
     /// <param name="options">The serverless options.</param>
     /// <param name="logger">The logger.</param>
     /// <param name="lifetime">The optional application lifetime used to stop the host when the registration stream fails.</param>
+    /// <param name="activityTracker">The optional activity tracker used to report live in-flight activity count.</param>
     public ServerlessActivityWorkerRegistrationHostedService(
         IServerlessActivitiesClient client,
         ServerlessOptions options,
         ILogger<ServerlessActivityWorkerRegistrationHostedService> logger,
-        IHostApplicationLifetime? lifetime = null)
+        IHostApplicationLifetime? lifetime = null,
+        ServerlessActivityTracker? activityTracker = null)
     {
         this.client = Check.NotNull(client);
         this.options = Check.NotNull(options);
         this.logger = Check.NotNull(logger);
         this.lifetime = lifetime;
+        this.activityTracker = activityTracker;
     }
 
     /// <inheritdoc/>
@@ -148,8 +152,9 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
             using PeriodicTimer timer = new(this.options.HeartbeatInterval);
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
+                int activeActivitiesCount = this.activityTracker?.InFlightCount ?? 0;
                 await registrationSession.WriteMessageAsync(
-                    ServerlessActivityConfiguration.BuildWorkerHeartbeat(activeActivitiesCount: 0)).ConfigureAwait(false);
+                    ServerlessActivityConfiguration.BuildWorkerHeartbeat(activeActivitiesCount)).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

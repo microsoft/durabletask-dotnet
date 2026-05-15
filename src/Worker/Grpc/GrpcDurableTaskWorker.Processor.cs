@@ -405,12 +405,23 @@ sealed partial class GrpcDurableTaskWorker
             }
             else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
             {
+                this.internalOptions.NotifyActivity?.Invoke(ActivityNotificationPhase.Started);
                 this.RunBackgroundTask(
                     workItem,
-                    () => this.OnRunActivityAsync(
-                        workItem.ActivityRequest,
-                        workItem.CompletionToken,
-                        cancellation),
+                    async () =>
+                    {
+                        try
+                        {
+                            await this.OnRunActivityAsync(
+                                workItem.ActivityRequest,
+                                workItem.CompletionToken,
+                                cancellation).ConfigureAwait(false);
+                        }
+                        finally
+                        {
+                            this.internalOptions.NotifyActivity?.Invoke(ActivityNotificationPhase.Completed);
+                        }
+                    },
                     cancellation);
             }
             else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)

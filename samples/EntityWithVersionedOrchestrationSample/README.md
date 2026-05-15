@@ -80,6 +80,34 @@ docker rm -f durabletask-emulator
 - **`ContinueAsNew(NewVersion = "...")` is the safe migration boundary** for eternal orchestrations. The history is fully reset, so there's no replay-determinism risk from changing logic. External state (entities, activities, sub-orchestrations completed before the boundary) persists.
 - **Entities themselves stay unversioned by design.** A single entity identity is the source of truth for some piece of state; versioning the identity would fork it.
 
+## What if I add v3 tomorrow? (Replay-determinism reference)
+
+Three scenarios are worth pulling apart, because the answer is different for each:
+
+### 1. Inside the v1→v2 migration itself
+
+`ContinueAsNew` **fully resets the history**. The post-`ContinueAsNew` v2 turn starts with an empty history; there's nothing for v2's code to "disagree with". Replay determinism applies *within* a single execution, and `ContinueAsNew` ends the current execution and starts a new one. So the migration itself doesn't break determinism — the v2 instance is a fresh execution that happens to share the same instance ID.
+
+### 2. You add v3 tomorrow as a new class — safe and additive
+
+Adding `[DurableTask("ProcessJobsWorkflow", Version = "3")]` as a brand-new class is non-breaking. The dispatch rule keys on `(name, version)`:
+
+- The v2 instance from the sample is tagged with version `"2"` on the wire. The worker still routes it to your unchanged `ProcessJobsWorkflowV2` class. v3 is invisible to it.
+- New `ScheduleNewProcessJobsWorkflowV3InstanceAsync(...)` calls start fresh v3 instances; they have no shared history with v2 instances.
+- A v2 instance can opt to migrate to v3 the same way v1 migrated to v2: `ContinueAsNew(NewVersion = "3")`. Same fresh-history guarantee.
+
+This is exactly the workflow per-task versioning is designed for: ship v3 alongside v2, drain or migrate v2 instances at your own pace.
+
+### 3. You modify the existing `ProcessJobsWorkflowV2` class in place — DON'T
+
+This is the only scenario that breaks determinism, and it isn't specific to `ContinueAsNew` or per-task versioning — it's the universal "don't change a shipped orchestrator's code while instances are mid-execution" rule.
+
+If a v2 instance has accumulated history (called the entity, awaited a timer, etc.) and you change `ProcessJobsWorkflowV2`'s code such that the next replay emits different actions than the history shows, you get a non-determinism failure. The mitigation is exactly what versioning enables: don't edit `V2`. Add `V3`. Migrate via `ContinueAsNew(NewVersion = "3")` at a deterministic boundary (which, by definition, is *between* turns, with a clean history reset).
+
+### The mental model
+
+The class you ship is your contract: `[DurableTask("X", Version = "v2")]` says "this class **is** the v2 implementation forever." When the logic needs to change, ship a new class with `Version = "v3"` and migrate at a `ContinueAsNew` boundary. Per-task versioning is what makes this *practical*, because you can hold multiple versions in one worker instead of spinning up a separate deployment.
+
 ## See also
 
 - [PerOrchestratorVersioningSample](../PerOrchestratorVersioningSample/README.md) — multi-version orchestration without entities; also includes a `MigratingWorkflow` example that uses `ContinueAsNew(NewVersion = "...")` without entities.

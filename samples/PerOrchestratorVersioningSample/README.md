@@ -69,4 +69,6 @@ Per-orchestrator versioning is useful when:
 
 For simpler deployment-based versioning, see the [WorkerVersioningSample](../WorkerVersioningSample/README.md).
 
+For a deeper walk-through of how `ContinueAsNew(NewVersion = "...")` interacts with replay determinism (what's safe to change, what isn't, and what happens when you ship v3 next week), see the ["What if I add v3 tomorrow?" section in the EntityWithVersionedOrchestrationSample README](../EntityWithVersionedOrchestrationSample/README.md#what-if-i-add-v3-tomorrow-replay-determinism-reference). Same answers apply to the `MigratingWorkflow` example in this sample.
+
 > **Note:** `[DurableTask(Version = "...")]` routing and worker-level `UseVersioning()` now compose. `UseVersioning()` filters which instance versions the worker accepts (via `MatchStrategy`), and the per-class registry dispatches each accepted work item to the implementation that exactly matches its `(name, version)`. Use them together if you need both deployment-level gating and same-process multi-version routing.

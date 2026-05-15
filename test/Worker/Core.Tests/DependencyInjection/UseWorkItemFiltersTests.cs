@@ -147,11 +147,12 @@ public class UseWorkItemFiltersTests
             provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
         DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
-        // Assert — unversioned-only registry produces a single-element [""] version list so the backend
-        // sends only unversioned work items the worker can dispatch (matches the explicit registry
-        // contents instead of streaming everything).
-        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.SequenceEqual(new[] { string.Empty }));
-        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.SequenceEqual(new[] { string.Empty }));
+        // Assert — unversioned-only registry produces an empty version list (filter wildcard) so the
+        // backend can deliver versioned work items that the factory resolves via the documented
+        // unversioned-fallback in DurableTaskFactory.TryCreateOrchestrator. Mixed and versioned-only
+        // names emit concrete version sets instead.
+        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.Count == 0);
+        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.Count == 0);
     }
 
     [Fact]
@@ -183,9 +184,11 @@ public class UseWorkItemFiltersTests
             provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
         DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
-        // Assert
-        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.SequenceEqual(new[] { string.Empty }));
-        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.SequenceEqual(new[] { string.Empty }));
+        // Assert — unversioned-only registry emits the filter wildcard regardless of MatchStrategy
+        // (so long as it's not Strict), so the backend can deliver versioned work items that the
+        // factory resolves via the documented unversioned-fallback path.
+        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.Count == 0);
+        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.Count == 0);
     }
 
     [Fact]

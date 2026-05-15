@@ -45,15 +45,19 @@ public class DurableTaskWorkerWorkItemFilters
                 : null;
 
         // Orchestration filters group registrations by logical name and emit the concrete distinct
-        // version set actually registered (treating null/unversioned as ""). Strict mode overrides this
-        // with the single configured worker version. We never emit a wildcard "match any version" set,
-        // because the factory's dispatch rule refuses unversioned-fallback once a name has any versioned
-        // registration — so the backend would otherwise stream work items the worker would then reject.
+        // version set actually registered (treating null/unversioned as ""). Strict mode overrides
+        // this with the single configured worker version. For unversioned-only names (no versioned
+        // registration exists for the name), we emit an empty version list — the filter wildcard —
+        // so the backend can deliver versioned work items that the factory will then resolve via
+        // the documented unversioned fallback in DurableTaskFactory.TryCreateOrchestrator. When a
+        // name has at least one versioned registration, the factory refuses unversioned-fallback,
+        // so emitting the concrete version set prevents the backend from streaming work items the
+        // worker would then reject after the fact.
         List<OrchestrationFilter> orchestrationFilters = registry.OrchestratorsByVersion
             .GroupBy(orchestration => orchestration.Key.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
-                IReadOnlyList<string> versions = strictWorkerVersions ?? GetRegistrationVersions(group.Select(entry => entry.Key.Version));
+                IReadOnlyList<string> versions = strictWorkerVersions ?? GetFilterVersions(group.Select(entry => entry.Key.Version));
 
                 return new OrchestrationFilter
                 {
@@ -67,7 +71,7 @@ public class DurableTaskWorkerWorkItemFilters
             .GroupBy(activity => activity.Key.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
-                IReadOnlyList<string> versions = strictWorkerVersions ?? GetRegistrationVersions(group.Select(entry => entry.Key.Version));
+                IReadOnlyList<string> versions = strictWorkerVersions ?? GetFilterVersions(group.Select(entry => entry.Key.Version));
 
                 return new ActivityFilter
                 {
@@ -88,18 +92,25 @@ public class DurableTaskWorkerWorkItemFilters
             }).ToList(),
         };
 
-        static IReadOnlyList<string> GetRegistrationVersions(IEnumerable<string?> versions)
+        static IReadOnlyList<string> GetFilterVersions(IEnumerable<string?> versions)
         {
-            // Distinct, deterministically ordered registered version strings (treating null as empty so
-            // an unversioned registration appears as "" in the filter list). We always emit the concrete
-            // set rather than collapsing to "[]" (match-all), because the factory's dispatch rule refuses
-            // unversioned-fallback once a name has any versioned registration — so a backend that streamed
-            // an unregistered version would be rejected after the fact.
-            return versions
+            // Normalize null to "" so an unversioned registration appears consistently.
+            string[] normalized = versions
                 .Select(version => version ?? string.Empty)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+
+            // Unversioned-only: emit the wildcard match-all (empty list) so the backend can deliver
+            // versioned work items that the factory will resolve via unversioned fallback. Without
+            // this, callers asking for a specific version would be filtered out at the backend even
+            // though the worker can handle them.
+            if (normalized.Length == 1 && normalized[0].Length == 0)
+            {
+                return [];
+            }
+
+            return normalized;
         }
     }
 

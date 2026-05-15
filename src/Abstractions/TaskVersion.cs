@@ -30,7 +30,7 @@ public readonly struct TaskVersion : IEquatable<TaskVersion>
     /// Thrown when <paramref name="version"/> is non-empty but contains only whitespace. Pass <c>null</c>,
     /// <see cref="string.Empty"/>, or use <see cref="Unversioned"/> to represent an unversioned task.
     /// </exception>
-    public TaskVersion(string version)
+    public TaskVersion(string? version)
     {
         // Normalize null/empty to string.Empty so default(TaskVersion), TaskVersion.Unversioned, and
         // new TaskVersion("") all compare and hash identically. The Version getter additionally coalesces
@@ -64,10 +64,11 @@ public readonly struct TaskVersion : IEquatable<TaskVersion>
     public static implicit operator string(TaskVersion value) => value.Version;
 
     /// <summary>
-    /// Implicitly converts a <see cref="string"/> into a <see cref="TaskVersion"/>.
+    /// Implicitly converts a <see cref="string"/> into a <see cref="TaskVersion"/>. A <c>null</c>
+    /// value produces <see cref="Unversioned"/>.
     /// </summary>
     /// <param name="value">The <see cref="string"/> to convert into a <see cref="TaskVersion"/>.</param>
-    public static implicit operator TaskVersion(string value) => new TaskVersion(value);
+    public static implicit operator TaskVersion(string? value) => new TaskVersion(value);
 
     /// <summary>
     /// Compares two <see cref="TaskVersion"/> structs for equality.

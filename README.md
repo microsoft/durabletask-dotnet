@@ -196,7 +196,7 @@ Durable Task Scheduler provides durable execution in Azure. Durable execution is
 
 This SDK can also be used with the Durable Task Scheduler directly, without any Durable Functions dependency. For getting started, you can find documentation and samples [here](https://learn.microsoft.com/en-us/azure/azure-functions/durable/what-is-durable-task).
 
-For runnable DTS emulator examples that demonstrate versioning, see the [WorkerVersioningSample](samples/WorkerVersioningSample/README.md) (deployment-based versioning), the [PerOrchestratorVersioningSample](samples/PerOrchestratorVersioningSample/README.md) (multi-version routing with `[DurableTask(Version = "...")]`), the [ActivityVersioningSample](samples/ActivityVersioningSample/README.md) (activity versioning with inherited defaults and explicit override support), and the [EntityWithVersionedOrchestrationSample](samples/EntityWithVersionedOrchestrationSample/README.md) (how versioned orchestrations interact with unversioned entities).
+For runnable DTS emulator examples that demonstrate versioning, see the [WorkerVersioningSample](samples/WorkerVersioningSample/README.md) (deployment-based versioning), the [PerOrchestratorVersioningSample](samples/PerOrchestratorVersioningSample/README.md) (multi-version routing with `[DurableTask(Version = "...")]`), and the [ActivityVersioningSample](samples/ActivityVersioningSample/README.md) (activity versioning with inherited defaults and explicit override support).
 
 ## Obtaining the Protobuf definitions
 

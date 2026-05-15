@@ -753,7 +753,7 @@ sealed partial class GrpcDurableTaskWorker
                     }
                     else
                     {
-                        string versionText = requestedVersion.Version ?? string.Empty;
+                        string versionText = requestedVersion.Version;
                         failureDetails = new P.TaskFailureDetails
                         {
                             ErrorType = "OrchestratorTaskNotFound",
@@ -916,7 +916,7 @@ sealed partial class GrpcDurableTaskWorker
                     }
                     else
                     {
-                        string versionText = requestedVersion.Version ?? string.Empty;
+                        string versionText = requestedVersion.Version;
                         failureDetails = new P.TaskFailureDetails
                         {
                             ErrorType = "ActivityTaskNotFound",

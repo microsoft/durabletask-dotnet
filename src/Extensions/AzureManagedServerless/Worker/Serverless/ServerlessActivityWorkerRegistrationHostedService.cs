@@ -11,7 +11,7 @@ namespace Microsoft.DurableTask.Worker.AzureManaged.Serverless;
 /// <summary>
 /// Hosted service that registers a running process as a serverless activity worker with DTS.
 /// </summary>
-sealed partial class ServerlessActivityWorkerRegistrationHostedService : IHostedService, IAsyncDisposable
+sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService, IAsyncDisposable
 {
     readonly IServerlessActivitiesClient client;
     readonly ServerlessOptions options;
@@ -58,7 +58,7 @@ sealed partial class ServerlessActivityWorkerRegistrationHostedService : IHosted
         string[] activityNames = ServerlessActivityConfiguration.ResolveActivityNames(this.options.ActivityNames);
         if (activityNames.Length == 0)
         {
-            Log.NoServerlessActivitiesDiscovered(this.logger, this.options.TaskHub);
+            Logs.NoServerlessActivitiesForWorkerRegistration(this.logger, this.options.TaskHub);
             this.Ready.TrySetResult(true);
             this.pump = Task.CompletedTask;
             return;
@@ -74,7 +74,7 @@ sealed partial class ServerlessActivityWorkerRegistrationHostedService : IHosted
         {
             await registrationSession.WriteMessageAsync(startMessage).ConfigureAwait(false);
             this.Ready.TrySetResult(true);
-            Log.ServerlessActivityWorkerRegistered(
+            Logs.ServerlessActivityWorkerRegistered(
                 this.logger,
                 startMessage.Start.TaskHub,
                 startMessage.Start.WorkerInstanceId,
@@ -85,7 +85,7 @@ sealed partial class ServerlessActivityWorkerRegistrationHostedService : IHosted
         catch (Exception ex)
         {
             this.Ready.TrySetException(ex);
-            Log.ServerlessActivityWorkerRegistrationFailed(this.logger, ex, this.options.TaskHub);
+            Logs.ServerlessActivityWorkerRegistrationFailed(this.logger, ex, this.options.TaskHub);
             throw;
         }
 
@@ -172,54 +172,7 @@ sealed partial class ServerlessActivityWorkerRegistrationHostedService : IHosted
 
     void HandleRegistrationStreamFailure(Exception exception)
     {
-        Log.ServerlessActivityWorkerRegistrationFailed(this.logger, exception, this.options.TaskHub);
+        Logs.ServerlessActivityWorkerRegistrationFailed(this.logger, exception, this.options.TaskHub);
         this.lifetime?.StopApplication();
-    }
-
-    static partial class Log
-    {
-        /// <summary>
-        /// Logs that no serverless activities were discovered for live worker registration.
-        /// </summary>
-        /// <param name="logger">The logger.</param>
-        /// <param name="hub">The task hub name.</param>
-        [LoggerMessage(
-            EventId = 1,
-            Level = LogLevel.Information,
-            Message = "No serverless activities discovered for worker hub={Hub}; skipping live registration")]
-        public static partial void NoServerlessActivitiesDiscovered(ILogger logger, string hub);
-
-        /// <summary>
-        /// Logs a successful serverless activity worker registration.
-        /// </summary>
-        /// <param name="logger">The logger.</param>
-        /// <param name="hub">The task hub name.</param>
-        /// <param name="worker">The worker instance ID.</param>
-        /// <param name="count">The activity count.</param>
-        /// <param name="substrate">The substrate kind.</param>
-        /// <param name="sandboxId">The sandbox ID.</param>
-        [LoggerMessage(
-            EventId = 2,
-            Level = LogLevel.Information,
-            Message = "Serverless activity worker registered hub={Hub} worker={Worker} count={Count} substrate={Substrate} sandboxId={SandboxId}")]
-        public static partial void ServerlessActivityWorkerRegistered(
-            ILogger logger,
-            string hub,
-            string worker,
-            int count,
-            Proto.SubstrateKind substrate,
-            string sandboxId);
-
-        /// <summary>
-        /// Logs a failed serverless activity worker registration stream.
-        /// </summary>
-        /// <param name="logger">The logger.</param>
-        /// <param name="exception">The registration exception.</param>
-        /// <param name="hub">The task hub name.</param>
-        [LoggerMessage(
-            EventId = 3,
-            Level = LogLevel.Error,
-            Message = "Serverless activity worker registration stream failed hub={Hub}")]
-        public static partial void ServerlessActivityWorkerRegistrationFailed(ILogger logger, Exception exception, string hub);
     }
 }

@@ -20,6 +20,7 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
     readonly ILogger<ServerlessActivityWorkerRegistrationHostedService> logger;
     readonly IHostApplicationLifetime? lifetime;
     readonly ServerlessActivityTracker? activityTracker;
+    readonly SemaphoreSlim streamSync = new(1, 1);
     CancellationTokenSource? cts;
     IServerlessActivityWorkerSession? session;
     Task? pump;
@@ -95,7 +96,7 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
         {
             try
             {
-                await localSession.CompleteAsync().ConfigureAwait(false);
+                await this.CompleteSessionAsync(localSession, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or RpcException)
             {
@@ -152,7 +153,7 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
                 this.SetCurrentSession(registrationSession);
 
                 Proto.ServerlessActivityWorkerMessage startMessage = ServerlessActivityConfiguration.BuildWorkerStart(this.options);
-                await registrationSession.WriteMessageAsync(startMessage).ConfigureAwait(false);
+                await this.WriteSessionMessageAsync(registrationSession, startMessage, cancellationToken).ConfigureAwait(false);
                 Logs.ServerlessActivityWorkerRegistered(
                     this.logger,
                     startMessage.Start.TaskHub,
@@ -162,7 +163,7 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
                     startMessage.Start.SandboxId);
 
                 retryDelay = this.GetInitialRetryDelay();
-                await this.PumpHeartbeatsAsync(registrationSession, cancellationToken).ConfigureAwait(false);
+                await this.RunRegistrationSessionAsync(registrationSession, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -191,6 +192,37 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
         }
     }
 
+    async Task RunRegistrationSessionAsync(
+        IServerlessActivityWorkerSession registrationSession,
+        CancellationToken cancellationToken)
+    {
+        using CancellationTokenSource heartbeatCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        Task heartbeatTask = this.PumpHeartbeatsAsync(registrationSession, heartbeatCts.Token);
+        Task<Proto.ServerlessActivityWorkerSessionResult> completionTask = registrationSession.WaitForCompletionAsync();
+        Task completedTask = await Task.WhenAny(heartbeatTask, completionTask).ConfigureAwait(false);
+
+        if (ReferenceEquals(completedTask, completionTask))
+        {
+            await heartbeatCts.CancelAsync().ConfigureAwait(false);
+            try
+            {
+                await heartbeatTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (heartbeatCts.IsCancellationRequested)
+            {
+            }
+            catch (Exception)
+            {
+                // The server response is authoritative once the response task wins the race.
+            }
+
+            await completionTask.ConfigureAwait(false);
+            return;
+        }
+
+        await heartbeatTask.ConfigureAwait(false);
+    }
+
     async Task PumpHeartbeatsAsync(
         IServerlessActivityWorkerSession registrationSession,
         CancellationToken cancellationToken)
@@ -199,8 +231,42 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
         while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
         {
             int activeActivitiesCount = this.activityTracker?.InFlightCount ?? 0;
-            await registrationSession.WriteMessageAsync(
-                ServerlessActivityConfiguration.BuildWorkerHeartbeat(activeActivitiesCount)).ConfigureAwait(false);
+            await this.WriteSessionMessageAsync(
+                registrationSession,
+                ServerlessActivityConfiguration.BuildWorkerHeartbeat(activeActivitiesCount),
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    async Task WriteSessionMessageAsync(
+        IServerlessActivityWorkerSession registrationSession,
+        Proto.ServerlessActivityWorkerMessage message,
+        CancellationToken cancellationToken)
+    {
+        await this.streamSync.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await registrationSession.WriteMessageAsync(message).ConfigureAwait(false);
+        }
+        finally
+        {
+            this.streamSync.Release();
+        }
+    }
+
+    async Task CompleteSessionAsync(
+        IServerlessActivityWorkerSession registrationSession,
+        CancellationToken cancellationToken)
+    {
+        await this.streamSync.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await registrationSession.CompleteAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            this.streamSync.Release();
         }
     }
 

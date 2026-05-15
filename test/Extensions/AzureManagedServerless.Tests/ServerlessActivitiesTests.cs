@@ -322,6 +322,86 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
+    public async Task ServerlessActivityWorkerRegistrationHostedService_ReopensSessionAfterTerminalServerFailure()
+    {
+        // Arrange
+        ServerlessOptions options = new()
+        {
+            Mode = ServerlessMode.ServerlessInclude,
+            TaskHub = TaskHub,
+            WorkerProfileId = "profile-a",
+            MaxConcurrentActivities = 3,
+            HeartbeatInterval = TimeSpan.FromDays(1),
+            WorkerRegistrationRetryInitialDelay = TimeSpan.FromMilliseconds(10),
+            WorkerRegistrationRetryMaxDelay = TimeSpan.FromMilliseconds(10),
+        };
+        options.ActivityNames.Add("RemoteHello");
+
+        FakeServerlessActivityWorkerSession failedSession = new();
+        FakeServerlessActivityWorkerSession recoveredSession = new();
+        FakeServerlessActivitiesClient client = new();
+        client.QueueSession(failedSession);
+        client.QueueSession(recoveredSession);
+
+        ServerlessActivityWorkerRegistrationHostedService service = new(
+            client,
+            options,
+            NullLogger<ServerlessActivityWorkerRegistrationHostedService>.Instance);
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+        await failedSession.WaitForMessageAsync(message => message.Start != null);
+        failedSession.FailCompletion(new RpcException(new Status(StatusCode.Unavailable, "terminal")));
+        await recoveredSession.WaitForMessageAsync(message => message.Start != null);
+        await service.StopAsync(CancellationToken.None);
+
+        // Assert
+        client.SessionTaskHubs.Should().Equal(TaskHub, TaskHub);
+        failedSession.Messages.Should().ContainSingle(message => message.Start != null);
+        recoveredSession.Messages.Should().ContainSingle(message => message.Start != null);
+    }
+
+    [Fact]
+    public async Task ServerlessActivityWorkerRegistrationHostedService_StopAsync_DoesNotCompleteStreamWhileWriteIsInFlight()
+    {
+        // Arrange
+        ServerlessOptions options = new()
+        {
+            Mode = ServerlessMode.ServerlessInclude,
+            TaskHub = TaskHub,
+            WorkerProfileId = "profile-a",
+            MaxConcurrentActivities = 3,
+            HeartbeatInterval = TimeSpan.FromMilliseconds(10),
+        };
+        options.ActivityNames.Add("RemoteHello");
+
+        FakeServerlessActivityWorkerSession session = new() { BlockWriteAttempt = 2 };
+        FakeServerlessActivitiesClient client = new();
+        client.QueueSession(session);
+
+        ServerlessActivityWorkerRegistrationHostedService service = new(
+            client,
+            options,
+            NullLogger<ServerlessActivityWorkerRegistrationHostedService>.Instance);
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+        await session.WaitForBlockedWriteAsync();
+        Task stopTask = service.StopAsync(CancellationToken.None);
+        Task completeAttempt = session.WaitForCompleteAsync();
+        Task completeBeforeWriteReleased = await Task.WhenAny(
+            completeAttempt,
+            Task.Delay(TimeSpan.FromMilliseconds(100)));
+        session.ReleaseBlockedWrite();
+        await stopTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Assert
+        completeBeforeWriteReleased.Should().NotBe(completeAttempt);
+        session.CompleteCalled.Should().BeTrue();
+        session.CompleteCalledWhileWriteActive.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task DeclareServerlessActivities_ConfiguresLocalWorkerExclusionFilter()
     {
         // Arrange
@@ -498,11 +578,38 @@ public class ServerlessActivitiesTests
     sealed class FakeServerlessActivityWorkerSession : IServerlessActivityWorkerSession
     {
         readonly object sync = new();
+        readonly TaskCompletionSource<ServerlessActivityWorkerSessionResult> completion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        readonly TaskCompletionSource blockedWriteStarted =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        readonly TaskCompletionSource releaseBlockedWrite =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
         int writeAttempts;
+        int activeWrites;
 
         public List<ServerlessActivityWorkerMessage> Messages { get; } = [];
 
         public int? ThrowOnWriteAttempt { get; init; }
+
+        public int? BlockWriteAttempt { get; init; }
+
+        public bool CompleteCalled { get; private set; }
+
+        public bool CompleteCalledWhileWriteActive { get; private set; }
+
+        public void FailCompletion(Exception exception) => this.completion.TrySetException(exception);
+
+        public Task WaitForBlockedWriteAsync() => this.blockedWriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        public Task WaitForCompleteAsync()
+        {
+            lock (this.sync)
+            {
+                return this.CompleteCalled ? Task.CompletedTask : this.completion.Task;
+            }
+        }
+
+        public void ReleaseBlockedWrite() => this.releaseBlockedWrite.TrySetResult();
 
         public async Task WaitForMessageAsync(Func<ServerlessActivityWorkerMessage, bool> predicate)
         {
@@ -525,23 +632,65 @@ public class ServerlessActivitiesTests
 
         public Task WriteMessageAsync(ServerlessActivityWorkerMessage message)
         {
+            int attempt;
+            bool blockWrite;
             lock (this.sync)
             {
-                this.writeAttempts++;
-                if (this.ThrowOnWriteAttempt == this.writeAttempts)
+                attempt = ++this.writeAttempts;
+                if (this.ThrowOnWriteAttempt == attempt)
                 {
                     throw new RpcException(new Status(StatusCode.Unavailable, "transient"));
                 }
 
-                this.Messages.Add(message.Clone());
+                this.activeWrites++;
+                blockWrite = this.BlockWriteAttempt == attempt;
+                if (blockWrite)
+                {
+                    this.blockedWriteStarted.TrySetResult();
+                }
             }
 
-            return Task.CompletedTask;
+            return this.WriteMessageCoreAsync(message, blockWrite);
         }
 
-        public Task CompleteAsync() => Task.CompletedTask;
+        public Task<ServerlessActivityWorkerSessionResult> WaitForCompletionAsync() => this.completion.Task;
+
+        public async Task CompleteAsync()
+        {
+            lock (this.sync)
+            {
+                this.CompleteCalled = true;
+                this.CompleteCalledWhileWriteActive = this.activeWrites > 0;
+            }
+
+            this.completion.TrySetResult(new ServerlessActivityWorkerSessionResult { Accepted = true });
+            await this.completion.Task.ConfigureAwait(false);
+        }
 
         public ValueTask DisposeAsync() => default;
+
+        async Task WriteMessageCoreAsync(ServerlessActivityWorkerMessage message, bool blockWrite)
+        {
+            try
+            {
+                if (blockWrite)
+                {
+                    await this.releaseBlockedWrite.Task.ConfigureAwait(false);
+                }
+
+                lock (this.sync)
+                {
+                    this.Messages.Add(message.Clone());
+                }
+            }
+            finally
+            {
+                lock (this.sync)
+                {
+                    this.activeWrites--;
+                }
+            }
+        }
     }
 
     sealed class EnvironmentVariableScope : IDisposable

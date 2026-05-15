@@ -45,9 +45,15 @@ interface IServerlessActivityWorkerSession : IAsyncDisposable
     Task WriteMessageAsync(Proto.ServerlessActivityWorkerMessage message);
 
     /// <summary>
-    /// Completes the request stream.
+    /// Waits for the server to complete the worker registration session.
     /// </summary>
-    /// <returns>A task that completes when the stream is completed.</returns>
+    /// <returns>The worker session result.</returns>
+    Task<Proto.ServerlessActivityWorkerSessionResult> WaitForCompletionAsync();
+
+    /// <summary>
+    /// Completes the request stream and waits for the server response.
+    /// </summary>
+    /// <returns>A task that completes when the server response is observed.</returns>
     Task CompleteAsync();
 }
 
@@ -111,7 +117,15 @@ sealed class ServerlessActivitiesClientAdapter : IServerlessActivitiesClient
             this.call.RequestStream.WriteAsync(message);
 
         /// <inheritdoc/>
-        public Task CompleteAsync() => this.call.RequestStream.CompleteAsync();
+        public async Task<Proto.ServerlessActivityWorkerSessionResult> WaitForCompletionAsync() =>
+            await this.call.ResponseAsync.ConfigureAwait(false);
+
+        /// <inheritdoc/>
+        public async Task CompleteAsync()
+        {
+            await this.call.RequestStream.CompleteAsync().ConfigureAwait(false);
+            await this.WaitForCompletionAsync().ConfigureAwait(false);
+        }
 
         /// <inheritdoc/>
         public ValueTask DisposeAsync()

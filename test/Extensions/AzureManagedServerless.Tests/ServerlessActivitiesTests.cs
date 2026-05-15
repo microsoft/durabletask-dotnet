@@ -198,6 +198,7 @@ public class ServerlessActivitiesTests
 
             // Act
             await service.StartAsync(CancellationToken.None);
+            await client.Session.WaitForMessageAsync(message => message.Start != null);
             await service.StopAsync(CancellationToken.None);
 
             // Assert
@@ -267,8 +268,7 @@ public class ServerlessActivitiesTests
             client,
             options,
             NullLogger<ServerlessActivityWorkerRegistrationHostedService>.Instance,
-            lifetime: null,
-            activityTracker);
+            activityTracker: activityTracker);
 
         // Act
         await service.StartAsync(CancellationToken.None);
@@ -280,6 +280,45 @@ public class ServerlessActivitiesTests
         // Assert
         client.Session.Messages.Should().Contain(message => message.Heartbeat != null && message.Heartbeat.ActiveActivitiesCount == 2);
         client.Session.Messages.Should().Contain(message => message.Heartbeat != null && message.Heartbeat.ActiveActivitiesCount == 1);
+    }
+
+    [Fact]
+    public async Task ServerlessActivityWorkerRegistrationHostedService_ReopensSessionAfterTransientStreamFailure()
+    {
+        // Arrange
+        ServerlessOptions options = new()
+        {
+            Mode = ServerlessMode.ServerlessInclude,
+            TaskHub = TaskHub,
+            WorkerProfileId = "profile-a",
+            MaxConcurrentActivities = 3,
+            HeartbeatInterval = TimeSpan.FromMilliseconds(10),
+            WorkerRegistrationRetryInitialDelay = TimeSpan.FromMilliseconds(10),
+            WorkerRegistrationRetryMaxDelay = TimeSpan.FromMilliseconds(10),
+        };
+        options.ActivityNames.Add("RemoteHello");
+
+        FakeServerlessActivityWorkerSession failedSession = new() { ThrowOnWriteAttempt = 2 };
+        FakeServerlessActivityWorkerSession recoveredSession = new();
+        FakeServerlessActivitiesClient client = new();
+        client.QueueSession(failedSession);
+        client.QueueSession(recoveredSession);
+
+        ServerlessActivityWorkerRegistrationHostedService service = new(
+            client,
+            options,
+            NullLogger<ServerlessActivityWorkerRegistrationHostedService>.Instance);
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+        await failedSession.WaitForMessageAsync(message => message.Start != null);
+        await recoveredSession.WaitForMessageAsync(message => message.Start != null);
+        await service.StopAsync(CancellationToken.None);
+
+        // Assert
+        client.SessionTaskHubs.Should().Equal(TaskHub, TaskHub);
+        failedSession.Messages.Should().ContainSingle(message => message.Start != null);
+        recoveredSession.Messages.Should().ContainSingle(message => message.Start != null);
     }
 
     [Fact]
@@ -411,6 +450,8 @@ public class ServerlessActivitiesTests
 
     sealed class FakeServerlessActivitiesClient : IServerlessActivitiesClient
     {
+        readonly Queue<FakeServerlessActivityWorkerSession> queuedSessions = new();
+
         public int TransientDeclarationFailures { get; init; }
 
         public int DeclarationAttempts { get; private set; }
@@ -421,7 +462,11 @@ public class ServerlessActivitiesTests
 
         public List<string> SessionTaskHubs { get; } = [];
 
+        public List<FakeServerlessActivityWorkerSession> Sessions { get; } = [];
+
         public FakeServerlessActivityWorkerSession Session { get; } = new();
+
+        public void QueueSession(FakeServerlessActivityWorkerSession session) => this.queuedSessions.Enqueue(session);
 
         public Task<ServerlessActivityDeclarationResult> DeclareServerlessActivitiesAsync(
             ServerlessActivityDeclaration declaration,
@@ -442,15 +487,22 @@ public class ServerlessActivitiesTests
         public IServerlessActivityWorkerSession OpenServerlessActivityWorkerSession(string taskHub, CancellationToken cancellationToken)
         {
             this.SessionTaskHubs.Add(taskHub);
-            return this.Session;
+            FakeServerlessActivityWorkerSession session = this.queuedSessions.Count > 0
+                ? this.queuedSessions.Dequeue()
+                : this.Session;
+            this.Sessions.Add(session);
+            return session;
         }
     }
 
     sealed class FakeServerlessActivityWorkerSession : IServerlessActivityWorkerSession
     {
         readonly object sync = new();
+        int writeAttempts;
 
         public List<ServerlessActivityWorkerMessage> Messages { get; } = [];
+
+        public int? ThrowOnWriteAttempt { get; init; }
 
         public async Task WaitForMessageAsync(Func<ServerlessActivityWorkerMessage, bool> predicate)
         {
@@ -475,6 +527,12 @@ public class ServerlessActivitiesTests
         {
             lock (this.sync)
             {
+                this.writeAttempts++;
+                if (this.ThrowOnWriteAttempt == this.writeAttempts)
+                {
+                    throw new RpcException(new Status(StatusCode.Unavailable, "transient"));
+                }
+
                 this.Messages.Add(message.Clone());
             }
 

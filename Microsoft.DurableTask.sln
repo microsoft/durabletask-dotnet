@@ -121,7 +121,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "AzureManaged", "AzureManage
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "AzureManaged", "AzureManaged", "{53193780-CD18-2643-6953-C26F59EAEDF5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerOrchestratorVersioningSample", "samples\PerOrchestratorVersioningSample\PerOrchestratorVersioningSample.csproj", "{1E30F09F-1ADA-4375-81CC-F0FBC74D5621}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EternalOrchestrationVersionMigrationSample", "samples\EternalOrchestrationVersionMigrationSample\EternalOrchestrationVersionMigrationSample.csproj", "{1E30F09F-1ADA-4375-81CC-F0FBC74D5621}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ActivityVersioningSample", "samples\ActivityVersioningSample\ActivityVersioningSample.csproj", "{3FBCFDBA-F547-4FD5-B8C6-0B645EF73E3A}"
 EndProject

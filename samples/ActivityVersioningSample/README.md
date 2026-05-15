@@ -13,7 +13,7 @@ This sample demonstrates activity versioning with `[DurableTask(Version = "...")
 
 ## Prerequisites
 
-- .NET 8.0 or 10.0 SDK
+- .NET 10.0 SDK
 - [Docker](https://www.docker.com/get-started)
 
 ## Running the Sample
@@ -21,13 +21,21 @@ This sample demonstrates activity versioning with `[DurableTask(Version = "...")
 ### 1. Start the DTS emulator
 
 ```bash
-docker run --name durabletask-emulator -d -p 8080:8080 -e ASPNETCORE_URLS=http://+:8080 mcr.microsoft.com/dts/dts-emulator:latest
+docker run --name durabletask-emulator -d -p 8080:8080 -p 8082:8082 -e ASPNETCORE_URLS=http://+:8080 mcr.microsoft.com/dts/dts-emulator:latest
 ```
+
+The emulator exposes the gRPC sidecar on port 8080 and the local dashboard on port 8082. After running the sample below, you can open the dashboard at <http://localhost:8082> to inspect the orchestrations (and their versions) interactively.
 
 ### 2. Set the connection string
 
 ```bash
 export DURABLE_TASK_SCHEDULER_CONNECTION_STRING="Endpoint=http://localhost:8080;TaskHub=default;Authentication=None"
+```
+
+PowerShell:
+
+```powershell
+$env:DURABLE_TASK_SCHEDULER_CONNECTION_STRING = "Endpoint=http://localhost:8080;TaskHub=default;Authentication=None"
 ```
 
 ### 3. Run the sample
@@ -68,4 +76,4 @@ Activity versioning is useful when:
 - You want multiple versions of the same logical activity active simultaneously in one worker
 - You want activity routing to follow the orchestration instance version by default, with explicit opt-in overrides when needed
 
-For deployment-based versioning, see the [WorkerVersioningSample](../WorkerVersioningSample/README.md). For the orchestration-focused version of this pattern, see the [PerOrchestratorVersioningSample](../PerOrchestratorVersioningSample/README.md).
+For deployment-based versioning, see the [WorkerVersioningSample](../WorkerVersioningSample/README.md). For the orchestration-focused version of this pattern, see the [EternalOrchestrationVersionMigrationSample](../EternalOrchestrationVersionMigrationSample/README.md).

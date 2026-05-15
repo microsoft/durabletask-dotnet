@@ -6,7 +6,7 @@ This sample shows the **one** scenario where per-orchestrator `[DurableTask(Vers
 
 | Sample | What it shows |
 |---|---|
-| `PerOrchestratorVersioningSample` | Two **parallel** instances at different versions, each running independently. |
+| `EternalOrchestrationVersionMigrationSample` | A single long-running instance migrating v1 → v2 via `ContinueAsNew(NewVersion = "2")`, plus a multi-version dispatch demo (two parallel instances at different versions). No entity involved. |
 | `ActivityVersioningSample` | A versioned orchestration calling versioned activities. |
 | `WorkerVersioningSample` | Worker-level deployment versioning via `UseVersioning()`. |
 | **This sample** | **One** orchestration instance whose logic version changes mid-life while external state held by an entity is preserved. |
@@ -76,56 +76,17 @@ docker rm -f durabletask-emulator
 
 ## Key takeaways
 
-- **Entities are the right place to anchor state you can't lose during a version migration.** Local orchestration variables don't survive `ContinueAsNew`; entity state does.
-- **`ContinueAsNew(NewVersion = "...")` is the safe migration boundary** for eternal orchestrations. The history is fully reset, so there's no replay-determinism risk from changing logic. External state (entities, activities, sub-orchestrations completed before the boundary) persists.
-- **Entities themselves stay unversioned by design.** A single entity identity is the source of truth for some piece of state; versioning the identity would fork it.
+- **`ContinueAsNew(NewVersion = "...")` is the migration boundary.** History is fully reset on the new instance, so the v2 logic isn't replayed against v1 history — there's no replay-determinism risk from changing the implementation.
+- **State that has to survive `ContinueAsNew` must live outside the orchestration.** For state the orchestration alone owns, the simplest and most efficient option is to pass it as the new input via `context.ContinueAsNew(newInput)` (or `context.ContinueAsNew(new ContinueAsNewOptions { NewInput = ..., NewVersion = "2" })` when also bumping the version). Use a **durable entity** when the same state is read or written by multiple orchestrations / clients and a single source of truth is required. This sample uses an entity because `JobLog` is intentionally shared.
+- **Entities themselves stay unversioned.** A single entity identity is the source of truth for some piece of state; versioning the identity would fork it.
 
-## Lifecycle of V1: how the sample's V1 came to be
+## How to update V1 to migrate its in-flight instances
 
-Reading the sample, `ProcessJobsWorkflowV1` looks like it already knows about V2 (it calls `ContinueAsNew(NewVersion = "2")`). That's not how V1 starts life. The realistic timeline:
+The sample's `ProcessJobsWorkflowV1` already calls `ContinueAsNew(new ContinueAsNewOptions { NewVersion = "2", NewInput = totalJobs })`. In a real deployment, the original V1 was an eternal loop that ended with a plain `context.ContinueAsNew(totalJobs)` (no version) — it had no knowledge that V2 would ever exist. When V2 is ready, the migration is enabled by **a minimal in-place change** to V1: replace the existing `ContinueAsNew` argument with `new ContinueAsNewOptions { NewVersion = "2", NewInput = totalJobs }`. Everything before that call stays unchanged.
 
-### Day 1 — original V1 is shipped
+That minimal change is replay-safe because `ContinueAsNew` is always the last action of a turn. The arguments to `ContinueAsNew` are not compared against prior history — they're inputs to the *next* execution, which starts with a fresh history. As long as every action emitted earlier in the turn is unchanged, in-flight V1 instances replay correctly and then restart as V2 at their next turn boundary.
 
-V1 is an eternal loop. Its last line is `ContinueAsNew()` (no version arg). It has no knowledge that V2 will ever exist.
-
-```csharp
-// What the *original* V1 looked like before V2 existed:
-[DurableTask("ProcessJobsWorkflow", Version = "1")]
-public sealed class ProcessJobsWorkflowV1 : TaskOrchestrator<int, string>
-{
-    public override Task<string> RunAsync(TaskOrchestrationContext context, int totalJobs)
-    {
-        EntityInstanceId logId = new(nameof(JobLog), "production-job-log");
-        // ... process work, record on JobLog ...
-        context.ContinueAsNew(totalJobs);  // loop on V1
-        return Task.FromResult(string.Empty);
-    }
-}
-```
-
-### Day 30 — bug discovered, V2 written
-
-You add `ProcessJobsWorkflowV2` as a brand-new class with the fix. Both classes now coexist in the registry.
-
-### Day 30 — V1 gets a surgical hotfix to migrate its in-flight instances
-
-You change one line in V1: replace `context.ContinueAsNew(totalJobs)` with `context.ContinueAsNew(new ContinueAsNewOptions { NewVersion = "2", NewInput = totalJobs })`. **That's the only change.** Everything before that line is unchanged. This is the V1 the sample shows.
-
-### Day 31+ — in-flight V1 instances migrate themselves at their next turn boundary
-
-Each turn ends with `ContinueAsNew(NewVersion = "2")`, restarting the same instance ID as a V2 instance. Entity state (held in `JobLog`) survives the boundary because entities are independent of orchestration lifecycle.
-
-### Day 60 — V1 class can be removed
-
-Once no V1 instances remain (you can verify via the management API or by querying the version field), delete the V1 class. From this point on, only V2 (and any future V3) live in the registry.
-
-### Is the Day-30 surgical hotfix replay-safe?
-
-Yes. `ContinueAsNew` is the **last action** of a turn. Adding `NewVersion = "2"` to an existing `ContinueAsNew(...)` call doesn't add a new action or change the order of any prior actions in the turn — it only changes the post-turn restart parameters the runtime uses for the next execution.
-
-As long as everything in V1 before the `ContinueAsNew` line is unchanged, replay of any in-flight V1 instance succeeds: history records the prior actions, the redeployed code emits the same prior actions, and the final `ContinueAsNew` is treated as a complete-the-turn action whose arguments inform how the next execution starts (not what gets compared against history).
-
-The single-line edit rule matters: if your hotfix also tweaks the loop body (an extra entity call, a removed timer, reordered operations), that *is* a non-deterministic change for instances mid-turn at deploy time. Keep the hotfix surgical — only the `ContinueAsNew` arguments change.
+Once no V1 instances remain, the V1 class can be removed from the registry.
 
 ## What if I add v3 tomorrow? (Replay-determinism reference)
 
@@ -157,6 +118,6 @@ The class you ship is your contract: `[DurableTask("X", Version = "v2")]` says "
 
 ## See also
 
-- [PerOrchestratorVersioningSample](../PerOrchestratorVersioningSample/README.md) — multi-version orchestration without entities; also includes a `MigratingWorkflow` example that uses `ContinueAsNew(NewVersion = "...")` without entities.
+- [EternalOrchestrationVersionMigrationSample](../EternalOrchestrationVersionMigrationSample/README.md) — multi-version orchestration without entities; also includes a `MigratingWorkflow` example that uses `ContinueAsNew(NewVersion = "...")` without entities.
 - [ActivityVersioningSample](../ActivityVersioningSample/README.md) — versioning across activities, including explicit override of the inherited orchestration version.
 - [WorkerVersioningSample](../WorkerVersioningSample/README.md) — worker-level (deployment) versioning via `UseVersioning()`.

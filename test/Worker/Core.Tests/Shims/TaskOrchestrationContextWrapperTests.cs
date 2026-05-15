@@ -291,11 +291,12 @@ public class TaskOrchestrationContextWrapperTests
     }
 
     [Fact]
-    public async Task CallSubOrchestratorAsync_PlainOptions_InheritsParentInstanceVersion()
+    public async Task CallSubOrchestratorAsync_PlainOptions_UsesWorkerDefaultVersion()
     {
-        // Arrange — sub-orchestration scheduled by a v2 parent without explicit options should inherit v2,
-        // matching the activity-dispatch rule. Worker-level Versioning.DefaultVersion does not apply to
-        // sub-orchestrations spawned from inside an executing parent.
+        // Arrange — a sub-orchestration scheduled without an explicit Version uses the worker's
+        // configured Versioning.DefaultVersion, mirroring the behavior the client gets when starting
+        // a top-level orchestration. The parent's instance version is intentionally NOT inherited —
+        // sub-orchestrations are new orchestration instances and follow the worker-default rule.
         TrackingOrchestrationContext innerContext = new("v2");
         OrchestrationInvocationContext invocationContext = new(
             "Test",
@@ -312,21 +313,19 @@ public class TaskOrchestrationContextWrapperTests
 
         // Assert
         innerContext.LastSubOrchestrationName.Should().Be("ChildOrchestration");
-        innerContext.LastSubOrchestrationVersion.Should().Be("v2");
+        innerContext.LastSubOrchestrationVersion.Should().Be("9.9");
     }
 
     [Fact]
-    public async Task CallSubOrchestratorAsync_UnversionedParent_StampsEmptyVersion()
+    public async Task CallSubOrchestratorAsync_NoWorkerDefaultVersion_StampsEmptyVersion()
     {
-        // Arrange — when the parent orchestration is unversioned, the sub-orchestration is also
-        // unversioned. Worker-level Versioning.DefaultVersion is intentionally ignored here.
-        TrackingOrchestrationContext innerContext = new();
+        // Arrange — without a worker Versioning.DefaultVersion and without an explicit option, the
+        // sub-orchestration is scheduled unversioned. The parent's own instance version is not
+        // inherited; sub-orchestrations are new instances and follow the worker-default rule.
+        TrackingOrchestrationContext innerContext = new("v2");
         OrchestrationInvocationContext invocationContext = new(
             "Test",
-            new DurableTaskWorkerOptions
-            {
-                Versioning = new DurableTaskWorkerOptions.VersioningOptions { DefaultVersion = "9.9" },
-            },
+            new DurableTaskWorkerOptions(),
             NullLoggerFactory.Instance,
             null);
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
@@ -340,11 +339,18 @@ public class TaskOrchestrationContextWrapperTests
     }
 
     [Fact]
-    public async Task CallSubOrchestratorAsync_ExplicitVersion_OverridesInheritedParentVersion()
+    public async Task CallSubOrchestratorAsync_ExplicitVersion_OverridesWorkerDefaultVersion()
     {
-        // Arrange — explicit SubOrchestrationOptions.Version wins over the inherited parent version.
+        // Arrange — explicit SubOrchestrationOptions.Version wins over the worker's DefaultVersion.
         TrackingOrchestrationContext innerContext = new("v2");
-        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        OrchestrationInvocationContext invocationContext = new(
+            "Test",
+            new DurableTaskWorkerOptions
+            {
+                Versioning = new DurableTaskWorkerOptions.VersioningOptions { DefaultVersion = "9.9" },
+            },
+            NullLoggerFactory.Instance,
+            null);
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
 
         // Act
@@ -359,12 +365,19 @@ public class TaskOrchestrationContextWrapperTests
     }
 
     [Fact]
-    public async Task CallSubOrchestratorAsync_ExplicitUnversionedOption_BypassesInheritedParentVersion()
+    public async Task CallSubOrchestratorAsync_ExplicitUnversionedOption_OverridesWorkerDefaultVersion()
     {
-        // Arrange — explicit TaskVersion.Unversioned on a v2 parent must produce an unversioned
-        // sub-orchestration call, matching the activity-side explicit-unversioned semantics.
+        // Arrange — explicit TaskVersion.Unversioned wins over the worker's DefaultVersion, producing
+        // an unversioned sub-orchestration call.
         TrackingOrchestrationContext innerContext = new("v2");
-        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        OrchestrationInvocationContext invocationContext = new(
+            "Test",
+            new DurableTaskWorkerOptions
+            {
+                Versioning = new DurableTaskWorkerOptions.VersioningOptions { DefaultVersion = "9.9" },
+            },
+            NullLoggerFactory.Instance,
+            null);
         TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
 
         // Act

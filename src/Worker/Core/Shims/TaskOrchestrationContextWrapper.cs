@@ -222,12 +222,14 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             => options is SubOrchestrationOptions derived ? derived.InstanceId : null;
         string instanceId = GetInstanceId(options) ?? this.NewGuid().ToString("N");
 
-        // Mirror the activity-dispatch rule: a sub-orchestration scheduled without an explicit Version
-        // inherits the version of the currently executing parent instance. This keeps a v2 parent's call
-        // tree on v2 by default and removes the previous asymmetry where activities inherited from the
-        // parent while sub-orchestrations fell through to Versioning.DefaultVersion (which is meant for
-        // newly started top-level instances, not for children spawned mid-flight).
-        string version = options?.Version is { } v ? v.Version : this.innerContext.Version;
+        // Sub-orchestrations are new orchestration instances, so an unspecified Version falls back
+        // to the worker's configured DefaultVersion — the same fallback the client uses when
+        // scheduling a top-level orchestration. This preserves the pre-versioning behavior: workers
+        // with `UseVersioning(DefaultVersion = "...")` start their sub-orchestrations at that version
+        // unless the caller passes an explicit Version on `SubOrchestrationOptions`. Sub-orch
+        // version is independent of the parent's instance version, in contrast with activities
+        // (which always run under the parent's version because they execute in the parent's history).
+        string version = options?.Version is { } v ? v.Version : this.GetDefaultVersion();
         Check.NotEntity(this.invocationContext.Options.EnableEntitySupport, instanceId);
 
         // if this orchestration uses entities, first validate that the suborchestration call is allowed in the current context
@@ -588,4 +590,20 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         }
     }
 
+    string GetDefaultVersion()
+    {
+        // The worker's configured DefaultVersion takes precedence; falls back to a per-properties
+        // override (used by integration tests) and finally to the empty/unversioned string.
+        if (this.invocationContext.Options.Versioning?.DefaultVersion is { } v)
+        {
+            return v;
+        }
+
+        if (this.Properties.TryGetValue("defaultVersion", out object? propVersion) && propVersion is string v2)
+        {
+            return v2;
+        }
+
+        return string.Empty;
+    }
 }

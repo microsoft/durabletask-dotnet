@@ -7,8 +7,10 @@
 // entity state it has been writing to survives that transition.
 //
 // Why this is different from the other versioning samples:
-//   - PerOrchestratorVersioningSample shows two parallel instances at different versions.
-//   - This sample shows ONE instance whose logic version changes while preserving external state.
+//   - EternalOrchestrationVersionMigrationSample shows the basic migration story (and a multi-version
+//     dispatch demo) without entities.
+//   - This sample shows ONE instance whose logic version changes while preserving external state
+//     held by an entity that is shared across orchestrations.
 //
 // Scenario:
 //   - JobLog is an unversioned [DurableTask] entity that tracks the count of processed jobs.

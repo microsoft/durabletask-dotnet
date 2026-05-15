@@ -21,53 +21,98 @@ namespace Microsoft.DurableTask.Worker.AzureManaged;
 public static class DurableTaskSchedulerServerlessWorkerExtensions
 {
     /// <summary>
-    /// Configures serverless activity declaration, local exclusion, and serverless worker registration.
+    /// Declares serverless activities with DTS, excludes them from local execution, and propagates the
+    /// activity list to sandbox workers via the <c>DTS_SERVERLESS_ACTIVITIES</c> environment variable.
+    /// Call this on the local coordinator worker — not on the sandbox worker binary.
     /// </summary>
     /// <param name="builder">The Durable Task worker builder to configure.</param>
-    /// <param name="configure">Optional callback to configure serverless activity behavior.</param>
+    /// <param name="configure">Callback to configure serverless activity behavior.</param>
     /// <returns>The original builder, for call chaining.</returns>
-    public static IDurableTaskWorkerBuilder UseServerlessActivities(
+    public static IDurableTaskWorkerBuilder DeclareServerlessActivities(
         this IDurableTaskWorkerBuilder builder,
-        Action<ServerlessOptions>? configure = null)
+        Action<ServerlessOptions> configure)
+    {
+        Check.NotNull(builder);
+        Check.NotNull(configure);
+
+        builder.Services.AddOptions<ServerlessOptions>(builder.Name)
+            .Configure(configure)
+            .PostConfigure<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>((options, schedulerOptions) =>
+                ApplyTaskHubDefault(options, schedulerOptions.Get(builder.Name).TaskHubName));
+
+        builder.Services.AddOptions<DurableTaskWorkerWorkItemFilters>(builder.Name)
+            .PostConfigure<IOptionsMonitor<ServerlessOptions>>(
+                (filters, serverlessOptions) => ExcludeServerlessActivitiesFromLocalExecution(filters, serverlessOptions.Get(builder.Name)));
+
+        builder.Services.AddSingleton<IHostedService>(sp => CreateServerlessActivityDeclarationHostedService(sp, builder.Name));
+        return builder;
+    }
+
+    /// <summary>
+    /// Configures this worker as a serverless activity worker that connects to DTS to receive and execute
+    /// serverless activities. Use this on a dedicated worker binary that runs inside serverless infrastructure.
+    /// All configuration is read from environment variables injected by the backend and coordinator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method is for separate worker binaries only. The coordinator uses <see cref="DeclareServerlessActivities"/>
+    /// to declare and provision the serverless activity configuration.
+    /// </para>
+    /// <para>
+    /// Required environment variables (injected automatically by the backend and coordinator):
+    /// <list type="bullet">
+    /// <item><c>DTS_SUBSTRATE</c> — identifies the sandbox substrate (injected by backend)</item>
+    /// <item><c>DTS_SERVERLESS_ACTIVITIES</c> — comma-separated activity names to execute (injected by coordinator)</item>
+    /// <item><c>DTS_TASK_HUB</c> — task hub name (injected by coordinator)</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    /// <param name="builder">The Durable Task worker builder to configure.</param>
+    /// <returns>The original builder, for call chaining.</returns>
+    public static IDurableTaskWorkerBuilder UseServerlessWorker(this IDurableTaskWorkerBuilder builder)
     {
         Check.NotNull(builder);
 
         builder.Services.AddOptions<ServerlessOptions>(builder.Name)
-            .Configure(configure ?? (_ => { }))
             .PostConfigure<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>((options, schedulerOptions) =>
             {
                 ApplyTaskHubDefault(options, schedulerOptions.Get(builder.Name).TaskHubName);
-                ApplyServerlessEnvironmentOverrides(options);
+                ApplyWorkerEnvironmentOverrides(options);
             });
 
         builder.Services.AddOptions<DurableTaskWorkerWorkItemFilters>(builder.Name)
             .PostConfigure<IOptionsMonitor<ServerlessOptions>>(
-                (filters, serverlessOptions) =>
-                {
-                    ServerlessOptions options = serverlessOptions.Get(builder.Name);
-                    string[] activityNames = ServerlessActivityConfiguration.ResolveActivityNames(options.ActivityNames);
-                    if (activityNames.Length == 0)
-                    {
-                        return;
-                    }
+                (filters, serverlessOptions) => IncludeOnlyServerlessActivities(filters, serverlessOptions.Get(builder.Name)));
 
-                    if (options.Mode == ServerlessMode.ServerlessInclude)
-                    {
-                        filters.Orchestrations = [];
-                        filters.Activities = activityNames
-                            .Select(static name => new DurableTaskWorkerWorkItemFilters.ActivityFilter { Name = name })
-                            .ToArray();
-                        filters.ExcludedActivities = [];
-                        filters.Entities = [];
-                        return;
-                    }
-
-                    filters.ExcludedActivities = MergeActivityFilters(filters.ExcludedActivities, activityNames);
-                });
-
-        builder.Services.AddSingleton<IHostedService>(sp => CreateServerlessActivityDeclarationHostedService(sp, builder.Name));
         builder.Services.AddSingleton<IHostedService>(sp => CreateServerlessActivityWorkerRegistrationHostedService(sp, builder.Name));
         return builder;
+    }
+
+    static void ExcludeServerlessActivitiesFromLocalExecution(DurableTaskWorkerWorkItemFilters filters, ServerlessOptions options)
+    {
+        string[] activityNames = ServerlessActivityConfiguration.ResolveActivityNames(options.ActivityNames);
+        if (activityNames.Length == 0)
+        {
+            return;
+        }
+
+        filters.ExcludedActivities = MergeActivityFilters(filters.ExcludedActivities, activityNames);
+    }
+
+    static void IncludeOnlyServerlessActivities(DurableTaskWorkerWorkItemFilters filters, ServerlessOptions options)
+    {
+        string[] activityNames = ServerlessActivityConfiguration.ResolveActivityNames(options.ActivityNames);
+        if (activityNames.Length == 0)
+        {
+            return;
+        }
+
+        filters.Orchestrations = [];
+        filters.Activities = activityNames
+            .Select(static name => new DurableTaskWorkerWorkItemFilters.ActivityFilter { Name = name })
+            .ToArray();
+        filters.ExcludedActivities = [];
+        filters.Entities = [];
     }
 
     static ServerlessActivityDeclarationHostedService CreateServerlessActivityDeclarationHostedService(
@@ -122,11 +167,10 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         }
     }
 
-    static void ApplyServerlessEnvironmentOverrides(ServerlessOptions options)
+    static void ApplyWorkerEnvironmentOverrides(ServerlessOptions options)
     {
         // Auto-detect worker mode from DTS_SUBSTRATE, which the backend injects when
-        // launching a sandbox. This removes the need for callers to manually set Mode
-        // or inject DTS_SERVERLESS_MODE into the sandbox environment.
+        // launching a sandbox. This is the authoritative signal that this process is a sandbox worker.
         string? substrate = Environment.GetEnvironmentVariable("DTS_SUBSTRATE");
         if (string.Equals(substrate, "Sandbox", StringComparison.OrdinalIgnoreCase)
             || string.Equals(substrate, "AcaSessionPool", StringComparison.OrdinalIgnoreCase))
@@ -134,26 +178,9 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
             options.Mode = ServerlessMode.ServerlessInclude;
         }
 
+        // DTS_SERVERLESS_ACTIVITIES is injected by the coordinator into the sandbox environment.
         ApplyActivityNameEnvironmentOverride(options.ActivityNames);
         ApplyWorkerProfileEnvironmentOverride(profile => options.WorkerProfileId = profile);
-
-        string? image = Environment.GetEnvironmentVariable("DTS_SERVERLESS_ACTIVITY_IMAGE");
-        if (!string.IsNullOrWhiteSpace(image))
-        {
-            options.ContainerImage = image;
-        }
-
-        string? cpu = Environment.GetEnvironmentVariable("DTS_SERVERLESS_CPU");
-        if (!string.IsNullOrWhiteSpace(cpu))
-        {
-            options.Cpu = cpu.Trim();
-        }
-
-        string? memory = Environment.GetEnvironmentVariable("DTS_SERVERLESS_MEMORY");
-        if (!string.IsNullOrWhiteSpace(memory))
-        {
-            options.Memory = memory.Trim();
-        }
 
         if (int.TryParse(Environment.GetEnvironmentVariable("DTS_SERVERLESS_MAX_ACTIVITIES"), out int maxActivities) && maxActivities > 0)
         {

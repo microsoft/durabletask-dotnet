@@ -6,7 +6,7 @@ namespace Microsoft.DurableTask.Worker.AzureManaged.Serverless;
 /// <summary>
 /// Defines how a worker participates in serverless activity execution.
 /// </summary>
-public enum ServerlessMode
+internal enum ServerlessMode
 {
     /// <summary>
     /// The local worker declares serverless activities and excludes them from local execution.
@@ -30,9 +30,9 @@ public sealed class ServerlessOptions
     internal const string DefaultWorkerProfileId = "default";
 
     /// <summary>
-    /// Gets or sets the worker mode for serverless activity execution.
+    /// Gets the worker mode for serverless activity execution. Set automatically from the runtime environment.
     /// </summary>
-    public ServerlessMode Mode { get; set; } = ServerlessMode.LocalExclude;
+    internal ServerlessMode Mode { get; set; } = ServerlessMode.LocalExclude;
 
     /// <summary>
     /// Gets the serverless activity names to declare or execute.

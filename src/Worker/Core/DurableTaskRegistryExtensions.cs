@@ -16,6 +16,6 @@ static class DurableTaskRegistryExtensions
     public static IDurableTaskFactory BuildFactory(this DurableTaskRegistry registry)
     {
         Check.NotNull(registry);
-        return new DurableTaskFactory(registry.Activities, registry.Orchestrators, registry.Entities);
+        return new DurableTaskFactory(registry.ActivitiesByVersion, registry.OrchestratorsByVersion, registry.Entities);
     }
 }

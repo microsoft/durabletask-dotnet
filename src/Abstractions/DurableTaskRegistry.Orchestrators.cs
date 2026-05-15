@@ -56,14 +56,14 @@ public partial class DurableTaskRegistry
         Check.NotNull(factory);
 
         TaskVersionKey key = new(name, version);
-        if (this.Orchestrators.ContainsKey(key))
+        if (this.OrchestratorsByVersion.ContainsKey(key))
         {
             throw new ArgumentException(
                 $"An {nameof(ITaskOrchestrator)} named '{name}' with version '{version.Version ?? string.Empty}' is already added.",
                 nameof(name));
         }
 
-        this.Orchestrators.Add(key, _ => factory());
+        this.OrchestratorsByVersion.Add(key, _ => factory());
         return this;
     }
 

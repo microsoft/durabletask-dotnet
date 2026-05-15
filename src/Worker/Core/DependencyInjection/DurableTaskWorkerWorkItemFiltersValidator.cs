@@ -50,10 +50,10 @@ sealed class DurableTaskWorkerWorkItemFiltersValidator : IValidateOptions<Durabl
         DurableTaskRegistry registry = this.registryMonitor.Get(name);
 
         HashSet<string> registeredOrchestratorNames = new(
-            registry.Orchestrators.Keys.Select(k => k.Name),
+            registry.OrchestratorsByVersion.Keys.Select(k => k.Name),
             StringComparer.OrdinalIgnoreCase);
         HashSet<string> registeredActivityNames = new(
-            registry.Activities.Keys.Select(k => k.Name),
+            registry.ActivitiesByVersion.Keys.Select(k => k.Name),
             StringComparer.OrdinalIgnoreCase);
 
         List<string> unknownOrchestrations = FindUnknown(

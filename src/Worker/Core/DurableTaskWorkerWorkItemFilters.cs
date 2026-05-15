@@ -49,7 +49,7 @@ public class DurableTaskWorkerWorkItemFilters
         // with the single configured worker version. We never emit a wildcard "match any version" set,
         // because the factory's dispatch rule refuses unversioned-fallback once a name has any versioned
         // registration — so the backend would otherwise stream work items the worker would then reject.
-        List<OrchestrationFilter> orchestrationFilters = registry.Orchestrators
+        List<OrchestrationFilter> orchestrationFilters = registry.OrchestratorsByVersion
             .GroupBy(orchestration => orchestration.Key.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
@@ -63,7 +63,7 @@ public class DurableTaskWorkerWorkItemFilters
             })
             .ToList();
 
-        List<ActivityFilter> activityFilters = registry.Activities
+        List<ActivityFilter> activityFilters = registry.ActivitiesByVersion
             .GroupBy(activity => activity.Key.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {

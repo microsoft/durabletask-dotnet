@@ -362,6 +362,72 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
+    public void ServerlessActivityWorkerRegistrationHostedService_ComputeJitteredReconnectDelay_UsesFullJitterWindow()
+    {
+        // Arrange
+        TimeSpan retryDelay = TimeSpan.FromSeconds(10);
+
+        // Act
+        TimeSpan zero = ServerlessActivityWorkerRegistrationHostedService.ComputeJitteredReconnectDelay(
+            TimeSpan.Zero,
+            new DeterministicRandom(0.5));
+        TimeSpan low = ServerlessActivityWorkerRegistrationHostedService.ComputeJitteredReconnectDelay(
+            retryDelay,
+            new DeterministicRandom(0.0));
+        TimeSpan mid = ServerlessActivityWorkerRegistrationHostedService.ComputeJitteredReconnectDelay(
+            retryDelay,
+            new DeterministicRandom(0.5));
+        TimeSpan high = ServerlessActivityWorkerRegistrationHostedService.ComputeJitteredReconnectDelay(
+            retryDelay,
+            new DeterministicRandom(0.999999));
+
+        // Assert
+        zero.Should().Be(TimeSpan.Zero);
+        low.Should().Be(TimeSpan.Zero);
+        mid.Should().Be(TimeSpan.FromSeconds(5));
+        high.Should().BeGreaterThan(TimeSpan.FromSeconds(9));
+        high.Should().BeLessThan(retryDelay);
+    }
+
+    [Fact]
+    public async Task ServerlessActivityWorkerRegistrationHostedService_AppliesJitterToReconnectDelay()
+    {
+        // Arrange
+        ServerlessOptions options = new()
+        {
+            Mode = ServerlessMode.ServerlessInclude,
+            TaskHub = TaskHub,
+            WorkerProfileId = "profile-a",
+            MaxConcurrentActivities = 3,
+            HeartbeatInterval = TimeSpan.FromMilliseconds(10),
+            WorkerRegistrationRetryInitialDelay = TimeSpan.FromDays(1),
+            WorkerRegistrationRetryMaxDelay = TimeSpan.FromDays(1),
+        };
+        options.ActivityNames.Add("RemoteHello");
+
+        FakeServerlessActivityWorkerSession failedSession = new() { ThrowOnWriteAttempt = 2 };
+        FakeServerlessActivityWorkerSession recoveredSession = new();
+        FakeServerlessActivitiesClient client = new();
+        client.QueueSession(failedSession);
+        client.QueueSession(recoveredSession);
+
+        ServerlessActivityWorkerRegistrationHostedService service = new(
+            client,
+            options,
+            NullLogger<ServerlessActivityWorkerRegistrationHostedService>.Instance,
+            reconnectJitter: new DeterministicRandom(0.0));
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+        await failedSession.WaitForMessageAsync(message => message.Start != null);
+        await recoveredSession.WaitForMessageAsync(message => message.Start != null);
+        await service.StopAsync(CancellationToken.None);
+
+        // Assert
+        client.SessionTaskHubs.Should().Equal(TaskHub, TaskHub);
+    }
+
+    [Fact]
     public async Task ServerlessActivityWorkerRegistrationHostedService_StopAsync_DoesNotCompleteStreamWhileWriteIsInFlight()
     {
         // Arrange
@@ -691,6 +757,18 @@ public class ServerlessActivitiesTests
                 }
             }
         }
+    }
+
+    sealed class DeterministicRandom : Random
+    {
+        readonly double value;
+
+        public DeterministicRandom(double value)
+        {
+            this.value = value;
+        }
+
+        protected override double Sample() => this.value;
     }
 
     sealed class EnvironmentVariableScope : IDisposable

@@ -20,6 +20,7 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
     readonly ILogger<ServerlessActivityWorkerRegistrationHostedService> logger;
     readonly IHostApplicationLifetime? lifetime;
     readonly ServerlessActivityTracker? activityTracker;
+    readonly Random reconnectJitter;
     readonly SemaphoreSlim streamSync = new(1, 1);
     CancellationTokenSource? cts;
     IServerlessActivityWorkerSession? session;
@@ -33,18 +34,21 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
     /// <param name="logger">The logger.</param>
     /// <param name="lifetime">The optional application lifetime used to stop the host when a non-retriable registration stream failure occurs.</param>
     /// <param name="activityTracker">The optional activity tracker used to report live in-flight activity count.</param>
+    /// <param name="reconnectJitter">The optional random source used to jitter reconnect delays.</param>
     public ServerlessActivityWorkerRegistrationHostedService(
         IServerlessActivitiesClient client,
         ServerlessOptions options,
         ILogger<ServerlessActivityWorkerRegistrationHostedService> logger,
         IHostApplicationLifetime? lifetime = null,
-        ServerlessActivityTracker? activityTracker = null)
+        ServerlessActivityTracker? activityTracker = null,
+        Random? reconnectJitter = null)
     {
         this.client = Check.NotNull(client);
         this.options = Check.NotNull(options);
         this.logger = Check.NotNull(logger);
         this.lifetime = lifetime;
         this.activityTracker = activityTracker;
+        this.reconnectJitter = reconnectJitter ?? Random.Shared;
     }
 
     /// <inheritdoc/>
@@ -141,6 +145,45 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
     /// <inheritdoc/>
     public ValueTask DisposeAsync() => new(this.StopAsync(CancellationToken.None));
 
+    /// <summary>
+    /// Computes a full-jitter reconnect delay in the range <c>[0, retryDelay)</c>.
+    /// </summary>
+    /// <param name="retryDelay">The current exponential retry delay.</param>
+    /// <param name="random">The random source used for jitter.</param>
+    /// <returns>The jittered reconnect delay.</returns>
+    internal static TimeSpan ComputeJitteredReconnectDelay(TimeSpan retryDelay, Random random)
+    {
+        Check.NotNull(random);
+        if (retryDelay <= TimeSpan.Zero)
+        {
+            return TimeSpan.Zero;
+        }
+
+        long jitteredTicks = (long)(random.NextDouble() * retryDelay.Ticks);
+        return TimeSpan.FromTicks(jitteredTicks);
+    }
+
+    static async ValueTask DisposeSessionAsync(IServerlessActivityWorkerSession registrationSession)
+    {
+        try
+        {
+            await registrationSession.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or RpcException)
+        {
+        }
+    }
+
+    static bool IsRetriableRegistrationFailure(Exception exception) =>
+        (exception is OperationCanceledException or ObjectDisposedException or IOException)
+        || (exception is RpcException rpcException
+            && rpcException.StatusCode is StatusCode.Cancelled
+                or StatusCode.DeadlineExceeded
+                or StatusCode.Internal
+                or StatusCode.ResourceExhausted
+                or StatusCode.Unavailable
+                or StatusCode.Unknown);
+
     async Task RunRegistrationLoopAsync(int activityCount, CancellationToken cancellationToken)
     {
         TimeSpan retryDelay = this.GetInitialRetryDelay();
@@ -178,7 +221,7 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
             catch (Exception ex)
             {
                 Logs.ServerlessActivityWorkerRegistrationFailed(this.logger, ex, this.options.TaskHub);
-                await DelayBeforeReconnectAsync(retryDelay, cancellationToken).ConfigureAwait(false);
+                await this.DelayBeforeReconnectAsync(retryDelay, cancellationToken).ConfigureAwait(false);
                 retryDelay = this.GetNextRetryDelay(retryDelay);
             }
             finally
@@ -305,32 +348,12 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
         return TimeSpan.FromTicks(nextTicks);
     }
 
-    static async Task DelayBeforeReconnectAsync(TimeSpan retryDelay, CancellationToken cancellationToken)
+    async Task DelayBeforeReconnectAsync(TimeSpan retryDelay, CancellationToken cancellationToken)
     {
-        if (retryDelay > TimeSpan.Zero)
+        TimeSpan jitteredDelay = ComputeJitteredReconnectDelay(retryDelay, this.reconnectJitter);
+        if (jitteredDelay > TimeSpan.Zero)
         {
-            await Task.Delay(retryDelay, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(jitteredDelay, cancellationToken).ConfigureAwait(false);
         }
     }
-
-    static async ValueTask DisposeSessionAsync(IServerlessActivityWorkerSession registrationSession)
-    {
-        try
-        {
-            await registrationSession.DisposeAsync().ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or RpcException)
-        {
-        }
-    }
-
-    static bool IsRetriableRegistrationFailure(Exception exception) =>
-        exception is OperationCanceledException or ObjectDisposedException or IOException
-        || exception is RpcException rpcException
-            && rpcException.StatusCode is StatusCode.Cancelled
-                or StatusCode.DeadlineExceeded
-                or StatusCode.Internal
-                or StatusCode.ResourceExhausted
-                or StatusCode.Unavailable
-                or StatusCode.Unknown;
 }

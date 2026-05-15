@@ -100,12 +100,7 @@ public readonly struct TaskVersion : IEquatable<TaskVersion>
     /// <returns><c>true</c> if the two <see cref="TaskVersion"/> are equal using value semantics; otherwise <c>false</c>.</returns>
     public bool Equals(TaskVersion other)
     {
-        // Treat null and empty Version as the same unversioned identity. Combined with normalization in
-        // the constructor, both default(TaskVersion) and new TaskVersion("") compare equal and hash to
-        // the same value as TaskVersion.Unversioned.
-        string left = this.Version ?? string.Empty;
-        string right = other.Version ?? string.Empty;
-        return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(this.Version, other.Version, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

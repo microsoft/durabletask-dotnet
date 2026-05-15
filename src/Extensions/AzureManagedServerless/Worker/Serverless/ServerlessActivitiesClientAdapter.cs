@@ -12,34 +12,37 @@ namespace Microsoft.DurableTask.Worker.AzureManaged.Serverless;
 interface IServerlessActivitiesClient
 {
     /// <summary>
-    /// Declares remote activities to DTS.
+    /// Declares serverless activities to DTS.
     /// </summary>
     /// <param name="declaration">The declaration message.</param>
+    /// <param name="taskHub">The task hub that owns the declaration.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The declaration result.</returns>
-    Task<Proto.RemoteActivityDeclarationResult> DeclareRemoteActivitiesAsync(
-        Proto.RemoteActivityDeclaration declaration,
+    Task<Proto.ServerlessActivityDeclarationResult> DeclareServerlessActivitiesAsync(
+        Proto.ServerlessActivityDeclaration declaration,
+        string taskHub,
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Opens a remote activity worker registration session.
+    /// Opens a serverless activity worker registration session.
     /// </summary>
+    /// <param name="taskHub">The task hub that owns the worker session.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The worker registration session.</returns>
-    IRemoteActivityWorkerSession OpenRemoteActivityWorkerSession(CancellationToken cancellationToken);
+    IServerlessActivityWorkerSession OpenServerlessActivityWorkerSession(string taskHub, CancellationToken cancellationToken);
 }
 
 /// <summary>
-/// Client-streaming session used by a remote activity worker registration.
+/// Client-streaming session used by a serverless activity worker registration.
 /// </summary>
-interface IRemoteActivityWorkerSession : IAsyncDisposable
+interface IServerlessActivityWorkerSession : IAsyncDisposable
 {
     /// <summary>
     /// Writes a worker registration message to the stream.
     /// </summary>
     /// <param name="message">The message to write.</param>
     /// <returns>A task that completes when the message is written.</returns>
-    Task WriteMessageAsync(Proto.RemoteActivityWorkerMessage message);
+    Task WriteMessageAsync(Proto.ServerlessActivityWorkerMessage message);
 
     /// <summary>
     /// Completes the request stream.
@@ -65,40 +68,46 @@ sealed class ServerlessActivitiesClientAdapter : IServerlessActivitiesClient
     }
 
     /// <inheritdoc/>
-    public async Task<Proto.RemoteActivityDeclarationResult> DeclareRemoteActivitiesAsync(
-        Proto.RemoteActivityDeclaration declaration,
+    public async Task<Proto.ServerlessActivityDeclarationResult> DeclareServerlessActivitiesAsync(
+        Proto.ServerlessActivityDeclaration declaration,
+        string taskHub,
         CancellationToken cancellationToken)
     {
-        return await this.client.DeclareRemoteActivitiesAsync(declaration, cancellationToken: cancellationToken)
+        return await this.client.DeclareServerlessActivitiesAsync(
+                declaration,
+                headers: CreateTaskHubHeaders(taskHub),
+                cancellationToken: cancellationToken)
             .ResponseAsync.ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public IRemoteActivityWorkerSession OpenRemoteActivityWorkerSession(CancellationToken cancellationToken)
+    public IServerlessActivityWorkerSession OpenServerlessActivityWorkerSession(string taskHub, CancellationToken cancellationToken)
     {
-        AsyncClientStreamingCall<Proto.RemoteActivityWorkerMessage, Proto.RemoteActivityWorkerSessionResult> call =
-            this.client.ConnectRemoteActivityWorker(cancellationToken: cancellationToken);
-        return new GrpcRemoteActivityWorkerSession(call);
+        AsyncClientStreamingCall<Proto.ServerlessActivityWorkerMessage, Proto.ServerlessActivityWorkerSessionResult> call =
+            this.client.ConnectServerlessActivityWorker(headers: CreateTaskHubHeaders(taskHub), cancellationToken: cancellationToken);
+        return new GrpcServerlessActivityWorkerSession(call);
     }
 
+    static Metadata CreateTaskHubHeaders(string taskHub) => new() { { "taskhub", taskHub } };
+
     /// <summary>
-    /// gRPC-backed remote activity worker registration session.
+    /// gRPC-backed serverless activity worker registration session.
     /// </summary>
-    sealed class GrpcRemoteActivityWorkerSession : IRemoteActivityWorkerSession
+    sealed class GrpcServerlessActivityWorkerSession : IServerlessActivityWorkerSession
     {
-        readonly AsyncClientStreamingCall<Proto.RemoteActivityWorkerMessage, Proto.RemoteActivityWorkerSessionResult> call;
+        readonly AsyncClientStreamingCall<Proto.ServerlessActivityWorkerMessage, Proto.ServerlessActivityWorkerSessionResult> call;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="GrpcRemoteActivityWorkerSession"/> class.
+        /// Initializes a new instance of the <see cref="GrpcServerlessActivityWorkerSession"/> class.
         /// </summary>
         /// <param name="call">The active gRPC client-streaming call.</param>
-        public GrpcRemoteActivityWorkerSession(AsyncClientStreamingCall<Proto.RemoteActivityWorkerMessage, Proto.RemoteActivityWorkerSessionResult> call)
+        public GrpcServerlessActivityWorkerSession(AsyncClientStreamingCall<Proto.ServerlessActivityWorkerMessage, Proto.ServerlessActivityWorkerSessionResult> call)
         {
             this.call = call;
         }
 
         /// <inheritdoc/>
-        public Task WriteMessageAsync(Proto.RemoteActivityWorkerMessage message) =>
+        public Task WriteMessageAsync(Proto.ServerlessActivityWorkerMessage message) =>
             this.call.RequestStream.WriteAsync(message);
 
         /// <inheritdoc/>

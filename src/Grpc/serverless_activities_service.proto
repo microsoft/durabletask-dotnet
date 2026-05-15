@@ -5,27 +5,32 @@ syntax = "proto3";
 
 package microsoft.durabletask.serverless;
 
+import "google/protobuf/timestamp.proto";
+
 option csharp_namespace = "Microsoft.DurableTask.Protobuf.Serverless";
 
 service ServerlessActivities {
-  // Opens a live remote activity worker session. The first message must be a
+  // Opens a live serverless activity worker session. The first message must be a
   // start message with static worker metadata. Heartbeats carry dynamic state
   // only. Closing the stream deregisters the worker.
-  rpc ConnectRemoteActivityWorker(stream RemoteActivityWorkerMessage) returns (RemoteActivityWorkerSessionResult);
+  rpc ConnectServerlessActivityWorker(stream ServerlessActivityWorkerMessage) returns (ServerlessActivityWorkerSessionResult);
 
-  // Declares remote activities before any live worker stream exists. This is a
+  // Declares serverless activities before any live worker stream exists. This is a
   // configuration contract and does not advertise active worker capacity.
-  rpc DeclareRemoteActivities(RemoteActivityDeclaration) returns (RemoteActivityDeclarationResult);
+  rpc DeclareServerlessActivities(ServerlessActivityDeclaration) returns (ServerlessActivityDeclarationResult);
+
+  // Streams best-effort stdout/stderr log lines from an ADC sandbox.
+  rpc StreamSandboxLogs(SandboxLogStreamRequest) returns (stream SandboxLogLine);
 }
 
-message RemoteActivityWorkerMessage {
+message ServerlessActivityWorkerMessage {
   oneof message {
-    RemoteActivityWorkerStart start = 1;
-    RemoteActivityWorkerHeartbeat heartbeat = 2;
+    ServerlessActivityWorkerStart start = 1;
+    ServerlessActivityWorkerHeartbeat heartbeat = 2;
   }
 }
 
-message RemoteActivityWorkerStart {
+message ServerlessActivityWorkerStart {
   string task_hub = 1;
   string worker_instance_id = 2;
   int32 max_activities_count = 3;
@@ -36,30 +41,53 @@ message RemoteActivityWorkerStart {
   string worker_profile_id = 6;
 }
 
-message RemoteActivityWorkerHeartbeat {
+message ServerlessActivityWorkerHeartbeat {
   int32 active_activities_count = 1;
 }
 
-message RemoteActivityWorkerSessionResult {
+message ServerlessActivityWorkerSessionResult {
   bool accepted = 1;
   string message = 2;
 }
 
-message RemoteActivityDeclaration {
-  string task_hub = 1;
+message ServerlessActivityDeclaration {
+  reserved 1;
   string worker_profile_id = 2;
   repeated string activity_names = 3;
-  RemoteActivityImage image = 4;
+  ServerlessActivityImage image = 4;
   map<string, string> environment_variables = 5;
   int32 max_concurrent_activities = 6;
+  ServerlessActivityResources resources = 7;
+  repeated string entrypoint = 8;
+  repeated string cmd = 9;
+  string launch_command = 10;
 }
 
-message RemoteActivityImage {
+message ServerlessActivityImage {
   string image_ref = 1;
   bool public_pull = 2;
 }
 
-message RemoteActivityDeclarationResult {
+message ServerlessActivityResources {
+  string cpu = 1;
+  string memory = 2;
+}
+
+message ServerlessActivityDeclarationResult {
+}
+
+message SandboxLogStreamRequest {
+  string sandbox_id = 1;
+  int32 tail = 2;
+}
+
+message SandboxLogLine {
+  string sandbox_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string stream = 3;
+  string tag = 4;
+  string message = 5;
+  string raw_line = 6;
 }
 
 // Compute substrate executing the activity worker.

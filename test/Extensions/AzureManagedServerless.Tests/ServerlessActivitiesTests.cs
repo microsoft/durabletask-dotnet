@@ -14,57 +14,69 @@ using Xunit;
 
 namespace Microsoft.DurableTask.Worker.AzureManaged.Tests;
 
-public class RemoteActivitiesTests
+public class ServerlessActivitiesTests
 {
     const string TaskHub = "testhub";
 
     [Fact]
-    public async Task RemoteActivityDeclarationHostedService_SendsDeclarationPayload()
+    public async Task ServerlessActivityDeclarationHostedService_SendsDeclarationPayload()
     {
         // Arrange
-        RemoteActivityOptions options = new()
+        ServerlessOptions options = new()
         {
             TaskHub = TaskHub,
             WorkerProfileId = "profile-a",
             ContainerImage = "mcr.microsoft.com/durabletask/demo-worker:1.0",
+            Cpu = "500m",
+            Memory = "1024Mi",
+            LaunchCommand = "cd /app && dotnet DemoWorker.dll",
             MaxConcurrentActivities = 7,
         };
         options.ActivityNames.Add("RemoteHello");
         options.EnvironmentVariables.Add("CUSTOM_SETTING", "enabled");
+        options.Entrypoint.Add("/usr/bin/tini");
+        options.Entrypoint.Add("--");
+        options.Cmd.Add("dotnet");
+        options.Cmd.Add("/app/DemoWorker.dll");
         FakeServerlessActivitiesClient client = new();
-        RemoteActivityDeclarationHostedService service = new(
+        ServerlessActivityDeclarationHostedService service = new(
             client,
             options,
-            NullLogger<RemoteActivityDeclarationHostedService>.Instance);
+            NullLogger<ServerlessActivityDeclarationHostedService>.Instance);
 
         // Act
         await service.StartAsync(CancellationToken.None);
 
         // Assert
-        RemoteActivityDeclaration declaration = client.Declarations.Should().ContainSingle().Subject;
-        declaration.TaskHub.Should().Be(TaskHub);
+        ServerlessActivityDeclaration declaration = client.Declarations.Should().ContainSingle().Subject;
+        client.DeclarationTaskHubs.Should().Equal(TaskHub);
         declaration.WorkerProfileId.Should().Be("profile-a");
         declaration.ActivityNames.Should().Equal("RemoteHello");
         declaration.Image.ImageRef.Should().Be("mcr.microsoft.com/durabletask/demo-worker:1.0");
         declaration.Image.PublicPull.Should().BeTrue();
+        declaration.Resources.Cpu.Should().Be("500m");
+        declaration.Resources.Memory.Should().Be("1024Mi");
         declaration.EnvironmentVariables.Should().ContainKey("CUSTOM_SETTING").WhoseValue.Should().Be("enabled");
+        declaration.Entrypoint.Should().Equal("/usr/bin/tini", "--");
+        declaration.Cmd.Should().Equal("dotnet", "/app/DemoWorker.dll");
+        declaration.LaunchCommand.Should().Be("cd /app && dotnet DemoWorker.dll");
         declaration.MaxConcurrentActivities.Should().Be(7);
     }
 
     [Fact]
-    public async Task RemoteActivityDeclarationHostedService_SkipsDeclarationWhenNamesAreEmpty()
+    public async Task ServerlessActivityDeclarationHostedService_SkipsDeclarationWhenNamesAreEmpty()
     {
         // Arrange
-        RemoteActivityOptions options = new()
+        ServerlessOptions options = new()
         {
             TaskHub = TaskHub,
             ContainerImage = "example.com/repo/worker:latest",
         };
         FakeServerlessActivitiesClient client = new();
-        RemoteActivityDeclarationHostedService service = new(
+        ServerlessActivityDeclarationHostedService service = new(
             client,
             options,
-            NullLogger<RemoteActivityDeclarationHostedService>.Instance);
+            NullLogger<ServerlessActivityDeclarationHostedService>.Instance);
 
         // Act
         await service.StartAsync(CancellationToken.None);
@@ -74,10 +86,10 @@ public class RemoteActivitiesTests
     }
 
     [Fact]
-    public async Task RemoteActivityDeclarationHostedService_RetriesTransientFailures()
+    public async Task ServerlessActivityDeclarationHostedService_RetriesTransientFailures()
     {
         // Arrange
-        RemoteActivityOptions options = new()
+        ServerlessOptions options = new()
         {
             TaskHub = TaskHub,
             ContainerImage = "example.com/repo/worker@sha256:abc",
@@ -86,10 +98,10 @@ public class RemoteActivitiesTests
         };
         options.ActivityNames.Add("RemoteHello");
         FakeServerlessActivitiesClient client = new() { TransientDeclarationFailures = 1 };
-        RemoteActivityDeclarationHostedService service = new(
+        ServerlessActivityDeclarationHostedService service = new(
             client,
             options,
-            NullLogger<RemoteActivityDeclarationHostedService>.Instance);
+            NullLogger<ServerlessActivityDeclarationHostedService>.Instance);
 
         // Act
         await service.StartAsync(CancellationToken.None);
@@ -100,31 +112,31 @@ public class RemoteActivitiesTests
     }
 
     [Fact]
-    public async Task RemoteActivityDeclarationHostedService_RejectsPrivatePullImages()
+    public async Task ServerlessActivityDeclarationHostedService_RejectsPrivatePullImages()
     {
         // Arrange
-        RemoteActivityOptions options = new()
+        ServerlessOptions options = new()
         {
             TaskHub = TaskHub,
             ContainerImage = "example.com/repo/worker:latest",
             PublicPull = false,
         };
         options.ActivityNames.Add("RemoteHello");
-        RemoteActivityDeclarationHostedService service = new(
+        ServerlessActivityDeclarationHostedService service = new(
             new FakeServerlessActivitiesClient(),
             options,
-            NullLogger<RemoteActivityDeclarationHostedService>.Instance);
+            NullLogger<ServerlessActivityDeclarationHostedService>.Instance);
 
         // Act
         Func<Task> action = () => service.StartAsync(CancellationToken.None);
 
         // Assert
         await action.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Remote activity images must be publicly pullable for private preview.");
+            .WithMessage("Serverless activity images must be publicly pullable for private preview.");
     }
 
     [Fact]
-    public async Task RemoteActivityWorkerRegistrationHostedService_SendsLiveWorkerMetadataWithoutActivityCatalog()
+    public async Task ServerlessActivityWorkerRegistrationHostedService_SendsLiveWorkerMetadataWithoutActivityCatalog()
     {
         // Arrange
         string? originalSubstrate = Environment.GetEnvironmentVariable("DTS_SUBSTRATE");
@@ -134,8 +146,9 @@ public class RemoteActivitiesTests
 
         try
         {
-            RemoteActivityWorkerOptions options = new()
+            ServerlessOptions options = new()
             {
+                Mode = ServerlessMode.ServerlessInclude,
                 TaskHub = TaskHub,
                 WorkerProfileId = "profile-a",
                 MaxConcurrentActivities = 3,
@@ -143,18 +156,19 @@ public class RemoteActivitiesTests
             };
             options.ActivityNames.Add("RemoteHello");
             FakeServerlessActivitiesClient client = new();
-            RemoteActivityWorkerRegistrationHostedService service = new(
+            ServerlessActivityWorkerRegistrationHostedService service = new(
                 client,
                 options,
-                NullLogger<RemoteActivityWorkerRegistrationHostedService>.Instance);
+                NullLogger<ServerlessActivityWorkerRegistrationHostedService>.Instance);
 
             // Act
             await service.StartAsync(CancellationToken.None);
             await service.StopAsync(CancellationToken.None);
 
             // Assert
-            RemoteActivityWorkerMessage message = client.Session.Messages.Should().ContainSingle().Subject;
-            RemoteActivityWorkerStart start = message.Start;
+            client.SessionTaskHubs.Should().Equal(TaskHub);
+            ServerlessActivityWorkerMessage message = client.Session.Messages.Should().ContainSingle().Subject;
+            ServerlessActivityWorkerStart start = message.Start;
             start.TaskHub.Should().Be(TaskHub);
             start.WorkerProfileId.Should().Be("profile-a");
             start.MaxActivitiesCount.Should().Be(3);
@@ -169,17 +183,17 @@ public class RemoteActivitiesTests
     }
 
     [Fact]
-    public async Task DeclareRemoteActivities_ConfiguresLocalWorkerExclusionFilter()
+    public async Task UseServerlessActivities_LocalExclude_ConfiguresLocalWorkerExclusionFilter()
     {
         // Arrange
-        using EnvironmentVariableScope remoteActivities = new("DTS_REMOTE_ACTIVITIES", null);
+        using EnvironmentVariableScope serverlessActivities = new("DTS_SERVERLESS_ACTIVITIES", null);
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
-        mockBuilder.Setup(b => b.Services).Returns(services);
-        mockBuilder.Setup(b => b.Name).Returns(Options.DefaultName);
+        mockBuilder.Setup(builder => builder.Services).Returns(services);
+        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
 
         // Act
-        mockBuilder.Object.DeclareRemoteActivities(options =>
+        mockBuilder.Object.UseServerlessActivities(options =>
         {
             options.TaskHub = TaskHub;
             options.ContainerImage = "example.com/repo/worker:latest";
@@ -195,17 +209,17 @@ public class RemoteActivitiesTests
     }
 
     [Fact]
-    public async Task DeclareRemoteActivities_DoesNotConfigureFilterWhenActivityNamesAreEmpty()
+    public async Task UseServerlessActivities_DoesNotConfigureFilterWhenActivityNamesAreEmpty()
     {
         // Arrange
-        using EnvironmentVariableScope remoteActivities = new("DTS_REMOTE_ACTIVITIES", null);
+        using EnvironmentVariableScope serverlessActivities = new("DTS_SERVERLESS_ACTIVITIES", null);
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
         mockBuilder.Setup(builder => builder.Services).Returns(services);
         mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
 
         // Act
-        mockBuilder.Object.DeclareRemoteActivities(options =>
+        mockBuilder.Object.UseServerlessActivities(options =>
         {
             options.TaskHub = TaskHub;
             options.ContainerImage = "example.com/repo/worker:latest";
@@ -220,18 +234,19 @@ public class RemoteActivitiesTests
     }
 
     [Fact]
-    public async Task UseRemoteActivityWorker_ConfiguresRemoteActivityWorkerFilter()
+    public async Task UseServerlessActivities_ServerlessInclude_ConfiguresServerlessActivityWorkerFilter()
     {
         // Arrange
-        using EnvironmentVariableScope remoteActivities = new("DTS_REMOTE_ACTIVITIES", null);
+        using EnvironmentVariableScope serverlessActivities = new("DTS_SERVERLESS_ACTIVITIES", null);
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
-        mockBuilder.Setup(b => b.Services).Returns(services);
-        mockBuilder.Setup(b => b.Name).Returns(Options.DefaultName);
+        mockBuilder.Setup(builder => builder.Services).Returns(services);
+        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
 
         // Act
-        mockBuilder.Object.UseRemoteActivityWorker(options =>
+        mockBuilder.Object.UseServerlessActivities(options =>
         {
+            options.Mode = ServerlessMode.ServerlessInclude;
             options.TaskHub = TaskHub;
             options.ActivityNames.Add("RemoteHello");
         });
@@ -246,42 +261,23 @@ public class RemoteActivitiesTests
         filters.Entities.Should().BeEmpty();
     }
 
-    [Fact]
-    public async Task UseRemoteActivityWorker_DoesNotConfigureFilterWhenActivityNamesAreEmpty()
-    {
-        // Arrange
-        using EnvironmentVariableScope remoteActivities = new("DTS_REMOTE_ACTIVITIES", null);
-        ServiceCollection services = new();
-        Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
-        mockBuilder.Setup(builder => builder.Services).Returns(services);
-        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
-
-        // Act
-        mockBuilder.Object.UseRemoteActivityWorker(options =>
-        {
-            options.TaskHub = TaskHub;
-        });
-
-        await using ServiceProvider provider = services.BuildServiceProvider();
-        DurableTaskWorkerWorkItemFilters filters = provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>().Get(Options.DefaultName);
-
-        // Assert
-        filters.Activities.Should().BeEmpty();
-        filters.ExcludedActivities.Should().BeEmpty();
-    }
-
     sealed class FakeServerlessActivitiesClient : IServerlessActivitiesClient
     {
         public int TransientDeclarationFailures { get; init; }
 
         public int DeclarationAttempts { get; private set; }
 
-        public List<RemoteActivityDeclaration> Declarations { get; } = [];
+        public List<ServerlessActivityDeclaration> Declarations { get; } = [];
 
-        public FakeRemoteActivityWorkerSession Session { get; } = new();
+        public List<string> DeclarationTaskHubs { get; } = [];
 
-        public Task<RemoteActivityDeclarationResult> DeclareRemoteActivitiesAsync(
-            RemoteActivityDeclaration declaration,
+        public List<string> SessionTaskHubs { get; } = [];
+
+        public FakeServerlessActivityWorkerSession Session { get; } = new();
+
+        public Task<ServerlessActivityDeclarationResult> DeclareServerlessActivitiesAsync(
+            ServerlessActivityDeclaration declaration,
+            string taskHub,
             CancellationToken cancellationToken)
         {
             this.DeclarationAttempts++;
@@ -290,18 +286,23 @@ public class RemoteActivitiesTests
                 throw new RpcException(new Status(StatusCode.Unavailable, "transient"));
             }
 
+            this.DeclarationTaskHubs.Add(taskHub);
             this.Declarations.Add(declaration.Clone());
-            return Task.FromResult(new RemoteActivityDeclarationResult());
+            return Task.FromResult(new ServerlessActivityDeclarationResult());
         }
 
-        public IRemoteActivityWorkerSession OpenRemoteActivityWorkerSession(CancellationToken cancellationToken) => this.Session;
+        public IServerlessActivityWorkerSession OpenServerlessActivityWorkerSession(string taskHub, CancellationToken cancellationToken)
+        {
+            this.SessionTaskHubs.Add(taskHub);
+            return this.Session;
+        }
     }
 
-    sealed class FakeRemoteActivityWorkerSession : IRemoteActivityWorkerSession
+    sealed class FakeServerlessActivityWorkerSession : IServerlessActivityWorkerSession
     {
-        public List<RemoteActivityWorkerMessage> Messages { get; } = [];
+        public List<ServerlessActivityWorkerMessage> Messages { get; } = [];
 
-        public Task WriteMessageAsync(RemoteActivityWorkerMessage message)
+        public Task WriteMessageAsync(ServerlessActivityWorkerMessage message)
         {
             this.Messages.Add(message.Clone());
             return Task.CompletedTask;

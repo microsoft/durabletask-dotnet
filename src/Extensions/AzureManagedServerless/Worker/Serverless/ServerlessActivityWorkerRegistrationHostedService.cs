@@ -9,29 +9,29 @@ using Proto = Microsoft.DurableTask.Protobuf.Serverless;
 namespace Microsoft.DurableTask.Worker.AzureManaged.Serverless;
 
 /// <summary>
-/// Hosted service that registers a running process as a remote activity worker with DTS.
+/// Hosted service that registers a running process as a serverless activity worker with DTS.
 /// </summary>
-sealed partial class RemoteActivityWorkerRegistrationHostedService : IHostedService, IAsyncDisposable
+sealed partial class ServerlessActivityWorkerRegistrationHostedService : IHostedService, IAsyncDisposable
 {
     readonly IServerlessActivitiesClient client;
-    readonly RemoteActivityWorkerOptions options;
-    readonly ILogger<RemoteActivityWorkerRegistrationHostedService> logger;
+    readonly ServerlessOptions options;
+    readonly ILogger<ServerlessActivityWorkerRegistrationHostedService> logger;
     readonly IHostApplicationLifetime? lifetime;
     CancellationTokenSource? cts;
-    IRemoteActivityWorkerSession? session;
+    IServerlessActivityWorkerSession? session;
     Task? pump;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="RemoteActivityWorkerRegistrationHostedService"/> class.
+    /// Initializes a new instance of the <see cref="ServerlessActivityWorkerRegistrationHostedService"/> class.
     /// </summary>
     /// <param name="client">The serverless activities client.</param>
-    /// <param name="options">The remote activity worker options.</param>
+    /// <param name="options">The serverless options.</param>
     /// <param name="logger">The logger.</param>
     /// <param name="lifetime">The optional application lifetime used to stop the host when the registration stream fails.</param>
-    public RemoteActivityWorkerRegistrationHostedService(
+    public ServerlessActivityWorkerRegistrationHostedService(
         IServerlessActivitiesClient client,
-        RemoteActivityWorkerOptions options,
-        ILogger<RemoteActivityWorkerRegistrationHostedService> logger,
+        ServerlessOptions options,
+        ILogger<ServerlessActivityWorkerRegistrationHostedService> logger,
         IHostApplicationLifetime? lifetime = null)
     {
         this.client = Check.NotNull(client);
@@ -48,10 +48,17 @@ sealed partial class RemoteActivityWorkerRegistrationHostedService : IHostedServ
     /// <inheritdoc/>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        string[] activityNames = RemoteActivityConfiguration.ResolveActivityNames(this.options.ActivityNames);
+        if (this.options.Mode != ServerlessMode.ServerlessInclude)
+        {
+            this.Ready.TrySetResult(true);
+            this.pump = Task.CompletedTask;
+            return;
+        }
+
+        string[] activityNames = ServerlessActivityConfiguration.ResolveActivityNames(this.options.ActivityNames);
         if (activityNames.Length == 0)
         {
-            Log.NoRemoteActivitiesDiscovered(this.logger, this.options.TaskHub);
+            Log.NoServerlessActivitiesDiscovered(this.logger, this.options.TaskHub);
             this.Ready.TrySetResult(true);
             this.pump = Task.CompletedTask;
             return;
@@ -59,15 +66,15 @@ sealed partial class RemoteActivityWorkerRegistrationHostedService : IHostedServ
 
         CancellationTokenSource registrationCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         this.cts = registrationCts;
-        IRemoteActivityWorkerSession registrationSession = this.client.OpenRemoteActivityWorkerSession(registrationCts.Token);
+        IServerlessActivityWorkerSession registrationSession = this.client.OpenServerlessActivityWorkerSession(this.options.TaskHub, registrationCts.Token);
         this.session = registrationSession;
 
-        Proto.RemoteActivityWorkerMessage startMessage = RemoteActivityConfiguration.BuildWorkerStart(this.options);
+        Proto.ServerlessActivityWorkerMessage startMessage = ServerlessActivityConfiguration.BuildWorkerStart(this.options);
         try
         {
             await registrationSession.WriteMessageAsync(startMessage).ConfigureAwait(false);
             this.Ready.TrySetResult(true);
-            Log.RemoteActivityWorkerRegistered(
+            Log.ServerlessActivityWorkerRegistered(
                 this.logger,
                 startMessage.Start.TaskHub,
                 startMessage.Start.WorkerInstanceId,
@@ -78,7 +85,7 @@ sealed partial class RemoteActivityWorkerRegistrationHostedService : IHostedServ
         catch (Exception ex)
         {
             this.Ready.TrySetException(ex);
-            Log.RemoteActivityWorkerRegistrationFailed(this.logger, ex, this.options.TaskHub);
+            Log.ServerlessActivityWorkerRegistrationFailed(this.logger, ex, this.options.TaskHub);
             throw;
         }
 
@@ -91,7 +98,7 @@ sealed partial class RemoteActivityWorkerRegistrationHostedService : IHostedServ
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         CancellationTokenSource? localCts = this.cts;
-        IRemoteActivityWorkerSession? localSession = this.session;
+        IServerlessActivityWorkerSession? localSession = this.session;
         localCts?.Cancel();
 
         if (localSession is not null)
@@ -142,7 +149,7 @@ sealed partial class RemoteActivityWorkerRegistrationHostedService : IHostedServ
     public ValueTask DisposeAsync() => new(this.StopAsync(CancellationToken.None));
 
     async Task PumpHeartbeatsAsync(
-        IRemoteActivityWorkerSession registrationSession,
+        IServerlessActivityWorkerSession registrationSession,
         CancellationToken cancellationToken)
     {
         try
@@ -151,7 +158,7 @@ sealed partial class RemoteActivityWorkerRegistrationHostedService : IHostedServ
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
                 await registrationSession.WriteMessageAsync(
-                    RemoteActivityConfiguration.BuildWorkerHeartbeat(activeActivitiesCount: 0)).ConfigureAwait(false);
+                    ServerlessActivityConfiguration.BuildWorkerHeartbeat(activeActivitiesCount: 0)).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -165,25 +172,25 @@ sealed partial class RemoteActivityWorkerRegistrationHostedService : IHostedServ
 
     void HandleRegistrationStreamFailure(Exception exception)
     {
-        Log.RemoteActivityWorkerRegistrationFailed(this.logger, exception, this.options.TaskHub);
+        Log.ServerlessActivityWorkerRegistrationFailed(this.logger, exception, this.options.TaskHub);
         this.lifetime?.StopApplication();
     }
 
     static partial class Log
     {
         /// <summary>
-        /// Logs that no remote activities were discovered for live worker registration.
+        /// Logs that no serverless activities were discovered for live worker registration.
         /// </summary>
         /// <param name="logger">The logger.</param>
         /// <param name="hub">The task hub name.</param>
         [LoggerMessage(
             EventId = 1,
             Level = LogLevel.Information,
-            Message = "No remote activities discovered for worker hub={Hub}; skipping live registration")]
-        public static partial void NoRemoteActivitiesDiscovered(ILogger logger, string hub);
+            Message = "No serverless activities discovered for worker hub={Hub}; skipping live registration")]
+        public static partial void NoServerlessActivitiesDiscovered(ILogger logger, string hub);
 
         /// <summary>
-        /// Logs a successful remote activity worker registration.
+        /// Logs a successful serverless activity worker registration.
         /// </summary>
         /// <param name="logger">The logger.</param>
         /// <param name="hub">The task hub name.</param>
@@ -194,8 +201,8 @@ sealed partial class RemoteActivityWorkerRegistrationHostedService : IHostedServ
         [LoggerMessage(
             EventId = 2,
             Level = LogLevel.Information,
-            Message = "Remote activity worker registered hub={Hub} worker={Worker} count={Count} substrate={Substrate} sandboxId={SandboxId}")]
-        public static partial void RemoteActivityWorkerRegistered(
+            Message = "Serverless activity worker registered hub={Hub} worker={Worker} count={Count} substrate={Substrate} sandboxId={SandboxId}")]
+        public static partial void ServerlessActivityWorkerRegistered(
             ILogger logger,
             string hub,
             string worker,
@@ -204,7 +211,7 @@ sealed partial class RemoteActivityWorkerRegistrationHostedService : IHostedServ
             string sandboxId);
 
         /// <summary>
-        /// Logs a failed remote activity worker registration stream.
+        /// Logs a failed serverless activity worker registration stream.
         /// </summary>
         /// <param name="logger">The logger.</param>
         /// <param name="exception">The registration exception.</param>
@@ -212,7 +219,7 @@ sealed partial class RemoteActivityWorkerRegistrationHostedService : IHostedServ
         [LoggerMessage(
             EventId = 3,
             Level = LogLevel.Error,
-            Message = "Remote activity worker registration stream failed hub={Hub}")]
-        public static partial void RemoteActivityWorkerRegistrationFailed(ILogger logger, Exception exception, string hub);
+            Message = "Serverless activity worker registration stream failed hub={Hub}")]
+        public static partial void ServerlessActivityWorkerRegistrationFailed(ILogger logger, Exception exception, string hub);
     }
 }

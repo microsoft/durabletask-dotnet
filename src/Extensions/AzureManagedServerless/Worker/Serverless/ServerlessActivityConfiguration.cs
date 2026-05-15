@@ -6,12 +6,12 @@ using Proto = Microsoft.DurableTask.Protobuf.Serverless;
 namespace Microsoft.DurableTask.Worker.AzureManaged.Serverless;
 
 /// <summary>
-/// Builds and normalizes remote activity protocol messages.
+/// Builds and normalizes serverless activity protocol messages.
 /// </summary>
-static class RemoteActivityConfiguration
+static class ServerlessActivityConfiguration
 {
     /// <summary>
-    /// Resolves configured activity names for a remote activity worker.
+    /// Resolves configured activity names for serverless activity execution.
     /// </summary>
     /// <param name="configuredNames">The configured activity names.</param>
     /// <returns>The normalized activity names.</returns>
@@ -25,68 +25,65 @@ static class RemoteActivityConfiguration
     }
 
     /// <summary>
-    /// Builds a remote activity declaration protocol message.
+    /// Builds a serverless activity declaration protocol message.
     /// </summary>
-    /// <param name="options">The declaration options.</param>
+    /// <param name="options">The serverless options.</param>
     /// <param name="activityNames">The activity names included in the declaration.</param>
     /// <returns>The declaration protocol message.</returns>
-    public static Proto.RemoteActivityDeclaration BuildDeclaration(RemoteActivityOptions options, IReadOnlyCollection<string> activityNames)
+    public static Proto.ServerlessActivityDeclaration BuildDeclaration(ServerlessOptions options, IReadOnlyCollection<string> activityNames)
     {
         Check.NotNull(options);
         Check.NotNull(activityNames);
 
-        if (string.IsNullOrWhiteSpace(options.TaskHub))
-        {
-            throw new InvalidOperationException("Remote activity declaration requires a task hub name.");
-        }
+        ValidateTaskHub(options.TaskHub, "Serverless activity declaration requires a task hub name.");
 
         if (activityNames.Count == 0)
         {
-            throw new InvalidOperationException("Remote activity declaration requires at least one activity name.");
+            throw new InvalidOperationException("Serverless activity declaration requires at least one activity name.");
         }
 
-        string workerProfileId = NormalizeWorkerProfileId(options.WorkerProfileId, "Remote activity declaration requires a worker profile ID.");
+        string workerProfileId = NormalizeWorkerProfileId(options.WorkerProfileId, "Serverless activity declaration requires a worker profile ID.");
 
         if (options.MaxConcurrentActivities <= 0)
         {
-            throw new InvalidOperationException("Remote activity max concurrent activities must be greater than zero.");
+            throw new InvalidOperationException("Serverless activity max concurrent activities must be greater than zero.");
         }
 
-        Proto.RemoteActivityDeclaration declaration = new()
+        Proto.ServerlessActivityDeclaration declaration = new()
         {
-            TaskHub = options.TaskHub,
             WorkerProfileId = workerProfileId,
             Image = BuildImage(options),
+            Resources = BuildResources(options),
+            LaunchCommand = options.LaunchCommand ?? string.Empty,
             MaxConcurrentActivities = options.MaxConcurrentActivities,
         };
 
         declaration.ActivityNames.AddRange(activityNames);
         declaration.EnvironmentVariables.Add(options.EnvironmentVariables);
+        declaration.Entrypoint.AddRange(NormalizeOptionalStrings(options.Entrypoint));
+        declaration.Cmd.AddRange(NormalizeOptionalStrings(options.Cmd));
         return declaration;
     }
 
     /// <summary>
-    /// Builds the initial remote activity worker registration message.
+    /// Builds the initial serverless activity worker registration message.
     /// </summary>
-    /// <param name="options">The worker options.</param>
+    /// <param name="options">The serverless options.</param>
     /// <returns>The worker start protocol message.</returns>
-    public static Proto.RemoteActivityWorkerMessage BuildWorkerStart(RemoteActivityWorkerOptions options)
+    public static Proto.ServerlessActivityWorkerMessage BuildWorkerStart(ServerlessOptions options)
     {
         Check.NotNull(options);
 
-        if (string.IsNullOrWhiteSpace(options.TaskHub))
-        {
-            throw new InvalidOperationException("Remote activity worker registration requires a task hub name.");
-        }
+        ValidateTaskHub(options.TaskHub, "Serverless activity worker registration requires a task hub name.");
 
         if (options.MaxConcurrentActivities <= 0)
         {
-            throw new InvalidOperationException("Remote activity worker max concurrent activities must be greater than zero.");
+            throw new InvalidOperationException("Serverless activity worker max concurrent activities must be greater than zero.");
         }
 
-        string workerProfileId = NormalizeWorkerProfileId(options.WorkerProfileId, "Remote activity worker registration requires a worker profile ID.");
+        string workerProfileId = NormalizeWorkerProfileId(options.WorkerProfileId, "Serverless activity worker registration requires a worker profile ID.");
 
-        Proto.RemoteActivityWorkerStart start = new()
+        Proto.ServerlessActivityWorkerStart start = new()
         {
             TaskHub = options.TaskHub,
             WorkerProfileId = workerProfileId,
@@ -96,35 +93,35 @@ static class RemoteActivityConfiguration
             SandboxId = Environment.GetEnvironmentVariable("DTS_SANDBOX_ID") ?? string.Empty,
         };
 
-        return new Proto.RemoteActivityWorkerMessage { Start = start };
+        return new Proto.ServerlessActivityWorkerMessage { Start = start };
     }
 
     /// <summary>
-    /// Builds a remote activity worker heartbeat message.
+    /// Builds a serverless activity worker heartbeat message.
     /// </summary>
     /// <param name="activeActivitiesCount">The number of activities currently executing.</param>
     /// <returns>The heartbeat protocol message.</returns>
-    public static Proto.RemoteActivityWorkerMessage BuildWorkerHeartbeat(int activeActivitiesCount)
+    public static Proto.ServerlessActivityWorkerMessage BuildWorkerHeartbeat(int activeActivitiesCount)
     {
         if (activeActivitiesCount < 0)
         {
-            throw new InvalidOperationException("Remote activity worker active activity count cannot be negative.");
+            throw new InvalidOperationException("Serverless activity worker active activity count cannot be negative.");
         }
 
-        return new Proto.RemoteActivityWorkerMessage
+        return new Proto.ServerlessActivityWorkerMessage
         {
-            Heartbeat = new Proto.RemoteActivityWorkerHeartbeat
+            Heartbeat = new Proto.ServerlessActivityWorkerHeartbeat
             {
                 ActiveActivitiesCount = activeActivitiesCount,
             },
         };
     }
 
-    static Proto.RemoteActivityImage BuildImage(RemoteActivityOptions options)
+    static Proto.ServerlessActivityImage BuildImage(ServerlessOptions options)
     {
         if (!options.PublicPull)
         {
-            throw new InvalidOperationException("Remote activity images must be publicly pullable for private preview.");
+            throw new InvalidOperationException("Serverless activity images must be publicly pullable for private preview.");
         }
 
         string? imageRef = Coalesce(
@@ -133,13 +130,25 @@ static class RemoteActivityConfiguration
 
         if (string.IsNullOrWhiteSpace(imageRef))
         {
-            throw new InvalidOperationException("Remote activity image metadata requires a container image reference.");
+            throw new InvalidOperationException("Serverless activity image metadata requires a container image reference.");
         }
 
-        return new Proto.RemoteActivityImage
+        return new Proto.ServerlessActivityImage
         {
             ImageRef = imageRef,
             PublicPull = true,
+        };
+    }
+
+    static Proto.ServerlessActivityResources BuildResources(ServerlessOptions options)
+    {
+        string cpu = NormalizeRequired(options.Cpu, "Serverless activity declaration requires CPU resources.");
+        string memory = NormalizeRequired(options.Memory, "Serverless activity declaration requires memory resources.");
+
+        return new Proto.ServerlessActivityResources
+        {
+            Cpu = cpu,
+            Memory = memory,
         };
     }
 
@@ -164,7 +173,17 @@ static class RemoteActivityConfiguration
         return Proto.SubstrateKind.Unspecified;
     }
 
+    static void ValidateTaskHub(string value, string errorMessage)
+    {
+        _ = NormalizeRequired(value, errorMessage);
+    }
+
     static string NormalizeWorkerProfileId(string value, string errorMessage)
+    {
+        return NormalizeRequired(value, errorMessage);
+    }
+
+    static string NormalizeRequired(string value, string errorMessage)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -172,6 +191,14 @@ static class RemoteActivityConfiguration
         }
 
         return value.Trim();
+    }
+
+    static string[] NormalizeOptionalStrings(IEnumerable<string> values)
+    {
+        return values
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value.Trim())
+            .ToArray();
     }
 
     static string? BuildImageRef(string? registryServer, string? repository, string? tag, string? digest)

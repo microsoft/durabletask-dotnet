@@ -80,6 +80,53 @@ docker rm -f durabletask-emulator
 - **`ContinueAsNew(NewVersion = "...")` is the safe migration boundary** for eternal orchestrations. The history is fully reset, so there's no replay-determinism risk from changing logic. External state (entities, activities, sub-orchestrations completed before the boundary) persists.
 - **Entities themselves stay unversioned by design.** A single entity identity is the source of truth for some piece of state; versioning the identity would fork it.
 
+## Lifecycle of V1: how the sample's V1 came to be
+
+Reading the sample, `ProcessJobsWorkflowV1` looks like it already knows about V2 (it calls `ContinueAsNew(NewVersion = "2")`). That's not how V1 starts life. The realistic timeline:
+
+### Day 1 — original V1 is shipped
+
+V1 is an eternal loop. Its last line is `ContinueAsNew()` (no version arg). It has no knowledge that V2 will ever exist.
+
+```csharp
+// What the *original* V1 looked like before V2 existed:
+[DurableTask("ProcessJobsWorkflow", Version = "1")]
+public sealed class ProcessJobsWorkflowV1 : TaskOrchestrator<int, string>
+{
+    public override Task<string> RunAsync(TaskOrchestrationContext context, int totalJobs)
+    {
+        EntityInstanceId logId = new(nameof(JobLog), "production-job-log");
+        // ... process work, record on JobLog ...
+        context.ContinueAsNew(totalJobs);  // loop on V1
+        return Task.FromResult(string.Empty);
+    }
+}
+```
+
+### Day 30 — bug discovered, V2 written
+
+You add `ProcessJobsWorkflowV2` as a brand-new class with the fix. Both classes now coexist in the registry.
+
+### Day 30 — V1 gets a surgical hotfix to migrate its in-flight instances
+
+You change one line in V1: replace `context.ContinueAsNew(totalJobs)` with `context.ContinueAsNew(new ContinueAsNewOptions { NewVersion = "2", NewInput = totalJobs })`. **That's the only change.** Everything before that line is unchanged. This is the V1 the sample shows.
+
+### Day 31+ — in-flight V1 instances migrate themselves at their next turn boundary
+
+Each turn ends with `ContinueAsNew(NewVersion = "2")`, restarting the same instance ID as a V2 instance. Entity state (held in `JobLog`) survives the boundary because entities are independent of orchestration lifecycle.
+
+### Day 60 — V1 class can be removed
+
+Once no V1 instances remain (you can verify via the management API or by querying the version field), delete the V1 class. From this point on, only V2 (and any future V3) live in the registry.
+
+### Is the Day-30 surgical hotfix replay-safe?
+
+Yes. `ContinueAsNew` is the **last action** of a turn. Adding `NewVersion = "2"` to an existing `ContinueAsNew(...)` call doesn't add a new action or change the order of any prior actions in the turn — it only changes the post-turn restart parameters the runtime uses for the next execution.
+
+As long as everything in V1 before the `ContinueAsNew` line is unchanged, replay of any in-flight V1 instance succeeds: history records the prior actions, the redeployed code emits the same prior actions, and the final `ContinueAsNew` is treated as a complete-the-turn action whose arguments inform how the next execution starts (not what gets compared against history).
+
+The single-line edit rule matters: if your hotfix also tweaks the loop body (an extra entity call, a removed timer, reordered operations), that *is* a non-deterministic change for instances mid-turn at deploy time. Keep the hotfix surgical — only the `ContinueAsNew` arguments change.
+
 ## What if I add v3 tomorrow? (Replay-determinism reference)
 
 Three scenarios are worth pulling apart, because the answer is different for each:

@@ -4,6 +4,7 @@
 using FluentAssertions;
 using Grpc.Core;
 using Microsoft.DurableTask.Protobuf.Serverless;
+using Microsoft.DurableTask.Worker.AzureManaged;
 using Microsoft.DurableTask.Worker.AzureManaged.Serverless;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -19,9 +20,11 @@ public class ServerlessActivitiesTests
     const string TaskHub = "testhub";
 
     [Fact]
-    public void ServerlessDeclarationContract_DoesNotExposeLaunchCommand()
+    public void ServerlessDeclarationContract_DoesNotExposeRemovedOptions()
     {
         typeof(ServerlessOptions).GetProperty("LaunchCommand").Should().BeNull();
+        typeof(ServerlessOptions).GetProperty("DeclarationRetryMaxAttempts").Should().BeNull();
+        typeof(ServerlessOptions).GetProperty("DeclarationRetryDelay").Should().BeNull();
         typeof(ServerlessActivityDeclaration).GetProperty("LaunchCommand").Should().BeNull();
     }
 
@@ -116,15 +119,13 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public async Task ServerlessActivityDeclarationHostedService_RetriesTransientFailures()
+    public async Task ServerlessActivityDeclarationHostedService_DoesNotRetryTransientFailures()
     {
         // Arrange
         ServerlessOptions options = new()
         {
             TaskHub = TaskHub,
             ContainerImage = "example.com/repo/worker@sha256:abc",
-            DeclarationRetryMaxAttempts = 2,
-            DeclarationRetryDelay = TimeSpan.Zero,
         };
         options.ActivityNames.Add("RemoteHello");
         FakeServerlessActivitiesClient client = new() { TransientDeclarationFailures = 1 };
@@ -134,11 +135,13 @@ public class ServerlessActivitiesTests
             NullLogger<ServerlessActivityDeclarationHostedService>.Instance);
 
         // Act
-        await service.StartAsync(CancellationToken.None);
+        Func<Task> action = () => service.StartAsync(CancellationToken.None);
 
         // Assert
-        client.DeclarationAttempts.Should().Be(2);
-        client.Declarations.Should().ContainSingle();
+        await action.Should().ThrowAsync<RpcException>()
+            .Where(exception => exception.StatusCode == StatusCode.Unavailable);
+        client.DeclarationAttempts.Should().Be(1);
+        client.Declarations.Should().BeEmpty();
     }
 
     [Fact]
@@ -213,7 +216,7 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public async Task UseServerlessActivities_LocalExclude_ConfiguresLocalWorkerExclusionFilter()
+    public async Task DeclareServerlessActivities_ConfiguresLocalWorkerExclusionFilter()
     {
         // Arrange
         using EnvironmentVariableScope serverlessActivities = new("DTS_SERVERLESS_ACTIVITIES", null);
@@ -223,7 +226,7 @@ public class ServerlessActivitiesTests
         mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
 
         // Act
-        mockBuilder.Object.UseServerlessActivities(options =>
+        mockBuilder.Object.DeclareServerlessActivities(options =>
         {
             options.TaskHub = TaskHub;
             options.ContainerImage = "example.com/repo/worker:latest";
@@ -239,7 +242,7 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public async Task UseServerlessActivities_DoesNotConfigureFilterWhenActivityNamesAreEmpty()
+    public async Task DeclareServerlessActivities_DoesNotConfigureFilterWhenActivityNamesAreEmpty()
     {
         // Arrange
         using EnvironmentVariableScope serverlessActivities = new("DTS_SERVERLESS_ACTIVITIES", null);
@@ -249,7 +252,7 @@ public class ServerlessActivitiesTests
         mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
 
         // Act
-        mockBuilder.Object.UseServerlessActivities(options =>
+        mockBuilder.Object.DeclareServerlessActivities(options =>
         {
             options.TaskHub = TaskHub;
             options.ContainerImage = "example.com/repo/worker:latest";
@@ -264,22 +267,17 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public async Task UseServerlessActivities_ServerlessInclude_ConfiguresServerlessActivityWorkerFilter()
+    public async Task UseServerlessWorker_ConfiguresServerlessActivityWorkerFilter()
     {
         // Arrange
-        using EnvironmentVariableScope serverlessActivities = new("DTS_SERVERLESS_ACTIVITIES", null);
+        using EnvironmentVariableScope serverlessActivities = new("DTS_SERVERLESS_ACTIVITIES", "RemoteHello");
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
         mockBuilder.Setup(builder => builder.Services).Returns(services);
         mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
 
         // Act
-        mockBuilder.Object.UseServerlessActivities(options =>
-        {
-            options.Mode = ServerlessMode.ServerlessInclude;
-            options.TaskHub = TaskHub;
-            options.ActivityNames.Add("RemoteHello");
-        });
+        mockBuilder.Object.UseServerlessWorker();
 
         await using ServiceProvider provider = services.BuildServiceProvider();
         DurableTaskWorkerWorkItemFilters filters = provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>().Get(Options.DefaultName);

@@ -24,12 +24,6 @@ static partial class Logs
     public static partial void ServerlessActivitiesDeclared(ILogger logger, string hub, string workerProfile, int count, string image);
 
     [LoggerMessage(
-        EventId = 3,
-        Level = LogLevel.Warning,
-        Message = "Serverless activity declaration failed transiently hub={Hub} attempt={Attempt} maxAttempts={MaxAttempts}")]
-    public static partial void ServerlessActivityDeclarationRetry(ILogger logger, Exception exception, string hub, int attempt, int maxAttempts);
-
-    [LoggerMessage(
         EventId = 4,
         Level = LogLevel.Error,
         Message = "Serverless activity declaration failed hub={Hub}")]

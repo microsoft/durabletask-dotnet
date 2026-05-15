@@ -30,11 +30,6 @@ public sealed class ServerlessOptions
     internal const string DefaultWorkerProfileId = "default";
 
     /// <summary>
-    /// Gets the worker mode for serverless activity execution. Set automatically from the runtime environment.
-    /// </summary>
-    internal ServerlessMode Mode { get; set; } = ServerlessMode.LocalExclude;
-
-    /// <summary>
     /// Gets the serverless activity names to declare or execute.
     /// </summary>
     public IList<string> ActivityNames { get; } = new List<string>();
@@ -115,17 +110,12 @@ public sealed class ServerlessOptions
     public int MaxConcurrentActivities { get; set; } = 100;
 
     /// <summary>
-    /// Gets or sets the maximum number of declaration attempts made on transient failures.
-    /// </summary>
-    public int DeclarationRetryMaxAttempts { get; set; } = 5;
-
-    /// <summary>
-    /// Gets or sets the delay between declaration retry attempts.
-    /// </summary>
-    public TimeSpan DeclarationRetryDelay { get; set; } = TimeSpan.FromSeconds(1);
-
-    /// <summary>
     /// Gets or sets the interval used to refresh live worker capacity while the registration stream is open.
     /// </summary>
     public TimeSpan HeartbeatInterval { get; set; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// Gets or sets the worker mode for serverless activity execution. Set automatically from the runtime environment.
+    /// </summary>
+    internal ServerlessMode Mode { get; set; } = ServerlessMode.LocalExclude;
 }

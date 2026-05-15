@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Grpc.Core;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Proto = Microsoft.DurableTask.Protobuf.Serverless;
@@ -33,18 +32,11 @@ sealed class ServerlessActivityDeclarationHostedService : IHostedService
         this.logger = Check.NotNull(logger);
     }
 
-    /// <summary>
-    /// Gets a task completed when the declaration attempt succeeds, is skipped, or fails.
-    /// </summary>
-    internal TaskCompletionSource<Proto.ServerlessActivityDeclarationResult?> Ready { get; } =
-        new(TaskCreationOptions.RunContinuationsAsynchronously);
-
     /// <inheritdoc/>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         if (this.options.Mode == ServerlessMode.ServerlessInclude)
         {
-            this.Ready.TrySetResult(null);
             return;
         }
 
@@ -52,53 +44,32 @@ sealed class ServerlessActivityDeclarationHostedService : IHostedService
         if (activityNames.Length == 0)
         {
             Logs.NoServerlessActivitiesForDeclaration(this.logger, this.options.TaskHub);
-            this.Ready.TrySetResult(null);
             return;
         }
 
-        Proto.ServerlessActivityDeclaration declaration = ServerlessActivityConfiguration.BuildDeclaration(this.options, activityNames);
-        int maxAttempts = Math.Max(1, this.options.DeclarationRetryMaxAttempts);
-        for (int attempt = 1; ; attempt++)
+        Proto.ServerlessActivityDeclaration declaration = ServerlessActivityConfiguration.BuildDeclaration(
+            this.options,
+            activityNames);
+        try
         {
-            try
-            {
-                Proto.ServerlessActivityDeclarationResult result = await this.client.DeclareServerlessActivitiesAsync(
-                    declaration,
-                    this.options.TaskHub,
-                    cancellationToken).ConfigureAwait(false);
-                this.Ready.TrySetResult(result);
-                Logs.ServerlessActivitiesDeclared(
-                    this.logger,
-                    this.options.TaskHub,
-                    declaration.WorkerProfileId,
-                    declaration.ActivityNames.Count,
-                    declaration.Image?.ImageRef ?? string.Empty);
-                return;
-            }
-            catch (Exception ex) when (IsTransient(ex) && attempt < maxAttempts && !cancellationToken.IsCancellationRequested)
-            {
-                Logs.ServerlessActivityDeclarationRetry(this.logger, ex, this.options.TaskHub, attempt, maxAttempts);
-                if (this.options.DeclarationRetryDelay > TimeSpan.Zero)
-                {
-                    await Task.Delay(this.options.DeclarationRetryDelay, cancellationToken).ConfigureAwait(false);
-                }
-            }
-            catch (Exception ex)
-            {
-                this.Ready.TrySetException(ex);
-                Logs.ServerlessActivityDeclarationFailed(this.logger, ex, this.options.TaskHub);
-                throw;
-            }
+            await this.client.DeclareServerlessActivitiesAsync(
+                declaration,
+                this.options.TaskHub,
+                cancellationToken).ConfigureAwait(false);
+            Logs.ServerlessActivitiesDeclared(
+                this.logger,
+                this.options.TaskHub,
+                declaration.WorkerProfileId,
+                declaration.ActivityNames.Count,
+                declaration.Image?.ImageRef ?? string.Empty);
+        }
+        catch (Exception ex)
+        {
+            Logs.ServerlessActivityDeclarationFailed(this.logger, ex, this.options.TaskHub);
+            throw;
         }
     }
 
     /// <inheritdoc/>
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    static bool IsTransient(Exception exception) =>
-        exception is RpcException rpcException
-        && (rpcException.StatusCode == StatusCode.Unavailable
-            || rpcException.StatusCode == StatusCode.DeadlineExceeded
-            || rpcException.StatusCode == StatusCode.ResourceExhausted
-            || rpcException.StatusCode == StatusCode.Internal);
 }

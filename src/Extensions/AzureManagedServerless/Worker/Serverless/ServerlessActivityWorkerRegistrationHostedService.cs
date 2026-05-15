@@ -40,17 +40,11 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
         this.lifetime = lifetime;
     }
 
-    /// <summary>
-    /// Gets a task completed when the worker registration succeeds, is skipped, or fails.
-    /// </summary>
-    internal TaskCompletionSource<bool> Ready { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
     /// <inheritdoc/>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         if (this.options.Mode != ServerlessMode.ServerlessInclude)
         {
-            this.Ready.TrySetResult(true);
             this.pump = Task.CompletedTask;
             return;
         }
@@ -59,7 +53,6 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
         if (activityNames.Length == 0)
         {
             Logs.NoServerlessActivitiesForWorkerRegistration(this.logger, this.options.TaskHub);
-            this.Ready.TrySetResult(true);
             this.pump = Task.CompletedTask;
             return;
         }
@@ -73,7 +66,6 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
         try
         {
             await registrationSession.WriteMessageAsync(startMessage).ConfigureAwait(false);
-            this.Ready.TrySetResult(true);
             Logs.ServerlessActivityWorkerRegistered(
                 this.logger,
                 startMessage.Start.TaskHub,
@@ -84,7 +76,6 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
         }
         catch (Exception ex)
         {
-            this.Ready.TrySetException(ex);
             Logs.ServerlessActivityWorkerRegistrationFailed(this.logger, ex, this.options.TaskHub);
             throw;
         }

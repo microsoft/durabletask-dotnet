@@ -146,6 +146,21 @@ public record SubOrchestrationOptions : TaskOptions
     /// Gets the orchestration instance ID.
     /// </summary>
     public string? InstanceId { get; init; }
+
+    /// <summary>
+    /// Gets the version to associate with the sub-orchestration instance.
+    /// </summary>
+    /// <remarks>
+    /// Forwards to <see cref="TaskOptions.Version"/>. This property is declared on the derived
+    /// record to preserve binary compatibility with assemblies compiled against earlier SDK versions
+    /// that declared <c>SubOrchestrationOptions.Version</c> directly. New code should prefer
+    /// <see cref="TaskOptions.Version"/>.
+    /// </remarks>
+    public new TaskVersion? Version
+    {
+        get => base.Version;
+        init => base.Version = value;
+    }
 }
 
 /// <summary>

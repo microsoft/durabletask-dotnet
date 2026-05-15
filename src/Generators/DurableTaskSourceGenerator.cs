@@ -4,7 +4,6 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
-using System.Globalization;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
@@ -248,14 +247,19 @@ namespace Microsoft.DurableTask.Generators
 
             string taskName = classType.Name;
             Location? taskNameLocation = null;
-            // Only treat the first argument as the positional task name when it is NOT a named property
-            // argument (e.g., `Version = "..."` from the new attribute syntax). Otherwise fall through and
-            // let the task name default to the class name.
-            if (attribute.ArgumentList?.Arguments is { Count: > 0 } argList0
-                && argList0[0].NameEquals is null
-                && argList0[0].NameColon is null)
+
+            // Find the task-name argument. It can be either positional (`[DurableTask("X")]`)
+            // or a named constructor argument (`[DurableTask(name: "X")]`). We must NOT treat the
+            // property assignment (`[DurableTask(Version = "v1")]`) as the task name — those use
+            // NameEquals and target the property setter, not the ctor parameter.
+            AttributeArgumentSyntax? nameArg = attribute.ArgumentList?.Arguments
+                .FirstOrDefault(arg =>
+                    arg.NameEquals is null
+                    && (arg.NameColon is null
+                        || arg.NameColon.Name.Identifier.ValueText == "name"));
+            if (nameArg is not null)
             {
-                ExpressionSyntax expression = argList0[0].Expression;
+                ExpressionSyntax expression = nameArg.Expression;
                 taskName = context.SemanticModel.GetConstantValue(expression).ToString();
                 taskNameLocation = expression.GetLocation();
             }

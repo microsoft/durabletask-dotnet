@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Reflection;
 using Microsoft.DurableTask.Client;
 
 namespace Microsoft.DurableTask.Tests;
@@ -282,5 +283,34 @@ public class TaskOptionsTests
         copy.Tags.Should().BeSameAs(original.Tags);
         copy.Version.Should().Be(original.Version);
         copy.DedupeStatuses.Should().BeSameAs(original.DedupeStatuses);
+    }
+
+    [Fact]
+    public void SubOrchestrationOptions_VersionPropertyDeclaredOnDerived_PreservesBinaryCompat()
+    {
+        // Pins that SubOrchestrationOptions.Version is declared (with `new`) on the derived
+        // record so the IL symbol `SubOrchestrationOptions.get_Version()` continues to resolve
+        // for assemblies compiled against earlier SDK versions that declared Version directly on
+        // SubOrchestrationOptions.
+        PropertyInfo? versionProp = typeof(SubOrchestrationOptions).GetProperty(
+            nameof(SubOrchestrationOptions.Version),
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly);
+
+        versionProp.Should().NotBeNull(
+            "SubOrchestrationOptions.Version must remain declared on the derived type for binary compatibility " +
+            "with assemblies compiled against earlier SDK versions.");
+        versionProp!.DeclaringType.Should().Be(typeof(SubOrchestrationOptions));
+        versionProp.PropertyType.Should().Be(typeof(TaskVersion?));
+    }
+
+    [Fact]
+    public void SubOrchestrationOptions_VersionGetterAndSetter_ForwardToBaseTaskOptions()
+    {
+        // Setting through SubOrchestrationOptions.Version must round-trip through TaskOptions.Version
+        // (forwarding accessors). Both must observe the same value with no duplicate backing store.
+        SubOrchestrationOptions sub = new() { Version = new TaskVersion("v1") };
+
+        sub.Version.Should().Be(new TaskVersion("v1"));
+        ((TaskOptions)sub).Version.Should().Be(new TaskVersion("v1"));
     }
 }

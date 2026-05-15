@@ -207,6 +207,104 @@ internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistr
     }
 
     [Fact]
+    public Task Standalone_VersionedOrchestratorWithNamedCtorNameArg_UsesNamedArgAsTaskName()
+    {
+        // Pins T1 fix: [DurableTask(name: "X", Version = "v1")] must read "X" as the task name.
+        // Prior to the fix, requiring NameColon is null skipped the named ctor arg and fell back
+        // to the class name. Now we also accept named ctor args targeting the "name" parameter.
+        string code = @"
+using System.Threading.Tasks;
+using Microsoft.DurableTask;
+
+[DurableTask(name: ""InvoiceWorkflow"", Version = ""v1"")]
+class InvoiceWorkflowImpl : TaskOrchestrator<int, string>
+{
+    public override Task<string> RunAsync(TaskOrchestrationContext context, int input) => Task.FromResult(string.Empty);
+}";
+
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            methodList: @"
+/// <summary>
+/// Schedules a new instance of the <see cref=""InvoiceWorkflowImpl""/> orchestrator.
+/// </summary>
+/// <remarks>Stamps version <c>v1</c> on the started instance. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
+/// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
+public static Task<string> ScheduleNewInvoiceWorkflowInstanceAsync(
+    this IOrchestrationSubmitter client, int input, StartOrchestrationOptions? options = null)
+{
+    return client.ScheduleNewOrchestrationInstanceAsync(""InvoiceWorkflow"", input, ApplyGeneratedVersion(options, ""v1""));
+}
+
+/// <summary>
+/// Calls the <see cref=""InvoiceWorkflowImpl""/> sub-orchestrator.
+/// </summary>
+/// <remarks>Stamps version <c>v1</c> on the sub-orchestration. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
+public static Task<string> CallInvoiceWorkflowAsync(
+    this TaskOrchestrationContext context, int input, TaskOptions? options = null)
+{
+    return context.CallSubOrchestratorAsync<string>(""InvoiceWorkflow"", input, ApplyGeneratedVersion(options, ""v1""));
+}
+
+static StartOrchestrationOptions? ApplyGeneratedVersion(StartOrchestrationOptions? options, string version)
+{
+    // Caller-supplied options.Version is preserved as-is — the explicit value wins. Otherwise we
+    // stamp the version that the generated helper was emitted for.
+    if (options is null)
+    {
+        return new StartOrchestrationOptions
+        {
+            Version = version,
+        };
+    }
+
+    if (options.Version is not null)
+    {
+        return options;
+    }
+
+    return options with { Version = new TaskVersion(version) };
+}
+
+static TaskOptions? ApplyGeneratedVersion(TaskOptions? options, string version)
+{
+    // Caller-supplied options.Version is preserved as-is — the explicit value wins. Otherwise we
+    // stamp the version that the generated helper was emitted for.
+    if (options is SubOrchestrationOptions subOrchestrationOptions)
+    {
+        return subOrchestrationOptions.Version is not null
+            ? subOrchestrationOptions
+            : subOrchestrationOptions with { Version = new TaskVersion(version) };
+    }
+
+    if (options is null)
+    {
+        return new SubOrchestrationOptions
+        {
+            Version = version,
+        };
+    }
+
+    return options.Version is not null
+        ? options
+        : new SubOrchestrationOptions(options) { Version = version };
+}
+
+internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
+{
+    builder.AddOrchestrator<InvoiceWorkflowImpl>();
+    return builder;
+}");
+
+        return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: false);
+    }
+
+    [Fact]
     public Task Standalone_MultiVersionedOrchestrators_GenerateVersionQualifiedHelpersOnly()
     {
         string code = @"

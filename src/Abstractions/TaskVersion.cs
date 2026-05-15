@@ -125,9 +125,6 @@ public readonly struct TaskVersion : IEquatable<TaskVersion>
     /// <returns>A 32-bit hash code value.</returns>
     public override int GetHashCode()
     {
-        // Null-safe: a default-constructed TaskVersion (or one created via the implicit conversion from
-        // null) must not crash when used as a dictionary key. Treats null and empty as the same key.
-        string value = this.Version ?? string.Empty;
-        return StringComparer.OrdinalIgnoreCase.GetHashCode(value);
+        return StringComparer.OrdinalIgnoreCase.GetHashCode(this.Version);
     }
 }

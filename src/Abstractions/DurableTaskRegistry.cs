@@ -48,7 +48,7 @@ public sealed partial class DurableTaskRegistry
     /// </remarks>
     internal IEnumerable<KeyValuePair<TaskName, Func<IServiceProvider, ITaskOrchestrator>>> Orchestrators
         => this.OrchestratorsByVersion.Select(kvp =>
-            new KeyValuePair<TaskName, Func<IServiceProvider, ITaskOrchestrator>>(kvp.Key.Name, kvp.Value));
+            new KeyValuePair<TaskName, Func<IServiceProvider, ITaskOrchestrator>>(new TaskName(kvp.Key.Name), kvp.Value));
 
     /// <summary>
     /// Gets the currently registered activities as a name-keyed enumeration. One entry per
@@ -66,7 +66,7 @@ public sealed partial class DurableTaskRegistry
     /// </remarks>
     internal IEnumerable<KeyValuePair<TaskName, Func<IServiceProvider, ITaskActivity>>> Activities
         => this.ActivitiesByVersion.Select(kvp =>
-            new KeyValuePair<TaskName, Func<IServiceProvider, ITaskActivity>>(kvp.Key.Name, kvp.Value));
+            new KeyValuePair<TaskName, Func<IServiceProvider, ITaskActivity>>(new TaskName(kvp.Key.Name), kvp.Value));
 
     /// <summary>
     /// Enumerates the registered orchestrators. One entry per registration; multi-version

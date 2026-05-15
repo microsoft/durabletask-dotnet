@@ -54,7 +54,6 @@ static class ServerlessActivityConfiguration
             WorkerProfileId = workerProfileId,
             Image = BuildImage(options),
             Resources = BuildResources(options),
-            LaunchCommand = options.LaunchCommand ?? string.Empty,
             MaxConcurrentActivities = options.MaxConcurrentActivities,
         };
 

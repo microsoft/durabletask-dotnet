@@ -105,11 +105,6 @@ public sealed class ServerlessOptions
     public IList<string> Cmd { get; } = new List<string>();
 
     /// <summary>
-    /// Gets or sets the shell command exec'd after the sandbox reaches Running.
-    /// </summary>
-    public string LaunchCommand { get; set; } = string.Empty;
-
-    /// <summary>
     /// Gets the unique worker instance identifier.
     /// </summary>
     public string WorkerInstanceId { get; } = Guid.NewGuid().ToString("N");

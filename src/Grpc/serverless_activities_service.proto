@@ -52,6 +52,8 @@ message ServerlessActivityWorkerSessionResult {
 
 message ServerlessActivityDeclaration {
   reserved 1;
+  reserved 10;
+  reserved "launch_command";
   string worker_profile_id = 2;
   repeated string activity_names = 3;
   ServerlessActivityImage image = 4;
@@ -60,7 +62,6 @@ message ServerlessActivityDeclaration {
   ServerlessActivityResources resources = 7;
   repeated string entrypoint = 8;
   repeated string cmd = 9;
-  string launch_command = 10;
 }
 
 message ServerlessActivityImage {

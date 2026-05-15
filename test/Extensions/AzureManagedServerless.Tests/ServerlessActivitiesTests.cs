@@ -19,6 +19,13 @@ public class ServerlessActivitiesTests
     const string TaskHub = "testhub";
 
     [Fact]
+    public void ServerlessDeclarationContract_DoesNotExposeLaunchCommand()
+    {
+        typeof(ServerlessOptions).GetProperty("LaunchCommand").Should().BeNull();
+        typeof(ServerlessActivityDeclaration).GetProperty("LaunchCommand").Should().BeNull();
+    }
+
+    [Fact]
     public async Task ServerlessActivityDeclarationHostedService_SendsDeclarationPayload()
     {
         // Arrange
@@ -29,7 +36,6 @@ public class ServerlessActivitiesTests
             ContainerImage = "mcr.microsoft.com/durabletask/demo-worker:1.0",
             Cpu = "500m",
             Memory = "1024Mi",
-            LaunchCommand = "cd /app && dotnet DemoWorker.dll",
             MaxConcurrentActivities = 7,
         };
         options.ActivityNames.Add("RemoteHello");
@@ -59,8 +65,32 @@ public class ServerlessActivitiesTests
         declaration.EnvironmentVariables.Should().ContainKey("CUSTOM_SETTING").WhoseValue.Should().Be("enabled");
         declaration.Entrypoint.Should().Equal("/usr/bin/tini", "--");
         declaration.Cmd.Should().Equal("dotnet", "/app/DemoWorker.dll");
-        declaration.LaunchCommand.Should().Be("cd /app && dotnet DemoWorker.dll");
         declaration.MaxConcurrentActivities.Should().Be(7);
+    }
+
+    [Fact]
+    public async Task ServerlessActivityDeclarationHostedService_OmitsEntrypointAndCmdByDefault()
+    {
+        // Arrange
+        ServerlessOptions options = new()
+        {
+            TaskHub = TaskHub,
+            ContainerImage = "mcr.microsoft.com/durabletask/demo-worker:1.0",
+        };
+        options.ActivityNames.Add("RemoteHello");
+        FakeServerlessActivitiesClient client = new();
+        ServerlessActivityDeclarationHostedService service = new(
+            client,
+            options,
+            NullLogger<ServerlessActivityDeclarationHostedService>.Instance);
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+
+        // Assert
+        ServerlessActivityDeclaration declaration = client.Declarations.Should().ContainSingle().Subject;
+        declaration.Entrypoint.Should().BeEmpty();
+        declaration.Cmd.Should().BeEmpty();
     }
 
     [Fact]

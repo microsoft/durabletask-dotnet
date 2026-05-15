@@ -124,13 +124,14 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
 
     static void ApplyServerlessEnvironmentOverrides(ServerlessOptions options)
     {
-        string? mode = Environment.GetEnvironmentVariable("DTS_SERVERLESS_MODE");
-        if (!string.IsNullOrWhiteSpace(mode))
+        // Auto-detect worker mode from DTS_SUBSTRATE, which the backend injects when
+        // launching a sandbox. This removes the need for callers to manually set Mode
+        // or inject DTS_SERVERLESS_MODE into the sandbox environment.
+        string? substrate = Environment.GetEnvironmentVariable("DTS_SUBSTRATE");
+        if (string.Equals(substrate, "Sandbox", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(substrate, "AcaSessionPool", StringComparison.OrdinalIgnoreCase))
         {
-            options.Mode = string.Equals(mode, "serverless-worker", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(mode, nameof(ServerlessMode.ServerlessInclude), StringComparison.OrdinalIgnoreCase)
-                    ? ServerlessMode.ServerlessInclude
-                    : ServerlessMode.LocalExclude;
+            options.Mode = ServerlessMode.ServerlessInclude;
         }
 
         ApplyActivityNameEnvironmentOverride(options.ActivityNames);
@@ -152,12 +153,6 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         if (!string.IsNullOrWhiteSpace(memory))
         {
             options.Memory = memory.Trim();
-        }
-
-        string? launchCommand = Environment.GetEnvironmentVariable("DTS_SERVERLESS_LAUNCH_COMMAND");
-        if (!string.IsNullOrWhiteSpace(launchCommand))
-        {
-            options.LaunchCommand = launchCommand;
         }
 
         if (int.TryParse(Environment.GetEnvironmentVariable("DTS_SERVERLESS_MAX_ACTIVITIES"), out int maxActivities) && maxActivities > 0)

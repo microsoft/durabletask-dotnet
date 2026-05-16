@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Fix DURABLE0010 false positives when a replay-safe logger created via `TaskOrchestrationContext.CreateReplaySafeLogger` is passed to a helper method ([#717](https://github.com/microsoft/durabletask-dotnet/issues/717))
 
 - Add per-task versioning via `[DurableTask(Version = "...")]`, `TaskOptions.Version`, and `StartOrchestrationOptions.Version` ([#695](https://github.com/microsoft/durabletask-dotnet/pull/695))
 

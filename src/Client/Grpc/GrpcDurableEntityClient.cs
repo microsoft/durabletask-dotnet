@@ -66,7 +66,7 @@ class GrpcDurableEntityClient : DurableEntityClient
             request.ParentTraceContext.TraceState = activity.TraceStateString;
         }
 
-        // TODO this.logger.LogSomething
+        this.logger.SignalingEntity(id.ToString(), operationName);
         try
         {
             await this.sidecarClient.SignalEntityAsync(request, cancellationToken: cancellation);
@@ -107,6 +107,7 @@ class GrpcDurableEntityClient : DurableEntityClient
         int emptyEntitiesRemoved = 0;
         int orphanedLocksReleased = 0;
 
+        this.logger.CleaningEntityStorage();
         try
         {
             do
@@ -156,6 +157,7 @@ class GrpcDurableEntityClient : DurableEntityClient
             IncludeState = includeState,
         };
 
+        this.logger.GettingEntity(id.ToString());
         try
         {
             P.GetEntityResponse response = await this.sidecarClient
@@ -180,6 +182,7 @@ class GrpcDurableEntityClient : DurableEntityClient
         DateTimeOffset? lastModifiedFrom = filter?.LastModifiedFrom;
         DateTimeOffset? lastModifiedTo = filter?.LastModifiedTo;
 
+        this.logger.QueryingEntities(startsWith, lastModifiedFrom, lastModifiedTo);
         return Pageable.Create(async (continuation, pageSize, cancellation) =>
         {
             pageSize ??= filter?.PageSize;

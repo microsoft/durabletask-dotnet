@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Testing;
 using Microsoft.DurableTask.Generators.Tests.Utils;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Microsoft.DurableTask.Generators.Tests;
 
@@ -414,6 +417,262 @@ public static Task<{outputType}> CallMyOrchestratorAsync(
             code,
             expectedOutput,
             isDurableFunctions: true);
+    }
+
+    [Fact]
+    public Task Orchestrators_ClassBasedSyntax_DuplicateLogicalNameAcrossVersions_ReportsDiagnostic()
+    {
+        string code = @"
+using System.Threading.Tasks;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.DurableTask;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace MyFunctions
+{
+    [DurableTask(""PaymentWorkflow"", Version = ""v1"")]
+    class PaymentWorkflowV1 : TaskOrchestrator<int, string>
+    {
+        public override Task<string> RunAsync(TaskOrchestrationContext context, int input) => Task.FromResult(string.Empty);
+    }
+
+    [DurableTask(""PaymentWorkflow"", Version = ""v2"")]
+    class PaymentWorkflowV2 : TaskOrchestrator<int, string>
+    {
+        public override Task<string> RunAsync(TaskOrchestrationContext context, int input) => Task.FromResult(string.Empty);
+    }
+}";
+
+        DiagnosticResult firstExpected = new DiagnosticResult("DURABLE3004", DiagnosticSeverity.Error)
+            .WithSpan("/0/Test0.cs", 9, 18, 9, 35)
+            .WithArguments("PaymentWorkflow");
+        DiagnosticResult secondExpected = new DiagnosticResult("DURABLE3004", DiagnosticSeverity.Error)
+            .WithSpan("/0/Test0.cs", 15, 18, 15, 35)
+            .WithArguments("PaymentWorkflow");
+
+        CSharpSourceGeneratorVerifier<DurableTaskSourceGenerator>.Test test = new()
+        {
+            TestState =
+            {
+                Sources = { code },
+                ExpectedDiagnostics = { firstExpected, secondExpected },
+                AdditionalReferences =
+                {
+                    typeof(TaskActivityContext).Assembly,
+                    typeof(FunctionAttribute).Assembly,
+                    typeof(FunctionContext).Assembly,
+                    typeof(OrchestrationTriggerAttribute).Assembly,
+                    typeof(ActivatorUtilities).Assembly,
+                },
+            },
+        };
+
+        return test.RunAsync();
+    }
+
+    /// <summary>
+    /// Forward-compatibility regression test. The Azure Functions integration is source-generator-driven:
+    /// each [DurableTask] class produces a [Function] trigger whose name is derived from the durable
+    /// task name. This test pins that adding the new <c>Version</c> property to <c>[DurableTask]</c> on
+    /// a single-version class does NOT change the emitted <c>[Function]</c> trigger name. Existing
+    /// Functions apps adding <c>Version</c> to one of their classes continue to work without renaming
+    /// triggers or losing in-flight instances. When the azure-functions-durable-extension later adds
+    /// support for same-name multi-version classes, removing the <c>DURABLE3004</c> gate is non-breaking
+    /// because no app today is in the multi-version state.
+    /// </summary>
+    [Fact]
+    public async Task Orchestrators_ClassBasedSyntax_SingleVersion_EmitsUnchangedFunctionTrigger()
+    {
+        string code = @"
+#nullable enable
+using System;
+using System.Threading.Tasks;
+using Microsoft.DurableTask;
+
+namespace MyNS
+{
+    [DurableTask(nameof(MyOrchestrator), Version = ""v1"")]
+    public class MyOrchestrator : TaskOrchestrator<int, string?>
+    {
+        public override Task<string?> RunAsync(TaskOrchestrationContext ctx, int input) => throw new NotImplementedException();
+    }
+}";
+
+        // The presence of Version on the attribute must NOT change the emitted [Function] trigger
+        // name (still nameof(MyOrchestrator)) or the singleton field name (still singletonMyOrchestrator).
+        // The Version only affects scheduling-side helpers (ApplyGeneratedVersion stamps "v1"); it does
+        // not affect how the Functions host receives the trigger.
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            "MyNS",
+            methodList: @"
+static readonly ITaskOrchestrator singletonMyOrchestrator = new MyOrchestrator();
+
+[Function(nameof(MyOrchestrator))]
+public static Task<string?> MyOrchestrator([OrchestrationTrigger] TaskOrchestrationContext context)
+{
+    return singletonMyOrchestrator.RunAsync(context, context.GetInput<int>())
+        .ContinueWith(t => (string?)(t.Result ?? default(string?)!), TaskContinuationOptions.ExecuteSynchronously);
+}
+
+/// <summary>
+/// Schedules a new instance of the <see cref=""MyOrchestrator""/> orchestrator.
+/// </summary>
+/// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
+public static Task<string> ScheduleNewMyOrchestratorInstanceAsync(
+    this IOrchestrationSubmitter client, int input, StartOrchestrationOptions? options = null)
+{
+    return client.ScheduleNewOrchestrationInstanceAsync(""MyOrchestrator"", input, options);
+}
+
+/// <summary>
+/// Calls the <see cref=""MyOrchestrator""/> sub-orchestrator.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
+public static Task<string?> CallMyOrchestratorAsync(
+    this TaskOrchestrationContext context, int input, TaskOptions? options = null)
+{
+    return context.CallSubOrchestratorAsync<string?>(""MyOrchestrator"", input, options);
+}",
+            isDurableFunctions: true);
+
+        await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: true);
+    }
+
+    /// <summary>
+    /// Forward-compatibility regression test for activities, mirroring the orchestrator case above.
+    /// Adding the new <c>Version</c> property to a single-version <c>[DurableTask]</c> activity must
+    /// not change the emitted <c>[Function]</c> trigger or the dispatcher logic — only the scheduling
+    /// helper's stamped version differs.
+    /// </summary>
+    [Fact]
+    public async Task Activities_ClassBasedSyntax_SingleVersion_EmitsUnchangedFunctionTrigger()
+    {
+        string code = @"
+#nullable enable
+using System;
+using System.Threading.Tasks;
+using Microsoft.DurableTask;
+
+namespace MyNS
+{
+    [DurableTask(nameof(MyActivity), Version = ""v1"")]
+    public class MyActivity : TaskActivity<int, string?>
+    {
+        public override Task<string?> RunAsync(TaskActivityContext ctx, int input) => throw new NotImplementedException();
+    }
+}";
+
+        string expectedOutput = TestHelpers.WrapAndFormat(
+            GeneratedClassName,
+            "MyNS",
+            methodList: @"
+/// <summary>
+/// Calls the <see cref=""MyActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
+public static Task<string?> CallMyActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
+{
+    return ctx.CallActivityAsync<string?>(""MyActivity"", input, options);
+}
+
+[Function(nameof(MyActivity))]
+public static async Task<string?> MyActivity([ActivityTrigger] int input, string instanceId, FunctionContext executionContext)
+{
+    ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<MyActivity>(executionContext.InstanceServices);
+    TaskActivityContext context = new GeneratedActivityContext(""MyActivity"", instanceId);
+    object? result = await activity.RunAsync(context, input);
+    return (string?)result!;
+}
+
+sealed class GeneratedActivityContext : TaskActivityContext
+{
+    public GeneratedActivityContext(TaskName name, string instanceId)
+    {
+        this.Name = name;
+        this.InstanceId = instanceId;
+    }
+
+    public override TaskName Name { get; }
+
+    public override string InstanceId { get; }
+}",
+            isDurableFunctions: true);
+
+        await TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: true);
+    }
+
+    [Fact]
+    public Task Orchestrators_ClassBasedSyntax_CollidesWithMethodBasedTrigger_ReportsDiagnostic()
+    {
+        string code = @"
+using System.Threading.Tasks;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.DurableTask;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace MyFunctions
+{
+    [DurableTask(""PaymentWorkflow"")]
+    class PaymentWorkflowOrchestrator : TaskOrchestrator<int, string>
+    {
+        public override Task<string> RunAsync(TaskOrchestrationContext context, int input) => Task.FromResult(string.Empty);
+    }
+
+    class ExistingFunctions
+    {
+        [Function(""PaymentWorkflow"")]
+        public Task<string> PaymentWorkflow([OrchestrationTrigger] TaskOrchestrationContext context) => Task.FromResult(string.Empty);
+    }
+}";
+
+        string expectedOutput = """
+// <auto-generated/>
+#nullable enable
+
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.DurableTask;
+using Microsoft.DurableTask.Internal;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Extensions.DependencyInjection;
+""";
+
+        DiagnosticResult expected = new DiagnosticResult("DURABLE3004", DiagnosticSeverity.Error)
+            .WithSpan("/0/Test0.cs", 9, 18, 9, 35)
+            .WithArguments("PaymentWorkflow");
+
+        CSharpSourceGeneratorVerifier<DurableTaskSourceGenerator>.Test test = new()
+        {
+            TestState =
+            {
+                Sources = { code },
+                GeneratedSources =
+                {
+                    (typeof(DurableTaskSourceGenerator), GeneratedFileName, Microsoft.CodeAnalysis.Text.SourceText.From(expectedOutput, System.Text.Encoding.UTF8, Microsoft.CodeAnalysis.Text.SourceHashAlgorithm.Sha256)),
+                },
+                ExpectedDiagnostics = { expected },
+                AdditionalReferences =
+                {
+                    typeof(TaskActivityContext).Assembly,
+                    typeof(FunctionAttribute).Assembly,
+                    typeof(FunctionContext).Assembly,
+                    typeof(OrchestrationTriggerAttribute).Assembly,
+                    typeof(ActivatorUtilities).Assembly,
+                },
+            },
+        };
+
+        return test.RunAsync();
     }
 
     /// <summary>

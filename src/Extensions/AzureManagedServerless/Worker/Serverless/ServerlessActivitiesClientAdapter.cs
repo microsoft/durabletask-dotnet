@@ -81,7 +81,6 @@ sealed class ServerlessActivitiesClientAdapter : IServerlessActivitiesClient
     {
         return await this.client.DeclareServerlessActivitiesAsync(
                 declaration,
-                headers: CreateTaskHubHeaders(taskHub),
                 cancellationToken: cancellationToken)
             .ResponseAsync.ConfigureAwait(false);
     }
@@ -90,11 +89,9 @@ sealed class ServerlessActivitiesClientAdapter : IServerlessActivitiesClient
     public IServerlessActivityWorkerSession OpenServerlessActivityWorkerSession(string taskHub, CancellationToken cancellationToken)
     {
         AsyncClientStreamingCall<Proto.ServerlessActivityWorkerMessage, Proto.ServerlessActivityWorkerSessionResult> call =
-            this.client.ConnectServerlessActivityWorker(headers: CreateTaskHubHeaders(taskHub), cancellationToken: cancellationToken);
+            this.client.ConnectServerlessActivityWorker(cancellationToken: cancellationToken);
         return new GrpcServerlessActivityWorkerSession(call);
     }
-
-    static Metadata CreateTaskHubHeaders(string taskHub) => new() { { "taskhub", taskHub } };
 
     /// <summary>
     /// gRPC-backed serverless activity worker registration session.

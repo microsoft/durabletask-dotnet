@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Generic;
 using System.Reflection;
 using DurableTask.Core;
 using DurableTask.Core.Serializing.Internal;
@@ -129,6 +130,273 @@ public class TaskOrchestrationContextWrapperTests
         innerContext.LastContinueAsNewInput.Should().Be("new-input");
     }
 
+    [Fact]
+    public async Task CallActivityAsync_TaskOptionsVersionOverridesInheritedOrchestrationVersion()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        await wrapper.CallActivityAsync<string>(
+            "TestActivity",
+            123,
+            new TaskOptions
+            {
+                Version = "v1",
+            });
+
+        // Assert
+        innerContext.LastScheduledTaskName.Should().Be("TestActivity");
+        innerContext.LastScheduledTaskVersion.Should().Be("v1");
+        innerContext.LastScheduledTaskInput.Should().Be(123);
+    }
+
+    [Fact]
+    public async Task CallActivityAsync_TaskOptionsVersionOverridesInheritedOrchestrationVersion_WithRetryPolicy()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        await wrapper.CallActivityAsync<string>(
+            "TestActivity",
+            123,
+            new TaskOptions(new RetryPolicy(1, TimeSpan.FromSeconds(1)))
+            {
+                Version = "v1",
+            });
+
+        // Assert
+        innerContext.LastScheduledTaskName.Should().Be("TestActivity");
+        innerContext.LastScheduledTaskVersion.Should().Be("v1");
+        innerContext.LastScheduledTaskInput.Should().Be(123);
+    }
+
+    [Fact]
+    public async Task CallActivityAsync_TaskOptionsVersionOverridesInheritedOrchestrationVersion_WithRetryHandler()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+        TaskOptions options = new(TaskOptions.FromRetryHandler(_ => false))
+        {
+            Version = "v1",
+        };
+
+        // Act
+        await wrapper.CallActivityAsync<string>("TestActivity", 123, options);
+
+        // Assert
+        innerContext.LastScheduledTaskName.Should().Be("TestActivity");
+        innerContext.LastScheduledTaskVersion.Should().Be("v1");
+        innerContext.LastScheduledTaskInput.Should().Be(123);
+    }
+
+    [Fact]
+    public async Task CallActivityAsync_PlainTaskOptionsUsesInheritedOrchestrationVersion()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        await wrapper.CallActivityAsync<string>("TestActivity", 123, new TaskOptions());
+
+        // Assert
+        innerContext.LastScheduledTaskName.Should().Be("TestActivity");
+        innerContext.LastScheduledTaskVersion.Should().Be("v2");
+        innerContext.LastScheduledTaskInput.Should().Be(123);
+    }
+
+    [Fact]
+    public async Task CallActivityAsync_PreservesCallerSuppliedTags()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act — caller supplies arbitrary tags; the SDK preserves them verbatim.
+        await wrapper.CallActivityAsync<string>(
+            "TestActivity",
+            123,
+            new TaskOptions(tags: new Dictionary<string, string>
+            {
+                ["caller.tag"] = "caller-value",
+            }));
+
+        // Assert
+        innerContext.LastScheduledTaskName.Should().Be("TestActivity");
+        innerContext.LastScheduledTaskVersion.Should().Be("v2");
+        innerContext.LastScheduledTaskInput.Should().Be(123);
+        GetLastScheduledTaskTags(innerContext).Should().Contain("caller.tag", "caller-value");
+    }
+
+    [Fact]
+    public async Task CallActivityAsync_NullOptionsUsesInheritedOrchestrationVersion()
+    {
+        // Arrange
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        await wrapper.CallActivityAsync<string>("TestActivity", 123);
+
+        // Assert
+        innerContext.LastScheduledTaskName.Should().Be("TestActivity");
+        innerContext.LastScheduledTaskVersion.Should().Be("v2");
+        innerContext.LastScheduledTaskInput.Should().Be(123);
+    }
+
+    [Fact]
+    public async Task CallActivityAsync_NullTaskOptionsVersion_InheritsOrchestrationVersion()
+    {
+        // Arrange — TaskOptions present but Version not set => inherit (same as plain TaskOptions).
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        await wrapper.CallActivityAsync<string>("TestActivity", 123, new TaskOptions());
+
+        // Assert
+        innerContext.LastScheduledTaskName.Should().Be("TestActivity");
+        innerContext.LastScheduledTaskVersion.Should().Be("v2");
+    }
+
+    [Fact]
+    public async Task CallActivityAsync_ExplicitUnversionedActivityOption_BypassesInherit()
+    {
+        // Arrange — from a v2 orchestration the caller explicitly requests the unversioned activity.
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        await wrapper.CallActivityAsync<string>(
+            "TestActivity",
+            123,
+            new TaskOptions { Version = TaskVersion.Unversioned });
+
+        // Assert — empty version is sent (the unversioned activity), instead of inheriting v2.
+        innerContext.LastScheduledTaskName.Should().Be("TestActivity");
+        innerContext.LastScheduledTaskVersion.Should().Be(string.Empty);
+    }
+
+    [Fact]
+    public async Task CallSubOrchestratorAsync_PlainOptions_UsesWorkerDefaultVersion()
+    {
+        // Arrange — a sub-orchestration scheduled without an explicit Version uses the worker's
+        // configured Versioning.DefaultVersion, mirroring the behavior the client gets when starting
+        // a top-level orchestration. The parent's instance version is intentionally NOT inherited —
+        // sub-orchestrations are new orchestration instances and follow the worker-default rule.
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new(
+            "Test",
+            new DurableTaskWorkerOptions
+            {
+                Versioning = new DurableTaskWorkerOptions.VersioningOptions { DefaultVersion = "9.9" },
+            },
+            NullLoggerFactory.Instance,
+            null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        await wrapper.CallSubOrchestratorAsync<string>("ChildOrchestration", 123);
+
+        // Assert
+        innerContext.LastSubOrchestrationName.Should().Be("ChildOrchestration");
+        innerContext.LastSubOrchestrationVersion.Should().Be("9.9");
+    }
+
+    [Fact]
+    public async Task CallSubOrchestratorAsync_NoWorkerDefaultVersion_StampsEmptyVersion()
+    {
+        // Arrange — without a worker Versioning.DefaultVersion and without an explicit option, the
+        // sub-orchestration is scheduled unversioned. The parent's own instance version is not
+        // inherited; sub-orchestrations are new instances and follow the worker-default rule.
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new(
+            "Test",
+            new DurableTaskWorkerOptions(),
+            NullLoggerFactory.Instance,
+            null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        await wrapper.CallSubOrchestratorAsync<string>("ChildOrchestration", 123);
+
+        // Assert
+        innerContext.LastSubOrchestrationName.Should().Be("ChildOrchestration");
+        innerContext.LastSubOrchestrationVersion.Should().Be(string.Empty);
+    }
+
+    [Fact]
+    public async Task CallSubOrchestratorAsync_ExplicitVersion_OverridesWorkerDefaultVersion()
+    {
+        // Arrange — explicit SubOrchestrationOptions.Version wins over the worker's DefaultVersion.
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new(
+            "Test",
+            new DurableTaskWorkerOptions
+            {
+                Versioning = new DurableTaskWorkerOptions.VersioningOptions { DefaultVersion = "9.9" },
+            },
+            NullLoggerFactory.Instance,
+            null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        await wrapper.CallSubOrchestratorAsync<string>(
+            "ChildOrchestration",
+            123,
+            new SubOrchestrationOptions { Version = "v1" });
+
+        // Assert
+        innerContext.LastSubOrchestrationName.Should().Be("ChildOrchestration");
+        innerContext.LastSubOrchestrationVersion.Should().Be("v1");
+    }
+
+    [Fact]
+    public async Task CallSubOrchestratorAsync_ExplicitUnversionedOption_OverridesWorkerDefaultVersion()
+    {
+        // Arrange — explicit TaskVersion.Unversioned wins over the worker's DefaultVersion, producing
+        // an unversioned sub-orchestration call.
+        TrackingOrchestrationContext innerContext = new("v2");
+        OrchestrationInvocationContext invocationContext = new(
+            "Test",
+            new DurableTaskWorkerOptions
+            {
+                Versioning = new DurableTaskWorkerOptions.VersioningOptions { DefaultVersion = "9.9" },
+            },
+            NullLoggerFactory.Instance,
+            null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        await wrapper.CallSubOrchestratorAsync<string>(
+            "ChildOrchestration",
+            123,
+            new SubOrchestrationOptions { Version = TaskVersion.Unversioned });
+
+        // Assert
+        innerContext.LastSubOrchestrationName.Should().Be("ChildOrchestration");
+        innerContext.LastSubOrchestrationVersion.Should().Be(string.Empty);
+    }
+
+    static IReadOnlyDictionary<string, string> GetLastScheduledTaskTags(TrackingOrchestrationContext innerContext)
+    {
+        PropertyInfo tagsProperty = innerContext.LastScheduledTaskOptions!.GetType().GetProperty("Tags")!;
+        return (IReadOnlyDictionary<string, string>)tagsProperty.GetValue(innerContext.LastScheduledTaskOptions)!;
+    }
+
     static void InvokeCompleteExternalEvent(TaskOrchestrationContextWrapper wrapper, string eventName, string rawEventPayload)
     {
         CompleteExternalEventMethod.Invoke(wrapper, [eventName, rawEventPayload]);
@@ -136,18 +404,31 @@ public class TaskOrchestrationContextWrapperTests
 
     sealed class TrackingOrchestrationContext : OrchestrationContext
     {
-        public TrackingOrchestrationContext()
+        public TrackingOrchestrationContext(string? version = null)
         {
             this.OrchestrationInstance = new()
             {
                 InstanceId = Guid.NewGuid().ToString(),
                 ExecutionId = Guid.NewGuid().ToString(),
             };
+            this.Version = version ?? string.Empty;
         }
 
         public object? LastContinueAsNewInput { get; private set; }
 
         public string? LastContinueAsNewVersion { get; private set; }
+
+        public string? LastScheduledTaskName { get; private set; }
+
+        public string? LastScheduledTaskVersion { get; private set; }
+
+        public object? LastScheduledTaskInput { get; private set; }
+
+        public ScheduleTaskOptions? LastScheduledTaskOptions { get; private set; }
+
+        public string? LastSubOrchestrationName { get; private set; }
+
+        public string? LastSubOrchestrationVersion { get; private set; }
 
         public List<(string InstanceId, string EventName, object EventData)> SentEvents { get; } = [];
 
@@ -164,13 +445,25 @@ public class TaskOrchestrationContextWrapperTests
         }
 
         public override Task<T> CreateSubOrchestrationInstance<T>(string name, string version, object input)
-            => throw new NotImplementedException();
+        {
+            this.LastSubOrchestrationName = name;
+            this.LastSubOrchestrationVersion = version;
+            return Task.FromResult(default(T)!);
+        }
 
         public override Task<T> CreateSubOrchestrationInstance<T>(string name, string version, string instanceId, object input)
-            => throw new NotImplementedException();
+        {
+            this.LastSubOrchestrationName = name;
+            this.LastSubOrchestrationVersion = version;
+            return Task.FromResult(default(T)!);
+        }
 
         public override Task<T> CreateSubOrchestrationInstance<T>(string name, string version, string instanceId, object input, IDictionary<string, string> tags)
-            => throw new NotImplementedException();
+        {
+            this.LastSubOrchestrationName = name;
+            this.LastSubOrchestrationVersion = version;
+            return Task.FromResult(default(T)!);
+        }
 
         public override Task<T> CreateTimer<T>(DateTime fireAt, T state)
             => throw new NotImplementedException();
@@ -179,7 +472,33 @@ public class TaskOrchestrationContextWrapperTests
             => throw new NotImplementedException();
 
         public override Task<TResult> ScheduleTask<TResult>(string name, string version, params object[] parameters)
-            => throw new NotImplementedException();
+            => this.CaptureScheduledTask<TResult>(name, version, parameters);
+
+        public override Task<TResult> ScheduleTask<TResult>(
+            string name,
+            string version,
+            ScheduleTaskOptions options,
+            params object[] parameters)
+            => this.CaptureScheduledTask<TResult>(name, version, parameters, options);
+
+        Task<TResult> CaptureScheduledTask<TResult>(
+            string name,
+            string version,
+            object[] parameters,
+            ScheduleTaskOptions? options = null)
+        {
+            this.LastScheduledTaskName = name;
+            this.LastScheduledTaskVersion = version;
+            this.LastScheduledTaskInput = parameters.Length switch
+            {
+                0 => null,
+                1 => parameters[0],
+                _ => parameters,
+            };
+            this.LastScheduledTaskOptions = options;
+
+            return Task.FromResult(default(TResult)!);
+        }
 
         public override void SendEvent(OrchestrationInstance orchestrationInstance, string eventName, object eventData)
         {

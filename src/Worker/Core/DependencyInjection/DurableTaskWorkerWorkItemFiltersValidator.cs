@@ -49,12 +49,19 @@ sealed class DurableTaskWorkerWorkItemFiltersValidator : IValidateOptions<Durabl
 
         DurableTaskRegistry registry = this.registryMonitor.Get(name);
 
+        HashSet<string> registeredOrchestratorNames = new(
+            registry.OrchestratorsByVersion.Keys.Select(k => k.Name),
+            StringComparer.OrdinalIgnoreCase);
+        HashSet<string> registeredActivityNames = new(
+            registry.ActivitiesByVersion.Keys.Select(k => k.Name),
+            StringComparer.OrdinalIgnoreCase);
+
         List<string> unknownOrchestrations = FindUnknown(
-            options.Orchestrations.Select(o => o.Name), n => registry.Orchestrators.ContainsKey(n));
+            options.Orchestrations.Select(o => o.Name), registeredOrchestratorNames.Contains);
         List<string> unknownActivities = FindUnknown(
-            options.Activities.Select(a => a.Name), n => registry.Activities.ContainsKey(n));
+            options.Activities.Select(a => a.Name), registeredActivityNames.Contains);
         List<string> unknownEntities = FindUnknown(
-            options.Entities.Select(e => e.Name), n => registry.Entities.ContainsKey(n));
+            options.Entities.Select(e => e.Name), n => registry.Entities.ContainsKey(new TaskName(n)));
 
         if (unknownOrchestrations.Count == 0
             && unknownActivities.Count == 0
@@ -76,7 +83,7 @@ sealed class DurableTaskWorkerWorkItemFiltersValidator : IValidateOptions<Durabl
         return ValidateOptionsResult.Fail(sb.ToString());
     }
 
-    static List<string> FindUnknown(IEnumerable<string> names, Func<TaskName, bool> isRegistered)
+    static List<string> FindUnknown(IEnumerable<string> names, Func<string, bool> isRegistered)
     {
         List<string> unknown = [];
         foreach (string name in names)
@@ -87,10 +94,7 @@ sealed class DurableTaskWorkerWorkItemFiltersValidator : IValidateOptions<Durabl
                 continue;
             }
 
-            // TaskName equality is OrdinalIgnoreCase, mirroring how registered keys are compared.
-            // Construct the TaskName explicitly so the conversion is not dependent on the implicit
-            // string -> TaskName operator (which could be removed/changed independently).
-            if (!isRegistered(new TaskName(name)))
+            if (!isRegistered(name))
             {
                 unknown.Add(name);
             }

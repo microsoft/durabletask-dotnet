@@ -856,7 +856,7 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
 
         try
         {
-            await this.SendWorkItemToClientAsync(new P.WorkItem
+            P.WorkItem workItem = new()
             {
                 ActivityRequest = new P.ActivityRequest
                 {
@@ -877,7 +877,14 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
                         }
                         : null,
                 },
-            });
+            };
+
+            if (activityEvent.Tags is not null)
+            {
+                workItem.ActivityRequest.Tags.Add(activityEvent.Tags);
+            }
+
+            await this.SendWorkItemToClientAsync(workItem);
         }
         catch
         {

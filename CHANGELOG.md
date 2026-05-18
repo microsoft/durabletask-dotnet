@@ -3,6 +3,8 @@
 ## Unreleased
 - Fix DURABLE0010 false positives when a replay-safe logger created via `TaskOrchestrationContext.CreateReplaySafeLogger` is passed to a helper method ([#717](https://github.com/microsoft/durabletask-dotnet/issues/717))
 
+- Add per-task versioning via `[DurableTask(Version = "...")]`, `TaskOptions.Version`, and `StartOrchestrationOptions.Version` ([#695](https://github.com/microsoft/durabletask-dotnet/pull/695))
+
 
 ## v1.24.2
 - Bump DI.Abstractions and Bcl.AsyncInterfaces to 9.0.1 ([#3433](https://github.com/microsoft/durabletask-dotnet/pull/3433)) (#723)

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+
+
+## v1.25.0-preview.1
+- Implement per-orchestration and per-activity versioning ([#695](https://github.com/microsoft/durabletask-dotnet/pull/695))
+- Add es-metadata.yml to schema 1.0.0 ([#722](https://github.com/microsoft/durabletask-dotnet/pull/722))
+- Release v1.24.2 ([#724](https://github.com/microsoft/durabletask-dotnet/pull/724))
 - Add per-task versioning via `[DurableTask(Version = "...")]`, `TaskOptions.Version`, and `StartOrchestrationOptions.Version` ([#695](https://github.com/microsoft/durabletask-dotnet/pull/695))
 
 

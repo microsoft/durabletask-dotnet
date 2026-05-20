@@ -15,8 +15,8 @@ string taskHub = Environment.GetEnvironmentVariable("DTS_TASK_HUB")
     ?? Environment.GetEnvironmentVariable("DTS_TASKHUB")
     ?? "ServerlessPocHub";
 bool allowInsecureCredentials = endpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
-TokenCredential credential = string.Equals(Environment.GetEnvironmentVariable("DTS_NO_AUTH"), "true", StringComparison.OrdinalIgnoreCase)
-    ? new NoAuthCredential()
+TokenCredential? credential = string.Equals(Environment.GetEnvironmentVariable("DTS_NO_AUTH"), "true", StringComparison.OrdinalIgnoreCase)
+    ? null
     : new DefaultAzureCredential();
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);

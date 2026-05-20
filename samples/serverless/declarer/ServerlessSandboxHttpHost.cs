@@ -20,7 +20,7 @@ internal static class ServerlessSandboxHttpHost
         string[] args,
         string endpoint,
         string taskHub,
-        TokenCredential credential,
+        TokenCredential? credential,
         bool allowInsecureCredentials)
     {
         string normalizedEndpoint = NormalizeEndpoint(endpoint);
@@ -31,7 +31,11 @@ internal static class ServerlessSandboxHttpHost
             Environment.GetEnvironmentVariable("DTS_WORKER_PROFILE_ID") ?? "default",
             Environment.GetEnvironmentVariable("DTS_RESOURCE_ID") ?? DefaultResourceId,
             allowInsecureCredentials || normalizedEndpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase)));
-        builder.Services.AddSingleton(credential);
+        if (credential is not null)
+        {
+            builder.Services.AddSingleton(credential);
+        }
+
         builder.Services.AddSingleton(CreateChannel);
         builder.Services.AddSingleton(provider => new Proto.ServerlessActivities.ServerlessActivitiesClient(
             provider.GetRequiredService<GrpcChannel>()));
@@ -76,7 +80,7 @@ internal static class ServerlessSandboxHttpHost
     static GrpcChannel CreateChannel(IServiceProvider provider)
     {
         ServerlessSandboxHttpOptions options = provider.GetRequiredService<ServerlessSandboxHttpOptions>();
-        TokenCredential credential = provider.GetRequiredService<TokenCredential>();
+        TokenCredential? credential = provider.GetService<TokenCredential>();
         TokenRequestContext tokenRequestContext = new([$"{options.ResourceId}/.default"]);
 
         ChannelCredentials channelCredentials = options.Endpoint.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
@@ -87,8 +91,11 @@ internal static class ServerlessSandboxHttpHost
             metadata.Add("taskhub", options.TaskHub);
             metadata.Add("x-user-agent", "durabletask-dotnet-serverless-sample");
 
-            AccessToken token = await credential.GetTokenAsync(tokenRequestContext, context.CancellationToken);
-            metadata.Add("Authorization", $"Bearer {token.Token}");
+            if (credential is not null)
+            {
+                AccessToken token = await credential.GetTokenAsync(tokenRequestContext, context.CancellationToken);
+                metadata.Add("Authorization", $"Bearer {token.Token}");
+            }
         });
 
         return GrpcChannel.ForAddress(options.Endpoint, new GrpcChannelOptions

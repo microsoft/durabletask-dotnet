@@ -36,9 +36,6 @@ $env:DTS_SERVERLESS_CPU = "1000m"
 $env:DTS_SERVERLESS_MEMORY = "2048Mi"
 $env:DTS_SERVERLESS_MAX_ACTIVITIES = "1"
 
-# Private preview test deployments may disable auth.
-$env:DTS_NO_AUTH = "true"
-
 dotnet run --project .\samples\serverless\declarer\declarer.csproj -- hello serverless-sample
 ```
 

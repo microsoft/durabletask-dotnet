@@ -181,7 +181,9 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
 
         if (options.Channel is { } channel)
         {
-            return new ServerlessActivitiesClientAdapter(new ServerlessActivities.ServerlessActivitiesClient(channel.CreateCallInvoker()));
+            return new ServerlessActivitiesClientAdapter(
+                new ServerlessActivities.ServerlessActivitiesClient(channel.CreateCallInvoker()),
+                attachTaskHubMetadata: false);
         }
 
         throw new InvalidOperationException("Azure Managed serverless activities require a configured gRPC channel or call invoker.");

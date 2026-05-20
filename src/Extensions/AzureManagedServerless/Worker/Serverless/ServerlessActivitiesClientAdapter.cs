@@ -63,14 +63,19 @@ interface IServerlessActivityWorkerSession : IAsyncDisposable
 sealed class ServerlessActivitiesClientAdapter : IServerlessActivitiesClient
 {
     readonly Proto.ServerlessActivities.ServerlessActivitiesClient client;
+    readonly bool attachTaskHubMetadata;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ServerlessActivitiesClientAdapter"/> class.
     /// </summary>
     /// <param name="client">The generated serverless activities gRPC client.</param>
-    public ServerlessActivitiesClientAdapter(Proto.ServerlessActivities.ServerlessActivitiesClient client)
+    /// <param name="attachTaskHubMetadata">True to add per-call task hub metadata when the underlying channel does not already do so.</param>
+    public ServerlessActivitiesClientAdapter(
+        Proto.ServerlessActivities.ServerlessActivitiesClient client,
+        bool attachTaskHubMetadata = true)
     {
         this.client = Check.NotNull(client);
+        this.attachTaskHubMetadata = attachTaskHubMetadata;
     }
 
     /// <inheritdoc/>
@@ -81,6 +86,7 @@ sealed class ServerlessActivitiesClientAdapter : IServerlessActivitiesClient
     {
         return await this.client.DeclareServerlessActivitiesAsync(
                 declaration,
+                headers: this.CreateTaskHubHeaders(taskHub),
                 cancellationToken: cancellationToken)
             .ResponseAsync.ConfigureAwait(false);
     }
@@ -89,9 +95,15 @@ sealed class ServerlessActivitiesClientAdapter : IServerlessActivitiesClient
     public IServerlessActivityWorkerSession OpenServerlessActivityWorkerSession(string taskHub, CancellationToken cancellationToken)
     {
         AsyncClientStreamingCall<Proto.ServerlessActivityWorkerMessage, Proto.ServerlessActivityWorkerSessionResult> call =
-            this.client.ConnectServerlessActivityWorker(cancellationToken: cancellationToken);
+            this.client.ConnectServerlessActivityWorker(
+                headers: this.CreateTaskHubHeaders(taskHub),
+                cancellationToken: cancellationToken);
         return new GrpcServerlessActivityWorkerSession(call);
     }
+
+    Metadata? CreateTaskHubHeaders(string taskHub) => this.attachTaskHubMetadata
+        ? new Metadata { { "taskhub", taskHub }, }
+        : null;
 
     /// <summary>
     /// gRPC-backed serverless activity worker registration session.

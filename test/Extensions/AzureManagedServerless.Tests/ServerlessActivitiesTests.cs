@@ -74,6 +74,76 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
+    public async Task ServerlessActivitiesClientAdapter_SendsTaskHubMetadata()
+    {
+        // Arrange
+        RecordingServerlessActivitiesCallInvoker callInvoker = new();
+        ServerlessActivitiesClientAdapter adapter = new(new ServerlessActivities.ServerlessActivitiesClient(callInvoker));
+        ServerlessActivityDeclaration declaration = new()
+        {
+            WorkerProfileId = "profile-a",
+            Image = new ServerlessActivityImage
+            {
+                ImageRef = "example.com/repo/worker:latest",
+                PublicPull = true,
+            },
+            Resources = new ServerlessActivityResources
+            {
+                Cpu = "500m",
+                Memory = "1024Mi",
+            },
+            MaxConcurrentActivities = 7,
+        };
+        declaration.ActivityNames.Add("RemoteHello");
+
+        // Act
+        await adapter.DeclareServerlessActivitiesAsync(declaration, TaskHub, CancellationToken.None);
+        await using IServerlessActivityWorkerSession session = adapter.OpenServerlessActivityWorkerSession(
+            TaskHub,
+            CancellationToken.None);
+
+        // Assert
+        callInvoker.DeclarationHeaders.Should().Contain(header => header.Key == "taskhub" && header.Value == TaskHub);
+        callInvoker.WorkerSessionHeaders.Should().Contain(header => header.Key == "taskhub" && header.Value == TaskHub);
+    }
+
+    [Fact]
+    public async Task ServerlessActivitiesClientAdapter_CanRelyOnChannelTaskHubMetadata()
+    {
+        // Arrange
+        RecordingServerlessActivitiesCallInvoker callInvoker = new();
+        ServerlessActivitiesClientAdapter adapter = new(
+            new ServerlessActivities.ServerlessActivitiesClient(callInvoker),
+            attachTaskHubMetadata: false);
+        ServerlessActivityDeclaration declaration = new()
+        {
+            WorkerProfileId = "profile-a",
+            Image = new ServerlessActivityImage
+            {
+                ImageRef = "example.com/repo/worker:latest",
+                PublicPull = true,
+            },
+            Resources = new ServerlessActivityResources
+            {
+                Cpu = "500m",
+                Memory = "1024Mi",
+            },
+            MaxConcurrentActivities = 7,
+        };
+        declaration.ActivityNames.Add("RemoteHello");
+
+        // Act
+        await adapter.DeclareServerlessActivitiesAsync(declaration, TaskHub, CancellationToken.None);
+        await using IServerlessActivityWorkerSession session = adapter.OpenServerlessActivityWorkerSession(
+            TaskHub,
+            CancellationToken.None);
+
+        // Assert
+        callInvoker.DeclarationHeaders.Should().NotContain(header => header.Key == "taskhub");
+        callInvoker.WorkerSessionHeaders.Should().NotContain(header => header.Key == "taskhub");
+    }
+
+    [Fact]
     public async Task ServerlessActivityDeclarationHostedService_OmitsEntrypointAndCmdByDefault()
     {
         // Arrange
@@ -639,6 +709,82 @@ public class ServerlessActivitiesTests
             this.Sessions.Add(session);
             return session;
         }
+    }
+
+    sealed class RecordingServerlessActivitiesCallInvoker : CallInvoker
+    {
+        public Metadata DeclarationHeaders { get; private set; } = [];
+
+        public Metadata WorkerSessionHeaders { get; private set; } = [];
+
+        public override TResponse BlockingUnaryCall<TRequest, TResponse>(
+            Method<TRequest, TResponse> method,
+            string? host,
+            CallOptions options,
+            TRequest request)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(
+            Method<TRequest, TResponse> method,
+            string? host,
+            CallOptions options,
+            TRequest request)
+        {
+            method.FullName.Should().EndWith("/DeclareServerlessActivities");
+            this.DeclarationHeaders = options.Headers ?? [];
+
+            return new AsyncUnaryCall<TResponse>(
+                Task.FromResult((TResponse)(object)new ServerlessActivityDeclarationResult()),
+                Task.FromResult(new Metadata()),
+                () => new Status(StatusCode.OK, string.Empty),
+                () => [],
+                () => { });
+        }
+
+        public override AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(
+            Method<TRequest, TResponse> method,
+            string? host,
+            CallOptions options,
+            TRequest request)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override AsyncClientStreamingCall<TRequest, TResponse> AsyncClientStreamingCall<TRequest, TResponse>(
+            Method<TRequest, TResponse> method,
+            string? host,
+            CallOptions options)
+        {
+            method.FullName.Should().EndWith("/ConnectServerlessActivityWorker");
+            this.WorkerSessionHeaders = options.Headers ?? [];
+
+            return new AsyncClientStreamingCall<TRequest, TResponse>(
+                new RecordingClientStreamWriter<TRequest>(),
+                Task.FromResult((TResponse)(object)new ServerlessActivityWorkerSessionResult()),
+                Task.FromResult(new Metadata()),
+                () => new Status(StatusCode.OK, string.Empty),
+                () => [],
+                () => { });
+        }
+
+        public override AsyncDuplexStreamingCall<TRequest, TResponse> AsyncDuplexStreamingCall<TRequest, TResponse>(
+            Method<TRequest, TResponse> method,
+            string? host,
+            CallOptions options)
+        {
+            throw new NotSupportedException();
+        }
+    }
+
+    sealed class RecordingClientStreamWriter<T> : IClientStreamWriter<T>
+    {
+        public WriteOptions? WriteOptions { get; set; }
+
+        public Task WriteAsync(T message) => Task.CompletedTask;
+
+        public Task CompleteAsync() => Task.CompletedTask;
     }
 
     sealed class FakeServerlessActivityWorkerSession : IServerlessActivityWorkerSession

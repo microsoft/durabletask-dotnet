@@ -19,7 +19,14 @@ service ServerlessActivities {
   // configuration contract and does not advertise active worker capacity.
   rpc DeclareServerlessActivities(ServerlessActivityDeclaration) returns (ServerlessActivityDeclarationResult);
 
-  // Streams best-effort stdout/stderr log lines from an ADC sandbox.
+  // Removes a serverless activity declaration so the backend stops waking new workers
+  // for the specified worker profile. Existing workers are not terminated by this RPC.
+  rpc RemoveServerlessActivityDeclaration(RemoveServerlessActivityDeclarationRequest) returns (RemoveServerlessActivityDeclarationResult);
+
+  // Lists DTS-managed sandboxes for a declared worker profile in the current task hub.
+  rpc ListServerlessActivitySandboxes(ListServerlessActivitySandboxesRequest) returns (ListServerlessActivitySandboxesResult);
+
+  // Streams best-effort stdout/stderr log lines from a DTS-managed sandbox.
   rpc StreamSandboxLogs(SandboxLogStreamRequest) returns (stream SandboxLogLine);
 }
 
@@ -31,13 +38,16 @@ message ServerlessActivityWorkerMessage {
 }
 
 message ServerlessActivityWorkerStart {
+  reserved 2;
+  reserved "worker_instance_id";
+
   string task_hub = 1;
-  string worker_instance_id = 2;
   int32 max_activities_count = 3;
   // Substrate the worker is running in. UNSPECIFIED = legacy (pre-substrate-aware) workers.
   SubstrateKind substrate = 4;
-  // Identifier of the ADC sandbox the worker is running inside. Empty when substrate != SANDBOX.
-  string sandbox_id = 5;
+  // DTS-generated sandbox identifier injected as DTS_SANDBOX_ID. This is not
+  // the ADC provider sandbox resource id.
+  string dts_sandbox_identifier = 5;
   string worker_profile_id = 6;
 }
 
@@ -74,13 +84,36 @@ message ServerlessActivityResources {
 message ServerlessActivityDeclarationResult {
 }
 
+message RemoveServerlessActivityDeclarationRequest {
+  string worker_profile_id = 1;
+}
+
+message RemoveServerlessActivityDeclarationResult {
+}
+
+message ListServerlessActivitySandboxesRequest {
+  string worker_profile_id = 1;
+}
+
+message ListServerlessActivitySandboxesResult {
+  repeated ServerlessActivitySandbox sandboxes = 1;
+}
+
+message ServerlessActivitySandbox {
+  string dts_sandbox_identifier = 1;
+  string worker_profile_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  string state = 4;
+}
+
 message SandboxLogStreamRequest {
-  string sandbox_id = 1;
+  // DTS-generated sandbox identifier injected into the worker as DTS_SANDBOX_ID.
+  string dts_sandbox_identifier = 1;
   int32 tail = 2;
 }
 
 message SandboxLogLine {
-  string sandbox_id = 1;
+  string dts_sandbox_identifier = 1;
   google.protobuf.Timestamp timestamp = 2;
   string stream = 3;
   string tag = 4;

@@ -86,10 +86,9 @@ static class ServerlessActivityConfiguration
         {
             TaskHub = options.TaskHub,
             WorkerProfileId = workerProfileId,
-            WorkerInstanceId = options.WorkerInstanceId,
             MaxActivitiesCount = options.MaxConcurrentActivities,
             Substrate = GetSubstrateFromEnvironment(),
-            SandboxId = Environment.GetEnvironmentVariable("DTS_SANDBOX_ID") ?? string.Empty,
+            DtsSandboxIdentifier = Environment.GetEnvironmentVariable("DTS_SANDBOX_ID") ?? string.Empty,
         };
 
         return new Proto.ServerlessActivityWorkerMessage { Start = start };

@@ -100,11 +100,6 @@ public sealed class ServerlessOptions
     public IList<string> Cmd { get; } = new List<string>();
 
     /// <summary>
-    /// Gets the unique worker instance identifier.
-    /// </summary>
-    public string WorkerInstanceId { get; } = Guid.NewGuid().ToString("N");
-
-    /// <summary>
     /// Gets or sets the maximum number of concurrent activities expected from each serverless worker.
     /// </summary>
     public int MaxConcurrentActivities { get; set; } = 100;

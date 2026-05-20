@@ -200,10 +200,9 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
                 Logs.ServerlessActivityWorkerRegistered(
                     this.logger,
                     startMessage.Start.TaskHub,
-                    startMessage.Start.WorkerInstanceId,
                     activityCount,
                     startMessage.Start.Substrate,
-                    startMessage.Start.SandboxId);
+                    startMessage.Start.DtsSandboxIdentifier);
 
                 retryDelay = this.GetInitialRetryDelay();
                 await this.RunRegistrationSessionAsync(registrationSession, cancellationToken).ConfigureAwait(false);

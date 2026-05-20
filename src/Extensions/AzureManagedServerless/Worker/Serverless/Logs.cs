@@ -38,9 +38,9 @@ static partial class Logs
     [LoggerMessage(
         EventId = 6,
         Level = LogLevel.Information,
-        Message = "Serverless activity worker registered hub={Hub} worker={Worker} count={Count} substrate={Substrate} sandboxId={SandboxId}")]
+        Message = "Serverless activity worker registered hub={Hub} count={Count} substrate={Substrate} sandboxId={SandboxId}")]
     public static partial void ServerlessActivityWorkerRegistered(
-        ILogger logger, string hub, string worker, int count, Proto.SubstrateKind substrate, string sandboxId);
+        ILogger logger, string hub, int count, Proto.SubstrateKind substrate, string sandboxId);
 
     [LoggerMessage(
         EventId = 7,

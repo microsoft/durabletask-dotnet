@@ -279,7 +279,7 @@ public class ServerlessActivitiesTests
             start.WorkerProfileId.Should().Be("profile-a");
             start.MaxActivitiesCount.Should().Be(3);
             start.Substrate.Should().Be(SubstrateKind.Sandbox);
-            start.SandboxId.Should().Be("sandbox-1");
+            start.DtsSandboxIdentifier.Should().Be("sandbox-1");
         }
         finally
         {

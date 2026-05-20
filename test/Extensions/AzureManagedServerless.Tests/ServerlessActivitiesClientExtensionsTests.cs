@@ -11,7 +11,42 @@ namespace Microsoft.DurableTask.Client.AzureManaged.Tests;
 
 public class ServerlessActivitiesClientExtensionsTests
 {
-    const string TaskHub = "testhub";
+    [Fact]
+    public async Task ListServerlessActivitySandboxesAsync_SendsRequestAndMapsSandboxes()
+    {
+        // Arrange
+        DateTimeOffset createdAt = new(2026, 5, 14, 10, 30, 0, TimeSpan.Zero);
+        RecordingServerlessLogCallInvoker callInvoker = new(
+            new ListServerlessActivitySandboxesResult
+            {
+                Sandboxes =
+                {
+                    new ServerlessActivitySandbox
+                    {
+                        DtsSandboxIdentifier = "sandbox-1",
+                        WorkerProfileId = "default",
+                        CreatedAt = createdAt.ToTimestamp(),
+                        State = "Running",
+                    },
+                },
+            });
+        ServerlessActivities.ServerlessActivitiesClient client = new(callInvoker);
+
+        // Act
+        IReadOnlyList<ServerlessSandboxInfo> sandboxes = await client.ListServerlessActivitySandboxesAsync("default");
+
+        // Assert
+        callInvoker.ListRequest.Should().NotBeNull();
+        callInvoker.ListRequest!.WorkerProfileId.Should().Be("default");
+        callInvoker.ListHeaders.Should().NotContain(header => header.Key == "taskhub");
+        callInvoker.UnaryDisposeCount.Should().Be(1);
+
+        ServerlessSandboxInfo mapped = sandboxes.Should().ContainSingle().Subject;
+        mapped.DtsSandboxIdentifier.Should().Be("sandbox-1");
+        mapped.WorkerProfileId.Should().Be("default");
+        mapped.CreatedAt.Should().Be(createdAt);
+        mapped.State.Should().Be("Running");
+    }
 
     [Fact]
     public async Task StreamSandboxLogsAsync_SendsRequestAndMapsLines()
@@ -21,7 +56,7 @@ public class ServerlessActivitiesClientExtensionsTests
         RecordingServerlessLogCallInvoker callInvoker = new(
             new SandboxLogLine
             {
-                SandboxId = "sandbox-1",
+                DtsSandboxIdentifier = "sandbox-1",
                 Timestamp = timestamp.ToTimestamp(),
                 Stream = "stdout",
                 Tag = "worker",
@@ -34,7 +69,6 @@ public class ServerlessActivitiesClientExtensionsTests
         List<ServerlessSandboxLogLine> lines = [];
         await foreach (ServerlessSandboxLogLine line in client.StreamSandboxLogsAsync(
             "sandbox-1",
-            TaskHub,
             tail: 42))
         {
             lines.Add(line);
@@ -42,13 +76,13 @@ public class ServerlessActivitiesClientExtensionsTests
 
         // Assert
         callInvoker.Request.Should().NotBeNull();
-        callInvoker.Request!.SandboxId.Should().Be("sandbox-1");
+        callInvoker.Request!.DtsSandboxIdentifier.Should().Be("sandbox-1");
         callInvoker.Request.Tail.Should().Be(42);
-        callInvoker.Headers.Should().Contain(header => header.Key == "taskhub" && header.Value == TaskHub);
+        callInvoker.Headers.Should().NotContain(header => header.Key == "taskhub");
         callInvoker.DisposeCount.Should().Be(1);
 
         ServerlessSandboxLogLine mapped = lines.Should().ContainSingle().Subject;
-        mapped.SandboxId.Should().Be("sandbox-1");
+        mapped.DtsSandboxIdentifier.Should().Be("sandbox-1");
         mapped.Timestamp.Should().Be(timestamp);
         mapped.Stream.Should().Be("stdout");
         mapped.Tag.Should().Be("worker");
@@ -57,7 +91,7 @@ public class ServerlessActivitiesClientExtensionsTests
     }
 
     [Fact]
-    public async Task StreamSandboxLogsAsync_WithoutExplicitTaskHub_UsesConfiguredChannelMetadata()
+    public async Task StreamSandboxLogsAsync_DoesNotAttachTaskHubMetadata()
     {
         // Arrange
         RecordingServerlessLogCallInvoker callInvoker = new();
@@ -85,8 +119,7 @@ public class ServerlessActivitiesClientExtensionsTests
         {
             await foreach (ServerlessSandboxLogLine _ in client.StreamSandboxLogsAsync(
                 "sandbox-1",
-                TaskHub,
-                tail))
+                tail: tail))
             {
             }
         };
@@ -99,10 +132,18 @@ public class ServerlessActivitiesClientExtensionsTests
     sealed class RecordingServerlessLogCallInvoker : CallInvoker
     {
         readonly SandboxLogStreamReader responseStream;
+        readonly ListServerlessActivitySandboxesResult listResponse;
 
         public RecordingServerlessLogCallInvoker(params SandboxLogLine[] lines)
         {
             this.responseStream = new SandboxLogStreamReader(lines);
+            this.listResponse = new ListServerlessActivitySandboxesResult();
+        }
+
+        public RecordingServerlessLogCallInvoker(ListServerlessActivitySandboxesResult listResponse)
+        {
+            this.responseStream = new SandboxLogStreamReader([]);
+            this.listResponse = listResponse;
         }
 
         public SandboxLogStreamRequest? Request { get; private set; }
@@ -110,6 +151,12 @@ public class ServerlessActivitiesClientExtensionsTests
         public Metadata Headers { get; private set; } = [];
 
         public int DisposeCount { get; private set; }
+
+        public ListServerlessActivitySandboxesRequest? ListRequest { get; private set; }
+
+        public Metadata ListHeaders { get; private set; } = [];
+
+        public int UnaryDisposeCount { get; private set; }
 
         public override TResponse BlockingUnaryCall<TRequest, TResponse>(
             Method<TRequest, TResponse> method,
@@ -126,7 +173,16 @@ public class ServerlessActivitiesClientExtensionsTests
             CallOptions options,
             TRequest request)
         {
-            throw new NotSupportedException();
+            method.FullName.Should().EndWith("/ListServerlessActivitySandboxes");
+            this.ListRequest = (ListServerlessActivitySandboxesRequest)(object)request;
+            this.ListHeaders = options.Headers ?? [];
+
+            return new AsyncUnaryCall<TResponse>(
+                Task.FromResult((TResponse)(object)this.listResponse),
+                Task.FromResult(new Metadata()),
+                () => new Status(StatusCode.OK, string.Empty),
+                () => new Metadata(),
+                () => this.UnaryDisposeCount++);
         }
 
         public override AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(

@@ -12,7 +12,6 @@ string endpoint = GetRequiredEnvironmentVariable("DTS_ENDPOINT");
 string taskHub = Environment.GetEnvironmentVariable("DTS_TASK_HUB")
     ?? Environment.GetEnvironmentVariable("DTS_TASKHUB")
     ?? "ServerlessPocHub";
-bool allowInsecureCredentials = endpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 builder.Logging.AddSimpleConsole(options =>
@@ -35,7 +34,6 @@ builder.Services.AddDurableTaskWorker(workerBuilder =>
     {
         options.EndpointAddress = endpoint;
         options.TaskHubName = taskHub;
-        options.AllowInsecureCredentials = allowInsecureCredentials;
     });
     workerBuilder.UseServerlessWorker();
 });

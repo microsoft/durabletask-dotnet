@@ -23,7 +23,6 @@ string endpoint = GetRequiredEnvironmentVariable("DTS_ENDPOINT");
 string taskHub = Environment.GetEnvironmentVariable("DTS_TASK_HUB")
     ?? Environment.GetEnvironmentVariable("DTS_TASKHUB")
     ?? "ServerlessPocHub";
-bool allowInsecureCredentials = endpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
 TokenCredential credential = new DefaultAzureCredential();
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
@@ -42,7 +41,6 @@ builder.Services.AddDurableTaskWorker(workerBuilder =>
         options.EndpointAddress = endpoint;
         options.TaskHubName = taskHub;
         options.Credential = credential;
-        options.AllowInsecureCredentials = allowInsecureCredentials;
     });
 
     workerBuilder.DeclareServerlessActivities(options =>
@@ -67,7 +65,6 @@ builder.Services.AddDurableTaskClient(clientBuilder =>
         options.EndpointAddress = endpoint;
         options.TaskHubName = taskHub;
         options.Credential = credential;
-        options.AllowInsecureCredentials = allowInsecureCredentials;
     });
 });
 

@@ -28,7 +28,6 @@ internal static class ServerlessSandboxHttpHost
                 options.EndpointAddress = endpoint;
                 options.TaskHubName = taskHub;
                 options.Credential = credential;
-                options.AllowInsecureCredentials = endpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
             });
         });
         builder.Services.AddDurableTaskSchedulerServerlessActivitiesClient();

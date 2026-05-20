@@ -4,11 +4,8 @@
 namespace Microsoft.DurableTask.Samples.Serverless.Declarer;
 
 public sealed record ServerlessSandboxHttpOptions(
-    string Endpoint,
     string TaskHub,
-    string DefaultWorkerProfileId,
-    string ResourceId,
-    bool AllowInsecureCredentials);
+    string DefaultWorkerProfileId);
 
 public sealed record ServerlessSandboxListResponse(
     string TaskHub,

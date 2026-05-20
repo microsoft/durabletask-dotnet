@@ -24,9 +24,7 @@ string taskHub = Environment.GetEnvironmentVariable("DTS_TASK_HUB")
     ?? Environment.GetEnvironmentVariable("DTS_TASKHUB")
     ?? "ServerlessPocHub";
 bool allowInsecureCredentials = endpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
-TokenCredential? credential = string.Equals(Environment.GetEnvironmentVariable("DTS_NO_AUTH"), "true", StringComparison.OrdinalIgnoreCase)
-    ? null
-    : new DefaultAzureCredential();
+TokenCredential credential = new DefaultAzureCredential();
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 builder.Logging.AddSimpleConsole(options =>
@@ -57,7 +55,6 @@ builder.Services.AddDurableTaskWorker(workerBuilder =>
         options.Memory = Environment.GetEnvironmentVariable("DTS_SERVERLESS_MEMORY") ?? "2048Mi";
         options.MaxConcurrentActivities = GetIntEnv("DTS_SERVERLESS_MAX_ACTIVITIES", 100);
         options.EnvironmentVariables["DTS_ENDPOINT"] = endpoint;
-        AddDeclarationEnvironmentVariableIfPresent(options.EnvironmentVariables, "DTS_NO_AUTH");
         AddDeclarationEnvironmentVariableIfPresent(options.EnvironmentVariables, "DTS_SERVERLESS_IDLE_TIMEOUT_SECONDS");
         AddServerlessActivityNames(options.ActivityNames);
     });
@@ -90,11 +87,9 @@ if (parseResult == DemoCommandParseResult.Execute)
 if (parseResult == DemoCommandParseResult.RunHttpApi)
 {
     await ServerlessSandboxHttpHost.RunAsync(
-        args,
         endpoint,
         taskHub,
-        credential,
-        allowInsecureCredentials);
+        credential);
     return;
 }
 

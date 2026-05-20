@@ -4,7 +4,6 @@
 using Grpc.Core;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.DurableTask.Client.AzureManaged;
-using Proto = Microsoft.DurableTask.Protobuf.Serverless;
 
 namespace Microsoft.DurableTask.Samples.Serverless.Declarer;
 
@@ -19,10 +18,10 @@ public sealed class HealthController : ControllerBase
 [ApiController]
 [Route("serverless/sandboxes")]
 public sealed class ServerlessSandboxesController(
-    Proto.ServerlessActivities.ServerlessActivitiesClient client,
+    ServerlessActivitiesClient client,
     ServerlessSandboxHttpOptions options) : ControllerBase
 {
-    readonly Proto.ServerlessActivities.ServerlessActivitiesClient client = client;
+    readonly ServerlessActivitiesClient client = client;
     readonly ServerlessSandboxHttpOptions options = options;
 
     [HttpGet]

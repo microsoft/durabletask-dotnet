@@ -8,7 +8,6 @@
 
   <ItemGroup>
     <PackageReference Include="Azure.Identity" />
-    <PackageReference Include="Grpc.Net.Client" />
   </ItemGroup>
 
   <ItemGroup>

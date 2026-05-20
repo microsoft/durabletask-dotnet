@@ -4,7 +4,10 @@
 using FluentAssertions;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
+using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.DurableTask.Protobuf.Serverless;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Microsoft.DurableTask.Client.AzureManaged.Tests;
@@ -46,6 +49,40 @@ public class ServerlessActivitiesClientExtensionsTests
         mapped.WorkerProfileId.Should().Be("default");
         mapped.CreatedAt.Should().Be(createdAt);
         mapped.State.Should().Be("Running");
+    }
+
+    [Fact]
+    public async Task AddDurableTaskSchedulerServerlessActivitiesClient_UsesConfiguredDurableTaskClientInvoker()
+    {
+        // Arrange
+        RecordingServerlessLogCallInvoker callInvoker = new(
+            new ListServerlessActivitySandboxesResult
+            {
+                Sandboxes =
+                {
+                    new ServerlessActivitySandbox
+                    {
+                        DtsSandboxIdentifier = "sandbox-1",
+                        WorkerProfileId = "default",
+                        State = "Running",
+                    },
+                },
+            });
+        ServiceCollection services = new();
+        services.AddOptions<GrpcDurableTaskClientOptions>(Options.DefaultName)
+            .Configure(options => options.CallInvoker = callInvoker);
+        services.AddDurableTaskSchedulerServerlessActivitiesClient();
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+        ServerlessActivitiesClient client = provider.GetRequiredService<ServerlessActivitiesClient>();
+
+        // Act
+        IReadOnlyList<ServerlessSandboxInfo> sandboxes = await client.ListServerlessActivitySandboxesAsync("default");
+
+        // Assert
+        callInvoker.ListRequest.Should().NotBeNull();
+        callInvoker.ListRequest!.WorkerProfileId.Should().Be("default");
+        sandboxes.Should().ContainSingle().Which.DtsSandboxIdentifier.Should().Be("sandbox-1");
     }
 
     [Fact]

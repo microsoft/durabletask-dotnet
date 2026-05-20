@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Azure.Core;
-using Azure.Identity;
 using Microsoft.DurableTask.Samples.Serverless.RemoteWorker;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.AzureManaged;
@@ -15,9 +13,6 @@ string taskHub = Environment.GetEnvironmentVariable("DTS_TASK_HUB")
     ?? Environment.GetEnvironmentVariable("DTS_TASKHUB")
     ?? "ServerlessPocHub";
 bool allowInsecureCredentials = endpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
-TokenCredential? credential = string.Equals(Environment.GetEnvironmentVariable("DTS_NO_AUTH"), "true", StringComparison.OrdinalIgnoreCase)
-    ? null
-    : new DefaultAzureCredential();
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 builder.Logging.AddSimpleConsole(options =>
@@ -40,7 +35,6 @@ builder.Services.AddDurableTaskWorker(workerBuilder =>
     {
         options.EndpointAddress = endpoint;
         options.TaskHubName = taskHub;
-        options.Credential = credential;
         options.AllowInsecureCredentials = allowInsecureCredentials;
     });
     workerBuilder.UseServerlessWorker();

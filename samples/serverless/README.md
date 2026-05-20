@@ -28,6 +28,8 @@ docker push $image
 
 ## Run a hello orchestration
 
+The declarer uses `DefaultAzureCredential`; sign in with Azure CLI or configure another supported Azure identity before running it.
+
 ```powershell
 $env:DTS_ENDPOINT = "https://<scheduler-endpoint>"
 $env:DTS_TASK_HUB = "<task-hub>"
@@ -48,7 +50,7 @@ Output: "local:serverless-sample | hello from <sandbox> pid=<pid>: serverless-sa
 
 ## Sandbox log helper API
 
-The declarer can also expose a small HTTP helper API:
+The declarer can also expose a small HTTP helper API. The helper reuses the SDK's DTS serverless client registration instead of setting up gRPC channels directly.
 
 ```powershell
 dotnet run --project .\samples\serverless\declarer\declarer.csproj -- serve

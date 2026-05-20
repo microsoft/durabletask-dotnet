@@ -49,6 +49,23 @@ public class ServerlessActivitiesClientExtensionsTests
     }
 
     [Fact]
+    public async Task RemoveServerlessActivityDeclarationAsync_SendsRequest()
+    {
+        // Arrange
+        RecordingServerlessLogCallInvoker callInvoker = new();
+        ServerlessActivities.ServerlessActivitiesClient client = new(callInvoker);
+
+        // Act
+        await client.RemoveServerlessActivityDeclarationAsync("default");
+
+        // Assert
+        callInvoker.RemoveRequest.Should().NotBeNull();
+        callInvoker.RemoveRequest!.WorkerProfileId.Should().Be("default");
+        callInvoker.RemoveHeaders.Should().NotContain(header => header.Key == "taskhub");
+        callInvoker.UnaryDisposeCount.Should().Be(1);
+    }
+
+    [Fact]
     public async Task StreamSandboxLogsAsync_SendsRequestAndMapsLines()
     {
         // Arrange
@@ -156,6 +173,10 @@ public class ServerlessActivitiesClientExtensionsTests
 
         public Metadata ListHeaders { get; private set; } = [];
 
+        public RemoveServerlessActivityDeclarationRequest? RemoveRequest { get; private set; }
+
+        public Metadata RemoveHeaders { get; private set; } = [];
+
         public int UnaryDisposeCount { get; private set; }
 
         public override TResponse BlockingUnaryCall<TRequest, TResponse>(
@@ -173,12 +194,25 @@ public class ServerlessActivitiesClientExtensionsTests
             CallOptions options,
             TRequest request)
         {
-            method.FullName.Should().EndWith("/ListServerlessActivitySandboxes");
-            this.ListRequest = (ListServerlessActivitySandboxesRequest)(object)request;
-            this.ListHeaders = options.Headers ?? [];
+            if (method.FullName.EndsWith("/ListServerlessActivitySandboxes", StringComparison.Ordinal))
+            {
+                this.ListRequest = (ListServerlessActivitySandboxesRequest)(object)request;
+                this.ListHeaders = options.Headers ?? [];
+
+                return new AsyncUnaryCall<TResponse>(
+                    Task.FromResult((TResponse)(object)this.listResponse),
+                    Task.FromResult(new Metadata()),
+                    () => new Status(StatusCode.OK, string.Empty),
+                    () => new Metadata(),
+                    () => this.UnaryDisposeCount++);
+            }
+
+            method.FullName.Should().EndWith("/RemoveServerlessActivityDeclaration");
+            this.RemoveRequest = (RemoveServerlessActivityDeclarationRequest)(object)request;
+            this.RemoveHeaders = options.Headers ?? [];
 
             return new AsyncUnaryCall<TResponse>(
-                Task.FromResult((TResponse)(object)this.listResponse),
+                Task.FromResult((TResponse)(object)new RemoveServerlessActivityDeclarationResult()),
                 Task.FromResult(new Metadata()),
                 () => new Status(StatusCode.OK, string.Empty),
                 () => new Metadata(),

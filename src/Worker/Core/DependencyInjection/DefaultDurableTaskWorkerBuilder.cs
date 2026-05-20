@@ -4,6 +4,7 @@
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.Worker;
 
@@ -54,10 +55,20 @@ public class DefaultDurableTaskWorkerBuilder : IDurableTaskWorkerBuilder
         Verify.NotNull(this.buildTarget, error);
 
         DurableTaskRegistry registry = serviceProvider.GetOptions<DurableTaskRegistry>(this.Name);
+        DurableTaskWorkerOptions workerOptions = serviceProvider.GetOptions<DurableTaskWorkerOptions>(this.Name);
+        if (workerOptions.Versioning?.UnversionedFallback
+            == DurableTaskWorkerOptions.UnversionedFallbackMode.WhenNoExactMatch)
+        {
+            ILoggerFactory? loggerFactory = serviceProvider.GetService<ILoggerFactory>();
+            if (loggerFactory is not null)
+            {
+                Logs.CreateWorkerLogger(loggerFactory).UnversionedFallbackEnabled(this.Name);
+            }
+        }
 
         // Note: Modifying any logic in this section could introduce breaking changes.
         // Do not alter the input parameter.
         return (IHostedService)ActivatorUtilities.CreateInstance(
-            serviceProvider, this.buildTarget, this.Name, registry.BuildFactory());
+            serviceProvider, this.buildTarget, this.Name, registry.BuildFactory(workerOptions));
     }
 }

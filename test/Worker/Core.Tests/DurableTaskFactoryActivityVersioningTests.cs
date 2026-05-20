@@ -130,6 +130,34 @@ public class DurableTaskFactoryActivityVersioningTests
         activity.Should().BeNull();
     }
 
+    [Fact]
+    public void TryCreateActivity_WithMixedRegistrationsAndUnversionedFallback_UsesUnversionedRegistrationForUnknownVersion()
+    {
+        // Arrange
+        DurableTaskRegistry registry = new();
+        registry.AddActivity<InvoiceActivityV1>();
+        registry.AddActivity<UnversionedInvoiceActivity>();
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Versioning = new DurableTaskWorkerOptions.VersioningOptions
+            {
+                UnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.WhenNoExactMatch,
+            },
+        };
+        IDurableTaskFactory factory = registry.BuildFactory(workerOptions);
+
+        // Act
+        bool found = ((IVersionedTaskFactory)factory).TryCreateActivity(
+            new TaskName("InvoiceActivity"),
+            new TaskVersion("v2"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskActivity? activity);
+
+        // Assert
+        found.Should().BeTrue();
+        activity.Should().BeOfType<UnversionedInvoiceActivity>();
+    }
+
     [DurableTask("InvoiceActivity", Version = "v1")]
     sealed class InvoiceActivityV1 : TaskActivity<string, string>
     {

@@ -16,6 +16,7 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
     readonly IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities;
     readonly HashSet<string> versionedOrchestratorNames;
     readonly HashSet<string> versionedActivityNames;
+    readonly bool useUnversionedFallback;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DurableTaskFactory" /> class.
@@ -23,19 +24,21 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
     /// <param name="activities">The activity factories.</param>
     /// <param name="orchestrators">The orchestrator factories.</param>
     /// <param name="entities">The entity factories.</param>
+    /// <param name="unversionedFallback">The unversioned fallback mode.</param>
     internal DurableTaskFactory(
         IDictionary<TaskVersionKey, Func<IServiceProvider, ITaskActivity>> activities,
         IDictionary<TaskVersionKey, Func<IServiceProvider, ITaskOrchestrator>> orchestrators,
-        IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities)
+        IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities,
+        DurableTaskWorkerOptions.UnversionedFallbackMode unversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.Never)
     {
         this.activities = Check.NotNull(activities);
         this.orchestrators = Check.NotNull(orchestrators);
         this.entities = Check.NotNull(entities);
+        this.useUnversionedFallback = unversionedFallback == DurableTaskWorkerOptions.UnversionedFallbackMode.WhenNoExactMatch;
 
-        // Snapshot the set of logical names that have at least one versioned registration. Used to gate the
-        // unversioned-fallback path: when a logical name has any versioned registration, we refuse to fall
-        // back to its unversioned registration for an unmatched versioned request — that would silently
-        // route the call to a different implementation than the caller asked for.
+        // Snapshot the set of logical names that have at least one versioned registration. By default, this gates
+        // unversioned fallback so a mixed versioned/unversioned name remains a closed set. Workers can opt in to
+        // allowing the unversioned registration to handle unmatched versions.
         this.versionedOrchestratorNames = new HashSet<string>(
             this.orchestrators.Keys
                 .Where(k => !string.IsNullOrWhiteSpace(k.Version))
@@ -63,12 +66,11 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
             return true;
         }
 
-        // Unversioned registrations remain the compatibility fallback for a versioned request, but ONLY when
-        // no versioned registration exists for the same logical name. This mirrors the orchestrator rule:
-        // once a name has any versioned registration, an unmatched versioned request returns "not found"
-        // rather than silently routing to a catch-all the caller did not ask for.
+        // Unversioned registrations remain the compatibility fallback for a versioned request when no versioned
+        // registration exists for the same logical name. Workers can also opt in to treating the unversioned
+        // registration as a catch-all for unmatched versions.
         if (!string.IsNullOrWhiteSpace(version.Version)
-            && !this.versionedActivityNames.Contains(name.Name)
+            && (this.useUnversionedFallback || !this.versionedActivityNames.Contains(name.Name))
             && this.activities.TryGetValue(new TaskVersionKey(name, default(TaskVersion)), out factory))
         {
             activity = factory.Invoke(serviceProvider);
@@ -99,12 +101,11 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
             return true;
         }
 
-        // Unversioned registrations remain the compatibility fallback for a versioned request, but ONLY when
-        // no versioned registration exists for the same logical name. If any versioned registration is present
-        // (e.g., v1 and v2 are registered, request asks for v3), we refuse to silently route the call to a
-        // catch-all registration the caller did not ask for.
+        // Unversioned registrations remain the compatibility fallback for a versioned request when no versioned
+        // registration exists for the same logical name. Workers can also opt in to treating the unversioned
+        // registration as a catch-all for unmatched versions.
         if (!string.IsNullOrWhiteSpace(version.Version)
-            && !this.versionedOrchestratorNames.Contains(name.Name)
+            && (this.useUnversionedFallback || !this.versionedOrchestratorNames.Contains(name.Name))
             && this.orchestrators.TryGetValue(new TaskVersionKey(name, default(TaskVersion)), out factory))
         {
             orchestrator = factory.Invoke(serviceProvider);

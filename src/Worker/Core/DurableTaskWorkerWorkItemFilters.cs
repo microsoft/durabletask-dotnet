@@ -43,21 +43,23 @@ public class DurableTaskWorkerWorkItemFilters
             workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict
                 ? [workerOptions.Versioning.Version ?? string.Empty]
                 : null;
+        bool useUnversionedFallback =
+            workerOptions?.Versioning?.UnversionedFallback == DurableTaskWorkerOptions.UnversionedFallbackMode.WhenNoExactMatch;
 
         // Orchestration filters group registrations by logical name and emit the concrete distinct
         // version set actually registered (treating null/unversioned as ""). Strict mode overrides
-        // this with the single configured worker version. For unversioned-only names (no versioned
-        // registration exists for the name), we emit an empty version list — the filter wildcard —
-        // so the backend can deliver versioned work items that the factory will then resolve via
-        // the documented unversioned fallback in DurableTaskFactory.TryCreateOrchestrator. When a
-        // name has at least one versioned registration, the factory refuses unversioned-fallback,
-        // so emitting the concrete version set prevents the backend from streaming work items the
-        // worker would then reject after the fact.
+        // this with the single configured worker version. When the factory can resolve unknown
+        // versions via an unversioned registration (unversioned-only names, or mixed names with
+        // opt-in unversioned fallback), we emit an empty version list — the filter wildcard — so the
+        // backend can deliver versioned work items the factory can handle. Otherwise, emitting the
+        // concrete version set prevents the backend from streaming work items the worker would then
+        // reject after the fact.
         List<OrchestrationFilter> orchestrationFilters = registry.OrchestratorsByVersion
             .GroupBy(orchestration => orchestration.Key.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
-                IReadOnlyList<string> versions = strictWorkerVersions ?? GetFilterVersions(group.Select(entry => entry.Key.Version));
+                IReadOnlyList<string> versions =
+                    strictWorkerVersions ?? GetFilterVersions(group.Select(entry => entry.Key.Version), useUnversionedFallback);
 
                 return new OrchestrationFilter
                 {
@@ -71,7 +73,8 @@ public class DurableTaskWorkerWorkItemFilters
             .GroupBy(activity => activity.Key.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
-                IReadOnlyList<string> versions = strictWorkerVersions ?? GetFilterVersions(group.Select(entry => entry.Key.Version));
+                IReadOnlyList<string> versions =
+                    strictWorkerVersions ?? GetFilterVersions(group.Select(entry => entry.Key.Version), useUnversionedFallback);
 
                 return new ActivityFilter
                 {
@@ -92,7 +95,7 @@ public class DurableTaskWorkerWorkItemFilters
             }).ToList(),
         };
 
-        static IReadOnlyList<string> GetFilterVersions(IEnumerable<string?> versions)
+        static IReadOnlyList<string> GetFilterVersions(IEnumerable<string?> versions, bool useUnversionedFallback)
         {
             // Normalize null to "" so an unversioned registration appears consistently.
             string[] normalized = versions
@@ -105,7 +108,8 @@ public class DurableTaskWorkerWorkItemFilters
             // versioned work items that the factory will resolve via unversioned fallback. Without
             // this, callers asking for a specific version would be filtered out at the backend even
             // though the worker can handle them.
-            if (normalized.Length == 1 && normalized[0].Length == 0)
+            if ((normalized.Length == 1 && normalized[0].Length == 0)
+                || (useUnversionedFallback && normalized.Contains(string.Empty, StringComparer.OrdinalIgnoreCase)))
             {
                 return [];
             }

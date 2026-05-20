@@ -5,6 +5,7 @@ using Microsoft.DurableTask.Converters;
 using Microsoft.DurableTask.Worker.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Microsoft.DurableTask.Worker.Tests;
@@ -85,6 +86,36 @@ public class DefaultDurableTaskWorkerBuilderTests
         target.Options.DataConverter.Should().BeSameAs(converter);
     }
 
+    [Fact]
+    public void Build_WithUnversionedFallback_LogsWarning()
+    {
+        // Arrange
+        CapturingLoggerFactory loggerFactory = new();
+        ServiceCollection services = new();
+        services.AddOptions();
+        services.AddSingleton<ILoggerFactory>(loggerFactory);
+        DefaultDurableTaskWorkerBuilder builder = new("test", services)
+        {
+            BuildTarget = typeof(GoodBuildTarget),
+        };
+        builder.UseVersioning(new DurableTaskWorkerOptions.VersioningOptions
+        {
+            UnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.WhenNoExactMatch,
+        });
+
+        // Act
+        builder.Build(services.BuildServiceProvider());
+
+        // Assert
+        loggerFactory.Logs.Should().Contain(log =>
+            log.Level == LogLevel.Warning
+            && log.Message.Contains("unversioned", StringComparison.OrdinalIgnoreCase)
+            && log.Message.Contains("fallback", StringComparison.OrdinalIgnoreCase)
+            && log.Message.Contains("replay", StringComparison.OrdinalIgnoreCase)
+            && log.Message.Contains("non-determinism", StringComparison.OrdinalIgnoreCase)
+            && log.Message.Contains("deserialization", StringComparison.OrdinalIgnoreCase));
+    }
+
     class BadBuildTarget : BackgroundService
     {
         protected override Task ExecuteAsync(CancellationToken stoppingToken)
@@ -129,5 +160,41 @@ public class DefaultDurableTaskWorkerBuilderTests
 
     class GoodBuildTargetOptions : DurableTaskWorkerOptions
     {
+    }
+
+    sealed class CapturingLoggerFactory : ILoggerFactory
+    {
+        public List<(LogLevel Level, string Message)> Logs { get; } = [];
+
+        public void AddProvider(ILoggerProvider provider)
+        {
+        }
+
+        public ILogger CreateLogger(string categoryName) => new CapturingLogger(this.Logs);
+
+        public void Dispose()
+        {
+        }
+    }
+
+    sealed class CapturingLogger(List<(LogLevel Level, string Message)> logs) : ILogger
+    {
+        readonly List<(LogLevel Level, string Message)> logs = logs;
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+            => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            this.logs.Add((logLevel, formatter(state, exception)));
+        }
     }
 }

@@ -28,6 +28,9 @@ public class GrpcDurableTaskWorkerTests
     static readonly MethodInfo ProcessorConnectAsyncMethod = typeof(GrpcDurableTaskWorker)
         .GetNestedType("Processor", BindingFlags.NonPublic)!
         .GetMethod("ConnectAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+    static readonly MethodInfo ProcessorRunOrchestratorAsyncMethod = typeof(GrpcDurableTaskWorker)
+        .GetNestedType("Processor", BindingFlags.NonPublic)!
+        .GetMethod("OnRunOrchestratorAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
     static readonly MethodInfo TryRecreateChannelAsyncMethod = typeof(GrpcDurableTaskWorker)
         .GetMethod("TryRecreateChannelAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
@@ -515,6 +518,71 @@ public class GrpcDurableTaskWorkerTests
     }
 
     [Fact]
+    public async Task OnRunOrchestratorAsync_StrictVersioningWithUnversionedFallback_RejectsMismatchBeforeFactoryDispatch()
+    {
+        // Arrange
+        const string orchestrationName = "StrictFallbackWorkflow";
+        string completionToken = Guid.NewGuid().ToString("N");
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Versioning = new DurableTaskWorkerOptions.VersioningOptions
+            {
+                Version = "1.0",
+                MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+                FailureStrategy = DurableTaskWorkerOptions.VersionFailureStrategy.Reject,
+                UnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.WhenNoExactMatch,
+            },
+            Logging = { UseLegacyCategories = false },
+        };
+        Mock<IDurableTaskFactory> factoryMock = new(MockBehavior.Strict);
+        GrpcDurableTaskWorker worker = CreateWorker(
+            new GrpcDurableTaskWorkerOptions(),
+            workerOptions,
+            NullLoggerFactory.Instance,
+            factoryMock.Object);
+        Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient> clientMock = new(
+            MockBehavior.Strict,
+            Mock.Of<CallInvoker>());
+        TaskCompletionSource<P.AbandonOrchestrationTaskRequest> abandonRequest = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        clientMock
+            .Setup(c => c.AbandonTaskOrchestratorWorkItemAsync(
+                It.IsAny<P.AbandonOrchestrationTaskRequest>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((P.AbandonOrchestrationTaskRequest request, Metadata _, DateTime? _, CancellationToken _) =>
+            {
+                abandonRequest.SetResult(request);
+                return CreateUnaryCall(Task.FromResult(new P.AbandonOrchestrationTaskResponse()));
+            });
+        object processor = CreateProcessor(worker, clientMock.Object);
+        P.OrchestratorRequest request = CreateOrchestratorRequest(
+            orchestrationName,
+            instanceVersion: "2.0");
+
+        // Act
+        await InvokeProcessorRunOrchestratorAsync(processor, request, completionToken);
+
+        // Assert
+        P.AbandonOrchestrationTaskRequest actualRequest = await abandonRequest.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        actualRequest.CompletionToken.Should().Be(completionToken);
+        factoryMock.Verify(
+            f => f.TryCreateOrchestrator(
+                It.IsAny<TaskName>(),
+                It.IsAny<IServiceProvider>(),
+                out It.Ref<ITaskOrchestrator?>.IsAny),
+            Times.Never);
+        clientMock.Verify(
+            c => c.CompleteOrchestratorTaskAsync(
+                It.IsAny<P.OrchestratorResponse>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public void Constructor_NoWorkerVersioningWithoutRegistryContents_DoesNotThrow()
     {
         // Arrange
@@ -606,11 +674,52 @@ public class GrpcDurableTaskWorkerTests
         return (AsyncServerStreamingCall<P.WorkItem>)task.GetType().GetProperty("Result")!.GetValue(task)!;
     }
 
+    static async Task InvokeProcessorRunOrchestratorAsync(
+        object processor,
+        P.OrchestratorRequest request,
+        string completionToken)
+    {
+        Task task = (Task)ProcessorRunOrchestratorAsyncMethod.Invoke(
+            processor,
+            new object?[] { request, completionToken, CancellationToken.None })!;
+        await task;
+    }
+
     static async Task<ProcessorExitReason> InvokeProcessorExecuteAsync(object processor, CancellationToken cancellationToken)
     {
         Task task = (Task)ProcessorExecuteAsyncMethod.Invoke(processor, new object?[] { cancellationToken })!;
         await task;
         return (ProcessorExitReason)task.GetType().GetProperty("Result")!.GetValue(task)!;
+    }
+
+    static P.OrchestratorRequest CreateOrchestratorRequest(string orchestrationName, string instanceVersion)
+    {
+        string instanceId = Guid.NewGuid().ToString("N");
+        string executionId = Guid.NewGuid().ToString("N");
+        return new P.OrchestratorRequest
+        {
+            InstanceId = instanceId,
+            ExecutionId = executionId,
+            NewEvents =
+            {
+                new P.HistoryEvent
+                {
+                    EventId = -1,
+                    Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+                    ExecutionStarted = new P.ExecutionStartedEvent
+                    {
+                        Name = orchestrationName,
+                        Version = instanceVersion,
+                        Input = "\"input\"",
+                        OrchestrationInstance = new P.OrchestrationInstance
+                        {
+                            InstanceId = instanceId,
+                            ExecutionId = executionId,
+                        },
+                    },
+                },
+            },
+        };
     }
 
     static void InvokeApplySuccessfulRecreate(

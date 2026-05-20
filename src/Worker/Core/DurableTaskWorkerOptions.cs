@@ -50,6 +50,23 @@ public class DurableTaskWorkerOptions
     }
 
     /// <summary>
+    /// Defines whether unversioned task registrations can be used when no exact version match exists.
+    /// </summary>
+    public enum UnversionedFallbackMode
+    {
+        /// <summary>
+        /// Only use an unversioned task registration for unversioned requests, or for versioned requests when
+        /// the task name has no versioned registrations.
+        /// </summary>
+        Never = 0,
+
+        /// <summary>
+        /// Use an unversioned task registration when no exact versioned registration exists for the requested task.
+        /// </summary>
+        WhenNoExactMatch = 1,
+    }
+
+    /// <summary>
     /// Gets or sets the data converter. Default value is <see cref="JsonDataConverter.Default" />.
     /// </summary>
     /// <remarks>
@@ -243,6 +260,27 @@ public class DurableTaskWorkerOptions
         /// If the version matching strategy is set to <see cref="VersionMatchStrategy.None"/>, this value has no effect.
         /// </remarks>
         public VersionFailureStrategy FailureStrategy { get; set; } = VersionFailureStrategy.Reject;
+
+        /// <summary>
+        /// Gets or sets whether unversioned task registrations can be used when no exact version match exists.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The default value, <see cref="UnversionedFallbackMode.Never"/>, preserves the closed-set behavior for
+        /// mixed unversioned and versioned registrations. In this mode, a request for an unknown version does not
+        /// fall back to the unversioned registration once any versioned registration exists for the same task name.
+        /// </para>
+        /// <para>
+        /// When set to <see cref="UnversionedFallbackMode.WhenNoExactMatch"/>, an exact versioned registration still
+        /// wins, but unmatched versioned requests can use the unversioned registration as a catch-all implementation.
+        /// </para>
+        /// <para>
+        /// WARNING: Only enable this mode when the unversioned implementation is compatible with every version it may
+        /// receive. Replaying an existing orchestration or activity history against a different implementation can
+        /// cause non-determinism or deserialization failures.
+        /// </para>
+        /// </remarks>
+        public UnversionedFallbackMode UnversionedFallback { get; set; } = UnversionedFallbackMode.Never;
     }
 
     /// <summary>

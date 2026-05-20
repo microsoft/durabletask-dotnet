@@ -35,6 +35,12 @@ namespace Microsoft.DurableTask
         [LoggerMessage(EventId = 605, Level = LogLevel.Information, Message = "'{Name}' activity of orchestration ID '{InstanceId}' failed.")]
         public static partial void ActivityFailed(this ILogger logger, Exception ex, string instanceId, string name);
 
+        [LoggerMessage(
+            EventId = 606,
+            Level = LogLevel.Warning,
+            Message = "Unversioned fallback mode is enabled for Durable Task worker '{workerName}'. Unmatched versioned orchestrations and activities may run on unversioned registrations; ensure those implementations are replay-compatible with every version they may receive. Replaying existing histories against a different implementation can cause non-determinism or deserialization failures.")]
+        public static partial void UnversionedFallbackEnabled(this ILogger logger, string workerName);
+
         /// <summary>
         /// Creates a logger named "Microsoft.DurableTask.Worker" with an optional subcategory.
         /// </summary>

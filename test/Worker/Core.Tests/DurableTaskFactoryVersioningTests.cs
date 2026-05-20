@@ -113,6 +113,35 @@ public class DurableTaskFactoryVersioningTests
     }
 
     [Fact]
+    public void TryCreateOrchestrator_WithMixedRegistrationsAndUnversionedFallback_UsesUnversionedRegistrationForUnknownVersion()
+    {
+        // Arrange
+        DurableTaskRegistry registry = new();
+        registry.AddOrchestrator<InvoiceWorkflowV1>();
+        registry.AddOrchestrator<InvoiceWorkflowV2>();
+        registry.AddOrchestrator<UnversionedInvoiceWorkflow>();
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Versioning = new DurableTaskWorkerOptions.VersioningOptions
+            {
+                UnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.WhenNoExactMatch,
+            },
+        };
+        IDurableTaskFactory factory = registry.BuildFactory(workerOptions);
+
+        // Act
+        bool found = ((IVersionedTaskFactory)factory).TryCreateOrchestrator(
+            new TaskName("InvoiceWorkflow"),
+            new TaskVersion("v3"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskOrchestrator? orchestrator);
+
+        // Assert
+        found.Should().BeTrue();
+        orchestrator.Should().BeOfType<UnversionedInvoiceWorkflow>();
+    }
+
+    [Fact]
     public void TryCreateOrchestrator_WithOnlyUnversionedRegistration_FallsBackForVersionedRequest()
     {
         // Arrange — name "InvoiceWorkflow" has only the unversioned registration. A versioned request

@@ -202,7 +202,6 @@ public class DurableTaskWorkerOptions
     /// </remarks>
     internal bool DataConverterExplicitlySet { get; private set; }
 
-
     /// <summary>
     /// Applies these option values to another.
     /// </summary>
@@ -216,7 +215,9 @@ public class DurableTaskWorkerOptions
             other.MaximumTimerInterval = this.MaximumTimerInterval;
             other.EnableEntitySupport = this.EnableEntitySupport;
             other.Versioning = this.Versioning;
+#pragma warning disable CS0618 // Internal forwarding of the experimental OrchestrationFilter property.
             other.OrchestrationFilter = this.OrchestrationFilter;
+#pragma warning restore CS0618
             other.Logging.UseLegacyCategories = this.Logging.UseLegacyCategories;
         }
     }

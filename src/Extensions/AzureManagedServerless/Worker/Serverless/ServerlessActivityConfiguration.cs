@@ -87,8 +87,8 @@ static class ServerlessActivityConfiguration
             TaskHub = options.TaskHub,
             WorkerProfileId = workerProfileId,
             MaxActivitiesCount = options.MaxConcurrentActivities,
-            Substrate = GetSubstrateFromEnvironment(),
-            DtsSandboxIdentifier = Environment.GetEnvironmentVariable("DTS_SANDBOX_ID") ?? string.Empty,
+            Substrate = ParseSubstrate(options.Substrate),
+            DtsSandboxIdentifier = options.DtsSandboxIdentifier ?? string.Empty,
         };
 
         return new Proto.ServerlessActivityWorkerMessage { Start = start };
@@ -150,10 +150,9 @@ static class ServerlessActivityConfiguration
         };
     }
 
-    static Proto.SubstrateKind GetSubstrateFromEnvironment()
+    static Proto.SubstrateKind ParseSubstrate(string? substrate)
     {
-        string? substrate = Environment.GetEnvironmentVariable("DTS_SUBSTRATE");
-        if (substrate is null)
+        if (string.IsNullOrWhiteSpace(substrate))
         {
             return Proto.SubstrateKind.Unspecified;
         }

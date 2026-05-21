@@ -50,18 +50,27 @@ public class DurableTaskWorkerOptions
     }
 
     /// <summary>
-    /// Defines whether unversioned task registrations can be used when no exact version match exists.
+    /// Controls when an unversioned task registration is used to serve a versioned request that has no exact
+    /// match. Only affects task names that have both an unversioned registration and at least one versioned
+    /// registration; otherwise the dispatch rules are unchanged.
     /// </summary>
     public enum UnversionedFallbackMode
     {
         /// <summary>
-        /// Only use an unversioned task registration for unversioned requests, or for versioned requests when
-        /// the task name has no versioned registrations.
+        /// Never fall back to an unversioned registration as a catch-all for unmatched versioned requests. This
+        /// is the default closed-set behavior: once a task name has at least one versioned registration, a
+        /// request for a version that has no exact match returns "not found" rather than dispatching to the
+        /// unversioned registration. Unversioned requests are still served by the unversioned registration, and
+        /// versioned requests still fall back to the unversioned registration when the task name has no
+        /// versioned registrations at all.
         /// </summary>
         Never = 0,
 
         /// <summary>
-        /// Use an unversioned task registration when no exact versioned registration exists for the requested task.
+        /// Fall back to the unversioned registration when no exact versioned match exists. An exact versioned
+        /// match still wins; only unmatched versioned requests dispatch to the unversioned registration as a
+        /// catch-all implementation. Use only when the unversioned implementation is replay-compatible with
+        /// every version it may receive.
         /// </summary>
         WhenNoExactMatch = 1,
     }

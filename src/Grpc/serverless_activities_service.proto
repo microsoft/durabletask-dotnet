@@ -20,7 +20,6 @@ service ServerlessActivities {
   // Removes a serverless activity declaration so the backend stops waking new workers
   // for the specified worker profile. Existing workers are not terminated by this RPC.
   rpc RemoveServerlessActivityDeclaration(RemoveServerlessActivityDeclarationRequest) returns (RemoveServerlessActivityDeclarationResult);
-
 }
 
 message ServerlessActivityWorkerMessage {

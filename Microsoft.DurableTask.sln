@@ -129,7 +129,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AzureManagedServerless.Test
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "serverless", "serverless", "{5BD6F026-413E-9AC5-D159-8E8D9F26EF1B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "declarer", "samples\serverless\declarer\declarer.csproj", "{4535F88F-EA1C-4C6F-84D5-93535EE1568C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "main-app", "samples\serverless\main-app\main-app.csproj", "{4535F88F-EA1C-4C6F-84D5-93535EE1568C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "remote-worker", "samples\serverless\remote-worker\remote-worker.csproj", "{562E5DB9-761B-4DE9-98CB-C364F6DE558E}"
 EndProject

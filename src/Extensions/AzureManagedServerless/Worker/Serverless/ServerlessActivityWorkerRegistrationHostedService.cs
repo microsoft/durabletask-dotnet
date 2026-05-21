@@ -245,7 +245,7 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
 
         if (ReferenceEquals(completedTask, completionTask))
         {
-            await heartbeatCts.CancelAsync().ConfigureAwait(false);
+            heartbeatCts.Cancel();
             try
             {
                 await heartbeatTask.ConfigureAwait(false);

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Samples.Serverless.Declarer;
+namespace Microsoft.DurableTask.Samples.Serverless.MainApp;
 
 public sealed record ServerlessSandboxHttpOptions(
     string TaskHub,

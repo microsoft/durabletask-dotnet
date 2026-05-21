@@ -5,7 +5,7 @@ using Grpc.Core;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.DurableTask.Client.AzureManaged;
 
-namespace Microsoft.DurableTask.Samples.Serverless.Declarer;
+namespace Microsoft.DurableTask.Samples.Serverless.MainApp;
 
 [ApiController]
 [Route("")]

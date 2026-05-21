@@ -26,9 +26,6 @@ builder.Services.AddDurableTaskWorker(workerBuilder =>
     workerBuilder.AddTasks(tasks =>
     {
         tasks.AddActivity<RemoteHelloActivity>();
-        tasks.AddActivity<BurstWorkActivity>();
-        tasks.AddActivity<ResizeImageActivity>();
-        tasks.AddActivity<BurstMegaWorkActivity>();
     });
     workerBuilder.UseDurableTaskScheduler(options =>
     {

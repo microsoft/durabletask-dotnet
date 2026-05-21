@@ -8,19 +8,18 @@ using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.AzureManaged;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Microsoft.DurableTask.Samples.Serverless.Declarer;
+namespace Microsoft.DurableTask.Samples.Serverless.MainApp;
 
 internal static class ServerlessSandboxHttpHost
 {
     public static async Task RunAsync(
         string endpoint,
         string taskHub,
+        string workerProfileId,
         TokenCredential credential)
     {
         WebApplicationBuilder builder = WebApplication.CreateBuilder();
-        builder.Services.AddSingleton(new ServerlessSandboxHttpOptions(
-            taskHub,
-            Environment.GetEnvironmentVariable("DTS_WORKER_PROFILE_ID") ?? "default"));
+        builder.Services.AddSingleton(new ServerlessSandboxHttpOptions(taskHub, workerProfileId));
         builder.Services.AddDurableTaskClient(clientBuilder =>
         {
             clientBuilder.UseDurableTaskScheduler(options =>

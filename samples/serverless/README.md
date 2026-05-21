@@ -6,7 +6,7 @@ The sample is intentionally split into two projects:
 
 | Path | Purpose |
 | --- | --- |
-| `main-app/` | Runs locally or in a normal app host. It declares the serverless activity, starts one hello orchestration, and can expose HTTP helpers for listing sandboxes and streaming logs. |
+| `main-app/` | Runs locally or in a normal app host. It declares the serverless activity and starts one hello orchestration. |
 | `remote-worker/` | Builds the container image that DTS starts inside a serverless sandbox. It contains the remote hello activity. |
 
 ## Build
@@ -49,16 +49,5 @@ Runtime status: Completed
 Output: "hello from <sandbox> pid=<pid>: serverless-sample"
 ```
 
-## Sandbox helper API
+Use the Durable Task Scheduler dashboard's Serverless Activities preview tab to inspect serverless activity runtimes and stream runtime logs.
 
-The main app can also expose a small HTTP helper API. The helper reuses the SDK's DTS serverless client registration instead of setting up gRPC channels directly.
-
-```powershell
-dotnet run --project .\samples\serverless\main-app\main-app.csproj -- serve
-```
-
-Endpoints:
-
-- `GET /health`
-- `GET /serverless/sandboxes?workerProfileId=default`
-- `GET /serverless/sandboxes/{dtsSandboxIdentifier}/logs?tail=100`

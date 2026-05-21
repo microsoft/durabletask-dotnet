@@ -20,19 +20,10 @@ string taskHub = Environment.GetEnvironmentVariable("DTS_TASK_HUB")
 string workerProfileId = Environment.GetEnvironmentVariable("DTS_WORKER_PROFILE_ID") ?? "default";
 string serverlessActivityImage = Environment.GetEnvironmentVariable("DTS_SERVERLESS_ACTIVITY_IMAGE")
     ?? "serverless-remote-worker:local";
-string helloInput = Environment.GetEnvironmentVariable("DTS_SAMPLE_HELLO_INPUT") ?? "serverless-sample";
+string helloInput = ParseHelloInput(
+    args,
+    Environment.GetEnvironmentVariable("DTS_SAMPLE_HELLO_INPUT") ?? "serverless-sample");
 TokenCredential credential = new DefaultAzureCredential();
-DemoCommand command = ParseCommand(args, helloInput);
-
-if (command.Kind == DemoCommandKind.Serve)
-{
-    await ServerlessSandboxHttpHost.RunAsync(
-        endpoint,
-        taskHub,
-        workerProfileId,
-        credential);
-    return;
-}
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 builder.Logging.AddSimpleConsole(options =>
@@ -82,7 +73,7 @@ await host.StartAsync();
 DurableTaskClient client = host.Services.GetRequiredService<DurableTaskClient>();
 string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
     ServerlessTaskNames.HelloOrchestrator,
-    input: command.HelloInput);
+    input: helloInput);
 OrchestrationMetadata? result = await client.WaitForInstanceCompletionAsync(
     instanceId,
     getInputsAndOutputs: true);
@@ -110,31 +101,17 @@ static int GetIntEnv(string name, int defaultValue)
         : throw new InvalidOperationException($"Environment variable '{name}' must be a positive integer.");
 }
 
-static DemoCommand ParseCommand(string[] args, string defaultHelloInput)
+static string ParseHelloInput(string[] args, string defaultHelloInput)
 {
     if (args.Length == 0)
     {
-        return DemoCommand.Hello(defaultHelloInput);
+        return defaultHelloInput;
     }
 
     string verb = args[0].ToLowerInvariant();
     return verb switch
     {
-        "hello" => DemoCommand.Hello(args.Length > 1 ? args[1] : defaultHelloInput),
-        "serve" or "http" or "api" => DemoCommand.Serve,
-        _ => throw new InvalidOperationException("Supported commands: hello [name], serve."),
+        "hello" => args.Length > 1 ? args[1] : defaultHelloInput,
+        _ => throw new InvalidOperationException("Supported commands: hello [name]."),
     };
-}
-
-internal enum DemoCommandKind
-{
-    Hello,
-    Serve,
-}
-
-internal sealed record DemoCommand(DemoCommandKind Kind, string HelloInput)
-{
-    public static DemoCommand Serve { get; } = new(DemoCommandKind.Serve, string.Empty);
-
-    public static DemoCommand Hello(string input) => new(DemoCommandKind.Hello, input);
 }

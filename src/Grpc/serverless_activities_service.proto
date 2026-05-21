@@ -5,8 +5,6 @@ syntax = "proto3";
 
 package microsoft.durabletask.serverless;
 
-import "google/protobuf/timestamp.proto";
-
 option csharp_namespace = "Microsoft.DurableTask.Protobuf.Serverless";
 
 service ServerlessActivities {
@@ -23,11 +21,6 @@ service ServerlessActivities {
   // for the specified worker profile. Existing workers are not terminated by this RPC.
   rpc RemoveServerlessActivityDeclaration(RemoveServerlessActivityDeclarationRequest) returns (RemoveServerlessActivityDeclarationResult);
 
-  // Lists DTS-managed sandboxes for a declared worker profile in the current task hub.
-  rpc ListServerlessActivitySandboxes(ListServerlessActivitySandboxesRequest) returns (ListServerlessActivitySandboxesResult);
-
-  // Streams best-effort stdout/stderr log lines from a DTS-managed sandbox.
-  rpc StreamSandboxLogs(SandboxLogStreamRequest) returns (stream SandboxLogLine);
 }
 
 message ServerlessActivityWorkerMessage {
@@ -89,36 +82,6 @@ message RemoveServerlessActivityDeclarationRequest {
 }
 
 message RemoveServerlessActivityDeclarationResult {
-}
-
-message ListServerlessActivitySandboxesRequest {
-  string worker_profile_id = 1;
-}
-
-message ListServerlessActivitySandboxesResult {
-  repeated ServerlessActivitySandbox sandboxes = 1;
-}
-
-message ServerlessActivitySandbox {
-  string dts_sandbox_identifier = 1;
-  string worker_profile_id = 2;
-  google.protobuf.Timestamp created_at = 3;
-  string state = 4;
-}
-
-message SandboxLogStreamRequest {
-  // DTS-generated sandbox identifier injected into the worker as DTS_SANDBOX_ID.
-  string dts_sandbox_identifier = 1;
-  int32 tail = 2;
-}
-
-message SandboxLogLine {
-  string dts_sandbox_identifier = 1;
-  google.protobuf.Timestamp timestamp = 2;
-  string stream = 3;
-  string tag = 4;
-  string message = 5;
-  string raw_line = 6;
 }
 
 // Compute substrate executing the activity worker.

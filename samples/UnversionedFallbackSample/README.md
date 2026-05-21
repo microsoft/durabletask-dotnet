@@ -21,7 +21,7 @@ This sample demonstrates opt-in unversioned fallback for per-task versioning. It
 ### 1. Start the DTS emulator
 
 ```bash
-docker run --name durabletask-emulator -d -p 8080:8080 -p 8082:8082 -e ASPNETCORE_URLS=http://+:8080 mcr.microsoft.com/dts/dts-emulator:latest
+docker run --name durabletask-emulator -d -p 8080:8080 -p 8082:8082 mcr.microsoft.com/dts/dts-emulator:latest
 ```
 
 The emulator exposes the gRPC sidecar on port 8080 and the local dashboard on port 8082. After running the sample below, you can open the dashboard at <http://localhost:8082> to inspect the orchestrations and their versions.

@@ -43,6 +43,21 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
+    public void ServerlessOptions_AddActivity_AddsStringAndTypedActivityNames()
+    {
+        // Arrange
+        ServerlessOptions options = new();
+
+        // Act
+        options
+            .AddActivity(" RemoteHello ")
+            .AddActivity<TypedRemoteHelloActivity>();
+
+        // Assert
+        options.ActivityNames.Should().Equal("RemoteHello", "TypedRemoteHello");
+    }
+
+    [Fact]
     public async Task ServerlessActivityDeclarationHostedService_SendsDeclarationPayload()
     {
         // Arrange
@@ -55,7 +70,7 @@ public class ServerlessActivitiesTests
             Memory = "1024Mi",
             MaxConcurrentActivities = 7,
         };
-        options.ActivityNames.Add("RemoteHello");
+        options.AddActivity("RemoteHello");
         options.EnvironmentVariables.Add("CUSTOM_SETTING", "enabled");
         options.Entrypoint.Add("/usr/bin/tini");
         options.Entrypoint.Add("--");
@@ -559,6 +574,8 @@ public class ServerlessActivitiesTests
     public async Task DeclareServerlessActivities_ConfiguresLocalWorkerExclusionFilter()
     {
         // Arrange
+        using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
+        using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
         mockBuilder.Setup(builder => builder.Services).Returns(services);
@@ -584,6 +601,8 @@ public class ServerlessActivitiesTests
     public async Task DeclareServerlessActivities_DoesNotConfigureFilterWhenActivityNamesAreEmpty()
     {
         // Arrange
+        using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
+        using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
         mockBuilder.Setup(builder => builder.Services).Returns(services);
@@ -608,6 +627,8 @@ public class ServerlessActivitiesTests
     public async Task UseServerlessWorker_ConfiguresRegisteredActivityWorkerFilter()
     {
         // Arrange
+        using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
+        using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
         ServiceCollection services = new();
         services.Configure<DurableTaskRegistry>(
             Options.DefaultName,
@@ -633,6 +654,8 @@ public class ServerlessActivitiesTests
     public void UseServerlessWorker_DoesNotRegisterWakeupServerHostedService()
     {
         // Arrange
+        using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
+        using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
         mockBuilder.Setup(builder => builder.Services).Returns(services);
@@ -643,6 +666,53 @@ public class ServerlessActivitiesTests
 
         // Assert
         services.Count(descriptor => descriptor.ServiceType == typeof(IHostedService)).Should().Be(1);
+    }
+
+    [Fact]
+    public void UseServerlessWorker_MissingInjectedEndpoint_Throws()
+    {
+        // Arrange
+        using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", null);
+        using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        ServiceCollection services = new();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
+        mockBuilder.Setup(builder => builder.Services).Returns(services);
+        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
+
+        // Act
+        Action action = () => mockBuilder.Object.UseServerlessWorker();
+
+        // Assert
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("DTS_ENDPOINT must be injected by DTS for serverless workers.");
+    }
+
+    [Fact]
+    public void UseServerlessWorker_MissingInjectedTaskHub_Throws()
+    {
+        // Arrange
+        using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
+        using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", null);
+        ServiceCollection services = new();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
+        mockBuilder.Setup(builder => builder.Services).Returns(services);
+        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
+
+        // Act
+        Action action = () => mockBuilder.Object.UseServerlessWorker();
+
+        // Assert
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("DTS_TASK_HUB must be injected by DTS for serverless workers.");
+    }
+
+    [DurableTask("TypedRemoteHello")]
+    sealed class TypedRemoteHelloActivity : TaskActivity<string, string>
+    {
+        public override Task<string> RunAsync(TaskActivityContext context, string input)
+        {
+            return Task.FromResult(input);
+        }
     }
 
     sealed class FakeServerlessActivitiesClient : IServerlessActivitiesClient

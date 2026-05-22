@@ -193,17 +193,21 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
 
     static void ConfigureDurableTaskSchedulerFromEnvironment(IDurableTaskWorkerBuilder builder)
     {
-        string? endpoint = Environment.GetEnvironmentVariable("DTS_ENDPOINT");
-        string? taskHub = Environment.GetEnvironmentVariable("DTS_TASK_HUB");
-        if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(taskHub))
-        {
-            return;
-        }
+        string endpoint = GetRequiredEnvironmentVariable("DTS_ENDPOINT");
+        string taskHub = GetRequiredEnvironmentVariable("DTS_TASK_HUB");
 
         // Private preview: DTS-owned sandbox workers authenticate with the injected
         // managed identity via DefaultAzureCredential. Revisit this if customer-owned
         // worker identities or non-default auth modes are introduced.
-        builder.UseDurableTaskScheduler(endpoint.Trim(), taskHub.Trim(), new DefaultAzureCredential());
+        builder.UseDurableTaskScheduler(endpoint, taskHub, new DefaultAzureCredential());
+    }
+
+    static string GetRequiredEnvironmentVariable(string name)
+    {
+        string? value = Environment.GetEnvironmentVariable(name);
+        return string.IsNullOrWhiteSpace(value)
+            ? throw new InvalidOperationException($"{name} must be injected by DTS for serverless workers.")
+            : value.Trim();
     }
 
     static void ApplyWorkerEnvironmentOverrides(ServerlessWorkerRuntimeOptions options)

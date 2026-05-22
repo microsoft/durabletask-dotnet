@@ -49,7 +49,7 @@ builder.Services.AddDurableTaskWorker(workerBuilder =>
         options.Cpu = Environment.GetEnvironmentVariable("DTS_SERVERLESS_CPU") ?? "1000m";
         options.Memory = Environment.GetEnvironmentVariable("DTS_SERVERLESS_MEMORY") ?? "2048Mi";
         options.MaxConcurrentActivities = GetIntEnv("DTS_SERVERLESS_MAX_ACTIVITIES", 1);
-        options.ActivityNames.Add(ServerlessTaskNames.RemoteHello);
+        options.AddActivity(ServerlessTaskNames.RemoteHello);
     });
 });
 

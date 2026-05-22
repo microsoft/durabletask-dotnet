@@ -15,7 +15,7 @@ static class ServerlessActivityConfiguration
     /// </summary>
     /// <param name="configuredNames">The configured activity names.</param>
     /// <returns>The normalized activity names.</returns>
-    public static string[] ResolveActivityNames(ICollection<string> configuredNames)
+    public static string[] ResolveActivityNames(IEnumerable<string> configuredNames)
     {
         return configuredNames
             .Where(static name => !string.IsNullOrWhiteSpace(name))
@@ -68,12 +68,21 @@ static class ServerlessActivityConfiguration
     /// Builds the initial serverless activity worker registration message.
     /// </summary>
     /// <param name="options">The serverless options.</param>
+    /// <param name="registeredActivityNames">The activity handlers registered by the worker process.</param>
     /// <returns>The worker start protocol message.</returns>
-    public static Proto.ServerlessActivityWorkerMessage BuildWorkerStart(ServerlessOptions options)
+    public static Proto.ServerlessActivityWorkerMessage BuildWorkerStart(
+        ServerlessOptions options,
+        IReadOnlyCollection<string> registeredActivityNames)
     {
         Check.NotNull(options);
+        Check.NotNull(registeredActivityNames);
 
         ValidateTaskHub(options.TaskHub, "Serverless activity worker registration requires a task hub name.");
+        string[] activityNames = ResolveActivityNames(registeredActivityNames);
+        if (activityNames.Length == 0)
+        {
+            throw new InvalidOperationException("Serverless activity worker registration requires at least one registered activity.");
+        }
 
         if (options.MaxConcurrentActivities <= 0)
         {
@@ -90,6 +99,7 @@ static class ServerlessActivityConfiguration
             Substrate = GetSubstrateFromEnvironment(),
             DtsSandboxIdentifier = Environment.GetEnvironmentVariable("DTS_SANDBOX_ID") ?? string.Empty,
         };
+        start.ActivityNames.AddRange(activityNames);
 
         return new Proto.ServerlessActivityWorkerMessage { Start = start };
     }

@@ -17,6 +17,7 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
     readonly object sync = new();
     readonly IServerlessActivitiesClient client;
     readonly ServerlessOptions options;
+    readonly IReadOnlyCollection<string> registeredActivityNames;
     readonly ILogger<ServerlessActivityWorkerRegistrationHostedService> logger;
     readonly IHostApplicationLifetime? lifetime;
     readonly ServerlessActivityTracker? activityTracker;
@@ -31,6 +32,7 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
     /// </summary>
     /// <param name="client">The serverless activities client.</param>
     /// <param name="options">The serverless options.</param>
+    /// <param name="registeredActivityNames">The activity handlers registered by this worker process.</param>
     /// <param name="logger">The logger.</param>
     /// <param name="lifetime">The optional application lifetime used to stop the host when a non-retriable registration stream failure occurs.</param>
     /// <param name="activityTracker">The optional activity tracker used to report live in-flight activity count.</param>
@@ -38,6 +40,7 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
     public ServerlessActivityWorkerRegistrationHostedService(
         IServerlessActivitiesClient client,
         ServerlessOptions options,
+        IReadOnlyCollection<string> registeredActivityNames,
         ILogger<ServerlessActivityWorkerRegistrationHostedService> logger,
         IHostApplicationLifetime? lifetime = null,
         ServerlessActivityTracker? activityTracker = null,
@@ -45,6 +48,7 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
     {
         this.client = Check.NotNull(client);
         this.options = Check.NotNull(options);
+        this.registeredActivityNames = Check.NotNull(registeredActivityNames);
         this.logger = Check.NotNull(logger);
         this.lifetime = lifetime;
         this.activityTracker = activityTracker;
@@ -60,7 +64,7 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
             return Task.CompletedTask;
         }
 
-        string[] activityNames = ServerlessActivityConfiguration.ResolveActivityNames(this.options.ActivityNames);
+        string[] activityNames = ServerlessActivityConfiguration.ResolveActivityNames(this.registeredActivityNames);
         if (activityNames.Length == 0)
         {
             Logs.NoServerlessActivitiesForWorkerRegistration(this.logger, this.options.TaskHub);
@@ -195,7 +199,7 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
                 registrationSession = this.client.OpenServerlessActivityWorkerSession(this.options.TaskHub, cancellationToken);
                 this.SetCurrentSession(registrationSession);
 
-                Proto.ServerlessActivityWorkerMessage startMessage = ServerlessActivityConfiguration.BuildWorkerStart(this.options);
+                Proto.ServerlessActivityWorkerMessage startMessage = ServerlessActivityConfiguration.BuildWorkerStart(this.options, this.registeredActivityNames);
                 await this.WriteSessionMessageAsync(registrationSession, startMessage, cancellationToken).ConfigureAwait(false);
                 Logs.ServerlessActivityWorkerRegistered(
                     this.logger,

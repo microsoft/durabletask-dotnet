@@ -241,7 +241,7 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public async Task ServerlessActivityWorkerRegistrationHostedService_SendsLiveWorkerMetadataWithoutActivityCatalog()
+    public async Task ServerlessActivityWorkerRegistrationHostedService_SendsLiveWorkerMetadataWithRegisteredActivities()
     {
         // Arrange
         string? originalSubstrate = Environment.GetEnvironmentVariable("DTS_SUBSTRATE");
@@ -264,6 +264,7 @@ public class ServerlessActivitiesTests
             ServerlessActivityWorkerRegistrationHostedService service = new(
                 client,
                 options,
+                ["RemoteHello"],
                 NullLogger<ServerlessActivityWorkerRegistrationHostedService>.Instance);
 
             // Act
@@ -280,6 +281,7 @@ public class ServerlessActivitiesTests
             start.MaxActivitiesCount.Should().Be(3);
             start.Substrate.Should().Be(SubstrateKind.Sandbox);
             start.DtsSandboxIdentifier.Should().Be("sandbox-1");
+            start.ActivityNames.Should().Equal("RemoteHello");
         }
         finally
         {
@@ -337,6 +339,7 @@ public class ServerlessActivitiesTests
         ServerlessActivityWorkerRegistrationHostedService service = new(
             client,
             options,
+            ["RemoteHello"],
             NullLogger<ServerlessActivityWorkerRegistrationHostedService>.Instance,
             activityTracker: activityTracker);
 
@@ -377,6 +380,7 @@ public class ServerlessActivitiesTests
         ServerlessActivityWorkerRegistrationHostedService service = new(
             client,
             options,
+            ["RemoteHello"],
             NullLogger<ServerlessActivityWorkerRegistrationHostedService>.Instance);
 
         // Act
@@ -416,6 +420,7 @@ public class ServerlessActivitiesTests
         ServerlessActivityWorkerRegistrationHostedService service = new(
             client,
             options,
+            ["RemoteHello"],
             NullLogger<ServerlessActivityWorkerRegistrationHostedService>.Instance);
 
         // Act
@@ -484,6 +489,7 @@ public class ServerlessActivitiesTests
         ServerlessActivityWorkerRegistrationHostedService service = new(
             client,
             options,
+            ["RemoteHello"],
             NullLogger<ServerlessActivityWorkerRegistrationHostedService>.Instance,
             reconnectJitter: new DeterministicRandom(0.0));
 
@@ -518,6 +524,7 @@ public class ServerlessActivitiesTests
         ServerlessActivityWorkerRegistrationHostedService service = new(
             client,
             options,
+            ["RemoteHello"],
             NullLogger<ServerlessActivityWorkerRegistrationHostedService>.Instance);
 
         // Act
@@ -541,7 +548,6 @@ public class ServerlessActivitiesTests
     public async Task DeclareServerlessActivities_ConfiguresLocalWorkerExclusionFilter()
     {
         // Arrange
-        using EnvironmentVariableScope serverlessActivities = new("DTS_SERVERLESS_ACTIVITIES", null);
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
         mockBuilder.Setup(builder => builder.Services).Returns(services);
@@ -567,7 +573,6 @@ public class ServerlessActivitiesTests
     public async Task DeclareServerlessActivities_DoesNotConfigureFilterWhenActivityNamesAreEmpty()
     {
         // Arrange
-        using EnvironmentVariableScope serverlessActivities = new("DTS_SERVERLESS_ACTIVITIES", null);
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
         mockBuilder.Setup(builder => builder.Services).Returns(services);
@@ -589,11 +594,13 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public async Task UseServerlessWorker_ConfiguresServerlessActivityWorkerFilter()
+    public async Task UseServerlessWorker_ConfiguresRegisteredActivityWorkerFilter()
     {
         // Arrange
-        using EnvironmentVariableScope serverlessActivities = new("DTS_SERVERLESS_ACTIVITIES", "RemoteHello");
         ServiceCollection services = new();
+        services.Configure<DurableTaskRegistry>(
+            Options.DefaultName,
+            registry => registry.AddActivityFunc<string, string>(new TaskName("RemoteHello"), (_, input) => input));
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
         mockBuilder.Setup(builder => builder.Services).Returns(services);
         mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);

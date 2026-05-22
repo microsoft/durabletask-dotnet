@@ -41,6 +41,9 @@ message ServerlessActivityWorkerStart {
   // the ADC provider sandbox resource id.
   string dts_sandbox_identifier = 5;
   string worker_profile_id = 6;
+  // Activity handlers registered by the worker process. DTS validates this
+  // matches the declaration before advertising worker capacity.
+  repeated string activity_names = 7;
 }
 
 message ServerlessActivityWorkerHeartbeat {

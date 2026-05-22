@@ -3,6 +3,7 @@
 
 using System.Collections.Generic;
 using System.Linq;
+using Azure.Identity;
 using Grpc.Net.Client;
 using Microsoft.DurableTask.Protobuf.Serverless;
 using Microsoft.DurableTask.Worker.AzureManaged.Serverless;
@@ -21,8 +22,7 @@ namespace Microsoft.DurableTask.Worker.AzureManaged;
 public static class DurableTaskSchedulerServerlessWorkerExtensions
 {
     /// <summary>
-    /// Declares serverless activities with DTS, excludes them from local execution, and propagates the
-    /// activity list to sandbox workers via the <c>DTS_SERVERLESS_ACTIVITIES</c> environment variable.
+    /// Declares serverless activities with DTS and excludes them from local execution.
     /// Call this on the local coordinator worker — not on the sandbox worker binary.
     /// </summary>
     /// <param name="builder">The Durable Task worker builder to configure.</param>
@@ -51,7 +51,7 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
     /// <summary>
     /// Configures this worker as a serverless activity worker that connects to DTS to receive and execute
     /// serverless activities. Use this on a dedicated worker binary that runs inside serverless infrastructure.
-    /// All configuration is read from environment variables injected by the backend and coordinator.
+    /// Runtime configuration is read from environment variables injected by DTS.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -59,11 +59,11 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
     /// to declare and provision the serverless activity configuration.
     /// </para>
     /// <para>
-    /// Required environment variables (injected automatically by the backend and coordinator):
+    /// Required environment variables injected automatically by DTS:
     /// <list type="bullet">
-    /// <item><c>DTS_SUBSTRATE</c> — identifies the sandbox substrate (injected by backend)</item>
-    /// <item><c>DTS_SERVERLESS_ACTIVITIES</c> — comma-separated activity names to execute (injected by coordinator)</item>
-    /// <item><c>DTS_TASK_HUB</c> — task hub name (injected by coordinator)</item>
+    /// <item><c>DTS_ENDPOINT</c> — canonical scheduler endpoint</item>
+    /// <item><c>DTS_TASK_HUB</c> — task hub name from the declaration</item>
+    /// <item><c>DTS_SUBSTRATE</c> — identifies the sandbox substrate</item>
     /// </list>
     /// </para>
     /// </remarks>
@@ -73,6 +73,9 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
     {
         Check.NotNull(builder);
 
+        ConfigureDurableTaskSchedulerFromEnvironment(builder);
+        builder.UseWorkItemFilters();
+
         builder.Services.AddOptions<ServerlessOptions>(builder.Name)
             .PostConfigure<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>((options, schedulerOptions) =>
             {
@@ -81,8 +84,7 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
             });
 
         builder.Services.AddOptions<DurableTaskWorkerWorkItemFilters>(builder.Name)
-            .PostConfigure<IOptionsMonitor<ServerlessOptions>>(
-                (filters, serverlessOptions) => IncludeOnlyServerlessActivities(filters, serverlessOptions.Get(builder.Name)));
+            .PostConfigure(IncludeOnlyRegisteredActivities);
 
         builder.Services.AddSingleton<ServerlessActivityTracker>();
         builder.Services.AddOptions<GrpcDurableTaskWorkerOptions>(builder.Name)
@@ -115,18 +117,9 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         filters.ExcludedActivities = MergeActivityFilters(filters.ExcludedActivities, activityNames);
     }
 
-    static void IncludeOnlyServerlessActivities(DurableTaskWorkerWorkItemFilters filters, ServerlessOptions options)
+    static void IncludeOnlyRegisteredActivities(DurableTaskWorkerWorkItemFilters filters)
     {
-        string[] activityNames = ServerlessActivityConfiguration.ResolveActivityNames(options.ActivityNames);
-        if (activityNames.Length == 0)
-        {
-            return;
-        }
-
         filters.Orchestrations = [];
-        filters.Activities = activityNames
-            .Select(static name => new DurableTaskWorkerWorkItemFilters.ActivityFilter { Name = name })
-            .ToArray();
         filters.ExcludedActivities = [];
         filters.Entities = [];
     }
@@ -152,10 +145,12 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         ILoggerFactory loggerFactory = services.GetRequiredService<ILoggerFactory>();
         IHostApplicationLifetime? lifetime = services.GetService<IHostApplicationLifetime>();
         ServerlessActivityTracker activityTracker = services.GetRequiredService<ServerlessActivityTracker>();
+        DurableTaskWorkerWorkItemFilters filters = services.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>().Get(builderName);
 
         return new ServerlessActivityWorkerRegistrationHostedService(
             CreateServerlessActivitiesClient(services, builderName),
             options,
+            ResolveActivityFilterNames(filters.Activities),
             loggerFactory.CreateLogger<ServerlessActivityWorkerRegistrationHostedService>(),
             lifetime,
             activityTracker);
@@ -197,6 +192,21 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         }
     }
 
+    static void ConfigureDurableTaskSchedulerFromEnvironment(IDurableTaskWorkerBuilder builder)
+    {
+        string? endpoint = Environment.GetEnvironmentVariable("DTS_ENDPOINT");
+        string? taskHub = Environment.GetEnvironmentVariable("DTS_TASK_HUB");
+        if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(taskHub))
+        {
+            return;
+        }
+
+        // Private preview: DTS-owned sandbox workers authenticate with the injected
+        // managed identity via DefaultAzureCredential. Revisit this if customer-owned
+        // worker identities or non-default auth modes are introduced.
+        builder.UseDurableTaskScheduler(endpoint.Trim(), taskHub.Trim(), new DefaultAzureCredential());
+    }
+
     static void ApplyWorkerEnvironmentOverrides(ServerlessOptions options)
     {
         // Auto-detect worker mode from DTS_SUBSTRATE, which the backend injects when
@@ -208,30 +218,11 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
             options.Mode = ServerlessMode.ServerlessInclude;
         }
 
-        // DTS_SERVERLESS_ACTIVITIES is injected by the coordinator into the sandbox environment.
-        ApplyActivityNameEnvironmentOverride(options.ActivityNames);
         ApplyWorkerProfileEnvironmentOverride(profile => options.WorkerProfileId = profile);
 
         if (int.TryParse(Environment.GetEnvironmentVariable("DTS_SERVERLESS_MAX_ACTIVITIES"), out int maxActivities) && maxActivities > 0)
         {
             options.MaxConcurrentActivities = maxActivities;
-        }
-    }
-
-    static void ApplyActivityNameEnvironmentOverride(ICollection<string> activityNames)
-    {
-        string? serverlessActivities = Environment.GetEnvironmentVariable("DTS_SERVERLESS_ACTIVITIES");
-        if (serverlessActivities is null)
-        {
-            return;
-        }
-
-        activityNames.Clear();
-        foreach (string name in serverlessActivities
-            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-            .Distinct(StringComparer.Ordinal))
-        {
-            activityNames.Add(name);
         }
     }
 
@@ -263,5 +254,15 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         }
 
         return merged.Values.ToArray();
+    }
+
+    static string[] ResolveActivityFilterNames(IReadOnlyList<DurableTaskWorkerWorkItemFilters.ActivityFilter> activityFilters)
+    {
+        return activityFilters
+            .Select(static filter => filter.Name)
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => name.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
     }
 }

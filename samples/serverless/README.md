@@ -51,3 +51,7 @@ Output: "hello from <sandbox> pid=<pid>: serverless-sample"
 
 Use the Durable Task Scheduler dashboard's Serverless Activities preview tab to inspect serverless activity runtimes and stream runtime logs.
 
+The remote worker image does not need customer-provided DTS runtime settings.
+DTS injects the scheduler endpoint, task hub, worker profile, capacity, substrate,
+and sandbox identifier when it starts the sandbox. The worker reports the
+activities registered in the image when it connects.

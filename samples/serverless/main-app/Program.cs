@@ -14,9 +14,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 string endpoint = GetRequiredEnvironmentVariable("DTS_ENDPOINT");
-string taskHub = Environment.GetEnvironmentVariable("DTS_TASK_HUB")
-    ?? Environment.GetEnvironmentVariable("DTS_TASKHUB")
-    ?? "ServerlessPocHub";
+string taskHub = Environment.GetEnvironmentVariable("DTS_TASK_HUB") ?? "ServerlessPocHub";
 string workerProfileId = Environment.GetEnvironmentVariable("DTS_WORKER_PROFILE_ID") ?? "default";
 string serverlessActivityImage = Environment.GetEnvironmentVariable("DTS_SERVERLESS_ACTIVITY_IMAGE")
     ?? "serverless-remote-worker:local";
@@ -51,7 +49,6 @@ builder.Services.AddDurableTaskWorker(workerBuilder =>
         options.Cpu = Environment.GetEnvironmentVariable("DTS_SERVERLESS_CPU") ?? "1000m";
         options.Memory = Environment.GetEnvironmentVariable("DTS_SERVERLESS_MEMORY") ?? "2048Mi";
         options.MaxConcurrentActivities = GetIntEnv("DTS_SERVERLESS_MAX_ACTIVITIES", 1);
-        options.EnvironmentVariables["DTS_ENDPOINT"] = endpoint;
         options.ActivityNames.Add(ServerlessTaskNames.RemoteHello);
     });
 });

@@ -8,11 +8,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-string endpoint = GetRequiredEnvironmentVariable("DTS_ENDPOINT");
-string taskHub = Environment.GetEnvironmentVariable("DTS_TASK_HUB")
-    ?? Environment.GetEnvironmentVariable("DTS_TASKHUB")
-    ?? "ServerlessPocHub";
-
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 builder.Logging.AddSimpleConsole(options =>
 {
@@ -27,16 +22,7 @@ builder.Services.AddDurableTaskWorker(workerBuilder =>
     {
         tasks.AddActivity<RemoteHelloActivity>();
     });
-    workerBuilder.UseDurableTaskScheduler(options =>
-    {
-        options.EndpointAddress = endpoint;
-        options.TaskHubName = taskHub;
-    });
     workerBuilder.UseServerlessWorker();
 });
 
 await builder.Build().RunAsync();
-
-static string GetRequiredEnvironmentVariable(string name)
-    => Environment.GetEnvironmentVariable(name)
-        ?? throw new InvalidOperationException($"An environment variable named '{name}' is required.");

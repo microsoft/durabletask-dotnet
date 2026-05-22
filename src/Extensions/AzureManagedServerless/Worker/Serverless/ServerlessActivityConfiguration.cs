@@ -71,7 +71,7 @@ static class ServerlessActivityConfiguration
     /// <param name="registeredActivityNames">The activity handlers registered by the worker process.</param>
     /// <returns>The worker start protocol message.</returns>
     public static Proto.ServerlessActivityWorkerMessage BuildWorkerStart(
-        ServerlessOptions options,
+        ServerlessWorkerRuntimeOptions options,
         IReadOnlyCollection<string> registeredActivityNames)
     {
         Check.NotNull(options);

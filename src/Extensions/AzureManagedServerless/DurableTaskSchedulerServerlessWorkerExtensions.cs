@@ -76,10 +76,10 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         ConfigureDurableTaskSchedulerFromEnvironment(builder);
         builder.UseWorkItemFilters();
 
-        builder.Services.AddOptions<ServerlessOptions>(builder.Name)
+        builder.Services.AddOptions<ServerlessWorkerRuntimeOptions>(builder.Name)
             .PostConfigure<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>((options, schedulerOptions) =>
             {
-                ApplyTaskHubDefault(options, schedulerOptions.Get(builder.Name).TaskHubName);
+                ApplyRuntimeTaskHubDefault(options, schedulerOptions.Get(builder.Name).TaskHubName);
                 ApplyWorkerEnvironmentOverrides(options);
             });
 
@@ -129,10 +129,12 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
     {
         ServerlessOptions options = services.GetRequiredService<IOptionsMonitor<ServerlessOptions>>().Get(builderName);
         ILoggerFactory loggerFactory = services.GetRequiredService<ILoggerFactory>();
+        ServerlessWorkerRuntimeOptions runtimeOptions = services.GetRequiredService<IOptionsMonitor<ServerlessWorkerRuntimeOptions>>().Get(builderName);
 
         return new ServerlessActivityDeclarationHostedService(
             CreateServerlessActivitiesClient(services, builderName),
             options,
+            runtimeOptions,
             loggerFactory.CreateLogger<ServerlessActivityDeclarationHostedService>());
     }
 
@@ -140,7 +142,7 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         IServiceProvider services,
         string builderName)
     {
-        ServerlessOptions options = services.GetRequiredService<IOptionsMonitor<ServerlessOptions>>().Get(builderName);
+        ServerlessWorkerRuntimeOptions options = services.GetRequiredService<IOptionsMonitor<ServerlessWorkerRuntimeOptions>>().Get(builderName);
         ILoggerFactory loggerFactory = services.GetRequiredService<ILoggerFactory>();
         IHostApplicationLifetime? lifetime = services.GetService<IHostApplicationLifetime>();
         ServerlessActivityTracker activityTracker = services.GetRequiredService<ServerlessActivityTracker>();
@@ -181,6 +183,14 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         }
     }
 
+    static void ApplyRuntimeTaskHubDefault(ServerlessWorkerRuntimeOptions options, string taskHubName)
+    {
+        if (string.IsNullOrWhiteSpace(options.TaskHub) && !string.IsNullOrWhiteSpace(taskHubName))
+        {
+            options.TaskHub = taskHubName;
+        }
+    }
+
     static void ConfigureDurableTaskSchedulerFromEnvironment(IDurableTaskWorkerBuilder builder)
     {
         string? endpoint = Environment.GetEnvironmentVariable("DTS_ENDPOINT");
@@ -196,7 +206,7 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         builder.UseDurableTaskScheduler(endpoint.Trim(), taskHub.Trim(), new DefaultAzureCredential());
     }
 
-    static void ApplyWorkerEnvironmentOverrides(ServerlessOptions options)
+    static void ApplyWorkerEnvironmentOverrides(ServerlessWorkerRuntimeOptions options)
     {
         // Auto-detect worker mode from DTS_SUBSTRATE, which the backend injects when
         // launching a sandbox. This is the authoritative signal that this process is a sandbox worker.

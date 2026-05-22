@@ -16,7 +16,7 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
 {
     readonly object sync = new();
     readonly IServerlessActivitiesClient client;
-    readonly ServerlessOptions options;
+    readonly ServerlessWorkerRuntimeOptions options;
     readonly IReadOnlyCollection<string> registeredActivityNames;
     readonly ILogger<ServerlessActivityWorkerRegistrationHostedService> logger;
     readonly IHostApplicationLifetime? lifetime;
@@ -31,7 +31,7 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
     /// Initializes a new instance of the <see cref="ServerlessActivityWorkerRegistrationHostedService"/> class.
     /// </summary>
     /// <param name="client">The serverless activities client.</param>
-    /// <param name="options">The serverless options.</param>
+    /// <param name="options">The serverless worker runtime options.</param>
     /// <param name="registeredActivityNames">The activity handlers registered by this worker process.</param>
     /// <param name="logger">The logger.</param>
     /// <param name="lifetime">The optional application lifetime used to stop the host when a non-retriable registration stream failure occurs.</param>
@@ -39,7 +39,7 @@ sealed class ServerlessActivityWorkerRegistrationHostedService : IHostedService,
     /// <param name="reconnectJitter">The optional random source used to jitter reconnect delays.</param>
     public ServerlessActivityWorkerRegistrationHostedService(
         IServerlessActivitiesClient client,
-        ServerlessOptions options,
+        ServerlessWorkerRuntimeOptions options,
         IReadOnlyCollection<string> registeredActivityNames,
         ILogger<ServerlessActivityWorkerRegistrationHostedService> logger,
         IHostApplicationLifetime? lifetime = null,

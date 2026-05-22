@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Reflection;
 using FluentAssertions;
 using Grpc.Core;
 using Microsoft.DurableTask.Protobuf.Serverless;
@@ -25,8 +26,19 @@ public class ServerlessActivitiesTests
         typeof(ServerlessOptions).GetProperty("LaunchCommand").Should().BeNull();
         typeof(ServerlessOptions).GetProperty("DeclarationRetryMaxAttempts").Should().BeNull();
         typeof(ServerlessOptions).GetProperty("DeclarationRetryDelay").Should().BeNull();
-        typeof(ServerlessOptions).GetProperty("HeartbeatInterval").Should().BeNull();
+        typeof(ServerlessOptions).GetProperty(
+            "HeartbeatInterval",
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Should().BeNull();
         typeof(ServerlessOptions).GetProperty("WakeupPort").Should().BeNull();
+        typeof(ServerlessOptions).GetProperty(
+            "WorkerRegistrationRetryInitialDelay",
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Should().BeNull();
+        typeof(ServerlessOptions).GetProperty(
+            "WorkerRegistrationRetryMaxDelay",
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Should().BeNull();
+        typeof(ServerlessOptions).GetProperty(
+            "Mode",
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Should().BeNull();
         typeof(ServerlessActivityDeclaration).GetProperty("LaunchCommand").Should().BeNull();
     }
 
@@ -53,6 +65,7 @@ public class ServerlessActivitiesTests
         ServerlessActivityDeclarationHostedService service = new(
             client,
             options,
+            runtimeOptions: null,
             NullLogger<ServerlessActivityDeclarationHostedService>.Instance);
 
         // Act
@@ -157,6 +170,7 @@ public class ServerlessActivitiesTests
         ServerlessActivityDeclarationHostedService service = new(
             client,
             options,
+            runtimeOptions: null,
             NullLogger<ServerlessActivityDeclarationHostedService>.Instance);
 
         // Act
@@ -181,6 +195,7 @@ public class ServerlessActivitiesTests
         ServerlessActivityDeclarationHostedService service = new(
             client,
             options,
+            runtimeOptions: null,
             NullLogger<ServerlessActivityDeclarationHostedService>.Instance);
 
         // Act
@@ -204,6 +219,7 @@ public class ServerlessActivitiesTests
         ServerlessActivityDeclarationHostedService service = new(
             client,
             options,
+            runtimeOptions: null,
             NullLogger<ServerlessActivityDeclarationHostedService>.Instance);
 
         // Act
@@ -230,6 +246,7 @@ public class ServerlessActivitiesTests
         ServerlessActivityDeclarationHostedService service = new(
             new FakeServerlessActivitiesClient(),
             options,
+            runtimeOptions: null,
             NullLogger<ServerlessActivityDeclarationHostedService>.Instance);
 
         // Act
@@ -251,7 +268,7 @@ public class ServerlessActivitiesTests
 
         try
         {
-            ServerlessOptions options = new()
+            ServerlessWorkerRuntimeOptions options = new()
             {
                 Mode = ServerlessMode.ServerlessInclude,
                 TaskHub = TaskHub,
@@ -259,7 +276,6 @@ public class ServerlessActivitiesTests
                 MaxConcurrentActivities = 3,
                 HeartbeatInterval = TimeSpan.FromDays(1),
             };
-            options.ActivityNames.Add("RemoteHello");
             FakeServerlessActivitiesClient client = new();
             ServerlessActivityWorkerRegistrationHostedService service = new(
                 client,
@@ -321,7 +337,7 @@ public class ServerlessActivitiesTests
     public async Task ServerlessActivityWorkerRegistrationHostedService_SendsHeartbeatWithCurrentInFlightCount()
     {
         // Arrange
-        ServerlessOptions options = new()
+        ServerlessWorkerRuntimeOptions options = new()
         {
             Mode = ServerlessMode.ServerlessInclude,
             TaskHub = TaskHub,
@@ -329,7 +345,6 @@ public class ServerlessActivitiesTests
             MaxConcurrentActivities = 3,
             HeartbeatInterval = TimeSpan.FromMilliseconds(10),
         };
-        options.ActivityNames.Add("RemoteHello");
 
         FakeServerlessActivitiesClient client = new();
         ServerlessActivityTracker activityTracker = new();
@@ -359,7 +374,7 @@ public class ServerlessActivitiesTests
     public async Task ServerlessActivityWorkerRegistrationHostedService_ReopensSessionAfterTransientStreamFailure()
     {
         // Arrange
-        ServerlessOptions options = new()
+        ServerlessWorkerRuntimeOptions options = new()
         {
             Mode = ServerlessMode.ServerlessInclude,
             TaskHub = TaskHub,
@@ -369,7 +384,6 @@ public class ServerlessActivitiesTests
             WorkerRegistrationRetryInitialDelay = TimeSpan.FromMilliseconds(10),
             WorkerRegistrationRetryMaxDelay = TimeSpan.FromMilliseconds(10),
         };
-        options.ActivityNames.Add("RemoteHello");
 
         FakeServerlessActivityWorkerSession failedSession = new() { ThrowOnWriteAttempt = 2 };
         FakeServerlessActivityWorkerSession recoveredSession = new();
@@ -399,7 +413,7 @@ public class ServerlessActivitiesTests
     public async Task ServerlessActivityWorkerRegistrationHostedService_ReopensSessionAfterTerminalServerFailure()
     {
         // Arrange
-        ServerlessOptions options = new()
+        ServerlessWorkerRuntimeOptions options = new()
         {
             Mode = ServerlessMode.ServerlessInclude,
             TaskHub = TaskHub,
@@ -409,7 +423,6 @@ public class ServerlessActivitiesTests
             WorkerRegistrationRetryInitialDelay = TimeSpan.FromMilliseconds(10),
             WorkerRegistrationRetryMaxDelay = TimeSpan.FromMilliseconds(10),
         };
-        options.ActivityNames.Add("RemoteHello");
 
         FakeServerlessActivityWorkerSession failedSession = new();
         FakeServerlessActivityWorkerSession recoveredSession = new();
@@ -468,7 +481,7 @@ public class ServerlessActivitiesTests
     public async Task ServerlessActivityWorkerRegistrationHostedService_AppliesJitterToReconnectDelay()
     {
         // Arrange
-        ServerlessOptions options = new()
+        ServerlessWorkerRuntimeOptions options = new()
         {
             Mode = ServerlessMode.ServerlessInclude,
             TaskHub = TaskHub,
@@ -478,7 +491,6 @@ public class ServerlessActivitiesTests
             WorkerRegistrationRetryInitialDelay = TimeSpan.FromDays(1),
             WorkerRegistrationRetryMaxDelay = TimeSpan.FromDays(1),
         };
-        options.ActivityNames.Add("RemoteHello");
 
         FakeServerlessActivityWorkerSession failedSession = new() { ThrowOnWriteAttempt = 2 };
         FakeServerlessActivityWorkerSession recoveredSession = new();
@@ -507,7 +519,7 @@ public class ServerlessActivitiesTests
     public async Task ServerlessActivityWorkerRegistrationHostedService_StopAsync_DoesNotCompleteStreamWhileWriteIsInFlight()
     {
         // Arrange
-        ServerlessOptions options = new()
+        ServerlessWorkerRuntimeOptions options = new()
         {
             Mode = ServerlessMode.ServerlessInclude,
             TaskHub = TaskHub,
@@ -515,7 +527,6 @@ public class ServerlessActivitiesTests
             MaxConcurrentActivities = 3,
             HeartbeatInterval = TimeSpan.FromMilliseconds(10),
         };
-        options.ActivityNames.Add("RemoteHello");
 
         FakeServerlessActivityWorkerSession session = new() { BlockWriteAttempt = 2 };
         FakeServerlessActivitiesClient client = new();

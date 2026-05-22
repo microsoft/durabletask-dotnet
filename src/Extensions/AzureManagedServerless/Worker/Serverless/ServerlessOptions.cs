@@ -4,22 +4,6 @@
 namespace Microsoft.DurableTask.Worker.AzureManaged.Serverless;
 
 /// <summary>
-/// Defines how a worker participates in serverless activity execution.
-/// </summary>
-internal enum ServerlessMode
-{
-    /// <summary>
-    /// The local worker declares serverless activities and excludes them from local execution.
-    /// </summary>
-    LocalExclude,
-
-    /// <summary>
-    /// The worker runs inside serverless infrastructure and executes only serverless activities.
-    /// </summary>
-    ServerlessInclude,
-}
-
-/// <summary>
 /// Options for configuring serverless activity worker behavior.
 /// </summary>
 public sealed class ServerlessOptions
@@ -103,24 +87,4 @@ public sealed class ServerlessOptions
     /// Gets or sets the maximum number of concurrent activities expected from each serverless worker.
     /// </summary>
     public int MaxConcurrentActivities { get; set; } = 100;
-
-    /// <summary>
-    /// Gets or sets the interval used to refresh live worker capacity while the registration stream is open.
-    /// </summary>
-    internal TimeSpan HeartbeatInterval { get; set; } = TimeSpan.FromSeconds(2);
-
-    /// <summary>
-    /// Gets or sets the initial delay before retrying a failed worker registration stream.
-    /// </summary>
-    internal TimeSpan WorkerRegistrationRetryInitialDelay { get; set; } = TimeSpan.FromSeconds(1);
-
-    /// <summary>
-    /// Gets or sets the maximum delay before retrying a failed worker registration stream.
-    /// </summary>
-    internal TimeSpan WorkerRegistrationRetryMaxDelay { get; set; } = TimeSpan.FromSeconds(30);
-
-    /// <summary>
-    /// Gets or sets the worker mode for serverless activity execution. Set automatically from the runtime environment.
-    /// </summary>
-    internal ServerlessMode Mode { get; set; } = ServerlessMode.LocalExclude;
 }

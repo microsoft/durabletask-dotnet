@@ -14,6 +14,7 @@ sealed class ServerlessActivityDeclarationHostedService : IHostedService
 {
     readonly IServerlessActivitiesClient client;
     readonly ServerlessOptions options;
+    readonly ServerlessWorkerRuntimeOptions? runtimeOptions;
     readonly ILogger<ServerlessActivityDeclarationHostedService> logger;
 
     /// <summary>
@@ -21,21 +22,24 @@ sealed class ServerlessActivityDeclarationHostedService : IHostedService
     /// </summary>
     /// <param name="client">The serverless activities client.</param>
     /// <param name="options">The serverless options.</param>
+    /// <param name="runtimeOptions">The optional serverless worker runtime options.</param>
     /// <param name="logger">The logger.</param>
     public ServerlessActivityDeclarationHostedService(
         IServerlessActivitiesClient client,
         ServerlessOptions options,
+        ServerlessWorkerRuntimeOptions? runtimeOptions,
         ILogger<ServerlessActivityDeclarationHostedService> logger)
     {
         this.client = Check.NotNull(client);
         this.options = Check.NotNull(options);
+        this.runtimeOptions = runtimeOptions;
         this.logger = Check.NotNull(logger);
     }
 
     /// <inheritdoc/>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (this.options.Mode == ServerlessMode.ServerlessInclude)
+        if (this.runtimeOptions?.Mode == ServerlessMode.ServerlessInclude)
         {
             return;
         }

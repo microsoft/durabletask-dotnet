@@ -106,14 +106,6 @@ public class DurableTaskWorkerOptions
         /// upstream clients should fail loudly instead of landing on the unversioned registration.
         /// </summary>
         StrictExactOnly = 2,
-
-        /// <summary>
-        /// Obsolete alias for <see cref="Implicit"/>. Prefer <see cref="Implicit"/> — the original
-        /// <c>Never</c> name was misleading because it did not actually disable the long-standing implicit
-        /// unversioned-only fallback. Only <see cref="StrictExactOnly"/> disables every fallback path.
-        /// </summary>
-        [Obsolete("Use UnversionedFallbackMode.Implicit instead. The original name was misleading; only StrictExactOnly actually disables every fallback path.")]
-        Never = Implicit,
     }
 
     /// <summary>

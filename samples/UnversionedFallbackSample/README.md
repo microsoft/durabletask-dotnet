@@ -67,10 +67,13 @@ docker rm -f durabletask-emulator
 ## Key takeaways
 
 - Exact version matches always win. A `1.4.0` request dispatches to the `1.4.0` class, not the unversioned class.
-- Orchestrator and activity fallback are configured independently. `OrchestratorUnversionedFallback` carries replay risk (orchestrators rehydrate state from history on every replay); `ActivityUnversionedFallback` is safer because activities are stateless. Start with activity-only fallback if you are unsure.
-- Unversioned fallback is opt-in. Without `CatchAll` on the corresponding side, a mixed unversioned plus versioned registration remains a closed set and unknown versions fail rather than falling back.
-- Use orchestrator fallback only when the unversioned implementation is replay-compatible with the versions it may receive. Replaying existing histories against a different implementation can cause non-determinism or deserialization failures.
-- `UseWorkItemFilters()` composes with these modes by allowing unmatched versions for logical names that have an unversioned catch-all registration on the enabled side.
+- Three modes are available per side via `UnversionedFallbackMode`:
+  - `Implicit` (default) — the unversioned registration serves versioned requests only when the name has no versioned siblings. Matches behavior before per-task versioning shipped.
+  - `CatchAll` — opt-in catch-all for unmatched versioned requests on mixed names. This sample uses it.
+  - `StrictExactOnly` — every versioned request requires an exact `(name, version)` registration. Use when bogus versions from upstream clients should fail loudly.
+- Orchestrator and activity fallback are configured independently. `OrchestratorUnversionedFallback` carries replay risk (orchestrators rehydrate state from history on every replay); `ActivityUnversionedFallback` is safer because activities are stateless. Start with activity-only `CatchAll` if you are unsure.
+- Use orchestrator `CatchAll` only when the unversioned implementation is replay-compatible with the versions it may receive. Replaying existing histories against a different implementation can cause non-determinism or deserialization failures.
+- `UseWorkItemFilters()` composes with these modes: it widens to a wildcard when the worker can actually serve unmatched versioned requests (under `Implicit` for unversioned-only names, under `CatchAll` whenever an unversioned registration exists). Under `StrictExactOnly` the filter emits the concrete version set so the backend does not deliver work items the worker would reject.
 
 ## See also
 

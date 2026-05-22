@@ -45,31 +45,32 @@ public class DurableTaskWorkerWorkItemFilters
             workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict
                 ? [workerOptions.Versioning.Version ?? string.Empty]
                 : null;
-        bool useOrchestratorUnversionedFallback =
+        DurableTaskWorkerOptions.UnversionedFallbackMode orchestratorFallbackMode =
             workerOptions?.Versioning?.OrchestratorUnversionedFallback
-                == DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll;
-        bool useActivityUnversionedFallback =
+                ?? DurableTaskWorkerOptions.UnversionedFallbackMode.Implicit;
+        DurableTaskWorkerOptions.UnversionedFallbackMode activityFallbackMode =
             workerOptions?.Versioning?.ActivityUnversionedFallback
-                == DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll;
+                ?? DurableTaskWorkerOptions.UnversionedFallbackMode.Implicit;
 
         // Orchestration filters group registrations by logical name and emit the concrete distinct
         // version set actually registered (treating null/unversioned as ""). Strict mode overrides
-        // this with the single configured worker version. When the factory can resolve unknown
-        // versions via an unversioned registration (unversioned-only names, or mixed names with
-        // opt-in unversioned fallback), we emit an empty version list — the filter wildcard — so the
-        // backend can deliver versioned work items the factory can handle. Otherwise, emitting the
-        // concrete version set prevents the backend from streaming work items the worker would then
-        // reject after the fact.
+        // this with the single configured worker version. When the factory can resolve unmatched
+        // versions via the unversioned registration (unversioned-only names under Implicit, or any
+        // name with an unversioned registration under CatchAll), we emit an empty version list — the
+        // filter wildcard — so the backend delivers versioned work items the factory can handle.
+        // Under StrictExactOnly the factory rejects unmatched versioned requests for every name,
+        // including unversioned-only names, so the filter must emit the concrete version set instead
+        // of widening.
         //
         // Orchestrator and activity fallback are configured independently, so each filter set
-        // consults its own flag.
+        // consults its own mode.
         List<OrchestrationFilter> orchestrationFilters = registry.OrchestratorsByVersion
             .GroupBy(orchestration => orchestration.Key.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
                 IReadOnlyList<string> versions =
                     strictWorkerVersions
-                    ?? GetFilterVersions(group.Select(entry => entry.Key.Version), useOrchestratorUnversionedFallback);
+                    ?? GetFilterVersions(group.Select(entry => entry.Key.Version), orchestratorFallbackMode);
 
                 return new OrchestrationFilter
                 {
@@ -85,7 +86,7 @@ public class DurableTaskWorkerWorkItemFilters
             {
                 IReadOnlyList<string> versions =
                     strictWorkerVersions
-                    ?? GetFilterVersions(group.Select(entry => entry.Key.Version), useActivityUnversionedFallback);
+                    ?? GetFilterVersions(group.Select(entry => entry.Key.Version), activityFallbackMode);
 
                 return new ActivityFilter
                 {
@@ -106,7 +107,9 @@ public class DurableTaskWorkerWorkItemFilters
             }).ToList(),
         };
 
-        static IReadOnlyList<string> GetFilterVersions(IEnumerable<string?> versions, bool useUnversionedFallback)
+        static IReadOnlyList<string> GetFilterVersions(
+            IEnumerable<string?> versions,
+            DurableTaskWorkerOptions.UnversionedFallbackMode mode)
         {
             // Normalize null to "" so an unversioned registration appears consistently.
             string[] normalized = versions
@@ -115,12 +118,29 @@ public class DurableTaskWorkerWorkItemFilters
                 .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
-            // Unversioned-only: emit the wildcard match-all (empty list) so the backend can deliver
-            // versioned work items that the factory will resolve via unversioned fallback. Without
-            // this, callers asking for a specific version would be filtered out at the backend even
-            // though the worker can handle them.
-            if ((normalized.Length == 1 && normalized[0].Length == 0)
-                || (useUnversionedFallback && normalized.Contains(string.Empty, StringComparer.OrdinalIgnoreCase)))
+            // StrictExactOnly disables every fallback path, including the long-standing implicit
+            // unversioned-only fallback. Emit the concrete registered version set so the backend
+            // does not deliver versioned work items the factory will reject after the fact.
+            if (mode == DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly)
+            {
+                return normalized;
+            }
+
+            // Otherwise, widen to a wildcard when the factory can actually resolve unmatched versions:
+            //   - Implicit: only when the registry has no versioned siblings for this name (i.e.
+            //     normalized is exactly [""]).
+            //   - CatchAll: whenever the registry has an unversioned registration for this name.
+            bool hasUnversionedRegistration =
+                normalized.Contains(string.Empty, StringComparer.OrdinalIgnoreCase);
+            bool implicitWildcard =
+                mode == DurableTaskWorkerOptions.UnversionedFallbackMode.Implicit
+                && normalized.Length == 1
+                && normalized[0].Length == 0;
+            bool catchAllWildcard =
+                mode == DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll
+                && hasUnversionedRegistration;
+
+            if (implicitWildcard || catchAllWildcard)
             {
                 return [];
             }

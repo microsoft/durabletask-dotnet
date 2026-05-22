@@ -17,8 +17,8 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
     readonly IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities;
     readonly HashSet<string> versionedOrchestratorNames;
     readonly HashSet<string> versionedActivityNames;
-    readonly bool useOrchestratorUnversionedFallback;
-    readonly bool useActivityUnversionedFallback;
+    readonly DurableTaskWorkerOptions.UnversionedFallbackMode orchestratorFallbackMode;
+    readonly DurableTaskWorkerOptions.UnversionedFallbackMode activityFallbackMode;
     readonly ILogger? logger;
 
     /// <summary>
@@ -34,23 +34,21 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
         IDictionary<TaskVersionKey, Func<IServiceProvider, ITaskActivity>> activities,
         IDictionary<TaskVersionKey, Func<IServiceProvider, ITaskOrchestrator>> orchestrators,
         IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities,
-        DurableTaskWorkerOptions.UnversionedFallbackMode orchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.Never,
-        DurableTaskWorkerOptions.UnversionedFallbackMode activityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.Never,
+        DurableTaskWorkerOptions.UnversionedFallbackMode orchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.Implicit,
+        DurableTaskWorkerOptions.UnversionedFallbackMode activityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.Implicit,
         ILoggerFactory? loggerFactory = null)
     {
         this.activities = Check.NotNull(activities);
         this.orchestrators = Check.NotNull(orchestrators);
         this.entities = Check.NotNull(entities);
-        this.useOrchestratorUnversionedFallback =
-            orchestratorUnversionedFallback == DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll;
-        this.useActivityUnversionedFallback =
-            activityUnversionedFallback == DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll;
+        this.orchestratorFallbackMode = orchestratorUnversionedFallback;
+        this.activityFallbackMode = activityUnversionedFallback;
         this.logger = loggerFactory is not null ? Logs.CreateWorkerLogger(loggerFactory) : null;
 
-        // Snapshot the set of logical names that have at least one versioned registration. By default, this gates
-        // unversioned fallback so a mixed versioned/unversioned name remains a closed set. Workers can opt in to
-        // allowing the unversioned registration to handle unmatched versions, independently for orchestrators
-        // and activities.
+        // Snapshot the set of logical names that have at least one versioned registration. Used by the
+        // Implicit fallback mode to recognize "unversioned-only" names, where a versioned request is allowed
+        // to resolve through the unversioned registration. CatchAll widens this for mixed names; StrictExactOnly
+        // disables fallback entirely.
         this.versionedOrchestratorNames = new HashSet<string>(
             this.orchestrators.Keys
                 .Where(k => !string.IsNullOrWhiteSpace(k.Version))
@@ -78,11 +76,10 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
             return true;
         }
 
-        // Unversioned registrations remain the compatibility fallback for a versioned request when no versioned
-        // registration exists for the same logical name. Workers can also opt in to treating the unversioned
-        // registration as a catch-all for unmatched versions.
+        // Resolve a versioned request through the unversioned registration when the mode allows it.
+        // See UnversionedFallbackMode for the dispatch matrix.
         if (!string.IsNullOrWhiteSpace(version.Version)
-            && (this.useActivityUnversionedFallback || !this.versionedActivityNames.Contains(name.Name))
+            && ShouldUseUnversionedFallback(this.activityFallbackMode, this.versionedActivityNames, name.Name)
             && this.activities.TryGetValue(new TaskVersionKey(name, default(TaskVersion)), out factory))
         {
             this.logger?.ActivityDispatchedToUnversionedFallback(name.Name, version.Version);
@@ -114,11 +111,10 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
             return true;
         }
 
-        // Unversioned registrations remain the compatibility fallback for a versioned request when no versioned
-        // registration exists for the same logical name. Workers can also opt in to treating the unversioned
-        // registration as a catch-all for unmatched versions.
+        // Resolve a versioned request through the unversioned registration when the mode allows it.
+        // See UnversionedFallbackMode for the dispatch matrix.
         if (!string.IsNullOrWhiteSpace(version.Version)
-            && (this.useOrchestratorUnversionedFallback || !this.versionedOrchestratorNames.Contains(name.Name))
+            && ShouldUseUnversionedFallback(this.orchestratorFallbackMode, this.versionedOrchestratorNames, name.Name)
             && this.orchestrators.TryGetValue(new TaskVersionKey(name, default(TaskVersion)), out factory))
         {
             this.logger?.OrchestratorDispatchedToUnversionedFallback(name.Name, version.Version);
@@ -147,5 +143,19 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
 
         entity = null;
         return false;
+    }
+
+    static bool ShouldUseUnversionedFallback(
+        DurableTaskWorkerOptions.UnversionedFallbackMode mode,
+        HashSet<string> versionedNames,
+        string requestedName)
+    {
+        return mode switch
+        {
+            DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly => false,
+            DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll => true,
+            DurableTaskWorkerOptions.UnversionedFallbackMode.Implicit => !versionedNames.Contains(requestedName),
+            _ => !versionedNames.Contains(requestedName),
+        };
     }
 }

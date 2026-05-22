@@ -33,10 +33,10 @@ static class DurableTaskRegistryExtensions
         Check.NotNull(registry);
         DurableTaskWorkerOptions.UnversionedFallbackMode orchestratorFallback =
             workerOptions?.Versioning?.OrchestratorUnversionedFallback
-                ?? DurableTaskWorkerOptions.UnversionedFallbackMode.Never;
+                ?? DurableTaskWorkerOptions.UnversionedFallbackMode.Implicit;
         DurableTaskWorkerOptions.UnversionedFallbackMode activityFallback =
             workerOptions?.Versioning?.ActivityUnversionedFallback
-                ?? DurableTaskWorkerOptions.UnversionedFallbackMode.Never;
+                ?? DurableTaskWorkerOptions.UnversionedFallbackMode.Implicit;
         return new DurableTaskFactory(
             registry.ActivitiesByVersion,
             registry.OrchestratorsByVersion,

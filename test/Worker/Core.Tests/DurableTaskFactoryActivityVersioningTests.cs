@@ -223,6 +223,91 @@ public class DurableTaskFactoryActivityVersioningTests
             && log.Message.Contains("unversioned", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void TryCreateActivity_StrictExactOnlyWithOnlyUnversionedRegistration_RejectsVersionedRequest()
+    {
+        // Arrange — only the unversioned registration exists. Under Implicit, a versioned request would
+        // resolve to it. StrictExactOnly disables that path: the request must fail.
+        DurableTaskRegistry registry = new();
+        registry.AddActivity<UnversionedInvoiceActivity>();
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Versioning = new DurableTaskWorkerOptions.VersioningOptions
+            {
+                ActivityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly,
+            },
+        };
+        IDurableTaskFactory factory = registry.BuildFactory(workerOptions);
+
+        // Act
+        bool found = ((IVersionedTaskFactory)factory).TryCreateActivity(
+            new TaskName("InvoiceActivity"),
+            new TaskVersion("v1"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskActivity? activity);
+
+        // Assert
+        found.Should().BeFalse();
+        activity.Should().BeNull();
+    }
+
+    [Fact]
+    public void TryCreateActivity_StrictExactOnlyWithOnlyUnversionedRegistration_AcceptsUnversionedRequest()
+    {
+        // Arrange — exact-match path for unversioned requests is preserved.
+        DurableTaskRegistry registry = new();
+        registry.AddActivity<UnversionedInvoiceActivity>();
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Versioning = new DurableTaskWorkerOptions.VersioningOptions
+            {
+                ActivityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly,
+            },
+        };
+        IDurableTaskFactory factory = registry.BuildFactory(workerOptions);
+
+        // Act
+        bool found = factory.TryCreateActivity(
+            new TaskName("InvoiceActivity"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskActivity? activity);
+
+        // Assert
+        found.Should().BeTrue();
+        activity.Should().BeOfType<UnversionedInvoiceActivity>();
+    }
+
+    [Fact]
+    public void TryCreateActivity_OrchestratorStrictExactOnly_DoesNotAffectActivityFallback()
+    {
+        // Arrange — asymmetric explicit modes: orchestrator side StrictExactOnly, activity side CatchAll.
+        // Activity registry is mixed ([X] + [X v=1]). Versioned request for v9 must fall back to the
+        // unversioned activity per CatchAll on the activity side; the orchestrator-side flag must NOT leak.
+        DurableTaskRegistry registry = new();
+        registry.AddActivity<InvoiceActivityV1>();
+        registry.AddActivity<UnversionedInvoiceActivity>();
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Versioning = new DurableTaskWorkerOptions.VersioningOptions
+            {
+                OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly,
+                ActivityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
+            },
+        };
+        IDurableTaskFactory factory = registry.BuildFactory(workerOptions);
+
+        // Act
+        bool found = ((IVersionedTaskFactory)factory).TryCreateActivity(
+            new TaskName("InvoiceActivity"),
+            new TaskVersion("v9"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskActivity? activity);
+
+        // Assert
+        found.Should().BeTrue();
+        activity.Should().BeOfType<UnversionedInvoiceActivity>();
+    }
+
     [DurableTask("InvoiceActivity", Version = "v1")]
     sealed class InvoiceActivityV1 : TaskActivity<string, string>
     {

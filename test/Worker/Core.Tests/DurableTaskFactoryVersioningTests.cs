@@ -229,6 +229,92 @@ public class DurableTaskFactoryVersioningTests
     }
 
     [Fact]
+    public void TryCreateOrchestrator_StrictExactOnlyWithOnlyUnversionedRegistration_RejectsVersionedRequest()
+    {
+        // Arrange — only the unversioned registration exists. Under Implicit, a versioned request would
+        // resolve to it. StrictExactOnly disables that path: the request must fail.
+        DurableTaskRegistry registry = new();
+        registry.AddOrchestrator<UnversionedInvoiceWorkflow>();
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Versioning = new DurableTaskWorkerOptions.VersioningOptions
+            {
+                OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly,
+            },
+        };
+        IDurableTaskFactory factory = registry.BuildFactory(workerOptions);
+
+        // Act
+        bool found = ((IVersionedTaskFactory)factory).TryCreateOrchestrator(
+            new TaskName("InvoiceWorkflow"),
+            new TaskVersion("v1"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskOrchestrator? orchestrator);
+
+        // Assert
+        found.Should().BeFalse();
+        orchestrator.Should().BeNull();
+    }
+
+    [Fact]
+    public void TryCreateOrchestrator_StrictExactOnlyWithOnlyUnversionedRegistration_AcceptsUnversionedRequest()
+    {
+        // Arrange — StrictExactOnly disables FALLBACK for versioned requests, not the exact-match path
+        // for unversioned requests. An unversioned request to an unversioned registration must still
+        // dispatch (it is an exact match in the empty-version key).
+        DurableTaskRegistry registry = new();
+        registry.AddOrchestrator<UnversionedInvoiceWorkflow>();
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Versioning = new DurableTaskWorkerOptions.VersioningOptions
+            {
+                OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly,
+            },
+        };
+        IDurableTaskFactory factory = registry.BuildFactory(workerOptions);
+
+        // Act
+        bool found = factory.TryCreateOrchestrator(
+            new TaskName("InvoiceWorkflow"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskOrchestrator? orchestrator);
+
+        // Assert
+        found.Should().BeTrue();
+        orchestrator.Should().BeOfType<UnversionedInvoiceWorkflow>();
+    }
+
+    [Fact]
+    public void TryCreateOrchestrator_StrictExactOnlyWithMixedRegistrations_RejectsUnmatchedVersion()
+    {
+        // Arrange — same registry shape as the "no fallback for unknown version" test, but explicitly
+        // under StrictExactOnly. Behavior should match Implicit for this shape (both reject), confirming
+        // StrictExactOnly is a strict generalization of Implicit on mixed names.
+        DurableTaskRegistry registry = new();
+        registry.AddOrchestrator<InvoiceWorkflowV1>();
+        registry.AddOrchestrator<UnversionedInvoiceWorkflow>();
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Versioning = new DurableTaskWorkerOptions.VersioningOptions
+            {
+                OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly,
+            },
+        };
+        IDurableTaskFactory factory = registry.BuildFactory(workerOptions);
+
+        // Act
+        bool found = ((IVersionedTaskFactory)factory).TryCreateOrchestrator(
+            new TaskName("InvoiceWorkflow"),
+            new TaskVersion("v9"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskOrchestrator? orchestrator);
+
+        // Assert
+        found.Should().BeFalse();
+        orchestrator.Should().BeNull();
+    }
+
+    [Fact]
     public void PublicTryCreateOrchestrator_UsesUnversionedRegistrationOnly()
     {
         // Arrange

@@ -569,6 +569,107 @@ public class UseWorkItemFiltersTests
     }
 
     [Fact]
+    public void WorkItemFilters_StrictExactOnlyForOrchestrators_DoesNotWildcardUnversionedOnly()
+    {
+        // Arrange — only the unversioned orchestrator is registered. Under Implicit (default), the
+        // filter would widen to wildcard [] because the factory resolves unmatched versions via the
+        // implicit fallback. Under StrictExactOnly the factory rejects those requests, so the filter
+        // MUST emit the concrete [""] version list to prevent the backend from delivering versioned
+        // work items the worker will reject after the fact.
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry => registry.AddOrchestrator<UnversionedFilterWorkflow>());
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly,
+                };
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle();
+        actual.Orchestrations[0].Name.Should().Be("FilterWorkflow");
+        actual.Orchestrations[0].Versions.Should().BeEquivalentTo([string.Empty]);
+    }
+
+    [Fact]
+    public void WorkItemFilters_StrictExactOnlyForActivities_DoesNotWildcardUnversionedOnly()
+    {
+        // Arrange — symmetric activity-side coverage for the StrictExactOnly filter behavior.
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry => registry.AddActivity<UnversionedFilterActivity>());
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    ActivityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly,
+                };
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Activities.Should().ContainSingle();
+        actual.Activities[0].Name.Should().Be("FilterActivity");
+        actual.Activities[0].Versions.Should().BeEquivalentTo([string.Empty]);
+    }
+
+    [Fact]
+    public void WorkItemFilters_StrictMatchOverridesStrictExactOnly_KnownLimitation()
+    {
+        // Arrange — pathological config: MatchStrategy=Strict with a worker Version, combined with
+        // StrictExactOnly, against an unversioned-only registration. The pre-existing strict override
+        // emits the worker's Version (best-effort assumption that the user has registered it). Under
+        // StrictExactOnly with no exact match, the factory will reject those work items. The filter
+        // still emits the worker version — captured here as a known limitation so the behavior is
+        // tracked, not silently changed. The per-property remarks document this gap; a proper fix
+        // would require per-name dispatch-capability analysis and is out of scope for this PR.
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry => registry.AddOrchestrator<UnversionedFilterWorkflow>());
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    Version = "1.0",
+                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+                    OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly,
+                };
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle();
+        actual.Orchestrations[0].Versions.Should().BeEquivalentTo(["1.0"]);
+    }
+
+    [Fact]
     public void WorkItemFilters_DefaultEmptyRegistry_ProducesEmptyFilters()
     {
         // Arrange

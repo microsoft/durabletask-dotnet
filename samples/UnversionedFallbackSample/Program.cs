@@ -27,7 +27,11 @@ builder.Services.AddDurableTaskWorker(wb =>
     wb.AddTasks(tasks => tasks.AddAllGeneratedTasks());
     wb.UseVersioning(new DurableTaskWorkerOptions.VersioningOptions
     {
-        UnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.WhenNoExactMatch,
+        // Activity fallback is the safer place to start: activities are stateless and do not replay
+        // history. Enable orchestrator fallback (commented below) only when the unversioned
+        // orchestrator is replay-compatible with every version it may receive.
+        ActivityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
+        OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
     });
     wb.UseWorkItemFilters();
     wb.UseDurableTaskScheduler(connectionString);
@@ -74,8 +78,8 @@ Console.WriteLine("Done! Version 1.4.0 used the explicit legacy class; version 1
 await host.StopAsync();
 
 /// <summary>
-/// The current implementation. With UnversionedFallback enabled, this unversioned registration handles every
-/// requested SupportWorkflow version that does not have an exact explicit registration.
+/// The current implementation. With OrchestratorUnversionedFallback enabled, this unversioned registration
+/// handles every requested SupportWorkflow version that does not have an exact explicit registration.
 /// </summary>
 [DurableTask(nameof(SupportWorkflow))]
 public sealed class SupportWorkflow : TaskOrchestrator<SupportRequest, string>

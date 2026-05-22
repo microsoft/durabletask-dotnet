@@ -6,7 +6,7 @@ This sample demonstrates opt-in unversioned fallback for per-task versioning. It
 
 - `SupportWorkflowLegacyV140` is registered as `[DurableTask(nameof(SupportWorkflow), Version = "1.4.0")]`.
 - `SupportWorkflow` is registered without a version and acts as the current catch-all implementation.
-- The worker enables `DurableTaskWorkerOptions.VersioningOptions.UnversionedFallback = WhenNoExactMatch`.
+- The worker enables both `OrchestratorUnversionedFallback = CatchAll` and `ActivityUnversionedFallback = CatchAll`. The orchestrator flag is what the demo exercises; the activity flag is set to illustrate that the two sides are configured independently.
 - `UseWorkItemFilters()` is enabled, so the generated filter must allow unmatched versions to reach the worker.
 - A version `1.4.0` request dispatches to the explicit legacy class.
 - A version `1.0` request has no exact registration, so it dispatches to the unversioned fallback class.
@@ -67,9 +67,10 @@ docker rm -f durabletask-emulator
 ## Key takeaways
 
 - Exact version matches always win. A `1.4.0` request dispatches to the `1.4.0` class, not the unversioned class.
-- Unversioned fallback is opt-in. Without `WhenNoExactMatch`, a mixed unversioned plus versioned registration remains a closed set and unknown versions fail rather than falling back.
-- Use this mode only when the unversioned implementation is compatible with the versions it may receive. Replaying existing histories against a different implementation can cause non-determinism or deserialization failures.
-- `UseWorkItemFilters()` composes with this mode by allowing unmatched versions for logical names that have an unversioned catch-all registration.
+- Orchestrator and activity fallback are configured independently. `OrchestratorUnversionedFallback` carries replay risk (orchestrators rehydrate state from history on every replay); `ActivityUnversionedFallback` is safer because activities are stateless. Start with activity-only fallback if you are unsure.
+- Unversioned fallback is opt-in. Without `CatchAll` on the corresponding side, a mixed unversioned plus versioned registration remains a closed set and unknown versions fail rather than falling back.
+- Use orchestrator fallback only when the unversioned implementation is replay-compatible with the versions it may receive. Replaying existing histories against a different implementation can cause non-determinism or deserialization failures.
+- `UseWorkItemFilters()` composes with these modes by allowing unmatched versions for logical names that have an unversioned catch-all registration on the enabled side.
 
 ## See also
 

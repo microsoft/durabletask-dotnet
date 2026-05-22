@@ -56,19 +56,24 @@ public class DefaultDurableTaskWorkerBuilder : IDurableTaskWorkerBuilder
 
         DurableTaskRegistry registry = serviceProvider.GetOptions<DurableTaskRegistry>(this.Name);
         DurableTaskWorkerOptions workerOptions = serviceProvider.GetOptions<DurableTaskWorkerOptions>(this.Name);
-        if (workerOptions.Versioning?.UnversionedFallback
-            == DurableTaskWorkerOptions.UnversionedFallbackMode.WhenNoExactMatch)
+        ILoggerFactory? loggerFactory = serviceProvider.GetService<ILoggerFactory>();
+        if (loggerFactory is not null && workerOptions.Versioning is { } versioning)
         {
-            ILoggerFactory? loggerFactory = serviceProvider.GetService<ILoggerFactory>();
-            if (loggerFactory is not null)
+            ILogger workerLogger = Logs.CreateWorkerLogger(loggerFactory);
+            if (versioning.OrchestratorUnversionedFallback == DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll)
             {
-                Logs.CreateWorkerLogger(loggerFactory).UnversionedFallbackEnabled(this.Name);
+                workerLogger.OrchestratorUnversionedFallbackEnabled(this.Name);
+            }
+
+            if (versioning.ActivityUnversionedFallback == DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll)
+            {
+                workerLogger.ActivityUnversionedFallbackEnabled(this.Name);
             }
         }
 
         // Note: Modifying any logic in this section could introduce breaking changes.
         // Do not alter the input parameter.
         return (IHostedService)ActivatorUtilities.CreateInstance(
-            serviceProvider, this.buildTarget, this.Name, registry.BuildFactory(workerOptions));
+            serviceProvider, this.buildTarget, this.Name, registry.BuildFactory(workerOptions, loggerFactory));
     }
 }

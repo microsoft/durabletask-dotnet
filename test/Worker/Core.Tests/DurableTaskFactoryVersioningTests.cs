@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.Extensions.Logging;
+
 namespace Microsoft.DurableTask.Worker.Tests;
 
 public class DurableTaskFactoryVersioningTests
@@ -124,7 +126,7 @@ public class DurableTaskFactoryVersioningTests
         {
             Versioning = new DurableTaskWorkerOptions.VersioningOptions
             {
-                UnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.WhenNoExactMatch,
+                OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
             },
         };
         IDurableTaskFactory factory = registry.BuildFactory(workerOptions);
@@ -139,6 +141,69 @@ public class DurableTaskFactoryVersioningTests
         // Assert
         found.Should().BeTrue();
         orchestrator.Should().BeOfType<UnversionedInvoiceWorkflow>();
+    }
+
+    [Fact]
+    public void TryCreateOrchestrator_WithActivityFallbackOnly_DoesNotEnableOrchestratorFallback()
+    {
+        // Arrange — only the activity-side flag is enabled. Orchestrator dispatch must still be closed-set
+        // for mixed names; otherwise the split into two properties does not actually isolate the two sides.
+        DurableTaskRegistry registry = new();
+        registry.AddOrchestrator<InvoiceWorkflowV1>();
+        registry.AddOrchestrator<UnversionedInvoiceWorkflow>();
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Versioning = new DurableTaskWorkerOptions.VersioningOptions
+            {
+                ActivityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
+            },
+        };
+        IDurableTaskFactory factory = registry.BuildFactory(workerOptions);
+
+        // Act
+        bool found = ((IVersionedTaskFactory)factory).TryCreateOrchestrator(
+            new TaskName("InvoiceWorkflow"),
+            new TaskVersion("v9"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskOrchestrator? orchestrator);
+
+        // Assert
+        found.Should().BeFalse();
+        orchestrator.Should().BeNull();
+    }
+
+    [Fact]
+    public void TryCreateOrchestrator_WithOrchestratorFallback_LogsDispatchAtDebug()
+    {
+        // Arrange
+        DurableTaskRegistry registry = new();
+        registry.AddOrchestrator<InvoiceWorkflowV1>();
+        registry.AddOrchestrator<UnversionedInvoiceWorkflow>();
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Versioning = new DurableTaskWorkerOptions.VersioningOptions
+            {
+                OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
+            },
+        };
+        CapturingLoggerFactory loggerFactory = new();
+        IDurableTaskFactory factory = registry.BuildFactory(workerOptions, loggerFactory);
+
+        // Act
+        bool found = ((IVersionedTaskFactory)factory).TryCreateOrchestrator(
+            new TaskName("InvoiceWorkflow"),
+            new TaskVersion("v9"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskOrchestrator? orchestrator);
+
+        // Assert
+        found.Should().BeTrue();
+        orchestrator.Should().BeOfType<UnversionedInvoiceWorkflow>();
+        loggerFactory.Logs.Should().Contain(log =>
+            log.Level == LogLevel.Debug
+            && log.Message.Contains("InvoiceWorkflow", StringComparison.Ordinal)
+            && log.Message.Contains("v9", StringComparison.Ordinal)
+            && log.Message.Contains("unversioned", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

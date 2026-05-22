@@ -87,7 +87,7 @@ public class DefaultDurableTaskWorkerBuilderTests
     }
 
     [Fact]
-    public void Build_WithUnversionedFallback_LogsWarning()
+    public void Build_WithOrchestratorUnversionedFallback_LogsOrchestratorWarning()
     {
         // Arrange
         CapturingLoggerFactory loggerFactory = new();
@@ -100,7 +100,7 @@ public class DefaultDurableTaskWorkerBuilderTests
         };
         builder.UseVersioning(new DurableTaskWorkerOptions.VersioningOptions
         {
-            UnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.WhenNoExactMatch,
+            OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
         });
 
         // Act
@@ -109,11 +109,73 @@ public class DefaultDurableTaskWorkerBuilderTests
         // Assert
         loggerFactory.Logs.Should().Contain(log =>
             log.Level == LogLevel.Warning
-            && log.Message.Contains("unversioned", StringComparison.OrdinalIgnoreCase)
-            && log.Message.Contains("fallback", StringComparison.OrdinalIgnoreCase)
+            && log.Message.Contains("Orchestrator unversioned fallback", StringComparison.OrdinalIgnoreCase)
             && log.Message.Contains("replay", StringComparison.OrdinalIgnoreCase)
             && log.Message.Contains("non-determinism", StringComparison.OrdinalIgnoreCase)
             && log.Message.Contains("deserialization", StringComparison.OrdinalIgnoreCase));
+        loggerFactory.Logs.Should().NotContain(log =>
+            log.Level == LogLevel.Warning
+            && log.Message.Contains("Activity unversioned fallback", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Build_WithActivityUnversionedFallback_LogsActivityWarning()
+    {
+        // Arrange
+        CapturingLoggerFactory loggerFactory = new();
+        ServiceCollection services = new();
+        services.AddOptions();
+        services.AddSingleton<ILoggerFactory>(loggerFactory);
+        DefaultDurableTaskWorkerBuilder builder = new("test", services)
+        {
+            BuildTarget = typeof(GoodBuildTarget),
+        };
+        builder.UseVersioning(new DurableTaskWorkerOptions.VersioningOptions
+        {
+            ActivityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
+        });
+
+        // Act
+        builder.Build(services.BuildServiceProvider());
+
+        // Assert
+        loggerFactory.Logs.Should().Contain(log =>
+            log.Level == LogLevel.Warning
+            && log.Message.Contains("Activity unversioned fallback", StringComparison.OrdinalIgnoreCase)
+            && log.Message.Contains("input shapes", StringComparison.OrdinalIgnoreCase));
+        loggerFactory.Logs.Should().NotContain(log =>
+            log.Level == LogLevel.Warning
+            && log.Message.Contains("Orchestrator unversioned fallback", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Build_WithBothFallbacksEnabled_LogsBothWarnings()
+    {
+        // Arrange
+        CapturingLoggerFactory loggerFactory = new();
+        ServiceCollection services = new();
+        services.AddOptions();
+        services.AddSingleton<ILoggerFactory>(loggerFactory);
+        DefaultDurableTaskWorkerBuilder builder = new("test", services)
+        {
+            BuildTarget = typeof(GoodBuildTarget),
+        };
+        builder.UseVersioning(new DurableTaskWorkerOptions.VersioningOptions
+        {
+            OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
+            ActivityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
+        });
+
+        // Act
+        builder.Build(services.BuildServiceProvider());
+
+        // Assert
+        loggerFactory.Logs.Should().Contain(log =>
+            log.Level == LogLevel.Warning
+            && log.Message.Contains("Orchestrator unversioned fallback", StringComparison.OrdinalIgnoreCase));
+        loggerFactory.Logs.Should().Contain(log =>
+            log.Level == LogLevel.Warning
+            && log.Message.Contains("Activity unversioned fallback", StringComparison.OrdinalIgnoreCase));
     }
 
     class BadBuildTarget : BackgroundService
@@ -160,41 +222,5 @@ public class DefaultDurableTaskWorkerBuilderTests
 
     class GoodBuildTargetOptions : DurableTaskWorkerOptions
     {
-    }
-
-    sealed class CapturingLoggerFactory : ILoggerFactory
-    {
-        public List<(LogLevel Level, string Message)> Logs { get; } = [];
-
-        public void AddProvider(ILoggerProvider provider)
-        {
-        }
-
-        public ILogger CreateLogger(string categoryName) => new CapturingLogger(this.Logs);
-
-        public void Dispose()
-        {
-        }
-    }
-
-    sealed class CapturingLogger(List<(LogLevel Level, string Message)> logs) : ILogger
-    {
-        readonly List<(LogLevel Level, string Message)> logs = logs;
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull
-            => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            this.logs.Add((logLevel, formatter(state, exception)));
-        }
     }
 }

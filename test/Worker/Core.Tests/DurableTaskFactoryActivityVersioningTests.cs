@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.Extensions.Logging;
+
 namespace Microsoft.DurableTask.Worker.Tests;
 
 public class DurableTaskFactoryActivityVersioningTests
@@ -141,7 +143,7 @@ public class DurableTaskFactoryActivityVersioningTests
         {
             Versioning = new DurableTaskWorkerOptions.VersioningOptions
             {
-                UnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.WhenNoExactMatch,
+                ActivityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
             },
         };
         IDurableTaskFactory factory = registry.BuildFactory(workerOptions);
@@ -156,6 +158,69 @@ public class DurableTaskFactoryActivityVersioningTests
         // Assert
         found.Should().BeTrue();
         activity.Should().BeOfType<UnversionedInvoiceActivity>();
+    }
+
+    [Fact]
+    public void TryCreateActivity_WithOrchestratorFallbackOnly_DoesNotEnableActivityFallback()
+    {
+        // Arrange — only the orchestrator-side flag is enabled. Activity dispatch must still be closed-set
+        // for mixed names; the split into two properties must isolate the two sides independently.
+        DurableTaskRegistry registry = new();
+        registry.AddActivity<InvoiceActivityV1>();
+        registry.AddActivity<UnversionedInvoiceActivity>();
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Versioning = new DurableTaskWorkerOptions.VersioningOptions
+            {
+                OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
+            },
+        };
+        IDurableTaskFactory factory = registry.BuildFactory(workerOptions);
+
+        // Act
+        bool found = ((IVersionedTaskFactory)factory).TryCreateActivity(
+            new TaskName("InvoiceActivity"),
+            new TaskVersion("v9"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskActivity? activity);
+
+        // Assert
+        found.Should().BeFalse();
+        activity.Should().BeNull();
+    }
+
+    [Fact]
+    public void TryCreateActivity_WithActivityFallback_LogsDispatchAtDebug()
+    {
+        // Arrange
+        DurableTaskRegistry registry = new();
+        registry.AddActivity<InvoiceActivityV1>();
+        registry.AddActivity<UnversionedInvoiceActivity>();
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Versioning = new DurableTaskWorkerOptions.VersioningOptions
+            {
+                ActivityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
+            },
+        };
+        CapturingLoggerFactory loggerFactory = new();
+        IDurableTaskFactory factory = registry.BuildFactory(workerOptions, loggerFactory);
+
+        // Act
+        bool found = ((IVersionedTaskFactory)factory).TryCreateActivity(
+            new TaskName("InvoiceActivity"),
+            new TaskVersion("v9"),
+            Mock.Of<IServiceProvider>(),
+            out ITaskActivity? activity);
+
+        // Assert
+        found.Should().BeTrue();
+        activity.Should().BeOfType<UnversionedInvoiceActivity>();
+        loggerFactory.Logs.Should().Contain(log =>
+            log.Level == LogLevel.Debug
+            && log.Message.Contains("InvoiceActivity", StringComparison.Ordinal)
+            && log.Message.Contains("v9", StringComparison.Ordinal)
+            && log.Message.Contains("unversioned", StringComparison.OrdinalIgnoreCase));
     }
 
     [DurableTask("InvoiceActivity", Version = "v1")]

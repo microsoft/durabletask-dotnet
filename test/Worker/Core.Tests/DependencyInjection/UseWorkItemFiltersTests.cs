@@ -381,7 +381,7 @@ public class UseWorkItemFiltersTests
             {
                 options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
                 {
-                    UnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.WhenNoExactMatch,
+                    OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
                 };
             });
             builder.UseWorkItemFilters();
@@ -397,6 +397,45 @@ public class UseWorkItemFiltersTests
         actual.Orchestrations.Should().ContainSingle();
         actual.Orchestrations[0].Name.Should().Be("FilterWorkflow");
         actual.Orchestrations[0].Versions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void WorkItemFilters_OrchestratorFallbackOnly_DoesNotWidenActivityFilter()
+    {
+        // Arrange — orchestrator fallback ON, activity fallback OFF. Mixed orchestrator name widens to
+        // wildcard; mixed activity name must still emit the concrete version list because the worker
+        // refuses activity unversioned-fallback for that name.
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<UnversionedFilterWorkflow>();
+                registry.AddOrchestrator<VersionedFilterWorkflowV2>();
+                registry.AddActivity<UnversionedFilterActivity>();
+                registry.AddActivity<VersionedFilterActivityV2>();
+            });
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
+                };
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle();
+        actual.Orchestrations[0].Versions.Should().BeEmpty();
+        actual.Activities.Should().ContainSingle();
+        actual.Activities[0].Versions.Should().BeEquivalentTo([string.Empty, "v2"]);
     }
 
     [Fact]
@@ -471,7 +510,7 @@ public class UseWorkItemFiltersTests
             {
                 options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
                 {
-                    UnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.WhenNoExactMatch,
+                    ActivityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
                 };
             });
             builder.UseWorkItemFilters();
@@ -509,7 +548,8 @@ public class UseWorkItemFiltersTests
                 {
                     Version = "1.0",
                     MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
-                    UnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.WhenNoExactMatch,
+                    OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
+                    ActivityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
                 };
             });
             builder.UseWorkItemFilters();

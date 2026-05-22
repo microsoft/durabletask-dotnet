@@ -54,6 +54,31 @@ public class DurableTaskWorkerOptions
     /// match. Only affects task names that have both an unversioned registration and at least one versioned
     /// registration; otherwise the dispatch rules are unchanged.
     /// </summary>
+    /// <remarks>
+    /// <para>The matrix below summarizes dispatch for a versioned request:</para>
+    /// <list type="table">
+    ///   <listheader>
+    ///     <term>Registration shape for the task name</term>
+    ///     <description>Result with <see cref="Never"/> vs. <see cref="CatchAll"/></description>
+    ///   </listheader>
+    ///   <item>
+    ///     <term>Only unversioned registration</term>
+    ///     <description>Both modes dispatch to the unversioned registration.</description>
+    ///   </item>
+    ///   <item>
+    ///     <term>Mixed (versioned + unversioned), exact version match</term>
+    ///     <description>Both modes dispatch to the exact-matching versioned registration.</description>
+    ///   </item>
+    ///   <item>
+    ///     <term>Mixed (versioned + unversioned), no exact version match</term>
+    ///     <description><see cref="Never"/> returns "not found"; <see cref="CatchAll"/> dispatches to the unversioned registration.</description>
+    ///   </item>
+    ///   <item>
+    ///     <term>Only versioned registrations, no exact version match</term>
+    ///     <description>Both modes return "not found" (no unversioned implementation exists).</description>
+    ///   </item>
+    /// </list>
+    /// </remarks>
     public enum UnversionedFallbackMode
     {
         /// <summary>
@@ -67,12 +92,12 @@ public class DurableTaskWorkerOptions
         Never = 0,
 
         /// <summary>
-        /// Fall back to the unversioned registration when no exact versioned match exists. An exact versioned
-        /// match still wins; only unmatched versioned requests dispatch to the unversioned registration as a
-        /// catch-all implementation. Use only when the unversioned implementation is replay-compatible with
-        /// every version it may receive.
+        /// Use the unversioned registration as a catch-all when no exact versioned match exists. An exact
+        /// versioned match still wins; only unmatched versioned requests dispatch to the unversioned
+        /// registration. Use only when the unversioned implementation is replay-compatible with every version it
+        /// may receive.
         /// </summary>
-        WhenNoExactMatch = 1,
+        CatchAll = 1,
     }
 
     /// <summary>
@@ -272,25 +297,65 @@ public class DurableTaskWorkerOptions
         public VersionFailureStrategy FailureStrategy { get; set; } = VersionFailureStrategy.Reject;
 
         /// <summary>
-        /// Gets or sets whether unversioned task registrations can be used when no exact version match exists.
+        /// Gets or sets whether the unversioned orchestrator registration acts as a catch-all for unmatched
+        /// versioned orchestrator requests.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// The default value, <see cref="UnversionedFallbackMode.Never"/>, preserves the closed-set behavior for
-        /// mixed unversioned and versioned registrations. In this mode, a request for an unknown version does not
-        /// fall back to the unversioned registration once any versioned registration exists for the same task name.
+        /// Defaults to <see cref="UnversionedFallbackMode.Never"/>. See <see cref="UnversionedFallbackMode"/>
+        /// for the dispatch matrix.
         /// </para>
         /// <para>
-        /// When set to <see cref="UnversionedFallbackMode.WhenNoExactMatch"/>, an exact versioned registration still
-        /// wins, but unmatched versioned requests can use the unversioned registration as a catch-all implementation.
+        /// Replay risk is highest on the orchestrator side: orchestrators are deterministic and rehydrate
+        /// state from history on every replay. Enable only when the unversioned orchestrator implementation
+        /// is replay-compatible with every version it may receive. Replaying existing histories against an
+        /// incompatible implementation can cause non-determinism faults or deserialization failures.
         /// </para>
         /// <para>
-        /// WARNING: Only enable this mode when the unversioned implementation is compatible with every version it may
-        /// receive. Replaying an existing orchestration or activity history against a different implementation can
-        /// cause non-determinism or deserialization failures.
+        /// Interaction with other versioning options:
         /// </para>
+        /// <list type="bullet">
+        ///   <item><description>Unlike <see cref="FailureStrategy"/>, this setting applies regardless of
+        ///   <see cref="MatchStrategy"/>. The factory-level fallback runs whether or not the pre-dispatch
+        ///   versioning gate is active.</description></item>
+        ///   <item><description>When <see cref="MatchStrategy"/> is <see cref="VersionMatchStrategy.Strict"/>,
+        ///   instance-version mismatches are rejected by the pre-dispatch versioning gate before the factory
+        ///   is consulted, so this setting has no observable effect.</description></item>
+        ///   <item><description>When <see cref="MatchStrategy"/> is
+        ///   <see cref="VersionMatchStrategy.CurrentOrOlder"/>, the pre-dispatch versioning gate rejects
+        ///   orchestration versions newer than <see cref="Version"/>. Fallback applies only to versions accepted
+        ///   by the gate; newer-than-worker versions are still subject to
+        ///   <see cref="FailureStrategy"/>.</description></item>
+        /// </list>
         /// </remarks>
-        public UnversionedFallbackMode UnversionedFallback { get; set; } = UnversionedFallbackMode.Never;
+        public UnversionedFallbackMode OrchestratorUnversionedFallback { get; set; } = UnversionedFallbackMode.Never;
+
+        /// <summary>
+        /// Gets or sets whether the unversioned activity registration acts as a catch-all for unmatched
+        /// versioned activity requests.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Defaults to <see cref="UnversionedFallbackMode.Never"/>. See <see cref="UnversionedFallbackMode"/>
+        /// for the dispatch matrix.
+        /// </para>
+        /// <para>
+        /// Activities are stateless and do not replay history, so this setting carries less risk than
+        /// <see cref="OrchestratorUnversionedFallback"/>. The main concern is input contract compatibility:
+        /// ensure the unversioned activity implementation accepts the input shapes produced by every version
+        /// of the calling orchestrators that may schedule it.
+        /// </para>
+        /// <para>
+        /// Interaction with other versioning options:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>Unlike <see cref="FailureStrategy"/>, this setting applies regardless of
+        ///   <see cref="MatchStrategy"/>.</description></item>
+        ///   <item><description><see cref="MatchStrategy"/> applies to orchestration instance versions, not
+        ///   activity scheduling versions, so it does not gate activity dispatch.</description></item>
+        /// </list>
+        /// </remarks>
+        public UnversionedFallbackMode ActivityUnversionedFallback { get; set; } = UnversionedFallbackMode.Never;
     }
 
     /// <summary>

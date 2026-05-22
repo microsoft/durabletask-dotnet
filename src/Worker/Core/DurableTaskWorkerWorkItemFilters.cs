@@ -43,8 +43,12 @@ public class DurableTaskWorkerWorkItemFilters
             workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict
                 ? [workerOptions.Versioning.Version ?? string.Empty]
                 : null;
-        bool useUnversionedFallback =
-            workerOptions?.Versioning?.UnversionedFallback == DurableTaskWorkerOptions.UnversionedFallbackMode.WhenNoExactMatch;
+        bool useOrchestratorUnversionedFallback =
+            workerOptions?.Versioning?.OrchestratorUnversionedFallback
+                == DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll;
+        bool useActivityUnversionedFallback =
+            workerOptions?.Versioning?.ActivityUnversionedFallback
+                == DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll;
 
         // Orchestration filters group registrations by logical name and emit the concrete distinct
         // version set actually registered (treating null/unversioned as ""). Strict mode overrides
@@ -54,12 +58,16 @@ public class DurableTaskWorkerWorkItemFilters
         // backend can deliver versioned work items the factory can handle. Otherwise, emitting the
         // concrete version set prevents the backend from streaming work items the worker would then
         // reject after the fact.
+        //
+        // Orchestrator and activity fallback are configured independently, so each filter set
+        // consults its own flag.
         List<OrchestrationFilter> orchestrationFilters = registry.OrchestratorsByVersion
             .GroupBy(orchestration => orchestration.Key.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
                 IReadOnlyList<string> versions =
-                    strictWorkerVersions ?? GetFilterVersions(group.Select(entry => entry.Key.Version), useUnversionedFallback);
+                    strictWorkerVersions
+                    ?? GetFilterVersions(group.Select(entry => entry.Key.Version), useOrchestratorUnversionedFallback);
 
                 return new OrchestrationFilter
                 {
@@ -74,7 +82,8 @@ public class DurableTaskWorkerWorkItemFilters
             .Select(group =>
             {
                 IReadOnlyList<string> versions =
-                    strictWorkerVersions ?? GetFilterVersions(group.Select(entry => entry.Key.Version), useUnversionedFallback);
+                    strictWorkerVersions
+                    ?? GetFilterVersions(group.Select(entry => entry.Key.Version), useActivityUnversionedFallback);
 
                 return new ActivityFilter
                 {

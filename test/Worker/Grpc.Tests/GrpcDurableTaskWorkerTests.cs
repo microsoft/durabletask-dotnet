@@ -530,7 +530,7 @@ public class GrpcDurableTaskWorkerTests
                 Version = "1.0",
                 MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
                 FailureStrategy = DurableTaskWorkerOptions.VersionFailureStrategy.Reject,
-                UnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.WhenNoExactMatch,
+                OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
             },
             Logging = { UseLegacyCategories = false },
         };

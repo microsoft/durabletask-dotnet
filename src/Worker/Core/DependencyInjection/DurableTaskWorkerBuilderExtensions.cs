@@ -106,7 +106,8 @@ public static class DurableTaskWorkerBuilderExtensions
                 DefaultVersion = versionOptions.DefaultVersion,
                 MatchStrategy = versionOptions.MatchStrategy,
                 FailureStrategy = versionOptions.FailureStrategy,
-                UnversionedFallback = versionOptions.UnversionedFallback,
+                OrchestratorUnversionedFallback = versionOptions.OrchestratorUnversionedFallback,
+                ActivityUnversionedFallback = versionOptions.ActivityUnversionedFallback,
             };
         });
         return builder;

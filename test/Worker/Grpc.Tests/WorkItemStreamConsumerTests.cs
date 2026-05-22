@@ -143,13 +143,17 @@ public class WorkItemStreamConsumerTests
         // Synchronize on the first item actually being processed so the second delay is measured from
         // the consumer's timer reset instead of from the test thread's write timing.
         //
-        // Timings are sized to leave ~500ms of slack on both sides of the assertion so the test is
-        // robust to thread-pool scheduling jitter on loaded CI runners:
-        //   - first delay (1000ms) + second delay (1500ms) = 2500ms total before 2nd item is written.
-        //   - Without the per-item timer reset, the 2000ms original timer would have fired at 2000ms,
-        //     leaving a ~500ms margin before the 2nd item is written (proves the test exercises the reset).
-        //   - With the per-item reset, the new timer fires at first-delay + jitter + 2000ms,
-        //     leaving ~500ms margin between the 2nd item write and the new timer expiry.
+        // Timing budget (with 500ms slack on both sides of the assertion to survive CI scheduling jitter):
+        //   - The consumer arms a 2000ms silent-disconnect timer.
+        //   - Test thread delays 1000ms, then writes the 1st item.
+        //   - Test thread awaits firstItemProcessed; the consumer dequeues the 1st item and re-arms the
+        //     timer at T = 1000ms + (small, variable processing delay).
+        //   - Test thread delays another 1500ms, then writes the 2nd item.
+        //   - Total elapsed before the 2nd write is at least 2500ms (1000 + 1500) plus the variable
+        //     time to process the 1st item — well past the original 2000ms timer, which proves the test
+        //     exercises the per-item reset path.
+        //   - After the reset, the new timer fires ~2000ms after the 1st item was dequeued, leaving
+        //     ~500ms margin between the 2nd item write and the new timer expiry.
         Channel<P.WorkItem> channel = Channel.CreateUnbounded<P.WorkItem>();
         TimeSpan timeout = TimeSpan.FromMilliseconds(2000);
         TaskCompletionSource firstItemProcessed = new(TaskCreationOptions.RunContinuationsAsynchronously);

@@ -68,6 +68,11 @@ public record TaskOptions
     /// The receiving worker is responsible for resolving the scheduled version to a registered implementation
     /// according to its own versioning configuration. That resolution is not visible to the scheduling client.
     /// </para>
+    /// <para>
+    /// When deploying versioned workloads, treat each worker's versioning configuration as a deployment-time
+    /// policy: the same version value may dispatch to different registrations across deployments. Use the
+    /// worker's startup and per-dispatch diagnostic logs to verify behavior across environments.
+    /// </para>
     /// </remarks>
     public TaskVersion? Version { get; init; }
 

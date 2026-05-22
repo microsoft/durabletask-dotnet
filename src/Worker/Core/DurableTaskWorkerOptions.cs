@@ -319,8 +319,9 @@ public class DurableTaskWorkerOptions
         ///   <see cref="MatchStrategy"/>. The factory-level fallback runs whether or not the pre-dispatch
         ///   versioning gate is active.</description></item>
         ///   <item><description>When <see cref="MatchStrategy"/> is <see cref="VersionMatchStrategy.Strict"/>,
-        ///   instance-version mismatches are rejected by the pre-dispatch versioning gate before the factory
-        ///   is consulted, so this setting has no observable effect.</description></item>
+        ///   the pre-dispatch versioning gate rejects instance versions that don't equal the worker's
+        ///   configured <see cref="Version"/>. Fallback does not bypass the gate, but can still apply post-gate
+        ///   to instances that pass it but lack an exact-version registration.</description></item>
         ///   <item><description>When <see cref="MatchStrategy"/> is
         ///   <see cref="VersionMatchStrategy.CurrentOrOlder"/>, the pre-dispatch versioning gate rejects
         ///   orchestration versions newer than <see cref="Version"/>. Fallback applies only to versions accepted

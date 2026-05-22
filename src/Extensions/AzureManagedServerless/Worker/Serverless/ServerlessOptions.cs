@@ -107,7 +107,7 @@ public sealed class ServerlessOptions
     /// <summary>
     /// Gets or sets the interval used to refresh live worker capacity while the registration stream is open.
     /// </summary>
-    public TimeSpan HeartbeatInterval { get; set; } = TimeSpan.FromSeconds(2);
+    internal TimeSpan HeartbeatInterval { get; set; } = TimeSpan.FromSeconds(2);
 
     /// <summary>
     /// Gets or sets the initial delay before retrying a failed worker registration stream.
@@ -118,11 +118,6 @@ public sealed class ServerlessOptions
     /// Gets or sets the maximum delay before retrying a failed worker registration stream.
     /// </summary>
     internal TimeSpan WorkerRegistrationRetryMaxDelay { get; set; } = TimeSpan.FromSeconds(30);
-
-    /// <summary>
-    /// Gets or sets the private HTTP port used by ADC to wake or probe a serverless worker container.
-    /// </summary>
-    public int WakeupPort { get; set; } = 8080;
 
     /// <summary>
     /// Gets or sets the worker mode for serverless activity execution. Set automatically from the runtime environment.

@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Net;
-using System.Net.Sockets;
 using FluentAssertions;
 using Grpc.Core;
 using Microsoft.DurableTask.Protobuf.Serverless;
@@ -27,6 +25,8 @@ public class ServerlessActivitiesTests
         typeof(ServerlessOptions).GetProperty("LaunchCommand").Should().BeNull();
         typeof(ServerlessOptions).GetProperty("DeclarationRetryMaxAttempts").Should().BeNull();
         typeof(ServerlessOptions).GetProperty("DeclarationRetryDelay").Should().BeNull();
+        typeof(ServerlessOptions).GetProperty("HeartbeatInterval").Should().BeNull();
+        typeof(ServerlessOptions).GetProperty("WakeupPort").Should().BeNull();
         typeof(ServerlessActivityDeclaration).GetProperty("LaunchCommand").Should().BeNull();
     }
 
@@ -619,7 +619,7 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public void UseServerlessWorker_RegistersWakeupServerHostedService()
+    public void UseServerlessWorker_DoesNotRegisterWakeupServerHostedService()
     {
         // Arrange
         ServiceCollection services = new();
@@ -631,44 +631,7 @@ public class ServerlessActivitiesTests
         mockBuilder.Object.UseServerlessWorker();
 
         // Assert
-        services.Count(descriptor => descriptor.ServiceType == typeof(IHostedService)).Should().Be(2);
-    }
-
-    [Fact]
-    public async Task ServerlessWakeupServer_RespondsToAdcProbesWhenWorkerIsServerless()
-    {
-        // Arrange
-        int wakeupPort = GetFreeTcpPort();
-        ServerlessOptions options = new()
-        {
-            Mode = ServerlessMode.ServerlessInclude,
-            WakeupPort = wakeupPort,
-        };
-        ServerlessWakeupServer server = new(
-            options,
-            NullLogger<ServerlessWakeupServer>.Instance);
-
-        // Act
-        await server.StartAsync(CancellationToken.None);
-
-        try
-        {
-            using HttpClient httpClient = new();
-
-            // Assert
-            using HttpResponseMessage healthResponse = await httpClient.GetAsync(
-                $"http://127.0.0.1:{wakeupPort}/health");
-            healthResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-
-            using HttpResponseMessage wakeupResponse = await httpClient.PostAsync(
-                $"http://127.0.0.1:{wakeupPort}/wakeup",
-                new ByteArrayContent([]));
-            wakeupResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        }
-        finally
-        {
-            await server.StopAsync(CancellationToken.None);
-        }
+        services.Count(descriptor => descriptor.ServiceType == typeof(IHostedService)).Should().Be(1);
     }
 
     sealed class FakeServerlessActivitiesClient : IServerlessActivitiesClient
@@ -937,12 +900,5 @@ public class ServerlessActivitiesTests
         }
 
         public void Dispose() => Environment.SetEnvironmentVariable(this.name, this.originalValue);
-    }
-
-    static int GetFreeTcpPort()
-    {
-        using TcpListener listener = new(IPAddress.Loopback, 0);
-        listener.Start();
-        return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 }

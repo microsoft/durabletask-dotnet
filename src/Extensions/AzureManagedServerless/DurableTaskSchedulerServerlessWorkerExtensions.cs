@@ -102,7 +102,6 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
                 }));
 
         builder.Services.AddSingleton<IHostedService>(sp => CreateServerlessActivityWorkerRegistrationHostedService(sp, builder.Name));
-        builder.Services.AddSingleton<IHostedService>(sp => CreateServerlessWakeupServer(sp, builder.Name));
         return builder;
     }
 
@@ -154,16 +153,6 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
             loggerFactory.CreateLogger<ServerlessActivityWorkerRegistrationHostedService>(),
             lifetime,
             activityTracker);
-    }
-
-    static ServerlessWakeupServer CreateServerlessWakeupServer(IServiceProvider services, string builderName)
-    {
-        ServerlessOptions options = services.GetRequiredService<IOptionsMonitor<ServerlessOptions>>().Get(builderName);
-        ILoggerFactory loggerFactory = services.GetRequiredService<ILoggerFactory>();
-
-        return new ServerlessWakeupServer(
-            options,
-            loggerFactory.CreateLogger<ServerlessWakeupServer>());
     }
 
     static ServerlessActivitiesClientAdapter CreateServerlessActivitiesClient(IServiceProvider services, string builderName)

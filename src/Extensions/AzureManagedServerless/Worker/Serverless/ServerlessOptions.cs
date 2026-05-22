@@ -105,24 +105,9 @@ public sealed class ServerlessOptions
     public int MaxConcurrentActivities { get; set; } = 100;
 
     /// <summary>
-    /// Gets or sets the substrate where this serverless worker is running.
-    /// </summary>
-    public string? Substrate { get; set; }
-
-    /// <summary>
-    /// Gets or sets the DTS-generated sandbox identifier for this serverless worker.
-    /// </summary>
-    public string? DtsSandboxIdentifier { get; set; }
-
-    /// <summary>
     /// Gets or sets the interval used to refresh live worker capacity while the registration stream is open.
     /// </summary>
     public TimeSpan HeartbeatInterval { get; set; } = TimeSpan.FromSeconds(2);
-
-    /// <summary>
-    /// Gets or sets the private HTTP port used by ADC to wake or probe a serverless worker container.
-    /// </summary>
-    public int WakeupPort { get; set; } = 8080;
 
     /// <summary>
     /// Gets or sets the initial delay before retrying a failed worker registration stream.
@@ -135,7 +120,12 @@ public sealed class ServerlessOptions
     internal TimeSpan WorkerRegistrationRetryMaxDelay { get; set; } = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// Gets or sets the worker mode for serverless activity execution.
+    /// Gets or sets the private HTTP port used by ADC to wake or probe a serverless worker container.
+    /// </summary>
+    public int WakeupPort { get; set; } = 8080;
+
+    /// <summary>
+    /// Gets or sets the worker mode for serverless activity execution. Set automatically from the runtime environment.
     /// </summary>
     internal ServerlessMode Mode { get; set; } = ServerlessMode.LocalExclude;
 }

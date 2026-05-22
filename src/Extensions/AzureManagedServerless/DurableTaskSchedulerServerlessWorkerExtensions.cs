@@ -21,7 +21,8 @@ namespace Microsoft.DurableTask.Worker.AzureManaged;
 public static class DurableTaskSchedulerServerlessWorkerExtensions
 {
     /// <summary>
-    /// Declares serverless activities with DTS and excludes them from local execution.
+    /// Declares serverless activities with DTS, excludes them from local execution, and propagates the
+    /// activity list to sandbox workers via the <c>DTS_SERVERLESS_ACTIVITIES</c> environment variable.
     /// Call this on the local coordinator worker — not on the sandbox worker binary.
     /// </summary>
     /// <param name="builder">The Durable Task worker builder to configure.</param>
@@ -50,6 +51,7 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
     /// <summary>
     /// Configures this worker as a serverless activity worker that connects to DTS to receive and execute
     /// serverless activities. Use this on a dedicated worker binary that runs inside serverless infrastructure.
+    /// All configuration is read from environment variables injected by the backend and coordinator.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -57,34 +59,25 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
     /// to declare and provision the serverless activity configuration.
     /// </para>
     /// <para>
-    /// Pass any environment-derived values explicitly through the configure callback or pre-configured options.
+    /// Required environment variables (injected automatically by the backend and coordinator):
+    /// <list type="bullet">
+    /// <item><c>DTS_SUBSTRATE</c> — identifies the sandbox substrate (injected by backend)</item>
+    /// <item><c>DTS_SERVERLESS_ACTIVITIES</c> — comma-separated activity names to execute (injected by coordinator)</item>
+    /// <item><c>DTS_TASK_HUB</c> — task hub name (injected by coordinator)</item>
+    /// </list>
     /// </para>
     /// </remarks>
     /// <param name="builder">The Durable Task worker builder to configure.</param>
     /// <returns>The original builder, for call chaining.</returns>
     public static IDurableTaskWorkerBuilder UseServerlessWorker(this IDurableTaskWorkerBuilder builder)
-        => UseServerlessWorker(builder, static _ => { });
-
-    /// <summary>
-    /// Configures this worker as a serverless activity worker that connects to DTS to receive and execute
-    /// serverless activities. Use this on a dedicated worker binary that runs inside serverless infrastructure.
-    /// </summary>
-    /// <param name="builder">The Durable Task worker builder to configure.</param>
-    /// <param name="configure">Callback to configure serverless worker behavior.</param>
-    /// <returns>The original builder, for call chaining.</returns>
-    public static IDurableTaskWorkerBuilder UseServerlessWorker(
-        this IDurableTaskWorkerBuilder builder,
-        Action<ServerlessOptions> configure)
     {
         Check.NotNull(builder);
-        Check.NotNull(configure);
 
         builder.Services.AddOptions<ServerlessOptions>(builder.Name)
-            .Configure(configure)
             .PostConfigure<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>((options, schedulerOptions) =>
             {
                 ApplyTaskHubDefault(options, schedulerOptions.Get(builder.Name).TaskHubName);
-                options.Mode = ServerlessMode.ServerlessInclude;
+                ApplyWorkerEnvironmentOverrides(options);
             });
 
         builder.Services.AddOptions<DurableTaskWorkerWorkItemFilters>(builder.Name)
@@ -201,6 +194,53 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         if (string.IsNullOrWhiteSpace(options.TaskHub) && !string.IsNullOrWhiteSpace(taskHubName))
         {
             options.TaskHub = taskHubName;
+        }
+    }
+
+    static void ApplyWorkerEnvironmentOverrides(ServerlessOptions options)
+    {
+        // Auto-detect worker mode from DTS_SUBSTRATE, which the backend injects when
+        // launching a sandbox. This is the authoritative signal that this process is a sandbox worker.
+        string? substrate = Environment.GetEnvironmentVariable("DTS_SUBSTRATE");
+        if (string.Equals(substrate, "Sandbox", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(substrate, "AcaSessionPool", StringComparison.OrdinalIgnoreCase))
+        {
+            options.Mode = ServerlessMode.ServerlessInclude;
+        }
+
+        // DTS_SERVERLESS_ACTIVITIES is injected by the coordinator into the sandbox environment.
+        ApplyActivityNameEnvironmentOverride(options.ActivityNames);
+        ApplyWorkerProfileEnvironmentOverride(profile => options.WorkerProfileId = profile);
+
+        if (int.TryParse(Environment.GetEnvironmentVariable("DTS_SERVERLESS_MAX_ACTIVITIES"), out int maxActivities) && maxActivities > 0)
+        {
+            options.MaxConcurrentActivities = maxActivities;
+        }
+    }
+
+    static void ApplyActivityNameEnvironmentOverride(ICollection<string> activityNames)
+    {
+        string? serverlessActivities = Environment.GetEnvironmentVariable("DTS_SERVERLESS_ACTIVITIES");
+        if (serverlessActivities is null)
+        {
+            return;
+        }
+
+        activityNames.Clear();
+        foreach (string name in serverlessActivities
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Distinct(StringComparer.Ordinal))
+        {
+            activityNames.Add(name);
+        }
+    }
+
+    static void ApplyWorkerProfileEnvironmentOverride(Action<string> setWorkerProfileId)
+    {
+        string? workerProfileId = Environment.GetEnvironmentVariable("DTS_WORKER_PROFILE_ID");
+        if (!string.IsNullOrWhiteSpace(workerProfileId))
+        {
+            setWorkerProfileId(workerProfileId.Trim());
         }
     }
 

@@ -244,39 +244,48 @@ public class ServerlessActivitiesTests
     public async Task ServerlessActivityWorkerRegistrationHostedService_SendsLiveWorkerMetadataWithoutActivityCatalog()
     {
         // Arrange
-        using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", "AcaSessionPool");
-        using EnvironmentVariableScope sandboxId = new("DTS_SANDBOX_ID", "env-sandbox");
-        ServerlessOptions options = new()
+        string? originalSubstrate = Environment.GetEnvironmentVariable("DTS_SUBSTRATE");
+        string? originalSandboxId = Environment.GetEnvironmentVariable("DTS_SANDBOX_ID");
+        Environment.SetEnvironmentVariable("DTS_SUBSTRATE", "Sandbox");
+        Environment.SetEnvironmentVariable("DTS_SANDBOX_ID", "sandbox-1");
+
+        try
         {
-            Mode = ServerlessMode.ServerlessInclude,
-            TaskHub = TaskHub,
-            WorkerProfileId = "profile-a",
-            MaxConcurrentActivities = 3,
-            HeartbeatInterval = TimeSpan.FromDays(1),
-            Substrate = "Sandbox",
-            DtsSandboxIdentifier = "explicit-sandbox",
-        };
-        options.ActivityNames.Add("RemoteHello");
-        FakeServerlessActivitiesClient client = new();
-        ServerlessActivityWorkerRegistrationHostedService service = new(
-            client,
-            options,
-            NullLogger<ServerlessActivityWorkerRegistrationHostedService>.Instance);
+            ServerlessOptions options = new()
+            {
+                Mode = ServerlessMode.ServerlessInclude,
+                TaskHub = TaskHub,
+                WorkerProfileId = "profile-a",
+                MaxConcurrentActivities = 3,
+                HeartbeatInterval = TimeSpan.FromDays(1),
+            };
+            options.ActivityNames.Add("RemoteHello");
+            FakeServerlessActivitiesClient client = new();
+            ServerlessActivityWorkerRegistrationHostedService service = new(
+                client,
+                options,
+                NullLogger<ServerlessActivityWorkerRegistrationHostedService>.Instance);
 
-        // Act
-        await service.StartAsync(CancellationToken.None);
-        await client.Session.WaitForMessageAsync(message => message.Start != null);
-        await service.StopAsync(CancellationToken.None);
+            // Act
+            await service.StartAsync(CancellationToken.None);
+            await client.Session.WaitForMessageAsync(message => message.Start != null);
+            await service.StopAsync(CancellationToken.None);
 
-        // Assert
-        client.SessionTaskHubs.Should().Equal(TaskHub);
-        ServerlessActivityWorkerMessage message = client.Session.Messages.Should().ContainSingle().Subject;
-        ServerlessActivityWorkerStart start = message.Start;
-        start.TaskHub.Should().Be(TaskHub);
-        start.WorkerProfileId.Should().Be("profile-a");
-        start.MaxActivitiesCount.Should().Be(3);
-        start.Substrate.Should().Be(SubstrateKind.Sandbox);
-        start.DtsSandboxIdentifier.Should().Be("explicit-sandbox");
+            // Assert
+            client.SessionTaskHubs.Should().Equal(TaskHub);
+            ServerlessActivityWorkerMessage message = client.Session.Messages.Should().ContainSingle().Subject;
+            ServerlessActivityWorkerStart start = message.Start;
+            start.TaskHub.Should().Be(TaskHub);
+            start.WorkerProfileId.Should().Be("profile-a");
+            start.MaxActivitiesCount.Should().Be(3);
+            start.Substrate.Should().Be(SubstrateKind.Sandbox);
+            start.DtsSandboxIdentifier.Should().Be("sandbox-1");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DTS_SUBSTRATE", originalSubstrate);
+            Environment.SetEnvironmentVariable("DTS_SANDBOX_ID", originalSandboxId);
+        }
     }
 
     [Fact]
@@ -580,37 +589,26 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public async Task UseServerlessWorker_ConfiguresServerlessActivityWorkerFromExplicitOptions()
+    public async Task UseServerlessWorker_ConfiguresServerlessActivityWorkerFilter()
     {
         // Arrange
-        using EnvironmentVariableScope serverlessActivities = new("DTS_SERVERLESS_ACTIVITIES", "EnvActivity");
-        using EnvironmentVariableScope workerProfile = new("DTS_WORKER_PROFILE_ID", "env-profile");
-        using EnvironmentVariableScope maxActivities = new("DTS_SERVERLESS_MAX_ACTIVITIES", "9");
+        using EnvironmentVariableScope serverlessActivities = new("DTS_SERVERLESS_ACTIVITIES", "RemoteHello");
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
         mockBuilder.Setup(builder => builder.Services).Returns(services);
         mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
 
         // Act
-        mockBuilder.Object.UseServerlessWorker(options =>
-        {
-            options.ActivityNames.Add("RemoteHello");
-            options.WorkerProfileId = "explicit-profile";
-            options.MaxConcurrentActivities = 5;
-        });
+        mockBuilder.Object.UseServerlessWorker();
 
         await using ServiceProvider provider = services.BuildServiceProvider();
         DurableTaskWorkerWorkItemFilters filters = provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>().Get(Options.DefaultName);
-        ServerlessOptions options = provider.GetRequiredService<IOptionsMonitor<ServerlessOptions>>().Get(Options.DefaultName);
 
         // Assert
         filters.Activities.Select(filter => filter.Name).Should().Equal("RemoteHello");
         filters.ExcludedActivities.Should().BeEmpty();
         filters.Orchestrations.Should().BeEmpty();
         filters.Entities.Should().BeEmpty();
-        options.Mode.Should().Be(ServerlessMode.ServerlessInclude);
-        options.WorkerProfileId.Should().Be("explicit-profile");
-        options.MaxConcurrentActivities.Should().Be(5);
     }
 
     [Fact]

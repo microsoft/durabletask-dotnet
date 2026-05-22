@@ -92,7 +92,6 @@ public class ServerlessActivitiesTests
         declaration.WorkerProfileId.Should().Be("profile-a");
         declaration.ActivityNames.Should().Equal("RemoteHello");
         declaration.Image.ImageRef.Should().Be("mcr.microsoft.com/durabletask/demo-worker:1.0");
-        declaration.Image.PublicPull.Should().BeTrue();
         declaration.Resources.Cpu.Should().Be("500m");
         declaration.Resources.Memory.Should().Be("1024Mi");
         declaration.EnvironmentVariables.Should().ContainKey("CUSTOM_SETTING").WhoseValue.Should().Be("enabled");
@@ -113,7 +112,6 @@ public class ServerlessActivitiesTests
             Image = new ServerlessActivityImage
             {
                 ImageRef = "example.com/repo/worker:latest",
-                PublicPull = true,
             },
             Resources = new ServerlessActivityResources
             {
@@ -149,7 +147,6 @@ public class ServerlessActivitiesTests
             Image = new ServerlessActivityImage
             {
                 ImageRef = "example.com/repo/worker:latest",
-                PublicPull = true,
             },
             Resources = new ServerlessActivityResources
             {
@@ -245,31 +242,6 @@ public class ServerlessActivitiesTests
             .Where(exception => exception.StatusCode == StatusCode.Unavailable);
         client.DeclarationAttempts.Should().Be(1);
         client.Declarations.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task ServerlessActivityDeclarationHostedService_RejectsPrivatePullImages()
-    {
-        // Arrange
-        ServerlessOptions options = new()
-        {
-            TaskHub = TaskHub,
-            ContainerImage = "example.com/repo/worker:latest",
-            PublicPull = false,
-        };
-        options.ActivityNames.Add("RemoteHello");
-        ServerlessActivityDeclarationHostedService service = new(
-            new FakeServerlessActivitiesClient(),
-            options,
-            runtimeOptions: null,
-            NullLogger<ServerlessActivityDeclarationHostedService>.Instance);
-
-        // Act
-        Func<Task> action = () => service.StartAsync(CancellationToken.None);
-
-        // Assert
-        await action.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Serverless activity images must be publicly pullable for private preview.");
     }
 
     [Fact]

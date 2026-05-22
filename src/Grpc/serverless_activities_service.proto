@@ -68,7 +68,6 @@ message ServerlessActivityDeclaration {
 
 message ServerlessActivityImage {
   string image_ref = 1;
-  bool public_pull = 2;
 }
 
 message ServerlessActivityResources {

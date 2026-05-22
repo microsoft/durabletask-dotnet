@@ -127,11 +127,6 @@ static class ServerlessActivityConfiguration
 
     static Proto.ServerlessActivityImage BuildImage(ServerlessOptions options)
     {
-        if (!options.PublicPull)
-        {
-            throw new InvalidOperationException("Serverless activity images must be publicly pullable for private preview.");
-        }
-
         string? imageRef = Coalesce(
             options.ContainerImage,
             BuildImageRef(options.RegistryServer, options.Repository, options.Tag, options.ImageDigest));
@@ -144,7 +139,6 @@ static class ServerlessActivityConfiguration
         return new Proto.ServerlessActivityImage
         {
             ImageRef = imageRef,
-            PublicPull = true,
         };
     }
 

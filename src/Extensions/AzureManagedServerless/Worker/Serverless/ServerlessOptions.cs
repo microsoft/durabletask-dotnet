@@ -55,11 +55,6 @@ public sealed class ServerlessOptions
     public string? ImageDigest { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether the image is publicly pullable. Private preview requires this to be <c>true</c>.
-    /// </summary>
-    public bool PublicPull { get; set; } = true;
-
-    /// <summary>
     /// Gets or sets the CPU quantity declared for each serverless sandbox.
     /// </summary>
     public string Cpu { get; set; } = "1000m";

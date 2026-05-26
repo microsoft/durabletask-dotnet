@@ -332,10 +332,7 @@ public class DurableTaskWorkerOptions
         ///   <item><description>When <see cref="MatchStrategy"/> is <see cref="VersionMatchStrategy.Strict"/>,
         ///   the pre-dispatch versioning gate rejects instance versions that don't equal the worker's
         ///   configured <see cref="Version"/>. This setting does not bypass the gate, but governs how the
-        ///   factory resolves instances that pass it. Note that with <see cref="UnversionedFallbackMode.StrictExactOnly"/>,
-        ///   the worker's configured version must also have an exact registration for the receiving task name;
-        ///   otherwise the factory will reject work items that the strict-mode work-item filter still requests
-        ///   from the backend.</description></item>
+        ///   factory resolves instances that pass it.</description></item>
         ///   <item><description>When <see cref="MatchStrategy"/> is
         ///   <see cref="VersionMatchStrategy.CurrentOrOlder"/>, the pre-dispatch versioning gate rejects
         ///   orchestration versions newer than <see cref="Version"/>. This setting governs only how versions

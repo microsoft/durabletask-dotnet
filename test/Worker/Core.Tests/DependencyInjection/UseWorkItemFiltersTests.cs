@@ -230,9 +230,14 @@ public class UseWorkItemFiltersTests
     }
 
     [Fact]
-    public void WorkItemFilters_MixedRegistrationsWithVersioningStrict_UseConfiguredWorkerVersion()
+    public void WorkItemFilters_MixedRegistrationsWithVersioningStrict_OmitsNamesWithoutResolvableVersion()
     {
-        // Arrange
+        // Arrange — name "FilterWorkflow" registers v="" + v="v2"; activity "FilterActivity" registers
+        // v="" + v="v2". Worker is configured Strict + Version="1.0" with default (Implicit) fallback.
+        // Under Implicit, the unversioned registration does NOT serve "1.0" because the name has
+        // versioned siblings. The strict pre-dispatch gate would also reject any version != "1.0".
+        // Therefore the worker cannot serve "1.0" for either name and both should be omitted from the
+        // generated filter, so the backend does not deliver work items the worker will reject.
         ServiceCollection services = new();
         services.AddDurableTaskWorker("test", builder =>
         {
@@ -261,12 +266,207 @@ public class UseWorkItemFiltersTests
         DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
         // Assert
+        actual.Orchestrations.Should().BeEmpty();
+        actual.Activities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void WorkItemFilters_MixedRegistrationsWithVersioningStrictMatchingRegisteredVersion_AdvertisesWorkerVersion()
+    {
+        // Arrange — same mixed registry as the previous test, but worker Version="v2" matches an exact
+        // registration. Both name + (name, v2) resolve to the v2 implementation directly, so the filter
+        // should advertise ["v2"] for each name.
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<UnversionedFilterWorkflow>();
+                registry.AddOrchestrator<VersionedFilterWorkflowV2>();
+                registry.AddActivity<UnversionedFilterActivity>();
+                registry.AddActivity<VersionedFilterActivityV2>();
+            });
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    Version = "v2",
+                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+                };
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle();
+        actual.Orchestrations[0].Name.Should().Be("FilterWorkflow");
+        actual.Orchestrations[0].Versions.Should().BeEquivalentTo(["v2"]);
+        actual.Activities.Should().ContainSingle();
+        actual.Activities[0].Name.Should().Be("FilterActivity");
+        actual.Activities[0].Versions.Should().BeEquivalentTo(["v2"]);
+    }
+
+    [Fact]
+    public void WorkItemFilters_MixedRegistrationsWithVersioningStrictAndCatchAll_AdvertisesWorkerVersion()
+    {
+        // Arrange — same mixed registry; worker Version="1.0" (no exact match) but CatchAll is enabled
+        // for both sides. The factory will resolve "1.0" via the unversioned registration on both
+        // sides, so the filter must advertise ["1.0"] for each name (not omit them).
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<UnversionedFilterWorkflow>();
+                registry.AddOrchestrator<VersionedFilterWorkflowV2>();
+                registry.AddActivity<UnversionedFilterActivity>();
+                registry.AddActivity<VersionedFilterActivityV2>();
+            });
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    Version = "1.0",
+                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+                    OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
+                    ActivityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
+                };
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle();
+        actual.Orchestrations[0].Versions.Should().BeEquivalentTo(["1.0"]);
+        actual.Activities.Should().ContainSingle();
+        actual.Activities[0].Versions.Should().BeEquivalentTo(["1.0"]);
+    }
+
+    [Fact]
+    public void WorkItemFilters_StrictWithAsymmetricFallback_AdvertisesOrchestratorOmitsActivity()
+    {
+        // Arrange — strict + asymmetric per-side modes. Orchestrator side has CatchAll, so unmatched
+        // versioned requests fall back to the unversioned orchestrator and the name is advertised.
+        // Activity side stays at the default Implicit, where a mixed registry rejects fallback, so the
+        // activity name must be omitted. This guards against accidentally using one side's mode for
+        // the other in the strict path.
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<UnversionedFilterWorkflow>();
+                registry.AddOrchestrator<VersionedFilterWorkflowV2>();
+                registry.AddActivity<UnversionedFilterActivity>();
+                registry.AddActivity<VersionedFilterActivityV2>();
+            });
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    Version = "1.0",
+                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+                    OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
+                };
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
         actual.Orchestrations.Should().ContainSingle();
         actual.Orchestrations[0].Name.Should().Be("FilterWorkflow");
         actual.Orchestrations[0].Versions.Should().BeEquivalentTo(["1.0"]);
-        actual.Activities.Should().ContainSingle();
-        actual.Activities[0].Name.Should().Be("FilterActivity");
-        actual.Activities[0].Versions.Should().BeEquivalentTo(["1.0"]);
+        actual.Activities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void WorkItemFilters_VersionedOnlyRegistrationsWithVersioningStrictAndStrictExactOnly_OmitsNames()
+    {
+        // Arrange — registry has only versioned registrations (v="v1" + v="v2") with no unversioned
+        // entries. Worker is Strict + Version="v3" with StrictExactOnly. No exact match exists for "v3"
+        // and StrictExactOnly disables all fallback. The names must be omitted.
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<VersionedFilterWorkflowV1>();
+                registry.AddOrchestrator<VersionedFilterWorkflowV2>();
+                registry.AddActivity<VersionedFilterActivityV1>();
+                registry.AddActivity<VersionedFilterActivityV2>();
+            });
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    Version = "v3",
+                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+                    OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly,
+                    ActivityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly,
+                };
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().BeEmpty();
+        actual.Activities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void WorkItemFilters_UnversionedOnlyRegistrationWithVersioningStrictAndStrictExactOnly_OmitsName()
+    {
+        // Arrange — name has only an unversioned registration. Worker is Strict + Version="1.0" with
+        // StrictExactOnly. There is no exact match for "1.0" (only ""), and StrictExactOnly disables
+        // the implicit fallback. The name must be omitted from the filter.
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry => registry.AddOrchestrator<UnversionedFilterWorkflow>());
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    Version = "1.0",
+                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+                    OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly,
+                };
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().BeEmpty();
     }
 
     [Fact]
@@ -529,46 +729,6 @@ public class UseWorkItemFiltersTests
     }
 
     [Fact]
-    public void WorkItemFilters_UnversionedFallbackWithVersioningStrict_UsesConfiguredWorkerVersion()
-    {
-        // Arrange
-        ServiceCollection services = new();
-        services.AddDurableTaskWorker("test", builder =>
-        {
-            builder.AddTasks(registry =>
-            {
-                registry.AddOrchestrator<UnversionedFilterWorkflow>();
-                registry.AddOrchestrator<VersionedFilterWorkflowV2>();
-                registry.AddActivity<UnversionedFilterActivity>();
-                registry.AddActivity<VersionedFilterActivityV2>();
-            });
-            builder.Configure(options =>
-            {
-                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
-                {
-                    Version = "1.0",
-                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
-                    OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
-                    ActivityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
-                };
-            });
-            builder.UseWorkItemFilters();
-        });
-
-        // Act
-        ServiceProvider provider = services.BuildServiceProvider();
-        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
-            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
-        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
-
-        // Assert
-        actual.Orchestrations.Should().ContainSingle();
-        actual.Orchestrations[0].Versions.Should().BeEquivalentTo(["1.0"]);
-        actual.Activities.Should().ContainSingle();
-        actual.Activities[0].Versions.Should().BeEquivalentTo(["1.0"]);
-    }
-
-    [Fact]
     public void WorkItemFilters_StrictExactOnlyForOrchestrators_DoesNotWildcardUnversionedOnly()
     {
         // Arrange — only the unversioned orchestrator is registered. Under Implicit (default), the
@@ -630,43 +790,6 @@ public class UseWorkItemFiltersTests
         actual.Activities.Should().ContainSingle();
         actual.Activities[0].Name.Should().Be("FilterActivity");
         actual.Activities[0].Versions.Should().BeEquivalentTo([string.Empty]);
-    }
-
-    [Fact]
-    public void WorkItemFilters_StrictMatchOverridesStrictExactOnly_KnownLimitation()
-    {
-        // Arrange — pathological config: MatchStrategy=Strict with a worker Version, combined with
-        // StrictExactOnly, against an unversioned-only registration. The pre-existing strict override
-        // emits the worker's Version (best-effort assumption that the user has registered it). Under
-        // StrictExactOnly with no exact match, the factory will reject those work items. The filter
-        // still emits the worker version — captured here as a known limitation so the behavior is
-        // tracked, not silently changed. The per-property remarks document this gap; a proper fix
-        // would require per-name dispatch-capability analysis and is out of scope for this PR.
-        ServiceCollection services = new();
-        services.AddDurableTaskWorker("test", builder =>
-        {
-            builder.AddTasks(registry => registry.AddOrchestrator<UnversionedFilterWorkflow>());
-            builder.Configure(options =>
-            {
-                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
-                {
-                    Version = "1.0",
-                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
-                    OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly,
-                };
-            });
-            builder.UseWorkItemFilters();
-        });
-
-        // Act
-        ServiceProvider provider = services.BuildServiceProvider();
-        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
-            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
-        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
-
-        // Assert
-        actual.Orchestrations.Should().ContainSingle();
-        actual.Orchestrations[0].Versions.Should().BeEquivalentTo(["1.0"]);
     }
 
     [Fact]

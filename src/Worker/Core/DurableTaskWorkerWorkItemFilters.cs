@@ -9,7 +9,7 @@ namespace Microsoft.DurableTask.Worker;
 /// the worker will process all work items. To opt-in to work item filtering, call
 /// <see cref="DurableTaskWorkerBuilderExtensions.UseWorkItemFilters(IDurableTaskWorkerBuilder)"/> for the
 /// auto-generated filters from the worker's <see cref="DurableTaskRegistry"/>, or
-/// <see cref="DurableTaskWorkerBuilderExtensions.UseWorkItemFilters(IDurableTaskWorkerBuilder, DurableTaskWorkerWorkItemFilters?)"/>
+/// <see cref="DurableTaskWorkerBuilderExtensions.UseWorkItemFilters(IDurableTaskWorkerBuilder, DurableTaskWorkerWorkItemFilters)"/>
 /// to supply explicit filters.
 /// </summary>
 public class DurableTaskWorkerWorkItemFilters

@@ -10,7 +10,6 @@ internal sealed class RemoteHelloActivity : TaskActivity<string, string>
 {
     public override Task<string> RunAsync(TaskActivityContext context, string input)
     {
-        string marker = Environment.GetEnvironmentVariable("SERVERLESS_SAMPLE_MARKER") ?? "<missing>";
-        return Task.FromResult($"hello remotely from {Environment.MachineName} pid={Environment.ProcessId}: {input}; marker={marker}");
+        return Task.FromResult($"hello remotely from {Environment.MachineName} pid={Environment.ProcessId}: {input}");
     }
 }

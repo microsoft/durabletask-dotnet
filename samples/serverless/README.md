@@ -31,22 +31,32 @@ docker push $image
 The main app uses `DefaultAzureCredential`; sign in with Azure CLI or configure another supported Azure identity before running it.
 After pushing the remote worker image, set `ContainerImage` in
 `main-app/WorkerProfiles.cs` to the pushed image reference. The same profile
-class declares the remote activity name, CPU, memory, max concurrency, and a
-customer environment variable that the remote hello activity echoes.
+class declares the remote activity name, CPU, memory, and max concurrency.
+
+Update `main-app/appsettings.json` with your scheduler endpoint and task hub:
+
+```json
+{
+  "ServerlessSample": {
+    "EndpointAddress": "https://<scheduler-endpoint>",
+    "TaskHubName": "ServerlessPocHub"
+  }
+}
+```
+
+Then run the main app:
 
 ```powershell
-$env:DTS_ENDPOINT = "https://<scheduler-endpoint>"
-$env:DTS_TASK_HUB = "<task-hub>"
-$env:DTS_SAMPLE_HELLO_INPUT = "serverless-sample"
-
-dotnet run --project .\samples\serverless\main-app\main-app.csproj
+Push-Location .\samples\serverless\main-app
+dotnet run
+Pop-Location
 ```
 
 Expected output includes the serverless activity result:
 
 ```text
 Runtime status: Completed
-Output: "hello locally: serverless-sample; hello remotely from <sandbox> pid=<pid>: serverless-sample; marker=serverless-dotnet-sample-marker"
+Output: "hello locally: serverless-sample; hello remotely from <sandbox> pid=<pid>: serverless-sample"
 ```
 
 Use the Durable Task Scheduler dashboard's Serverless Activities preview tab to inspect serverless activity runtimes and stream runtime logs.

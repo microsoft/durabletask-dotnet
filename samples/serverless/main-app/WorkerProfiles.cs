@@ -14,7 +14,6 @@ internal sealed class DefaultServerlessWorkerProfile : IServerlessWorkerProfile
         options.Cpu = "1000m";
         options.Memory = "2048Mi";
         options.MaxConcurrentActivities = 1;
-        options.EnvironmentVariables["SERVERLESS_SAMPLE_MARKER"] = "serverless-dotnet-sample-marker";
         options.AddActivity(ServerlessTaskNames.RemoteHello);
     }
 }

@@ -1,0 +1,19 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+using Microsoft.DurableTask.Worker.AzureManaged.Serverless;
+
+namespace Microsoft.DurableTask.Samples.Serverless.MainApp;
+
+[ServerlessWorkerProfile("default")]
+internal sealed class DefaultServerlessWorkerProfile : IServerlessWorkerProfile
+{
+    public void Configure(ServerlessOptions options)
+    {
+        options.ContainerImage = "serverless-remote-worker:local";
+        options.Cpu = "1000m";
+        options.Memory = "2048Mi";
+        options.MaxConcurrentActivities = 1;
+        options.EnvironmentVariables["SERVERLESS_SAMPLE_MARKER"] = "serverless-dotnet-sample-marker";
+    }
+}

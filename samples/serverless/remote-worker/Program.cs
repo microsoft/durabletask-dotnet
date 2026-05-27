@@ -21,12 +21,6 @@ builder.Services.AddDurableTaskWorker(workerBuilder =>
     workerBuilder.AddTasks(tasks =>
     {
         tasks.AddActivity<RemoteHelloActivity>();
-        tasks.AddActivity<RemoteDelayActivity>();
-        tasks.AddActivity<RemoteEnvActivity>();
-        tasks.AddActivity<RemoteIndexActivity>();
-        tasks.AddActivity<RemoteFailActivity>();
-        tasks.AddActivity<RemoteFlakyActivity>();
-        tasks.AddActivity<RemoteCrashActivity>();
     });
     workerBuilder.UseServerlessWorker();
 });

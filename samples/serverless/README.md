@@ -30,9 +30,9 @@ docker push $image
 
 The main app uses `DefaultAzureCredential`; sign in with Azure CLI or configure another supported Azure identity before running it.
 After pushing the remote worker image, set `ContainerImage` in
-`DefaultServerlessWorkerProfile.Configure` to the pushed image reference. The
-same method is where the sample declares CPU, memory, max concurrency, and the
-customer environment variable used by the `env` demo command.
+`main-app/WorkerProfiles.cs` to the pushed image reference. The same profile
+class declares CPU, memory, max concurrency, and a customer environment variable
+that the remote hello activity echoes.
 
 ```powershell
 $env:DTS_ENDPOINT = "https://<scheduler-endpoint>"
@@ -46,19 +46,10 @@ Expected output includes the serverless activity result:
 
 ```text
 Runtime status: Completed
-Output: "hello from <sandbox> pid=<pid>: serverless-sample"
+Output: "hello locally: serverless-sample; hello remotely from <sandbox> pid=<pid>: serverless-sample; marker=serverless-dotnet-sample-marker"
 ```
 
 Use the Durable Task Scheduler dashboard's Serverless Activities preview tab to inspect serverless activity runtimes and stream runtime logs.
-
-To verify customer environment variable overrides end-to-end, run:
-
-```powershell
-dotnet run --project .\samples\serverless\main-app\main-app.csproj -- env SERVERLESS_SAMPLE_MARKER
-```
-
-The result should include `SERVERLESS_SAMPLE_MARKER=serverless-dotnet-sample-marker`
-from the worker profile declaration.
 
 The remote worker image does not need customer-provided DTS runtime settings.
 DTS injects the scheduler endpoint, task hub, worker profile, capacity, substrate,

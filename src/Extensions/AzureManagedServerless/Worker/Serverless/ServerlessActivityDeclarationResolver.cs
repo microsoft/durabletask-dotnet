@@ -12,6 +12,7 @@ namespace Microsoft.DurableTask.Worker.AzureManaged.Serverless;
 static class ServerlessActivityDeclarationResolver
 {
     static readonly Lazy<ProfileMetadata[]> Profiles = new(ScanProfiles, LazyThreadSafetyMode.ExecutionAndPublication);
+    static readonly Lazy<ActivityMetadata[]> Activities = new(ScanActivities, LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>
     /// Resolves serverless declarations for the specified task hub.
@@ -24,8 +25,11 @@ static class ServerlessActivityDeclarationResolver
             ? throw new InvalidOperationException("Serverless activity declaration requires a task hub name.")
             : taskHub.Trim();
 
-        ServerlessOptions[] declarations = Profiles.Value
-            .Select(profile => CreateOptions(normalizedTaskHub, profile))
+        ProfileMetadata[] profiles = Profiles.Value;
+        Dictionary<string, string[]> activitiesByProfile = ResolveActivitiesByProfile(profiles);
+
+        ServerlessOptions[] declarations = profiles
+            .Select(profile => CreateOptions(normalizedTaskHub, profile, activitiesByProfile))
             .Where(static options => ServerlessActivityConfiguration.ResolveActivityNames(options.ActivityNames).Length > 0)
             .ToArray();
 
@@ -67,7 +71,54 @@ static class ServerlessActivityDeclarationResolver
         return profiles.Values.ToArray();
     }
 
-    static ServerlessOptions CreateOptions(string taskHub, ProfileMetadata profile)
+    static ActivityMetadata[] ScanActivities()
+    {
+        List<ActivityMetadata> activities = [];
+        foreach (Type type in GetCandidateTypes())
+        {
+            if (type.GetCustomAttribute<ServerlessActivityAttribute>() is not { } activity)
+            {
+                continue;
+            }
+
+            activities.Add(new ActivityMetadata(
+                ResolveActivityName(type, activity),
+                ResolveWorkerProfileId(activity)));
+        }
+
+        return activities.ToArray();
+    }
+
+    static Dictionary<string, string[]> ResolveActivitiesByProfile(IReadOnlyCollection<ProfileMetadata> profiles)
+    {
+        Dictionary<string, string[]> activitiesByProfile = Activities.Value
+            .GroupBy(static activity => activity.WorkerProfileId, StringComparer.Ordinal)
+            .ToDictionary(
+                static group => group.Key,
+                static group => group
+                    .Select(static activity => activity.Name)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray(),
+                StringComparer.Ordinal);
+
+        HashSet<string> profileIds = profiles
+            .Select(static profile => profile.WorkerProfileId)
+            .ToHashSet(StringComparer.Ordinal);
+        string[] missingProfiles = activitiesByProfile.Keys
+            .Where(profileId => !profileIds.Contains(profileId))
+            .ToArray();
+        if (missingProfiles.Length > 0)
+        {
+            throw new InvalidOperationException($"Serverless worker profile '{missingProfiles[0]}' is referenced by a serverless activity but is not declared.");
+        }
+
+        return activitiesByProfile;
+    }
+
+    static ServerlessOptions CreateOptions(
+        string taskHub,
+        ProfileMetadata profile,
+        Dictionary<string, string[]> activitiesByProfile)
     {
         ServerlessOptions options = new()
         {
@@ -76,6 +127,13 @@ static class ServerlessActivityDeclarationResolver
         };
 
         ConfigureProfile(profile.Type, options);
+        if (activitiesByProfile.TryGetValue(profile.WorkerProfileId, out string[]? activityNames))
+        {
+            foreach (string activityName in activityNames)
+            {
+                options.ActivityNames.Add(activityName);
+            }
+        }
 
         return options;
     }
@@ -136,7 +194,29 @@ static class ServerlessActivityDeclarationResolver
         }
     }
 
+    static string ResolveActivityName(Type type, ServerlessActivityAttribute activity)
+    {
+        string activityName = string.IsNullOrWhiteSpace(activity.Name)
+            ? type.Name
+            : activity.Name.Trim();
+
+        return string.IsNullOrWhiteSpace(activityName)
+            ? throw new InvalidOperationException($"Serverless activity declaration '{type.FullName}' requires an activity name.")
+            : activityName;
+    }
+
+    static string ResolveWorkerProfileId(ServerlessActivityAttribute activity)
+    {
+        return string.IsNullOrWhiteSpace(activity.WorkerProfile)
+            ? throw new InvalidOperationException("Serverless activity declaration requires a worker profile ID.")
+            : activity.WorkerProfile.Trim();
+    }
+
     sealed record ProfileMetadata(
         string WorkerProfileId,
         Type Type);
+
+    sealed record ActivityMetadata(
+        string Name,
+        string WorkerProfileId);
 }

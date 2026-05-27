@@ -30,8 +30,10 @@ docker push $image
 
 The main app uses `DefaultAzureCredential`; sign in with Azure CLI or configure another supported Azure identity before running it.
 After pushing the remote worker image, set `ContainerImage` in
-`main-app/WorkerProfiles.cs` to the pushed image reference. The same profile
-class declares the remote activity name, CPU, memory, and max concurrency.
+`main-app/WorkerProfiles.cs` to the pushed image reference. The worker profile
+class declares the image, CPU, memory, and max concurrency. The separate
+`[ServerlessActivity(WorkerProfile = "default")]` declaration class declares the
+remote activity name by class name.
 
 Update `main-app/appsettings.json` with your scheduler endpoint and task hub:
 

@@ -43,18 +43,16 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public void ServerlessOptions_AddActivity_AddsStringAndTypedActivityNames()
+    public void ServerlessDeclarationContract_DoesNotExposeAddActivity()
     {
         // Arrange
-        ServerlessOptions options = new();
+        Type optionsType = typeof(ServerlessOptions);
 
-        // Act
-        options
-            .AddActivity(" RemoteHello ")
-            .AddActivity<TypedRemoteHelloActivity>();
-
-        // Assert
-        options.ActivityNames.Should().Equal("RemoteHello", "TypedRemoteHello");
+        // Act/Assert
+        optionsType.GetProperty("ActivityNames").Should().BeNull();
+        optionsType.GetMethod("AddActivity", [typeof(string)]).Should().BeNull();
+        optionsType.GetMethods().Should().NotContain(method =>
+            method.Name == "AddActivity" && method.IsGenericMethodDefinition);
     }
 
     [Fact]
@@ -70,7 +68,7 @@ public class ServerlessActivitiesTests
             Memory = "1024Mi",
             MaxConcurrentActivities = 7,
         };
-        options.AddActivity("RemoteHello");
+        options.ActivityNames.Add("RemoteHello");
         options.EnvironmentVariables.Add("CUSTOM_SETTING", "enabled");
         options.Entrypoint.Add("/usr/bin/tini");
         options.Entrypoint.Add("--");
@@ -605,7 +603,7 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public void ServerlessActivityDeclarationResolver_ResolveDeclarations_UsesWorkerProfileConfigure()
+    public void ServerlessActivityDeclarationResolver_ResolveDeclarations_UsesServerlessActivityAttributes()
     {
         // Arrange
         using EnvironmentVariableScope image = new("DTS_SERVERLESS_ACTIVITY_IMAGE", "example.com/not-used:latest");
@@ -622,7 +620,7 @@ public class ServerlessActivitiesTests
 
         // Assert
         declaration.WorkerProfileId.Should().Be("annotated-profile");
-        declaration.ActivityNames.Should().Equal("ConfiguredRemoteHello");
+        declaration.ActivityNames.Should().Equal(nameof(ConfiguredRemoteHello));
         declaration.Image.ImageRef.Should().Be("example.com/repo/annotated-worker:latest");
         declaration.Resources.Cpu.Should().Be("500m");
         declaration.Resources.Memory.Should().Be("1024Mi");
@@ -633,7 +631,7 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public void ServerlessActivityDeclarationResolver_ResolveDeclaredActivityNames_UsesProfileConfigure()
+    public void ServerlessActivityDeclarationResolver_ResolveDeclaredActivityNames_UsesServerlessActivityAttributes()
     {
         // Arrange
         int before = AnnotatedWorkerProfile.ConfigureCallCount;
@@ -642,7 +640,7 @@ public class ServerlessActivitiesTests
         string[] activityNames = ServerlessActivityDeclarationResolver.ResolveDeclaredActivityNames(TaskHub);
 
         // Assert
-        activityNames.Should().Contain("ConfiguredRemoteHello");
+        activityNames.Should().Contain(nameof(ConfiguredRemoteHello));
         AnnotatedWorkerProfile.ConfigureCallCount.Should().BeGreaterThan(before);
     }
 
@@ -777,8 +775,12 @@ public class ServerlessActivitiesTests
             options.Memory = "1024Mi";
             options.MaxConcurrentActivities = 4;
             options.EnvironmentVariables["CUSTOM_ENV"] = "configured-value";
-            options.AddActivity("ConfiguredRemoteHello");
         }
+    }
+
+    [ServerlessActivity(WorkerProfile = "annotated-profile")]
+    sealed class ConfiguredRemoteHello
+    {
     }
 
     sealed class FakeServerlessActivitiesClient : IServerlessActivitiesClient

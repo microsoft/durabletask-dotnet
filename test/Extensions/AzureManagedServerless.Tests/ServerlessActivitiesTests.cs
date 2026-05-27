@@ -622,6 +622,20 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
+    public void ServerlessActivityAnnotationResolver_ResolveActivityNames_DoesNotRequireTaskHubOrConfigureProfiles()
+    {
+        // Arrange
+        int before = AnnotatedWorkerProfile.ConfigureCallCount;
+
+        // Act
+        string[] activityNames = ServerlessActivityAnnotationResolver.ResolveActivityNames();
+
+        // Assert
+        activityNames.Should().Contain(["AnnotatedRemoteHello", "MarkerRemoteHello"]);
+        AnnotatedWorkerProfile.ConfigureCallCount.Should().Be(before);
+    }
+
+    [Fact]
     public async Task UseServerlessWorker_ConfiguresRegisteredActivityWorkerFilter()
     {
         // Arrange
@@ -742,8 +756,11 @@ public class ServerlessActivitiesTests
     [ServerlessWorkerProfile("annotated-profile")]
     sealed class AnnotatedWorkerProfile : IServerlessWorkerProfile
     {
+        public static int ConfigureCallCount { get; private set; }
+
         public void Configure(ServerlessOptions options)
         {
+            ConfigureCallCount++;
             options.ContainerImage = "example.com/repo/annotated-worker:latest";
             options.Cpu = "500m";
             options.Memory = "1024Mi";

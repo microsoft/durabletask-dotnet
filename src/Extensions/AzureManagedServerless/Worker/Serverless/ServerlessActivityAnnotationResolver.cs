@@ -68,10 +68,45 @@ static class ServerlessActivityAnnotationResolver
     /// Resolves annotated serverless activity names.
     /// </summary>
     /// <returns>The resolved activity names.</returns>
-    public static string[] ResolveActivityNames() => Resolve(taskHub: "annotation-scan")
-        .SelectMany(static options => options.ActivityNames)
-        .Distinct(StringComparer.Ordinal)
-        .ToArray();
+    public static string[] ResolveActivityNames()
+    {
+        HashSet<string> profiles = new(StringComparer.Ordinal);
+        Dictionary<string, string> activityOwners = new(StringComparer.Ordinal);
+
+        foreach (Type type in GetCandidateTypes())
+        {
+            if (type.GetCustomAttribute<ServerlessWorkerProfileAttribute>() is { } profile)
+            {
+                if (!profiles.Add(profile.WorkerProfileId))
+                {
+                    throw new InvalidOperationException($"Serverless worker profile '{profile.WorkerProfileId}' is declared more than once.");
+                }
+            }
+        }
+
+        foreach (Type type in GetCandidateTypes())
+        {
+            if (type.GetCustomAttribute<ServerlessActivityAttribute>() is not { } activity)
+            {
+                continue;
+            }
+
+            if (!profiles.Contains(activity.WorkerProfileId))
+            {
+                throw new InvalidOperationException($"Serverless activity '{type.FullName}' references undeclared worker profile '{activity.WorkerProfileId}'.");
+            }
+
+            string activityName = GetTaskName(type, activity);
+            if (activityOwners.TryGetValue(activityName, out string? existingProfile))
+            {
+                throw new InvalidOperationException($"Serverless activity '{activityName}' is assigned to both worker profile '{existingProfile}' and '{activity.WorkerProfileId}'.");
+            }
+
+            activityOwners.Add(activityName, activity.WorkerProfileId);
+        }
+
+        return activityOwners.Keys.ToArray();
+    }
 
     static ServerlessOptions CreateOptions(string taskHub, ServerlessWorkerProfileAttribute profile, Type profileType)
     {

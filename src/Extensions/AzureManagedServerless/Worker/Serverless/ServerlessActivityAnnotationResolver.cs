@@ -182,7 +182,9 @@ static class ServerlessActivityAnnotationResolver
             return activity.Name.Trim();
         }
 
-        return ServerlessTaskNameResolver.GetTaskName(type);
+        return Attribute.GetCustomAttribute(type, typeof(DurableTaskAttribute)) is DurableTaskAttribute { Name.Name: not null and not "" } attr
+            ? attr.Name.Name
+            : type.Name;
     }
 
     sealed record AnnotationCatalog(

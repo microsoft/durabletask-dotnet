@@ -110,6 +110,14 @@ public sealed class ServerlessOptions
     public ServerlessOptions AddActivity<TActivity>()
         where TActivity : class, ITaskActivity
     {
-        return this.AddActivity(ServerlessTaskNameResolver.GetTaskName(typeof(TActivity)));
+        return this.AddActivity(GetTaskName(typeof(TActivity)));
+    }
+
+    static string GetTaskName(Type type)
+    {
+        Check.NotNull(type);
+        return Attribute.GetCustomAttribute(type, typeof(DurableTaskAttribute)) is DurableTaskAttribute { Name.Name: not null and not "" } attr
+            ? attr.Name.Name
+            : type.Name;
     }
 }

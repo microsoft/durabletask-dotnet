@@ -7,14 +7,14 @@ using System.Threading;
 namespace Microsoft.DurableTask.Worker.AzureManaged.Serverless;
 
 /// <summary>
-/// Resolves serverless worker profile and activity annotations from loaded assemblies.
+/// Resolves serverless activity declarations from worker profile annotations.
 /// </summary>
-static class ServerlessActivityAnnotationResolver
+static class ServerlessActivityDeclarationResolver
 {
-    static readonly Lazy<AnnotationCatalog> Catalog = new(ScanAnnotations, LazyThreadSafetyMode.ExecutionAndPublication);
+    static readonly Lazy<ProfileMetadata[]> Profiles = new(ScanProfiles, LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>
-    /// Resolves annotated serverless declarations for the specified task hub.
+    /// Resolves serverless declarations for the specified task hub.
     /// </summary>
     /// <param name="taskHub">The task hub name.</param>
     /// <returns>The resolved serverless declaration options.</returns>
@@ -24,21 +24,17 @@ static class ServerlessActivityAnnotationResolver
             ? throw new InvalidOperationException("Serverless activity declaration requires a task hub name.")
             : taskHub.Trim();
 
-        Dictionary<string, ServerlessOptions> optionsByProfile = CreateOptionsByProfile(normalizedTaskHub);
-        foreach (ActivityMetadata activity in Catalog.Value.Activities)
-        {
-            optionsByProfile[activity.WorkerProfileId].ActivityNames.Add(activity.ActivityName);
-        }
-
-        ValidateActivityOwnership(optionsByProfile.Values);
-
-        return optionsByProfile.Values
+        ServerlessOptions[] declarations = Profiles.Value
+            .Select(profile => CreateOptions(normalizedTaskHub, profile))
             .Where(static options => ServerlessActivityConfiguration.ResolveActivityNames(options.ActivityNames).Length > 0)
             .ToArray();
+
+        ValidateActivityOwnership(declarations);
+        return declarations;
     }
 
     /// <summary>
-    /// Resolves activity names declared by serverless worker profiles and activity annotations.
+    /// Resolves activity names declared by serverless worker profiles.
     /// </summary>
     /// <param name="taskHub">The task hub name.</param>
     /// <returns>The resolved activity names.</returns>
@@ -50,54 +46,25 @@ static class ServerlessActivityAnnotationResolver
             .ToArray();
     }
 
-    static AnnotationCatalog ScanAnnotations()
+    static ProfileMetadata[] ScanProfiles()
     {
         Dictionary<string, ProfileMetadata> profiles = new(StringComparer.Ordinal);
-        List<ActivityMetadata> activities = [];
-        List<(Type Type, ServerlessActivityAttribute Attribute)> activityAnnotations = [];
-
         foreach (Type type in GetCandidateTypes())
         {
-            if (type.GetCustomAttribute<ServerlessWorkerProfileAttribute>() is { } profile)
+            if (type.GetCustomAttribute<ServerlessWorkerProfileAttribute>() is not { } profile)
             {
-                if (profiles.ContainsKey(profile.WorkerProfileId))
-                {
-                    throw new InvalidOperationException($"Serverless worker profile '{profile.WorkerProfileId}' is declared more than once.");
-                }
-
-                profiles.Add(profile.WorkerProfileId, new ProfileMetadata(profile.WorkerProfileId, type));
+                continue;
             }
 
-            if (type.GetCustomAttribute<ServerlessActivityAttribute>() is { } activity)
+            if (profiles.ContainsKey(profile.WorkerProfileId))
             {
-                activityAnnotations.Add((type, activity));
-            }
-        }
-
-        foreach ((Type type, ServerlessActivityAttribute activity) in activityAnnotations)
-        {
-            if (!profiles.ContainsKey(activity.WorkerProfileId))
-            {
-                throw new InvalidOperationException($"Serverless activity '{type.FullName}' references undeclared worker profile '{activity.WorkerProfileId}'.");
+                throw new InvalidOperationException($"Serverless worker profile '{profile.WorkerProfileId}' is declared more than once.");
             }
 
-            string activityName = GetActivityName(type, activity);
-            activities.Add(new ActivityMetadata(activityName, activity.WorkerProfileId, type));
+            profiles.Add(profile.WorkerProfileId, new ProfileMetadata(profile.WorkerProfileId, type));
         }
 
-        return new AnnotationCatalog(profiles, activities);
-    }
-
-    static Dictionary<string, ServerlessOptions> CreateOptionsByProfile(string taskHub)
-    {
-        AnnotationCatalog catalog = Catalog.Value;
-        Dictionary<string, ServerlessOptions> optionsByProfile = new(StringComparer.Ordinal);
-        foreach (ProfileMetadata profile in catalog.Profiles.Values)
-        {
-            optionsByProfile.Add(profile.WorkerProfileId, CreateOptions(taskHub, profile));
-        }
-
-        return optionsByProfile;
+        return profiles.Values.ToArray();
     }
 
     static ServerlessOptions CreateOptions(string taskHub, ProfileMetadata profile)
@@ -169,34 +136,7 @@ static class ServerlessActivityAnnotationResolver
         }
     }
 
-    static string GetActivityName(Type type, ServerlessActivityAttribute activity)
-    {
-        Check.NotNull(type);
-        if (!typeof(ITaskActivity).IsAssignableFrom(type))
-        {
-            throw new InvalidOperationException($"Serverless activity '{type.FullName}' must implement {nameof(ITaskActivity)}. Remote-only activities should be declared in {nameof(IServerlessWorkerProfile)}.{nameof(IServerlessWorkerProfile.Configure)}.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(activity.Name))
-        {
-            return activity.Name.Trim();
-        }
-
-        return Attribute.GetCustomAttribute(type, typeof(DurableTaskAttribute)) is DurableTaskAttribute { Name.Name: not null and not "" } attr
-            ? attr.Name.Name
-            : type.Name;
-    }
-
-    sealed record AnnotationCatalog(
-        IReadOnlyDictionary<string, ProfileMetadata> Profiles,
-        IReadOnlyList<ActivityMetadata> Activities);
-
     sealed record ProfileMetadata(
-        string WorkerProfileId,
-        Type Type);
-
-    sealed record ActivityMetadata(
-        string ActivityName,
         string WorkerProfileId,
         Type Type);
 }

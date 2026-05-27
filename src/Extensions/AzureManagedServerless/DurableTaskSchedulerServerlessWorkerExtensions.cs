@@ -104,7 +104,7 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         DurableTaskWorkerWorkItemFilters filters,
         string taskHub)
     {
-        string[] activityNames = ServerlessActivityAnnotationResolver.ResolveDeclaredActivityNames(taskHub);
+        string[] activityNames = ServerlessActivityDeclarationResolver.ResolveDeclaredActivityNames(taskHub);
         if (activityNames.Length == 0)
         {
             return;
@@ -138,7 +138,7 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
 
         return new ServerlessActivityDeclarationHostedService(
             CreateServerlessActivitiesClient(services, builderName),
-            ServerlessActivityAnnotationResolver.ResolveDeclarations(schedulerOptions.TaskHubName),
+            ServerlessActivityDeclarationResolver.ResolveDeclarations(schedulerOptions.TaskHubName),
             runtimeOptions,
             loggerFactory.CreateLogger<ServerlessActivityDeclarationHostedService>());
     }

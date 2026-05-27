@@ -543,7 +543,7 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public async Task EnableServerlessActivities_ConfiguresLocalWorkerExclusionFilterFromAnnotations()
+    public async Task EnableServerlessActivities_ConfiguresLocalWorkerExclusionFilterFromWorkerProfiles()
     {
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
@@ -563,7 +563,7 @@ public class ServerlessActivitiesTests
         DurableTaskWorkerWorkItemFilters filters = provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>().Get(Options.DefaultName);
 
         // Assert
-        filters.ExcludedActivities.Select(filter => filter.Name).Should().Contain(["ConfiguredRemoteHello", "AnnotatedRemoteHello"]);
+        filters.ExcludedActivities.Select(filter => filter.Name).Should().Contain("ConfiguredRemoteHello");
         filters.Activities.Should().BeEmpty();
     }
 
@@ -605,7 +605,7 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public void ServerlessActivityAnnotationResolver_ResolveDeclarations_UsesWorkerProfileConfigure()
+    public void ServerlessActivityDeclarationResolver_ResolveDeclarations_UsesWorkerProfileConfigure()
     {
         // Arrange
         using EnvironmentVariableScope image = new("DTS_SERVERLESS_ACTIVITY_IMAGE", "example.com/not-used:latest");
@@ -614,7 +614,7 @@ public class ServerlessActivitiesTests
         using EnvironmentVariableScope maxActivities = new("DTS_SERVERLESS_MAX_ACTIVITIES", "99");
 
         // Act
-        ServerlessOptions options = ServerlessActivityAnnotationResolver.ResolveDeclarations(TaskHub)
+        ServerlessOptions options = ServerlessActivityDeclarationResolver.ResolveDeclarations(TaskHub)
             .Single(options => options.WorkerProfileId == "annotated-profile");
         ServerlessActivityDeclaration declaration = ServerlessActivityConfiguration.BuildDeclaration(
             options,
@@ -622,7 +622,7 @@ public class ServerlessActivitiesTests
 
         // Assert
         declaration.WorkerProfileId.Should().Be("annotated-profile");
-        declaration.ActivityNames.Should().Equal("ConfiguredRemoteHello", "AnnotatedRemoteHello", "ExplicitServerlessName");
+        declaration.ActivityNames.Should().Equal("ConfiguredRemoteHello");
         declaration.Image.ImageRef.Should().Be("example.com/repo/annotated-worker:latest");
         declaration.Resources.Cpu.Should().Be("500m");
         declaration.Resources.Memory.Should().Be("1024Mi");
@@ -633,16 +633,16 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public void ServerlessActivityAnnotationResolver_ResolveDeclaredActivityNames_UsesProfileConfigure()
+    public void ServerlessActivityDeclarationResolver_ResolveDeclaredActivityNames_UsesProfileConfigure()
     {
         // Arrange
         int before = AnnotatedWorkerProfile.ConfigureCallCount;
 
         // Act
-        string[] activityNames = ServerlessActivityAnnotationResolver.ResolveDeclaredActivityNames(TaskHub);
+        string[] activityNames = ServerlessActivityDeclarationResolver.ResolveDeclaredActivityNames(TaskHub);
 
         // Assert
-        activityNames.Should().Contain(["ConfiguredRemoteHello", "AnnotatedRemoteHello", "ExplicitServerlessName"]);
+        activityNames.Should().Contain("ConfiguredRemoteHello");
         AnnotatedWorkerProfile.ConfigureCallCount.Should().BeGreaterThan(before);
     }
 
@@ -778,26 +778,6 @@ public class ServerlessActivitiesTests
             options.MaxConcurrentActivities = 4;
             options.EnvironmentVariables["CUSTOM_ENV"] = "configured-value";
             options.AddActivity("ConfiguredRemoteHello");
-        }
-    }
-
-    [DurableTask("AnnotatedRemoteHello")]
-    [ServerlessActivity("annotated-profile")]
-    sealed class AnnotatedRemoteHelloActivity : TaskActivity<string, string>
-    {
-        public override Task<string> RunAsync(TaskActivityContext context, string input)
-        {
-            return Task.FromResult(input);
-        }
-    }
-
-    [DurableTask("DurableTaskNameIgnoredByServerlessAttribute")]
-    [ServerlessActivity("annotated-profile", Name = "ExplicitServerlessName")]
-    sealed class ExplicitNameServerlessActivity : TaskActivity<string, string>
-    {
-        public override Task<string> RunAsync(TaskActivityContext context, string input)
-        {
-            return Task.FromResult(input);
         }
     }
 

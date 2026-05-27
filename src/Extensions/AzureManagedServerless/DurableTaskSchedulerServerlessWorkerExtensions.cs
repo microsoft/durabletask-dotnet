@@ -36,7 +36,8 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         ThrowIfServerlessWorkerRuntime();
 
         builder.Services.AddOptions<DurableTaskWorkerWorkItemFilters>(builder.Name)
-            .PostConfigure(ExcludeAnnotatedServerlessActivitiesFromLocalExecution);
+            .PostConfigure<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>((filters, schedulerOptions) =>
+                ExcludeDeclaredServerlessActivitiesFromLocalExecution(filters, schedulerOptions.Get(builder.Name).TaskHubName));
 
         builder.Services.AddSingleton<IHostedService>(sp => CreateServerlessActivityDeclarationHostedService(sp, builder.Name));
         return builder;
@@ -99,9 +100,11 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         return builder;
     }
 
-    static void ExcludeAnnotatedServerlessActivitiesFromLocalExecution(DurableTaskWorkerWorkItemFilters filters)
+    static void ExcludeDeclaredServerlessActivitiesFromLocalExecution(
+        DurableTaskWorkerWorkItemFilters filters,
+        string taskHub)
     {
-        string[] activityNames = ServerlessActivityAnnotationResolver.ResolveActivityNames();
+        string[] activityNames = ServerlessActivityAnnotationResolver.ResolveDeclaredActivityNames(taskHub);
         if (activityNames.Length == 0)
         {
             return;

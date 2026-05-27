@@ -26,7 +26,8 @@ public sealed class ServerlessActivityAttribute : Attribute
     public string WorkerProfileId { get; }
 
     /// <summary>
-    /// Gets or sets the activity name when this attribute is applied to a declaration marker class.
+    /// Gets or sets the serverless activity name. When omitted, the name is resolved from
+    /// <see cref="DurableTaskAttribute"/> or the activity type name.
     /// </summary>
     public string? Name { get; set; }
 }

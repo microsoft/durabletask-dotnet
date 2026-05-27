@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.Worker.AzureManaged.Serverless;
-
 namespace Microsoft.DurableTask.Samples.Serverless.MainApp;
 
 internal static class ServerlessTaskNames
@@ -19,5 +17,3 @@ internal sealed class LocalHelloActivity : TaskActivity<string, string>
         => Task.FromResult($"hello locally: {input}");
 }
 
-[ServerlessActivity("default", Name = ServerlessTaskNames.RemoteHello)]
-internal sealed class RemoteHelloDeclaration;

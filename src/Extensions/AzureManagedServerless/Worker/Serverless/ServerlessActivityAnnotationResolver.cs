@@ -24,31 +24,29 @@ static class ServerlessActivityAnnotationResolver
             ? throw new InvalidOperationException("Serverless activity declaration requires a task hub name.")
             : taskHub.Trim();
 
-        AnnotationCatalog catalog = Catalog.Value;
-        Dictionary<string, ServerlessOptions> optionsByProfile = new(StringComparer.Ordinal);
-        foreach (ActivityMetadata activity in catalog.Activities)
+        Dictionary<string, ServerlessOptions> optionsByProfile = CreateOptionsByProfile(normalizedTaskHub);
+        foreach (ActivityMetadata activity in Catalog.Value.Activities)
         {
-            if (!optionsByProfile.TryGetValue(activity.WorkerProfileId, out ServerlessOptions? options))
-            {
-                ProfileMetadata profile = catalog.Profiles[activity.WorkerProfileId];
-                options = CreateOptions(normalizedTaskHub, profile);
-                optionsByProfile.Add(activity.WorkerProfileId, options);
-            }
-
-            options.ActivityNames.Add(activity.ActivityName);
+            optionsByProfile[activity.WorkerProfileId].ActivityNames.Add(activity.ActivityName);
         }
 
-        return optionsByProfile.Values.ToArray();
+        ValidateActivityOwnership(optionsByProfile.Values);
+
+        return optionsByProfile.Values
+            .Where(static options => ServerlessActivityConfiguration.ResolveActivityNames(options.ActivityNames).Length > 0)
+            .ToArray();
     }
 
     /// <summary>
-    /// Resolves annotated serverless activity names.
+    /// Resolves activity names declared by serverless worker profiles and activity annotations.
     /// </summary>
+    /// <param name="taskHub">The task hub name.</param>
     /// <returns>The resolved activity names.</returns>
-    public static string[] ResolveActivityNames()
+    public static string[] ResolveDeclaredActivityNames(string taskHub)
     {
-        return Catalog.Value.Activities
-            .Select(static activity => activity.ActivityName)
+        return ResolveDeclarations(taskHub)
+            .SelectMany(static options => ServerlessActivityConfiguration.ResolveActivityNames(options.ActivityNames))
+            .Distinct(StringComparer.Ordinal)
             .ToArray();
     }
 
@@ -56,7 +54,6 @@ static class ServerlessActivityAnnotationResolver
     {
         Dictionary<string, ProfileMetadata> profiles = new(StringComparer.Ordinal);
         List<ActivityMetadata> activities = [];
-        Dictionary<string, string> activityOwners = new(StringComparer.Ordinal);
         List<(Type Type, ServerlessActivityAttribute Attribute)> activityAnnotations = [];
 
         foreach (Type type in GetCandidateTypes())
@@ -85,16 +82,22 @@ static class ServerlessActivityAnnotationResolver
             }
 
             string activityName = GetActivityName(type, activity);
-            if (activityOwners.TryGetValue(activityName, out string? existingProfile))
-            {
-                throw new InvalidOperationException($"Serverless activity '{activityName}' is assigned to both worker profile '{existingProfile}' and '{activity.WorkerProfileId}'.");
-            }
-
-            activityOwners.Add(activityName, activity.WorkerProfileId);
             activities.Add(new ActivityMetadata(activityName, activity.WorkerProfileId, type));
         }
 
         return new AnnotationCatalog(profiles, activities);
+    }
+
+    static Dictionary<string, ServerlessOptions> CreateOptionsByProfile(string taskHub)
+    {
+        AnnotationCatalog catalog = Catalog.Value;
+        Dictionary<string, ServerlessOptions> optionsByProfile = new(StringComparer.Ordinal);
+        foreach (ProfileMetadata profile in catalog.Profiles.Values)
+        {
+            optionsByProfile.Add(profile.WorkerProfileId, CreateOptions(taskHub, profile));
+        }
+
+        return optionsByProfile;
     }
 
     static ServerlessOptions CreateOptions(string taskHub, ProfileMetadata profile)
@@ -148,17 +151,35 @@ static class ServerlessActivityAnnotationResolver
         }
     }
 
+    static void ValidateActivityOwnership(IEnumerable<ServerlessOptions> declarations)
+    {
+        Dictionary<string, string> activityOwners = new(StringComparer.Ordinal);
+        foreach (ServerlessOptions declaration in declarations)
+        {
+            foreach (string activityName in ServerlessActivityConfiguration.ResolveActivityNames(declaration.ActivityNames))
+            {
+                if (activityOwners.TryGetValue(activityName, out string? existingProfile)
+                    && !string.Equals(existingProfile, declaration.WorkerProfileId, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"Serverless activity '{activityName}' is assigned to both worker profile '{existingProfile}' and '{declaration.WorkerProfileId}'.");
+                }
+
+                activityOwners[activityName] = declaration.WorkerProfileId;
+            }
+        }
+    }
+
     static string GetActivityName(Type type, ServerlessActivityAttribute activity)
     {
         Check.NotNull(type);
+        if (!typeof(ITaskActivity).IsAssignableFrom(type))
+        {
+            throw new InvalidOperationException($"Serverless activity '{type.FullName}' must implement {nameof(ITaskActivity)}. Remote-only activities should be declared in {nameof(IServerlessWorkerProfile)}.{nameof(IServerlessWorkerProfile.Configure)}.");
+        }
+
         if (!string.IsNullOrWhiteSpace(activity.Name))
         {
             return activity.Name.Trim();
-        }
-
-        if (!typeof(ITaskActivity).IsAssignableFrom(type))
-        {
-            throw new InvalidOperationException($"Serverless activity declaration marker '{type.FullName}' must specify {nameof(ServerlessActivityAttribute.Name)} or implement {nameof(ITaskActivity)}.");
         }
 
         return ServerlessTaskNameResolver.GetTaskName(type);

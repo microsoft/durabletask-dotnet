@@ -31,8 +31,8 @@ docker push $image
 The main app uses `DefaultAzureCredential`; sign in with Azure CLI or configure another supported Azure identity before running it.
 After pushing the remote worker image, set `ContainerImage` in
 `main-app/WorkerProfiles.cs` to the pushed image reference. The same profile
-class declares CPU, memory, max concurrency, and a customer environment variable
-that the remote hello activity echoes.
+class declares the remote activity name, CPU, memory, max concurrency, and a
+customer environment variable that the remote hello activity echoes.
 
 ```powershell
 $env:DTS_ENDPOINT = "https://<scheduler-endpoint>"

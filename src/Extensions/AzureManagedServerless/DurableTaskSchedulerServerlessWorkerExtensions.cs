@@ -20,6 +20,10 @@ namespace Microsoft.DurableTask.Worker.AzureManaged;
 /// </summary>
 public static class DurableTaskSchedulerServerlessWorkerExtensions
 {
+    const string EnableServerlessActivitiesWorkerRuntimeErrorMessage =
+        "EnableServerlessActivities is for declaring serverless activities from the coordinator app. " +
+        "DTS serverless workers should use UseServerlessWorker instead.";
+
     /// <summary>
     /// Enables annotation-based serverless activity declarations with DTS and excludes annotated
     /// serverless activities from local execution.
@@ -29,6 +33,7 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
     public static IDurableTaskWorkerBuilder EnableServerlessActivities(this IDurableTaskWorkerBuilder builder)
     {
         Check.NotNull(builder);
+        ThrowIfServerlessWorkerRuntime();
 
         builder.Services.AddOptions<DurableTaskWorkerWorkItemFilters>(builder.Name)
             .PostConfigure(ExcludeAnnotatedServerlessActivitiesFromLocalExecution);
@@ -110,6 +115,14 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         filters.Orchestrations = [];
         filters.ExcludedActivities = [];
         filters.Entities = [];
+    }
+
+    static void ThrowIfServerlessWorkerRuntime()
+    {
+        if (IsServerlessWorkerSubstrate(Environment.GetEnvironmentVariable("DTS_SUBSTRATE")))
+        {
+            throw new InvalidOperationException(EnableServerlessActivitiesWorkerRuntimeErrorMessage);
+        }
     }
 
     static ServerlessActivityDeclarationHostedService CreateServerlessActivityDeclarationHostedService(
@@ -197,9 +210,7 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
     {
         // Auto-detect worker mode from DTS_SUBSTRATE, which the backend injects when
         // launching a sandbox. This is the authoritative signal that this process is a sandbox worker.
-        string? substrate = Environment.GetEnvironmentVariable("DTS_SUBSTRATE");
-        if (string.Equals(substrate, "Sandbox", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(substrate, "AcaSessionPool", StringComparison.OrdinalIgnoreCase))
+        if (IsServerlessWorkerSubstrate(Environment.GetEnvironmentVariable("DTS_SUBSTRATE")))
         {
             options.Mode = ServerlessMode.ServerlessInclude;
         }
@@ -220,6 +231,10 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
             setWorkerProfileId(workerProfileId.Trim());
         }
     }
+
+    static bool IsServerlessWorkerSubstrate(string? substrate)
+        => string.Equals(substrate, "Sandbox", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(substrate, "AcaSessionPool", StringComparison.OrdinalIgnoreCase);
 
     static DurableTaskWorkerWorkItemFilters.ActivityFilter[] MergeActivityFilters(
         IReadOnlyList<DurableTaskWorkerWorkItemFilters.ActivityFilter> existingFilters,

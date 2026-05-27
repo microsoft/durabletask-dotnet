@@ -583,6 +583,25 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
+    public void EnableServerlessActivities_WhenRunningInServerlessWorker_Throws()
+    {
+        // Arrange
+        using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", "Sandbox");
+        ServiceCollection services = new();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
+        mockBuilder.Setup(builder => builder.Services).Returns(services);
+        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
+
+        // Act
+        Action action = () => mockBuilder.Object.EnableServerlessActivities();
+
+        // Assert
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("EnableServerlessActivities is for declaring serverless activities from the coordinator app. DTS serverless workers should use UseServerlessWorker instead.");
+        services.Should().NotContain(descriptor => descriptor.ServiceType == typeof(IHostedService));
+    }
+
+    [Fact]
     public void ServerlessActivityAnnotationResolver_UsesWorkerProfileConfigureForDeclarationOptions()
     {
         // Arrange

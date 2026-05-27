@@ -135,7 +135,7 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
 
         return new ServerlessActivityDeclarationHostedService(
             CreateServerlessActivitiesClient(services, builderName),
-            ServerlessActivityAnnotationResolver.Resolve(schedulerOptions.TaskHubName),
+            ServerlessActivityAnnotationResolver.ResolveDeclarations(schedulerOptions.TaskHubName),
             runtimeOptions,
             loggerFactory.CreateLogger<ServerlessActivityDeclarationHostedService>());
     }

@@ -602,7 +602,7 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public void ServerlessActivityAnnotationResolver_UsesWorkerProfileConfigureForDeclarationOptions()
+    public void ServerlessActivityAnnotationResolver_ResolveDeclarations_UsesWorkerProfileConfigure()
     {
         // Arrange
         using EnvironmentVariableScope image = new("DTS_SERVERLESS_ACTIVITY_IMAGE", "example.com/not-used:latest");
@@ -611,7 +611,7 @@ public class ServerlessActivitiesTests
         using EnvironmentVariableScope maxActivities = new("DTS_SERVERLESS_MAX_ACTIVITIES", "99");
 
         // Act
-        ServerlessOptions options = ServerlessActivityAnnotationResolver.Resolve(TaskHub)
+        ServerlessOptions options = ServerlessActivityAnnotationResolver.ResolveDeclarations(TaskHub)
             .Single(options => options.WorkerProfileId == "annotated-profile");
         ServerlessActivityDeclaration declaration = ServerlessActivityConfiguration.BuildDeclaration(
             options,
@@ -630,10 +630,10 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public void ServerlessActivityAnnotationResolver_AllowsDeclarationMarkerClassWithExplicitName()
+    public void ServerlessActivityAnnotationResolver_ResolveDeclarations_AllowsMarkerClassWithExplicitName()
     {
         // Act
-        ServerlessOptions options = ServerlessActivityAnnotationResolver.Resolve(TaskHub)
+        ServerlessOptions options = ServerlessActivityAnnotationResolver.ResolveDeclarations(TaskHub)
             .Single(options => options.WorkerProfileId == "marker-profile");
 
         // Assert

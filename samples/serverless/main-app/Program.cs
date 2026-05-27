@@ -15,10 +15,11 @@ using Microsoft.Extensions.Logging;
 
 string endpoint = GetRequiredEnvironmentVariable("DTS_ENDPOINT");
 string taskHub = Environment.GetEnvironmentVariable("DTS_TASK_HUB") ?? "ServerlessPocHub";
-string workerProfileId = Environment.GetEnvironmentVariable("DTS_WORKER_PROFILE_ID") ?? "default";
-string serverlessActivityImage = Environment.GetEnvironmentVariable("DTS_SERVERLESS_ACTIVITY_IMAGE")
-    ?? "serverless-remote-worker:local";
-string helloInput = ParseHelloInput(
+bool skipDeclaration = string.Equals(
+    Environment.GetEnvironmentVariable("DTS_SKIP_SERVERLESS_DECLARATION"),
+    "true",
+    StringComparison.OrdinalIgnoreCase);
+DemoCommand command = ParseCommand(
     args,
     Environment.GetEnvironmentVariable("DTS_SAMPLE_HELLO_INPUT") ?? "serverless-sample");
 TokenCredential credential = new DefaultAzureCredential();
@@ -41,16 +42,10 @@ builder.Services.AddDurableTaskWorker(workerBuilder =>
         options.Credential = credential;
     });
 
-    workerBuilder.DeclareServerlessActivities(options =>
+    if (!skipDeclaration)
     {
-        options.TaskHub = taskHub;
-        options.WorkerProfileId = workerProfileId;
-        options.ContainerImage = serverlessActivityImage;
-        options.Cpu = Environment.GetEnvironmentVariable("DTS_SERVERLESS_CPU") ?? "1000m";
-        options.Memory = Environment.GetEnvironmentVariable("DTS_SERVERLESS_MEMORY") ?? "2048Mi";
-        options.MaxConcurrentActivities = GetIntEnv("DTS_SERVERLESS_MAX_ACTIVITIES", 1);
-        options.AddActivity(ServerlessTaskNames.RemoteHello);
-    });
+        workerBuilder.EnableServerlessActivities();
+    }
 });
 
 builder.Services.AddDurableTaskClient(clientBuilder =>
@@ -69,8 +64,8 @@ await host.StartAsync();
 
 DurableTaskClient client = host.Services.GetRequiredService<DurableTaskClient>();
 string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
-    ServerlessTaskNames.HelloOrchestrator,
-    input: helloInput);
+    command.OrchestratorName,
+    input: command.Input);
 OrchestrationMetadata? result = await client.WaitForInstanceCompletionAsync(
     instanceId,
     getInputsAndOutputs: true);
@@ -85,30 +80,48 @@ static string GetRequiredEnvironmentVariable(string name)
     => Environment.GetEnvironmentVariable(name)
         ?? throw new InvalidOperationException($"An environment variable named '{name}' is required.");
 
-static int GetIntEnv(string name, int defaultValue)
-{
-    string? value = Environment.GetEnvironmentVariable(name);
-    if (string.IsNullOrWhiteSpace(value))
-    {
-        return defaultValue;
-    }
-
-    return int.TryParse(value, out int parsed) && parsed > 0
-        ? parsed
-        : throw new InvalidOperationException($"Environment variable '{name}' must be a positive integer.");
-}
-
-static string ParseHelloInput(string[] args, string defaultHelloInput)
+static DemoCommand ParseCommand(string[] args, string defaultHelloInput)
 {
     if (args.Length == 0)
     {
-        return defaultHelloInput;
+        return new DemoCommand(ServerlessTaskNames.HelloOrchestrator, defaultHelloInput);
     }
 
     string verb = args[0].ToLowerInvariant();
     return verb switch
     {
-        "hello" => args.Length > 1 ? args[1] : defaultHelloInput,
-        _ => throw new InvalidOperationException("Supported commands: hello [name]."),
+        "hello" => new DemoCommand(
+            ServerlessTaskNames.HelloOrchestrator,
+            args.Length > 1 ? args[1] : defaultHelloInput),
+        "long" => new DemoCommand(
+            ServerlessTaskNames.LongRunningOrchestrator,
+            $"{ParseLongRunningSeconds(args)}|{(args.Length > 2 ? args[2] : defaultHelloInput)}"),
+        "mixed" => new DemoCommand(ServerlessTaskNames.MixedLocalRemoteOrchestrator, args.Length > 1 ? args[1] : defaultHelloInput),
+        "multi" => new DemoCommand(ServerlessTaskNames.MultiActivityOrchestrator, args.Length > 1 ? args[1] : defaultHelloInput),
+        "undeclared" => new DemoCommand(ServerlessTaskNames.UndeclaredActivityOrchestrator, args.Length > 1 ? args[1] : defaultHelloInput),
+        "fanout" => new DemoCommand(ServerlessTaskNames.FanOutOrchestrator, $"{GetArgOrDefault(args, 1, "10")}|{GetArgOrDefault(args, 2, "0")}"),
+        "env" => new DemoCommand(ServerlessTaskNames.EnvOrchestrator, args.Length > 1 ? args[1] : "SERVERLESS_SAMPLE_MARKER"),
+        "fail" => new DemoCommand(ServerlessTaskNames.ExceptionOrchestrator, args.Length > 1 ? args[1] : defaultHelloInput),
+        "retry" => new DemoCommand(ServerlessTaskNames.RetryOrchestrator, args.Length > 1 ? args[1] : defaultHelloInput),
+        "timer" => new DemoCommand(ServerlessTaskNames.TimerOrchestrator, args.Length > 1 ? args[1] : "5"),
+        "crash" => new DemoCommand(ServerlessTaskNames.CrashOrchestrator, args.Length > 1 ? args[1] : defaultHelloInput),
+        _ => throw new InvalidOperationException("Supported commands: hello [name], long [seconds] [name], mixed [name], multi [name], undeclared [name], fanout [count] [delaySeconds], env [name], fail [name], retry [name], timer [seconds], crash [name]."),
     };
 }
+
+static string GetArgOrDefault(string[] args, int index, string defaultValue) =>
+    args.Length > index ? args[index] : defaultValue;
+
+static int ParseLongRunningSeconds(string[] args)
+{
+    if (args.Length <= 1)
+    {
+        return 900;
+    }
+
+    return int.TryParse(args[1], out int seconds) && seconds > 0
+        ? seconds
+        : throw new InvalidOperationException("The long command duration must be a positive integer number of seconds.");
+}
+
+sealed record DemoCommand(string OrchestratorName, string Input);

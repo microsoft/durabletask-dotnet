@@ -3,7 +3,6 @@
 
 using System.Collections.Generic;
 using System.Linq;
-using Azure.Identity;
 using Grpc.Net.Client;
 using Microsoft.DurableTask.Protobuf.Serverless;
 using Microsoft.DurableTask.Worker.AzureManaged.Serverless;
@@ -22,27 +21,17 @@ namespace Microsoft.DurableTask.Worker.AzureManaged;
 public static class DurableTaskSchedulerServerlessWorkerExtensions
 {
     /// <summary>
-    /// Declares serverless activities with DTS and excludes them from local execution.
-    /// Call this on the local coordinator worker — not on the sandbox worker binary.
+    /// Enables annotation-based serverless activity declarations with DTS and excludes annotated
+    /// serverless activities from local execution.
     /// </summary>
     /// <param name="builder">The Durable Task worker builder to configure.</param>
-    /// <param name="configure">Callback to configure serverless activity behavior.</param>
     /// <returns>The original builder, for call chaining.</returns>
-    public static IDurableTaskWorkerBuilder DeclareServerlessActivities(
-        this IDurableTaskWorkerBuilder builder,
-        Action<ServerlessOptions> configure)
+    public static IDurableTaskWorkerBuilder EnableServerlessActivities(this IDurableTaskWorkerBuilder builder)
     {
         Check.NotNull(builder);
-        Check.NotNull(configure);
-
-        builder.Services.AddOptions<ServerlessOptions>(builder.Name)
-            .Configure(configure)
-            .PostConfigure<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>((options, schedulerOptions) =>
-                ApplyTaskHubDefault(options, schedulerOptions.Get(builder.Name).TaskHubName));
 
         builder.Services.AddOptions<DurableTaskWorkerWorkItemFilters>(builder.Name)
-            .PostConfigure<IOptionsMonitor<ServerlessOptions>>(
-                (filters, serverlessOptions) => ExcludeServerlessActivitiesFromLocalExecution(filters, serverlessOptions.Get(builder.Name)));
+            .PostConfigure(ExcludeAnnotatedServerlessActivitiesFromLocalExecution);
 
         builder.Services.AddSingleton<IHostedService>(sp => CreateServerlessActivityDeclarationHostedService(sp, builder.Name));
         return builder;
@@ -55,7 +44,7 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method is for separate worker binaries only. The coordinator uses <see cref="DeclareServerlessActivities"/>
+    /// This method is for separate worker binaries only. The coordinator uses <see cref="EnableServerlessActivities"/>
     /// to declare and provision the serverless activity configuration.
     /// </para>
     /// <para>
@@ -105,9 +94,9 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         return builder;
     }
 
-    static void ExcludeServerlessActivitiesFromLocalExecution(DurableTaskWorkerWorkItemFilters filters, ServerlessOptions options)
+    static void ExcludeAnnotatedServerlessActivitiesFromLocalExecution(DurableTaskWorkerWorkItemFilters filters)
     {
-        string[] activityNames = ServerlessActivityConfiguration.ResolveActivityNames(options.ActivityNames);
+        string[] activityNames = ServerlessActivityAnnotationResolver.ResolveActivityNames();
         if (activityNames.Length == 0)
         {
             return;
@@ -127,13 +116,13 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         IServiceProvider services,
         string builderName)
     {
-        ServerlessOptions options = services.GetRequiredService<IOptionsMonitor<ServerlessOptions>>().Get(builderName);
         ILoggerFactory loggerFactory = services.GetRequiredService<ILoggerFactory>();
         ServerlessWorkerRuntimeOptions runtimeOptions = services.GetRequiredService<IOptionsMonitor<ServerlessWorkerRuntimeOptions>>().Get(builderName);
+        DurableTaskSchedulerWorkerOptions schedulerOptions = services.GetRequiredService<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>().Get(builderName);
 
         return new ServerlessActivityDeclarationHostedService(
             CreateServerlessActivitiesClient(services, builderName),
-            options,
+            ServerlessActivityAnnotationResolver.Resolve(schedulerOptions.TaskHubName),
             runtimeOptions,
             loggerFactory.CreateLogger<ServerlessActivityDeclarationHostedService>());
     }
@@ -175,14 +164,6 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         throw new InvalidOperationException("Azure Managed serverless activities require a configured gRPC channel or call invoker.");
     }
 
-    static void ApplyTaskHubDefault(ServerlessOptions options, string taskHubName)
-    {
-        if (string.IsNullOrWhiteSpace(options.TaskHub) && !string.IsNullOrWhiteSpace(taskHubName))
-        {
-            options.TaskHub = taskHubName;
-        }
-    }
-
     static void ApplyRuntimeTaskHubDefault(ServerlessWorkerRuntimeOptions options, string taskHubName)
     {
         if (string.IsNullOrWhiteSpace(options.TaskHub) && !string.IsNullOrWhiteSpace(taskHubName))
@@ -196,10 +177,12 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         string endpoint = GetRequiredEnvironmentVariable("DTS_ENDPOINT");
         string taskHub = GetRequiredEnvironmentVariable("DTS_TASK_HUB");
 
-        // Private preview: DTS-owned sandbox workers authenticate with the injected
-        // managed identity via DefaultAzureCredential. Revisit this if customer-owned
-        // worker identities or non-default auth modes are introduced.
-        builder.UseDurableTaskScheduler(endpoint, taskHub, new DefaultAzureCredential());
+        builder.UseDurableTaskScheduler(options =>
+        {
+            options.EndpointAddress = endpoint;
+            options.TaskHubName = taskHub;
+            options.AllowInsecureCredentials = true;
+        });
     }
 
     static string GetRequiredEnvironmentVariable(string name)

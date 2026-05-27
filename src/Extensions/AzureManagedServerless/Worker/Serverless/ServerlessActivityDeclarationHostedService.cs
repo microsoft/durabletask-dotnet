@@ -13,7 +13,7 @@ namespace Microsoft.DurableTask.Worker.AzureManaged.Serverless;
 sealed class ServerlessActivityDeclarationHostedService : IHostedService
 {
     readonly IServerlessActivitiesClient client;
-    readonly ServerlessOptions options;
+    readonly IReadOnlyList<ServerlessOptions> declarations;
     readonly ServerlessWorkerRuntimeOptions? runtimeOptions;
     readonly ILogger<ServerlessActivityDeclarationHostedService> logger;
 
@@ -21,19 +21,35 @@ sealed class ServerlessActivityDeclarationHostedService : IHostedService
     /// Initializes a new instance of the <see cref="ServerlessActivityDeclarationHostedService"/> class.
     /// </summary>
     /// <param name="client">The serverless activities client.</param>
-    /// <param name="options">The serverless options.</param>
+    /// <param name="declarations">The serverless declaration options.</param>
     /// <param name="runtimeOptions">The optional serverless worker runtime options.</param>
     /// <param name="logger">The logger.</param>
     public ServerlessActivityDeclarationHostedService(
         IServerlessActivitiesClient client,
-        ServerlessOptions options,
+        IReadOnlyList<ServerlessOptions> declarations,
         ServerlessWorkerRuntimeOptions? runtimeOptions,
         ILogger<ServerlessActivityDeclarationHostedService> logger)
     {
         this.client = Check.NotNull(client);
-        this.options = Check.NotNull(options);
+        this.declarations = Check.NotNull(declarations);
         this.runtimeOptions = runtimeOptions;
         this.logger = Check.NotNull(logger);
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ServerlessActivityDeclarationHostedService"/> class.
+    /// </summary>
+    /// <param name="client">The serverless activities client.</param>
+    /// <param name="declaration">The serverless declaration options.</param>
+    /// <param name="runtimeOptions">The optional serverless worker runtime options.</param>
+    /// <param name="logger">The logger.</param>
+    public ServerlessActivityDeclarationHostedService(
+        IServerlessActivitiesClient client,
+        ServerlessOptions declaration,
+        ServerlessWorkerRuntimeOptions? runtimeOptions,
+        ILogger<ServerlessActivityDeclarationHostedService> logger)
+        : this(client, [declaration], runtimeOptions, logger)
+    {
     }
 
     /// <inheritdoc/>
@@ -44,33 +60,42 @@ sealed class ServerlessActivityDeclarationHostedService : IHostedService
             return;
         }
 
-        string[] activityNames = ServerlessActivityConfiguration.ResolveActivityNames(this.options.ActivityNames);
-        if (activityNames.Length == 0)
+        if (this.declarations.Count == 0)
         {
-            Logs.NoServerlessActivitiesForDeclaration(this.logger, this.options.TaskHub);
+            Logs.NoServerlessActivitiesForDeclaration(this.logger, string.Empty);
             return;
         }
 
-        Proto.ServerlessActivityDeclaration declaration = ServerlessActivityConfiguration.BuildDeclaration(
-            this.options,
-            activityNames);
-        try
+        foreach (ServerlessOptions options in this.declarations)
         {
-            await this.client.DeclareServerlessActivitiesAsync(
-                declaration,
-                this.options.TaskHub,
-                cancellationToken).ConfigureAwait(false);
-            Logs.ServerlessActivitiesDeclared(
-                this.logger,
-                this.options.TaskHub,
-                declaration.WorkerProfileId,
-                declaration.ActivityNames.Count,
-                declaration.Image?.ImageRef ?? string.Empty);
-        }
-        catch (Exception ex)
-        {
-            Logs.ServerlessActivityDeclarationFailed(this.logger, ex, this.options.TaskHub);
-            throw;
+            string[] activityNames = ServerlessActivityConfiguration.ResolveActivityNames(options.ActivityNames);
+            if (activityNames.Length == 0)
+            {
+                Logs.NoServerlessActivitiesForDeclaration(this.logger, options.TaskHub);
+                continue;
+            }
+
+            Proto.ServerlessActivityDeclaration declaration = ServerlessActivityConfiguration.BuildDeclaration(
+                options,
+                activityNames);
+            try
+            {
+                await this.client.DeclareServerlessActivitiesAsync(
+                    declaration,
+                    options.TaskHub,
+                    cancellationToken).ConfigureAwait(false);
+                Logs.ServerlessActivitiesDeclared(
+                    this.logger,
+                    options.TaskHub,
+                    declaration.WorkerProfileId,
+                    declaration.ActivityNames.Count,
+                    declaration.Image?.ImageRef ?? string.Empty);
+            }
+            catch (Exception ex)
+            {
+                Logs.ServerlessActivityDeclarationFailed(this.logger, ex, options.TaskHub);
+                throw;
+            }
         }
     }
 

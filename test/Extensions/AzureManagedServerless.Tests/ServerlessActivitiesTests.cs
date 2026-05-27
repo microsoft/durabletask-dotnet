@@ -543,7 +543,7 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public async Task DeclareServerlessActivities_ConfiguresLocalWorkerExclusionFilter()
+    public async Task EnableServerlessActivities_ConfiguresLocalWorkerExclusionFilterFromAnnotations()
     {
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
@@ -554,23 +554,18 @@ public class ServerlessActivitiesTests
         mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
 
         // Act
-        mockBuilder.Object.DeclareServerlessActivities(options =>
-        {
-            options.TaskHub = TaskHub;
-            options.ContainerImage = "example.com/repo/worker:latest";
-            options.ActivityNames.Add("RemoteHello");
-        });
+        mockBuilder.Object.EnableServerlessActivities();
 
         await using ServiceProvider provider = services.BuildServiceProvider();
         DurableTaskWorkerWorkItemFilters filters = provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>().Get(Options.DefaultName);
 
         // Assert
-        filters.ExcludedActivities.Select(filter => filter.Name).Should().Equal("RemoteHello");
+        filters.ExcludedActivities.Select(filter => filter.Name).Should().Contain("AnnotatedRemoteHello");
         filters.Activities.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task DeclareServerlessActivities_DoesNotConfigureFilterWhenActivityNamesAreEmpty()
+    public async Task EnableServerlessActivities_RegistersDeclarationHostedService()
     {
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
@@ -581,18 +576,49 @@ public class ServerlessActivitiesTests
         mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
 
         // Act
-        mockBuilder.Object.DeclareServerlessActivities(options =>
-        {
-            options.TaskHub = TaskHub;
-            options.ContainerImage = "example.com/repo/worker:latest";
-        });
-
-        await using ServiceProvider provider = services.BuildServiceProvider();
-        DurableTaskWorkerWorkItemFilters filters = provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>().Get(Options.DefaultName);
+        mockBuilder.Object.EnableServerlessActivities();
 
         // Assert
-        filters.ExcludedActivities.Should().BeEmpty();
-        filters.Activities.Should().BeEmpty();
+        services.Should().Contain(descriptor => descriptor.ServiceType == typeof(IHostedService));
+    }
+
+    [Fact]
+    public void ServerlessActivityAnnotationResolver_UsesWorkerProfileConfigureForDeclarationOptions()
+    {
+        // Arrange
+        using EnvironmentVariableScope image = new("DTS_SERVERLESS_ACTIVITY_IMAGE", "example.com/not-used:latest");
+        using EnvironmentVariableScope cpu = new("DTS_SERVERLESS_CPU", "2000m");
+        using EnvironmentVariableScope memory = new("DTS_SERVERLESS_MEMORY", "4096Mi");
+        using EnvironmentVariableScope maxActivities = new("DTS_SERVERLESS_MAX_ACTIVITIES", "99");
+
+        // Act
+        ServerlessOptions options = ServerlessActivityAnnotationResolver.Resolve(TaskHub)
+            .Single(options => options.WorkerProfileId == "annotated-profile");
+        ServerlessActivityDeclaration declaration = ServerlessActivityConfiguration.BuildDeclaration(
+            options,
+            ServerlessActivityConfiguration.ResolveActivityNames(options.ActivityNames));
+
+        // Assert
+        declaration.WorkerProfileId.Should().Be("annotated-profile");
+        declaration.ActivityNames.Should().Equal("AnnotatedRemoteHello");
+        declaration.Image.ImageRef.Should().Be("example.com/repo/annotated-worker:latest");
+        declaration.Resources.Cpu.Should().Be("500m");
+        declaration.Resources.Memory.Should().Be("1024Mi");
+        declaration.MaxConcurrentActivities.Should().Be(4);
+        declaration.EnvironmentVariables.Should().ContainKey("CUSTOM_ENV").WhoseValue.Should().Be("configured-value");
+        declaration.Entrypoint.Should().BeEmpty();
+        declaration.Cmd.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ServerlessActivityAnnotationResolver_AllowsDeclarationMarkerClassWithExplicitName()
+    {
+        // Act
+        ServerlessOptions options = ServerlessActivityAnnotationResolver.Resolve(TaskHub)
+            .Single(options => options.WorkerProfileId == "marker-profile");
+
+        // Assert
+        options.ActivityNames.Should().Equal("MarkerRemoteHello");
     }
 
     [Fact]
@@ -620,6 +646,32 @@ public class ServerlessActivitiesTests
         filters.ExcludedActivities.Should().BeEmpty();
         filters.Orchestrations.Should().BeEmpty();
         filters.Entities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task UseServerlessWorker_ConfiguresSchedulerWithoutCredential()
+    {
+        // Arrange
+        using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
+        using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        ServiceCollection services = new();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
+        mockBuilder.Setup(builder => builder.Services).Returns(services);
+        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
+
+        // Act
+        mockBuilder.Object.UseServerlessWorker();
+
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        DurableTaskSchedulerWorkerOptions options = provider
+            .GetRequiredService<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>()
+            .Get(Options.DefaultName);
+
+        // Assert
+        options.EndpointAddress.Should().Be("https://example.scheduler");
+        options.TaskHubName.Should().Be(TaskHub);
+        options.Credential.Should().BeNull();
+        options.AllowInsecureCredentials.Should().BeTrue();
     }
 
     [Fact]
@@ -686,6 +738,41 @@ public class ServerlessActivitiesTests
             return Task.FromResult(input);
         }
     }
+
+    [ServerlessWorkerProfile("annotated-profile")]
+    sealed class AnnotatedWorkerProfile : IServerlessWorkerProfile
+    {
+        public void Configure(ServerlessOptions options)
+        {
+            options.ContainerImage = "example.com/repo/annotated-worker:latest";
+            options.Cpu = "500m";
+            options.Memory = "1024Mi";
+            options.MaxConcurrentActivities = 4;
+            options.EnvironmentVariables["CUSTOM_ENV"] = "configured-value";
+        }
+    }
+
+    [DurableTask("AnnotatedRemoteHello")]
+    [ServerlessActivity("annotated-profile")]
+    sealed class AnnotatedRemoteHelloActivity : TaskActivity<string, string>
+    {
+        public override Task<string> RunAsync(TaskActivityContext context, string input)
+        {
+            return Task.FromResult(input);
+        }
+    }
+
+    [ServerlessWorkerProfile("marker-profile")]
+    sealed class MarkerWorkerProfile : IServerlessWorkerProfile
+    {
+        public void Configure(ServerlessOptions options)
+        {
+            options.ContainerImage = "example.com/repo/marker-worker:latest";
+        }
+    }
+
+    [ServerlessActivity("marker-profile", Name = "MarkerRemoteHello")]
+    sealed class MarkerRemoteHelloDeclaration;
 
     sealed class FakeServerlessActivitiesClient : IServerlessActivitiesClient
     {

@@ -27,9 +27,10 @@ builder.Services.AddDurableTaskWorker(wb =>
     wb.AddTasks(tasks => tasks.AddAllGeneratedTasks());
     wb.UseVersioning(new DurableTaskWorkerOptions.VersioningOptions
     {
-        // Activity fallback is the safer place to start: activities are stateless and do not replay
-        // history. Enable orchestrator fallback (commented below) only when the unversioned
-        // orchestrator is replay-compatible with every version it may receive.
+        // This sample enables CatchAll fallback on both sides. Activity fallback is the safer place to
+        // start in your own code (activities are stateless and don't replay history); only enable
+        // orchestrator fallback when the unversioned orchestrator is replay-compatible with every
+        // version it may receive.
         ActivityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
         OrchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll,
     });

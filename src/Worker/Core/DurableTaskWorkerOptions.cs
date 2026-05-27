@@ -364,8 +364,12 @@ public class DurableTaskWorkerOptions
         /// <list type="bullet">
         ///   <item><description>Unlike <see cref="FailureStrategy"/>, this setting applies regardless of
         ///   <see cref="MatchStrategy"/>.</description></item>
-        ///   <item><description><see cref="MatchStrategy"/> applies to orchestration instance versions, not
-        ///   activity scheduling versions, so it does not gate activity dispatch.</description></item>
+        ///   <item><description>When <see cref="MatchStrategy"/> is not <see cref="VersionMatchStrategy.None"/>,
+        ///   the pre-dispatch versioning gate also evaluates the activity work item's version (set via
+        ///   <c>TaskOptions.Version</c> at schedule time, or inherited from the calling orchestration's
+        ///   instance version when <c>TaskOptions.Version</c> is <c>null</c>) and rejects mismatches per
+        ///   <see cref="FailureStrategy"/>. This setting governs only how the factory resolves activity
+        ///   work items that pass the gate.</description></item>
         /// </list>
         /// </remarks>
         public UnversionedFallbackMode ActivityUnversionedFallback { get; set; } = UnversionedFallbackMode.Implicit;

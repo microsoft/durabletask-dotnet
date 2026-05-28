@@ -43,16 +43,19 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public void ServerlessDeclarationContract_DoesNotExposeAddActivity()
+    public void ServerlessDeclarationContract_ExposesProfileAddActivityOnly()
     {
         // Arrange
         Type optionsType = typeof(ServerlessOptions);
+        Type? activityAttributeType = typeof(ServerlessOptions).Assembly.GetType(
+            "Microsoft.DurableTask.Worker.AzureManaged.Serverless.ServerlessActivityAttribute");
 
         // Act/Assert
         optionsType.GetProperty("ActivityNames").Should().BeNull();
-        optionsType.GetMethod("AddActivity", [typeof(string)]).Should().BeNull();
-        optionsType.GetMethods().Should().NotContain(method =>
+        optionsType.GetMethod("AddActivity", [typeof(string)]).Should().NotBeNull();
+        optionsType.GetMethods().Should().Contain(method =>
             method.Name == "AddActivity" && method.IsGenericMethodDefinition);
+        activityAttributeType.Should().BeNull();
     }
 
     [Fact]
@@ -68,7 +71,7 @@ public class ServerlessActivitiesTests
             Memory = "1024Mi",
             MaxConcurrentActivities = 7,
         };
-        options.ActivityNames.Add("RemoteHello");
+        options.AddActivity("RemoteHello");
         options.EnvironmentVariables.Add("CUSTOM_SETTING", "enabled");
         options.Entrypoint.Add("/usr/bin/tini");
         options.Entrypoint.Add("--");
@@ -175,7 +178,7 @@ public class ServerlessActivitiesTests
             TaskHub = TaskHub,
             ContainerImage = "mcr.microsoft.com/durabletask/demo-worker:1.0",
         };
-        options.ActivityNames.Add("RemoteHello");
+        options.AddActivity("RemoteHello");
         FakeServerlessActivitiesClient client = new();
         ServerlessActivityDeclarationHostedService service = new(
             client,
@@ -224,7 +227,7 @@ public class ServerlessActivitiesTests
             TaskHub = TaskHub,
             ContainerImage = "example.com/repo/worker@sha256:abc",
         };
-        options.ActivityNames.Add("RemoteHello");
+        options.AddActivity("RemoteHello");
         FakeServerlessActivitiesClient client = new() { TransientDeclarationFailures = 1 };
         ServerlessActivityDeclarationHostedService service = new(
             client,
@@ -603,7 +606,7 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public void ServerlessActivityDeclarationResolver_ResolveDeclarations_UsesServerlessActivityAttributes()
+    public void ServerlessActivityDeclarationResolver_ResolveDeclarations_UsesWorkerProfileConfigure()
     {
         // Arrange
         using EnvironmentVariableScope image = new("DTS_SERVERLESS_ACTIVITY_IMAGE", "example.com/not-used:latest");
@@ -620,7 +623,7 @@ public class ServerlessActivitiesTests
 
         // Assert
         declaration.WorkerProfileId.Should().Be("annotated-profile");
-        declaration.ActivityNames.Should().Equal(nameof(ConfiguredRemoteHello));
+        declaration.ActivityNames.Should().Equal("ConfiguredRemoteHello");
         declaration.Image.ImageRef.Should().Be("example.com/repo/annotated-worker:latest");
         declaration.Resources.Cpu.Should().Be("500m");
         declaration.Resources.Memory.Should().Be("1024Mi");
@@ -631,7 +634,7 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
-    public void ServerlessActivityDeclarationResolver_ResolveDeclaredActivityNames_UsesServerlessActivityAttributes()
+    public void ServerlessActivityDeclarationResolver_ResolveDeclaredActivityNames_UsesWorkerProfileConfigure()
     {
         // Arrange
         int before = AnnotatedWorkerProfile.ConfigureCallCount;
@@ -640,7 +643,7 @@ public class ServerlessActivitiesTests
         string[] activityNames = ServerlessActivityDeclarationResolver.ResolveDeclaredActivityNames(TaskHub);
 
         // Assert
-        activityNames.Should().Contain(nameof(ConfiguredRemoteHello));
+        activityNames.Should().Contain("ConfiguredRemoteHello");
         AnnotatedWorkerProfile.ConfigureCallCount.Should().BeGreaterThan(before);
     }
 
@@ -753,15 +756,6 @@ public class ServerlessActivitiesTests
             .WithMessage("DTS_TASK_HUB must be injected by DTS for serverless workers.");
     }
 
-    [DurableTask("TypedRemoteHello")]
-    sealed class TypedRemoteHelloActivity : TaskActivity<string, string>
-    {
-        public override Task<string> RunAsync(TaskActivityContext context, string input)
-        {
-            return Task.FromResult(input);
-        }
-    }
-
     [ServerlessWorkerProfile("annotated-profile")]
     sealed class AnnotatedWorkerProfile : IServerlessWorkerProfile
     {
@@ -775,12 +769,8 @@ public class ServerlessActivitiesTests
             options.Memory = "1024Mi";
             options.MaxConcurrentActivities = 4;
             options.EnvironmentVariables["CUSTOM_ENV"] = "configured-value";
+            options.AddActivity("ConfiguredRemoteHello");
         }
-    }
-
-    [ServerlessActivity(WorkerProfile = "annotated-profile")]
-    sealed class ConfiguredRemoteHello
-    {
     }
 
     sealed class FakeServerlessActivitiesClient : IServerlessActivitiesClient

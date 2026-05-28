@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Updated private preview serverless worker profile declarations to use `ServerlessOptions.AddActivity(...)`, and updated the serverless sample to share activity name constants between the main app and remote worker.
 
 ## v1.24.2
 - Bump DI.Abstractions and Bcl.AsyncInterfaces to 9.0.1 ([#3433](https://github.com/microsoft/durabletask-dotnet/pull/3433)) (#723)

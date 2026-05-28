@@ -4,7 +4,7 @@
 namespace Microsoft.DurableTask.Worker.AzureManaged.Serverless;
 
 /// <summary>
-/// Declares a serverless worker profile that DTS can start for annotated activities.
+/// Declares a serverless worker profile that DTS can start for activities declared by the profile.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class ServerlessWorkerProfileAttribute : Attribute
@@ -24,21 +24,4 @@ public sealed class ServerlessWorkerProfileAttribute : Attribute
     /// Gets the worker profile ID.
     /// </summary>
     public string WorkerProfileId { get; }
-}
-
-/// <summary>
-/// Declares that an activity should run on a DTS-managed serverless worker profile.
-/// </summary>
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-public sealed class ServerlessActivityAttribute : Attribute
-{
-    /// <summary>
-    /// Gets or sets the activity name. If not specified, the annotated class name is used.
-    /// </summary>
-    public string? Name { get; set; }
-
-    /// <summary>
-    /// Gets or sets the worker profile ID that owns this serverless activity.
-    /// </summary>
-    public string WorkerProfile { get; set; } = ServerlessOptions.DefaultWorkerProfileId;
 }

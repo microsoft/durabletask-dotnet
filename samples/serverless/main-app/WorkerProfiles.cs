@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Worker.AzureManaged.Serverless;
+using Microsoft.DurableTask.Samples.Serverless.Shared;
 
 namespace Microsoft.DurableTask.Samples.Serverless.MainApp;
 
@@ -14,10 +15,6 @@ internal sealed class DefaultServerlessWorkerProfile : IServerlessWorkerProfile
         options.Cpu = "1000m";
         options.Memory = "2048Mi";
         options.MaxConcurrentActivities = 1;
+        options.AddActivity(ActivityNames.RemoteHello);
     }
-}
-
-[ServerlessActivity(WorkerProfile = "default")]
-internal sealed class RemoteHello
-{
 }

@@ -15,6 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="$(SrcRoot)Worker/AzureManaged/Worker.AzureManaged.csproj" />
     <ProjectReference Include="$(SrcRoot)Extensions/AzureManagedServerless/AzureManagedServerless.csproj" />
+    <ProjectReference Include="..\shared\shared.csproj" />
     <ProjectReference Include="$(SrcRoot)Analyzers/Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 

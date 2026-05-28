@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Reflection;
+
 namespace Microsoft.DurableTask.Worker.AzureManaged.Serverless;
 
 /// <summary>
@@ -85,4 +87,30 @@ public sealed class ServerlessOptions
     /// activities separately when they connect.
     /// </summary>
     internal IList<string> ActivityNames { get; } = new List<string>();
+
+    /// <summary>
+    /// Adds an activity name to the serverless worker profile declaration.
+    /// </summary>
+    /// <param name="activityName">The activity name.</param>
+    public void AddActivity(string activityName)
+    {
+        if (string.IsNullOrWhiteSpace(activityName))
+        {
+            throw new ArgumentException("Serverless activity name cannot be empty.", nameof(activityName));
+        }
+
+        this.ActivityNames.Add(activityName.Trim());
+    }
+
+    /// <summary>
+    /// Adds an activity to the serverless worker profile declaration using its durable task name.
+    /// </summary>
+    /// <typeparam name="TActivity">The activity type.</typeparam>
+    public void AddActivity<TActivity>() where TActivity : class, ITaskActivity
+    {
+        Type activityType = typeof(TActivity);
+        DurableTaskAttribute? attribute = activityType.GetCustomAttribute<DurableTaskAttribute>();
+        string? activityName = attribute?.Name.Name;
+        this.AddActivity(string.IsNullOrWhiteSpace(activityName) ? activityType.Name : activityName);
+    }
 }

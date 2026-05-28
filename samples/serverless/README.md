@@ -6,6 +6,7 @@ The sample is intentionally split into two projects:
 
 | Path | Purpose |
 | --- | --- |
+| `shared/` | Defines activity name constants shared by the main app and remote worker. |
 | `main-app/` | Runs locally or in a normal app host. It declares the serverless activity and starts one hello orchestration. |
 | `remote-worker/` | Builds the container image that DTS starts inside a serverless sandbox. It contains the remote hello activity. |
 
@@ -31,9 +32,10 @@ docker push $image
 The main app uses `DefaultAzureCredential`; sign in with Azure CLI or configure another supported Azure identity before running it.
 After pushing the remote worker image, set `ContainerImage` in
 `main-app/WorkerProfiles.cs` to the pushed image reference. The worker profile
-class declares the image, CPU, memory, and max concurrency. The separate
-`[ServerlessActivity(WorkerProfile = "default")]` declaration class declares the
-remote activity name by class name.
+class declares the image, CPU, memory, max concurrency, and serverless activity
+names with `options.AddActivity(...)`. The main app and remote worker both use
+the `shared/ActivityNames.cs` constants so the declaration and worker registration
+stay in sync.
 
 Update `main-app/appsettings.json` with your scheduler endpoint and task hub:
 

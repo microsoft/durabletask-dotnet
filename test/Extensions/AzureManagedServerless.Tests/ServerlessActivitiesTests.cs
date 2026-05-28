@@ -675,6 +675,31 @@ public class ServerlessActivitiesTests
     }
 
     [Fact]
+    public async Task UseServerlessWorker_WithNoRegisteredActivities_FailsWhenWorkerFiltersAreResolved()
+    {
+        // Arrange
+        using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
+        using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        ServiceCollection services = new();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
+        mockBuilder.Setup(builder => builder.Services).Returns(services);
+        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
+
+        mockBuilder.Object.UseServerlessWorker();
+
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act
+        Action act = () => provider
+            .GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>()
+            .Get(Options.DefaultName);
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("UseServerlessWorker requires at least one registered activity*");
+    }
+
+    [Fact]
     public async Task UseServerlessWorker_ConfiguresSchedulerWithoutCredential()
     {
         // Arrange

@@ -24,6 +24,10 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         "EnableServerlessActivities is for declaring serverless activities from the coordinator app. " +
         "DTS serverless workers should use UseServerlessWorker instead.";
 
+    const string UseServerlessWorkerNoActivitiesErrorMessage =
+        "UseServerlessWorker requires at least one registered activity. " +
+        "Register an activity on this worker before starting the serverless worker.";
+
     /// <summary>
     /// Enables annotation-based serverless activity declarations with DTS and excludes annotated
     /// serverless activities from local execution.
@@ -52,6 +56,9 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
     /// <para>
     /// This method is for separate worker binaries only. The coordinator uses <see cref="EnableServerlessActivities"/>
     /// to declare and provision the serverless activity configuration.
+    /// </para>
+    /// <para>
+    /// The worker must register at least one activity; serverless workers without registered activities fail at startup.
     /// </para>
     /// <para>
     /// Required environment variables injected automatically by DTS:
@@ -115,6 +122,11 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
 
     static void IncludeOnlyRegisteredActivities(DurableTaskWorkerWorkItemFilters filters)
     {
+        if (filters.Activities.Count == 0)
+        {
+            throw new InvalidOperationException(UseServerlessWorkerNoActivitiesErrorMessage);
+        }
+
         filters.Orchestrations = [];
         filters.ExcludedActivities = [];
         filters.Entities = [];

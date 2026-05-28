@@ -653,6 +653,7 @@ public class ServerlessActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope maxActivities = new("DTS_SERVERLESS_MAX_ACTIVITIES", "3");
         ServiceCollection services = new();
         services.Configure<DurableTaskRegistry>(
             Options.DefaultName,
@@ -666,12 +667,16 @@ public class ServerlessActivitiesTests
 
         await using ServiceProvider provider = services.BuildServiceProvider();
         DurableTaskWorkerWorkItemFilters filters = provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>().Get(Options.DefaultName);
+        DurableTaskWorkerOptions workerOptions = provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerOptions>>().Get(Options.DefaultName);
 
         // Assert
         filters.Activities.Select(filter => filter.Name).Should().Equal("RemoteHello");
         filters.ExcludedActivities.Should().BeEmpty();
         filters.Orchestrations.Should().BeEmpty();
         filters.Entities.Should().BeEmpty();
+        workerOptions.Concurrency.MaximumConcurrentActivityWorkItems.Should().Be(3);
+        workerOptions.Concurrency.MaximumConcurrentOrchestrationWorkItems.Should().Be(0);
+        workerOptions.Concurrency.MaximumConcurrentEntityWorkItems.Should().Be(0);
     }
 
     [Fact]

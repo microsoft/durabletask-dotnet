@@ -11,7 +11,7 @@ internal sealed class DefaultServerlessWorkerProfile : IServerlessWorkerProfile
 {
     public void Configure(ServerlessOptions options)
     {
-        options.ContainerImage = "serverless-remote-worker:local";
+        options.ContainerImage = Environment.GetEnvironmentVariable("DTS_SERVERLESS_CONTAINER_IMAGE") ?? "serverless-remote-worker:local";
         options.Cpu = "1000m";
         options.Memory = "2048Mi";
         options.MaxConcurrentActivities = 1;

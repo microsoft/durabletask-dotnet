@@ -85,6 +85,10 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
                 ApplyWorkerEnvironmentOverrides(options);
             });
 
+        builder.Services.AddOptions<DurableTaskWorkerOptions>(builder.Name)
+            .PostConfigure<IOptionsMonitor<ServerlessWorkerRuntimeOptions>>((options, runtimeOptions) =>
+                ConfigureServerlessWorkerConcurrency(options, runtimeOptions.Get(builder.Name)));
+
         builder.Services.AddOptions<DurableTaskWorkerWorkItemFilters>(builder.Name)
             .PostConfigure(IncludeOnlyRegisteredActivities);
 
@@ -130,6 +134,15 @@ public static class DurableTaskSchedulerServerlessWorkerExtensions
         filters.Orchestrations = [];
         filters.ExcludedActivities = [];
         filters.Entities = [];
+    }
+
+    static void ConfigureServerlessWorkerConcurrency(
+        DurableTaskWorkerOptions options,
+        ServerlessWorkerRuntimeOptions runtimeOptions)
+    {
+        options.Concurrency.MaximumConcurrentActivityWorkItems = runtimeOptions.MaxConcurrentActivities;
+        options.Concurrency.MaximumConcurrentOrchestrationWorkItems = 0;
+        options.Concurrency.MaximumConcurrentEntityWorkItems = 0;
     }
 
     static void ThrowIfServerlessWorkerRuntime()

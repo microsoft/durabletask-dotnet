@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Updated private preview serverless worker profile declarations to use `ServerlessOptions.AddActivity(...)`, and updated the serverless sample to share activity name constants between the main app and remote worker.
+- Updated private preview on-demand sandbox worker profile declarations to use `OnDemandSandboxOptions.AddActivity(...)`, and updated the on-demand sandbox sample to share activity name constants between the main app and remote worker.
 
 ## v1.24.2
 - Bump DI.Abstractions and Bcl.AsyncInterfaces to 9.0.1 ([#3433](https://github.com/microsoft/durabletask-dotnet/pull/3433)) (#723)
@@ -152,13 +152,13 @@
 ## v1.16.0
 - Include Exception Properties at FailureDetails by nytian in([#474](https://github.com/microsoft/durabletask-dotnet/pull/474))
 
-## v1.15.1 
+## v1.15.1
 - Add version check to activities by @halspang in ([#472](https://github.com/microsoft/durabletask-dotnet/pull/472))
 
 ## v1.15.0
 - Abandon workitem if processing workitem failed by @YunchuWang in ([#467](https://github.com/microsoft/durabletask-dotnet/pull/467))
 - Extended Sessions for Isolated (Orchestrations) by @sophiatev in ([#449](https://github.com/microsoft/durabletask-dotnet/pull/449))
-  
+
 ## v1.14.0
 - Add RestartAsync API Support at DurableTaskClient ([#456](https://github.com/microsoft/durabletask-dotnet/pull/456))
 

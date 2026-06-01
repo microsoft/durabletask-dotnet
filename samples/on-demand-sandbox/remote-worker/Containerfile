@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1.7
+
+FROM --platform=$TARGETPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+ARG TARGETARCH
+
+COPY . /src/durabletask-dotnet
+
+WORKDIR /src/durabletask-dotnet/samples/on-demand-sandbox/remote-worker
+RUN case "$TARGETARCH" in \
+        amd64) runtime_identifier=linux-x64 ;; \
+        arm64) runtime_identifier=linux-arm64 ;; \
+        *) echo "Unsupported target architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+    && dotnet publish remote-worker.csproj \
+    -c Release \
+    -r "$runtime_identifier" \
+    --self-contained false \
+    -o /app/publish \
+    --configfile /src/durabletask-dotnet/nuget.config \
+    /p:DebugSymbols=false \
+    /p:DebugType=None \
+    && find /app/publish -type f \( -name '*.xml' -o -name '*.pdb' \) -delete
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+
+ENV ASPNETCORE_URLS=http://+:8080
+
+EXPOSE 8080
+
+COPY --from=build /app/publish ./
+
+ENTRYPOINT ["dotnet", "OnDemandSandboxRemoteWorker.dll"]

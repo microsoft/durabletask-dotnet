@@ -1,0 +1,234 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
+
+namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
+
+/// <summary>
+/// Builds and normalizes on-demand sandbox activity protocol messages.
+/// </summary>
+static class OnDemandSandboxActivityConfiguration
+{
+    /// <summary>
+    /// Resolves configured activity names for on-demand sandbox activity execution.
+    /// </summary>
+    /// <param name="configuredNames">The configured activity names.</param>
+    /// <returns>The normalized activity names.</returns>
+    public static string[] ResolveActivityNames(IEnumerable<string> configuredNames)
+    {
+        return configuredNames
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => name.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Builds an on-demand sandbox activity declaration protocol message.
+    /// </summary>
+    /// <param name="options">The on-demand sandbox options.</param>
+    /// <param name="activityNames">The activity names included in the declaration.</param>
+    /// <returns>The declaration protocol message.</returns>
+    public static Proto.OnDemandSandboxActivityDeclaration BuildDeclaration(OnDemandSandboxOptions options, IReadOnlyCollection<string> activityNames)
+    {
+        Check.NotNull(options);
+        Check.NotNull(activityNames);
+
+        ValidateTaskHub(options.TaskHub, "On-demand sandbox activity declaration requires a task hub name.");
+
+        if (activityNames.Count == 0)
+        {
+            throw new InvalidOperationException("On-demand sandbox activity declaration requires at least one activity name.");
+        }
+
+        string workerProfileId = NormalizeWorkerProfileId(options.WorkerProfileId, "On-demand sandbox activity declaration requires a worker profile ID.");
+
+        if (options.MaxConcurrentActivities <= 0)
+        {
+            throw new InvalidOperationException("On-demand sandbox activity max concurrent activities must be greater than zero.");
+        }
+
+        Proto.OnDemandSandboxActivityDeclaration declaration = new()
+        {
+            WorkerProfileId = workerProfileId,
+            Image = BuildImage(options),
+            Resources = BuildResources(options),
+            MaxConcurrentActivities = options.MaxConcurrentActivities,
+        };
+
+        declaration.ActivityNames.AddRange(activityNames);
+        declaration.EnvironmentVariables.Add(options.EnvironmentVariables);
+        declaration.Entrypoint.AddRange(NormalizeOptionalStrings(options.Entrypoint));
+        declaration.Cmd.AddRange(NormalizeOptionalStrings(options.Cmd));
+        return declaration;
+    }
+
+    /// <summary>
+    /// Builds the initial on-demand sandbox activity worker registration message.
+    /// </summary>
+    /// <param name="options">The on-demand sandbox options.</param>
+    /// <param name="registeredActivityNames">The activity handlers registered by the worker process.</param>
+    /// <returns>The worker start protocol message.</returns>
+    public static Proto.OnDemandSandboxActivityWorkerMessage BuildWorkerStart(
+        OnDemandSandboxWorkerRuntimeOptions options,
+        IReadOnlyCollection<string> registeredActivityNames)
+    {
+        Check.NotNull(options);
+        Check.NotNull(registeredActivityNames);
+
+        ValidateTaskHub(options.TaskHub, "On-demand sandbox activity worker registration requires a task hub name.");
+        string[] activityNames = ResolveActivityNames(registeredActivityNames);
+        if (activityNames.Length == 0)
+        {
+            throw new InvalidOperationException("On-demand sandbox activity worker registration requires at least one registered activity.");
+        }
+
+        if (options.MaxConcurrentActivities <= 0)
+        {
+            throw new InvalidOperationException("On-demand sandbox activity worker max concurrent activities must be greater than zero.");
+        }
+
+        string workerProfileId = NormalizeWorkerProfileId(options.WorkerProfileId, "On-demand sandbox activity worker registration requires a worker profile ID.");
+
+        Proto.OnDemandSandboxActivityWorkerStart start = new()
+        {
+            TaskHub = options.TaskHub,
+            WorkerProfileId = workerProfileId,
+            MaxActivitiesCount = options.MaxConcurrentActivities,
+            Substrate = GetSubstrateFromEnvironment(),
+            DtsSandboxIdentifier = Environment.GetEnvironmentVariable("DTS_SANDBOX_ID") ?? string.Empty,
+        };
+        start.ActivityNames.AddRange(activityNames);
+
+        return new Proto.OnDemandSandboxActivityWorkerMessage { Start = start };
+    }
+
+    /// <summary>
+    /// Builds an on-demand sandbox activity worker heartbeat message.
+    /// </summary>
+    /// <param name="activeActivitiesCount">The number of activities currently executing.</param>
+    /// <returns>The heartbeat protocol message.</returns>
+    public static Proto.OnDemandSandboxActivityWorkerMessage BuildWorkerHeartbeat(int activeActivitiesCount)
+    {
+        if (activeActivitiesCount < 0)
+        {
+            throw new InvalidOperationException("On-demand sandbox activity worker active activity count cannot be negative.");
+        }
+
+        return new Proto.OnDemandSandboxActivityWorkerMessage
+        {
+            Heartbeat = new Proto.OnDemandSandboxActivityWorkerHeartbeat
+            {
+                ActiveActivitiesCount = activeActivitiesCount,
+            },
+        };
+    }
+
+    static Proto.OnDemandSandboxActivityImage BuildImage(OnDemandSandboxOptions options)
+    {
+        string? imageRef = Coalesce(
+            options.ContainerImage,
+            BuildImageRef(options.RegistryServer, options.Repository, options.Tag, options.ImageDigest));
+
+        if (string.IsNullOrWhiteSpace(imageRef))
+        {
+            throw new InvalidOperationException("On-demand sandbox activity image metadata requires a container image reference.");
+        }
+
+        return new Proto.OnDemandSandboxActivityImage
+        {
+            ImageRef = imageRef,
+        };
+    }
+
+    static Proto.OnDemandSandboxActivityResources BuildResources(OnDemandSandboxOptions options)
+    {
+        string cpu = NormalizeRequired(options.Cpu, "On-demand sandbox activity declaration requires CPU resources.");
+        string memory = NormalizeRequired(options.Memory, "On-demand sandbox activity declaration requires memory resources.");
+
+        return new Proto.OnDemandSandboxActivityResources
+        {
+            Cpu = cpu,
+            Memory = memory,
+        };
+    }
+
+    static Proto.SubstrateKind GetSubstrateFromEnvironment()
+    {
+        string? substrate = Environment.GetEnvironmentVariable("DTS_SUBSTRATE");
+        if (substrate is null)
+        {
+            return Proto.SubstrateKind.Unspecified;
+        }
+
+        if (substrate.Equals("Sandbox", StringComparison.OrdinalIgnoreCase))
+        {
+            return Proto.SubstrateKind.Sandbox;
+        }
+
+        if (substrate.Equals("AcaSessionPool", StringComparison.OrdinalIgnoreCase))
+        {
+            return Proto.SubstrateKind.AcaSessionPool;
+        }
+
+        return Proto.SubstrateKind.Unspecified;
+    }
+
+    static void ValidateTaskHub(string value, string errorMessage)
+    {
+        _ = NormalizeRequired(value, errorMessage);
+    }
+
+    static string NormalizeWorkerProfileId(string value, string errorMessage)
+    {
+        return NormalizeRequired(value, errorMessage);
+    }
+
+    static string NormalizeRequired(string value, string errorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException(errorMessage);
+        }
+
+        return value.Trim();
+    }
+
+    static string[] NormalizeOptionalStrings(IEnumerable<string> values)
+    {
+        return values
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value.Trim())
+            .ToArray();
+    }
+
+    static string? BuildImageRef(string? registryServer, string? repository, string? tag, string? digest)
+    {
+        if (string.IsNullOrWhiteSpace(repository))
+        {
+            return null;
+        }
+
+        string image = string.IsNullOrWhiteSpace(registryServer) ? repository : $"{registryServer}/{repository}";
+        if (!string.IsNullOrWhiteSpace(digest))
+        {
+            return $"{image}@{digest}";
+        }
+
+        return string.IsNullOrWhiteSpace(tag) ? image : $"{image}:{tag}";
+    }
+
+    static string? Coalesce(params string?[] values)
+    {
+        foreach (string? value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+
+        return null;
+    }
+}

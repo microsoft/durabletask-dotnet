@@ -1,4 +1,4 @@
-﻿# Durable Task .NET Client SDK
+# Durable Task .NET Client SDK
 
 [![Build status](https://github.com/microsoft/durabletask-dotnet/workflows/Validate%20Build/badge.svg)](https://github.com/microsoft/durabletask-dotnet/actions?workflow=Validate+Build)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -165,7 +165,7 @@ The Durable Task Scheduler for Azure Functions is a managed backend that is curr
 
 This SDK can also be used with the Durable Task Scheduler directly, without any Durable Functions dependency. To get started, sign up for the [Durable Task Scheduler private preview](https://techcommunity.microsoft.com/blog/appsonazureblog/announcing-limited-early-access-of-the-durable-task-scheduler-for-azure-durable-/4286526) and follow the instructions to create a new Durable Task Scheduler instance. Once granted access to the private preview GitHub repository, you can find samples and documentation for getting started [here](https://github.com/Azure/Azure-Functions-Durable-Task-Scheduler-Private-Preview/tree/main/samples/portable-sdk/dotnet/AspNetWebApp#readme).
 
-The [serverless activities sample](samples/serverless/README.md) shows how to declare selected activities for DTS-managed serverless execution and build the remote worker container image separately from the declarer app.
+The [on-demand sandbox activities sample](samples/on-demand-sandbox/README.md) shows how to declare selected activities for DTS-managed on-demand sandbox execution and build the remote worker container image separately from the declarer app.
 
 ## Obtaining the Protobuf definitions
 

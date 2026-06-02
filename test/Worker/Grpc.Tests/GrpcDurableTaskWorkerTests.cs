@@ -545,6 +545,68 @@ public class GrpcDurableTaskWorkerTests
         deadline.Should().Be(DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc));
     }
 
+    [Fact]
+    public void Constructor_StrictWorkerVersioningWithoutRegistryContents_DoesNotThrow()
+    {
+        // Arrange — combine UseVersioning(Strict) with multi-version registrations. Both are now part of
+        // the same versioning feature: UseVersioning's match strategy decides which instance versions to
+        // accept off the wire, and the per-task registry decides which implementation handles a surviving
+        // work item. They no longer fail-fast at construction. Registry contents are not inspected here
+        // (see VersionedClassSyntaxIntegrationTests for the runtime composition test).
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Versioning = new DurableTaskWorkerOptions.VersioningOptions
+            {
+                Version = "1",
+                MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+            },
+            Logging = { UseLegacyCategories = false },
+        };
+
+        // Act
+        Action act = () => CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, NullLoggerFactory.Instance);
+
+        // Assert
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Constructor_NoWorkerVersioningWithoutRegistryContents_DoesNotThrow()
+    {
+        // Arrange
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Logging = { UseLegacyCategories = false },
+        };
+
+        // Act
+        Action act = () => CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, NullLoggerFactory.Instance);
+
+        // Assert
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Constructor_StrictWorkerVersioningOnly_DoesNotThrow()
+    {
+        // Arrange
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Versioning = new DurableTaskWorkerOptions.VersioningOptions
+            {
+                Version = "1",
+                MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+            },
+            Logging = { UseLegacyCategories = false },
+        };
+
+        // Act
+        Action act = () => CreateWorker(new GrpcDurableTaskWorkerOptions(), workerOptions, NullLoggerFactory.Instance);
+
+        // Assert
+        act.Should().NotThrow();
+    }
+
     static GrpcDurableTaskWorker CreateWorker(GrpcDurableTaskWorkerOptions grpcOptions)
     {
         return CreateWorker(grpcOptions, new DurableTaskWorkerOptions(), NullLoggerFactory.Instance);
@@ -556,16 +618,25 @@ public class GrpcDurableTaskWorkerTests
         ILoggerFactory loggerFactory)
     {
         Mock<IDurableTaskFactory> factoryMock = new(MockBehavior.Strict);
+        return CreateWorker(grpcOptions, workerOptions, loggerFactory, factoryMock.Object);
+    }
 
+    static GrpcDurableTaskWorker CreateWorker(
+        GrpcDurableTaskWorkerOptions grpcOptions,
+        DurableTaskWorkerOptions workerOptions,
+        ILoggerFactory loggerFactory,
+        IDurableTaskFactory factory)
+    {
         return new GrpcDurableTaskWorker(
             name: "Test",
-            factory: factoryMock.Object,
+            factory: factory,
             grpcOptions: new OptionsMonitorStub<GrpcDurableTaskWorkerOptions>(grpcOptions),
             workerOptions: new OptionsMonitorStub<DurableTaskWorkerOptions>(workerOptions),
             services: Mock.Of<IServiceProvider>(),
             loggerFactory: loggerFactory,
             orchestrationFilter: null,
-            exceptionPropertiesProvider: null);
+            exceptionPropertiesProvider: null,
+            workItemFiltersMonitor: null);
     }
 
     static Task InvokeExecuteAsync(GrpcDurableTaskWorker worker, CancellationToken cancellationToken)

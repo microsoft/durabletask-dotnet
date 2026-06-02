@@ -310,6 +310,11 @@ class TaskOrchestrationDispatcher : WorkItemDispatcher<TaskOrchestrationWorkItem
                     scheduleTaskAction.Version,
                     scheduleTaskAction.Input);
 
+                if (scheduleTaskAction.Tags is { Count: > 0 } tags)
+                {
+                    scheduledEvent.Tags = new Dictionary<string, string>(tags, StringComparer.Ordinal);
+                }
+
                 if (action is GrpcScheduleTaskOrchestratorAction { ParentTraceContext: not null } grpcAction)
                 {
                     scheduledEvent.ParentTraceContext ??= new(grpcAction.ParentTraceContext.TraceParent, grpcAction.ParentTraceContext.TraceState);

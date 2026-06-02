@@ -155,15 +155,48 @@ public class SayHelloTyped : TaskActivity<string, string>
 
 You can find the full sample file, including detailed comments, at [samples/AzureFunctionsApp/HelloCitiesTyped.cs](samples/AzureFunctionsApp/HelloCitiesTyped.cs).
 
+### Versioned class-based orchestrators (standalone worker)
+
+Standalone worker projects can register multiple class-based orchestrators under the same durable task name when each class declares a unique `[DurableTask(Version = "...")]`. Start a specific implementation by setting `StartOrchestrationOptions.Version`.
+
+```csharp
+[DurableTask("OrderWorkflow", Version = "v1")]
+public sealed class OrderWorkflowV1 : TaskOrchestrator<int, string>
+{
+    public override Task<string> RunAsync(TaskOrchestrationContext context, int input)
+        => Task.FromResult($"v1:{input}");
+}
+
+[DurableTask("OrderWorkflow", Version = "v2")]
+public sealed class OrderWorkflowV2 : TaskOrchestrator<int, string>
+{
+    public override Task<string> RunAsync(TaskOrchestrationContext context, int input)
+        => Task.FromResult($"v2:{input}");
+}
+
+string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
+    "OrderWorkflow",
+    input: 5,
+    new StartOrchestrationOptions { Version = new TaskVersion("v2") });
+```
+
+Use `ContinueAsNewOptions.NewVersion` to migrate long-running orchestrations at a replay-safe boundary.
+
+> Per-class `[DurableTask(Version = "...")]` routing composes with `DurableTaskWorkerOptions.Versioning` (or `UseVersioning(...)`). The worker-level `MatchStrategy` gates which instance versions are accepted off the wire, and the registry then dispatches each accepted work item to the implementation that exactly matches its `(name, version)`. Use them together when a single worker needs to host multiple versions of the same name.
+>
+> Azure Functions projects do not support same-name multi-version class-based orchestrators in v1. The source generator reports a diagnostic instead of generating colliding triggers.
+
 ### Compatibility with Durable Functions in-process
 
 This SDK is *not* compatible with Durable Functions for the .NET *in-process* worker. It only works with the newer out-of-process .NET Isolated worker.
 
-## Usage with the Durable Task Scheduler
+## Usage with Durable Task Scheduler
 
-The Durable Task Scheduler for Azure Functions is a managed backend that is currently in preview. Durable Functions apps can use the Durable Task Scheduler as one of its [supported storage providers](https://learn.microsoft.com/azure/azure-functions/durable/durable-functions-storage-providers).
+Durable Task Scheduler provides durable execution in Azure. Durable execution is a fault-tolerant approach to running code that handles failures and interruptions through automatic retries and state persistence.
 
-This SDK can also be used with the Durable Task Scheduler directly, without any Durable Functions dependency. To get started, sign up for the [Durable Task Scheduler private preview](https://techcommunity.microsoft.com/blog/appsonazureblog/announcing-limited-early-access-of-the-durable-task-scheduler-for-azure-durable-/4286526) and follow the instructions to create a new Durable Task Scheduler instance. Once granted access to the private preview GitHub repository, you can find samples and documentation for getting started [here](https://github.com/Azure/Azure-Functions-Durable-Task-Scheduler-Private-Preview/tree/main/samples/portable-sdk/dotnet/AspNetWebApp#readme).
+This SDK can also be used with the Durable Task Scheduler directly, without any Durable Functions dependency. For getting started, you can find documentation and samples [here](https://learn.microsoft.com/en-us/azure/azure-functions/durable/what-is-durable-task).
+
+For runnable DTS emulator examples that demonstrate versioning, see the [WorkerVersioningSample](samples/WorkerVersioningSample/README.md) (deployment-based versioning), the [EternalOrchestrationVersionMigrationSample](samples/EternalOrchestrationVersionMigrationSample/README.md) (multi-version routing with `[DurableTask(Version = "...")]`), the [ActivityVersioningSample](samples/ActivityVersioningSample/README.md) (activity versioning with inherited defaults and explicit override support), and the [EntityWithVersionedOrchestrationSample](samples/EntityWithVersionedOrchestrationSample/README.md) (a single instance migrating v1→v2 via `ContinueAsNew(NewVersion)` while preserving entity-held state).
 
 The [on-demand sandbox activities sample](samples/on-demand-sandbox/README.md) shows how to declare selected activities for DTS-managed on-demand sandbox execution and build the remote worker container image separately from the declarer app.
 

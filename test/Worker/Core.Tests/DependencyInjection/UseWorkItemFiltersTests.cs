@@ -147,7 +147,10 @@ public class UseWorkItemFiltersTests
             provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
         DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
-        // Assert
+        // Assert — unversioned-only registry produces an empty version list (filter wildcard) so the
+        // backend can deliver versioned work items that the factory resolves via the documented
+        // unversioned-fallback in DurableTaskFactory.TryCreateOrchestrator. Mixed and versioned-only
+        // names emit concrete version sets instead.
         actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.Count == 0);
         actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.Count == 0);
     }
@@ -181,13 +184,15 @@ public class UseWorkItemFiltersTests
             provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
         DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
-        // Assert
+        // Assert — unversioned-only registry emits the filter wildcard regardless of MatchStrategy
+        // (so long as it's not Strict), so the backend can deliver versioned work items that the
+        // factory resolves via the documented unversioned-fallback path.
         actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.Count == 0);
         actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.Count == 0);
     }
 
     [Fact]
-    public void WorkItemFilters_DefaultVersionWithVersioningStrict_WhenExplicitlyOptedIn()
+    public void WorkItemFilters_DefaultVersionWithVersioningStrict_NarrowsGeneratedFilters_WhenExplicitlyOptedIn()
     {
         // Arrange
         ServiceCollection services = new();
@@ -216,8 +221,204 @@ public class UseWorkItemFiltersTests
         DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
 
         // Assert
-        actual.Orchestrations.Should().ContainSingle(o => o.Name == nameof(TestOrchestrator) && o.Versions.Contains("1.0"));
-        actual.Activities.Should().ContainSingle(a => a.Name == nameof(TestActivity) && a.Versions.Contains("1.0"));
+        actual.Orchestrations.Should().ContainSingle();
+        actual.Orchestrations[0].Name.Should().Be(nameof(TestOrchestrator));
+        actual.Orchestrations[0].Versions.Should().BeEquivalentTo(["1.0"]);
+        actual.Activities.Should().ContainSingle();
+        actual.Activities[0].Name.Should().Be(nameof(TestActivity));
+        actual.Activities[0].Versions.Should().BeEquivalentTo(["1.0"]);
+    }
+
+    [Fact]
+    public void WorkItemFilters_MixedRegistrationsWithVersioningStrict_UseConfiguredWorkerVersion()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<UnversionedFilterWorkflow>();
+                registry.AddOrchestrator<VersionedFilterWorkflowV2>();
+                registry.AddActivity<UnversionedFilterActivity>();
+                registry.AddActivity<VersionedFilterActivityV2>();
+            });
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    Version = "1.0",
+                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+                };
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle();
+        actual.Orchestrations[0].Name.Should().Be("FilterWorkflow");
+        actual.Orchestrations[0].Versions.Should().BeEquivalentTo(["1.0"]);
+        actual.Activities.Should().ContainSingle();
+        actual.Activities[0].Name.Should().Be("FilterActivity");
+        actual.Activities[0].Versions.Should().BeEquivalentTo(["1.0"]);
+    }
+
+    [Fact]
+    public void WorkItemFilters_StrictWithEmptyWorkerVersion_NarrowsFilterToUnversioned()
+    {
+        // Arrange — Strict + Version="" means the worker only accepts unversioned work items. The filter
+        // must narrow each name to [""] rather than emitting no version constraint (which would match all
+        // versions and leave the worker to reject mismatches after the fact).
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<UnversionedFilterWorkflow>();
+                registry.AddActivity<UnversionedFilterActivity>();
+            });
+            builder.Configure(options =>
+            {
+                options.Versioning = new DurableTaskWorkerOptions.VersioningOptions
+                {
+                    Version = string.Empty,
+                    MatchStrategy = DurableTaskWorkerOptions.VersionMatchStrategy.Strict,
+                };
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle();
+        actual.Orchestrations[0].Name.Should().Be("FilterWorkflow");
+        actual.Orchestrations[0].Versions.Should().BeEquivalentTo([string.Empty]);
+        actual.Activities.Should().ContainSingle();
+        actual.Activities[0].Name.Should().Be("FilterActivity");
+        actual.Activities[0].Versions.Should().BeEquivalentTo([string.Empty]);
+    }
+
+    [Fact]
+    public void WorkItemFilters_VersionedOrchestrators_GroupVersionsByLogicalName()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<VersionedFilterWorkflowV1>();
+                registry.AddOrchestrator<VersionedFilterWorkflowV2>();
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Orchestrations.Should().ContainSingle();
+        actual.Orchestrations[0].Name.Should().Be("FilterWorkflow");
+        actual.Orchestrations[0].Versions.Should().BeEquivalentTo(["v1", "v2"]);
+    }
+
+    [Fact]
+    public void WorkItemFilters_UnversionedAndVersionedOrchestrators_EmitConcreteVersionList()
+    {
+        // Arrange — register both an unversioned and a v2 orchestration under the same logical name.
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddOrchestrator<UnversionedFilterWorkflow>();
+                registry.AddOrchestrator<VersionedFilterWorkflowV2>();
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert — emit ["", "v2"] (the literal registered set) instead of [] (match all). The factory's
+        // dispatch rule refuses unversioned-fallback once any versioned registration exists, so emitting
+        // [] here would cause the backend to stream unregistered versions the worker would then reject.
+        actual.Orchestrations.Should().ContainSingle();
+        actual.Orchestrations[0].Name.Should().Be("FilterWorkflow");
+        actual.Orchestrations[0].Versions.Should().BeEquivalentTo([string.Empty, "v2"]);
+    }
+
+    [Fact]
+    public void WorkItemFilters_VersionedActivities_GroupVersionsByLogicalName()
+    {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddActivity<VersionedFilterActivityV1>();
+                registry.AddActivity<VersionedFilterActivityV2>();
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert
+        actual.Activities.Should().ContainSingle();
+        actual.Activities[0].Name.Should().Be("FilterActivity");
+        actual.Activities[0].Versions.Should().BeEquivalentTo(["v1", "v2"]);
+    }
+
+    [Fact]
+    public void WorkItemFilters_UnversionedAndVersionedActivities_EmitConcreteVersionList()
+    {
+        // Arrange — register both an unversioned and a v2 activity under the same logical name.
+        ServiceCollection services = new();
+        services.AddDurableTaskWorker("test", builder =>
+        {
+            builder.AddTasks(registry =>
+            {
+                registry.AddActivity<UnversionedFilterActivity>();
+                registry.AddActivity<VersionedFilterActivityV2>();
+            });
+            builder.UseWorkItemFilters();
+        });
+
+        // Act
+        ServiceProvider provider = services.BuildServiceProvider();
+        IOptionsMonitor<DurableTaskWorkerWorkItemFilters> filtersMonitor =
+            provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>();
+        DurableTaskWorkerWorkItemFilters actual = filtersMonitor.Get("test");
+
+        // Assert — emit ["", "v2"] (the literal registered set) instead of [] (match all). Same rationale
+        // as the orchestrator-side test: dispatch refuses unversioned-fallback once any versioned
+        // registration exists.
+        actual.Activities.Should().ContainSingle();
+        actual.Activities[0].Name.Should().Be("FilterActivity");
+        actual.Activities[0].Versions.Should().BeEquivalentTo([string.Empty, "v2"]);
     }
 
     [Fact]
@@ -804,11 +1005,65 @@ public class UseWorkItemFiltersTests
         }
     }
 
+    [DurableTask("FilterWorkflow", Version = "v1")]
+    sealed class VersionedFilterWorkflowV1 : TaskOrchestrator<string, string>
+    {
+        public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+        {
+            return Task.FromResult("v1");
+        }
+    }
+
+    [DurableTask("FilterWorkflow", Version = "v2")]
+    sealed class VersionedFilterWorkflowV2 : TaskOrchestrator<string, string>
+    {
+        public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+        {
+            return Task.FromResult("v2");
+        }
+    }
+
+    [DurableTask("FilterWorkflow")]
+    sealed class UnversionedFilterWorkflow : TaskOrchestrator<string, string>
+    {
+        public override Task<string> RunAsync(TaskOrchestrationContext context, string input)
+        {
+            return Task.FromResult("unversioned");
+        }
+    }
+
     sealed class TestActivity : TaskActivity<object, object>
     {
         public override Task<object> RunAsync(TaskActivityContext context, object input)
         {
             throw new NotImplementedException();
+        }
+    }
+
+    [DurableTask("FilterActivity", Version = "v1")]
+    sealed class VersionedFilterActivityV1 : TaskActivity<string, string>
+    {
+        public override Task<string> RunAsync(TaskActivityContext context, string input)
+        {
+            return Task.FromResult("v1");
+        }
+    }
+
+    [DurableTask("FilterActivity", Version = "v2")]
+    sealed class VersionedFilterActivityV2 : TaskActivity<string, string>
+    {
+        public override Task<string> RunAsync(TaskActivityContext context, string input)
+        {
+            return Task.FromResult("v2");
+        }
+    }
+
+    [DurableTask("FilterActivity")]
+    sealed class UnversionedFilterActivity : TaskActivity<string, string>
+    {
+        public override Task<string> RunAsync(TaskActivityContext context, string input)
+        {
+            return Task.FromResult("unversioned");
         }
     }
 

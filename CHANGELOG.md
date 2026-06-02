@@ -5,6 +5,14 @@
 - Updated private preview on-demand sandbox worker profile declarations to use `OnDemandSandboxOptions.AddActivity(...)`, and updated the on-demand sandbox sample to share activity name constants between the main app and remote worker.
 - Added SDK-side validation for private preview on-demand sandbox CPU and memory resource quantities.
 
+
+## v1.25.0-preview.1
+- Implement per-orchestration and per-activity versioning ([#695](https://github.com/microsoft/durabletask-dotnet/pull/695))
+- Add es-metadata.yml to schema 1.0.0 ([#722](https://github.com/microsoft/durabletask-dotnet/pull/722))
+- Release v1.24.2 ([#724](https://github.com/microsoft/durabletask-dotnet/pull/724))
+- Add per-task versioning via `[DurableTask(Version = "...")]`, `TaskOptions.Version`, and `StartOrchestrationOptions.Version` ([#695](https://github.com/microsoft/durabletask-dotnet/pull/695))
+
+
 ## v1.24.2
 - Bump DI.Abstractions and Bcl.AsyncInterfaces to 9.0.1 ([#3433](https://github.com/microsoft/durabletask-dotnet/pull/3433)) (#723)
 - Validate UseWorkItemFilters names against registered tasks at worker build time ([#719](https://github.com/microsoft/durabletask-dotnet/pull/719))

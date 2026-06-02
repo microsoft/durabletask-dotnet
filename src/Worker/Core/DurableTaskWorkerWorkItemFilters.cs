@@ -40,26 +40,56 @@ public class DurableTaskWorkerWorkItemFilters
     /// <returns>A new instance of <see cref="DurableTaskWorkerWorkItemFilters"/> constructed from the provided registry.</returns>
     internal static DurableTaskWorkerWorkItemFilters FromDurableTaskRegistry(DurableTaskRegistry registry, DurableTaskWorkerOptions? workerOptions)
     {
-        // TODO: Support multiple versions per orchestration/activity.
-        // For now, fetch the version based on the versioning match strategy if defined. If undefined, default to null (all versions match).
-        IReadOnlyList<string> versions = [];
-        if (workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict)
-        {
-            versions = [workerOptions.Versioning.Version];
-        }
+        // Under MatchStrategy.Strict the worker accepts only instances whose version matches the
+        // worker's configured Version exactly — including the empty/unversioned case. The filter must
+        // narrow each name's version list to that single value (treating null as empty) so the backend
+        // does not stream work items the worker will then reject after the fact.
+        IReadOnlyList<string>? strictWorkerVersions =
+            workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict
+                ? [workerOptions.Versioning.Version ?? string.Empty]
+                : null;
+
+        // Orchestration filters group registrations by logical name and emit the concrete distinct
+        // version set actually registered (treating null/unversioned as ""). Strict mode overrides
+        // this with the single configured worker version. For unversioned-only names (no versioned
+        // registration exists for the name), we emit an empty version list — the filter wildcard —
+        // so the backend can deliver versioned work items that the factory will then resolve via
+        // the documented unversioned fallback in DurableTaskFactory.TryCreateOrchestrator. When a
+        // name has at least one versioned registration, the factory refuses unversioned-fallback,
+        // so emitting the concrete version set prevents the backend from streaming work items the
+        // worker would then reject after the fact.
+        List<OrchestrationFilter> orchestrationFilters = registry.OrchestratorsByVersion
+            .GroupBy(orchestration => orchestration.Key.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                IReadOnlyList<string> versions = strictWorkerVersions ?? GetFilterVersions(group.Select(entry => entry.Key.Version));
+
+                return new OrchestrationFilter
+                {
+                    Name = group.Key,
+                    Versions = versions,
+                };
+            })
+            .ToList();
+
+        List<ActivityFilter> activityFilters = registry.ActivitiesByVersion
+            .GroupBy(activity => activity.Key.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                IReadOnlyList<string> versions = strictWorkerVersions ?? GetFilterVersions(group.Select(entry => entry.Key.Version));
+
+                return new ActivityFilter
+                {
+                    Name = group.Key,
+                    Versions = versions,
+                };
+            })
+            .ToList();
 
         return new DurableTaskWorkerWorkItemFilters
         {
-            Orchestrations = registry.Orchestrators.Select(orchestration => new OrchestrationFilter
-            {
-                Name = orchestration.Key,
-                Versions = versions,
-            }).ToList(),
-            Activities = registry.Activities.Select(activity => new ActivityFilter
-            {
-                Name = activity.Key,
-                Versions = versions,
-            }).ToList(),
+            Orchestrations = orchestrationFilters,
+            Activities = activityFilters,
             ExcludedActivities = [],
             Entities = registry.Entities.Select(entity => new EntityFilter
             {
@@ -67,6 +97,27 @@ public class DurableTaskWorkerWorkItemFilters
                 Name = entity.Key.ToString(),
             }).ToList(),
         };
+
+        static IReadOnlyList<string> GetFilterVersions(IEnumerable<string?> versions)
+        {
+            // Normalize null to "" so an unversioned registration appears consistently.
+            string[] normalized = versions
+                .Select(version => version ?? string.Empty)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            // Unversioned-only: emit the wildcard match-all (empty list) so the backend can deliver
+            // versioned work items that the factory will resolve via unversioned fallback. Without
+            // this, callers asking for a specific version would be filtered out at the backend even
+            // though the worker can handle them.
+            if (normalized.Length == 1 && normalized[0].Length == 0)
+            {
+                return [];
+            }
+
+            return normalized;
+        }
     }
 
     /// <summary>

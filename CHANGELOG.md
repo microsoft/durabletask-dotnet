@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Updated private preview on-demand sandbox worker profile declarations to use `OnDemandSandboxOptions.AddActivity(...)`, and updated the on-demand sandbox sample to share activity name constants between the main app and remote worker.
+- Added SDK-side validation for private preview on-demand sandbox CPU and memory resource quantities.
 
 ## v1.24.2
 - Bump DI.Abstractions and Bcl.AsyncInterfaces to 9.0.1 ([#3433](https://github.com/microsoft/durabletask-dotnet/pull/3433)) (#723)

@@ -47,4 +47,40 @@ static partial class Logs
         Level = LogLevel.Error,
         Message = "On-demand sandbox activity worker registration stream failed hub={Hub}")]
     public static partial void OnDemandSandboxActivityWorkerRegistrationFailed(ILogger logger, Exception exception, string hub);
+
+    [LoggerMessage(
+        EventId = 8,
+        Level = LogLevel.Debug,
+        Message = "Ignoring on-demand sandbox worker session completion failure during shutdown.")]
+    public static partial void OnDemandSandboxWorkerSessionCompletionFailureIgnored(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 9,
+        Level = LogLevel.Debug,
+        Message = "Ignoring on-demand sandbox worker registration pump cancellation during shutdown.")]
+    public static partial void OnDemandSandboxWorkerRegistrationPumpCancellationIgnored(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 10,
+        Level = LogLevel.Debug,
+        Message = "Ignoring on-demand sandbox worker registration pump failure during shutdown.")]
+    public static partial void OnDemandSandboxWorkerRegistrationPumpFailureIgnored(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 11,
+        Level = LogLevel.Debug,
+        Message = "Ignoring on-demand sandbox worker session dispose failure during shutdown.")]
+    public static partial void OnDemandSandboxWorkerSessionDisposeFailureIgnored(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 12,
+        Level = LogLevel.Debug,
+        Message = "Ignoring on-demand sandbox heartbeat pump cancellation after registration session completion.")]
+    public static partial void OnDemandSandboxHeartbeatPumpCancellationIgnored(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 13,
+        Level = LogLevel.Debug,
+        Message = "Ignoring on-demand sandbox heartbeat pump failure after registration session completion.")]
+    public static partial void OnDemandSandboxHeartbeatPumpFailureIgnored(ILogger logger, Exception exception);
 }

@@ -51,12 +51,12 @@ public sealed class OnDemandSandboxOptions
     public string? ImageDigest { get; set; }
 
     /// <summary>
-    /// Gets or sets the CPU quantity declared for each sandbox.
+    /// Gets or sets the CPU quantity declared for each sandbox. Supported formats include <c>500m</c>, <c>2</c>, and <c>0.5</c>.
     /// </summary>
     public string Cpu { get; set; } = "1000m";
 
     /// <summary>
-    /// Gets or sets the memory quantity declared for each sandbox.
+    /// Gets or sets the memory quantity declared for each sandbox. Supported formats include <c>256Mi</c>, <c>1Gi</c>, and <c>2048</c>.
     /// </summary>
     public string Memory { get; set; } = "2048Mi";
 

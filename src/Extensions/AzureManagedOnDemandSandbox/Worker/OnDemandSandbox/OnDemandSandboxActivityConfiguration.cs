@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Globalization;
 using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 
 namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
@@ -144,8 +145,8 @@ static class OnDemandSandboxActivityConfiguration
 
     static Proto.OnDemandSandboxActivityResources BuildResources(OnDemandSandboxOptions options)
     {
-        string cpu = NormalizeRequired(options.Cpu, "On-demand sandbox activity declaration requires CPU resources.");
-        string memory = NormalizeRequired(options.Memory, "On-demand sandbox activity declaration requires memory resources.");
+        string cpu = NormalizeCpu(options.Cpu);
+        string memory = NormalizeMemory(options.Memory);
 
         return new Proto.OnDemandSandboxActivityResources
         {
@@ -195,6 +196,87 @@ static class OnDemandSandboxActivityConfiguration
         return value.Trim();
     }
 
+    static string NormalizeCpu(string value)
+    {
+        string normalized = NormalizeRequired(value, "On-demand sandbox activity declaration requires CPU resources.");
+        if (TryParseCpuMillicores(normalized) is not { } milliCpu || milliCpu <= 0)
+        {
+            throw new InvalidOperationException(
+                "On-demand sandbox activity CPU resources must be a positive Kubernetes-style CPU quantity. " +
+                "Use formats like '500m', '2', or '0.5'.");
+        }
+
+        return normalized;
+    }
+
+    static string NormalizeMemory(string value)
+    {
+        string normalized = NormalizeRequired(value, "On-demand sandbox activity declaration requires memory resources.");
+        if (TryParseMemoryMiB(normalized) is not { } memoryMiB || memoryMiB <= 0)
+        {
+            throw new InvalidOperationException(
+                "On-demand sandbox activity memory resources must be a positive Kubernetes-style memory quantity. " +
+                "Use formats like '256Mi', '1Gi', or '2048'.");
+        }
+
+        return normalized;
+    }
+
+    static long? TryParseCpuMillicores(string value)
+    {
+        if (value.EndsWith('m') || value.EndsWith('M'))
+        {
+            return decimal.TryParse(
+                value[..^1],
+                NumberStyles.Number,
+                CultureInfo.InvariantCulture,
+                out decimal milliCpu)
+                ? (long)milliCpu
+                : null;
+        }
+
+        return decimal.TryParse(
+            value,
+            NumberStyles.Number,
+            CultureInfo.InvariantCulture,
+            out decimal cores)
+            ? (long)(cores * 1000)
+            : null;
+    }
+
+    static long? TryParseMemoryMiB(string value)
+    {
+        if (value.EndsWith("Gi", StringComparison.OrdinalIgnoreCase))
+        {
+            return decimal.TryParse(
+                value[..^2],
+                NumberStyles.Number,
+                CultureInfo.InvariantCulture,
+                out decimal gib)
+                ? (long)(gib * 1024)
+                : null;
+        }
+
+        if (value.EndsWith("Mi", StringComparison.OrdinalIgnoreCase))
+        {
+            return decimal.TryParse(
+                value[..^2],
+                NumberStyles.Number,
+                CultureInfo.InvariantCulture,
+                out decimal mib)
+                ? (long)mib
+                : null;
+        }
+
+        return decimal.TryParse(
+            value,
+            NumberStyles.Number,
+            CultureInfo.InvariantCulture,
+            out decimal parsed)
+            ? (long)parsed
+            : null;
+    }
+
     static string[] NormalizeOptionalStrings(IEnumerable<string> values)
     {
         return values
@@ -221,14 +303,9 @@ static class OnDemandSandboxActivityConfiguration
 
     static string? Coalesce(params string?[] values)
     {
-        foreach (string? value in values)
-        {
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                return value.Trim();
-            }
-        }
-
-        return null;
+        return values
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value!.Trim())
+            .FirstOrDefault();
     }
 }

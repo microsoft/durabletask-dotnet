@@ -101,6 +101,56 @@ public class OnDemandSandboxActivitiesTests
         declaration.MaxConcurrentActivities.Should().Be(7);
     }
 
+    [Theory]
+    [InlineData("500m", "1024Mi")]
+    [InlineData("0.5", "1Gi")]
+    [InlineData("2", "2048")]
+    public void OnDemandSandboxActivityConfiguration_BuildDeclaration_AcceptsAdcResourceQuantities(
+        string cpu,
+        string memory)
+    {
+        // Arrange
+        OnDemandSandboxOptions options = CreateDeclarationOptions();
+        options.Cpu = cpu;
+        options.Memory = memory;
+
+        // Act
+        OnDemandSandboxActivityDeclaration declaration = OnDemandSandboxActivityConfiguration.BuildDeclaration(
+            options,
+            OnDemandSandboxActivityConfiguration.ResolveActivityNames(options.ActivityNames));
+
+        // Assert
+        declaration.Resources.Cpu.Should().Be(cpu);
+        declaration.Resources.Memory.Should().Be(memory);
+    }
+
+    [Theory]
+    [InlineData("0", "1024Mi", "CPU")]
+    [InlineData("0m", "1024Mi", "CPU")]
+    [InlineData("500Mi", "1024Mi", "CPU")]
+    [InlineData("500m", "0", "memory")]
+    [InlineData("500m", "0Mi", "memory")]
+    [InlineData("500m", "500m", "memory")]
+    public void OnDemandSandboxActivityConfiguration_BuildDeclaration_RejectsInvalidAdcResourceQuantities(
+        string cpu,
+        string memory,
+        string expectedMessage)
+    {
+        // Arrange
+        OnDemandSandboxOptions options = CreateDeclarationOptions();
+        options.Cpu = cpu;
+        options.Memory = memory;
+
+        // Act
+        Action action = () => OnDemandSandboxActivityConfiguration.BuildDeclaration(
+            options,
+            OnDemandSandboxActivityConfiguration.ResolveActivityNames(options.ActivityNames));
+
+        // Assert
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage($"*{expectedMessage}*");
+    }
+
     [Fact]
     public async Task OnDemandSandboxActivitiesClientAdapter_SendsTaskHubMetadata()
     {
@@ -784,6 +834,21 @@ public class OnDemandSandboxActivitiesTests
         // Assert
         action.Should().Throw<InvalidOperationException>()
             .WithMessage("DTS_TASK_HUB must be injected by DTS for on-demand sandbox workers.");
+    }
+
+    static OnDemandSandboxOptions CreateDeclarationOptions()
+    {
+        OnDemandSandboxOptions options = new()
+        {
+            TaskHub = TaskHub,
+            WorkerProfileId = "profile-a",
+            ContainerImage = "mcr.microsoft.com/durabletask/demo-worker:1.0",
+            Cpu = "500m",
+            Memory = "1024Mi",
+            MaxConcurrentActivities = 7,
+        };
+        options.AddActivity("RemoteHello");
+        return options;
     }
 
     [OnDemandSandboxWorkerProfile("annotated-profile")]

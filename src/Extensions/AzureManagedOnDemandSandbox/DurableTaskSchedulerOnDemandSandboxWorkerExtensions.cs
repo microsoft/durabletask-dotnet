@@ -252,12 +252,9 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
         IEnumerable<string> activityNames)
     {
         Dictionary<string, DurableTaskWorkerWorkItemFilters.ActivityFilter> merged = new(StringComparer.OrdinalIgnoreCase);
-        foreach (DurableTaskWorkerWorkItemFilters.ActivityFilter filter in existingFilters)
+        foreach (DurableTaskWorkerWorkItemFilters.ActivityFilter filter in existingFilters.Where(static filter => !string.IsNullOrWhiteSpace(filter.Name)))
         {
-            if (!string.IsNullOrWhiteSpace(filter.Name))
-            {
-                merged[filter.Name] = filter;
-            }
+            merged[filter.Name] = filter;
         }
 
         foreach (string activityName in activityNames)

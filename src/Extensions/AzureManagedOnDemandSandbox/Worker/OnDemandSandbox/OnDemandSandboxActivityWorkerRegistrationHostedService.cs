@@ -108,6 +108,7 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
             }
             catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or RpcException)
             {
+                Logs.OnDemandSandboxWorkerSessionCompletionFailureIgnored(this.logger, ex);
             }
         }
 
@@ -117,11 +118,13 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
             {
                 await localPump.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
             {
+                Logs.OnDemandSandboxWorkerRegistrationPumpCancellationIgnored(this.logger, ex);
             }
             catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or RpcException)
             {
+                Logs.OnDemandSandboxWorkerRegistrationPumpFailureIgnored(this.logger, ex);
             }
         }
 
@@ -167,7 +170,9 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
         return TimeSpan.FromTicks(jitteredTicks);
     }
 
-    static async ValueTask DisposeSessionAsync(IOnDemandSandboxActivityWorkerSession registrationSession)
+    static async ValueTask DisposeSessionAsync(
+        IOnDemandSandboxActivityWorkerSession registrationSession,
+        ILogger logger)
     {
         try
         {
@@ -175,6 +180,7 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
         }
         catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or RpcException)
         {
+            Logs.OnDemandSandboxWorkerSessionDisposeFailureIgnored(logger, ex);
         }
     }
 
@@ -215,27 +221,59 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
             {
                 break;
             }
-            catch (Exception ex) when (!IsRetriableRegistrationFailure(ex))
+            catch (RpcException ex) when (IsRetriableRegistrationFailure(ex))
             {
-                Logs.OnDemandSandboxActivityWorkerRegistrationFailed(this.logger, ex, this.options.TaskHub);
-                this.lifetime?.StopApplication();
-                break;
+                retryDelay = await this.HandleRetriableRegistrationFailureAsync(
+                    ex,
+                    retryDelay,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (IOException ex) when (IsRetriableRegistrationFailure(ex))
+            {
+                retryDelay = await this.HandleRetriableRegistrationFailureAsync(
+                    ex,
+                    retryDelay,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException ex) when (IsRetriableRegistrationFailure(ex))
+            {
+                retryDelay = await this.HandleRetriableRegistrationFailureAsync(
+                    ex,
+                    retryDelay,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException ex) when (IsRetriableRegistrationFailure(ex))
+            {
+                retryDelay = await this.HandleRetriableRegistrationFailureAsync(
+                    ex,
+                    retryDelay,
+                    cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 Logs.OnDemandSandboxActivityWorkerRegistrationFailed(this.logger, ex, this.options.TaskHub);
-                await this.DelayBeforeReconnectAsync(retryDelay, cancellationToken).ConfigureAwait(false);
-                retryDelay = this.GetNextRetryDelay(retryDelay);
+                this.lifetime?.StopApplication();
+                break;
             }
             finally
             {
                 if (registrationSession is not null)
                 {
                     this.ClearCurrentSession(registrationSession);
-                    await DisposeSessionAsync(registrationSession).ConfigureAwait(false);
+                    await DisposeSessionAsync(registrationSession, this.logger).ConfigureAwait(false);
                 }
             }
         }
+    }
+
+    async Task<TimeSpan> HandleRetriableRegistrationFailureAsync(
+        Exception exception,
+        TimeSpan retryDelay,
+        CancellationToken cancellationToken)
+    {
+        Logs.OnDemandSandboxActivityWorkerRegistrationFailed(this.logger, exception, this.options.TaskHub);
+        await this.DelayBeforeReconnectAsync(retryDelay, cancellationToken).ConfigureAwait(false);
+        return this.GetNextRetryDelay(retryDelay);
     }
 
     async Task RunRegistrationSessionAsync(
@@ -254,12 +292,24 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
             {
                 await heartbeatTask.ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (heartbeatCts.IsCancellationRequested)
+            catch (OperationCanceledException ex) when (heartbeatCts.IsCancellationRequested)
             {
+                Logs.OnDemandSandboxHeartbeatPumpCancellationIgnored(this.logger, ex);
             }
-            catch (Exception)
+            catch (RpcException ex)
             {
                 // The server response is authoritative once the response task wins the race.
+                Logs.OnDemandSandboxHeartbeatPumpFailureIgnored(this.logger, ex);
+            }
+            catch (IOException ex)
+            {
+                // The server response is authoritative once the response task wins the race.
+                Logs.OnDemandSandboxHeartbeatPumpFailureIgnored(this.logger, ex);
+            }
+            catch (ObjectDisposedException ex)
+            {
+                // The server response is authoritative once the response task wins the race.
+                Logs.OnDemandSandboxHeartbeatPumpFailureIgnored(this.logger, ex);
             }
 
             await completionTask.ConfigureAwait(false);

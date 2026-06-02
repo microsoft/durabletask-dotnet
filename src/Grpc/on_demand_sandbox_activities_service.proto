@@ -53,7 +53,6 @@ message OnDemandSandboxActivityWorkerHeartbeat {
 }
 
 message OnDemandSandboxActivityWorkerSessionResult {
-  bool accepted = 1;
   string message = 2;
 }
 

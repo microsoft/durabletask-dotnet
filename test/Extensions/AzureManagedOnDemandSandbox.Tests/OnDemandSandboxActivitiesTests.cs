@@ -1079,7 +1079,7 @@ public class OnDemandSandboxActivitiesTests
                 this.CompleteCalledWhileWriteActive = this.activeWrites > 0;
             }
 
-            this.completion.TrySetResult(new OnDemandSandboxActivityWorkerSessionResult { Accepted = true });
+            this.completion.TrySetResult(new OnDemandSandboxActivityWorkerSessionResult());
             await this.completion.Task.ConfigureAwait(false);
         }
 

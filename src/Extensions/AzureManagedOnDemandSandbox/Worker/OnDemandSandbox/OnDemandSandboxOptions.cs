@@ -51,6 +51,11 @@ public sealed class OnDemandSandboxOptions
     public string? ImageDigest { get; set; }
 
     /// <summary>
+    /// Gets or sets the user-assigned managed identity client ID ADC uses to pull the on-demand sandbox worker image.
+    /// </summary>
+    public string? ImagePullManagedIdentityClientId { get; set; }
+
+    /// <summary>
     /// Gets or sets the user-assigned managed identity client ID workers use to authenticate to the DTS scheduler.
     /// </summary>
     public string? SchedulerManagedIdentityClientId { get; set; }

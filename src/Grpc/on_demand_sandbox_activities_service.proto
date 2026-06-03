@@ -70,6 +70,7 @@ message OnDemandSandboxActivityDeclaration {
 
 message OnDemandSandboxActivityImage {
   string image_ref = 1;
+  string managed_identity_client_id = 2;
 }
 
 message OnDemandSandboxActivityResources {

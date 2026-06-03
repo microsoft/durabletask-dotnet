@@ -145,6 +145,9 @@ static class OnDemandSandboxActivityConfiguration
         Proto.OnDemandSandboxActivityImage image = new()
         {
             ImageRef = imageRef,
+            ManagedIdentityClientId = NormalizeRequired(
+                options.ImagePullManagedIdentityClientId ?? string.Empty,
+                "On-demand sandbox activity declaration requires the managed identity client ID ADC uses to pull the worker image."),
         };
 
         return image;

@@ -68,6 +68,7 @@ public class OnDemandSandboxActivitiesTests
             TaskHub = TaskHub,
             WorkerProfileId = "profile-a",
             ContainerImage = "mcr.microsoft.com/durabletask/demo-worker:1.0",
+            ImagePullManagedIdentityClientId = "image-pull-client-id",
             SchedulerManagedIdentityClientId = "scheduler-client-id",
             Cpu = "500m",
             Memory = "1024Mi",
@@ -95,6 +96,7 @@ public class OnDemandSandboxActivitiesTests
         declaration.WorkerProfileId.Should().Be("profile-a");
         declaration.ActivityNames.Should().Equal("RemoteHello");
         declaration.Image.ImageRef.Should().Be("mcr.microsoft.com/durabletask/demo-worker:1.0");
+        declaration.Image.ManagedIdentityClientId.Should().Be("image-pull-client-id");
         declaration.SchedulerManagedIdentityClientId.Should().Be("scheduler-client-id");
         declaration.Resources.Cpu.Should().Be("500m");
         declaration.Resources.Memory.Should().Be("1024Mi");
@@ -169,6 +171,23 @@ public class OnDemandSandboxActivitiesTests
         // Assert
         action.Should().Throw<InvalidOperationException>()
             .WithMessage("*managed identity client ID*");
+    }
+
+    [Fact]
+    public void OnDemandSandboxActivityConfiguration_BuildDeclaration_RequiresImagePullManagedIdentityClientId()
+    {
+        // Arrange
+        OnDemandSandboxOptions options = CreateDeclarationOptions();
+        options.ImagePullManagedIdentityClientId = " ";
+
+        // Act
+        Action action = () => OnDemandSandboxActivityConfiguration.BuildDeclaration(
+            options,
+            OnDemandSandboxActivityConfiguration.ResolveActivityNames(options.ActivityNames));
+
+        // Assert
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("*managed identity client ID ADC uses to pull the worker image*");
     }
 
     [Fact]
@@ -247,6 +266,7 @@ public class OnDemandSandboxActivitiesTests
         {
             TaskHub = TaskHub,
             ContainerImage = "mcr.microsoft.com/durabletask/demo-worker:1.0",
+            ImagePullManagedIdentityClientId = "image-pull-client-id",
             SchedulerManagedIdentityClientId = "scheduler-client-id",
         };
         options.AddActivity("RemoteHello");
@@ -297,6 +317,7 @@ public class OnDemandSandboxActivitiesTests
         {
             TaskHub = TaskHub,
             ContainerImage = "example.com/repo/worker@sha256:abc",
+            ImagePullManagedIdentityClientId = "image-pull-client-id",
             SchedulerManagedIdentityClientId = "scheduler-client-id",
         };
         options.AddActivity("RemoteHello");
@@ -697,6 +718,7 @@ public class OnDemandSandboxActivitiesTests
         declaration.WorkerProfileId.Should().Be("annotated-profile");
         declaration.ActivityNames.Should().Equal("ConfiguredRemoteHello");
         declaration.Image.ImageRef.Should().Be("example.com/repo/annotated-worker:latest");
+        declaration.Image.ManagedIdentityClientId.Should().Be("image-pull-client-id");
         declaration.SchedulerManagedIdentityClientId.Should().Be("scheduler-client-id");
         declaration.Resources.Cpu.Should().Be("500m");
         declaration.Resources.Memory.Should().Be("1024Mi");
@@ -919,6 +941,7 @@ public class OnDemandSandboxActivitiesTests
             TaskHub = TaskHub,
             WorkerProfileId = "profile-a",
             ContainerImage = "mcr.microsoft.com/durabletask/demo-worker:1.0",
+            ImagePullManagedIdentityClientId = "image-pull-client-id",
             SchedulerManagedIdentityClientId = "scheduler-client-id",
             Cpu = "500m",
             Memory = "1024Mi",
@@ -937,6 +960,7 @@ public class OnDemandSandboxActivitiesTests
         {
             ConfigureCallCount++;
             options.ContainerImage = "example.com/repo/annotated-worker:latest";
+            options.ImagePullManagedIdentityClientId = "image-pull-client-id";
             options.SchedulerManagedIdentityClientId = "scheduler-client-id";
             options.Cpu = "500m";
             options.Memory = "1024Mi";

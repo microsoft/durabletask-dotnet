@@ -50,12 +50,17 @@ static class OnDemandSandboxActivityConfiguration
             throw new InvalidOperationException("On-demand sandbox activity max concurrent activities must be greater than zero.");
         }
 
+        string schedulerManagedIdentityClientId = NormalizeRequired(
+            options.SchedulerManagedIdentityClientId ?? string.Empty,
+            "On-demand sandbox activity declaration requires the managed identity client ID workers use to connect to the DTS scheduler.");
+
         Proto.OnDemandSandboxActivityDeclaration declaration = new()
         {
             WorkerProfileId = workerProfileId,
             Image = BuildImage(options),
             Resources = BuildResources(options),
             MaxConcurrentActivities = options.MaxConcurrentActivities,
+            SchedulerManagedIdentityClientId = schedulerManagedIdentityClientId,
         };
 
         declaration.ActivityNames.AddRange(activityNames);
@@ -137,10 +142,12 @@ static class OnDemandSandboxActivityConfiguration
             throw new InvalidOperationException("On-demand sandbox activity image metadata requires a container image reference.");
         }
 
-        return new Proto.OnDemandSandboxActivityImage
+        Proto.OnDemandSandboxActivityImage image = new()
         {
             ImageRef = imageRef,
         };
+
+        return image;
     }
 
     static Proto.OnDemandSandboxActivityResources BuildResources(OnDemandSandboxOptions options)

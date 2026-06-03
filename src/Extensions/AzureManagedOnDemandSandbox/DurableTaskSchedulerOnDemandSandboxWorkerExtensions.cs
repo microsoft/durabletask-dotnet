@@ -3,6 +3,8 @@
 
 using System.Collections.Generic;
 using System.Linq;
+using Azure.Core;
+using Azure.Identity;
 using Grpc.Net.Client;
 using Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 using Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
@@ -206,8 +208,19 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
             options.EndpointAddress = endpoint;
             options.TaskHubName = taskHub;
             options.AllowInsecureCredentials = true;
+            if (UsesManagedIdentityAuthentication(Environment.GetEnvironmentVariable("DTS_AUTHENTICATION")))
+            {
+                options.Credential = CreateManagedIdentityCredential();
+                options.AllowInsecureCredentials = false;
+            }
         });
     }
+
+    static bool UsesManagedIdentityAuthentication(string? authentication) =>
+        string.Equals(authentication, "ManagedIdentity", StringComparison.OrdinalIgnoreCase);
+
+    static TokenCredential CreateManagedIdentityCredential() =>
+        new ManagedIdentityCredential(ManagedIdentityId.FromUserAssignedClientId(GetRequiredEnvironmentVariable("DTS_UMI_CLIENT_ID")));
 
     static string GetRequiredEnvironmentVariable(string name)
     {

@@ -65,6 +65,7 @@ message OnDemandSandboxActivityDeclaration {
   OnDemandSandboxActivityResources resources = 7;
   repeated string entrypoint = 8;
   repeated string cmd = 9;
+  string scheduler_managed_identity_client_id = 10;
 }
 
 message OnDemandSandboxActivityImage {

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Reflection;
+using Azure.Identity;
 using FluentAssertions;
 using Grpc.Core;
 using Microsoft.DurableTask.Protobuf.OnDemandSandbox;
@@ -67,6 +68,7 @@ public class OnDemandSandboxActivitiesTests
             TaskHub = TaskHub,
             WorkerProfileId = "profile-a",
             ContainerImage = "mcr.microsoft.com/durabletask/demo-worker:1.0",
+            SchedulerManagedIdentityClientId = "scheduler-client-id",
             Cpu = "500m",
             Memory = "1024Mi",
             MaxConcurrentActivities = 7,
@@ -93,6 +95,7 @@ public class OnDemandSandboxActivitiesTests
         declaration.WorkerProfileId.Should().Be("profile-a");
         declaration.ActivityNames.Should().Equal("RemoteHello");
         declaration.Image.ImageRef.Should().Be("mcr.microsoft.com/durabletask/demo-worker:1.0");
+        declaration.SchedulerManagedIdentityClientId.Should().Be("scheduler-client-id");
         declaration.Resources.Cpu.Should().Be("500m");
         declaration.Resources.Memory.Should().Be("1024Mi");
         declaration.EnvironmentVariables.Should().ContainKey("CUSTOM_SETTING").WhoseValue.Should().Be("enabled");
@@ -149,6 +152,23 @@ public class OnDemandSandboxActivitiesTests
         // Assert
         action.Should().Throw<InvalidOperationException>()
             .WithMessage($"*{expectedMessage}*");
+    }
+
+    [Fact]
+    public void OnDemandSandboxActivityConfiguration_BuildDeclaration_RequiresSchedulerManagedIdentityClientId()
+    {
+        // Arrange
+        OnDemandSandboxOptions options = CreateDeclarationOptions();
+        options.SchedulerManagedIdentityClientId = " ";
+
+        // Act
+        Action action = () => OnDemandSandboxActivityConfiguration.BuildDeclaration(
+            options,
+            OnDemandSandboxActivityConfiguration.ResolveActivityNames(options.ActivityNames));
+
+        // Assert
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("*managed identity client ID*");
     }
 
     [Fact]
@@ -227,6 +247,7 @@ public class OnDemandSandboxActivitiesTests
         {
             TaskHub = TaskHub,
             ContainerImage = "mcr.microsoft.com/durabletask/demo-worker:1.0",
+            SchedulerManagedIdentityClientId = "scheduler-client-id",
         };
         options.AddActivity("RemoteHello");
         FakeOnDemandSandboxActivitiesClient client = new();
@@ -276,6 +297,7 @@ public class OnDemandSandboxActivitiesTests
         {
             TaskHub = TaskHub,
             ContainerImage = "example.com/repo/worker@sha256:abc",
+            SchedulerManagedIdentityClientId = "scheduler-client-id",
         };
         options.AddActivity("RemoteHello");
         FakeOnDemandSandboxActivitiesClient client = new() { TransientDeclarationFailures = 1 };
@@ -675,6 +697,7 @@ public class OnDemandSandboxActivitiesTests
         declaration.WorkerProfileId.Should().Be("annotated-profile");
         declaration.ActivityNames.Should().Equal("ConfiguredRemoteHello");
         declaration.Image.ImageRef.Should().Be("example.com/repo/annotated-worker:latest");
+        declaration.SchedulerManagedIdentityClientId.Should().Be("scheduler-client-id");
         declaration.Resources.Cpu.Should().Be("500m");
         declaration.Resources.Memory.Should().Be("1024Mi");
         declaration.MaxConcurrentActivities.Should().Be(4);
@@ -781,6 +804,59 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
+    public async Task UseSandboxWorker_WithManagedIdentityAuth_ConfiguresSchedulerCredential()
+    {
+        // Arrange
+        using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
+        using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "ManagedIdentity");
+        using EnvironmentVariableScope clientId = new("DTS_UMI_CLIENT_ID", "worker-client-id");
+        ServiceCollection services = new();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
+        mockBuilder.Setup(builder => builder.Services).Returns(services);
+        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
+
+        // Act
+        mockBuilder.Object.UseSandboxWorker();
+
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        DurableTaskSchedulerWorkerOptions options = provider
+            .GetRequiredService<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>()
+            .Get(Options.DefaultName);
+
+        // Assert
+        options.EndpointAddress.Should().Be("https://example.scheduler");
+        options.TaskHubName.Should().Be(TaskHub);
+        options.Credential.Should().BeOfType<ManagedIdentityCredential>();
+        options.AllowInsecureCredentials.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task UseSandboxWorker_WithManagedIdentityAuthAndMissingClientId_Throws()
+    {
+        // Arrange
+        using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
+        using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "ManagedIdentity");
+        using EnvironmentVariableScope clientId = new("DTS_UMI_CLIENT_ID", null);
+        ServiceCollection services = new();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
+        mockBuilder.Setup(builder => builder.Services).Returns(services);
+        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
+
+        // Act
+        mockBuilder.Object.UseSandboxWorker();
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        Action getOptions = () => provider
+            .GetRequiredService<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>()
+            .Get(Options.DefaultName);
+
+        // Assert
+        getOptions.Should().Throw<InvalidOperationException>()
+            .WithMessage("*DTS_UMI_CLIENT_ID*");
+    }
+
+    [Fact]
     public void UseSandboxWorker_DoesNotRegisterWakeupServerHostedService()
     {
         // Arrange
@@ -843,6 +919,7 @@ public class OnDemandSandboxActivitiesTests
             TaskHub = TaskHub,
             WorkerProfileId = "profile-a",
             ContainerImage = "mcr.microsoft.com/durabletask/demo-worker:1.0",
+            SchedulerManagedIdentityClientId = "scheduler-client-id",
             Cpu = "500m",
             Memory = "1024Mi",
             MaxConcurrentActivities = 7,
@@ -860,6 +937,7 @@ public class OnDemandSandboxActivitiesTests
         {
             ConfigureCallCount++;
             options.ContainerImage = "example.com/repo/annotated-worker:latest";
+            options.SchedulerManagedIdentityClientId = "scheduler-client-id";
             options.Cpu = "500m";
             options.Memory = "1024Mi";
             options.MaxConcurrentActivities = 4;

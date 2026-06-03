@@ -51,6 +51,11 @@ public sealed class OnDemandSandboxOptions
     public string? ImageDigest { get; set; }
 
     /// <summary>
+    /// Gets or sets the user-assigned managed identity client ID workers use to authenticate to the DTS scheduler.
+    /// </summary>
+    public string? SchedulerManagedIdentityClientId { get; set; }
+
+    /// <summary>
     /// Gets or sets the CPU quantity declared for each sandbox. Supported formats include <c>500m</c>, <c>2</c>, and <c>0.5</c>.
     /// </summary>
     public string Cpu { get; set; } = "1000m";

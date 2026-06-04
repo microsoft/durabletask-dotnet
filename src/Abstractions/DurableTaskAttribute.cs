@@ -32,4 +32,20 @@ public sealed class DurableTaskAttribute : Attribute
     /// Gets the name of the durable task.
     /// </summary>
     public TaskName Name { get; }
+
+    /// <summary>
+    /// Gets or sets the version of the durable task. Multiple classes may declare the same
+    /// <see cref="Name"/> as long as each declares a unique <see cref="Version"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Leave unset (or set to <c>null</c> / <see cref="string.Empty"/>) for an unversioned task.
+    /// Whitespace-only values are rejected at compile time by source generator diagnostic
+    /// <c>DURABLE3005</c> and at registration time by the <see cref="TaskVersion"/> constructor.
+    /// </para>
+    /// <para>
+    /// Entities ignore this property.
+    /// </para>
+    /// </remarks>
+    public string? Version { get; set; }
 }

@@ -6,9 +6,9 @@ namespace Microsoft.DurableTask.Worker;
 /// <summary>
 /// A class that represents work item filters for a Durable Task Worker. These filters are passed to the backend
 /// and only work items matching the filters will be processed by the worker. If no filters are provided,
-/// the worker will process all work items. By default, these are auto-generated from the registered orchestrations,
-/// activities, and entities in the <see cref="DurableTaskRegistry"/>. To opt-out of filters, provide a <c>null</c>
-/// value to the <see cref="DurableTaskWorkerBuilderExtensions.UseWorkItemFilters"/> method when configuring the worker.
+/// the worker will process all work items. To opt-in to work item filtering, call
+/// <see cref="DurableTaskWorkerBuilderExtensions.UseWorkItemFilters"/> on the worker builder with either
+/// explicit filters or auto-generated filters from the <see cref="DurableTaskRegistry"/>.
 /// </summary>
 public class DurableTaskWorkerWorkItemFilters
 {
@@ -35,32 +35,83 @@ public class DurableTaskWorkerWorkItemFilters
     /// <returns>A new instance of <see cref="DurableTaskWorkerWorkItemFilters"/> constructed from the provided registry.</returns>
     internal static DurableTaskWorkerWorkItemFilters FromDurableTaskRegistry(DurableTaskRegistry registry, DurableTaskWorkerOptions? workerOptions)
     {
-        // TODO: Support multiple versions per orchestration/activity.
-        // For now, fetch the version based on the versioning match strategy if defined. If undefined, default to null (all versions match).
-        IReadOnlyList<string> versions = [];
-        if (workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict)
-        {
-            versions = [workerOptions.Versioning.Version];
-        }
+        // Under MatchStrategy.Strict the worker accepts only instances whose version matches the
+        // worker's configured Version exactly — including the empty/unversioned case. The filter must
+        // narrow each name's version list to that single value (treating null as empty) so the backend
+        // does not stream work items the worker will then reject after the fact.
+        IReadOnlyList<string>? strictWorkerVersions =
+            workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict
+                ? [workerOptions.Versioning.Version ?? string.Empty]
+                : null;
+
+        // Orchestration filters group registrations by logical name and emit the concrete distinct
+        // version set actually registered (treating null/unversioned as ""). Strict mode overrides
+        // this with the single configured worker version. For unversioned-only names (no versioned
+        // registration exists for the name), we emit an empty version list — the filter wildcard —
+        // so the backend can deliver versioned work items that the factory will then resolve via
+        // the documented unversioned fallback in DurableTaskFactory.TryCreateOrchestrator. When a
+        // name has at least one versioned registration, the factory refuses unversioned-fallback,
+        // so emitting the concrete version set prevents the backend from streaming work items the
+        // worker would then reject after the fact.
+        List<OrchestrationFilter> orchestrationFilters = registry.OrchestratorsByVersion
+            .GroupBy(orchestration => orchestration.Key.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                IReadOnlyList<string> versions = strictWorkerVersions ?? GetFilterVersions(group.Select(entry => entry.Key.Version));
+
+                return new OrchestrationFilter
+                {
+                    Name = group.Key,
+                    Versions = versions,
+                };
+            })
+            .ToList();
+
+        List<ActivityFilter> activityFilters = registry.ActivitiesByVersion
+            .GroupBy(activity => activity.Key.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                IReadOnlyList<string> versions = strictWorkerVersions ?? GetFilterVersions(group.Select(entry => entry.Key.Version));
+
+                return new ActivityFilter
+                {
+                    Name = group.Key,
+                    Versions = versions,
+                };
+            })
+            .ToList();
 
         return new DurableTaskWorkerWorkItemFilters
         {
-            Orchestrations = registry.Orchestrators.Select(orchestration => new OrchestrationFilter
-            {
-                Name = orchestration.Key,
-                Versions = versions,
-            }).ToList(),
-            Activities = registry.Activities.Select(activity => new ActivityFilter
-            {
-                Name = activity.Key,
-                Versions = versions,
-            }).ToList(),
+            Orchestrations = orchestrationFilters,
+            Activities = activityFilters,
             Entities = registry.Entities.Select(entity => new EntityFilter
             {
                 // Entity names are normalized to lowercase in the backend.
                 Name = entity.Key.ToString(),
             }).ToList(),
         };
+
+        static IReadOnlyList<string> GetFilterVersions(IEnumerable<string?> versions)
+        {
+            // Normalize null to "" so an unversioned registration appears consistently.
+            string[] normalized = versions
+                .Select(version => version ?? string.Empty)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            // Unversioned-only: emit the wildcard match-all (empty list) so the backend can deliver
+            // versioned work items that the factory will resolve via unversioned fallback. Without
+            // this, callers asking for a specific version would be filtered out at the backend even
+            // though the worker can handle them.
+            if (normalized.Length == 1 && normalized[0].Length == 0)
+            {
+                return [];
+            }
+
+            return normalized;
+        }
     }
 
     /// <summary>

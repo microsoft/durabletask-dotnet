@@ -54,29 +54,66 @@ sealed partial class GrpcDurableTaskWorker
 
         ILogger Logger => this.worker.logger;
 
-        public async Task ExecuteAsync(CancellationToken cancellation)
+        public async Task<ProcessorExitReason> ExecuteAsync(CancellationToken cancellation)
         {
+            // Tracks consecutive failures against the same channel. Reset only after the stream
+            // has actually delivered a message (HelloAsync alone is not proof the channel is healthy).
+            int consecutiveChannelFailures = 0;
+
+            // Tracks consecutive retry attempts for backoff calculation. Reset on first stream message.
+            int reconnectAttempt = 0;
+            Random backoffRandom = GrpcBackoff.CreateRandom();
+
             while (!cancellation.IsCancellationRequested)
             {
+                bool channelLikelyPoisoned = false;
                 try
                 {
-                    AsyncServerStreamingCall<P.WorkItem> stream = await this.ConnectAsync(cancellation);
-                    await this.ProcessWorkItemsAsync(stream, cancellation);
+                    using AsyncServerStreamingCall<P.WorkItem> stream = await this.ConnectAsync(cancellation);
+                    await this.ProcessWorkItemsAsync(
+                        stream,
+                        cancellation,
+                        onFirstMessage: () =>
+                        {
+                            consecutiveChannelFailures = 0;
+                            reconnectAttempt = 0;
+                        },
+                        onChannelLikelyPoisoned: () => channelLikelyPoisoned = true);
                 }
                 catch (RpcException) when (cancellation.IsCancellationRequested)
                 {
                     // Worker is shutting down - let the method exit gracefully
-                    break;
+                    return ProcessorExitReason.Shutdown;
                 }
                 catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
                 {
-                    // Sidecar is shutting down - retry
+                    // Sidecar is shutting down - retry. Don't count toward channel-poisoned threshold:
+                    // Cancelled is ambiguous and shouldn't drive recreate storms.
                     this.Logger.SidecarDisconnected();
+                }
+                catch (RpcException ex) when (ex.StatusCode == StatusCode.DeadlineExceeded)
+                {
+                    // Only HelloAsync carries a deadline. Once the work-item stream is established,
+                    // ProcessWorkItemsAsync relies on the silent-disconnect timer instead of per-read deadlines.
+                    // A DeadlineExceeded here therefore means the handshake hung on a stale or half-open channel.
+                    this.Logger.HelloTimeout(this.internalOptions.HelloDeadline);
+                    channelLikelyPoisoned = true;
                 }
                 catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
                 {
-                    // Sidecar is down - keep retrying
+                    // Sidecar is down - keep retrying.
                     this.Logger.SidecarUnavailable();
+                    channelLikelyPoisoned = true;
+                }
+                catch (RpcException ex) when (ex.StatusCode == StatusCode.Unauthenticated)
+                {
+                    // Auth rejection — log distinctly so it's diagnosable. Do not count toward channel
+                    // recreate: a fresh channel won't fix bad credentials. Reset the consecutive-failure
+                    // counters: a status reply is proof the transport itself is healthy, so prior
+                    // transport failures should not combine with later ones to trip the recreate.
+                    this.Logger.AuthenticationFailed(ex);
+                    consecutiveChannelFailures = 0;
+                    reconnectAttempt = 0;
                 }
                 catch (RpcException ex) when (ex.StatusCode == StatusCode.NotFound)
                 {
@@ -91,7 +128,7 @@ sealed partial class GrpcDurableTaskWorker
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
                 {
                     // Shutting down, lets exit gracefully.
-                    break;
+                    return ProcessorExitReason.Shutdown;
                 }
                 catch (Exception ex)
                 {
@@ -99,18 +136,41 @@ sealed partial class GrpcDurableTaskWorker
                     this.Logger.UnexpectedError(ex, string.Empty);
                 }
 
+                if (channelLikelyPoisoned)
+                {
+                    consecutiveChannelFailures++;
+                    int threshold = this.internalOptions.ChannelRecreateFailureThreshold;
+                    if (threshold > 0 && consecutiveChannelFailures >= threshold)
+                    {
+                        this.Logger.RecreatingChannel(consecutiveChannelFailures);
+                        return ProcessorExitReason.ChannelRecreateRequested;
+                    }
+                }
+
                 try
                 {
-                    // CONSIDER: Exponential backoff
-                    await Task.Delay(TimeSpan.FromSeconds(5), cancellation);
+                    // Full jitter intentionally allows any value in the retry window. The wide spread keeps many
+                    // workers that saw the same outage from reconnecting in lockstep against the backend.
+                    TimeSpan delay = GrpcBackoff.Compute(
+                        reconnectAttempt,
+                        this.internalOptions.ReconnectBackoffBase,
+                        this.internalOptions.ReconnectBackoffCap,
+                        backoffRandom,
+                        fullJitter: true);
+                    this.Logger.ReconnectBackoff(reconnectAttempt, (int)delay.TotalMilliseconds);
+                    reconnectAttempt++;
+                    await Task.Delay(delay, cancellation);
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
                 {
                     // Worker is shutting down - let the method exit gracefully
-                    break;
+                    return ProcessorExitReason.Shutdown;
                 }
             }
+
+            return ProcessorExitReason.Shutdown;
         }
+
 
         static string GetActionsListForLogging(IReadOnlyList<P.OrchestratorAction> actions)
         {
@@ -242,7 +302,21 @@ sealed partial class GrpcDurableTaskWorker
 
         async Task<AsyncServerStreamingCall<P.WorkItem>> ConnectAsync(CancellationToken cancellation)
         {
-            await this.client!.HelloAsync(EmptyMessage, cancellationToken: cancellation);
+            TimeSpan helloDeadline = this.internalOptions.HelloDeadline;
+            DateTime? deadline = null;
+
+            if (helloDeadline > TimeSpan.Zero)
+            {
+                // Clamp to a UTC DateTime.MaxValue so a misconfigured (very large) HelloDeadline cannot
+                // throw ArgumentOutOfRangeException out of DateTime.Add and so the gRPC deadline remains
+                // unambiguous during internal normalization.
+                DateTime now = DateTime.UtcNow;
+                DateTime maxDeadlineUtc = DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc);
+                TimeSpan maxOffset = maxDeadlineUtc - now;
+                deadline = helloDeadline >= maxOffset ? maxDeadlineUtc : now.Add(helloDeadline);
+            }
+
+            await this.client!.HelloAsync(EmptyMessage, deadline: deadline, cancellationToken: cancellation);
             this.Logger.EstablishedWorkItemConnection();
 
             DurableTaskWorkerOptions workerOptions = this.worker.workerOptions;
@@ -263,85 +337,115 @@ sealed partial class GrpcDurableTaskWorker
                 cancellationToken: cancellation);
         }
 
-        async Task ProcessWorkItemsAsync(AsyncServerStreamingCall<P.WorkItem> stream, CancellationToken cancellation)
+        async Task ProcessWorkItemsAsync(
+            AsyncServerStreamingCall<P.WorkItem> stream,
+            CancellationToken cancellation,
+            Action? onFirstMessage = null,
+            Action? onChannelLikelyPoisoned = null)
         {
-            // Create a new token source for timing out and a final token source that keys off of them both.
-            // The timeout token is used to detect when we are no longer getting any messages, including health checks.
-            // If this is the case, it signifies the connection has been dropped silently and we need to reconnect.
-            using var timeoutSource = new CancellationTokenSource();
-            timeoutSource.CancelAfter(TimeSpan.FromSeconds(60));
-            using var tokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellation, timeoutSource.Token);
+            // The timeout token (managed by WorkItemStreamConsumer) detects when no messages —
+            // including health pings sent periodically by the server — arrive within the configured
+            // window. If that fires we treat the stream as silently disconnected and reconnect.
+            TimeSpan silentDisconnectTimeout = this.internalOptions.SilentDisconnectTimeout;
 
-            while (!cancellation.IsCancellationRequested)
+            // NOTE: the consumer deliberately does NOT wrap its await foreach in an outer loop.
+            // The underlying IAsyncStreamReader is single-use — once the server terminates the stream
+            // (e.g. via a graceful HTTP/2 GOAWAY with OK trailers during a rolling upgrade), MoveNext
+            // returns false forever and re-entering await foreach would tight-spin with no yield.
+            WorkItemStreamResult result = await WorkItemStreamConsumer.ConsumeAsync(
+                ct => stream.ResponseStream.ReadAllAsync(ct),
+                silentDisconnectTimeout,
+                workItem => this.DispatchWorkItem(workItem, cancellation),
+                onFirstMessage,
+                cancellation);
+
+            switch (result.Outcome)
             {
-                await foreach (P.WorkItem workItem in stream.ResponseStream.ReadAllAsync(tokenSource.Token))
-                {
-                    timeoutSource.CancelAfter(TimeSpan.FromSeconds(60));
-                    if (workItem.RequestCase == P.WorkItem.RequestOneofCase.OrchestratorRequest)
-                    {
-                        this.RunBackgroundTask(
-                            workItem,
-                            () => this.OnRunOrchestratorAsync(
-                                workItem.OrchestratorRequest,
-                                workItem.CompletionToken,
-                                cancellation),
-                            cancellation);
-                    }
-                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
-                    {
-                        this.RunBackgroundTask(
-                            workItem,
-                            () => this.OnRunActivityAsync(
-                                workItem.ActivityRequest,
-                                workItem.CompletionToken,
-                                cancellation),
-                            cancellation);
-                    }
-                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
-                    {
-                        this.RunBackgroundTask(
-                            workItem,
-                            () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation),
-                            cancellation);
-                    }
-                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequestV2)
-                    {
-                        workItem.EntityRequestV2.ToEntityBatchRequest(
-                            out EntityBatchRequest batchRequest,
-                            out List<P.OperationInfo> operationInfos);
+                case WorkItemStreamOutcome.Shutdown:
+                    return;
 
-                        this.RunBackgroundTask(
-                             workItem,
-                             () => this.OnRunEntityBatchAsync(
-                                batchRequest,
-                                cancellation,
-                                workItem.CompletionToken,
-                                operationInfos),
-                             cancellation);
-                    }
-                    else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
-                    {
-                        // No-op
-                    }
-                    else
-                    {
-                        this.Logger.UnexpectedWorkItemType(workItem.RequestCase.ToString());
-                    }
-                }
+                case WorkItemStreamOutcome.SilentDisconnect:
+                    // Stream stopped producing messages (including health pings) for longer than the
+                    // configured window. Treat as a poisoned channel.
+                    this.Logger.ConnectionTimeout();
+                    onChannelLikelyPoisoned?.Invoke();
+                    return;
 
-                if (tokenSource.IsCancellationRequested || tokenSource.Token.IsCancellationRequested)
-                {
-                    // The token has cancelled, this means either:
-                    // 1. The broader 'cancellation' was triggered, return here to start a graceful shutdown.
-                    // 2. The timeoutSource was triggered, return here to trigger a reconnect to the backend.
-                    if (!cancellation.IsCancellationRequested)
+                case WorkItemStreamOutcome.GracefulDrain:
+                    // Canonical signal sent by the backend during a graceful drain (HTTP/2 GOAWAY +
+                    // OK trailers when a DTS instance is being replaced). Log it explicitly so
+                    // operators can see it. Only count it toward the channel-poisoned threshold when
+                    // the stream produced no messages: a stream that successfully delivered work and
+                    // was then closed by the server is healthy behavior (e.g. routine rolling
+                    // upgrade), and counting those would let a long-lived process accumulate spurious
+                    // "poison" credits across many healthy drains. An empty drain, on the other hand,
+                    // is a strong signal the channel is latched onto a dead/evacuated backend and
+                    // needs to be recreated to pick up fresh DNS/routing.
+                    this.Logger.StreamEndedByPeer();
+                    if (!result.FirstMessageObserved)
                     {
-                        // Since the cancellation came from the timeout, log a warning.
-                        this.Logger.ConnectionTimeout();
+                        onChannelLikelyPoisoned?.Invoke();
                     }
 
                     return;
-                }
+            }
+        }
+
+        void DispatchWorkItem(P.WorkItem workItem, CancellationToken cancellation)
+        {
+            if (workItem.RequestCase == P.WorkItem.RequestOneofCase.OrchestratorRequest)
+            {
+                this.RunBackgroundTask(
+                    workItem,
+                    () => this.OnRunOrchestratorAsync(
+                        workItem.OrchestratorRequest,
+                        workItem.CompletionToken,
+                        cancellation),
+                    cancellation);
+            }
+            else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
+            {
+                this.RunBackgroundTask(
+                    workItem,
+                    () => this.OnRunActivityAsync(
+                        workItem.ActivityRequest,
+                        workItem.CompletionToken,
+                        cancellation),
+                    cancellation);
+            }
+            else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
+            {
+                this.RunBackgroundTask(
+                    workItem,
+                    () => this.OnRunEntityBatchAsync(workItem.EntityRequest.ToEntityBatchRequest(), cancellation),
+                    cancellation);
+            }
+            else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequestV2)
+            {
+                workItem.EntityRequestV2.ToEntityBatchRequest(
+                    out EntityBatchRequest batchRequest,
+                    out List<P.OperationInfo> operationInfos);
+
+                this.RunBackgroundTask(
+                     workItem,
+                     () => this.OnRunEntityBatchAsync(
+                        batchRequest,
+                        cancellation,
+                        workItem.CompletionToken,
+                        operationInfos),
+                     cancellation);
+            }
+            else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.HealthPing)
+            {
+                // Health pings are heartbeat-only signals from the backend; the silent-disconnect
+                // timer reset (handled inside WorkItemStreamConsumer) is the actionable behavior.
+                // Logging at Trace allows operators to confirm liveness without flooding info-level
+                // telemetry.
+                this.Logger.ReceivedHealthPing();
+            }
+            else
+            {
+                this.Logger.UnexpectedWorkItemType(workItem.RequestCase.ToString());
             }
         }
 
@@ -371,91 +475,75 @@ sealed partial class GrpcDurableTaskWorker
 
                     if (workItem?.OrchestratorRequest != null)
                     {
-                        try
-                        {
-                            this.Logger.AbandoningOrchestratorWorkItem(instanceId, workItem?.CompletionToken ?? string.Empty);
-                            await this.client.AbandonTaskOrchestratorWorkItemAsync(
+                        this.Logger.AbandoningOrchestratorWorkItem(instanceId, workItem.CompletionToken ?? string.Empty);
+                        await this.ExecuteWithRetryAsync(
+                            async () => await this.client.AbandonTaskOrchestratorWorkItemAsync(
                                 new P.AbandonOrchestrationTaskRequest
                                 {
-                                    CompletionToken = workItem?.CompletionToken,
+                                    CompletionToken = workItem.CompletionToken,
                                 },
-                                cancellationToken: cancellation);
-                            this.Logger.AbandonedOrchestratorWorkItem(instanceId, workItem?.CompletionToken ?? string.Empty);
-                        }
-                        catch (Exception abandonException)
-                        {
-                            this.Logger.UnexpectedError(abandonException, instanceId);
-                        }
+                                cancellationToken: cancellation),
+                            nameof(this.client.AbandonTaskOrchestratorWorkItemAsync),
+                            cancellation);
+                        this.Logger.AbandonedOrchestratorWorkItem(instanceId, workItem.CompletionToken ?? string.Empty);
                     }
                     else if (workItem?.ActivityRequest != null)
                     {
-                        try
-                        {
-                            this.Logger.AbandoningActivityWorkItem(
-                                instanceId,
-                                workItem.ActivityRequest.Name,
-                                workItem.ActivityRequest.TaskId,
-                                workItem?.CompletionToken ?? string.Empty);
-                            await this.client.AbandonTaskActivityWorkItemAsync(
+                        this.Logger.AbandoningActivityWorkItem(
+                            instanceId,
+                            workItem.ActivityRequest.Name,
+                            workItem.ActivityRequest.TaskId,
+                            workItem.CompletionToken ?? string.Empty);
+                        await this.ExecuteWithRetryAsync(
+                            async () => await this.client.AbandonTaskActivityWorkItemAsync(
                                 new P.AbandonActivityTaskRequest
                                 {
-                                    CompletionToken = workItem?.CompletionToken,
+                                    CompletionToken = workItem.CompletionToken,
                                 },
-                                cancellationToken: cancellation);
-                            this.Logger.AbandonedActivityWorkItem(
-                                instanceId,
-                                workItem.ActivityRequest.Name,
-                                workItem.ActivityRequest.TaskId,
-                                workItem?.CompletionToken ?? string.Empty);
-                        }
-                        catch (Exception abandonException)
-                        {
-                            this.Logger.UnexpectedError(abandonException, instanceId);
-                        }
+                                cancellationToken: cancellation),
+                            nameof(this.client.AbandonTaskActivityWorkItemAsync),
+                            cancellation);
+                        this.Logger.AbandonedActivityWorkItem(
+                           instanceId,
+                           workItem.ActivityRequest.Name,
+                           workItem.ActivityRequest.TaskId,
+                           workItem.CompletionToken ?? string.Empty);
                     }
                     else if (workItem?.EntityRequest != null)
                     {
-                        try
-                        {
-                            this.Logger.AbandoningEntityWorkItem(
-                                workItem.EntityRequest.InstanceId,
-                                workItem?.CompletionToken ?? string.Empty);
-                            await this.client.AbandonTaskEntityWorkItemAsync(
+                        this.Logger.AbandoningEntityWorkItem(
+                            workItem.EntityRequest.InstanceId,
+                            workItem.CompletionToken ?? string.Empty);
+                        await this.ExecuteWithRetryAsync(
+                            async () => await this.client.AbandonTaskEntityWorkItemAsync(
                                 new P.AbandonEntityTaskRequest
                                 {
-                                    CompletionToken = workItem?.CompletionToken,
+                                    CompletionToken = workItem.CompletionToken,
                                 },
-                                cancellationToken: cancellation);
-                            this.Logger.AbandonedEntityWorkItem(
-                                workItem.EntityRequest.InstanceId,
-                                workItem?.CompletionToken ?? string.Empty);
-                        }
-                        catch (Exception abandonException)
-                        {
-                            this.Logger.UnexpectedError(abandonException, workItem.EntityRequest.InstanceId);
-                        }
+                                cancellationToken: cancellation),
+                            nameof(this.client.AbandonTaskEntityWorkItemAsync),
+                            cancellation);
+                        this.Logger.AbandonedEntityWorkItem(
+                            workItem.EntityRequest.InstanceId,
+                            workItem.CompletionToken ?? string.Empty);
                     }
                     else if (workItem?.EntityRequestV2 != null)
                     {
-                        try
-                        {
-                            this.Logger.AbandoningEntityWorkItem(
-                                workItem.EntityRequestV2.InstanceId,
-                                workItem?.CompletionToken ?? string.Empty);
-                            await this.client.AbandonTaskEntityWorkItemAsync(
+                        this.Logger.AbandoningEntityWorkItem(
+                            workItem.EntityRequestV2.InstanceId,
+                            workItem.CompletionToken ?? string.Empty);
+                        await this.ExecuteWithRetryAsync(
+                            async () => await this.client.AbandonTaskEntityWorkItemAsync(
                                 new P.AbandonEntityTaskRequest
                                 {
-                                    CompletionToken = workItem?.CompletionToken,
+                                    CompletionToken = workItem.CompletionToken,
                                 },
-                                cancellationToken: cancellation);
-                            this.Logger.AbandonedEntityWorkItem(
-                                workItem.EntityRequestV2.InstanceId,
-                                workItem?.CompletionToken ?? string.Empty);
-                        }
-                        catch (Exception abandonException)
-                        {
-                            this.Logger.UnexpectedError(abandonException, workItem.EntityRequestV2.InstanceId);
-                        }
+                                cancellationToken: cancellation),
+                            nameof(this.client.AbandonTaskEntityWorkItemAsync),
+                            cancellation);
+                        this.Logger.AbandonedEntityWorkItem(
+                            workItem.EntityRequestV2.InstanceId,
+                            workItem.CompletionToken ?? string.Empty);
                     }
                 }
             });
@@ -602,13 +690,16 @@ sealed partial class GrpcDurableTaskWorker
                 if (!filterPassed)
                 {
                     this.Logger.AbandoningOrchestrationDueToOrchestrationFilter(request.InstanceId, completionToken);
-                    await this.client.AbandonTaskOrchestratorWorkItemAsync(
-                        new P.AbandonOrchestrationTaskRequest
-                        {
-                            CompletionToken = completionToken,
-                        },
-                        cancellationToken: cancellationToken);
-
+                    await this.ExecuteWithRetryAsync(
+                        async () => await this.client.AbandonTaskOrchestratorWorkItemAsync(
+                            new P.AbandonOrchestrationTaskRequest
+                            {
+                                CompletionToken = completionToken,
+                            },
+                            cancellationToken: cancellationToken),
+                        nameof(this.client.AbandonTaskOrchestratorWorkItemAsync),
+                        cancellationToken);
+                    this.Logger.AbandonedOrchestratorWorkItem(request.InstanceId, completionToken);
                     return;
                 }
 
@@ -618,6 +709,9 @@ sealed partial class GrpcDurableTaskWorker
                 // Only continue with the work if the versioning check passed.
                 if (failureDetails == null)
                 {
+                    TaskVersion requestedVersion = string.IsNullOrWhiteSpace(runtimeState.Version)
+                        ? default
+                        : new TaskVersion(runtimeState.Version);
                     name = new TaskName(runtimeState.Name);
 
                     this.Logger.ReceivedOrchestratorRequest(
@@ -627,8 +721,17 @@ sealed partial class GrpcDurableTaskWorker
                         runtimeState.NewEvents.Count);
 
                     await using AsyncServiceScope scope = this.worker.services.CreateAsyncScope();
-                    if (this.worker.Factory.TryCreateOrchestrator(
-                        name, scope.ServiceProvider, out ITaskOrchestrator? orchestrator))
+                    bool found = this.worker.Factory is IVersionedTaskFactory versionedFactory
+                        ? versionedFactory.TryCreateOrchestrator(
+                            name,
+                            requestedVersion,
+                            scope.ServiceProvider,
+                            out ITaskOrchestrator? orchestrator)
+                        : this.worker.Factory.TryCreateOrchestrator(
+                            name,
+                            scope.ServiceProvider,
+                            out orchestrator);
+                    if (found)
                     {
                         // Both the factory invocation and the ExecuteAsync could involve user code and need to be handled
                         // as part of try/catch.
@@ -650,10 +753,13 @@ sealed partial class GrpcDurableTaskWorker
                     }
                     else
                     {
+                        string versionText = requestedVersion.Version;
                         failureDetails = new P.TaskFailureDetails
                         {
                             ErrorType = "OrchestratorTaskNotFound",
-                            ErrorMessage = $"No orchestrator task named '{name}' was found.",
+                            ErrorMessage = string.IsNullOrEmpty(versionText)
+                                ? $"No orchestrator task named '{name}' was found."
+                                : $"No orchestrator task named '{name}' with version '{versionText}' was found.",
                             IsNonRetriable = true,
                         };
                     }
@@ -703,13 +809,16 @@ sealed partial class GrpcDurableTaskWorker
                 else
                 {
                     this.Logger.AbandoningOrchestrationDueToVersioning(request.InstanceId, completionToken);
-                    await this.client.AbandonTaskOrchestratorWorkItemAsync(
-                        new P.AbandonOrchestrationTaskRequest
-                        {
-                            CompletionToken = completionToken,
-                        },
-                        cancellationToken: cancellationToken);
-
+                    await this.ExecuteWithRetryAsync(
+                        async () => await this.client.AbandonTaskOrchestratorWorkItemAsync(
+                            new P.AbandonOrchestrationTaskRequest
+                            {
+                                CompletionToken = completionToken,
+                            },
+                            cancellationToken: cancellationToken),
+                        nameof(this.client.AbandonTaskOrchestratorWorkItemAsync),
+                        cancellationToken);
+                    this.Logger.AbandonedOrchestratorWorkItem(request.InstanceId, completionToken);
                     return;
                 }
             }
@@ -787,7 +896,18 @@ sealed partial class GrpcDurableTaskWorker
                 try
                 {
                     await using AsyncServiceScope scope = this.worker.services.CreateAsyncScope();
-                    if (this.worker.Factory.TryCreateActivity(name, scope.ServiceProvider, out ITaskActivity? activity))
+                    TaskVersion requestedVersion = string.IsNullOrWhiteSpace(request.Version)
+                        ? default
+                        : new TaskVersion(request.Version);
+                    bool found = this.worker.Factory is IVersionedTaskFactory versionedFactory
+                        ? versionedFactory.TryCreateActivity(
+                            name,
+                            requestedVersion,
+                            scope.ServiceProvider,
+                            out ITaskActivity? activity)
+                        : this.worker.Factory.TryCreateActivity(name, scope.ServiceProvider, out activity);
+
+                    if (found)
                     {
                         // Both the factory invocation and the RunAsync could involve user code and need to be handled as
                         // part of try/catch.
@@ -796,10 +916,13 @@ sealed partial class GrpcDurableTaskWorker
                     }
                     else
                     {
+                        string versionText = requestedVersion.Version;
                         failureDetails = new P.TaskFailureDetails
                         {
                             ErrorType = "ActivityTaskNotFound",
-                            ErrorMessage = $"No activity task named '{name}' was found.",
+                            ErrorMessage = string.IsNullOrEmpty(versionText)
+                                ? $"No activity task named '{name}' was found."
+                                : $"No activity task named '{name}' with version '{versionText}' was found.",
                             IsNonRetriable = true,
                         };
                     }
@@ -814,12 +937,16 @@ sealed partial class GrpcDurableTaskWorker
                 if (this.worker.workerOptions.Versioning?.FailureStrategy == DurableTaskWorkerOptions.VersionFailureStrategy.Reject)
                 {
                     this.Logger.AbandoningActivityWorkItem(instance.InstanceId, request.Name, request.TaskId, completionToken);
-                    await this.client.AbandonTaskActivityWorkItemAsync(
-                        new P.AbandonActivityTaskRequest
-                        {
-                            CompletionToken = completionToken,
-                        },
-                        cancellationToken: cancellation);
+                    await this.ExecuteWithRetryAsync(
+                        async () => await this.client.AbandonTaskActivityWorkItemAsync(
+                            new P.AbandonActivityTaskRequest
+                            {
+                                CompletionToken = completionToken,
+                            },
+                            cancellationToken: cancellation),
+                        nameof(this.client.AbandonTaskActivityWorkItemAsync),
+                        cancellation);
+                    this.Logger.AbandonedActivityWorkItem(instance.InstanceId, request.Name, request.TaskId, completionToken);
                 }
 
                 return;
@@ -853,7 +980,10 @@ sealed partial class GrpcDurableTaskWorker
             // Stop the trace activity here to avoid including the completion time in the latency calculation
             traceActivity?.Stop();
 
-            await this.client.CompleteActivityTaskAsync(response, cancellationToken: cancellation);
+            await this.ExecuteWithRetryAsync(
+                async () => await this.client.CompleteActivityTaskAsync(response, cancellationToken: cancellation),
+                nameof(this.client.CompleteActivityTaskAsync),
+                cancellation);
         }
 
         async Task OnRunEntityBatchAsync(
@@ -919,7 +1049,10 @@ sealed partial class GrpcDurableTaskWorker
                 completionToken,
                 operationInfos?.Take(batchResult.Results?.Count ?? 0));
 
-            await this.client.CompleteEntityTaskAsync(response, cancellationToken: cancellation);
+            await this.ExecuteWithRetryAsync(
+                async () => await this.client.CompleteEntityTaskAsync(response, cancellationToken: cancellation),
+                nameof(this.client.CompleteEntityTaskAsync),
+                cancellation);
         }
 
         /// <summary>
@@ -957,7 +1090,9 @@ sealed partial class GrpcDurableTaskWorker
                 return null;
             }
 
-            P.TaskFailureDetails? validationFailure = ValidateActionsSize(response.Actions, maxChunkBytes);
+            P.TaskFailureDetails? validationFailure = this.worker.grpcOptions.Capabilities.Contains(P.WorkerCapability.LargePayloads)
+                ? null
+                : ValidateActionsSize(response.Actions, maxChunkBytes);
             if (validationFailure != null)
             {
                 // Complete the orchestration with a failed status and failure details
@@ -979,7 +1114,10 @@ sealed partial class GrpcDurableTaskWorker
                     },
                 };
 
-                await this.client.CompleteOrchestratorTaskAsync(failureResponse, cancellationToken: cancellationToken);
+                await this.ExecuteWithRetryAsync(
+                    async () => await this.client.CompleteOrchestratorTaskAsync(failureResponse, cancellationToken: cancellationToken),
+                    nameof(this.client.CompleteOrchestratorTaskAsync),
+                    cancellationToken);
                 return;
             }
 
@@ -991,7 +1129,7 @@ sealed partial class GrpcDurableTaskWorker
                 int maxChunkBytes)
             {
                 int actionSize = action.CalculateSize();
-                if (currentSize + actionSize > maxChunkBytes)
+                if (currentSize + actionSize > maxChunkBytes && currentSize > 0)
                 {
                     return false;
                 }
@@ -1006,7 +1144,10 @@ sealed partial class GrpcDurableTaskWorker
             if (totalSize <= maxChunkBytes)
             {
                 // Response fits in one chunk, send it directly (isPartial defaults to false)
-                await this.client.CompleteOrchestratorTaskAsync(response, cancellationToken: cancellationToken);
+                await this.ExecuteWithRetryAsync(
+                    async () => await this.client.CompleteOrchestratorTaskAsync(response, cancellationToken: cancellationToken),
+                    nameof(this.client.CompleteOrchestratorTaskAsync),
+                    cancellationToken);
                 return;
             }
 
@@ -1014,6 +1155,7 @@ sealed partial class GrpcDurableTaskWorker
             int actionsCompletedSoFar = 0, chunkIndex = 0;
             List<P.OrchestratorAction> allActions = response.Actions.ToList();
             bool isPartial = true;
+            bool isChunkedMode = false;
 
             while (isPartial)
             {
@@ -1024,7 +1166,6 @@ sealed partial class GrpcDurableTaskWorker
                     CompletionToken = response.CompletionToken,
                     RequiresHistory = response.RequiresHistory,
                     NumEventsProcessed = 0,
-                    ChunkIndex = chunkIndex,
                 };
 
                 int chunkPayloadSize = 0;
@@ -1040,6 +1181,20 @@ sealed partial class GrpcDurableTaskWorker
                 isPartial = actionsCompletedSoFar < allActions.Count;
                 chunkedResponse.IsPartial = isPartial;
 
+                // Only activate chunked mode when we actually need multiple chunks.
+                // A single oversized action that fits in one chunk (via TryAddAction allowing
+                // the first item in an empty chunk) should be sent as non-chunked to avoid
+                // backend issues with ChunkIndex=0 + IsPartial=false.
+                if (isPartial)
+                {
+                    isChunkedMode = true;
+                }
+
+                if (isChunkedMode)
+                {
+                    chunkedResponse.ChunkIndex = chunkIndex;
+                }
+
                 if (chunkIndex == 0)
                 {
                     // The first chunk preserves the original response's NumEventsProcessed value (null)
@@ -1052,7 +1207,67 @@ sealed partial class GrpcDurableTaskWorker
                 chunkIndex++;
 
                 // Send the chunk
-                await this.client.CompleteOrchestratorTaskAsync(chunkedResponse, cancellationToken: cancellationToken);
+                await this.ExecuteWithRetryAsync(
+                    async () => await this.client.CompleteOrchestratorTaskAsync(chunkedResponse, cancellationToken: cancellationToken),
+                    nameof(this.client.CompleteOrchestratorTaskAsync),
+                    cancellationToken);
+            }
+        }
+
+        async Task ExecuteWithRetryAsync(
+            Func<Task> action,
+            string operationName,
+            CancellationToken cancellationToken)
+        {
+            int maxAttempts = this.internalOptions.TransientRetryMaxAttempts;
+            TimeSpan baseDelay = this.internalOptions.TransientRetryBackoffBase;
+            TimeSpan cap = this.internalOptions.TransientRetryBackoffCap;
+            Random retryRandom;
+#if NET6_0_OR_GREATER
+            retryRandom = Random.Shared;
+#else
+            retryRandom = new Random();
+#endif
+
+            for (int attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    await action();
+                    return;
+                }
+                catch (RpcException ex) when (
+                    (ex.StatusCode == StatusCode.Unavailable ||
+                     ex.StatusCode == StatusCode.Unknown ||
+                     ex.StatusCode == StatusCode.DeadlineExceeded ||
+                     ex.StatusCode == StatusCode.Internal) &&
+                    attempt < maxAttempts)
+                {
+                    // Don't use full jitter  since we want to keep the retry interval fairly fixed and increasing with
+                    // each attempt. We don't have lockstep concerns in this case.
+                    // Also make sure to zero-index the attempts
+                    TimeSpan backoff = GrpcBackoff.Compute(attempt - 1, baseDelay, cap, retryRandom, fullJitter: false);
+
+                    this.Logger.TransientGrpcRetry(
+                        operationName,
+                        attempt,
+                        maxAttempts,
+                        backoff.TotalMilliseconds,
+                        (int)ex.StatusCode,
+                        ex);
+
+                    try
+                    {
+                        await Task.Delay(backoff, cancellationToken);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        // If shutting down during the retry delay, propagate the cancellation exception
+                        throw;
+                    }
+
+                    continue;
+                }
             }
         }
     }

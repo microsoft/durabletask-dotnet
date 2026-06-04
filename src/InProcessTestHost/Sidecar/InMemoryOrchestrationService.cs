@@ -653,7 +653,7 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
             SerializedInstanceState state = this.store.GetOrAdd(instanceId, id => new SerializedInstanceState(id, executionId));
             lock (state)
             {
-                bool isRestart = state.ExecutionId != null && state.ExecutionId != executionId;
+                bool isRestart = executionId != null && state.ExecutionId != null && state.ExecutionId != executionId;
                 
                 if (message.Event is ExecutionStartedEvent startEvent)
                 {
@@ -684,11 +684,14 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                 else if (state.IsCompleted)
                 {
                     // Drop the message since we're completed
-                    // GOOD: The user-provided the instanceId
-                    // logger.LogWarning(
-                    //     "Dropped {eventType} message for instance '{instanceId}' because the orchestration has already completed.",
-                    //     message.Event.EventType,
-                    //     instanceId);
+                    return;
+                }
+                else if (isRestart)
+                {
+                    // Drop messages that belong to a previous execution (stale activity
+                    // completions, timer fires, etc.). These can arrive when a
+                    // ContinueAsNew created a new execution but work items from the
+                    // old execution are still in flight.
                     return;
                 }
 
@@ -742,7 +745,7 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
             // First, add the waiter before checking completion to avoid a race condition.
             // This ensures we don't miss a completion notification that happens between
             // checking the status and adding the waiter.
-            var tcs = this.waiters.GetOrAdd(instanceId, _ => new TaskCompletionSource<OrchestrationState>());
+            var tcs = this.waiters.GetOrAdd(instanceId, _ => new TaskCompletionSource<OrchestrationState>(TaskCreationOptions.RunContinuationsAsynchronously));
 
             // Now check if already completed - if so, complete the waiter immediately
             if (this.store.TryGetValue(instanceId, out SerializedInstanceState? state))
@@ -879,7 +882,7 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
         class ReadyToRunQueue
         {
             readonly Channel<SerializedInstanceState> readyToRunQueue = Channel.CreateUnbounded<SerializedInstanceState>();
-            readonly Dictionary<string, object> readyInstances = new(StringComparer.OrdinalIgnoreCase);
+            readonly ConcurrentDictionary<string, SerializedInstanceState> readyInstances = new(StringComparer.OrdinalIgnoreCase);
 
             public void Reset()
             {
@@ -893,7 +896,7 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
                     SerializedInstanceState state = await this.readyToRunQueue.Reader.ReadAsync(ct);
                     lock (state)
                     {
-                        if (this.readyInstances.Remove(state.InstanceId))
+                        if (this.readyInstances.TryRemove(state.InstanceId, out _))
                         {
                             if (state.IsLoaded)
                             {
@@ -909,12 +912,9 @@ public class InMemoryOrchestrationService : IOrchestrationService, IOrchestratio
 
             public void Schedule(SerializedInstanceState state)
             {
-                // TODO: There is a race condition here. If another thread is calling TakeNextAsync
-                //       and removed the queue item before updating the dictionary, then we'll fail
-                //       to update the readyToRunQueue and the orchestration will get stuck.
                 if (this.readyInstances.TryAdd(state.InstanceId, state))
                 {
-                    if (!this.readyToRunQueue.Writer.TryWrite(state)) 
+                    if (!this.readyToRunQueue.Writer.TryWrite(state))
                     {
                         throw new InvalidOperationException($"unable to write to queue for {state.InstanceId}");
                     }

@@ -12,13 +12,14 @@
     <Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
     <RepositoryUrl>https://github.com/microsoft/durabletask-dotnet</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
     <PackageTags>Microsoft Durable Task Orchestration Workflow Activity Reliable DTFx</PackageTags>
   </PropertyGroup>
 
   <PropertyGroup>
-    <VersionPrefix>1.22.0</VersionPrefix>
-    <VersionSuffix></VersionSuffix>
+    <VersionPrefix>1.25.0</VersionPrefix>
+    <VersionSuffix>preview.1</VersionSuffix>
   </PropertyGroup>
 
 </Project>

@@ -33,6 +33,61 @@ public partial class DurableTaskRegistry
     /// <summary>
     /// Registers an orchestrator factory.
     /// </summary>
+    /// <param name="name">The name of the orchestrator.</param>
+    /// <param name="version">The orchestrator version.</param>
+    /// <param name="factory">The orchestrator factory.</param>
+    /// <returns>This registry instance, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if any of the following are true:
+    /// <list type="bullet">
+    ///   <item>If <paramref name="name"/> is <c>default</c>.</item>
+    ///   <item>If <paramref name="name" /> and <paramref name="version" /> are already registered.</item>
+    ///   <item>If <paramref name="factory"/> is <c>null</c>.</item>
+    /// </list>
+    /// </exception>
+    /// <remarks>
+    /// Registration is version-aware in the registry. Worker dispatch uses exact <paramref name="name" /> and
+    /// <paramref name="version" /> matching, while the public name-only factory path continues to resolve only the
+    /// default registration.
+    /// </remarks>
+    public DurableTaskRegistry AddOrchestrator(TaskName name, TaskVersion version, Func<ITaskOrchestrator> factory)
+    {
+        Check.NotDefault(name);
+        Check.NotNull(factory);
+
+        TaskVersionKey key = new(name, version);
+        if (this.OrchestratorsByVersion.ContainsKey(key))
+        {
+            string message = string.IsNullOrEmpty(version.Version)
+                ? $"An {nameof(ITaskOrchestrator)} named '{name}' is already added."
+                : $"An {nameof(ITaskOrchestrator)} named '{name}' with version '{version.Version}' is already added.";
+            throw new ArgumentException(message, nameof(name));
+        }
+
+        this.OrchestratorsByVersion.Add(key, _ => factory());
+        return this;
+    }
+
+    /// <summary>
+    /// Registers an orchestrator factory.
+    /// </summary>
+    /// <param name="name">The name of the orchestrator.</param>
+    /// <param name="factory">The orchestrator factory.</param>
+    /// <returns>This registry instance, for call chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if any of the following are true:
+    /// <list type="bullet">
+    ///   <item>If <paramref name="name"/> is <c>default</c>.</item>
+    ///   <item>If <paramref name="name" /> is already registered.</item>
+    ///   <item>If <paramref name="factory"/> is <c>null</c>.</item>
+    /// </list>
+    /// </exception>
+    public DurableTaskRegistry AddOrchestrator(TaskName name, Func<ITaskOrchestrator> factory)
+        => this.AddOrchestrator(name, default, factory);
+
+    /// <summary>
+    /// Registers an orchestrator factory.
+    /// </summary>
     /// <param name="name">The name of the orchestrator to register.</param>
     /// <param name="type">The orchestrator type.</param>
     /// <returns>The same registry, for call chaining.</returns>
@@ -40,7 +95,10 @@ public partial class DurableTaskRegistry
     {
         // TODO: Compile a constructor expression for performance.
         Check.ConcreteType<ITaskOrchestrator>(type);
-        return this.AddOrchestrator(name, () => (ITaskOrchestrator)Activator.CreateInstance(type));
+        return this.AddOrchestrator(
+            name,
+            type.GetDurableTaskVersion(),
+            () => (ITaskOrchestrator)Activator.CreateInstance(type));
     }
 
     /// <summary>
@@ -49,7 +107,10 @@ public partial class DurableTaskRegistry
     /// <param name="type">The orchestrator type.</param>
     /// <returns>The same registry, for call chaining.</returns>
     public DurableTaskRegistry AddOrchestrator(Type type)
-        => this.AddOrchestrator(type.GetTaskName(), type);
+    {
+        Check.ConcreteType<ITaskOrchestrator>(type);
+        return this.AddOrchestrator(type.GetTaskName(), type.GetDurableTaskVersion(), () => (ITaskOrchestrator)Activator.CreateInstance(type));
+    }
 
     /// <summary>
     /// Registers an orchestrator factory.
@@ -79,7 +140,7 @@ public partial class DurableTaskRegistry
     public DurableTaskRegistry AddOrchestrator(TaskName name, ITaskOrchestrator orchestrator)
     {
         Check.NotNull(orchestrator);
-        return this.AddOrchestrator(name, () => orchestrator);
+        return this.AddOrchestrator(name, orchestrator.GetType().GetDurableTaskVersion(), () => orchestrator);
     }
 
     /// <summary>
@@ -90,7 +151,10 @@ public partial class DurableTaskRegistry
     public DurableTaskRegistry AddOrchestrator(ITaskOrchestrator orchestrator)
     {
         Check.NotNull(orchestrator);
-        return this.AddOrchestrator(orchestrator.GetType().GetTaskName(), orchestrator);
+        return this.AddOrchestrator(
+            orchestrator.GetType().GetTaskName(),
+            orchestrator.GetType().GetDurableTaskVersion(),
+            () => orchestrator);
     }
 
     /// <summary>
@@ -103,10 +167,28 @@ public partial class DurableTaskRegistry
     /// <returns>The same registry, for call chaining.</returns>
     public DurableTaskRegistry AddOrchestratorFunc<TInput, TOutput>(
         TaskName name, Func<TaskOrchestrationContext, TInput, Task<TOutput>> orchestrator)
+        => this.AddOrchestratorFunc(name, default, orchestrator);
+
+    /// <summary>
+    /// Registers an orchestrator factory at the specified version, where the implementation is the
+    /// supplied lambda. This is the canonical version-aware lambda overload that the other
+    /// <c>AddOrchestratorFunc</c> overloads pass through to with an unversioned default.
+    /// </summary>
+    /// <typeparam name="TInput">The orchestrator input type.</typeparam>
+    /// <typeparam name="TOutput">The orchestrator output type.</typeparam>
+    /// <param name="name">The name of the orchestrator to register.</param>
+    /// <param name="version">
+    /// The version of the orchestrator. Pass <see cref="TaskVersion.Unversioned"/> (or
+    /// <c>default(TaskVersion)</c>) to register an unversioned orchestrator.
+    /// </param>
+    /// <param name="orchestrator">The orchestrator implementation.</param>
+    /// <returns>The same registry, for call chaining.</returns>
+    public DurableTaskRegistry AddOrchestratorFunc<TInput, TOutput>(
+        TaskName name, TaskVersion version, Func<TaskOrchestrationContext, TInput, Task<TOutput>> orchestrator)
     {
         Check.NotNull(orchestrator);
         ITaskOrchestrator wrapper = FuncTaskOrchestrator.Create(orchestrator);
-        return this.AddOrchestrator(name, wrapper);
+        return this.AddOrchestrator(name, version, () => wrapper);
     }
 
     /// <summary>

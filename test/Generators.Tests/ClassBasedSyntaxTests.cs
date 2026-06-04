@@ -228,23 +228,25 @@ namespace MyNS
     public class MyClass { }
 }";
 
-        string expectedOutput = TestHelpers.WrapAndFormat(
+        string expectedOutput = TestHelpers.WrapAndFormatMultiNamespace(
             GeneratedClassName,
-            methodList: @"
+            isDurableFunctions: false,
+            ("MyNS", @"
 /// <summary>
-/// Calls the <see cref=""MyNS.MyActivityImpl""/> activity.
+/// Calls the <see cref=""MyActivityImpl""/> activity.
 /// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
-public static Task<MyNS.MyClass> CallMyActivityAsync(this TaskOrchestrationContext ctx, MyNS.MyClass input, TaskOptions? options = null)
+public static Task<MyClass> CallMyActivityAsync(this TaskOrchestrationContext ctx, MyClass input, TaskOptions? options = null)
 {
-    return ctx.CallActivityAsync<MyNS.MyClass>(""MyActivity"", input, options);
-}
-
+    return ctx.CallActivityAsync<MyClass>(""MyActivity"", input, options);
+}"),
+            ("Microsoft.DurableTask", @"
 internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
 {
     builder.AddActivity<MyNS.MyActivityImpl>();
     return builder;
-}");
+}")
+        );
 
         return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
             GeneratedFileName,
@@ -608,21 +610,22 @@ namespace MyNS
 
         string expectedOutput = TestHelpers.WrapAndFormat(
             GeneratedClassName,
+            "MyNS",
             methodList: @"
 /// <summary>
-/// Waits for an external event of type <see cref=""MyNS.DataReceivedEvent""/>.
+/// Waits for an external event of type <see cref=""DataReceivedEvent""/>.
 /// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.WaitForExternalEvent{T}(string, CancellationToken)""/>
-public static Task<MyNS.DataReceivedEvent> WaitForDataReceivedEventAsync(this TaskOrchestrationContext context, CancellationToken cancellationToken = default)
+public static Task<DataReceivedEvent> WaitForDataReceivedEventAsync(this TaskOrchestrationContext context, CancellationToken cancellationToken = default)
 {
-    return context.WaitForExternalEvent<MyNS.DataReceivedEvent>(""DataReceivedEvent"", cancellationToken);
+    return context.WaitForExternalEvent<DataReceivedEvent>(""DataReceivedEvent"", cancellationToken);
 }
 
 /// <summary>
-/// Sends an external event of type <see cref=""MyNS.DataReceivedEvent""/> to another orchestration instance.
+/// Sends an external event of type <see cref=""DataReceivedEvent""/> to another orchestration instance.
 /// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.SendEvent(string, string, object)""/>
-public static void SendDataReceivedEvent(this TaskOrchestrationContext context, string instanceId, MyNS.DataReceivedEvent eventData)
+public static void SendDataReceivedEvent(this TaskOrchestrationContext context, string instanceId, DataReceivedEvent eventData)
 {
     context.SendEvent(instanceId, ""DataReceivedEvent"", eventData);
 }");
@@ -633,4 +636,149 @@ public static void SendDataReceivedEvent(this TaskOrchestrationContext context, 
             expectedOutput,
             isDurableFunctions: false);
     }
+
+    [Fact]
+    public Task MultiNamespace_OrchestratorAndActivityInDifferentNamespaces()
+    {
+        // Verify that tasks in different namespaces generate extension methods in their respective namespaces
+        string code = @"
+using System.Threading.Tasks;
+using Microsoft.DurableTask;
+
+namespace Approvals
+{
+    [DurableTask(nameof(ApprovalOrchestrator))]
+    public class ApprovalOrchestrator : TaskOrchestrator<string, string>
+    {
+        public override Task<string> RunAsync(TaskOrchestrationContext ctx, string input) => Task.FromResult(string.Empty);
+    }
+}
+
+namespace Registrations
+{
+    [DurableTask(nameof(RegistrationActivity))]
+    public class RegistrationActivity : TaskActivity<int, string>
+    {
+        public override Task<string> RunAsync(TaskActivityContext context, int input) => Task.FromResult(string.Empty);
+    }
+}";
+
+        string expectedOutput = TestHelpers.WrapAndFormatMultiNamespace(
+            GeneratedClassName,
+            isDurableFunctions: false,
+            ("Approvals", @"
+/// <summary>
+/// Schedules a new instance of the <see cref=""ApprovalOrchestrator""/> orchestrator.
+/// </summary>
+/// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
+public static Task<string> ScheduleNewApprovalOrchestratorInstanceAsync(
+    this IOrchestrationSubmitter client, string input, StartOrchestrationOptions? options = null)
+{
+    return client.ScheduleNewOrchestrationInstanceAsync(""ApprovalOrchestrator"", input, options);
+}
+
+/// <summary>
+/// Calls the <see cref=""ApprovalOrchestrator""/> sub-orchestrator.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
+public static Task<string> CallApprovalOrchestratorAsync(
+    this TaskOrchestrationContext context, string input, TaskOptions? options = null)
+{
+    return context.CallSubOrchestratorAsync<string>(""ApprovalOrchestrator"", input, options);
+}"),
+            ("Registrations", @"
+/// <summary>
+/// Calls the <see cref=""RegistrationActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
+public static Task<string> CallRegistrationActivityAsync(this TaskOrchestrationContext ctx, int input, TaskOptions? options = null)
+{
+    return ctx.CallActivityAsync<string>(""RegistrationActivity"", input, options);
+}"),
+            ("Microsoft.DurableTask", @"
+internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
+{
+    builder.AddOrchestrator<Approvals.ApprovalOrchestrator>();
+    builder.AddActivity<Registrations.RegistrationActivity>();
+    return builder;
+}")
+        );
+
+        return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: false);
+    }
+
+    [Fact]
+    public Task MultiNamespace_CustomTypesSimplifiedPerNamespace()
+    {
+        // Verify that custom types are simplified when in the same namespace as the generated code,
+        // but remain fully qualified when referenced from a different namespace
+        string code = @"
+using System.Threading.Tasks;
+using Microsoft.DurableTask;
+
+namespace OrderNS
+{
+    public class OrderInput { }
+    public class OrderOutput { }
+
+    [DurableTask(nameof(OrderActivity))]
+    public class OrderActivity : TaskActivity<OrderInput, OrderOutput>
+    {
+        public override Task<OrderOutput> RunAsync(TaskActivityContext context, OrderInput input) => Task.FromResult(new OrderOutput());
+    }
+}
+
+namespace ShippingNS
+{
+    public class ShippingRequest { }
+    public class ShippingResult { }
+
+    [DurableTask(nameof(ShippingActivity))]
+    public class ShippingActivity : TaskActivity<ShippingRequest, ShippingResult>
+    {
+        public override Task<ShippingResult> RunAsync(TaskActivityContext context, ShippingRequest input) => Task.FromResult(new ShippingResult());
+    }
+}";
+
+        string expectedOutput = TestHelpers.WrapAndFormatMultiNamespace(
+            GeneratedClassName,
+            isDurableFunctions: false,
+            ("OrderNS", @"
+/// <summary>
+/// Calls the <see cref=""OrderActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
+public static Task<OrderOutput> CallOrderActivityAsync(this TaskOrchestrationContext ctx, OrderInput input, TaskOptions? options = null)
+{
+    return ctx.CallActivityAsync<OrderOutput>(""OrderActivity"", input, options);
+}"),
+            ("ShippingNS", @"
+/// <summary>
+/// Calls the <see cref=""ShippingActivity""/> activity.
+/// </summary>
+/// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
+public static Task<ShippingResult> CallShippingActivityAsync(this TaskOrchestrationContext ctx, ShippingRequest input, TaskOptions? options = null)
+{
+    return ctx.CallActivityAsync<ShippingResult>(""ShippingActivity"", input, options);
+}"),
+            ("Microsoft.DurableTask", @"
+internal static DurableTaskRegistry AddAllGeneratedTasks(this DurableTaskRegistry builder)
+{
+    builder.AddActivity<OrderNS.OrderActivity>();
+    builder.AddActivity<ShippingNS.ShippingActivity>();
+    return builder;
+}")
+        );
+
+        return TestHelpers.RunTestAsync<DurableTaskSourceGenerator>(
+            GeneratedFileName,
+            code,
+            expectedOutput,
+            isDurableFunctions: false);
+    }
+
 }

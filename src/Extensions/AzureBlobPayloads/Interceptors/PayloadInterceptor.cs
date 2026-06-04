@@ -174,17 +174,17 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
         }
 
         int size = Encoding.UTF8.GetByteCount(value);
-        if (size < this.options.ExternalizeThresholdBytes)
+        if (size < this.options.ThresholdBytes)
         {
             return value;
         }
 
         // Enforce a hard cap to prevent unbounded payload sizes
-        if (size > this.options.MaxExternalizedPayloadBytes)
+        if (size > this.options.MaxPayloadBytes)
         {
-            throw new InvalidOperationException(
-                $"Payload size {size / 1024} kb exceeds the configured maximum of {this.options.MaxExternalizedPayloadBytes / 1024} kb. " +
-                "Consider reducing the payload or increase MaxExternalizedPayloadBytes setting.");
+            throw new PayloadStorageException(
+                $"Payload size {size / 1024} KB exceeds the configured maximum of {this.options.MaxPayloadBytes / 1024} KB. " +
+                "Reduce the payload size or increase the max payload size limit.");
         }
 
         return await this.payloadStore.UploadAsync(value!, cancellation);

@@ -30,6 +30,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
     int newGuidCounter;
     object? customStatus;
+    bool preserveUnprocessedEventsOnContinueAsNew;
     TaskOrchestrationEntityContext? entityFeature;
 
     /// <summary>
@@ -128,6 +129,21 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         object? input = null,
         TaskOptions? options = null)
     {
+        // Returns the version to schedule the activity with. If the caller passed TaskOptions.Version,
+        // use that (including TaskVersion.Unversioned for an explicit unversioned request); otherwise inherit
+        // the orchestration instance version. The unified dispatch rule on the worker side (exact match;
+        // fallback to unversioned only when the name has no versioned registration) applies regardless of
+        // how the version was selected.
+        static string GetRequestedActivityVersion(TaskOptions? taskOptions, string inheritedVersion)
+        {
+            if (taskOptions?.Version is TaskVersion explicitVersion)
+            {
+                return explicitVersion.Version ?? string.Empty;
+            }
+
+            return inheritedVersion;
+        }
+
         // Since the input parameter takes any object, it's possible that callers may accidentally provide a
         // TaskOptions parameter here when the actually meant to provide TaskOptions for the optional options
         // parameter.
@@ -142,14 +158,12 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
 
         try
         {
-            IDictionary<string, string> tags = ImmutableDictionary<string, string>.Empty;
-            if (options is TaskOptions callActivityOptions)
-            {
-                if (callActivityOptions.Tags is not null)
-                {
-                    tags = callActivityOptions.Tags;
-                }
-            }
+            string requestedVersion = GetRequestedActivityVersion(options, this.innerContext.Version);
+
+            // ScheduleTaskOptions.Builder.WithTags requires a non-null dictionary. When the caller did
+            // not supply tags, use the shared empty ImmutableDictionary instance instead of allocating
+            // a fresh Dictionary on every activity call.
+            IDictionary<string, string> tags = options?.Tags ?? ImmutableDictionary<string, string>.Empty;
 
             // TODO: Cancellation (https://github.com/microsoft/durabletask-dotnet/issues/7)
 #pragma warning disable 0618
@@ -157,7 +171,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             {
                 return await this.innerContext.ScheduleTask<T>(
                     name.Name,
-                    this.innerContext.Version,
+                    requestedVersion,
                     options: ScheduleTaskOptions.CreateBuilder()
                         .WithRetryOptions(policy.ToDurableTaskCoreRetryOptions())
                         .WithTags(tags)
@@ -169,7 +183,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
                 return await this.InvokeWithCustomRetryHandler(
                     () => this.innerContext.ScheduleTask<T>(
                         name.Name,
-                        this.innerContext.Version,
+                        requestedVersion,
                         options: ScheduleTaskOptions.CreateBuilder()
                             .WithTags(tags)
                             .Build(),
@@ -182,7 +196,7 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
             {
                 return await this.innerContext.ScheduleTask<T>(
                     name.Name,
-                    this.innerContext.Version,
+                    requestedVersion,
                     options: ScheduleTaskOptions.CreateBuilder()
                         .WithTags(tags)
                         .Build(),
@@ -207,8 +221,15 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         static string? GetInstanceId(TaskOptions? options)
             => options is SubOrchestrationOptions derived ? derived.InstanceId : null;
         string instanceId = GetInstanceId(options) ?? this.NewGuid().ToString("N");
-        string defaultVersion = this.GetDefaultVersion();
-        string version = options is SubOrchestrationOptions { Version: { } v } ? v.Version : defaultVersion;
+
+        // Sub-orchestrations are new orchestration instances, so an unspecified Version falls back
+        // to the worker's configured DefaultVersion — the same fallback the client uses when
+        // scheduling a top-level orchestration. This preserves the pre-versioning behavior: workers
+        // with `UseVersioning(DefaultVersion = "...")` start their sub-orchestrations at that version
+        // unless the caller passes an explicit Version on `SubOrchestrationOptions`. Sub-orch
+        // version is independent of the parent's instance version, in contrast with activities
+        // (which always run under the parent's version because they execute in the parent's history).
+        string version = options?.Version is { } v ? v.Version : this.GetDefaultVersion();
         Check.NotEntity(this.invocationContext.Options.EnableEntitySupport, instanceId);
 
         // if this orchestration uses entities, first validate that the suborchestration call is allowed in the current context
@@ -337,17 +358,43 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     /// <inheritdoc/>
     public override void ContinueAsNew(object? newInput = null, bool preserveUnprocessedEvents = true)
     {
-        this.innerContext.ContinueAsNew(newInput);
+        this.ContinueAsNew(new ContinueAsNewOptions
+        {
+            NewInput = newInput,
+            PreserveUnprocessedEvents = preserveUnprocessedEvents,
+        });
+    }
 
-        if (preserveUnprocessedEvents)
+    /// <inheritdoc/>
+    public override void ContinueAsNew(ContinueAsNewOptions options)
+    {
+        Check.NotNull(options);
+
+        this.preserveUnprocessedEventsOnContinueAsNew = options.PreserveUnprocessedEvents;
+
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(options.NewVersion))
+            {
+                this.innerContext.ContinueAsNew(options.NewVersion, options.NewInput);
+            }
+            else
+            {
+                this.innerContext.ContinueAsNew(options.NewInput);
+            }
+        }
+        catch
+        {
+            this.preserveUnprocessedEventsOnContinueAsNew = false;
+            throw;
+        }
+
+        if (options.PreserveUnprocessedEvents)
         {
             // Send all the buffered external events to ourself.
-            OrchestrationInstance instance = new() { InstanceId = this.InstanceId };
             foreach ((string eventName, string eventPayload) in this.externalEventBuffer.TakeAll())
             {
-#pragma warning disable CS0618 // Type or member is obsolete -- 'internal' usage.
-                this.innerContext.SendEvent(instance, eventName, new RawInput(eventPayload));
-#pragma warning restore CS0618 // Type or member is obsolete
+                this.ForwardRawExternalEvent(eventName, eventPayload);
             }
         }
     }
@@ -458,10 +505,28 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         }
         else
         {
-            // The orchestrator isn't waiting for this event (yet?). Save it in case
-            // the orchestrator wants it later.
-            this.externalEventBuffer.Add(eventName, rawEventPayload);
+            if (this.preserveUnprocessedEventsOnContinueAsNew)
+            {
+                // ContinueAsNew has already been scheduled with event preservation enabled.
+                // Forward late-arriving events directly to the next execution instead of buffering
+                // them on the current wrapper instance, which is about to be discarded.
+                this.ForwardRawExternalEvent(eventName, rawEventPayload);
+            }
+            else
+            {
+                // The orchestrator isn't waiting for this event (yet?). Save it in case
+                // the orchestrator wants it later.
+                this.externalEventBuffer.Add(eventName, rawEventPayload);
+            }
         }
+    }
+
+    void ForwardRawExternalEvent(string eventName, string rawEventPayload)
+    {
+        OrchestrationInstance instance = new() { InstanceId = this.InstanceId };
+#pragma warning disable CS0618 // Type or member is obsolete -- 'internal' usage.
+        this.innerContext.SendEvent(instance, eventName, new RawInput(rawEventPayload));
+#pragma warning restore CS0618 // Type or member is obsolete
     }
 
     /// <summary>
@@ -525,16 +590,15 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         }
     }
 
-    // The default version can come from two different places depending on the context of the invocation.
     string GetDefaultVersion()
     {
-        // Preferred choice.
+        // The worker's configured DefaultVersion takes precedence; falls back to a per-properties
+        // override (used by integration tests) and finally to the empty/unversioned string.
         if (this.invocationContext.Options.Versioning?.DefaultVersion is { } v)
         {
             return v;
         }
 
-        // Secondary choice.
         if (this.Properties.TryGetValue("defaultVersion", out object? propVersion) && propVersion is string v2)
         {
             return v2;

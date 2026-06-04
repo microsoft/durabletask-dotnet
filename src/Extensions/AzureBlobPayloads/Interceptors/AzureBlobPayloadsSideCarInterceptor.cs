@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Azure;
 using Grpc.Core.Interceptors;
 
 using P = Microsoft.DurableTask.Protobuf;
@@ -39,10 +40,56 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                 r.Input = await this.MaybeExternalizeAsync(r.Input, cancellation);
                 break;
             case P.ActivityResponse r:
-                r.Result = await this.MaybeExternalizeAsync(r.Result, cancellation);
+                try
+                {
+                    r.Result = await this.MaybeExternalizeAsync(r.Result, cancellation);
+                }
+                catch (Exception ex) when (IsPermanentStorageFailure(ex))
+                {
+                    // Permanent failure (e.g., payload exceeds configured maximum, 4xx auth/permission error).
+                    // Replace with a failure response so the orchestration sees a failed activity
+                    // instead of the work item being abandoned and redelivered indefinitely.
+                    r.Result = null;
+                    r.FailureDetails = new P.TaskFailureDetails
+                    {
+                        ErrorType = ex.GetType().FullName,
+                        ErrorMessage = ex.Message,
+                        StackTrace = ex.StackTrace,
+                        IsNonRetriable = true,
+                    };
+                }
+
                 break;
             case P.OrchestratorResponse r:
-                await this.ExternalizeOrchestratorResponseAsync(r, cancellation);
+                try
+                {
+                    await this.ExternalizeOrchestratorResponseAsync(r, cancellation);
+                }
+                catch (Exception ex) when (IsPermanentStorageFailure(ex))
+                {
+                    // Permanent failure during orchestration response externalization.
+                    // Replace all actions with a single Failed completion so the orchestration
+                    // terminates instead of being abandoned and redelivered indefinitely.
+                    r.Actions.Clear();
+                    r.CustomStatus = null;
+                    r.IsPartial = false;
+                    r.ChunkIndex = null;
+                    r.Actions.Add(new P.OrchestratorAction
+                    {
+                        CompleteOrchestration = new P.CompleteOrchestrationAction
+                        {
+                            OrchestrationStatus = P.OrchestrationStatus.Failed,
+                            FailureDetails = new P.TaskFailureDetails
+                            {
+                                ErrorType = ex.GetType().FullName,
+                                ErrorMessage = ex.Message,
+                                StackTrace = ex.StackTrace,
+                                IsNonRetriable = true,
+                            },
+                        },
+                    });
+                }
+
                 break;
             case P.EntityBatchResult r:
                 await this.ExternalizeEntityBatchResultAsync(r, cancellation);
@@ -359,5 +406,32 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
 
                 break;
         }
+    }
+
+    /// <summary>
+    /// Determines whether an exception represents a permanent storage failure that will never
+    /// succeed on retry, such as payload exceeding the configured maximum or 4xx HTTP errors
+    /// (authentication, authorization, not found).
+    /// </summary>
+    static bool IsPermanentStorageFailure(Exception ex)
+    {
+        if (ex is PayloadStorageException)
+        {
+            return true;
+        }
+
+        // Azure SDK retries 408 (Request Timeout) and 429 (Too Many Requests) automatically
+        // (see ResponseClassifier.IsRetriableResponse in Azure.Core). All other 4xx status codes
+        // are NOT retried, meaning the request is fundamentally invalid
+        // (e.g., 401 bad credentials, 403 missing RBAC role, 404 account/container not found).
+        // These will never succeed on retry with the same configuration.
+        if (ex is RequestFailedException rfe
+            && rfe.Status >= 400 && rfe.Status < 500
+            && rfe.Status != 408 && rfe.Status != 429)
+        {
+            return true;
+        }
+
+        return false;
     }
 }

@@ -5,6 +5,7 @@ using FluentAssertions;
 using Grpc.Core;
 using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.DurableTask.Protobuf.OnDemandSandbox;
+using Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -35,6 +36,28 @@ public class OnDemandSandboxActivitiesClientExtensionsTests
     }
 
     [Fact]
+    public async Task EnableSandboxActivitiesAsync_SendsWorkerProfileDeclarations()
+    {
+        // Arrange
+        RecordingOnDemandSandboxLogCallInvoker callInvoker = new();
+        OnDemandSandboxActivitiesClient client = new(
+            new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker));
+
+        // Act
+        await client.EnableSandboxActivitiesAsync("client-test-taskhub");
+
+        // Assert
+        OnDemandSandboxActivityDeclaration declaration = callInvoker.DeclareRequests
+            .Should()
+            .ContainSingle(request => request.WorkerProfileId == "client-test-profile")
+            .Subject;
+        declaration.ActivityNames.Should().Equal("ClientTestRemoteActivity");
+        declaration.Image.ImageRef.Should().Be("example.com/client-test-worker:latest");
+        callInvoker.DeclareHeaders.Should().Contain(header => header.Key == "taskhub" && header.Value == "client-test-taskhub");
+        callInvoker.UnaryDisposeCount.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
     public async Task RemoveOnDemandSandboxActivityDeclarationAsync_SendsRequest()
     {
         // Arrange
@@ -53,6 +76,10 @@ public class OnDemandSandboxActivitiesClientExtensionsTests
 
     sealed class RecordingOnDemandSandboxLogCallInvoker : CallInvoker
     {
+        public List<OnDemandSandboxActivityDeclaration> DeclareRequests { get; } = [];
+
+        public Metadata DeclareHeaders { get; private set; } = [];
+
         public RemoveOnDemandSandboxActivityDeclarationRequest? RemoveRequest { get; private set; }
 
         public Metadata RemoveHeaders { get; private set; } = [];
@@ -74,16 +101,21 @@ public class OnDemandSandboxActivitiesClientExtensionsTests
             CallOptions options,
             TRequest request)
         {
-            method.FullName.Should().EndWith("/RemoveOnDemandSandboxActivityDeclaration");
-            this.RemoveRequest = (RemoveOnDemandSandboxActivityDeclarationRequest)(object)request;
-            this.RemoveHeaders = options.Headers ?? [];
+            if (method.FullName.EndsWith("/DeclareOnDemandSandboxActivities", StringComparison.Ordinal))
+            {
+                this.DeclareRequests.Add(((OnDemandSandboxActivityDeclaration)(object)request).Clone());
+                this.DeclareHeaders = options.Headers ?? [];
+                return CreateUnaryCall((TResponse)(object)new OnDemandSandboxActivityDeclarationResult());
+            }
 
-            return new AsyncUnaryCall<TResponse>(
-                Task.FromResult((TResponse)(object)new RemoveOnDemandSandboxActivityDeclarationResult()),
-                Task.FromResult(new Metadata()),
-                () => new Status(StatusCode.OK, string.Empty),
-                () => new Metadata(),
-                () => this.UnaryDisposeCount++);
+            if (method.FullName.EndsWith("/RemoveOnDemandSandboxActivityDeclaration", StringComparison.Ordinal))
+            {
+                this.RemoveRequest = (RemoveOnDemandSandboxActivityDeclarationRequest)(object)request;
+                this.RemoveHeaders = options.Headers ?? [];
+                return CreateUnaryCall((TResponse)(object)new RemoveOnDemandSandboxActivityDeclarationResult());
+            }
+
+            throw new NotSupportedException(method.FullName);
         }
 
         public override AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(
@@ -109,6 +141,31 @@ public class OnDemandSandboxActivitiesClientExtensionsTests
             CallOptions options)
         {
             throw new NotSupportedException();
+        }
+
+        AsyncUnaryCall<TResponse> CreateUnaryCall<TResponse>(TResponse response)
+        {
+            return new AsyncUnaryCall<TResponse>(
+                Task.FromResult(response),
+                Task.FromResult(new Metadata()),
+                () => new Status(StatusCode.OK, string.Empty),
+                () => new Metadata(),
+                () => this.UnaryDisposeCount++);
+        }
+    }
+
+    [OnDemandSandboxWorkerProfile("client-test-profile")]
+    sealed class ClientTestWorkerProfile : ISandboxWorkerProfile
+    {
+        public void Configure(OnDemandSandboxOptions options)
+        {
+            options.ContainerImage = "example.com/client-test-worker:latest";
+            options.ImagePullManagedIdentityClientId = "image-pull-client-id";
+            options.SchedulerManagedIdentityClientId = "scheduler-client-id";
+            options.Cpu = "500m";
+            options.Memory = "1024Mi";
+            options.MaxConcurrentActivities = 4;
+            options.AddActivity("ClientTestRemoteActivity");
         }
     }
 }

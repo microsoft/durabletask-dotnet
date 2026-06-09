@@ -43,12 +43,16 @@ public static class OnDemandSandboxActivitiesClientServiceCollectionExtensions
 
             if (options.CallInvoker is { } callInvoker)
             {
-                return new OnDemandSandboxActivitiesClient(new Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker));
+                return new OnDemandSandboxActivitiesClient(
+                    new Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker),
+                    attachTaskHubMetadata: false);
             }
 
             if (options.Channel is GrpcChannel channel)
             {
-                return new OnDemandSandboxActivitiesClient(new Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(channel.CreateCallInvoker()));
+                return new OnDemandSandboxActivitiesClient(
+                    new Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(channel.CreateCallInvoker()),
+                    attachTaskHubMetadata: false);
             }
 
             throw new InvalidOperationException("DTS on-demand sandbox activity management requires a configured Durable Task Scheduler client.");

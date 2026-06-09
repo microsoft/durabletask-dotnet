@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Grpc.Core;
+using Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
 using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 
 namespace Microsoft.DurableTask.Client.AzureManaged;
@@ -11,14 +13,54 @@ namespace Microsoft.DurableTask.Client.AzureManaged;
 public sealed class OnDemandSandboxActivitiesClient
 {
     readonly Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient client;
+    readonly bool attachTaskHubMetadata;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="OnDemandSandboxActivitiesClient"/> class.
     /// </summary>
     /// <param name="client">The generated gRPC client used to call DTS on-demand sandbox management operations.</param>
-    internal OnDemandSandboxActivitiesClient(Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient client)
+    /// <param name="attachTaskHubMetadata">True to add per-call task hub metadata when the underlying channel does not already do so.</param>
+    internal OnDemandSandboxActivitiesClient(
+        Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient client,
+        bool attachTaskHubMetadata = true)
     {
         this.client = client;
+        this.attachTaskHubMetadata = attachTaskHubMetadata;
+    }
+
+    /// <summary>
+    /// Enables on-demand sandbox activities declared by worker profiles for a task hub.
+    /// </summary>
+    /// <param name="taskHub">The task hub whose declarations should be sent to DTS.</param>
+    /// <param name="cancellation">The cancellation token used to cancel the request.</param>
+    /// <returns>A task that completes when DTS accepts all declarations.</returns>
+    public async Task EnableSandboxActivitiesAsync(
+        string taskHub,
+        CancellationToken cancellation = default)
+    {
+        string normalizedTaskHub = string.IsNullOrWhiteSpace(taskHub)
+            ? throw new ArgumentException("Task hub name is required.", nameof(taskHub))
+            : taskHub.Trim();
+
+        IReadOnlyList<OnDemandSandboxOptions> declarations =
+            OnDemandSandboxActivityDeclarationResolver.ResolveDeclarations(normalizedTaskHub);
+        foreach (OnDemandSandboxOptions options in declarations)
+        {
+            string[] activityNames = OnDemandSandboxActivityConfiguration.ResolveActivityNames(options.ActivityNames);
+            if (activityNames.Length == 0)
+            {
+                continue;
+            }
+
+            Proto.OnDemandSandboxActivityDeclaration declaration =
+                OnDemandSandboxActivityConfiguration.BuildDeclaration(options, activityNames);
+            using AsyncUnaryCall<Proto.OnDemandSandboxActivityDeclarationResult> call =
+                this.client.DeclareOnDemandSandboxActivitiesAsync(
+                    declaration,
+                    headers: this.CreateTaskHubHeaders(normalizedTaskHub),
+                    cancellationToken: cancellation);
+            await call.ResponseAsync.ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -31,4 +73,8 @@ public sealed class OnDemandSandboxActivitiesClient
         string workerProfileId,
         CancellationToken cancellation = default)
         => this.client.RemoveOnDemandSandboxActivityDeclarationAsync(workerProfileId, cancellation);
+
+    Metadata? CreateTaskHubHeaders(string taskHub) => this.attachTaskHubMetadata
+        ? new Metadata { { "taskhub", taskHub }, }
+        : null;
 }

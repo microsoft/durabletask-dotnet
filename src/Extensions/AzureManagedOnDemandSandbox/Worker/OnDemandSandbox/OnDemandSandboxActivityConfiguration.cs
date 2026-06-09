@@ -133,14 +133,9 @@ static class OnDemandSandboxActivityConfiguration
 
     static Proto.OnDemandSandboxActivityImage BuildImage(OnDemandSandboxOptions options)
     {
-        string? imageRef = Coalesce(
-            options.ContainerImage,
-            BuildImageRef(options.RegistryServer, options.Repository, options.Tag, options.ImageDigest));
-
-        if (string.IsNullOrWhiteSpace(imageRef))
-        {
-            throw new InvalidOperationException("On-demand sandbox activity image metadata requires a container image reference.");
-        }
+        string imageRef = NormalizeRequired(
+            options.ContainerImage ?? string.Empty,
+            "On-demand sandbox activity image metadata requires a container image reference like 'myregistry.azurecr.io/workers/hello:1.0' or 'myregistry.azurecr.io/workers/hello@sha256:...'.");
 
         Proto.OnDemandSandboxActivityImage image = new()
         {
@@ -293,29 +288,5 @@ static class OnDemandSandboxActivityConfiguration
             .Where(static value => !string.IsNullOrWhiteSpace(value))
             .Select(static value => value.Trim())
             .ToArray();
-    }
-
-    static string? BuildImageRef(string? registryServer, string? repository, string? tag, string? digest)
-    {
-        if (string.IsNullOrWhiteSpace(repository))
-        {
-            return null;
-        }
-
-        string image = string.IsNullOrWhiteSpace(registryServer) ? repository : $"{registryServer}/{repository}";
-        if (!string.IsNullOrWhiteSpace(digest))
-        {
-            return $"{image}@{digest}";
-        }
-
-        return string.IsNullOrWhiteSpace(tag) ? image : $"{image}:{tag}";
-    }
-
-    static string? Coalesce(params string?[] values)
-    {
-        return values
-            .Where(static value => !string.IsNullOrWhiteSpace(value))
-            .Select(static value => value!.Trim())
-            .FirstOrDefault();
     }
 }

@@ -26,29 +26,11 @@ public sealed class OnDemandSandboxOptions
     public string WorkerProfileId { get; set; } = DefaultWorkerProfileId;
 
     /// <summary>
-    /// Gets or sets the full container image reference for on-demand sandbox workers.
+    /// Gets or sets the full OCI container image reference for on-demand sandbox workers.
+    /// Examples: <c>myregistry.azurecr.io/workers/hello:1.0</c> or
+    /// <c>myregistry.azurecr.io/workers/hello@sha256:0123456789abcdef...</c>.
     /// </summary>
     public string? ContainerImage { get; set; }
-
-    /// <summary>
-    /// Gets or sets the registry server for the on-demand sandbox worker image.
-    /// </summary>
-    public string? RegistryServer { get; set; }
-
-    /// <summary>
-    /// Gets or sets the repository for the on-demand sandbox worker image.
-    /// </summary>
-    public string? Repository { get; set; }
-
-    /// <summary>
-    /// Gets or sets the tag for the on-demand sandbox worker image.
-    /// </summary>
-    public string? Tag { get; set; }
-
-    /// <summary>
-    /// Gets or sets the digest for the on-demand sandbox worker image.
-    /// </summary>
-    public string? ImageDigest { get; set; }
 
     /// <summary>
     /// Gets or sets the user-assigned managed identity client ID ADC uses to pull the on-demand sandbox worker image.

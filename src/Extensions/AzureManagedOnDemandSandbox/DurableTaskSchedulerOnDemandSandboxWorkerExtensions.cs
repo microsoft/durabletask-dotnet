@@ -22,8 +22,8 @@ namespace Microsoft.DurableTask.Worker.AzureManaged;
 /// </summary>
 public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
 {
-    const string EnableSandboxActivitiesWorkerRuntimeErrorMessage =
-        "Activity declaration is for declaring on-demand sandbox activities from the coordinator app. " +
+    const string ExcludeSandboxActivitiesWorkerRuntimeErrorMessage =
+        "On-demand sandbox activity exclusion is for normal app workers. " +
         "DTS on-demand sandbox workers should use UseSandboxWorker instead.";
 
     const string UseSandboxWorkerNoActivitiesErrorMessage =
@@ -31,12 +31,13 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
         "Register an activity on this worker before starting the sandbox worker.";
 
     /// <summary>
-    /// Enables annotation-based on-demand sandbox activity declarations with DTS and excludes annotated
-    /// on-demand sandbox activities from local execution.
+    /// Configures this worker to exclude activities declared for on-demand sandbox execution from local execution.
+    /// Use <see cref="Microsoft.DurableTask.Client.AzureManaged.OnDemandSandboxActivitiesClient.EnableSandboxActivitiesAsync(string, CancellationToken)"/>
+    /// from the client process to declare on-demand sandbox activities with DTS.
     /// </summary>
     /// <param name="builder">The Durable Task worker builder to configure.</param>
     /// <returns>The original builder, for call chaining.</returns>
-    public static IDurableTaskWorkerBuilder EnableSandboxActivities(this IDurableTaskWorkerBuilder builder)
+    public static IDurableTaskWorkerBuilder ExcludeOnDemandSandboxActivities(this IDurableTaskWorkerBuilder builder)
     {
         Check.NotNull(builder);
         ThrowIfOnDemandSandboxWorkerRuntime();
@@ -45,7 +46,6 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
             .PostConfigure<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>((filters, schedulerOptions) =>
                 ExcludeDeclaredOnDemandSandboxActivitiesFromLocalExecution(filters, schedulerOptions.Get(builder.Name).TaskHubName));
 
-        builder.Services.AddSingleton<IHostedService>(sp => CreateOnDemandSandboxActivityDeclarationHostedService(sp, builder.Name));
         return builder;
     }
 
@@ -134,23 +134,8 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
     {
         if (IsOnDemandSandboxWorkerSubstrate(Environment.GetEnvironmentVariable("DTS_SUBSTRATE")))
         {
-            throw new InvalidOperationException(EnableSandboxActivitiesWorkerRuntimeErrorMessage);
+            throw new InvalidOperationException(ExcludeSandboxActivitiesWorkerRuntimeErrorMessage);
         }
-    }
-
-    static OnDemandSandboxActivityDeclarationHostedService CreateOnDemandSandboxActivityDeclarationHostedService(
-        IServiceProvider services,
-        string builderName)
-    {
-        ILoggerFactory loggerFactory = services.GetRequiredService<ILoggerFactory>();
-        OnDemandSandboxWorkerRuntimeOptions runtimeOptions = services.GetRequiredService<IOptionsMonitor<OnDemandSandboxWorkerRuntimeOptions>>().Get(builderName);
-        DurableTaskSchedulerWorkerOptions schedulerOptions = services.GetRequiredService<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>().Get(builderName);
-
-        return new OnDemandSandboxActivityDeclarationHostedService(
-            CreateOnDemandSandboxActivitiesClient(services, builderName),
-            OnDemandSandboxActivityDeclarationResolver.ResolveDeclarations(schedulerOptions.TaskHubName),
-            runtimeOptions,
-            loggerFactory.CreateLogger<OnDemandSandboxActivityDeclarationHostedService>());
     }
 
     static OnDemandSandboxActivityWorkerRegistrationHostedService CreateOnDemandSandboxActivityWorkerRegistrationHostedService(

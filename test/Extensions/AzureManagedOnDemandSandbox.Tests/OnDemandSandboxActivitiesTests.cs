@@ -637,7 +637,7 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public async Task EnableSandboxActivities_ConfiguresLocalWorkerExclusionFilterFromWorkerProfiles()
+    public async Task ExcludeOnDemandSandboxActivities_ConfiguresLocalWorkerExclusionFilterFromWorkerProfiles()
     {
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
@@ -651,7 +651,7 @@ public class OnDemandSandboxActivitiesTests
         mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
 
         // Act
-        mockBuilder.Object.EnableSandboxActivities();
+        mockBuilder.Object.ExcludeOnDemandSandboxActivities();
 
         await using ServiceProvider provider = services.BuildServiceProvider();
         DurableTaskWorkerWorkItemFilters filters = provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>().Get(Options.DefaultName);
@@ -662,7 +662,7 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public void EnableSandboxActivities_RegistersDeclarationHostedService()
+    public void ExcludeOnDemandSandboxActivities_DoesNotRegisterDeclarationHostedService()
     {
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
@@ -673,14 +673,14 @@ public class OnDemandSandboxActivitiesTests
         mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
 
         // Act
-        mockBuilder.Object.EnableSandboxActivities();
+        mockBuilder.Object.ExcludeOnDemandSandboxActivities();
 
         // Assert
-        services.Should().Contain(descriptor => descriptor.ServiceType == typeof(IHostedService));
+        services.Should().NotContain(descriptor => descriptor.ServiceType == typeof(IHostedService));
     }
 
     [Fact]
-    public void EnableSandboxActivities_WhenRunningInOnDemandSandboxWorker_Throws()
+    public void ExcludeOnDemandSandboxActivities_WhenRunningInOnDemandSandboxWorker_Throws()
     {
         // Arrange
         using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", "Sandbox");
@@ -690,11 +690,11 @@ public class OnDemandSandboxActivitiesTests
         mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
 
         // Act
-        Action action = () => mockBuilder.Object.EnableSandboxActivities();
+        Action action = () => mockBuilder.Object.ExcludeOnDemandSandboxActivities();
 
         // Assert
         action.Should().Throw<InvalidOperationException>()
-            .WithMessage("Activity declaration is for declaring on-demand sandbox activities from the coordinator app. DTS on-demand sandbox workers should use UseSandboxWorker instead.");
+            .WithMessage("On-demand sandbox activity exclusion is for normal app workers. DTS on-demand sandbox workers should use UseSandboxWorker instead.");
         services.Should().NotContain(descriptor => descriptor.ServiceType == typeof(IHostedService));
     }
 

@@ -1,7 +1,7 @@
 # Changelog
 
 ## Unreleased
-
+- Add support for multiple versions in DurableTask attribute ([#751](https://github.com/microsoft/durabletask-dotnet/pull/751))
 
 ## v1.25.0-preview.2
 - On-demand sandbox ([#736](https://github.com/microsoft/durabletask-dotnet/pull/736))

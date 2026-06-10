@@ -95,9 +95,9 @@ public partial class DurableTaskRegistry
     {
         // TODO: Compile a constructor expression for performance.
         Check.ConcreteType<ITaskOrchestrator>(type);
-        return this.AddOrchestrator(
+        return this.AddOrchestratorAllVersions(
             name,
-            type.GetDurableTaskVersion(),
+            type.GetDurableTaskVersions(),
             () => (ITaskOrchestrator)Activator.CreateInstance(type));
     }
 
@@ -109,7 +109,8 @@ public partial class DurableTaskRegistry
     public DurableTaskRegistry AddOrchestrator(Type type)
     {
         Check.ConcreteType<ITaskOrchestrator>(type);
-        return this.AddOrchestrator(type.GetTaskName(), type.GetDurableTaskVersion(), () => (ITaskOrchestrator)Activator.CreateInstance(type));
+        return this.AddOrchestratorAllVersions(
+            type.GetTaskName(), type.GetDurableTaskVersions(), () => (ITaskOrchestrator)Activator.CreateInstance(type));
     }
 
     /// <summary>
@@ -140,7 +141,7 @@ public partial class DurableTaskRegistry
     public DurableTaskRegistry AddOrchestrator(TaskName name, ITaskOrchestrator orchestrator)
     {
         Check.NotNull(orchestrator);
-        return this.AddOrchestrator(name, orchestrator.GetType().GetDurableTaskVersion(), () => orchestrator);
+        return this.AddOrchestratorAllVersions(name, orchestrator.GetType().GetDurableTaskVersions(), () => orchestrator);
     }
 
     /// <summary>
@@ -151,9 +152,9 @@ public partial class DurableTaskRegistry
     public DurableTaskRegistry AddOrchestrator(ITaskOrchestrator orchestrator)
     {
         Check.NotNull(orchestrator);
-        return this.AddOrchestrator(
+        return this.AddOrchestratorAllVersions(
             orchestrator.GetType().GetTaskName(),
-            orchestrator.GetType().GetDurableTaskVersion(),
+            orchestrator.GetType().GetDurableTaskVersions(),
             () => orchestrator);
     }
 
@@ -301,5 +302,21 @@ public partial class DurableTaskRegistry
             orchestrator(context);
             return CompletedNullTask;
         });
+    }
+
+    /// <summary>
+    /// Registers an orchestrator factory under every supplied version. This is the shared fan-out used by the
+    /// type- and singleton-based registration overloads so that a class declaring multiple versions via
+    /// <see cref="DurableTaskAttribute.Version"/> is registered once per declared version.
+    /// </summary>
+    DurableTaskRegistry AddOrchestratorAllVersions(
+        TaskName name, IReadOnlyList<TaskVersion> versions, Func<ITaskOrchestrator> factory)
+    {
+        foreach (TaskVersion version in versions)
+        {
+            this.AddOrchestrator(name, version, factory);
+        }
+
+        return this;
     }
 }

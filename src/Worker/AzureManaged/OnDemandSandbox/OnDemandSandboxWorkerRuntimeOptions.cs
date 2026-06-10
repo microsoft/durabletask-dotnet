@@ -6,22 +6,6 @@ using Microsoft.DurableTask.AzureManaged.Internal;
 namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
 
 /// <summary>
-/// Defines how a worker participates in on-demand sandbox activity execution.
-/// </summary>
-internal enum OnDemandSandboxMode
-{
-    /// <summary>
-    /// The worker is not running inside on-demand sandbox infrastructure.
-    /// </summary>
-    LocalExclude,
-
-    /// <summary>
-    /// The worker runs inside on-demand sandbox infrastructure and executes only on-demand sandbox activities.
-    /// </summary>
-    OnDemandSandboxInclude,
-}
-
-/// <summary>
 /// Internal runtime settings for an on-demand sandbox worker process.
 /// </summary>
 internal sealed class OnDemandSandboxWorkerRuntimeOptions
@@ -55,9 +39,4 @@ internal sealed class OnDemandSandboxWorkerRuntimeOptions
     /// Gets or sets the maximum delay before retrying a failed worker registration stream.
     /// </summary>
     public TimeSpan WorkerRegistrationRetryMaxDelay { get; set; } = TimeSpan.FromSeconds(30);
-
-    /// <summary>
-    /// Gets or sets the worker mode for on-demand sandbox activity execution. Set automatically from the runtime environment.
-    /// </summary>
-    public OnDemandSandboxMode Mode { get; set; } = OnDemandSandboxMode.LocalExclude;
 }

@@ -102,7 +102,6 @@ public class OnDemandSandboxActivitiesTests
         {
             OnDemandSandboxWorkerRuntimeOptions options = new()
             {
-                Mode = OnDemandSandboxMode.OnDemandSandboxInclude,
                 TaskHub = TaskHub,
                 WorkerProfileId = "profile-a",
                 MaxConcurrentActivities = 3,
@@ -171,7 +170,6 @@ public class OnDemandSandboxActivitiesTests
         // Arrange
         OnDemandSandboxWorkerRuntimeOptions options = new()
         {
-            Mode = OnDemandSandboxMode.OnDemandSandboxInclude,
             TaskHub = TaskHub,
             WorkerProfileId = "profile-a",
             MaxConcurrentActivities = 3,
@@ -208,7 +206,6 @@ public class OnDemandSandboxActivitiesTests
         // Arrange
         OnDemandSandboxWorkerRuntimeOptions options = new()
         {
-            Mode = OnDemandSandboxMode.OnDemandSandboxInclude,
             TaskHub = TaskHub,
             WorkerProfileId = "profile-a",
             MaxConcurrentActivities = 3,
@@ -247,7 +244,6 @@ public class OnDemandSandboxActivitiesTests
         // Arrange
         OnDemandSandboxWorkerRuntimeOptions options = new()
         {
-            Mode = OnDemandSandboxMode.OnDemandSandboxInclude,
             TaskHub = TaskHub,
             WorkerProfileId = "profile-a",
             MaxConcurrentActivities = 3,
@@ -315,7 +311,6 @@ public class OnDemandSandboxActivitiesTests
         // Arrange
         OnDemandSandboxWorkerRuntimeOptions options = new()
         {
-            Mode = OnDemandSandboxMode.OnDemandSandboxInclude,
             TaskHub = TaskHub,
             WorkerProfileId = "profile-a",
             MaxConcurrentActivities = 3,
@@ -353,7 +348,6 @@ public class OnDemandSandboxActivitiesTests
         // Arrange
         OnDemandSandboxWorkerRuntimeOptions options = new()
         {
-            Mode = OnDemandSandboxMode.OnDemandSandboxInclude,
             TaskHub = TaskHub,
             WorkerProfileId = "profile-a",
             MaxConcurrentActivities = 3,
@@ -393,6 +387,7 @@ public class OnDemandSandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", "Sandbox");
         using EnvironmentVariableScope maxActivities = new("DTS_ON_DEMAND_SANDBOX_MAX_ACTIVITIES", "3");
         ServiceCollection services = new();
         services.Configure<DurableTaskRegistry>(
@@ -424,6 +419,7 @@ public class OnDemandSandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", "Sandbox");
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
         mockBuilder.Setup(builder => builder.Services).Returns(services);
@@ -576,6 +572,62 @@ public class OnDemandSandboxActivitiesTests
         // Assert
         action.Should().Throw<InvalidOperationException>()
             .WithMessage("DTS_TASK_HUB must be injected by DTS for on-demand sandbox workers.");
+    }
+
+    [Fact]
+    public async Task UseSandboxWorker_MissingInjectedSubstrate_ThrowsWhenWorkerOptionsAreResolved()
+    {
+        // Arrange
+        using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
+        using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", null);
+        ServiceCollection services = new();
+        services.Configure<DurableTaskRegistry>(
+            Options.DefaultName,
+            registry => registry.AddActivityFunc<string, string>(new TaskName("RemoteHello"), (_, input) => input));
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
+        mockBuilder.Setup(builder => builder.Services).Returns(services);
+        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
+
+        mockBuilder.Object.UseSandboxWorker();
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act
+        Action action = () => provider
+            .GetRequiredService<IOptionsMonitor<DurableTaskWorkerOptions>>()
+            .Get(Options.DefaultName);
+
+        // Assert
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("DTS_SUBSTRATE must be injected by DTS for on-demand sandbox workers.");
+    }
+
+    [Fact]
+    public async Task UseSandboxWorker_InvalidInjectedSubstrate_ThrowsWhenWorkerOptionsAreResolved()
+    {
+        // Arrange
+        using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
+        using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", "ContainerApp");
+        ServiceCollection services = new();
+        services.Configure<DurableTaskRegistry>(
+            Options.DefaultName,
+            registry => registry.AddActivityFunc<string, string>(new TaskName("RemoteHello"), (_, input) => input));
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
+        mockBuilder.Setup(builder => builder.Services).Returns(services);
+        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
+
+        mockBuilder.Object.UseSandboxWorker();
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act
+        Action action = () => provider
+            .GetRequiredService<IOptionsMonitor<DurableTaskWorkerOptions>>()
+            .Get(Options.DefaultName);
+
+        // Assert
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("DTS_SUBSTRATE must be 'Sandbox' or 'AcaSessionPool' for on-demand sandbox workers.");
     }
 
     sealed class FakeOnDemandSandboxActivitiesTransport : IOnDemandSandboxActivitiesTransport

@@ -59,12 +59,6 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
     /// <inheritdoc/>
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        if (this.options.Mode != OnDemandSandboxMode.OnDemandSandboxInclude)
-        {
-            this.pump = Task.CompletedTask;
-            return Task.CompletedTask;
-        }
-
         string[] activityNames = OnDemandSandboxActivityMetadata.ResolveActivityNames(this.registeredActivityNames);
         if (activityNames.Length == 0)
         {

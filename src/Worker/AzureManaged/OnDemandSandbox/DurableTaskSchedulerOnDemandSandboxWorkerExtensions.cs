@@ -173,12 +173,7 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
 
     static void ApplyWorkerEnvironmentOverrides(OnDemandSandboxWorkerRuntimeOptions options)
     {
-        // Auto-detect worker mode from DTS_SUBSTRATE, which the backend injects when
-        // launching a sandbox. This is the authoritative signal that this process is a sandbox worker.
-        if (IsOnDemandSandboxWorkerSubstrate(Environment.GetEnvironmentVariable("DTS_SUBSTRATE")))
-        {
-            options.Mode = OnDemandSandboxMode.OnDemandSandboxInclude;
-        }
+        ValidateOnDemandSandboxWorkerSubstrate(GetRequiredEnvironmentVariable("DTS_SUBSTRATE"));
 
         ApplyWorkerProfileEnvironmentOverride(profile => options.WorkerProfileId = profile);
 
@@ -197,9 +192,15 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
         }
     }
 
-    static bool IsOnDemandSandboxWorkerSubstrate(string? substrate)
-        => string.Equals(substrate, "Sandbox", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(substrate, "AcaSessionPool", StringComparison.OrdinalIgnoreCase);
+    static void ValidateOnDemandSandboxWorkerSubstrate(string substrate)
+    {
+        if (!string.Equals(substrate, "Sandbox", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(substrate, "AcaSessionPool", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "DTS_SUBSTRATE must be 'Sandbox' or 'AcaSessionPool' for on-demand sandbox workers.");
+        }
+    }
 
     static string[] ResolveActivityFilterNames(IReadOnlyList<DurableTaskWorkerWorkItemFilters.ActivityFilter> activityFilters)
     {

@@ -26,7 +26,7 @@ static class OnDemandSandboxActivityDeclarationResolver
 
         OnDemandSandboxOptions[] declarations = Profiles.Value
             .Select(profile => CreateOptions(normalizedTaskHub, profile))
-            .Where(static options => OnDemandSandboxActivityConfiguration.ResolveActivityNames(options.ActivityNames).Length > 0)
+            .Where(static options => OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames).Length > 0)
             .ToArray();
 
         ValidateActivityOwnership(declarations);
@@ -111,7 +111,7 @@ static class OnDemandSandboxActivityDeclarationResolver
         Dictionary<string, string> activityOwners = new(StringComparer.Ordinal);
         foreach (OnDemandSandboxOptions declaration in declarations)
         {
-            foreach (string activityName in OnDemandSandboxActivityConfiguration.ResolveActivityNames(declaration.ActivityNames))
+            foreach (string activityName in OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(declaration.ActivityNames))
             {
                 if (activityOwners.TryGetValue(activityName, out string? existingProfile)
                     && !string.Equals(existingProfile, declaration.WorkerProfileId, StringComparison.Ordinal))

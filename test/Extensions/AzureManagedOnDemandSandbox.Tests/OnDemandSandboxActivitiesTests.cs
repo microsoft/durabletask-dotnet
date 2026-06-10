@@ -63,7 +63,7 @@ public class OnDemandSandboxActivitiesTests
     [InlineData("500m", "1024Mi")]
     [InlineData("0.5", "1Gi")]
     [InlineData("2", "2048")]
-    public void OnDemandSandboxActivityConfiguration_BuildDeclaration_AcceptsAdcResourceQuantities(
+    public void OnDemandSandboxActivityDeclarationBuilder_BuildDeclaration_AcceptsAdcResourceQuantities(
         string cpu,
         string memory)
     {
@@ -73,9 +73,9 @@ public class OnDemandSandboxActivitiesTests
         options.Memory = memory;
 
         // Act
-        OnDemandSandboxActivityDeclaration declaration = OnDemandSandboxActivityConfiguration.BuildDeclaration(
+        OnDemandSandboxActivityDeclaration declaration = OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(
             options,
-            OnDemandSandboxActivityConfiguration.ResolveActivityNames(options.ActivityNames));
+            OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
 
         // Assert
         declaration.Resources.Cpu.Should().Be(cpu);
@@ -89,7 +89,7 @@ public class OnDemandSandboxActivitiesTests
     [InlineData("500m", "0", "memory")]
     [InlineData("500m", "0Mi", "memory")]
     [InlineData("500m", "500m", "memory")]
-    public void OnDemandSandboxActivityConfiguration_BuildDeclaration_RejectsInvalidAdcResourceQuantities(
+    public void OnDemandSandboxActivityDeclarationBuilder_BuildDeclaration_RejectsInvalidAdcResourceQuantities(
         string cpu,
         string memory,
         string expectedMessage)
@@ -100,9 +100,9 @@ public class OnDemandSandboxActivitiesTests
         options.Memory = memory;
 
         // Act
-        Action action = () => OnDemandSandboxActivityConfiguration.BuildDeclaration(
+        Action action = () => OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(
             options,
-            OnDemandSandboxActivityConfiguration.ResolveActivityNames(options.ActivityNames));
+            OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
 
         // Assert
         action.Should().Throw<InvalidOperationException>()
@@ -110,16 +110,16 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public void OnDemandSandboxActivityConfiguration_BuildDeclaration_RequiresSchedulerManagedIdentityClientId()
+    public void OnDemandSandboxActivityDeclarationBuilder_BuildDeclaration_RequiresSchedulerManagedIdentityClientId()
     {
         // Arrange
         OnDemandSandboxOptions options = CreateDeclarationOptions();
         options.SchedulerManagedIdentityClientId = " ";
 
         // Act
-        Action action = () => OnDemandSandboxActivityConfiguration.BuildDeclaration(
+        Action action = () => OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(
             options,
-            OnDemandSandboxActivityConfiguration.ResolveActivityNames(options.ActivityNames));
+            OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
 
         // Assert
         action.Should().Throw<InvalidOperationException>()
@@ -127,16 +127,16 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public void OnDemandSandboxActivityConfiguration_BuildDeclaration_RequiresImagePullManagedIdentityClientId()
+    public void OnDemandSandboxActivityDeclarationBuilder_BuildDeclaration_RequiresImagePullManagedIdentityClientId()
     {
         // Arrange
         OnDemandSandboxOptions options = CreateDeclarationOptions();
         options.ImagePullManagedIdentityClientId = " ";
 
         // Act
-        Action action = () => OnDemandSandboxActivityConfiguration.BuildDeclaration(
+        Action action = () => OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(
             options,
-            OnDemandSandboxActivityConfiguration.ResolveActivityNames(options.ActivityNames));
+            OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
 
         // Assert
         action.Should().Throw<InvalidOperationException>()
@@ -144,11 +144,11 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public async Task OnDemandSandboxActivitiesClientAdapter_SendsTaskHubMetadata()
+    public async Task OnDemandSandboxActivitiesGrpcTransport_SendsTaskHubMetadata()
     {
         // Arrange
         RecordingOnDemandSandboxActivitiesCallInvoker callInvoker = new();
-        OnDemandSandboxActivitiesClientAdapter adapter = new(new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker));
+        OnDemandSandboxActivitiesGrpcTransport transport = new(new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker));
         OnDemandSandboxActivityDeclaration declaration = new()
         {
             WorkerProfileId = "profile-a",
@@ -166,8 +166,8 @@ public class OnDemandSandboxActivitiesTests
         declaration.ActivityNames.Add("RemoteHello");
 
         // Act
-        await adapter.DeclareOnDemandSandboxActivitiesAsync(declaration, TaskHub, CancellationToken.None);
-        await using IOnDemandSandboxActivityWorkerSession session = adapter.OpenOnDemandSandboxActivityWorkerSession(
+        await transport.DeclareOnDemandSandboxActivitiesAsync(declaration, TaskHub, CancellationToken.None);
+        await using IOnDemandSandboxActivityWorkerSession session = transport.OpenOnDemandSandboxActivityWorkerSession(
             TaskHub,
             CancellationToken.None);
 
@@ -177,11 +177,11 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public async Task OnDemandSandboxActivitiesClientAdapter_CanRelyOnChannelTaskHubMetadata()
+    public async Task OnDemandSandboxActivitiesGrpcTransport_CanRelyOnChannelTaskHubMetadata()
     {
         // Arrange
         RecordingOnDemandSandboxActivitiesCallInvoker callInvoker = new();
-        OnDemandSandboxActivitiesClientAdapter adapter = new(
+        OnDemandSandboxActivitiesGrpcTransport transport = new(
             new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker),
             attachTaskHubMetadata: false);
         OnDemandSandboxActivityDeclaration declaration = new()
@@ -201,8 +201,8 @@ public class OnDemandSandboxActivitiesTests
         declaration.ActivityNames.Add("RemoteHello");
 
         // Act
-        await adapter.DeclareOnDemandSandboxActivitiesAsync(declaration, TaskHub, CancellationToken.None);
-        await using IOnDemandSandboxActivityWorkerSession session = adapter.OpenOnDemandSandboxActivityWorkerSession(
+        await transport.DeclareOnDemandSandboxActivitiesAsync(declaration, TaskHub, CancellationToken.None);
+        await using IOnDemandSandboxActivityWorkerSession session = transport.OpenOnDemandSandboxActivityWorkerSession(
             TaskHub,
             CancellationToken.None);
 
@@ -230,7 +230,7 @@ public class OnDemandSandboxActivitiesTests
                 MaxConcurrentActivities = 3,
                 HeartbeatInterval = TimeSpan.FromDays(1),
             };
-            FakeOnDemandSandboxActivitiesClient client = new();
+            FakeOnDemandSandboxActivitiesTransport client = new();
             OnDemandSandboxActivityWorkerRegistrationHostedService service = new(
                 client,
                 options,
@@ -300,7 +300,7 @@ public class OnDemandSandboxActivitiesTests
             HeartbeatInterval = TimeSpan.FromMilliseconds(10),
         };
 
-        FakeOnDemandSandboxActivitiesClient client = new();
+        FakeOnDemandSandboxActivitiesTransport client = new();
         OnDemandSandboxActivityTracker activityTracker = new();
         activityTracker.NotifyActivityStarted();
         activityTracker.NotifyActivityStarted();
@@ -341,7 +341,7 @@ public class OnDemandSandboxActivitiesTests
 
         FakeOnDemandSandboxActivityWorkerSession failedSession = new() { ThrowOnWriteAttempt = 2 };
         FakeOnDemandSandboxActivityWorkerSession recoveredSession = new();
-        FakeOnDemandSandboxActivitiesClient client = new();
+        FakeOnDemandSandboxActivitiesTransport client = new();
         client.QueueSession(failedSession);
         client.QueueSession(recoveredSession);
 
@@ -380,7 +380,7 @@ public class OnDemandSandboxActivitiesTests
 
         FakeOnDemandSandboxActivityWorkerSession failedSession = new();
         FakeOnDemandSandboxActivityWorkerSession recoveredSession = new();
-        FakeOnDemandSandboxActivitiesClient client = new();
+        FakeOnDemandSandboxActivitiesTransport client = new();
         client.QueueSession(failedSession);
         client.QueueSession(recoveredSession);
 
@@ -448,7 +448,7 @@ public class OnDemandSandboxActivitiesTests
 
         FakeOnDemandSandboxActivityWorkerSession failedSession = new() { ThrowOnWriteAttempt = 2 };
         FakeOnDemandSandboxActivityWorkerSession recoveredSession = new();
-        FakeOnDemandSandboxActivitiesClient client = new();
+        FakeOnDemandSandboxActivitiesTransport client = new();
         client.QueueSession(failedSession);
         client.QueueSession(recoveredSession);
 
@@ -483,7 +483,7 @@ public class OnDemandSandboxActivitiesTests
         };
 
         FakeOnDemandSandboxActivityWorkerSession session = new() { BlockWriteAttempt = 2 };
-        FakeOnDemandSandboxActivitiesClient client = new();
+        FakeOnDemandSandboxActivitiesTransport client = new();
         client.QueueSession(session);
 
         OnDemandSandboxActivityWorkerRegistrationHostedService service = new(
@@ -521,9 +521,9 @@ public class OnDemandSandboxActivitiesTests
         // Act
         OnDemandSandboxOptions options = OnDemandSandboxActivityDeclarationResolver.ResolveDeclarations(TaskHub)
             .Single(options => options.WorkerProfileId == "annotated-profile");
-        OnDemandSandboxActivityDeclaration declaration = OnDemandSandboxActivityConfiguration.BuildDeclaration(
+        OnDemandSandboxActivityDeclaration declaration = OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(
             options,
-            OnDemandSandboxActivityConfiguration.ResolveActivityNames(options.ActivityNames));
+            OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
 
         // Assert
         declaration.WorkerProfileId.Should().Be("annotated-profile");
@@ -766,7 +766,7 @@ public class OnDemandSandboxActivitiesTests
         }
     }
 
-    sealed class FakeOnDemandSandboxActivitiesClient : IOnDemandSandboxActivitiesClient
+    sealed class FakeOnDemandSandboxActivitiesTransport : IOnDemandSandboxActivitiesTransport
     {
         readonly Queue<FakeOnDemandSandboxActivityWorkerSession> queuedSessions = new();
 

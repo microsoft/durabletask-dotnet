@@ -7,9 +7,9 @@ using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
 
 /// <summary>
-/// Client abstraction for the on-demand sandbox activities gRPC service.
+/// Transport abstraction for the on-demand sandbox activities gRPC service.
 /// </summary>
-interface IOnDemandSandboxActivitiesClient
+interface IOnDemandSandboxActivitiesTransport
 {
     /// <summary>
     /// Declares on-demand sandbox activities to DTS.
@@ -58,19 +58,19 @@ interface IOnDemandSandboxActivityWorkerSession : IAsyncDisposable
 }
 
 /// <summary>
-/// gRPC-backed implementation of <see cref="IOnDemandSandboxActivitiesClient"/>.
+/// gRPC-backed implementation of <see cref="IOnDemandSandboxActivitiesTransport"/>.
 /// </summary>
-sealed class OnDemandSandboxActivitiesClientAdapter : IOnDemandSandboxActivitiesClient
+sealed class OnDemandSandboxActivitiesGrpcTransport : IOnDemandSandboxActivitiesTransport
 {
     readonly Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient client;
     readonly bool attachTaskHubMetadata;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="OnDemandSandboxActivitiesClientAdapter"/> class.
+    /// Initializes a new instance of the <see cref="OnDemandSandboxActivitiesGrpcTransport"/> class.
     /// </summary>
     /// <param name="client">The generated on-demand sandbox activities gRPC client.</param>
     /// <param name="attachTaskHubMetadata">True to add per-call task hub metadata when the underlying channel does not already do so.</param>
-    public OnDemandSandboxActivitiesClientAdapter(
+    public OnDemandSandboxActivitiesGrpcTransport(
         Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient client,
         bool attachTaskHubMetadata = true)
     {

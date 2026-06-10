@@ -7,9 +7,9 @@ using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
 
 /// <summary>
-/// Builds and normalizes on-demand sandbox activity protocol messages.
+/// Builds and normalizes on-demand sandbox activity declaration protocol messages.
 /// </summary>
-static class OnDemandSandboxActivityConfiguration
+static class OnDemandSandboxActivityDeclarationBuilder
 {
     /// <summary>
     /// Resolves configured activity names for on-demand sandbox activity execution.
@@ -31,20 +31,22 @@ static class OnDemandSandboxActivityConfiguration
     /// <param name="options">The on-demand sandbox options.</param>
     /// <param name="activityNames">The activity names included in the declaration.</param>
     /// <returns>The declaration protocol message.</returns>
-    public static Proto.OnDemandSandboxActivityDeclaration BuildDeclaration(OnDemandSandboxOptions options, IReadOnlyCollection<string> activityNames)
+    public static Proto.OnDemandSandboxActivityDeclaration BuildDeclaration(
+        OnDemandSandboxOptions options,
+        IReadOnlyCollection<string> activityNames)
     {
         Check.NotNull(options);
         Check.NotNull(activityNames);
 
-        ValidateTaskHub(options.TaskHub, "On-demand sandbox activity declaration requires a task hub name.");
-
+        _ = NormalizeRequired(options.TaskHub, "On-demand sandbox activity declaration requires a task hub name.");
         if (activityNames.Count == 0)
         {
             throw new InvalidOperationException("On-demand sandbox activity declaration requires at least one activity name.");
         }
 
-        string workerProfileId = NormalizeWorkerProfileId(options.WorkerProfileId, "On-demand sandbox activity declaration requires a worker profile ID.");
-
+        string workerProfileId = NormalizeWorkerProfileId(
+            options.WorkerProfileId,
+            "On-demand sandbox activity declaration requires a worker profile ID.");
         if (options.MaxConcurrentActivities <= 0)
         {
             throw new InvalidOperationException("On-demand sandbox activity max concurrent activities must be greater than zero.");
@@ -70,65 +72,19 @@ static class OnDemandSandboxActivityConfiguration
         return declaration;
     }
 
-    /// <summary>
-    /// Builds the initial on-demand sandbox activity worker registration message.
-    /// </summary>
-    /// <param name="options">The on-demand sandbox options.</param>
-    /// <param name="registeredActivityNames">The activity handlers registered by the worker process.</param>
-    /// <returns>The worker start protocol message.</returns>
-    public static Proto.OnDemandSandboxActivityWorkerMessage BuildWorkerStart(
-        OnDemandSandboxWorkerRuntimeOptions options,
-        IReadOnlyCollection<string> registeredActivityNames)
+    internal static string NormalizeWorkerProfileId(string value, string errorMessage)
     {
-        Check.NotNull(options);
-        Check.NotNull(registeredActivityNames);
-
-        ValidateTaskHub(options.TaskHub, "On-demand sandbox activity worker registration requires a task hub name.");
-        string[] activityNames = ResolveActivityNames(registeredActivityNames);
-        if (activityNames.Length == 0)
-        {
-            throw new InvalidOperationException("On-demand sandbox activity worker registration requires at least one registered activity.");
-        }
-
-        if (options.MaxConcurrentActivities <= 0)
-        {
-            throw new InvalidOperationException("On-demand sandbox activity worker max concurrent activities must be greater than zero.");
-        }
-
-        string workerProfileId = NormalizeWorkerProfileId(options.WorkerProfileId, "On-demand sandbox activity worker registration requires a worker profile ID.");
-
-        Proto.OnDemandSandboxActivityWorkerStart start = new()
-        {
-            TaskHub = options.TaskHub,
-            WorkerProfileId = workerProfileId,
-            MaxActivitiesCount = options.MaxConcurrentActivities,
-            Substrate = GetSubstrateFromEnvironment(),
-            DtsSandboxIdentifier = Environment.GetEnvironmentVariable("DTS_SANDBOX_ID") ?? string.Empty,
-        };
-        start.ActivityNames.AddRange(activityNames);
-
-        return new Proto.OnDemandSandboxActivityWorkerMessage { Start = start };
+        return NormalizeRequired(value, errorMessage);
     }
 
-    /// <summary>
-    /// Builds an on-demand sandbox activity worker heartbeat message.
-    /// </summary>
-    /// <param name="activeActivitiesCount">The number of activities currently executing.</param>
-    /// <returns>The heartbeat protocol message.</returns>
-    public static Proto.OnDemandSandboxActivityWorkerMessage BuildWorkerHeartbeat(int activeActivitiesCount)
+    internal static string NormalizeRequired(string value, string errorMessage)
     {
-        if (activeActivitiesCount < 0)
+        if (string.IsNullOrWhiteSpace(value))
         {
-            throw new InvalidOperationException("On-demand sandbox activity worker active activity count cannot be negative.");
+            throw new InvalidOperationException(errorMessage);
         }
 
-        return new Proto.OnDemandSandboxActivityWorkerMessage
-        {
-            Heartbeat = new Proto.OnDemandSandboxActivityWorkerHeartbeat
-            {
-                ActiveActivitiesCount = activeActivitiesCount,
-            },
-        };
+        return value.Trim();
     }
 
     static Proto.OnDemandSandboxActivityImage BuildImage(OnDemandSandboxOptions options)
@@ -158,47 +114,6 @@ static class OnDemandSandboxActivityConfiguration
             Cpu = cpu,
             Memory = memory,
         };
-    }
-
-    static Proto.SubstrateKind GetSubstrateFromEnvironment()
-    {
-        string? substrate = Environment.GetEnvironmentVariable("DTS_SUBSTRATE");
-        if (substrate is null)
-        {
-            return Proto.SubstrateKind.Unspecified;
-        }
-
-        if (substrate.Equals("Sandbox", StringComparison.OrdinalIgnoreCase))
-        {
-            return Proto.SubstrateKind.Sandbox;
-        }
-
-        if (substrate.Equals("AcaSessionPool", StringComparison.OrdinalIgnoreCase))
-        {
-            return Proto.SubstrateKind.AcaSessionPool;
-        }
-
-        return Proto.SubstrateKind.Unspecified;
-    }
-
-    static void ValidateTaskHub(string value, string errorMessage)
-    {
-        _ = NormalizeRequired(value, errorMessage);
-    }
-
-    static string NormalizeWorkerProfileId(string value, string errorMessage)
-    {
-        return NormalizeRequired(value, errorMessage);
-    }
-
-    static string NormalizeRequired(string value, string errorMessage)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            throw new InvalidOperationException(errorMessage);
-        }
-
-        return value.Trim();
     }
 
     static string NormalizeCpu(string value)

@@ -45,14 +45,14 @@ public sealed class OnDemandSandboxActivitiesClient
             OnDemandSandboxActivityDeclarationResolver.ResolveDeclarations(this.taskHub);
         foreach (OnDemandSandboxOptions options in declarations)
         {
-            string[] activityNames = OnDemandSandboxActivityConfiguration.ResolveActivityNames(options.ActivityNames);
+            string[] activityNames = OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames);
             if (activityNames.Length == 0)
             {
                 continue;
             }
 
             Proto.OnDemandSandboxActivityDeclaration declaration =
-                OnDemandSandboxActivityConfiguration.BuildDeclaration(options, activityNames);
+                OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(options, activityNames);
             using AsyncUnaryCall<Proto.OnDemandSandboxActivityDeclarationResult> call =
                 this.client.DeclareOnDemandSandboxActivitiesAsync(
                     declaration,
@@ -71,7 +71,30 @@ public sealed class OnDemandSandboxActivitiesClient
     public Task RemoveOnDemandSandboxActivityDeclarationAsync(
         string workerProfileId,
         CancellationToken cancellation = default)
-        => this.client.RemoveOnDemandSandboxActivityDeclarationAsync(workerProfileId, cancellation);
+    {
+        string normalizedWorkerProfileId = string.IsNullOrWhiteSpace(workerProfileId)
+            ? throw new ArgumentException("Worker profile ID is required.", nameof(workerProfileId))
+            : workerProfileId.Trim();
+
+        Proto.RemoveOnDemandSandboxActivityDeclarationRequest request = new()
+        {
+            WorkerProfileId = normalizedWorkerProfileId,
+        };
+
+        return this.RemoveOnDemandSandboxActivityDeclarationCoreAsync(request, cancellation);
+    }
+
+    async Task RemoveOnDemandSandboxActivityDeclarationCoreAsync(
+        Proto.RemoveOnDemandSandboxActivityDeclarationRequest request,
+        CancellationToken cancellation)
+    {
+        using AsyncUnaryCall<Proto.RemoveOnDemandSandboxActivityDeclarationResult> call =
+            this.client.RemoveOnDemandSandboxActivityDeclarationAsync(
+                request,
+                headers: this.CreateTaskHubHeaders(),
+                cancellationToken: cancellation);
+        await call.ResponseAsync.ConfigureAwait(false);
+    }
 
     Metadata? CreateTaskHubHeaders() => this.attachTaskHubMetadata
         ? new Metadata { { "taskhub", this.taskHub }, }

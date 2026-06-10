@@ -104,7 +104,7 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
         DurableTaskWorkerWorkItemFilters filters = services.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>().Get(builderName);
 
         return new OnDemandSandboxActivityWorkerRegistrationHostedService(
-            CreateOnDemandSandboxActivitiesClient(services, builderName),
+            CreateOnDemandSandboxActivitiesTransport(services, builderName),
             options,
             ResolveActivityFilterNames(filters.Activities),
             loggerFactory.CreateLogger<OnDemandSandboxActivityWorkerRegistrationHostedService>(),
@@ -112,17 +112,17 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
             activityTracker);
     }
 
-    static OnDemandSandboxActivitiesClientAdapter CreateOnDemandSandboxActivitiesClient(IServiceProvider services, string builderName)
+    static OnDemandSandboxActivitiesGrpcTransport CreateOnDemandSandboxActivitiesTransport(IServiceProvider services, string builderName)
     {
         GrpcDurableTaskWorkerOptions options = services.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>().Get(builderName);
         if (options.CallInvoker is { } callInvoker)
         {
-            return new OnDemandSandboxActivitiesClientAdapter(new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker));
+            return new OnDemandSandboxActivitiesGrpcTransport(new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker));
         }
 
         if (options.Channel is { } channel)
         {
-            return new OnDemandSandboxActivitiesClientAdapter(
+            return new OnDemandSandboxActivitiesGrpcTransport(
                 new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(channel.CreateCallInvoker()),
                 attachTaskHubMetadata: false);
         }

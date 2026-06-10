@@ -15,7 +15,7 @@ namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
 sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedService, IAsyncDisposable
 {
     readonly object sync = new();
-    readonly IOnDemandSandboxActivitiesClient client;
+    readonly IOnDemandSandboxActivitiesTransport transport;
     readonly OnDemandSandboxWorkerRuntimeOptions options;
     readonly IReadOnlyCollection<string> registeredActivityNames;
     readonly ILogger<OnDemandSandboxActivityWorkerRegistrationHostedService> logger;
@@ -30,7 +30,7 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
     /// <summary>
     /// Initializes a new instance of the <see cref="OnDemandSandboxActivityWorkerRegistrationHostedService"/> class.
     /// </summary>
-    /// <param name="client">The on-demand sandbox activities client.</param>
+    /// <param name="transport">The on-demand sandbox activities transport.</param>
     /// <param name="options">The on-demand sandbox worker runtime options.</param>
     /// <param name="registeredActivityNames">The activity handlers registered by this worker process.</param>
     /// <param name="logger">The logger.</param>
@@ -38,7 +38,7 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
     /// <param name="activityTracker">The optional activity tracker used to report live in-flight activity count.</param>
     /// <param name="reconnectJitter">The optional random source used to jitter reconnect delays.</param>
     public OnDemandSandboxActivityWorkerRegistrationHostedService(
-        IOnDemandSandboxActivitiesClient client,
+        IOnDemandSandboxActivitiesTransport transport,
         OnDemandSandboxWorkerRuntimeOptions options,
         IReadOnlyCollection<string> registeredActivityNames,
         ILogger<OnDemandSandboxActivityWorkerRegistrationHostedService> logger,
@@ -46,7 +46,7 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
         OnDemandSandboxActivityTracker? activityTracker = null,
         Random? reconnectJitter = null)
     {
-        this.client = Check.NotNull(client);
+        this.transport = Check.NotNull(transport);
         this.options = Check.NotNull(options);
         this.registeredActivityNames = Check.NotNull(registeredActivityNames);
         this.logger = Check.NotNull(logger);
@@ -64,7 +64,7 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
             return Task.CompletedTask;
         }
 
-        string[] activityNames = OnDemandSandboxActivityConfiguration.ResolveActivityNames(this.registeredActivityNames);
+        string[] activityNames = OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(this.registeredActivityNames);
         if (activityNames.Length == 0)
         {
             Logs.NoOnDemandSandboxActivitiesForWorkerRegistration(this.logger, this.options.TaskHub);
@@ -202,10 +202,10 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
             IOnDemandSandboxActivityWorkerSession? registrationSession = null;
             try
             {
-                registrationSession = this.client.OpenOnDemandSandboxActivityWorkerSession(this.options.TaskHub, cancellationToken);
+                registrationSession = this.transport.OpenOnDemandSandboxActivityWorkerSession(this.options.TaskHub, cancellationToken);
                 this.SetCurrentSession(registrationSession);
 
-                Proto.OnDemandSandboxActivityWorkerMessage startMessage = OnDemandSandboxActivityConfiguration.BuildWorkerStart(this.options, this.registeredActivityNames);
+                Proto.OnDemandSandboxActivityWorkerMessage startMessage = OnDemandSandboxWorkerMessageBuilder.BuildWorkerStart(this.options, this.registeredActivityNames);
                 await this.WriteSessionMessageAsync(registrationSession, startMessage, cancellationToken).ConfigureAwait(false);
                 Logs.OnDemandSandboxActivityWorkerRegistered(
                     this.logger,
@@ -329,7 +329,7 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
             int activeActivitiesCount = this.activityTracker?.InFlightCount ?? 0;
             await this.WriteSessionMessageAsync(
                 registrationSession,
-                OnDemandSandboxActivityConfiguration.BuildWorkerHeartbeat(activeActivitiesCount),
+                OnDemandSandboxWorkerMessageBuilder.BuildWorkerHeartbeat(activeActivitiesCount),
                 cancellationToken).ConfigureAwait(false);
         }
     }

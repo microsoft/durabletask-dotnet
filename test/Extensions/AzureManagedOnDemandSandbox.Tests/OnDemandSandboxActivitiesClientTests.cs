@@ -12,7 +12,7 @@ using Xunit;
 
 namespace Microsoft.DurableTask.Client.AzureManaged.Tests;
 
-public class OnDemandSandboxActivitiesClientExtensionsTests
+public class OnDemandSandboxActivitiesClientTests
 {
     [Fact]
     public async Task AddDurableTaskSchedulerOnDemandSandboxActivitiesClient_UsesConfiguredDurableTaskClientInvoker()
@@ -58,23 +58,6 @@ public class OnDemandSandboxActivitiesClientExtensionsTests
         declaration.Image.ImageRef.Should().Be("example.com/client-test-worker:latest");
         callInvoker.DeclareHeaders.Should().Contain(header => header.Key == "taskhub" && header.Value == "client-test-taskhub");
         callInvoker.UnaryDisposeCount.Should().BeGreaterThan(0);
-    }
-
-    [Fact]
-    public async Task RemoveOnDemandSandboxActivityDeclarationAsync_SendsRequest()
-    {
-        // Arrange
-        RecordingOnDemandSandboxLogCallInvoker callInvoker = new();
-        OnDemandSandboxActivities.OnDemandSandboxActivitiesClient client = new(callInvoker);
-
-        // Act
-        await client.RemoveOnDemandSandboxActivityDeclarationAsync("default");
-
-        // Assert
-        callInvoker.RemoveRequest.Should().NotBeNull();
-        callInvoker.RemoveRequest!.WorkerProfileId.Should().Be("default");
-        callInvoker.RemoveHeaders.Should().NotContain(header => header.Key == "taskhub");
-        callInvoker.UnaryDisposeCount.Should().Be(1);
     }
 
     sealed class RecordingOnDemandSandboxLogCallInvoker : CallInvoker

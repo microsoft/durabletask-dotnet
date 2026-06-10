@@ -37,6 +37,9 @@ public static class OnDemandSandboxActivitiesClientServiceCollectionExtensions
 
         services.AddSingleton(provider =>
         {
+            DurableTaskSchedulerClientOptions schedulerOptions = provider
+                .GetRequiredService<IOptionsMonitor<DurableTaskSchedulerClientOptions>>()
+                .Get(clientName);
             GrpcDurableTaskClientOptions options = provider
                 .GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>()
                 .Get(clientName);
@@ -45,6 +48,7 @@ public static class OnDemandSandboxActivitiesClientServiceCollectionExtensions
             {
                 return new OnDemandSandboxActivitiesClient(
                     new Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker),
+                    schedulerOptions.TaskHubName,
                     attachTaskHubMetadata: false);
             }
 
@@ -52,6 +56,7 @@ public static class OnDemandSandboxActivitiesClientServiceCollectionExtensions
             {
                 return new OnDemandSandboxActivitiesClient(
                     new Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(channel.CreateCallInvoker()),
+                    schedulerOptions.TaskHubName,
                     attachTaskHubMetadata: false);
             }
 

@@ -37,8 +37,6 @@ builder.Services.AddDurableTaskWorker(workerBuilder =>
         options.TaskHubName = taskHub;
         options.Credential = credential;
     });
-
-    workerBuilder.ExcludeOnDemandSandboxActivities();
 });
 
 builder.Services.AddDurableTaskClient(clientBuilder =>
@@ -57,7 +55,7 @@ using IHost host = builder.Build();
 await host.StartAsync();
 
 OnDemandSandboxActivitiesClient sandboxActivitiesClient = host.Services.GetRequiredService<OnDemandSandboxActivitiesClient>();
-await sandboxActivitiesClient.EnableSandboxActivitiesAsync(taskHub);
+await sandboxActivitiesClient.EnableOnDemandSandboxActivitiesAsync();
 
 DurableTaskClient client = host.Services.GetRequiredService<DurableTaskClient>();
 List<string> instanceIds = new(orchestrationCount);

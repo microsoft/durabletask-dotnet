@@ -59,53 +59,6 @@ public class OnDemandSandboxActivitiesTests
         activityAttributeType.Should().BeNull();
     }
 
-    [Fact]
-    public async Task OnDemandSandboxActivityDeclarationHostedService_SendsDeclarationPayload()
-    {
-        // Arrange
-        OnDemandSandboxOptions options = new()
-        {
-            TaskHub = TaskHub,
-            WorkerProfileId = "profile-a",
-            ContainerImage = "mcr.microsoft.com/durabletask/demo-worker:1.0",
-            ImagePullManagedIdentityClientId = "image-pull-client-id",
-            SchedulerManagedIdentityClientId = "scheduler-client-id",
-            Cpu = "500m",
-            Memory = "1024Mi",
-            MaxConcurrentActivities = 7,
-        };
-        options.AddActivity("RemoteHello");
-        options.EnvironmentVariables.Add("CUSTOM_SETTING", "enabled");
-        options.Entrypoint.Add("/usr/bin/tini");
-        options.Entrypoint.Add("--");
-        options.Cmd.Add("dotnet");
-        options.Cmd.Add("/app/DemoWorker.dll");
-        FakeOnDemandSandboxActivitiesClient client = new();
-        OnDemandSandboxActivityDeclarationHostedService service = new(
-            client,
-            options,
-            runtimeOptions: null,
-            NullLogger<OnDemandSandboxActivityDeclarationHostedService>.Instance);
-
-        // Act
-        await service.StartAsync(CancellationToken.None);
-
-        // Assert
-        OnDemandSandboxActivityDeclaration declaration = client.Declarations.Should().ContainSingle().Subject;
-        client.DeclarationTaskHubs.Should().Equal(TaskHub);
-        declaration.WorkerProfileId.Should().Be("profile-a");
-        declaration.ActivityNames.Should().Equal("RemoteHello");
-        declaration.Image.ImageRef.Should().Be("mcr.microsoft.com/durabletask/demo-worker:1.0");
-        declaration.Image.ManagedIdentityClientId.Should().Be("image-pull-client-id");
-        declaration.SchedulerManagedIdentityClientId.Should().Be("scheduler-client-id");
-        declaration.Resources.Cpu.Should().Be("500m");
-        declaration.Resources.Memory.Should().Be("1024Mi");
-        declaration.EnvironmentVariables.Should().ContainKey("CUSTOM_SETTING").WhoseValue.Should().Be("enabled");
-        declaration.Entrypoint.Should().Equal("/usr/bin/tini", "--");
-        declaration.Cmd.Should().Equal("dotnet", "/app/DemoWorker.dll");
-        declaration.MaxConcurrentActivities.Should().Be(7);
-    }
-
     [Theory]
     [InlineData("500m", "1024Mi")]
     [InlineData("0.5", "1Gi")]
@@ -256,86 +209,6 @@ public class OnDemandSandboxActivitiesTests
         // Assert
         callInvoker.DeclarationHeaders.Should().NotContain(header => header.Key == "taskhub");
         callInvoker.WorkerSessionHeaders.Should().NotContain(header => header.Key == "taskhub");
-    }
-
-    [Fact]
-    public async Task OnDemandSandboxActivityDeclarationHostedService_OmitsEntrypointAndCmdByDefault()
-    {
-        // Arrange
-        OnDemandSandboxOptions options = new()
-        {
-            TaskHub = TaskHub,
-            ContainerImage = "mcr.microsoft.com/durabletask/demo-worker:1.0",
-            ImagePullManagedIdentityClientId = "image-pull-client-id",
-            SchedulerManagedIdentityClientId = "scheduler-client-id",
-        };
-        options.AddActivity("RemoteHello");
-        FakeOnDemandSandboxActivitiesClient client = new();
-        OnDemandSandboxActivityDeclarationHostedService service = new(
-            client,
-            options,
-            runtimeOptions: null,
-            NullLogger<OnDemandSandboxActivityDeclarationHostedService>.Instance);
-
-        // Act
-        await service.StartAsync(CancellationToken.None);
-
-        // Assert
-        OnDemandSandboxActivityDeclaration declaration = client.Declarations.Should().ContainSingle().Subject;
-        declaration.Entrypoint.Should().BeEmpty();
-        declaration.Cmd.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task OnDemandSandboxActivityDeclarationHostedService_SkipsDeclarationWhenNamesAreEmpty()
-    {
-        // Arrange
-        OnDemandSandboxOptions options = new()
-        {
-            TaskHub = TaskHub,
-            ContainerImage = "example.com/repo/worker:latest",
-        };
-        FakeOnDemandSandboxActivitiesClient client = new();
-        OnDemandSandboxActivityDeclarationHostedService service = new(
-            client,
-            options,
-            runtimeOptions: null,
-            NullLogger<OnDemandSandboxActivityDeclarationHostedService>.Instance);
-
-        // Act
-        await service.StartAsync(CancellationToken.None);
-
-        // Assert
-        client.Declarations.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task OnDemandSandboxActivityDeclarationHostedService_DoesNotRetryTransientFailures()
-    {
-        // Arrange
-        OnDemandSandboxOptions options = new()
-        {
-            TaskHub = TaskHub,
-            ContainerImage = "example.com/repo/worker@sha256:abc",
-            ImagePullManagedIdentityClientId = "image-pull-client-id",
-            SchedulerManagedIdentityClientId = "scheduler-client-id",
-        };
-        options.AddActivity("RemoteHello");
-        FakeOnDemandSandboxActivitiesClient client = new() { TransientDeclarationFailures = 1 };
-        OnDemandSandboxActivityDeclarationHostedService service = new(
-            client,
-            options,
-            runtimeOptions: null,
-            NullLogger<OnDemandSandboxActivityDeclarationHostedService>.Instance);
-
-        // Act
-        Func<Task> action = () => service.StartAsync(CancellationToken.None);
-
-        // Assert
-        await action.Should().ThrowAsync<RpcException>()
-            .Where(exception => exception.StatusCode == StatusCode.Unavailable);
-        client.DeclarationAttempts.Should().Be(1);
-        client.Declarations.Should().BeEmpty();
     }
 
     [Fact]
@@ -637,68 +510,6 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public async Task ExcludeOnDemandSandboxActivities_ConfiguresLocalWorkerExclusionFilterFromWorkerProfiles()
-    {
-        // Arrange
-        using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
-        using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
-        ServiceCollection services = new();
-        services.Configure<DurableTaskSchedulerWorkerOptions>(
-            Options.DefaultName,
-            options => options.TaskHubName = TaskHub);
-        Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
-        mockBuilder.Setup(builder => builder.Services).Returns(services);
-        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
-
-        // Act
-        mockBuilder.Object.ExcludeOnDemandSandboxActivities();
-
-        await using ServiceProvider provider = services.BuildServiceProvider();
-        DurableTaskWorkerWorkItemFilters filters = provider.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>().Get(Options.DefaultName);
-
-        // Assert
-        filters.ExcludedActivities.Select(filter => filter.Name).Should().Contain("ConfiguredRemoteHello");
-        filters.Activities.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void ExcludeOnDemandSandboxActivities_DoesNotRegisterDeclarationHostedService()
-    {
-        // Arrange
-        using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
-        using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
-        ServiceCollection services = new();
-        Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
-        mockBuilder.Setup(builder => builder.Services).Returns(services);
-        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
-
-        // Act
-        mockBuilder.Object.ExcludeOnDemandSandboxActivities();
-
-        // Assert
-        services.Should().NotContain(descriptor => descriptor.ServiceType == typeof(IHostedService));
-    }
-
-    [Fact]
-    public void ExcludeOnDemandSandboxActivities_WhenRunningInOnDemandSandboxWorker_Throws()
-    {
-        // Arrange
-        using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", "Sandbox");
-        ServiceCollection services = new();
-        Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
-        mockBuilder.Setup(builder => builder.Services).Returns(services);
-        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
-
-        // Act
-        Action action = () => mockBuilder.Object.ExcludeOnDemandSandboxActivities();
-
-        // Assert
-        action.Should().Throw<InvalidOperationException>()
-            .WithMessage("On-demand sandbox activity exclusion is for normal app workers. DTS on-demand sandbox workers should use UseSandboxWorker instead.");
-        services.Should().NotContain(descriptor => descriptor.ServiceType == typeof(IHostedService));
-    }
-
-    [Fact]
     public void OnDemandSandboxActivityDeclarationResolver_ResolveDeclarations_UsesWorkerProfileConfigure()
     {
         // Arrange
@@ -729,20 +540,6 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public void OnDemandSandboxActivityDeclarationResolver_ResolveDeclaredActivityNames_UsesWorkerProfileConfigure()
-    {
-        // Arrange
-        int before = AnnotatedWorkerProfile.ConfigureCallCount;
-
-        // Act
-        string[] activityNames = OnDemandSandboxActivityDeclarationResolver.ResolveDeclaredActivityNames(TaskHub);
-
-        // Assert
-        activityNames.Should().Contain("ConfiguredRemoteHello");
-        AnnotatedWorkerProfile.ConfigureCallCount.Should().BeGreaterThan(before);
-    }
-
-    [Fact]
     public async Task UseSandboxWorker_ConfiguresRegisteredActivityWorkerFilter()
     {
         // Arrange
@@ -766,7 +563,6 @@ public class OnDemandSandboxActivitiesTests
 
         // Assert
         filters.Activities.Select(filter => filter.Name).Should().Equal("RemoteHello");
-        filters.ExcludedActivities.Should().BeEmpty();
         filters.Orchestrations.Should().BeEmpty();
         filters.Entities.Should().BeEmpty();
         workerOptions.Concurrency.MaximumConcurrentActivityWorkItems.Should().Be(3);

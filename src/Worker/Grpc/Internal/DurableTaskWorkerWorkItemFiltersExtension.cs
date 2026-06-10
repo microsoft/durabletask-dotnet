@@ -39,16 +39,6 @@ public static class DurableTaskWorkerWorkItemFiltersExtension
             grpcWorkItemFilters.Activities.Add(grpcActivityFilter);
         }
 
-        foreach (var activityFilter in workItemFilter.ExcludedActivities)
-        {
-            var grpcActivityFilter = new P.ActivityFilter
-            {
-                Name = activityFilter.Name,
-            };
-            grpcActivityFilter.Versions.AddRange(activityFilter.Versions);
-            grpcWorkItemFilters.ExcludeActivities.Add(grpcActivityFilter);
-        }
-
         foreach (var entityFilter in workItemFilter.Entities)
         {
             var grpcEntityFilter = new P.EntityFilter

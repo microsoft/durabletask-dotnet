@@ -42,7 +42,6 @@ sealed class DurableTaskWorkerWorkItemFiltersValidator : IValidateOptions<Durabl
         // reports a verdict for workers that actually configured filters.
         if (options.Orchestrations.Count == 0
             && options.Activities.Count == 0
-            && options.ExcludedActivities.Count == 0
             && options.Entities.Count == 0)
         {
             return ValidateOptionsResult.Skip;
@@ -61,14 +60,11 @@ sealed class DurableTaskWorkerWorkItemFiltersValidator : IValidateOptions<Durabl
             options.Orchestrations.Select(o => o.Name), registeredOrchestratorNames.Contains);
         List<string> unknownActivities = FindUnknown(
             options.Activities.Select(a => a.Name), registeredActivityNames.Contains);
-        List<string> unknownExcludedActivities = FindUnknown(
-            options.ExcludedActivities.Select(a => a.Name), registeredActivityNames.Contains);
         List<string> unknownEntities = FindUnknown(
             options.Entities.Select(e => e.Name), n => registry.Entities.ContainsKey(new TaskName(n)));
 
         if (unknownOrchestrations.Count == 0
             && unknownActivities.Count == 0
-            && unknownExcludedActivities.Count == 0
             && unknownEntities.Count == 0)
         {
             return ValidateOptionsResult.Success;
@@ -82,7 +78,6 @@ sealed class DurableTaskWorkerWorkItemFiltersValidator : IValidateOptions<Durabl
           .Append("or remove them from the filters.");
         AppendCategory(sb, "Orchestrations", unknownOrchestrations);
         AppendCategory(sb, "Activities", unknownActivities);
-        AppendCategory(sb, "ExcludedActivities", unknownExcludedActivities);
         AppendCategory(sb, "Entities", unknownEntities);
 
         return ValidateOptionsResult.Fail(sb.ToString());

@@ -20,6 +20,8 @@ public class OnDemandSandboxActivitiesClientExtensionsTests
         // Arrange
         RecordingOnDemandSandboxLogCallInvoker callInvoker = new();
         ServiceCollection services = new();
+        services.AddOptions<DurableTaskSchedulerClientOptions>(Options.DefaultName)
+            .Configure(options => options.TaskHubName = "client-test-taskhub");
         services.AddOptions<GrpcDurableTaskClientOptions>(Options.DefaultName)
             .Configure(options => options.CallInvoker = callInvoker);
         services.AddDurableTaskSchedulerOnDemandSandboxActivitiesClient();
@@ -36,15 +38,16 @@ public class OnDemandSandboxActivitiesClientExtensionsTests
     }
 
     [Fact]
-    public async Task EnableSandboxActivitiesAsync_SendsWorkerProfileDeclarations()
+    public async Task EnableOnDemandSandboxActivitiesAsync_SendsWorkerProfileDeclarations()
     {
         // Arrange
         RecordingOnDemandSandboxLogCallInvoker callInvoker = new();
         OnDemandSandboxActivitiesClient client = new(
-            new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker));
+            new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker),
+            "client-test-taskhub");
 
         // Act
-        await client.EnableSandboxActivitiesAsync("client-test-taskhub");
+        await client.EnableOnDemandSandboxActivitiesAsync();
 
         // Assert
         OnDemandSandboxActivityDeclaration declaration = callInvoker.DeclareRequests

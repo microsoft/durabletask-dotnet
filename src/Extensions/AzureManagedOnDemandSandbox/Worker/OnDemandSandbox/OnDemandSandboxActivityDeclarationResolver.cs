@@ -33,19 +33,6 @@ static class OnDemandSandboxActivityDeclarationResolver
         return declarations;
     }
 
-    /// <summary>
-    /// Resolves activity names declared by on-demand sandbox worker profiles.
-    /// </summary>
-    /// <param name="taskHub">The task hub name.</param>
-    /// <returns>The resolved activity names.</returns>
-    public static string[] ResolveDeclaredActivityNames(string taskHub)
-    {
-        return ResolveDeclarations(taskHub)
-            .SelectMany(static options => OnDemandSandboxActivityConfiguration.ResolveActivityNames(options.ActivityNames))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-    }
-
     static ProfileMetadata[] ScanProfiles()
     {
         Dictionary<string, ProfileMetadata> profiles = new(StringComparer.Ordinal);

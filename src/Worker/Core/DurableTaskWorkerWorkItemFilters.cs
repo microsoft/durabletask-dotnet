@@ -23,11 +23,6 @@ public class DurableTaskWorkerWorkItemFilters
     public IReadOnlyList<ActivityFilter> Activities { get; set; } = [];
 
     /// <summary>
-    /// Gets or sets the activity filters that should be excluded from this worker connection.
-    /// </summary>
-    public IReadOnlyList<ActivityFilter> ExcludedActivities { get; set; } = [];
-
-    /// <summary>
     /// Gets or sets the entity filters.
     /// </summary>
     public IReadOnlyList<EntityFilter> Entities { get; set; } = [];
@@ -90,7 +85,6 @@ public class DurableTaskWorkerWorkItemFilters
         {
             Orchestrations = orchestrationFilters,
             Activities = activityFilters,
-            ExcludedActivities = [],
             Entities = registry.Entities.Select(entity => new EntityFilter
             {
                 // Entity names are normalized to lowercase in the backend.

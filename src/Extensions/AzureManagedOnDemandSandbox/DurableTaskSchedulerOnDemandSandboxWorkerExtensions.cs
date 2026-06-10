@@ -22,32 +22,9 @@ namespace Microsoft.DurableTask.Worker.AzureManaged;
 /// </summary>
 public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
 {
-    const string ExcludeSandboxActivitiesWorkerRuntimeErrorMessage =
-        "On-demand sandbox activity exclusion is for normal app workers. " +
-        "DTS on-demand sandbox workers should use UseSandboxWorker instead.";
-
     const string UseSandboxWorkerNoActivitiesErrorMessage =
         "On-demand sandbox workers require at least one registered activity. " +
         "Register an activity on this worker before starting the sandbox worker.";
-
-    /// <summary>
-    /// Configures this worker to exclude activities declared for on-demand sandbox execution from local execution.
-    /// Use <see cref="Microsoft.DurableTask.Client.AzureManaged.OnDemandSandboxActivitiesClient.EnableSandboxActivitiesAsync(string, CancellationToken)"/>
-    /// from the client process to declare on-demand sandbox activities with DTS.
-    /// </summary>
-    /// <param name="builder">The Durable Task worker builder to configure.</param>
-    /// <returns>The original builder, for call chaining.</returns>
-    public static IDurableTaskWorkerBuilder ExcludeOnDemandSandboxActivities(this IDurableTaskWorkerBuilder builder)
-    {
-        Check.NotNull(builder);
-        ThrowIfOnDemandSandboxWorkerRuntime();
-
-        builder.Services.AddOptions<DurableTaskWorkerWorkItemFilters>(builder.Name)
-            .PostConfigure<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>((filters, schedulerOptions) =>
-                ExcludeDeclaredOnDemandSandboxActivitiesFromLocalExecution(filters, schedulerOptions.Get(builder.Name).TaskHubName));
-
-        return builder;
-    }
 
     /// <summary>
     /// Configures this worker as an on-demand sandbox activity worker that connects to DTS to receive and execute
@@ -96,19 +73,6 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
         return builder;
     }
 
-    static void ExcludeDeclaredOnDemandSandboxActivitiesFromLocalExecution(
-        DurableTaskWorkerWorkItemFilters filters,
-        string taskHub)
-    {
-        string[] activityNames = OnDemandSandboxActivityDeclarationResolver.ResolveDeclaredActivityNames(taskHub);
-        if (activityNames.Length == 0)
-        {
-            return;
-        }
-
-        filters.ExcludedActivities = MergeActivityFilters(filters.ExcludedActivities, activityNames);
-    }
-
     static void IncludeOnlyRegisteredActivities(DurableTaskWorkerWorkItemFilters filters)
     {
         if (filters.Activities.Count == 0)
@@ -117,7 +81,6 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
         }
 
         filters.Orchestrations = [];
-        filters.ExcludedActivities = [];
         filters.Entities = [];
     }
 
@@ -128,14 +91,6 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
         options.Concurrency.MaximumConcurrentActivityWorkItems = runtimeOptions.MaxConcurrentActivities;
         options.Concurrency.MaximumConcurrentOrchestrationWorkItems = 0;
         options.Concurrency.MaximumConcurrentEntityWorkItems = 0;
-    }
-
-    static void ThrowIfOnDemandSandboxWorkerRuntime()
-    {
-        if (IsOnDemandSandboxWorkerSubstrate(Environment.GetEnvironmentVariable("DTS_SUBSTRATE")))
-        {
-            throw new InvalidOperationException(ExcludeSandboxActivitiesWorkerRuntimeErrorMessage);
-        }
     }
 
     static OnDemandSandboxActivityWorkerRegistrationHostedService CreateOnDemandSandboxActivityWorkerRegistrationHostedService(
@@ -244,24 +199,6 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
     static bool IsOnDemandSandboxWorkerSubstrate(string? substrate)
         => string.Equals(substrate, "Sandbox", StringComparison.OrdinalIgnoreCase)
             || string.Equals(substrate, "AcaSessionPool", StringComparison.OrdinalIgnoreCase);
-
-    static DurableTaskWorkerWorkItemFilters.ActivityFilter[] MergeActivityFilters(
-        IReadOnlyList<DurableTaskWorkerWorkItemFilters.ActivityFilter> existingFilters,
-        IEnumerable<string> activityNames)
-    {
-        Dictionary<string, DurableTaskWorkerWorkItemFilters.ActivityFilter> merged = new(StringComparer.OrdinalIgnoreCase);
-        foreach (DurableTaskWorkerWorkItemFilters.ActivityFilter filter in existingFilters.Where(static filter => !string.IsNullOrWhiteSpace(filter.Name)))
-        {
-            merged[filter.Name] = filter;
-        }
-
-        foreach (string activityName in activityNames)
-        {
-            merged[activityName] = new DurableTaskWorkerWorkItemFilters.ActivityFilter { Name = activityName };
-        }
-
-        return merged.Values.ToArray();
-    }
 
     static string[] ResolveActivityFilterNames(IReadOnlyList<DurableTaskWorkerWorkItemFilters.ActivityFilter> activityFilters)
     {

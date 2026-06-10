@@ -2,9 +2,10 @@
 // Licensed under the MIT License.
 
 using System.Globalization;
+using Microsoft.DurableTask.AzureManaged.Internal;
 using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 
-namespace Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
+namespace Microsoft.DurableTask.Client.AzureManaged;
 
 /// <summary>
 /// Builds and normalizes on-demand sandbox activity declaration protocol messages.
@@ -18,11 +19,7 @@ static class OnDemandSandboxActivityDeclarationBuilder
     /// <returns>The normalized activity names.</returns>
     public static string[] ResolveActivityNames(IEnumerable<string> configuredNames)
     {
-        return configuredNames
-            .Where(static name => !string.IsNullOrWhiteSpace(name))
-            .Select(static name => name.Trim())
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
+        return OnDemandSandboxActivityMetadata.ResolveActivityNames(configuredNames);
     }
 
     /// <summary>
@@ -74,17 +71,12 @@ static class OnDemandSandboxActivityDeclarationBuilder
 
     internal static string NormalizeWorkerProfileId(string value, string errorMessage)
     {
-        return NormalizeRequired(value, errorMessage);
+        return OnDemandSandboxActivityMetadata.NormalizeRequired(value, errorMessage);
     }
 
     internal static string NormalizeRequired(string value, string errorMessage)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            throw new InvalidOperationException(errorMessage);
-        }
-
-        return value.Trim();
+        return OnDemandSandboxActivityMetadata.NormalizeRequired(value, errorMessage);
     }
 
     static Proto.OnDemandSandboxActivityImage BuildImage(OnDemandSandboxOptions options)

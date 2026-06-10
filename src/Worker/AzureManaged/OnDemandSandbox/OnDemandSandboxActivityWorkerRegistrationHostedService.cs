@@ -3,7 +3,7 @@
 
 using System.IO;
 using Grpc.Core;
-using Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
+using Microsoft.DurableTask.AzureManaged.Internal;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
@@ -65,7 +65,7 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
             return Task.CompletedTask;
         }
 
-        string[] activityNames = OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(this.registeredActivityNames);
+        string[] activityNames = OnDemandSandboxActivityMetadata.ResolveActivityNames(this.registeredActivityNames);
         if (activityNames.Length == 0)
         {
             Logs.NoOnDemandSandboxActivitiesForWorkerRegistration(this.logger, this.options.TaskHub);

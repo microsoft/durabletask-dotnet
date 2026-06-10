@@ -4,7 +4,7 @@
 using Grpc.Core;
 using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 
-namespace Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
+namespace Microsoft.DurableTask.AzureManaged.Internal;
 
 /// <summary>
 /// Transport abstraction for the on-demand sandbox activities gRPC service.

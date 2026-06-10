@@ -6,7 +6,7 @@ using System.Linq;
 using Azure.Core;
 using Azure.Identity;
 using Grpc.Net.Client;
-using Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
+using Microsoft.DurableTask.AzureManaged.Internal;
 using Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 using Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
 using Microsoft.DurableTask.Worker.Grpc;

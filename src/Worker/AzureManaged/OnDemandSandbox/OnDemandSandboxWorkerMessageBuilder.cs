@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
+using Microsoft.DurableTask.AzureManaged.Internal;
 using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 
 namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
@@ -24,10 +24,10 @@ static class OnDemandSandboxWorkerMessageBuilder
         Check.NotNull(options);
         Check.NotNull(registeredActivityNames);
 
-        _ = OnDemandSandboxActivityDeclarationBuilder.NormalizeRequired(
+        _ = OnDemandSandboxActivityMetadata.NormalizeRequired(
             options.TaskHub,
             "On-demand sandbox activity worker registration requires a task hub name.");
-        string[] activityNames = OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(registeredActivityNames);
+        string[] activityNames = OnDemandSandboxActivityMetadata.ResolveActivityNames(registeredActivityNames);
         if (activityNames.Length == 0)
         {
             throw new InvalidOperationException("On-demand sandbox activity worker registration requires at least one registered activity.");
@@ -38,7 +38,7 @@ static class OnDemandSandboxWorkerMessageBuilder
             throw new InvalidOperationException("On-demand sandbox activity worker max activity count must be greater than zero.");
         }
 
-        string workerProfileId = OnDemandSandboxActivityDeclarationBuilder.NormalizeWorkerProfileId(
+        string workerProfileId = OnDemandSandboxActivityMetadata.NormalizeWorkerProfileId(
             options.WorkerProfileId,
             "On-demand sandbox activity worker registration requires a worker profile ID.");
 

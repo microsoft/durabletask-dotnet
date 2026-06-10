@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using Grpc.Net.Client;
-using Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
+using Microsoft.DurableTask.AzureManaged.Internal;
 using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;

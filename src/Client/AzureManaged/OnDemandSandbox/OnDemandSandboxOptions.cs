@@ -2,9 +2,10 @@
 // Licensed under the MIT License.
 
 using System.Reflection;
-using Microsoft.DurableTask.Worker;
+using Microsoft.DurableTask;
+using Microsoft.DurableTask.AzureManaged.Internal;
 
-namespace Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
+namespace Microsoft.DurableTask.Client.AzureManaged;
 
 /// <summary>
 /// Options for declaring on-demand sandbox activities and the worker image DTS should start for them.
@@ -14,7 +15,7 @@ public sealed class OnDemandSandboxOptions
     /// <summary>
     /// Default worker profile ID used when no profile is specified.
     /// </summary>
-    internal const string DefaultWorkerProfileId = "default";
+    internal const string DefaultWorkerProfileId = OnDemandSandboxActivityMetadata.DefaultWorkerProfileId;
 
     /// <summary>
     /// Gets or sets the task hub where the on-demand sandbox activity declaration is stored.

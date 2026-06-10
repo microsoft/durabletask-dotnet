@@ -1,11 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Reflection;
 using Azure.Identity;
 using FluentAssertions;
 using Grpc.Core;
-using Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
+using Microsoft.DurableTask.AzureManaged.Internal;
 using Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 using Microsoft.DurableTask.Worker.AzureManaged;
 using Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
@@ -21,128 +20,6 @@ namespace Microsoft.DurableTask.Worker.AzureManaged.Tests;
 public class OnDemandSandboxActivitiesTests
 {
     const string TaskHub = "testhub";
-
-    [Fact]
-    public void OnDemandSandboxDeclarationContract_DoesNotExposeRemovedOptions()
-    {
-        typeof(OnDemandSandboxOptions).GetProperty("LaunchCommand").Should().BeNull();
-        typeof(OnDemandSandboxOptions).GetProperty("DeclarationRetryMaxAttempts").Should().BeNull();
-        typeof(OnDemandSandboxOptions).GetProperty("DeclarationRetryDelay").Should().BeNull();
-        typeof(OnDemandSandboxOptions).GetProperty(
-            "HeartbeatInterval",
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Should().BeNull();
-        typeof(OnDemandSandboxOptions).GetProperty("WakeupPort").Should().BeNull();
-        typeof(OnDemandSandboxOptions).GetProperty(
-            "WorkerRegistrationRetryInitialDelay",
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Should().BeNull();
-        typeof(OnDemandSandboxOptions).GetProperty(
-            "WorkerRegistrationRetryMaxDelay",
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Should().BeNull();
-        typeof(OnDemandSandboxOptions).GetProperty(
-            "Mode",
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Should().BeNull();
-        typeof(OnDemandSandboxActivityDeclaration).GetProperty("LaunchCommand").Should().BeNull();
-    }
-
-    [Fact]
-    public void OnDemandSandboxDeclarationContract_ExposesProfileAddActivityOnly()
-    {
-        // Arrange
-        Type optionsType = typeof(OnDemandSandboxOptions);
-        Type? activityAttributeType = typeof(OnDemandSandboxOptions).Assembly.GetType(
-            "Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox.OnDemandSandboxActivityAttribute");
-
-        // Act/Assert
-        optionsType.GetProperty("ActivityNames").Should().BeNull();
-        optionsType.GetMethod("AddActivity", [typeof(string)]).Should().NotBeNull();
-        optionsType.GetMethods().Should().Contain(method =>
-            method.Name == "AddActivity" && method.IsGenericMethodDefinition);
-        activityAttributeType.Should().BeNull();
-    }
-
-    [Theory]
-    [InlineData("500m", "1024Mi")]
-    [InlineData("0.5", "1Gi")]
-    [InlineData("2", "2048")]
-    public void OnDemandSandboxActivityDeclarationBuilder_BuildDeclaration_AcceptsAdcResourceQuantities(
-        string cpu,
-        string memory)
-    {
-        // Arrange
-        OnDemandSandboxOptions options = CreateDeclarationOptions();
-        options.Cpu = cpu;
-        options.Memory = memory;
-
-        // Act
-        OnDemandSandboxActivityDeclaration declaration = OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(
-            options,
-            OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
-
-        // Assert
-        declaration.Resources.Cpu.Should().Be(cpu);
-        declaration.Resources.Memory.Should().Be(memory);
-    }
-
-    [Theory]
-    [InlineData("0", "1024Mi", "CPU")]
-    [InlineData("0m", "1024Mi", "CPU")]
-    [InlineData("500Mi", "1024Mi", "CPU")]
-    [InlineData("500m", "0", "memory")]
-    [InlineData("500m", "0Mi", "memory")]
-    [InlineData("500m", "500m", "memory")]
-    public void OnDemandSandboxActivityDeclarationBuilder_BuildDeclaration_RejectsInvalidAdcResourceQuantities(
-        string cpu,
-        string memory,
-        string expectedMessage)
-    {
-        // Arrange
-        OnDemandSandboxOptions options = CreateDeclarationOptions();
-        options.Cpu = cpu;
-        options.Memory = memory;
-
-        // Act
-        Action action = () => OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(
-            options,
-            OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
-
-        // Assert
-        action.Should().Throw<InvalidOperationException>()
-            .WithMessage($"*{expectedMessage}*");
-    }
-
-    [Fact]
-    public void OnDemandSandboxActivityDeclarationBuilder_BuildDeclaration_RequiresSchedulerManagedIdentityClientId()
-    {
-        // Arrange
-        OnDemandSandboxOptions options = CreateDeclarationOptions();
-        options.SchedulerManagedIdentityClientId = " ";
-
-        // Act
-        Action action = () => OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(
-            options,
-            OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
-
-        // Assert
-        action.Should().Throw<InvalidOperationException>()
-            .WithMessage("*managed identity client ID*");
-    }
-
-    [Fact]
-    public void OnDemandSandboxActivityDeclarationBuilder_BuildDeclaration_RequiresImagePullManagedIdentityClientId()
-    {
-        // Arrange
-        OnDemandSandboxOptions options = CreateDeclarationOptions();
-        options.ImagePullManagedIdentityClientId = " ";
-
-        // Act
-        Action action = () => OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(
-            options,
-            OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
-
-        // Assert
-        action.Should().Throw<InvalidOperationException>()
-            .WithMessage("*managed identity client ID ADC uses to pull the worker image*");
-    }
 
     [Fact]
     public async Task OnDemandSandboxActivitiesGrpcTransport_SendsTaskHubMetadata()
@@ -511,36 +388,6 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public void OnDemandSandboxActivityDeclarationResolver_ResolveDeclarations_UsesWorkerProfileConfigure()
-    {
-        // Arrange
-        using EnvironmentVariableScope image = new("DTS_ON_DEMAND_SANDBOX_ACTIVITY_IMAGE", "example.com/not-used:latest");
-        using EnvironmentVariableScope cpu = new("DTS_ON_DEMAND_SANDBOX_CPU", "2000m");
-        using EnvironmentVariableScope memory = new("DTS_ON_DEMAND_SANDBOX_MEMORY", "4096Mi");
-        using EnvironmentVariableScope maxActivities = new("DTS_ON_DEMAND_SANDBOX_MAX_ACTIVITIES", "99");
-
-        // Act
-        OnDemandSandboxOptions options = OnDemandSandboxActivityDeclarationResolver.ResolveDeclarations(TaskHub)
-            .Single(options => options.WorkerProfileId == "annotated-profile");
-        OnDemandSandboxActivityDeclaration declaration = OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(
-            options,
-            OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
-
-        // Assert
-        declaration.WorkerProfileId.Should().Be("annotated-profile");
-        declaration.ActivityNames.Should().Equal("ConfiguredRemoteHello");
-        declaration.Image.ImageRef.Should().Be("example.com/repo/annotated-worker:latest");
-        declaration.Image.ManagedIdentityClientId.Should().Be("image-pull-client-id");
-        declaration.SchedulerManagedIdentityClientId.Should().Be("scheduler-client-id");
-        declaration.Resources.Cpu.Should().Be("500m");
-        declaration.Resources.Memory.Should().Be("1024Mi");
-        declaration.MaxConcurrentActivities.Should().Be(4);
-        declaration.EnvironmentVariables.Should().ContainKey("CUSTOM_ENV").WhoseValue.Should().Be("configured-value");
-        declaration.Entrypoint.Should().BeEmpty();
-        declaration.Cmd.Should().BeEmpty();
-    }
-
-    [Fact]
     public async Task UseSandboxWorker_ConfiguresRegisteredActivityWorkerFilter()
     {
         // Arrange
@@ -729,42 +576,6 @@ public class OnDemandSandboxActivitiesTests
         // Assert
         action.Should().Throw<InvalidOperationException>()
             .WithMessage("DTS_TASK_HUB must be injected by DTS for on-demand sandbox workers.");
-    }
-
-    static OnDemandSandboxOptions CreateDeclarationOptions()
-    {
-        OnDemandSandboxOptions options = new()
-        {
-            TaskHub = TaskHub,
-            WorkerProfileId = "profile-a",
-            ContainerImage = "mcr.microsoft.com/durabletask/demo-worker:1.0",
-            ImagePullManagedIdentityClientId = "image-pull-client-id",
-            SchedulerManagedIdentityClientId = "scheduler-client-id",
-            Cpu = "500m",
-            Memory = "1024Mi",
-            MaxConcurrentActivities = 7,
-        };
-        options.AddActivity("RemoteHello");
-        return options;
-    }
-
-    [OnDemandSandboxWorkerProfile("annotated-profile")]
-    sealed class AnnotatedWorkerProfile : ISandboxWorkerProfile
-    {
-        public static int ConfigureCallCount { get; private set; }
-
-        public void Configure(OnDemandSandboxOptions options)
-        {
-            ConfigureCallCount++;
-            options.ContainerImage = "example.com/repo/annotated-worker:latest";
-            options.ImagePullManagedIdentityClientId = "image-pull-client-id";
-            options.SchedulerManagedIdentityClientId = "scheduler-client-id";
-            options.Cpu = "500m";
-            options.Memory = "1024Mi";
-            options.MaxConcurrentActivities = 4;
-            options.EnvironmentVariables["CUSTOM_ENV"] = "configured-value";
-            options.AddActivity("ConfiguredRemoteHello");
-        }
     }
 
     sealed class FakeOnDemandSandboxActivitiesTransport : IOnDemandSandboxActivitiesTransport

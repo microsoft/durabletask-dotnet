@@ -3,6 +3,7 @@
 
 using System.IO;
 using Grpc.Core;
+using Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;

@@ -4,6 +4,7 @@
 using FluentAssertions;
 using Grpc.Core;
 using Microsoft.DurableTask.Client.Grpc;
+using Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
 using Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 using Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,7 +44,7 @@ public class OnDemandSandboxActivitiesClientTests
         // Arrange
         RecordingOnDemandSandboxLogCallInvoker callInvoker = new();
         OnDemandSandboxActivitiesClient client = new(
-            new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker),
+            new OnDemandSandboxActivitiesGrpcTransport(new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker)),
             "client-test-taskhub");
 
         // Act

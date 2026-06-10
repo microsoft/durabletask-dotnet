@@ -4,7 +4,7 @@
 using Grpc.Core;
 using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 
-namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
+namespace Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
 
 /// <summary>
 /// Transport abstraction for the on-demand sandbox activities gRPC service.
@@ -20,6 +20,18 @@ interface IOnDemandSandboxActivitiesTransport
     /// <returns>The declaration result.</returns>
     Task<Proto.OnDemandSandboxActivityDeclarationResult> DeclareOnDemandSandboxActivitiesAsync(
         Proto.OnDemandSandboxActivityDeclaration declaration,
+        string taskHub,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Removes an on-demand sandbox activity declaration from DTS.
+    /// </summary>
+    /// <param name="workerProfileId">The worker profile ID whose declaration should be removed.</param>
+    /// <param name="taskHub">The task hub that owns the declaration.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The removal result.</returns>
+    Task<Proto.RemoveOnDemandSandboxActivityDeclarationResult> RemoveOnDemandSandboxActivityDeclarationAsync(
+        string workerProfileId,
         string taskHub,
         CancellationToken cancellationToken);
 
@@ -84,11 +96,31 @@ sealed class OnDemandSandboxActivitiesGrpcTransport : IOnDemandSandboxActivities
         string taskHub,
         CancellationToken cancellationToken)
     {
-        return await this.client.DeclareOnDemandSandboxActivitiesAsync(
+        using AsyncUnaryCall<Proto.OnDemandSandboxActivityDeclarationResult> call =
+            this.client.DeclareOnDemandSandboxActivitiesAsync(
                 declaration,
                 headers: this.CreateTaskHubHeaders(taskHub),
-                cancellationToken: cancellationToken)
-            .ResponseAsync.ConfigureAwait(false);
+                cancellationToken: cancellationToken);
+        return await call.ResponseAsync.ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task<Proto.RemoveOnDemandSandboxActivityDeclarationResult> RemoveOnDemandSandboxActivityDeclarationAsync(
+        string workerProfileId,
+        string taskHub,
+        CancellationToken cancellationToken)
+    {
+        Proto.RemoveOnDemandSandboxActivityDeclarationRequest request = new()
+        {
+            WorkerProfileId = workerProfileId,
+        };
+
+        using AsyncUnaryCall<Proto.RemoveOnDemandSandboxActivityDeclarationResult> call =
+            this.client.RemoveOnDemandSandboxActivityDeclarationAsync(
+                request,
+                headers: this.CreateTaskHubHeaders(taskHub),
+                cancellationToken: cancellationToken);
+        return await call.ResponseAsync.ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

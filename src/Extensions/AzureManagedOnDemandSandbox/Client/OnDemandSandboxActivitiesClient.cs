@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Grpc.Core;
+using Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
 using Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
 using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 
@@ -12,26 +12,22 @@ namespace Microsoft.DurableTask.Client.AzureManaged;
 /// </summary>
 public sealed class OnDemandSandboxActivitiesClient
 {
-    readonly Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient client;
+    readonly IOnDemandSandboxActivitiesTransport transport;
     readonly string taskHub;
-    readonly bool attachTaskHubMetadata;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="OnDemandSandboxActivitiesClient"/> class.
     /// </summary>
-    /// <param name="client">The generated gRPC client used to call DTS on-demand sandbox management operations.</param>
+    /// <param name="transport">The transport used to call DTS on-demand sandbox management operations.</param>
     /// <param name="taskHub">The task hub whose declarations should be sent to DTS.</param>
-    /// <param name="attachTaskHubMetadata">True to add per-call task hub metadata when the underlying channel does not already do so.</param>
     internal OnDemandSandboxActivitiesClient(
-        Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient client,
-        string taskHub,
-        bool attachTaskHubMetadata = true)
+        IOnDemandSandboxActivitiesTransport transport,
+        string taskHub)
     {
-        this.client = client;
+        this.transport = Check.NotNull(transport);
         this.taskHub = string.IsNullOrWhiteSpace(taskHub)
             ? throw new ArgumentException("Task hub name is required.", nameof(taskHub))
             : taskHub.Trim();
-        this.attachTaskHubMetadata = attachTaskHubMetadata;
     }
 
     /// <summary>
@@ -53,12 +49,11 @@ public sealed class OnDemandSandboxActivitiesClient
 
             Proto.OnDemandSandboxActivityDeclaration declaration =
                 OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(options, activityNames);
-            using AsyncUnaryCall<Proto.OnDemandSandboxActivityDeclarationResult> call =
-                this.client.DeclareOnDemandSandboxActivitiesAsync(
+            await this.transport.DeclareOnDemandSandboxActivitiesAsync(
                     declaration,
-                    headers: this.CreateTaskHubHeaders(),
-                    cancellationToken: cancellation);
-            await call.ResponseAsync.ConfigureAwait(false);
+                    this.taskHub,
+                    cancellation)
+                .ConfigureAwait(false);
         }
     }
 
@@ -76,27 +71,9 @@ public sealed class OnDemandSandboxActivitiesClient
             ? throw new ArgumentException("Worker profile ID is required.", nameof(workerProfileId))
             : workerProfileId.Trim();
 
-        Proto.RemoveOnDemandSandboxActivityDeclarationRequest request = new()
-        {
-            WorkerProfileId = normalizedWorkerProfileId,
-        };
-
-        return this.RemoveOnDemandSandboxActivityDeclarationCoreAsync(request, cancellation);
+        return this.transport.RemoveOnDemandSandboxActivityDeclarationAsync(
+            normalizedWorkerProfileId,
+            this.taskHub,
+            cancellation);
     }
-
-    async Task RemoveOnDemandSandboxActivityDeclarationCoreAsync(
-        Proto.RemoveOnDemandSandboxActivityDeclarationRequest request,
-        CancellationToken cancellation)
-    {
-        using AsyncUnaryCall<Proto.RemoveOnDemandSandboxActivityDeclarationResult> call =
-            this.client.RemoveOnDemandSandboxActivityDeclarationAsync(
-                request,
-                headers: this.CreateTaskHubHeaders(),
-                cancellationToken: cancellation);
-        await call.ResponseAsync.ConfigureAwait(false);
-    }
-
-    Metadata? CreateTaskHubHeaders() => this.attachTaskHubMetadata
-        ? new Metadata { { "taskhub", this.taskHub }, }
-        : null;
 }

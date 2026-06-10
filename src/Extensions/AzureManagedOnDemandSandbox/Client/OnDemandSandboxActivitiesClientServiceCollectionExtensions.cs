@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Grpc.Net.Client;
+using Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
 using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -47,17 +48,19 @@ public static class OnDemandSandboxActivitiesClientServiceCollectionExtensions
             if (options.CallInvoker is { } callInvoker)
             {
                 return new OnDemandSandboxActivitiesClient(
-                    new Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker),
-                    schedulerOptions.TaskHubName,
-                    attachTaskHubMetadata: false);
+                    new OnDemandSandboxActivitiesGrpcTransport(
+                        new Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker),
+                        attachTaskHubMetadata: false),
+                    schedulerOptions.TaskHubName);
             }
 
             if (options.Channel is GrpcChannel channel)
             {
                 return new OnDemandSandboxActivitiesClient(
-                    new Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(channel.CreateCallInvoker()),
-                    schedulerOptions.TaskHubName,
-                    attachTaskHubMetadata: false);
+                    new OnDemandSandboxActivitiesGrpcTransport(
+                        new Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(channel.CreateCallInvoker()),
+                        attachTaskHubMetadata: false),
+                    schedulerOptions.TaskHubName);
             }
 
             throw new InvalidOperationException("DTS on-demand sandbox activity management requires a configured Durable Task Scheduler client.");

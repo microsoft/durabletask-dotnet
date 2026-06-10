@@ -5,6 +5,7 @@ using System.Reflection;
 using Azure.Identity;
 using FluentAssertions;
 using Grpc.Core;
+using Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
 using Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 using Microsoft.DurableTask.Worker.AzureManaged;
 using Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
@@ -800,6 +801,14 @@ public class OnDemandSandboxActivitiesTests
             this.DeclarationTaskHubs.Add(taskHub);
             this.Declarations.Add(declaration.Clone());
             return Task.FromResult(new OnDemandSandboxActivityDeclarationResult());
+        }
+
+        public Task<RemoveOnDemandSandboxActivityDeclarationResult> RemoveOnDemandSandboxActivityDeclarationAsync(
+            string workerProfileId,
+            string taskHub,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new RemoveOnDemandSandboxActivityDeclarationResult());
         }
 
         public IOnDemandSandboxActivityWorkerSession OpenOnDemandSandboxActivityWorkerSession(string taskHub, CancellationToken cancellationToken)

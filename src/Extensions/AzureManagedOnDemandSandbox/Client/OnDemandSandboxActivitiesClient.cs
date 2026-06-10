@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
-using Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
 using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 
 namespace Microsoft.DurableTask.Client.AzureManaged;

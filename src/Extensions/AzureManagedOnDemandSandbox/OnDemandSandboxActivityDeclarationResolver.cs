@@ -4,7 +4,7 @@
 using System.Reflection;
 using System.Threading;
 
-namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
+namespace Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
 
 /// <summary>
 /// Resolves on-demand sandbox activity declarations from worker profile configuration.

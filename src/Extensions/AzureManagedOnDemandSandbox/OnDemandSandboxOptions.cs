@@ -2,8 +2,9 @@
 // Licensed under the MIT License.
 
 using System.Reflection;
+using Microsoft.DurableTask.Worker;
 
-namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
+namespace Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
 
 /// <summary>
 /// Options for declaring on-demand sandbox activities and the worker image DTS should start for them.

@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
+
 namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
 
 /// <summary>

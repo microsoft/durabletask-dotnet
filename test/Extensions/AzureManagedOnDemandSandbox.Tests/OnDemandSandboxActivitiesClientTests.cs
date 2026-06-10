@@ -3,10 +3,9 @@
 
 using FluentAssertions;
 using Grpc.Core;
-using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
+using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.DurableTask.Protobuf.OnDemandSandbox;
-using Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Xunit;

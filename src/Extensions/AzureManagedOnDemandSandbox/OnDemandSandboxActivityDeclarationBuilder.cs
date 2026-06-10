@@ -4,7 +4,7 @@
 using System.Globalization;
 using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 
-namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
+namespace Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
 
 /// <summary>
 /// Builds and normalizes on-demand sandbox activity declaration protocol messages.

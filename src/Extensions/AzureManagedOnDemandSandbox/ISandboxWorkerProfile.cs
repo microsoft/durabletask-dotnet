@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
+namespace Microsoft.DurableTask.AzureManaged.OnDemandSandbox;
 
 /// <summary>
 /// Configures an on-demand sandbox worker profile declaration.

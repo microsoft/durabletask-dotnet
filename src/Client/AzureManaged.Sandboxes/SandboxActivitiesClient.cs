@@ -9,22 +9,22 @@ namespace Microsoft.DurableTask.Client.AzureManaged;
 /// <summary>
 /// Client for DTS on-demand sandbox activity management operations.
 /// </summary>
-public sealed class OnDemandSandboxActivitiesClient
+public sealed class SandboxActivitiesClient
 {
-    readonly IOnDemandSandboxActivitiesTransport transport;
-    readonly OnDemandSandboxActivityDeclarationProvider declarationProvider;
+    readonly ISandboxActivitiesTransport transport;
+    readonly SandboxActivityDeclarationProvider declarationProvider;
     readonly string taskHub;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="OnDemandSandboxActivitiesClient"/> class.
+    /// Initializes a new instance of the <see cref="SandboxActivitiesClient"/> class.
     /// </summary>
     /// <param name="transport">The transport used to call DTS on-demand sandbox management operations.</param>
     /// <param name="taskHub">The task hub whose declarations should be sent to DTS.</param>
     /// <param name="declarationProvider">The declaration provider.</param>
-    internal OnDemandSandboxActivitiesClient(
-        IOnDemandSandboxActivitiesTransport transport,
+    internal SandboxActivitiesClient(
+        ISandboxActivitiesTransport transport,
         string taskHub,
-        OnDemandSandboxActivityDeclarationProvider declarationProvider)
+        SandboxActivityDeclarationProvider declarationProvider)
     {
         this.transport = Check.NotNull(transport);
         this.declarationProvider = Check.NotNull(declarationProvider);
@@ -38,19 +38,19 @@ public sealed class OnDemandSandboxActivitiesClient
     /// </summary>
     /// <param name="cancellation">The cancellation token used to cancel the request.</param>
     /// <returns>A task that completes when DTS accepts all declarations.</returns>
-    public async Task EnableOnDemandSandboxActivitiesAsync(CancellationToken cancellation = default)
+    public async Task EnableSandboxActivitiesAsync(CancellationToken cancellation = default)
     {
-        IReadOnlyList<OnDemandSandboxOptions> declarations = this.declarationProvider.ResolveDeclarations(this.taskHub);
-        foreach (OnDemandSandboxOptions options in declarations)
+        IReadOnlyList<SandboxWorkerProfileOptions> declarations = this.declarationProvider.ResolveDeclarations(this.taskHub);
+        foreach (SandboxWorkerProfileOptions options in declarations)
         {
-            string[] activityNames = OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames);
+            string[] activityNames = SandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames);
             if (activityNames.Length == 0)
             {
                 continue;
             }
 
             Proto.OnDemandSandboxActivityDeclaration declaration =
-                OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(options, activityNames);
+                SandboxActivityDeclarationBuilder.BuildDeclaration(options, activityNames);
             await this.transport.DeclareOnDemandSandboxActivitiesAsync(
                     declaration,
                     this.taskHub,
@@ -65,7 +65,7 @@ public sealed class OnDemandSandboxActivitiesClient
     /// <param name="workerProfileId">The worker profile ID whose declaration should be removed.</param>
     /// <param name="cancellation">The cancellation token used to cancel the request.</param>
     /// <returns>A task that completes when DTS removes the declaration.</returns>
-    public Task RemoveOnDemandSandboxActivityDeclarationAsync(
+    public Task RemoveSandboxActivityDeclarationAsync(
         string workerProfileId,
         CancellationToken cancellation = default)
     {
@@ -73,7 +73,7 @@ public sealed class OnDemandSandboxActivitiesClient
             ? throw new ArgumentException("Worker profile ID is required.", nameof(workerProfileId))
             : workerProfileId.Trim();
 
-        return this.transport.RemoveOnDemandSandboxActivityDeclarationAsync(
+        return this.transport.RemoveSandboxActivityDeclarationAsync(
             normalizedWorkerProfileId,
             this.taskHub,
             cancellation);

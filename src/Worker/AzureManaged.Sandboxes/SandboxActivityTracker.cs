@@ -1,12 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
+namespace Microsoft.DurableTask.Worker.AzureManaged.Sandboxes;
 
 /// <summary>
 /// Tracks activity execution state for an on-demand sandbox worker process.
 /// </summary>
-sealed class OnDemandSandboxActivityTracker
+sealed class SandboxActivityTracker
 {
     int activeActivityCount;
 

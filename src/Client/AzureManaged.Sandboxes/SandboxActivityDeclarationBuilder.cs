@@ -10,7 +10,7 @@ namespace Microsoft.DurableTask.Client.AzureManaged;
 /// <summary>
 /// Builds and normalizes on-demand sandbox activity declaration protocol messages.
 /// </summary>
-static class OnDemandSandboxActivityDeclarationBuilder
+static class SandboxActivityDeclarationBuilder
 {
     /// <summary>
     /// Resolves configured activity names for on-demand sandbox activity execution.
@@ -19,7 +19,7 @@ static class OnDemandSandboxActivityDeclarationBuilder
     /// <returns>The normalized activity names.</returns>
     public static string[] ResolveActivityNames(IEnumerable<string> configuredNames)
     {
-        return OnDemandSandboxActivityMetadata.ResolveActivityNames(configuredNames);
+        return SandboxActivityMetadata.ResolveActivityNames(configuredNames);
     }
 
     /// <summary>
@@ -29,7 +29,7 @@ static class OnDemandSandboxActivityDeclarationBuilder
     /// <param name="activityNames">The activity names included in the declaration.</param>
     /// <returns>The declaration protocol message.</returns>
     public static Proto.OnDemandSandboxActivityDeclaration BuildDeclaration(
-        OnDemandSandboxOptions options,
+        SandboxWorkerProfileOptions options,
         IReadOnlyCollection<string> activityNames)
     {
         Check.NotNull(options);
@@ -77,7 +77,7 @@ static class OnDemandSandboxActivityDeclarationBuilder
     /// <returns>The normalized worker profile ID.</returns>
     internal static string NormalizeWorkerProfileId(string value, string errorMessage)
     {
-        return OnDemandSandboxActivityMetadata.NormalizeRequired(value, errorMessage);
+        return SandboxActivityMetadata.NormalizeRequired(value, errorMessage);
     }
 
     /// <summary>
@@ -88,10 +88,10 @@ static class OnDemandSandboxActivityDeclarationBuilder
     /// <returns>The normalized value.</returns>
     internal static string NormalizeRequired(string value, string errorMessage)
     {
-        return OnDemandSandboxActivityMetadata.NormalizeRequired(value, errorMessage);
+        return SandboxActivityMetadata.NormalizeRequired(value, errorMessage);
     }
 
-    static Proto.OnDemandSandboxActivityImage BuildImage(OnDemandSandboxOptions options)
+    static Proto.OnDemandSandboxActivityImage BuildImage(SandboxWorkerProfileOptions options)
     {
         string imageRef = NormalizeRequired(
             options.ContainerImage ?? string.Empty,
@@ -108,7 +108,7 @@ static class OnDemandSandboxActivityDeclarationBuilder
         return image;
     }
 
-    static Proto.OnDemandSandboxActivityResources BuildResources(OnDemandSandboxOptions options)
+    static Proto.OnDemandSandboxActivityResources BuildResources(SandboxWorkerProfileOptions options)
     {
         string cpu = NormalizeCpu(options.Cpu);
         string memory = NormalizeMemory(options.Memory);

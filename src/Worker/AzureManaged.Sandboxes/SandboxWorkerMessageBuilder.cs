@@ -4,12 +4,12 @@
 using Microsoft.DurableTask.AzureManaged.Internal;
 using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 
-namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
+namespace Microsoft.DurableTask.Worker.AzureManaged.Sandboxes;
 
 /// <summary>
 /// Builds on-demand sandbox activity worker registration protocol messages.
 /// </summary>
-static class OnDemandSandboxWorkerMessageBuilder
+static class SandboxWorkerMessageBuilder
 {
     /// <summary>
     /// Builds the initial on-demand sandbox activity worker registration message.
@@ -18,16 +18,16 @@ static class OnDemandSandboxWorkerMessageBuilder
     /// <param name="registeredActivityNames">The activity handlers registered by the worker process.</param>
     /// <returns>The worker start protocol message.</returns>
     public static Proto.OnDemandSandboxActivityWorkerMessage BuildWorkerStart(
-        OnDemandSandboxWorkerRuntimeOptions options,
+        SandboxWorkerRuntimeOptions options,
         IReadOnlyCollection<string> registeredActivityNames)
     {
         Check.NotNull(options);
         Check.NotNull(registeredActivityNames);
 
-        string taskHub = OnDemandSandboxActivityMetadata.NormalizeRequired(
+        string taskHub = SandboxActivityMetadata.NormalizeRequired(
             options.TaskHub,
             "On-demand sandbox activity worker registration requires a task hub name.");
-        string[] activityNames = OnDemandSandboxActivityMetadata.ResolveActivityNames(registeredActivityNames);
+        string[] activityNames = SandboxActivityMetadata.ResolveActivityNames(registeredActivityNames);
         if (activityNames.Length == 0)
         {
             throw new InvalidOperationException("On-demand sandbox activity worker registration requires at least one registered activity.");
@@ -38,10 +38,10 @@ static class OnDemandSandboxWorkerMessageBuilder
             throw new InvalidOperationException("On-demand sandbox activity worker max activity count must be greater than zero.");
         }
 
-        string workerProfileId = OnDemandSandboxActivityMetadata.NormalizeWorkerProfileId(
+        string workerProfileId = SandboxActivityMetadata.NormalizeWorkerProfileId(
             options.WorkerProfileId,
             "On-demand sandbox activity worker registration requires a worker profile ID.");
-        string dtsSandboxIdentifier = OnDemandSandboxActivityMetadata.NormalizeRequired(
+        string dtsSandboxIdentifier = SandboxActivityMetadata.NormalizeRequired(
             Environment.GetEnvironmentVariable("DTS_SANDBOX_ID") ?? string.Empty,
             "On-demand sandbox activity worker registration requires a DTS sandbox ID.");
 

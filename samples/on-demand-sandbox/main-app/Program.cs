@@ -16,8 +16,8 @@ using Microsoft.Extensions.Logging;
 const string Input = "on-demand-sandbox-sample";
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
-string endpoint = builder.Configuration["OnDemandSandboxSample:EndpointAddress"]!;
-string taskHub = builder.Configuration["OnDemandSandboxSample:TaskHubName"]!;
+string endpoint = GetRequiredConfigurationValue("OnDemandSandboxSample:EndpointAddress");
+string taskHub = GetRequiredConfigurationValue("OnDemandSandboxSample:TaskHubName");
 TokenCredential credential = new DefaultAzureCredential();
 builder.Logging.AddSimpleConsole(options =>
 {
@@ -47,14 +47,14 @@ builder.Services.AddDurableTaskClient(clientBuilder =>
         options.Credential = credential;
     });
 });
-builder.Services.AddDurableTaskSchedulerOnDemandSandboxActivitiesClient();
+builder.Services.AddDurableTaskSchedulerSandboxActivitiesClient();
 
 using IHost host = builder.Build();
 
 await host.StartAsync();
 
-OnDemandSandboxActivitiesClient sandboxActivitiesClient = host.Services.GetRequiredService<OnDemandSandboxActivitiesClient>();
-await sandboxActivitiesClient.EnableOnDemandSandboxActivitiesAsync();
+SandboxActivitiesClient sandboxActivitiesClient = host.Services.GetRequiredService<SandboxActivitiesClient>();
+await sandboxActivitiesClient.EnableSandboxActivitiesAsync();
 
 DurableTaskClient client = host.Services.GetRequiredService<DurableTaskClient>();
 string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
@@ -69,3 +69,14 @@ Console.WriteLine($"Runtime status: {result.RuntimeStatus}");
 Console.WriteLine($"Output: {result.SerializedOutput ?? "<null>"}");
 
 await host.StopAsync();
+
+string GetRequiredConfigurationValue(string key)
+{
+    string? value = builder.Configuration[key];
+    if (string.IsNullOrWhiteSpace(value))
+    {
+        throw new InvalidOperationException($"Configuration value '{key}' must be set.");
+    }
+
+    return value.Trim();
+}

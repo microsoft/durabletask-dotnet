@@ -6,10 +6,10 @@ using Microsoft.DurableTask.Samples.OnDemandSandbox.Shared;
 
 namespace Microsoft.DurableTask.Samples.OnDemandSandbox.MainApp;
 
-[OnDemandSandboxWorkerProfile("default")]
+[SandboxWorkerProfile("default")]
 internal sealed class DefaultSandboxWorkerProfile : ISandboxWorkerProfile
 {
-    public void Configure(OnDemandSandboxOptions options)
+    public void Configure(SandboxWorkerProfileOptions options)
     {
         options.ContainerImage = Environment.GetEnvironmentVariable("DTS_ON_DEMAND_SANDBOX_CONTAINER_IMAGE") ?? "on-demand-sandbox-remote-worker:local";
         options.ImagePullManagedIdentityClientId = GetRequiredEnvironmentVariable("DTS_ON_DEMAND_SANDBOX_IMAGE_PULL_UMI_CLIENT_ID");
@@ -22,7 +22,7 @@ internal sealed class DefaultSandboxWorkerProfile : ISandboxWorkerProfile
         options.AddActivity(ActivityNames.RemoteHello);
     }
 
-    static void AddEnvironmentVariable(OnDemandSandboxOptions options, string name)
+    static void AddEnvironmentVariable(SandboxWorkerProfileOptions options, string name)
     {
         string? value = Environment.GetEnvironmentVariable(name);
         if (!string.IsNullOrWhiteSpace(value))
@@ -39,6 +39,6 @@ internal sealed class DefaultSandboxWorkerProfile : ISandboxWorkerProfile
             throw new InvalidOperationException($"{name} must be set.");
         }
 
-        return value;
+        return value.Trim();
     }
 }

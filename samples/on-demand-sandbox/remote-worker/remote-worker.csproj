@@ -14,7 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="$(SrcRoot)Worker/AzureManaged/Worker.AzureManaged.csproj" />
-    <ProjectReference Include="$(SrcRoot)Worker/AzureManaged.OnDemandSandbox/Worker.AzureManaged.OnDemandSandbox.csproj" />
+    <ProjectReference Include="$(SrcRoot)Worker/AzureManaged.Sandboxes/Worker.AzureManaged.Sandboxes.csproj" />
     <ProjectReference Include="..\shared\shared.csproj" />
     <ProjectReference Include="$(SrcRoot)Analyzers/Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>

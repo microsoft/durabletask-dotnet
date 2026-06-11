@@ -8,7 +8,7 @@ using Azure.Identity;
 using Grpc.Net.Client;
 using Microsoft.DurableTask.AzureManaged.Internal;
 using Microsoft.DurableTask.Protobuf.OnDemandSandbox;
-using Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
+using Microsoft.DurableTask.Worker.AzureManaged.Sandboxes;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,7 +21,7 @@ namespace Microsoft.DurableTask.Worker.AzureManaged;
 /// <summary>
 /// Extension methods for configuring Azure Managed Durable Task workers with on-demand sandbox activity support.
 /// </summary>
-public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
+public static class DurableTaskSchedulerSandboxWorkerExtensions
 {
     const string UseSandboxWorkerNoActivitiesErrorMessage =
         "On-demand sandbox workers require at least one registered activity. " +
@@ -41,7 +41,7 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
         ConfigureDurableTaskSchedulerFromEnvironment(builder);
         builder.UseWorkItemFilters();
 
-        builder.Services.AddOptions<OnDemandSandboxWorkerRuntimeOptions>(builder.Name)
+        builder.Services.AddOptions<SandboxWorkerRuntimeOptions>(builder.Name)
             .PostConfigure<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>((options, schedulerOptions) =>
             {
                 ApplyRuntimeTaskHubDefault(options, schedulerOptions.Get(builder.Name).TaskHubName);
@@ -49,15 +49,15 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
             });
 
         builder.Services.AddOptions<DurableTaskWorkerOptions>(builder.Name)
-            .PostConfigure<IOptionsMonitor<OnDemandSandboxWorkerRuntimeOptions>>((options, runtimeOptions) =>
-                ConfigureOnDemandSandboxWorkerConcurrency(options, runtimeOptions.Get(builder.Name)));
+            .PostConfigure<IOptionsMonitor<SandboxWorkerRuntimeOptions>>((options, runtimeOptions) =>
+                ConfigureSandboxWorkerConcurrency(options, runtimeOptions.Get(builder.Name)));
 
         builder.Services.AddOptions<DurableTaskWorkerWorkItemFilters>(builder.Name)
             .PostConfigure(IncludeOnlyRegisteredActivities);
 
-        builder.Services.AddSingleton<OnDemandSandboxActivityTracker>();
+        builder.Services.AddSingleton<SandboxActivityTracker>();
         builder.Services.AddOptions<GrpcDurableTaskWorkerOptions>(builder.Name)
-            .Configure<OnDemandSandboxActivityTracker>((options, activityTracker) =>
+            .Configure<SandboxActivityTracker>((options, activityTracker) =>
                 options.ConfigureActivityNotification(phase =>
                 {
                     if (phase == ActivityNotificationPhase.Started)
@@ -70,7 +70,7 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
                     }
                 }));
 
-        builder.Services.AddSingleton<IHostedService>(sp => CreateOnDemandSandboxActivityWorkerRegistrationHostedService(sp, builder.Name));
+        builder.Services.AddSingleton<IHostedService>(sp => CreateSandboxActivityWorkerRegistrationHostedService(sp, builder.Name));
         return builder;
     }
 
@@ -85,45 +85,45 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
         filters.Entities = [];
     }
 
-    static void ConfigureOnDemandSandboxWorkerConcurrency(
+    static void ConfigureSandboxWorkerConcurrency(
         DurableTaskWorkerOptions options,
-        OnDemandSandboxWorkerRuntimeOptions runtimeOptions)
+        SandboxWorkerRuntimeOptions runtimeOptions)
     {
         options.Concurrency.MaximumConcurrentActivityWorkItems = runtimeOptions.MaxConcurrentActivities;
         options.Concurrency.MaximumConcurrentOrchestrationWorkItems = 0;
         options.Concurrency.MaximumConcurrentEntityWorkItems = 0;
     }
 
-    static OnDemandSandboxActivityWorkerRegistrationHostedService CreateOnDemandSandboxActivityWorkerRegistrationHostedService(
+    static SandboxActivityWorkerRegistrationHostedService CreateSandboxActivityWorkerRegistrationHostedService(
         IServiceProvider services,
         string builderName)
     {
-        OnDemandSandboxWorkerRuntimeOptions options = services.GetRequiredService<IOptionsMonitor<OnDemandSandboxWorkerRuntimeOptions>>().Get(builderName);
+        SandboxWorkerRuntimeOptions options = services.GetRequiredService<IOptionsMonitor<SandboxWorkerRuntimeOptions>>().Get(builderName);
         ILoggerFactory loggerFactory = services.GetRequiredService<ILoggerFactory>();
         IHostApplicationLifetime? lifetime = services.GetService<IHostApplicationLifetime>();
-        OnDemandSandboxActivityTracker activityTracker = services.GetRequiredService<OnDemandSandboxActivityTracker>();
+        SandboxActivityTracker activityTracker = services.GetRequiredService<SandboxActivityTracker>();
         DurableTaskWorkerWorkItemFilters filters = services.GetRequiredService<IOptionsMonitor<DurableTaskWorkerWorkItemFilters>>().Get(builderName);
 
-        return new OnDemandSandboxActivityWorkerRegistrationHostedService(
-            CreateOnDemandSandboxActivitiesTransport(services, builderName),
+        return new SandboxActivityWorkerRegistrationHostedService(
+            CreateSandboxActivitiesTransport(services, builderName),
             options,
             ResolveActivityFilterNames(filters.Activities),
-            loggerFactory.CreateLogger<OnDemandSandboxActivityWorkerRegistrationHostedService>(),
+            loggerFactory.CreateLogger<SandboxActivityWorkerRegistrationHostedService>(),
             lifetime,
             activityTracker);
     }
 
-    static OnDemandSandboxActivitiesGrpcTransport CreateOnDemandSandboxActivitiesTransport(IServiceProvider services, string builderName)
+    static SandboxActivitiesGrpcTransport CreateSandboxActivitiesTransport(IServiceProvider services, string builderName)
     {
         GrpcDurableTaskWorkerOptions options = services.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>().Get(builderName);
         if (options.CallInvoker is { } callInvoker)
         {
-            return new OnDemandSandboxActivitiesGrpcTransport(new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker));
+            return new SandboxActivitiesGrpcTransport(new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker));
         }
 
         if (options.Channel is { } channel)
         {
-            return new OnDemandSandboxActivitiesGrpcTransport(
+            return new SandboxActivitiesGrpcTransport(
                 new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(channel.CreateCallInvoker()),
                 attachTaskHubMetadata: false);
         }
@@ -131,7 +131,7 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
         throw new InvalidOperationException("Azure Managed on-demand sandbox activities require a configured gRPC channel or call invoker.");
     }
 
-    static void ApplyRuntimeTaskHubDefault(OnDemandSandboxWorkerRuntimeOptions options, string taskHubName)
+    static void ApplyRuntimeTaskHubDefault(SandboxWorkerRuntimeOptions options, string taskHubName)
     {
         if (string.IsNullOrWhiteSpace(options.TaskHub) && !string.IsNullOrWhiteSpace(taskHubName))
         {
@@ -171,9 +171,9 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
             : value.Trim();
     }
 
-    static void ApplyWorkerEnvironmentOverrides(OnDemandSandboxWorkerRuntimeOptions options)
+    static void ApplyWorkerEnvironmentOverrides(SandboxWorkerRuntimeOptions options)
     {
-        ValidateOnDemandSandboxWorkerSubstrate(GetRequiredEnvironmentVariable("DTS_SUBSTRATE"));
+        ValidateSandboxWorkerSubstrate(GetRequiredEnvironmentVariable("DTS_SUBSTRATE"));
 
         string? workerProfileId = Environment.GetEnvironmentVariable("DTS_WORKER_PROFILE_ID");
         if (!string.IsNullOrWhiteSpace(workerProfileId))
@@ -187,7 +187,7 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
         }
     }
 
-    static void ValidateOnDemandSandboxWorkerSubstrate(string substrate)
+    static void ValidateSandboxWorkerSubstrate(string substrate)
     {
         if (!string.Equals(substrate, "Sandbox", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(substrate, "AcaSessionPool", StringComparison.OrdinalIgnoreCase))

@@ -8,28 +8,28 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 
-namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
+namespace Microsoft.DurableTask.Worker.AzureManaged.Sandboxes;
 
 /// <summary>
 /// Hosted service that registers a running process as an on-demand sandbox activity worker with DTS.
 /// </summary>
-sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedService, IAsyncDisposable
+sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IAsyncDisposable
 {
     readonly object sync = new();
-    readonly IOnDemandSandboxActivitiesTransport transport;
-    readonly OnDemandSandboxWorkerRuntimeOptions options;
+    readonly ISandboxActivitiesTransport transport;
+    readonly SandboxWorkerRuntimeOptions options;
     readonly IReadOnlyCollection<string> registeredActivityNames;
-    readonly ILogger<OnDemandSandboxActivityWorkerRegistrationHostedService> logger;
+    readonly ILogger<SandboxActivityWorkerRegistrationHostedService> logger;
     readonly IHostApplicationLifetime? lifetime;
-    readonly OnDemandSandboxActivityTracker? activityTracker;
+    readonly SandboxActivityTracker? activityTracker;
     readonly Random reconnectJitter;
     readonly SemaphoreSlim streamSync = new(1, 1);
     CancellationTokenSource? cts;
-    IOnDemandSandboxActivityWorkerSession? session;
+    ISandboxActivityWorkerSession? session;
     Task? pump;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="OnDemandSandboxActivityWorkerRegistrationHostedService"/> class.
+    /// Initializes a new instance of the <see cref="SandboxActivityWorkerRegistrationHostedService"/> class.
     /// </summary>
     /// <param name="transport">The on-demand sandbox activities transport.</param>
     /// <param name="options">The on-demand sandbox worker runtime options.</param>
@@ -38,13 +38,13 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
     /// <param name="lifetime">The optional application lifetime used to stop the host when a non-retriable registration stream failure occurs.</param>
     /// <param name="activityTracker">The optional activity tracker used to report live in-flight activity count.</param>
     /// <param name="reconnectJitter">The optional random source used to jitter reconnect delays.</param>
-    public OnDemandSandboxActivityWorkerRegistrationHostedService(
-        IOnDemandSandboxActivitiesTransport transport,
-        OnDemandSandboxWorkerRuntimeOptions options,
+    public SandboxActivityWorkerRegistrationHostedService(
+        ISandboxActivitiesTransport transport,
+        SandboxWorkerRuntimeOptions options,
         IReadOnlyCollection<string> registeredActivityNames,
-        ILogger<OnDemandSandboxActivityWorkerRegistrationHostedService> logger,
+        ILogger<SandboxActivityWorkerRegistrationHostedService> logger,
         IHostApplicationLifetime? lifetime = null,
-        OnDemandSandboxActivityTracker? activityTracker = null,
+        SandboxActivityTracker? activityTracker = null,
         Random? reconnectJitter = null)
     {
         this.transport = Check.NotNull(transport);
@@ -59,7 +59,7 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
     /// <inheritdoc/>
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        string[] activityNames = OnDemandSandboxActivityMetadata.ResolveActivityNames(this.registeredActivityNames);
+        string[] activityNames = SandboxActivityMetadata.ResolveActivityNames(this.registeredActivityNames);
         CancellationTokenSource registrationCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task registrationPump = Task.Run(
             () => this.RunRegistrationLoopAsync(activityNames.Length, registrationCts.Token),
@@ -77,7 +77,7 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         CancellationTokenSource? localCts;
-        IOnDemandSandboxActivityWorkerSession? localSession;
+        ISandboxActivityWorkerSession? localSession;
         Task? localPump;
         lock (this.sync)
         {
@@ -159,7 +159,7 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
     }
 
     static async ValueTask DisposeSessionAsync(
-        IOnDemandSandboxActivityWorkerSession registrationSession,
+        ISandboxActivityWorkerSession registrationSession,
         ILogger logger)
     {
         try
@@ -187,13 +187,13 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
         TimeSpan retryDelay = this.GetInitialRetryDelay();
         while (!cancellationToken.IsCancellationRequested)
         {
-            IOnDemandSandboxActivityWorkerSession? registrationSession = null;
+            ISandboxActivityWorkerSession? registrationSession = null;
             try
             {
                 registrationSession = this.transport.OpenOnDemandSandboxActivityWorkerSession(this.options.TaskHub, cancellationToken);
                 this.SetCurrentSession(registrationSession);
 
-                Proto.OnDemandSandboxActivityWorkerMessage startMessage = OnDemandSandboxWorkerMessageBuilder.BuildWorkerStart(this.options, this.registeredActivityNames);
+                Proto.OnDemandSandboxActivityWorkerMessage startMessage = SandboxWorkerMessageBuilder.BuildWorkerStart(this.options, this.registeredActivityNames);
                 await this.WriteSessionMessageAsync(registrationSession, startMessage, cancellationToken).ConfigureAwait(false);
                 Logs.OnDemandSandboxActivityWorkerRegistered(
                     this.logger,
@@ -265,7 +265,7 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
     }
 
     async Task RunRegistrationSessionAsync(
-        IOnDemandSandboxActivityWorkerSession registrationSession,
+        ISandboxActivityWorkerSession registrationSession,
         CancellationToken cancellationToken)
     {
         using CancellationTokenSource heartbeatCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -308,7 +308,7 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
     }
 
     async Task PumpHeartbeatsAsync(
-        IOnDemandSandboxActivityWorkerSession registrationSession,
+        ISandboxActivityWorkerSession registrationSession,
         CancellationToken cancellationToken)
     {
         using PeriodicTimer timer = new(this.options.HeartbeatInterval);
@@ -317,13 +317,13 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
             int activeActivitiesCount = this.activityTracker?.InFlightCount ?? 0;
             await this.WriteSessionMessageAsync(
                 registrationSession,
-                OnDemandSandboxWorkerMessageBuilder.BuildWorkerHeartbeat(activeActivitiesCount),
+                SandboxWorkerMessageBuilder.BuildWorkerHeartbeat(activeActivitiesCount),
                 cancellationToken).ConfigureAwait(false);
         }
     }
 
     async Task WriteSessionMessageAsync(
-        IOnDemandSandboxActivityWorkerSession registrationSession,
+        ISandboxActivityWorkerSession registrationSession,
         Proto.OnDemandSandboxActivityWorkerMessage message,
         CancellationToken cancellationToken)
     {
@@ -340,7 +340,7 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
     }
 
     async Task CompleteSessionAsync(
-        IOnDemandSandboxActivityWorkerSession registrationSession,
+        ISandboxActivityWorkerSession registrationSession,
         CancellationToken cancellationToken)
     {
         await this.streamSync.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -354,7 +354,7 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
         }
     }
 
-    void SetCurrentSession(IOnDemandSandboxActivityWorkerSession registrationSession)
+    void SetCurrentSession(ISandboxActivityWorkerSession registrationSession)
     {
         lock (this.sync)
         {
@@ -362,7 +362,7 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
         }
     }
 
-    void ClearCurrentSession(IOnDemandSandboxActivityWorkerSession registrationSession)
+    void ClearCurrentSession(ISandboxActivityWorkerSession registrationSession)
     {
         lock (this.sync)
         {

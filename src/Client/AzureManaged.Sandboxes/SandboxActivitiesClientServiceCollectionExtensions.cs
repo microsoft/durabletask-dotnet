@@ -14,15 +14,15 @@ namespace Microsoft.DurableTask.Client.AzureManaged;
 /// <summary>
 /// Extension methods for registering DTS on-demand sandbox activity management clients.
 /// </summary>
-public static class OnDemandSandboxActivitiesClientServiceCollectionExtensions
+public static class SandboxActivitiesClientServiceCollectionExtensions
 {
     /// <summary>
     /// Adds a DTS on-demand sandbox activity management client using the default Durable Task client configuration.
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
     /// <returns>The original service collection, for call chaining.</returns>
-    public static IServiceCollection AddDurableTaskSchedulerOnDemandSandboxActivitiesClient(this IServiceCollection services)
-        => AddDurableTaskSchedulerOnDemandSandboxActivitiesClient(services, Options.DefaultName);
+    public static IServiceCollection AddDurableTaskSchedulerSandboxActivitiesClient(this IServiceCollection services)
+        => AddDurableTaskSchedulerSandboxActivitiesClient(services, Options.DefaultName);
 
     /// <summary>
     /// Adds a DTS on-demand sandbox activity management client using a named Durable Task client configuration.
@@ -30,14 +30,14 @@ public static class OnDemandSandboxActivitiesClientServiceCollectionExtensions
     /// <param name="services">The service collection to configure.</param>
     /// <param name="clientName">The Durable Task client name whose scheduler channel should be reused.</param>
     /// <returns>The original service collection, for call chaining.</returns>
-    public static IServiceCollection AddDurableTaskSchedulerOnDemandSandboxActivitiesClient(
+    public static IServiceCollection AddDurableTaskSchedulerSandboxActivitiesClient(
         this IServiceCollection services,
         string clientName)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(clientName);
 
-        services.TryAddSingleton<OnDemandSandboxActivityDeclarationProvider>();
+        services.TryAddSingleton<SandboxActivityDeclarationProvider>();
 
         services.AddSingleton(provider =>
         {
@@ -47,12 +47,12 @@ public static class OnDemandSandboxActivitiesClientServiceCollectionExtensions
             GrpcDurableTaskClientOptions options = provider
                 .GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>()
                 .Get(clientName);
-            OnDemandSandboxActivityDeclarationProvider declarationProvider = provider.GetRequiredService<OnDemandSandboxActivityDeclarationProvider>();
+            SandboxActivityDeclarationProvider declarationProvider = provider.GetRequiredService<SandboxActivityDeclarationProvider>();
 
             if (options.CallInvoker is { } callInvoker)
             {
-                return new OnDemandSandboxActivitiesClient(
-                    new OnDemandSandboxActivitiesGrpcTransport(
+                return new SandboxActivitiesClient(
+                    new SandboxActivitiesGrpcTransport(
                         new Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker),
                         attachTaskHubMetadata: false),
                     schedulerOptions.TaskHubName,
@@ -61,8 +61,8 @@ public static class OnDemandSandboxActivitiesClientServiceCollectionExtensions
 
             if (options.Channel is GrpcChannel channel)
             {
-                return new OnDemandSandboxActivitiesClient(
-                    new OnDemandSandboxActivitiesGrpcTransport(
+                return new SandboxActivitiesClient(
+                    new SandboxActivitiesGrpcTransport(
                         new Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(channel.CreateCallInvoker()),
                         attachTaskHubMetadata: false),
                     schedulerOptions.TaskHubName,

@@ -1,10 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net6.0;net8.0;net10.0</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <PackageDescription>Azure Managed on-demand sandbox activity management extensions for the Durable Task Framework client.</PackageDescription>
-    <AssemblyName>Microsoft.DurableTask.Client.AzureManaged.OnDemandSandbox</AssemblyName>
-    <RootNamespace>Microsoft.DurableTask</RootNamespace>
+    <AssemblyName>Microsoft.DurableTask.Client.AzureManaged.Sandboxes</AssemblyName>
     <EnableStyleCop>true</EnableStyleCop>
   </PropertyGroup>
 
@@ -18,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <SharedSection Include="AzureManaged.OnDemandSandbox" />
+    <SharedSection Include="AzureManaged.Sandboxes" />
     <SharedSection Include="Core" />
   </ItemGroup>
 

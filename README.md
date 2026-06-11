@@ -198,7 +198,7 @@ This SDK can also be used with the Durable Task Scheduler directly, without any 
 
 For runnable DTS emulator examples that demonstrate versioning, see the [WorkerVersioningSample](samples/WorkerVersioningSample/README.md) (deployment-based versioning), the [EternalOrchestrationVersionMigrationSample](samples/EternalOrchestrationVersionMigrationSample/README.md) (multi-version routing with `[DurableTask(Version = "...")]`), the [ActivityVersioningSample](samples/ActivityVersioningSample/README.md) (activity versioning with inherited defaults and explicit override support), and the [EntityWithVersionedOrchestrationSample](samples/EntityWithVersionedOrchestrationSample/README.md) (a single instance migrating v1→v2 via `ContinueAsNew(NewVersion)` while preserving entity-held state).
 
-The [on-demand sandbox activities sample](samples/on-demand-sandbox/README.md) shows how to declare selected activities for DTS-managed on-demand sandbox execution and build the remote worker container image separately from the declarer app.
+The [on-demand sandbox activities sample](samples/on-demand-sandbox/README.md) shows how to declare selected activities for Durable Task Scheduler (DTS)-managed on-demand sandbox execution and build the remote worker container image separately from the declarer app.
 
 ## Obtaining the Protobuf definitions
 

@@ -3,12 +3,12 @@
 
 using Microsoft.DurableTask.AzureManaged.Internal;
 
-namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
+namespace Microsoft.DurableTask.Worker.AzureManaged.Sandboxes;
 
 /// <summary>
 /// Internal runtime settings for an on-demand sandbox worker process.
 /// </summary>
-internal sealed class OnDemandSandboxWorkerRuntimeOptions
+internal sealed class SandboxWorkerRuntimeOptions
 {
     /// <summary>
     /// Gets or sets the task hub used by on-demand sandbox worker registration.
@@ -18,7 +18,7 @@ internal sealed class OnDemandSandboxWorkerRuntimeOptions
     /// <summary>
     /// Gets or sets the worker profile ID used by on-demand sandbox worker registration.
     /// </summary>
-    public string WorkerProfileId { get; set; } = OnDemandSandboxActivityMetadata.DefaultWorkerProfileId;
+    public string WorkerProfileId { get; set; } = SandboxActivityMetadata.DefaultWorkerProfileId;
 
     /// <summary>
     /// Gets or sets the maximum number of concurrent activities expected from this on-demand sandbox worker.

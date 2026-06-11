@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../../src/Worker/AzureManaged/Worker.AzureManaged.csproj" />
-    <ProjectReference Include="../../../src/Worker/AzureManaged.OnDemandSandbox/Worker.AzureManaged.OnDemandSandbox.csproj" />
+    <ProjectReference Include="../../../src/Worker/AzureManaged.Sandboxes/Worker.AzureManaged.Sandboxes.csproj" />
     <ProjectReference Include="../../TestHelpers/TestHelpers.csproj" />
   </ItemGroup>
 

@@ -7,13 +7,13 @@ namespace Microsoft.DurableTask.Client.AzureManaged;
 /// Declares an on-demand sandbox worker profile that DTS can start for activities declared by the profile.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-public sealed class OnDemandSandboxWorkerProfileAttribute : Attribute
+public sealed class SandboxWorkerProfileAttribute : Attribute
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="OnDemandSandboxWorkerProfileAttribute"/> class.
+    /// Initializes a new instance of the <see cref="SandboxWorkerProfileAttribute"/> class.
     /// </summary>
     /// <param name="workerProfileId">The worker profile ID.</param>
-    public OnDemandSandboxWorkerProfileAttribute(string workerProfileId)
+    public SandboxWorkerProfileAttribute(string workerProfileId)
     {
         this.WorkerProfileId = string.IsNullOrWhiteSpace(workerProfileId)
             ? throw new ArgumentException("On-demand sandbox worker profile ID cannot be empty.", nameof(workerProfileId))

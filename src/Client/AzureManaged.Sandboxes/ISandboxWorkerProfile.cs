@@ -12,5 +12,5 @@ public interface ISandboxWorkerProfile
     /// Configures the on-demand sandbox worker profile declaration options.
     /// </summary>
     /// <param name="options">The declaration options to configure.</param>
-    void Configure(OnDemandSandboxOptions options);
+    void Configure(SandboxWorkerProfileOptions options);
 }

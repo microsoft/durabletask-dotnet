@@ -307,6 +307,58 @@ public class GrpcDurableTaskWorkerTests
     }
 
     [Fact]
+    public async Task DispatchWorkItem_ActivityRequest_NotificationFailure_CompletesActivity()
+    {
+        // Arrange
+        TaskCompletionSource activityCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        GrpcDurableTaskWorkerOptions grpcOptions = new();
+        grpcOptions.ConfigureActivityNotification(phase => throw new InvalidOperationException($"Notification failed: {phase}"));
+
+        P.WorkItem activityWorkItem = new()
+        {
+            ActivityRequest = new P.ActivityRequest
+            {
+                Name = "MyActivity",
+                TaskId = 42,
+                OrchestrationInstance = new P.OrchestrationInstance
+                {
+                    InstanceId = "instance1",
+                    ExecutionId = "execution1",
+                },
+            },
+            CompletionToken = "completion1",
+        };
+
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Logging = { UseLegacyCategories = false },
+        };
+        TestLogProvider logProvider = new(new NullOutput());
+        GrpcDurableTaskWorker worker = CreateWorker(grpcOptions, workerOptions, new SimpleLoggerFactory(logProvider));
+        Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient> clientMock = new(
+            MockBehavior.Strict,
+            new object[] { Mock.Of<CallInvoker>() });
+        clientMock
+            .Setup(client => client.CompleteActivityTaskAsync(
+                It.IsAny<P.ActivityResponse>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback(() => activityCompleted.TrySetResult())
+            .Returns(CreateUnaryCall(Task.FromResult(new P.CompleteTaskResponse())));
+        object processor = CreateProcessor(worker, clientMock.Object);
+
+        // Act
+        InvokeDispatchWorkItem(processor, activityWorkItem, CancellationToken.None);
+        await activityCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Assert
+        clientMock.VerifyAll();
+        logProvider.TryGetLogs(Category, out IReadOnlyCollection<LogEntry>? logs).Should().BeTrue();
+        logs!.Should().Contain(log => log.Message.Contains("Activity notification callback failed for phase 'Started'"));
+    }
+
+    [Fact]
     public async Task ProcessorExecuteAsync_HelloDeadlineExceeded_ReturnsChannelRecreateRequested()
     {
         // Arrange

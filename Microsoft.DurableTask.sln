@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.3.32901.215
@@ -131,15 +131,15 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "main-app", "samples\on-dema
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "remote-worker", "samples\on-demand-sandbox\remote-worker\remote-worker.csproj", "{B7069604-DD97-4115-8B30-FC1D4C0E6D43}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "AzureManaged.OnDemandSandbox", "AzureManaged.OnDemandSandbox", "{28648169-70E4-D0BA-4357-338A556A7DA8}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "AzureManaged.Sandboxes", "AzureManaged.Sandboxes", "{28648169-70E4-D0BA-4357-338A556A7DA8}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.AzureManaged.OnDemandSandbox", "src\Client\AzureManaged.OnDemandSandbox\Client.AzureManaged.OnDemandSandbox.csproj", "{A7C6DF09-1AD3-42F6-BCF1-D40E011D1056}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.AzureManaged.Sandboxes", "src\Client\AzureManaged.Sandboxes\Client.AzureManaged.Sandboxes.csproj", "{A7C6DF09-1AD3-42F6-BCF1-D40E011D1056}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "AzureManaged", "AzureManaged", "{D4587EC0-1B16-8420-7502-A967139249D4}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "AzureManaged.OnDemandSandbox", "AzureManaged.OnDemandSandbox", "{9686B8F9-2644-6C9B-E567-55B0471E4584}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "AzureManaged.Sandboxes", "AzureManaged.Sandboxes", "{9686B8F9-2644-6C9B-E567-55B0471E4584}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Worker.AzureManaged.OnDemandSandbox", "src\Worker\AzureManaged.OnDemandSandbox\Worker.AzureManaged.OnDemandSandbox.csproj", "{C1995163-1DCE-405D-BE82-8B4B2584893E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Worker.AzureManaged.Sandboxes", "src\Worker\AzureManaged.Sandboxes\Worker.AzureManaged.Sandboxes.csproj", "{C1995163-1DCE-405D-BE82-8B4B2584893E}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "AzureManaged", "AzureManaged", "{53193780-CD18-2643-6953-C26F59EAEDF5}"
 EndProject

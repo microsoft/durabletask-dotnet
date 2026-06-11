@@ -10,12 +10,12 @@ namespace Microsoft.DurableTask.Client.AzureManaged;
 /// <summary>
 /// Options for declaring on-demand sandbox activities and the worker image DTS should start for them.
 /// </summary>
-public sealed class OnDemandSandboxOptions
+public sealed class SandboxWorkerProfileOptions
 {
     /// <summary>
     /// Default worker profile ID used when no profile is specified.
     /// </summary>
-    internal const string DefaultWorkerProfileId = OnDemandSandboxActivityMetadata.DefaultWorkerProfileId;
+    internal const string DefaultWorkerProfileId = SandboxActivityMetadata.DefaultWorkerProfileId;
 
     /// <summary>
     /// Gets or sets the task hub where the on-demand sandbox activity declaration is stored.

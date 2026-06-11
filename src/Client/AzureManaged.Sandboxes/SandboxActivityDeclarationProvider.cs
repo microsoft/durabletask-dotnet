@@ -9,14 +9,14 @@ namespace Microsoft.DurableTask.Client.AzureManaged;
 /// <summary>
 /// Provides on-demand sandbox activity declarations from worker profile configuration.
 /// </summary>
-sealed class OnDemandSandboxActivityDeclarationProvider
+sealed class SandboxActivityDeclarationProvider
 {
     readonly Lazy<ProfileMetadata[]> profiles;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="OnDemandSandboxActivityDeclarationProvider"/> class.
+    /// Initializes a new instance of the <see cref="SandboxActivityDeclarationProvider"/> class.
     /// </summary>
-    public OnDemandSandboxActivityDeclarationProvider()
+    public SandboxActivityDeclarationProvider()
     {
         this.profiles = new Lazy<ProfileMetadata[]>(ScanProfiles, LazyThreadSafetyMode.ExecutionAndPublication);
     }
@@ -26,15 +26,15 @@ sealed class OnDemandSandboxActivityDeclarationProvider
     /// </summary>
     /// <param name="taskHub">The task hub name.</param>
     /// <returns>The resolved on-demand sandbox declaration options.</returns>
-    public IReadOnlyList<OnDemandSandboxOptions> ResolveDeclarations(string taskHub)
+    public IReadOnlyList<SandboxWorkerProfileOptions> ResolveDeclarations(string taskHub)
     {
         string normalizedTaskHub = string.IsNullOrWhiteSpace(taskHub)
             ? throw new InvalidOperationException("On-demand sandbox activity declaration requires a task hub name.")
             : taskHub.Trim();
 
-        OnDemandSandboxOptions[] declarations = this.profiles.Value
+        SandboxWorkerProfileOptions[] declarations = this.profiles.Value
             .Select(profile => CreateOptions(normalizedTaskHub, profile))
-            .Where(static options => OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames).Length > 0)
+            .Where(static options => SandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames).Length > 0)
             .ToArray();
 
         ValidateActivityOwnership(declarations);
@@ -59,7 +59,7 @@ sealed class OnDemandSandboxActivityDeclarationProvider
         Dictionary<string, ProfileMetadata> profiles = new(StringComparer.Ordinal);
         foreach (Type type in GetCandidateTypes())
         {
-            if (type.GetCustomAttribute<OnDemandSandboxWorkerProfileAttribute>() is not { } profile)
+            if (type.GetCustomAttribute<SandboxWorkerProfileAttribute>() is not { } profile)
             {
                 continue;
             }
@@ -77,11 +77,11 @@ sealed class OnDemandSandboxActivityDeclarationProvider
         return profiles.Values.ToArray();
     }
 
-    static OnDemandSandboxOptions CreateOptions(
+    static SandboxWorkerProfileOptions CreateOptions(
         string taskHub,
         ProfileMetadata profile)
     {
-        OnDemandSandboxOptions options = new()
+        SandboxWorkerProfileOptions options = new()
         {
             TaskHub = taskHub,
             WorkerProfileId = profile.WorkerProfileId,
@@ -91,7 +91,7 @@ sealed class OnDemandSandboxActivityDeclarationProvider
         return options;
     }
 
-    static void ConfigureProfile(Type profileType, OnDemandSandboxOptions options)
+    static void ConfigureProfile(Type profileType, SandboxWorkerProfileOptions options)
     {
         ValidateProfileType(profileType);
 
@@ -126,12 +126,12 @@ sealed class OnDemandSandboxActivityDeclarationProvider
         }
     }
 
-    static void ValidateActivityOwnership(IEnumerable<OnDemandSandboxOptions> declarations)
+    static void ValidateActivityOwnership(IEnumerable<SandboxWorkerProfileOptions> declarations)
     {
         Dictionary<string, string> activityOwners = new(StringComparer.Ordinal);
-        foreach (OnDemandSandboxOptions declaration in declarations)
+        foreach (SandboxWorkerProfileOptions declaration in declarations)
         {
-            foreach (string activityName in OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(declaration.ActivityNames))
+            foreach (string activityName in SandboxActivityDeclarationBuilder.ResolveActivityNames(declaration.ActivityNames))
             {
                 if (activityOwners.TryGetValue(activityName, out string? existingProfile)
                     && !string.Equals(existingProfile, declaration.WorkerProfileId, StringComparison.Ordinal))

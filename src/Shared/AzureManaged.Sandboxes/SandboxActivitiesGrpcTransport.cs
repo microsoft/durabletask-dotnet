@@ -9,7 +9,7 @@ namespace Microsoft.DurableTask.AzureManaged.Internal;
 /// <summary>
 /// Transport abstraction for the on-demand sandbox activities gRPC service.
 /// </summary>
-interface IOnDemandSandboxActivitiesTransport
+interface ISandboxActivitiesTransport
 {
     /// <summary>
     /// Declares on-demand sandbox activities to DTS.
@@ -30,7 +30,7 @@ interface IOnDemandSandboxActivitiesTransport
     /// <param name="taskHub">The task hub that owns the declaration.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The removal result.</returns>
-    Task<Proto.RemoveOnDemandSandboxActivityDeclarationResult> RemoveOnDemandSandboxActivityDeclarationAsync(
+    Task<Proto.RemoveOnDemandSandboxActivityDeclarationResult> RemoveSandboxActivityDeclarationAsync(
         string workerProfileId,
         string taskHub,
         CancellationToken cancellationToken);
@@ -41,13 +41,13 @@ interface IOnDemandSandboxActivitiesTransport
     /// <param name="taskHub">The task hub that owns the worker session.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The worker registration session.</returns>
-    IOnDemandSandboxActivityWorkerSession OpenOnDemandSandboxActivityWorkerSession(string taskHub, CancellationToken cancellationToken);
+    ISandboxActivityWorkerSession OpenOnDemandSandboxActivityWorkerSession(string taskHub, CancellationToken cancellationToken);
 }
 
 /// <summary>
 /// Client-streaming session used by an on-demand sandbox activity worker registration.
 /// </summary>
-interface IOnDemandSandboxActivityWorkerSession : IAsyncDisposable
+interface ISandboxActivityWorkerSession : IAsyncDisposable
 {
     /// <summary>
     /// Writes a worker registration message to the stream.
@@ -70,19 +70,19 @@ interface IOnDemandSandboxActivityWorkerSession : IAsyncDisposable
 }
 
 /// <summary>
-/// gRPC-backed implementation of <see cref="IOnDemandSandboxActivitiesTransport"/>.
+/// gRPC-backed implementation of <see cref="ISandboxActivitiesTransport"/>.
 /// </summary>
-sealed class OnDemandSandboxActivitiesGrpcTransport : IOnDemandSandboxActivitiesTransport
+sealed class SandboxActivitiesGrpcTransport : ISandboxActivitiesTransport
 {
     readonly Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient client;
     readonly bool attachTaskHubMetadata;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="OnDemandSandboxActivitiesGrpcTransport"/> class.
+    /// Initializes a new instance of the <see cref="SandboxActivitiesGrpcTransport"/> class.
     /// </summary>
     /// <param name="client">The generated on-demand sandbox activities gRPC client.</param>
     /// <param name="attachTaskHubMetadata">True to add per-call task hub metadata when the underlying channel does not already do so.</param>
-    public OnDemandSandboxActivitiesGrpcTransport(
+    public SandboxActivitiesGrpcTransport(
         Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient client,
         bool attachTaskHubMetadata = true)
     {
@@ -105,7 +105,7 @@ sealed class OnDemandSandboxActivitiesGrpcTransport : IOnDemandSandboxActivities
     }
 
     /// <inheritdoc/>
-    public async Task<Proto.RemoveOnDemandSandboxActivityDeclarationResult> RemoveOnDemandSandboxActivityDeclarationAsync(
+    public async Task<Proto.RemoveOnDemandSandboxActivityDeclarationResult> RemoveSandboxActivityDeclarationAsync(
         string workerProfileId,
         string taskHub,
         CancellationToken cancellationToken)
@@ -124,7 +124,7 @@ sealed class OnDemandSandboxActivitiesGrpcTransport : IOnDemandSandboxActivities
     }
 
     /// <inheritdoc/>
-    public IOnDemandSandboxActivityWorkerSession OpenOnDemandSandboxActivityWorkerSession(string taskHub, CancellationToken cancellationToken)
+    public ISandboxActivityWorkerSession OpenOnDemandSandboxActivityWorkerSession(string taskHub, CancellationToken cancellationToken)
     {
         AsyncClientStreamingCall<Proto.OnDemandSandboxActivityWorkerMessage, Proto.OnDemandSandboxActivityWorkerSessionResult> call =
             this.client.ConnectOnDemandSandboxActivityWorker(
@@ -140,7 +140,7 @@ sealed class OnDemandSandboxActivitiesGrpcTransport : IOnDemandSandboxActivities
     /// <summary>
     /// gRPC-backed on-demand sandbox activity worker registration session.
     /// </summary>
-    sealed class GrpcOnDemandSandboxActivityWorkerSession : IOnDemandSandboxActivityWorkerSession
+    sealed class GrpcOnDemandSandboxActivityWorkerSession : ISandboxActivityWorkerSession
     {
         readonly AsyncClientStreamingCall<Proto.OnDemandSandboxActivityWorkerMessage, Proto.OnDemandSandboxActivityWorkerSessionResult> call;
 

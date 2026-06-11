@@ -4,7 +4,7 @@
 using Microsoft.Extensions.Logging;
 using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 
-namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
+namespace Microsoft.DurableTask.Worker.AzureManaged.Sandboxes;
 
 /// <summary>
 /// Log messages for on-demand sandbox activity services.

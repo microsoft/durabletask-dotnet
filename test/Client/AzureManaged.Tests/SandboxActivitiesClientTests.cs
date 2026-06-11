@@ -13,27 +13,27 @@ using Xunit;
 
 namespace Microsoft.DurableTask.Client.AzureManaged.Tests;
 
-public class OnDemandSandboxActivitiesClientTests
+public class SandboxActivitiesClientTests
 {
     const string TaskHub = "testhub";
 
     [Fact]
     public void OnDemandSandboxDeclarationContract_DoesNotExposeRemovedOptions()
     {
-        typeof(OnDemandSandboxOptions).GetProperty("LaunchCommand").Should().BeNull();
-        typeof(OnDemandSandboxOptions).GetProperty("DeclarationRetryMaxAttempts").Should().BeNull();
-        typeof(OnDemandSandboxOptions).GetProperty("DeclarationRetryDelay").Should().BeNull();
-        typeof(OnDemandSandboxOptions).GetProperty(
+        typeof(SandboxWorkerProfileOptions).GetProperty("LaunchCommand").Should().BeNull();
+        typeof(SandboxWorkerProfileOptions).GetProperty("DeclarationRetryMaxAttempts").Should().BeNull();
+        typeof(SandboxWorkerProfileOptions).GetProperty("DeclarationRetryDelay").Should().BeNull();
+        typeof(SandboxWorkerProfileOptions).GetProperty(
             "HeartbeatInterval",
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Should().BeNull();
-        typeof(OnDemandSandboxOptions).GetProperty("WakeupPort").Should().BeNull();
-        typeof(OnDemandSandboxOptions).GetProperty(
+        typeof(SandboxWorkerProfileOptions).GetProperty("WakeupPort").Should().BeNull();
+        typeof(SandboxWorkerProfileOptions).GetProperty(
             "WorkerRegistrationRetryInitialDelay",
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Should().BeNull();
-        typeof(OnDemandSandboxOptions).GetProperty(
+        typeof(SandboxWorkerProfileOptions).GetProperty(
             "WorkerRegistrationRetryMaxDelay",
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Should().BeNull();
-        typeof(OnDemandSandboxOptions).GetProperty(
+        typeof(SandboxWorkerProfileOptions).GetProperty(
             "Mode",
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Should().BeNull();
         typeof(OnDemandSandboxActivityDeclaration).GetProperty("LaunchCommand").Should().BeNull();
@@ -43,9 +43,9 @@ public class OnDemandSandboxActivitiesClientTests
     public void OnDemandSandboxDeclarationContract_ExposesProfileAddActivityOnly()
     {
         // Arrange
-        Type optionsType = typeof(OnDemandSandboxOptions);
-        Type? activityAttributeType = typeof(OnDemandSandboxOptions).Assembly.GetType(
-            "Microsoft.DurableTask.Client.AzureManaged.OnDemandSandboxActivityAttribute");
+        Type optionsType = typeof(SandboxWorkerProfileOptions);
+        Type? activityAttributeType = typeof(SandboxWorkerProfileOptions).Assembly.GetType(
+            "Microsoft.DurableTask.Client.AzureManaged.SandboxesActivityAttribute");
 
         // Act/Assert
         optionsType.GetProperty("ActivityNames").Should().BeNull();
@@ -59,19 +59,19 @@ public class OnDemandSandboxActivitiesClientTests
     [InlineData("500m", "1024Mi")]
     [InlineData("0.5", "1Gi")]
     [InlineData("2", "2048")]
-    public void OnDemandSandboxActivityDeclarationBuilder_BuildDeclaration_AcceptsAdcResourceQuantities(
+    public void SandboxActivityDeclarationBuilder_BuildDeclaration_AcceptsAdcResourceQuantities(
         string cpu,
         string memory)
     {
         // Arrange
-        OnDemandSandboxOptions options = CreateDeclarationOptions();
+        SandboxWorkerProfileOptions options = CreateDeclarationOptions();
         options.Cpu = cpu;
         options.Memory = memory;
 
         // Act
-        OnDemandSandboxActivityDeclaration declaration = OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(
+        OnDemandSandboxActivityDeclaration declaration = SandboxActivityDeclarationBuilder.BuildDeclaration(
             options,
-            OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
+            SandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
 
         // Assert
         declaration.Resources.Cpu.Should().Be(cpu);
@@ -85,20 +85,20 @@ public class OnDemandSandboxActivitiesClientTests
     [InlineData("500m", "0", "memory")]
     [InlineData("500m", "0Mi", "memory")]
     [InlineData("500m", "500m", "memory")]
-    public void OnDemandSandboxActivityDeclarationBuilder_BuildDeclaration_RejectsInvalidAdcResourceQuantities(
+    public void SandboxActivityDeclarationBuilder_BuildDeclaration_RejectsInvalidAdcResourceQuantities(
         string cpu,
         string memory,
         string expectedMessage)
     {
         // Arrange
-        OnDemandSandboxOptions options = CreateDeclarationOptions();
+        SandboxWorkerProfileOptions options = CreateDeclarationOptions();
         options.Cpu = cpu;
         options.Memory = memory;
 
         // Act
-        Action action = () => OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(
+        Action action = () => SandboxActivityDeclarationBuilder.BuildDeclaration(
             options,
-            OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
+            SandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
 
         // Assert
         action.Should().Throw<InvalidOperationException>()
@@ -106,16 +106,16 @@ public class OnDemandSandboxActivitiesClientTests
     }
 
     [Fact]
-    public void OnDemandSandboxActivityDeclarationBuilder_BuildDeclaration_RequiresSchedulerManagedIdentityClientId()
+    public void SandboxActivityDeclarationBuilder_BuildDeclaration_RequiresSchedulerManagedIdentityClientId()
     {
         // Arrange
-        OnDemandSandboxOptions options = CreateDeclarationOptions();
+        SandboxWorkerProfileOptions options = CreateDeclarationOptions();
         options.SchedulerManagedIdentityClientId = " ";
 
         // Act
-        Action action = () => OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(
+        Action action = () => SandboxActivityDeclarationBuilder.BuildDeclaration(
             options,
-            OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
+            SandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
 
         // Assert
         action.Should().Throw<InvalidOperationException>()
@@ -123,16 +123,16 @@ public class OnDemandSandboxActivitiesClientTests
     }
 
     [Fact]
-    public void OnDemandSandboxActivityDeclarationBuilder_BuildDeclaration_RequiresImagePullManagedIdentityClientId()
+    public void SandboxActivityDeclarationBuilder_BuildDeclaration_RequiresImagePullManagedIdentityClientId()
     {
         // Arrange
-        OnDemandSandboxOptions options = CreateDeclarationOptions();
+        SandboxWorkerProfileOptions options = CreateDeclarationOptions();
         options.ImagePullManagedIdentityClientId = " ";
 
         // Act
-        Action action = () => OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(
+        Action action = () => SandboxActivityDeclarationBuilder.BuildDeclaration(
             options,
-            OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
+            SandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
 
         // Assert
         action.Should().Throw<InvalidOperationException>()
@@ -140,7 +140,7 @@ public class OnDemandSandboxActivitiesClientTests
     }
 
     [Fact]
-    public void OnDemandSandboxActivityDeclarationProvider_ResolveDeclarations_UsesWorkerProfileConfigure()
+    public void SandboxActivityDeclarationProvider_ResolveDeclarations_UsesWorkerProfileConfigure()
     {
         // Arrange
         using EnvironmentVariableScope image = new("DTS_ON_DEMAND_SANDBOX_ACTIVITY_IMAGE", "example.com/not-used:latest");
@@ -148,14 +148,14 @@ public class OnDemandSandboxActivitiesClientTests
         using EnvironmentVariableScope memory = new("DTS_ON_DEMAND_SANDBOX_MEMORY", "4096Mi");
         using EnvironmentVariableScope maxActivities = new("DTS_ON_DEMAND_SANDBOX_MAX_ACTIVITIES", "99");
 
-        OnDemandSandboxActivityDeclarationProvider provider = new();
+        SandboxActivityDeclarationProvider provider = new();
 
         // Act
-        OnDemandSandboxOptions options = provider.ResolveDeclarations(TaskHub)
+        SandboxWorkerProfileOptions options = provider.ResolveDeclarations(TaskHub)
             .Single(options => options.WorkerProfileId == "annotated-profile");
-        OnDemandSandboxActivityDeclaration declaration = OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(
+        OnDemandSandboxActivityDeclaration declaration = SandboxActivityDeclarationBuilder.BuildDeclaration(
             options,
-            OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
+            SandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
 
         // Assert
         declaration.WorkerProfileId.Should().Be("annotated-profile");
@@ -172,11 +172,11 @@ public class OnDemandSandboxActivitiesClientTests
     }
 
     [Fact]
-    public void OnDemandSandboxActivityDeclarationProvider_ValidateProfileType_RequiresProfileInterface()
+    public void SandboxActivityDeclarationProvider_ValidateProfileType_RequiresProfileInterface()
     {
         // Arrange
         // Act
-        Action action = () => OnDemandSandboxActivityDeclarationProvider.ValidateProfileType(typeof(ProfileWithoutInterface));
+        Action action = () => SandboxActivityDeclarationProvider.ValidateProfileType(typeof(ProfileWithoutInterface));
 
         // Assert
         action.Should().Throw<InvalidOperationException>()
@@ -184,7 +184,7 @@ public class OnDemandSandboxActivitiesClientTests
     }
 
     [Fact]
-    public async Task AddDurableTaskSchedulerOnDemandSandboxActivitiesClient_UsesConfiguredDurableTaskClientInvoker()
+    public async Task AddDurableTaskSchedulerSandboxActivitiesClient_UsesConfiguredDurableTaskClientInvoker()
     {
         // Arrange
         RecordingOnDemandSandboxLogCallInvoker callInvoker = new();
@@ -193,13 +193,13 @@ public class OnDemandSandboxActivitiesClientTests
             .Configure(options => options.TaskHubName = "client-test-taskhub");
         services.AddOptions<GrpcDurableTaskClientOptions>(Options.DefaultName)
             .Configure(options => options.CallInvoker = callInvoker);
-        services.AddDurableTaskSchedulerOnDemandSandboxActivitiesClient();
+        services.AddDurableTaskSchedulerSandboxActivitiesClient();
 
         using ServiceProvider provider = services.BuildServiceProvider();
-        OnDemandSandboxActivitiesClient client = provider.GetRequiredService<OnDemandSandboxActivitiesClient>();
+        SandboxActivitiesClient client = provider.GetRequiredService<SandboxActivitiesClient>();
 
         // Act
-        await client.RemoveOnDemandSandboxActivityDeclarationAsync("default");
+        await client.RemoveSandboxActivityDeclarationAsync("default");
 
         // Assert
         callInvoker.RemoveRequest.Should().NotBeNull();
@@ -207,17 +207,17 @@ public class OnDemandSandboxActivitiesClientTests
     }
 
     [Fact]
-    public async Task EnableOnDemandSandboxActivitiesAsync_SendsWorkerProfileDeclarations()
+    public async Task EnableSandboxActivitiesAsync_SendsWorkerProfileDeclarations()
     {
         // Arrange
         RecordingOnDemandSandboxLogCallInvoker callInvoker = new();
-        OnDemandSandboxActivitiesClient client = new(
-            new OnDemandSandboxActivitiesGrpcTransport(new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker)),
+        SandboxActivitiesClient client = new(
+            new SandboxActivitiesGrpcTransport(new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker)),
             "client-test-taskhub",
-            new OnDemandSandboxActivityDeclarationProvider());
+            new SandboxActivityDeclarationProvider());
 
         // Act
-        await client.EnableOnDemandSandboxActivitiesAsync();
+        await client.EnableSandboxActivitiesAsync();
 
         // Assert
         OnDemandSandboxActivityDeclaration declaration = callInvoker.DeclareRequests
@@ -310,9 +310,9 @@ public class OnDemandSandboxActivitiesClientTests
         }
     }
 
-    static OnDemandSandboxOptions CreateDeclarationOptions()
+    static SandboxWorkerProfileOptions CreateDeclarationOptions()
     {
-        OnDemandSandboxOptions options = new()
+        SandboxWorkerProfileOptions options = new()
         {
             TaskHub = TaskHub,
             WorkerProfileId = "profile-a",
@@ -327,10 +327,10 @@ public class OnDemandSandboxActivitiesClientTests
         return options;
     }
 
-    [OnDemandSandboxWorkerProfile("client-test-profile")]
+    [SandboxWorkerProfile("client-test-profile")]
     sealed class ClientTestWorkerProfile : ISandboxWorkerProfile
     {
-        public void Configure(OnDemandSandboxOptions options)
+        public void Configure(SandboxWorkerProfileOptions options)
         {
             options.ContainerImage = "example.com/client-test-worker:latest";
             options.ImagePullManagedIdentityClientId = "image-pull-client-id";
@@ -342,12 +342,12 @@ public class OnDemandSandboxActivitiesClientTests
         }
     }
 
-    [OnDemandSandboxWorkerProfile("annotated-profile")]
+    [SandboxWorkerProfile("annotated-profile")]
     sealed class AnnotatedWorkerProfile : ISandboxWorkerProfile
     {
         public static int ConfigureCallCount { get; private set; }
 
-        public void Configure(OnDemandSandboxOptions options)
+        public void Configure(SandboxWorkerProfileOptions options)
         {
             ConfigureCallCount++;
             options.ContainerImage = "example.com/repo/annotated-worker:latest";

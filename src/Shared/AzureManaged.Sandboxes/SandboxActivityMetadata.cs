@@ -6,7 +6,7 @@ namespace Microsoft.DurableTask.AzureManaged.Internal;
 /// <summary>
 /// Shared normalization helpers for on-demand sandbox activity metadata.
 /// </summary>
-static class OnDemandSandboxActivityMetadata
+static class SandboxActivityMetadata
 {
     /// <summary>
     /// Default worker profile ID used when no profile is specified.

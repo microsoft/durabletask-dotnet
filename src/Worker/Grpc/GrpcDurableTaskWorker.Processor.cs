@@ -405,7 +405,7 @@ sealed partial class GrpcDurableTaskWorker
             }
             else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
             {
-                this.internalOptions.NotifyActivity?.Invoke(ActivityNotificationPhase.Started);
+                this.NotifyActivity(ActivityNotificationPhase.Started);
                 this.RunBackgroundTask(
                     workItem,
                     async () =>
@@ -419,7 +419,7 @@ sealed partial class GrpcDurableTaskWorker
                         }
                         finally
                         {
-                            this.internalOptions.NotifyActivity?.Invoke(ActivityNotificationPhase.Completed);
+                            this.NotifyActivity(ActivityNotificationPhase.Completed);
                         }
                     },
                     cancellation);
@@ -457,6 +457,18 @@ sealed partial class GrpcDurableTaskWorker
             else
             {
                 this.Logger.UnexpectedWorkItemType(workItem.RequestCase.ToString());
+            }
+        }
+
+        void NotifyActivity(ActivityNotificationPhase phase)
+        {
+            try
+            {
+                this.internalOptions.NotifyActivity?.Invoke(phase);
+            }
+            catch (Exception ex)
+            {
+                this.Logger.ActivityNotificationFailed(phase, ex);
             }
         }
 

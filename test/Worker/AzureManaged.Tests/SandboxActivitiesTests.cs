@@ -7,7 +7,7 @@ using Grpc.Core;
 using Microsoft.DurableTask.AzureManaged.Internal;
 using Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 using Microsoft.DurableTask.Worker.AzureManaged;
-using Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
+using Microsoft.DurableTask.Worker.AzureManaged.Sandboxes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -22,11 +22,11 @@ public class OnDemandSandboxActivitiesTests
     const string TaskHub = "testhub";
 
     [Fact]
-    public async Task OnDemandSandboxActivitiesGrpcTransport_SendsTaskHubMetadata()
+    public async Task SandboxActivitiesGrpcTransport_SendsTaskHubMetadata()
     {
         // Arrange
         RecordingOnDemandSandboxActivitiesCallInvoker callInvoker = new();
-        OnDemandSandboxActivitiesGrpcTransport transport = new(new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker));
+        SandboxActivitiesGrpcTransport transport = new(new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker));
         OnDemandSandboxActivityDeclaration declaration = new()
         {
             WorkerProfileId = "profile-a",
@@ -45,7 +45,7 @@ public class OnDemandSandboxActivitiesTests
 
         // Act
         await transport.DeclareOnDemandSandboxActivitiesAsync(declaration, TaskHub, CancellationToken.None);
-        await using IOnDemandSandboxActivityWorkerSession session = transport.OpenOnDemandSandboxActivityWorkerSession(
+        await using ISandboxActivityWorkerSession session = transport.OpenOnDemandSandboxActivityWorkerSession(
             TaskHub,
             CancellationToken.None);
 
@@ -55,11 +55,11 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public async Task OnDemandSandboxActivitiesGrpcTransport_CanRelyOnChannelTaskHubMetadata()
+    public async Task SandboxActivitiesGrpcTransport_CanRelyOnChannelTaskHubMetadata()
     {
         // Arrange
         RecordingOnDemandSandboxActivitiesCallInvoker callInvoker = new();
-        OnDemandSandboxActivitiesGrpcTransport transport = new(
+        SandboxActivitiesGrpcTransport transport = new(
             new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker),
             attachTaskHubMetadata: false);
         OnDemandSandboxActivityDeclaration declaration = new()
@@ -80,7 +80,7 @@ public class OnDemandSandboxActivitiesTests
 
         // Act
         await transport.DeclareOnDemandSandboxActivitiesAsync(declaration, TaskHub, CancellationToken.None);
-        await using IOnDemandSandboxActivityWorkerSession session = transport.OpenOnDemandSandboxActivityWorkerSession(
+        await using ISandboxActivityWorkerSession session = transport.OpenOnDemandSandboxActivityWorkerSession(
             TaskHub,
             CancellationToken.None);
 
@@ -90,7 +90,7 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public async Task OnDemandSandboxActivityWorkerRegistrationHostedService_SendsLiveWorkerMetadataWithRegisteredActivities()
+    public async Task SandboxActivityWorkerRegistrationHostedService_SendsLiveWorkerMetadataWithRegisteredActivities()
     {
         // Arrange
         string? originalSubstrate = Environment.GetEnvironmentVariable("DTS_SUBSTRATE");
@@ -100,7 +100,7 @@ public class OnDemandSandboxActivitiesTests
 
         try
         {
-            OnDemandSandboxWorkerRuntimeOptions options = new()
+            SandboxWorkerRuntimeOptions options = new()
             {
                 TaskHub = TaskHub,
                 WorkerProfileId = "profile-a",
@@ -108,11 +108,11 @@ public class OnDemandSandboxActivitiesTests
                 HeartbeatInterval = TimeSpan.FromDays(1),
             };
             FakeOnDemandSandboxActivitiesTransport client = new();
-            OnDemandSandboxActivityWorkerRegistrationHostedService service = new(
+            SandboxActivityWorkerRegistrationHostedService service = new(
                 client,
                 options,
                 ["RemoteHello"],
-                NullLogger<OnDemandSandboxActivityWorkerRegistrationHostedService>.Instance);
+                NullLogger<SandboxActivityWorkerRegistrationHostedService>.Instance);
 
             // Act
             await service.StartAsync(CancellationToken.None);
@@ -138,7 +138,7 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public void OnDemandSandboxWorkerMessageBuilder_NormalizesTaskHubAndSandboxId()
+    public void SandboxWorkerMessageBuilder_NormalizesTaskHubAndSandboxId()
     {
         // Arrange
         string? originalSandboxId = Environment.GetEnvironmentVariable("DTS_SANDBOX_ID");
@@ -146,7 +146,7 @@ public class OnDemandSandboxActivitiesTests
 
         try
         {
-            OnDemandSandboxWorkerRuntimeOptions options = new()
+            SandboxWorkerRuntimeOptions options = new()
             {
                 TaskHub = " testhub ",
                 WorkerProfileId = "profile-a",
@@ -154,7 +154,7 @@ public class OnDemandSandboxActivitiesTests
             };
 
             // Act
-            OnDemandSandboxActivityWorkerMessage message = OnDemandSandboxWorkerMessageBuilder.BuildWorkerStart(
+            OnDemandSandboxActivityWorkerMessage message = SandboxWorkerMessageBuilder.BuildWorkerStart(
                 options,
                 ["RemoteHello"]);
 
@@ -173,7 +173,7 @@ public class OnDemandSandboxActivitiesTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void OnDemandSandboxWorkerMessageBuilder_MissingSandboxId_Throws(string? sandboxId)
+    public void SandboxWorkerMessageBuilder_MissingSandboxId_Throws(string? sandboxId)
     {
         // Arrange
         string? originalSandboxId = Environment.GetEnvironmentVariable("DTS_SANDBOX_ID");
@@ -181,7 +181,7 @@ public class OnDemandSandboxActivitiesTests
 
         try
         {
-            OnDemandSandboxWorkerRuntimeOptions options = new()
+            SandboxWorkerRuntimeOptions options = new()
             {
                 TaskHub = TaskHub,
                 WorkerProfileId = "profile-a",
@@ -189,7 +189,7 @@ public class OnDemandSandboxActivitiesTests
             };
 
             // Act
-            Action action = () => OnDemandSandboxWorkerMessageBuilder.BuildWorkerStart(
+            Action action = () => SandboxWorkerMessageBuilder.BuildWorkerStart(
                 options,
                 ["RemoteHello"]);
 
@@ -204,10 +204,10 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public void OnDemandSandboxActivityTracker_TracksInFlightActivityCount()
+    public void SandboxActivityTracker_TracksInFlightActivityCount()
     {
         // Arrange
-        OnDemandSandboxActivityTracker activityTracker = new();
+        SandboxActivityTracker activityTracker = new();
 
         // Act
         activityTracker.NotifyActivityStarted();
@@ -231,11 +231,11 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public async Task OnDemandSandboxActivityWorkerRegistrationHostedService_SendsHeartbeatWithCurrentInFlightCount()
+    public async Task SandboxActivityWorkerRegistrationHostedService_SendsHeartbeatWithCurrentInFlightCount()
     {
         // Arrange
         using EnvironmentVariableScope sandboxId = new("DTS_SANDBOX_ID", "sandbox-1");
-        OnDemandSandboxWorkerRuntimeOptions options = new()
+        SandboxWorkerRuntimeOptions options = new()
         {
             TaskHub = TaskHub,
             WorkerProfileId = "profile-a",
@@ -244,15 +244,15 @@ public class OnDemandSandboxActivitiesTests
         };
 
         FakeOnDemandSandboxActivitiesTransport client = new();
-        OnDemandSandboxActivityTracker activityTracker = new();
+        SandboxActivityTracker activityTracker = new();
         activityTracker.NotifyActivityStarted();
         activityTracker.NotifyActivityStarted();
 
-        OnDemandSandboxActivityWorkerRegistrationHostedService service = new(
+        SandboxActivityWorkerRegistrationHostedService service = new(
             client,
             options,
             ["RemoteHello"],
-            NullLogger<OnDemandSandboxActivityWorkerRegistrationHostedService>.Instance,
+            NullLogger<SandboxActivityWorkerRegistrationHostedService>.Instance,
             activityTracker: activityTracker);
 
         // Act
@@ -268,11 +268,11 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public async Task OnDemandSandboxActivityWorkerRegistrationHostedService_ReopensSessionAfterTransientStreamFailure()
+    public async Task SandboxActivityWorkerRegistrationHostedService_ReopensSessionAfterTransientStreamFailure()
     {
         // Arrange
         using EnvironmentVariableScope sandboxId = new("DTS_SANDBOX_ID", "sandbox-1");
-        OnDemandSandboxWorkerRuntimeOptions options = new()
+        SandboxWorkerRuntimeOptions options = new()
         {
             TaskHub = TaskHub,
             WorkerProfileId = "profile-a",
@@ -288,11 +288,11 @@ public class OnDemandSandboxActivitiesTests
         client.QueueSession(failedSession);
         client.QueueSession(recoveredSession);
 
-        OnDemandSandboxActivityWorkerRegistrationHostedService service = new(
+        SandboxActivityWorkerRegistrationHostedService service = new(
             client,
             options,
             ["RemoteHello"],
-            NullLogger<OnDemandSandboxActivityWorkerRegistrationHostedService>.Instance);
+            NullLogger<SandboxActivityWorkerRegistrationHostedService>.Instance);
 
         // Act
         await service.StartAsync(CancellationToken.None);
@@ -307,11 +307,11 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public async Task OnDemandSandboxActivityWorkerRegistrationHostedService_ReopensSessionAfterTerminalServerFailure()
+    public async Task SandboxActivityWorkerRegistrationHostedService_ReopensSessionAfterTerminalServerFailure()
     {
         // Arrange
         using EnvironmentVariableScope sandboxId = new("DTS_SANDBOX_ID", "sandbox-1");
-        OnDemandSandboxWorkerRuntimeOptions options = new()
+        SandboxWorkerRuntimeOptions options = new()
         {
             TaskHub = TaskHub,
             WorkerProfileId = "profile-a",
@@ -327,11 +327,11 @@ public class OnDemandSandboxActivitiesTests
         client.QueueSession(failedSession);
         client.QueueSession(recoveredSession);
 
-        OnDemandSandboxActivityWorkerRegistrationHostedService service = new(
+        SandboxActivityWorkerRegistrationHostedService service = new(
             client,
             options,
             ["RemoteHello"],
-            NullLogger<OnDemandSandboxActivityWorkerRegistrationHostedService>.Instance);
+            NullLogger<SandboxActivityWorkerRegistrationHostedService>.Instance);
 
         // Act
         await service.StartAsync(CancellationToken.None);
@@ -347,22 +347,22 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public void OnDemandSandboxActivityWorkerRegistrationHostedService_ComputeJitteredReconnectDelay_UsesFullJitterWindow()
+    public void SandboxActivityWorkerRegistrationHostedService_ComputeJitteredReconnectDelay_UsesFullJitterWindow()
     {
         // Arrange
         TimeSpan retryDelay = TimeSpan.FromSeconds(10);
 
         // Act
-        TimeSpan zero = OnDemandSandboxActivityWorkerRegistrationHostedService.ComputeJitteredReconnectDelay(
+        TimeSpan zero = SandboxActivityWorkerRegistrationHostedService.ComputeJitteredReconnectDelay(
             TimeSpan.Zero,
             new DeterministicRandom(0.5));
-        TimeSpan low = OnDemandSandboxActivityWorkerRegistrationHostedService.ComputeJitteredReconnectDelay(
+        TimeSpan low = SandboxActivityWorkerRegistrationHostedService.ComputeJitteredReconnectDelay(
             retryDelay,
             new DeterministicRandom(0.0));
-        TimeSpan mid = OnDemandSandboxActivityWorkerRegistrationHostedService.ComputeJitteredReconnectDelay(
+        TimeSpan mid = SandboxActivityWorkerRegistrationHostedService.ComputeJitteredReconnectDelay(
             retryDelay,
             new DeterministicRandom(0.5));
-        TimeSpan high = OnDemandSandboxActivityWorkerRegistrationHostedService.ComputeJitteredReconnectDelay(
+        TimeSpan high = SandboxActivityWorkerRegistrationHostedService.ComputeJitteredReconnectDelay(
             retryDelay,
             new DeterministicRandom(0.999999));
 
@@ -375,11 +375,11 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public async Task OnDemandSandboxActivityWorkerRegistrationHostedService_AppliesJitterToReconnectDelay()
+    public async Task SandboxActivityWorkerRegistrationHostedService_AppliesJitterToReconnectDelay()
     {
         // Arrange
         using EnvironmentVariableScope sandboxId = new("DTS_SANDBOX_ID", "sandbox-1");
-        OnDemandSandboxWorkerRuntimeOptions options = new()
+        SandboxWorkerRuntimeOptions options = new()
         {
             TaskHub = TaskHub,
             WorkerProfileId = "profile-a",
@@ -395,11 +395,11 @@ public class OnDemandSandboxActivitiesTests
         client.QueueSession(failedSession);
         client.QueueSession(recoveredSession);
 
-        OnDemandSandboxActivityWorkerRegistrationHostedService service = new(
+        SandboxActivityWorkerRegistrationHostedService service = new(
             client,
             options,
             ["RemoteHello"],
-            NullLogger<OnDemandSandboxActivityWorkerRegistrationHostedService>.Instance,
+            NullLogger<SandboxActivityWorkerRegistrationHostedService>.Instance,
             reconnectJitter: new DeterministicRandom(0.0));
 
         // Act
@@ -413,11 +413,11 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
-    public async Task OnDemandSandboxActivityWorkerRegistrationHostedService_StopAsync_DoesNotCompleteStreamWhileWriteIsInFlight()
+    public async Task SandboxActivityWorkerRegistrationHostedService_StopAsync_DoesNotCompleteStreamWhileWriteIsInFlight()
     {
         // Arrange
         using EnvironmentVariableScope sandboxId = new("DTS_SANDBOX_ID", "sandbox-1");
-        OnDemandSandboxWorkerRuntimeOptions options = new()
+        SandboxWorkerRuntimeOptions options = new()
         {
             TaskHub = TaskHub,
             WorkerProfileId = "profile-a",
@@ -429,11 +429,11 @@ public class OnDemandSandboxActivitiesTests
         FakeOnDemandSandboxActivitiesTransport client = new();
         client.QueueSession(session);
 
-        OnDemandSandboxActivityWorkerRegistrationHostedService service = new(
+        SandboxActivityWorkerRegistrationHostedService service = new(
             client,
             options,
             ["RemoteHello"],
-            NullLogger<OnDemandSandboxActivityWorkerRegistrationHostedService>.Instance);
+            NullLogger<SandboxActivityWorkerRegistrationHostedService>.Instance);
 
         // Act
         await service.StartAsync(CancellationToken.None);
@@ -701,7 +701,7 @@ public class OnDemandSandboxActivitiesTests
             .WithMessage("DTS_SUBSTRATE must be 'Sandbox' or 'AcaSessionPool' for on-demand sandbox workers.");
     }
 
-    sealed class FakeOnDemandSandboxActivitiesTransport : IOnDemandSandboxActivitiesTransport
+    sealed class FakeOnDemandSandboxActivitiesTransport : ISandboxActivitiesTransport
     {
         readonly Queue<FakeOnDemandSandboxActivityWorkerSession> queuedSessions = new();
 
@@ -721,7 +721,7 @@ public class OnDemandSandboxActivitiesTests
             throw new NotSupportedException();
         }
 
-        public Task<RemoveOnDemandSandboxActivityDeclarationResult> RemoveOnDemandSandboxActivityDeclarationAsync(
+        public Task<RemoveOnDemandSandboxActivityDeclarationResult> RemoveSandboxActivityDeclarationAsync(
             string workerProfileId,
             string taskHub,
             CancellationToken cancellationToken)
@@ -729,7 +729,7 @@ public class OnDemandSandboxActivitiesTests
             throw new NotSupportedException();
         }
 
-        public IOnDemandSandboxActivityWorkerSession OpenOnDemandSandboxActivityWorkerSession(string taskHub, CancellationToken cancellationToken)
+        public ISandboxActivityWorkerSession OpenOnDemandSandboxActivityWorkerSession(string taskHub, CancellationToken cancellationToken)
         {
             this.SessionTaskHubs.Add(taskHub);
             FakeOnDemandSandboxActivityWorkerSession session = this.queuedSessions.Count > 0
@@ -816,7 +816,7 @@ public class OnDemandSandboxActivitiesTests
         public Task CompleteAsync() => Task.CompletedTask;
     }
 
-    sealed class FakeOnDemandSandboxActivityWorkerSession : IOnDemandSandboxActivityWorkerSession
+    sealed class FakeOnDemandSandboxActivityWorkerSession : ISandboxActivityWorkerSession
     {
         readonly object sync = new();
         readonly TaskCompletionSource<OnDemandSandboxActivityWorkerSessionResult> completion =

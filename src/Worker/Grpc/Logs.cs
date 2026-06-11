@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.Worker.Grpc
@@ -103,5 +104,8 @@ namespace Microsoft.DurableTask.Worker.Grpc
 
         [LoggerMessage(EventId = 77, Level = LogLevel.Warning, Message = "Transient gRPC error for '{OperationName}'. Attempt {Attempt} of {MaxAttempts}. Retrying in {BackoffMs} ms. StatusCode={StatusCode}")]
         public static partial void TransientGrpcRetry(this ILogger logger, string operationName, int attempt, int maxAttempts, double backoffMs, int statusCode, Exception exception);
+
+        [LoggerMessage(EventId = 78, Level = LogLevel.Warning, Message = "Activity notification callback failed for phase '{Phase}'.")]
+        public static partial void ActivityNotificationFailed(this ILogger logger, ActivityNotificationPhase phase, Exception exception);
     }
 }

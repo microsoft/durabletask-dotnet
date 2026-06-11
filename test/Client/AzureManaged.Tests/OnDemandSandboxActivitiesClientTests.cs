@@ -140,7 +140,7 @@ public class OnDemandSandboxActivitiesClientTests
     }
 
     [Fact]
-    public void OnDemandSandboxActivityDeclarationResolver_ResolveDeclarations_UsesWorkerProfileConfigure()
+    public void OnDemandSandboxActivityDeclarationProvider_ResolveDeclarations_UsesWorkerProfileConfigure()
     {
         // Arrange
         using EnvironmentVariableScope image = new("DTS_ON_DEMAND_SANDBOX_ACTIVITY_IMAGE", "example.com/not-used:latest");
@@ -148,8 +148,10 @@ public class OnDemandSandboxActivitiesClientTests
         using EnvironmentVariableScope memory = new("DTS_ON_DEMAND_SANDBOX_MEMORY", "4096Mi");
         using EnvironmentVariableScope maxActivities = new("DTS_ON_DEMAND_SANDBOX_MAX_ACTIVITIES", "99");
 
+        OnDemandSandboxActivityDeclarationProvider provider = new();
+
         // Act
-        OnDemandSandboxOptions options = OnDemandSandboxActivityDeclarationResolver.ResolveDeclarations(TaskHub)
+        OnDemandSandboxOptions options = provider.ResolveDeclarations(TaskHub)
             .Single(options => options.WorkerProfileId == "annotated-profile");
         OnDemandSandboxActivityDeclaration declaration = OnDemandSandboxActivityDeclarationBuilder.BuildDeclaration(
             options,
@@ -170,10 +172,11 @@ public class OnDemandSandboxActivitiesClientTests
     }
 
     [Fact]
-    public void OnDemandSandboxActivityDeclarationResolver_ValidateProfileType_RequiresProfileInterface()
+    public void OnDemandSandboxActivityDeclarationProvider_ValidateProfileType_RequiresProfileInterface()
     {
+        // Arrange
         // Act
-        Action action = () => OnDemandSandboxActivityDeclarationResolver.ValidateProfileType(typeof(ProfileWithoutInterface));
+        Action action = () => OnDemandSandboxActivityDeclarationProvider.ValidateProfileType(typeof(ProfileWithoutInterface));
 
         // Assert
         action.Should().Throw<InvalidOperationException>()
@@ -210,7 +213,8 @@ public class OnDemandSandboxActivitiesClientTests
         RecordingOnDemandSandboxLogCallInvoker callInvoker = new();
         OnDemandSandboxActivitiesClient client = new(
             new OnDemandSandboxActivitiesGrpcTransport(new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker)),
-            "client-test-taskhub");
+            "client-test-taskhub",
+            new OnDemandSandboxActivityDeclarationProvider());
 
         // Act
         await client.EnableOnDemandSandboxActivitiesAsync();

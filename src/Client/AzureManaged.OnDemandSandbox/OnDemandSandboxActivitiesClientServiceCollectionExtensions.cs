@@ -5,6 +5,7 @@ using Grpc.Net.Client;
 using Microsoft.DurableTask.AzureManaged.Internal;
 using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
 
@@ -36,6 +37,8 @@ public static class OnDemandSandboxActivitiesClientServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(clientName);
 
+        services.TryAddSingleton<OnDemandSandboxActivityDeclarationProvider>();
+
         services.AddSingleton(provider =>
         {
             DurableTaskSchedulerClientOptions schedulerOptions = provider
@@ -44,6 +47,7 @@ public static class OnDemandSandboxActivitiesClientServiceCollectionExtensions
             GrpcDurableTaskClientOptions options = provider
                 .GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>()
                 .Get(clientName);
+            OnDemandSandboxActivityDeclarationProvider declarationProvider = provider.GetRequiredService<OnDemandSandboxActivityDeclarationProvider>();
 
             if (options.CallInvoker is { } callInvoker)
             {
@@ -51,7 +55,8 @@ public static class OnDemandSandboxActivitiesClientServiceCollectionExtensions
                     new OnDemandSandboxActivitiesGrpcTransport(
                         new Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker),
                         attachTaskHubMetadata: false),
-                    schedulerOptions.TaskHubName);
+                    schedulerOptions.TaskHubName,
+                    declarationProvider);
             }
 
             if (options.Channel is GrpcChannel channel)
@@ -60,7 +65,8 @@ public static class OnDemandSandboxActivitiesClientServiceCollectionExtensions
                     new OnDemandSandboxActivitiesGrpcTransport(
                         new Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(channel.CreateCallInvoker()),
                         attachTaskHubMetadata: false),
-                    schedulerOptions.TaskHubName);
+                    schedulerOptions.TaskHubName,
+                    declarationProvider);
             }
 
             throw new InvalidOperationException("DTS on-demand sandbox activity management requires a configured Durable Task Scheduler client.");

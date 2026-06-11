@@ -7,24 +7,32 @@ using System.Threading;
 namespace Microsoft.DurableTask.Client.AzureManaged;
 
 /// <summary>
-/// Resolves on-demand sandbox activity declarations from worker profile configuration.
+/// Provides on-demand sandbox activity declarations from worker profile configuration.
 /// </summary>
-static class OnDemandSandboxActivityDeclarationResolver
+sealed class OnDemandSandboxActivityDeclarationProvider
 {
-    static readonly Lazy<ProfileMetadata[]> Profiles = new(ScanProfiles, LazyThreadSafetyMode.ExecutionAndPublication);
+    readonly Lazy<ProfileMetadata[]> profiles;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OnDemandSandboxActivityDeclarationProvider"/> class.
+    /// </summary>
+    public OnDemandSandboxActivityDeclarationProvider()
+    {
+        this.profiles = new Lazy<ProfileMetadata[]>(ScanProfiles, LazyThreadSafetyMode.ExecutionAndPublication);
+    }
 
     /// <summary>
     /// Resolves on-demand sandbox declarations for the specified task hub.
     /// </summary>
     /// <param name="taskHub">The task hub name.</param>
     /// <returns>The resolved on-demand sandbox declaration options.</returns>
-    public static IReadOnlyList<OnDemandSandboxOptions> ResolveDeclarations(string taskHub)
+    public IReadOnlyList<OnDemandSandboxOptions> ResolveDeclarations(string taskHub)
     {
         string normalizedTaskHub = string.IsNullOrWhiteSpace(taskHub)
             ? throw new InvalidOperationException("On-demand sandbox activity declaration requires a task hub name.")
             : taskHub.Trim();
 
-        OnDemandSandboxOptions[] declarations = Profiles.Value
+        OnDemandSandboxOptions[] declarations = this.profiles.Value
             .Select(profile => CreateOptions(normalizedTaskHub, profile))
             .Where(static options => OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames).Length > 0)
             .ToArray();

@@ -69,11 +69,23 @@ static class OnDemandSandboxActivityDeclarationBuilder
         return declaration;
     }
 
+    /// <summary>
+    /// Normalizes a worker profile ID and throws with the supplied message if it is missing.
+    /// </summary>
+    /// <param name="value">The worker profile ID value.</param>
+    /// <param name="errorMessage">The error message to use when the value is missing.</param>
+    /// <returns>The normalized worker profile ID.</returns>
     internal static string NormalizeWorkerProfileId(string value, string errorMessage)
     {
         return OnDemandSandboxActivityMetadata.NormalizeRequired(value, errorMessage);
     }
 
+    /// <summary>
+    /// Normalizes a required string and throws with the supplied message if it is missing.
+    /// </summary>
+    /// <param name="value">The value.</param>
+    /// <param name="errorMessage">The error message to use when the value is missing.</param>
+    /// <returns>The normalized value.</returns>
     internal static string NormalizeRequired(string value, string errorMessage)
     {
         return OnDemandSandboxActivityMetadata.NormalizeRequired(value, errorMessage);

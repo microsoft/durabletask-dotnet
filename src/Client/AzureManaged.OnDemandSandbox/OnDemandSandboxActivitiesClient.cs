@@ -12,6 +12,7 @@ namespace Microsoft.DurableTask.Client.AzureManaged;
 public sealed class OnDemandSandboxActivitiesClient
 {
     readonly IOnDemandSandboxActivitiesTransport transport;
+    readonly OnDemandSandboxActivityDeclarationProvider declarationProvider;
     readonly string taskHub;
 
     /// <summary>
@@ -19,11 +20,14 @@ public sealed class OnDemandSandboxActivitiesClient
     /// </summary>
     /// <param name="transport">The transport used to call DTS on-demand sandbox management operations.</param>
     /// <param name="taskHub">The task hub whose declarations should be sent to DTS.</param>
+    /// <param name="declarationProvider">The declaration provider.</param>
     internal OnDemandSandboxActivitiesClient(
         IOnDemandSandboxActivitiesTransport transport,
-        string taskHub)
+        string taskHub,
+        OnDemandSandboxActivityDeclarationProvider declarationProvider)
     {
         this.transport = Check.NotNull(transport);
+        this.declarationProvider = Check.NotNull(declarationProvider);
         this.taskHub = string.IsNullOrWhiteSpace(taskHub)
             ? throw new ArgumentException("Task hub name is required.", nameof(taskHub))
             : taskHub.Trim();
@@ -36,8 +40,7 @@ public sealed class OnDemandSandboxActivitiesClient
     /// <returns>A task that completes when DTS accepts all declarations.</returns>
     public async Task EnableOnDemandSandboxActivitiesAsync(CancellationToken cancellation = default)
     {
-        IReadOnlyList<OnDemandSandboxOptions> declarations =
-            OnDemandSandboxActivityDeclarationResolver.ResolveDeclarations(this.taskHub);
+        IReadOnlyList<OnDemandSandboxOptions> declarations = this.declarationProvider.ResolveDeclarations(this.taskHub);
         foreach (OnDemandSandboxOptions options in declarations)
         {
             string[] activityNames = OnDemandSandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames);

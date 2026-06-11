@@ -43,7 +43,7 @@ Update `main-app/appsettings.json` with your scheduler endpoint and task hub:
 {
   "OnDemandSandboxSample": {
     "EndpointAddress": "https://<scheduler-endpoint>",
-    "TaskHubName": "OnDemandSandboxPocHub"
+    "TaskHubName": "<task-hub-name>"
   }
 }
 ```

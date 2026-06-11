@@ -237,7 +237,7 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
                     retryDelay,
                     cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!IsFatalException(ex))
             {
                 Logs.OnDemandSandboxActivityWorkerRegistrationFailed(this.logger, ex, this.options.TaskHub);
                 this.lifetime?.StopApplication();
@@ -397,4 +397,9 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
             await Task.Delay(jitteredDelay, cancellationToken).ConfigureAwait(false);
         }
     }
+
+    static bool IsFatalException(Exception ex) => ex is OutOfMemoryException
+        or StackOverflowException
+        or AccessViolationException
+        or ThreadAbortException;
 }

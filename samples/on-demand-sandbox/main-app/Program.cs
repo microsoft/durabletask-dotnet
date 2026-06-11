@@ -29,6 +29,7 @@ builder.Logging.AddSimpleConsole(options =>
 builder.Services.AddDurableTaskWorker(workerBuilder =>
 {
     workerBuilder.AddTasks(tasks => tasks.AddAllGeneratedTasks());
+    workerBuilder.UseWorkItemFilters();
     workerBuilder.UseDurableTaskScheduler(options =>
     {
         options.EndpointAddress = endpoint;

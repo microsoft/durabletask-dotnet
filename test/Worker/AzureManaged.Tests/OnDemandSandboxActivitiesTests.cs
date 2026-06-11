@@ -138,6 +138,72 @@ public class OnDemandSandboxActivitiesTests
     }
 
     [Fact]
+    public void OnDemandSandboxWorkerMessageBuilder_NormalizesTaskHubAndSandboxId()
+    {
+        // Arrange
+        string? originalSandboxId = Environment.GetEnvironmentVariable("DTS_SANDBOX_ID");
+        Environment.SetEnvironmentVariable("DTS_SANDBOX_ID", " sandbox-1 ");
+
+        try
+        {
+            OnDemandSandboxWorkerRuntimeOptions options = new()
+            {
+                TaskHub = " testhub ",
+                WorkerProfileId = "profile-a",
+                MaxConcurrentActivities = 3,
+            };
+
+            // Act
+            OnDemandSandboxActivityWorkerMessage message = OnDemandSandboxWorkerMessageBuilder.BuildWorkerStart(
+                options,
+                ["RemoteHello"]);
+
+            // Assert
+            OnDemandSandboxActivityWorkerStart start = message.Start;
+            start.TaskHub.Should().Be(TaskHub);
+            start.DtsSandboxIdentifier.Should().Be("sandbox-1");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DTS_SANDBOX_ID", originalSandboxId);
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void OnDemandSandboxWorkerMessageBuilder_MissingSandboxId_Throws(string? sandboxId)
+    {
+        // Arrange
+        string? originalSandboxId = Environment.GetEnvironmentVariable("DTS_SANDBOX_ID");
+        Environment.SetEnvironmentVariable("DTS_SANDBOX_ID", sandboxId);
+
+        try
+        {
+            OnDemandSandboxWorkerRuntimeOptions options = new()
+            {
+                TaskHub = TaskHub,
+                WorkerProfileId = "profile-a",
+                MaxConcurrentActivities = 3,
+            };
+
+            // Act
+            Action action = () => OnDemandSandboxWorkerMessageBuilder.BuildWorkerStart(
+                options,
+                ["RemoteHello"]);
+
+            // Assert
+            action.Should().Throw<InvalidOperationException>()
+                .WithMessage("On-demand sandbox activity worker registration requires a DTS sandbox ID.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DTS_SANDBOX_ID", originalSandboxId);
+        }
+    }
+
+    [Fact]
     public void OnDemandSandboxActivityTracker_TracksInFlightActivityCount()
     {
         // Arrange
@@ -168,6 +234,7 @@ public class OnDemandSandboxActivitiesTests
     public async Task OnDemandSandboxActivityWorkerRegistrationHostedService_SendsHeartbeatWithCurrentInFlightCount()
     {
         // Arrange
+        using EnvironmentVariableScope sandboxId = new("DTS_SANDBOX_ID", "sandbox-1");
         OnDemandSandboxWorkerRuntimeOptions options = new()
         {
             TaskHub = TaskHub,
@@ -204,6 +271,7 @@ public class OnDemandSandboxActivitiesTests
     public async Task OnDemandSandboxActivityWorkerRegistrationHostedService_ReopensSessionAfterTransientStreamFailure()
     {
         // Arrange
+        using EnvironmentVariableScope sandboxId = new("DTS_SANDBOX_ID", "sandbox-1");
         OnDemandSandboxWorkerRuntimeOptions options = new()
         {
             TaskHub = TaskHub,
@@ -242,6 +310,7 @@ public class OnDemandSandboxActivitiesTests
     public async Task OnDemandSandboxActivityWorkerRegistrationHostedService_ReopensSessionAfterTerminalServerFailure()
     {
         // Arrange
+        using EnvironmentVariableScope sandboxId = new("DTS_SANDBOX_ID", "sandbox-1");
         OnDemandSandboxWorkerRuntimeOptions options = new()
         {
             TaskHub = TaskHub,
@@ -309,6 +378,7 @@ public class OnDemandSandboxActivitiesTests
     public async Task OnDemandSandboxActivityWorkerRegistrationHostedService_AppliesJitterToReconnectDelay()
     {
         // Arrange
+        using EnvironmentVariableScope sandboxId = new("DTS_SANDBOX_ID", "sandbox-1");
         OnDemandSandboxWorkerRuntimeOptions options = new()
         {
             TaskHub = TaskHub,
@@ -346,6 +416,7 @@ public class OnDemandSandboxActivitiesTests
     public async Task OnDemandSandboxActivityWorkerRegistrationHostedService_StopAsync_DoesNotCompleteStreamWhileWriteIsInFlight()
     {
         // Arrange
+        using EnvironmentVariableScope sandboxId = new("DTS_SANDBOX_ID", "sandbox-1");
         OnDemandSandboxWorkerRuntimeOptions options = new()
         {
             TaskHub = TaskHub,

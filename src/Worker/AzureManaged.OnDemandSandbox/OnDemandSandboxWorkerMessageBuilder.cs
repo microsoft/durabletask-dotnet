@@ -24,7 +24,7 @@ static class OnDemandSandboxWorkerMessageBuilder
         Check.NotNull(options);
         Check.NotNull(registeredActivityNames);
 
-        _ = OnDemandSandboxActivityMetadata.NormalizeRequired(
+        string taskHub = OnDemandSandboxActivityMetadata.NormalizeRequired(
             options.TaskHub,
             "On-demand sandbox activity worker registration requires a task hub name.");
         string[] activityNames = OnDemandSandboxActivityMetadata.ResolveActivityNames(registeredActivityNames);
@@ -41,14 +41,17 @@ static class OnDemandSandboxWorkerMessageBuilder
         string workerProfileId = OnDemandSandboxActivityMetadata.NormalizeWorkerProfileId(
             options.WorkerProfileId,
             "On-demand sandbox activity worker registration requires a worker profile ID.");
+        string dtsSandboxIdentifier = OnDemandSandboxActivityMetadata.NormalizeRequired(
+            Environment.GetEnvironmentVariable("DTS_SANDBOX_ID") ?? string.Empty,
+            "On-demand sandbox activity worker registration requires a DTS sandbox ID.");
 
         Proto.OnDemandSandboxActivityWorkerStart start = new()
         {
-            TaskHub = options.TaskHub,
+            TaskHub = taskHub,
             WorkerProfileId = workerProfileId,
             MaxActivitiesCount = options.MaxConcurrentActivities,
             Substrate = GetSubstrateFromEnvironment(),
-            DtsSandboxIdentifier = Environment.GetEnvironmentVariable("DTS_SANDBOX_ID") ?? string.Empty,
+            DtsSandboxIdentifier = dtsSandboxIdentifier,
         };
         start.ActivityNames.AddRange(activityNames);
 

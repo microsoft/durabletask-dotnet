@@ -12,12 +12,6 @@ namespace Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox;
 static partial class Logs
 {
     [LoggerMessage(
-        EventId = 700,
-        Level = LogLevel.Information,
-        Message = "No on-demand sandbox activities discovered for worker hub={Hub}; skipping live registration")]
-    public static partial void NoOnDemandSandboxActivitiesForWorkerRegistration(ILogger logger, string hub);
-
-    [LoggerMessage(
         EventId = 701,
         Level = LogLevel.Information,
         Message = "On-demand sandbox activity worker registered hub={Hub} count={Count} substrate={Substrate} sandboxId={SandboxId}")]

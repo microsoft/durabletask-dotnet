@@ -60,13 +60,6 @@ sealed class OnDemandSandboxActivityWorkerRegistrationHostedService : IHostedSer
     public Task StartAsync(CancellationToken cancellationToken)
     {
         string[] activityNames = OnDemandSandboxActivityMetadata.ResolveActivityNames(this.registeredActivityNames);
-        if (activityNames.Length == 0)
-        {
-            Logs.NoOnDemandSandboxActivitiesForWorkerRegistration(this.logger, this.options.TaskHub);
-            this.pump = Task.CompletedTask;
-            return Task.CompletedTask;
-        }
-
         CancellationTokenSource registrationCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task registrationPump = Task.Run(
             () => this.RunRegistrationLoopAsync(activityNames.Length, registrationCts.Token),

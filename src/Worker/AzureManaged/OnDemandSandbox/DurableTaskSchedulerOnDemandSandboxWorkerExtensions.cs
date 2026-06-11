@@ -175,20 +175,15 @@ public static class DurableTaskSchedulerOnDemandSandboxWorkerExtensions
     {
         ValidateOnDemandSandboxWorkerSubstrate(GetRequiredEnvironmentVariable("DTS_SUBSTRATE"));
 
-        ApplyWorkerProfileEnvironmentOverride(profile => options.WorkerProfileId = profile);
+        string? workerProfileId = Environment.GetEnvironmentVariable("DTS_WORKER_PROFILE_ID");
+        if (!string.IsNullOrWhiteSpace(workerProfileId))
+        {
+            options.WorkerProfileId = workerProfileId.Trim();
+        }
 
         if (int.TryParse(Environment.GetEnvironmentVariable("DTS_ON_DEMAND_SANDBOX_MAX_ACTIVITIES"), out int maxActivities) && maxActivities > 0)
         {
             options.MaxConcurrentActivities = maxActivities;
-        }
-    }
-
-    static void ApplyWorkerProfileEnvironmentOverride(Action<string> setWorkerProfileId)
-    {
-        string? workerProfileId = Environment.GetEnvironmentVariable("DTS_WORKER_PROFILE_ID");
-        if (!string.IsNullOrWhiteSpace(workerProfileId))
-        {
-            setWorkerProfileId(workerProfileId.Trim());
         }
     }
 

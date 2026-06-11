@@ -634,14 +634,6 @@ public class OnDemandSandboxActivitiesTests
     {
         readonly Queue<FakeOnDemandSandboxActivityWorkerSession> queuedSessions = new();
 
-        public int TransientDeclarationFailures { get; init; }
-
-        public int DeclarationAttempts { get; private set; }
-
-        public List<OnDemandSandboxActivityDeclaration> Declarations { get; } = [];
-
-        public List<string> DeclarationTaskHubs { get; } = [];
-
         public List<string> SessionTaskHubs { get; } = [];
 
         public List<FakeOnDemandSandboxActivityWorkerSession> Sessions { get; } = [];
@@ -655,15 +647,7 @@ public class OnDemandSandboxActivitiesTests
             string taskHub,
             CancellationToken cancellationToken)
         {
-            this.DeclarationAttempts++;
-            if (this.DeclarationAttempts <= this.TransientDeclarationFailures)
-            {
-                throw new RpcException(new Status(StatusCode.Unavailable, "transient"));
-            }
-
-            this.DeclarationTaskHubs.Add(taskHub);
-            this.Declarations.Add(declaration.Clone());
-            return Task.FromResult(new OnDemandSandboxActivityDeclarationResult());
+            throw new NotSupportedException();
         }
 
         public Task<RemoveOnDemandSandboxActivityDeclarationResult> RemoveOnDemandSandboxActivityDeclarationAsync(
@@ -671,7 +655,7 @@ public class OnDemandSandboxActivitiesTests
             string taskHub,
             CancellationToken cancellationToken)
         {
-            return Task.FromResult(new RemoveOnDemandSandboxActivityDeclarationResult());
+            throw new NotSupportedException();
         }
 
         public IOnDemandSandboxActivityWorkerSession OpenOnDemandSandboxActivityWorkerSession(string taskHub, CancellationToken cancellationToken)

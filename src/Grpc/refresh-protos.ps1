@@ -18,7 +18,8 @@ $commitId = $commitDetails.sha
 
 # These are the proto files we need to download from the durabletask-protobuf repository.
 $protoFileNames = @(
-    "orchestrator_service.proto"
+    "orchestrator_service.proto",
+    "on_demand_sandbox_activities_service.proto"
 )
 
 # Download each proto file to the local directory using the above commit ID

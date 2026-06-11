@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Moved private preview on-demand sandbox APIs into the existing Azure Managed client and worker packages, with shared internal transport code under the Azure Managed shared sources.
+- Split private preview on-demand sandbox APIs into opt-in `Microsoft.DurableTask.Client.AzureManaged.OnDemandSandbox` and `Microsoft.DurableTask.Worker.AzureManaged.OnDemandSandbox` packages.
 - Updated private preview on-demand sandbox worker profile declarations to use `OnDemandSandboxOptions.AddActivity(...)`, and updated the on-demand sandbox sample to share activity name constants between the main app and remote worker.
 - Added SDK-side validation for private preview on-demand sandbox CPU and memory resource quantities.
 

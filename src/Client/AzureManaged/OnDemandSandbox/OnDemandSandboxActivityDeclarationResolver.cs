@@ -33,6 +33,19 @@ static class OnDemandSandboxActivityDeclarationResolver
         return declarations;
     }
 
+    /// <summary>
+    /// Validates that a profile type can configure on-demand sandbox declarations.
+    /// </summary>
+    /// <param name="profileType">The profile type.</param>
+    internal static void ValidateProfileType(Type profileType)
+    {
+        if (!typeof(ISandboxWorkerProfile).IsAssignableFrom(profileType))
+        {
+            throw new InvalidOperationException(
+                $"On-demand sandbox worker profile '{profileType.FullName}' must implement {nameof(ISandboxWorkerProfile)}.");
+        }
+    }
+
     static ProfileMetadata[] ScanProfiles()
     {
         Dictionary<string, ProfileMetadata> profiles = new(StringComparer.Ordinal);
@@ -42,6 +55,8 @@ static class OnDemandSandboxActivityDeclarationResolver
             {
                 continue;
             }
+
+            ValidateProfileType(type);
 
             if (profiles.ContainsKey(profile.WorkerProfileId))
             {
@@ -70,10 +85,7 @@ static class OnDemandSandboxActivityDeclarationResolver
 
     static void ConfigureProfile(Type profileType, OnDemandSandboxOptions options)
     {
-        if (!typeof(ISandboxWorkerProfile).IsAssignableFrom(profileType))
-        {
-            return;
-        }
+        ValidateProfileType(profileType);
 
         object? instance = Activator.CreateInstance(profileType, nonPublic: true)
             ?? throw new InvalidOperationException($"On-demand sandbox worker profile '{profileType.FullName}' could not be created.");

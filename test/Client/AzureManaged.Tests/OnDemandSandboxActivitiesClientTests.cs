@@ -170,6 +170,17 @@ public class OnDemandSandboxActivitiesClientTests
     }
 
     [Fact]
+    public void OnDemandSandboxActivityDeclarationResolver_ValidateProfileType_RequiresProfileInterface()
+    {
+        // Act
+        Action action = () => OnDemandSandboxActivityDeclarationResolver.ValidateProfileType(typeof(ProfileWithoutInterface));
+
+        // Assert
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage($"*{nameof(ISandboxWorkerProfile)}*");
+    }
+
+    [Fact]
     public async Task AddDurableTaskSchedulerOnDemandSandboxActivitiesClient_UsesConfiguredDurableTaskClientInvoker()
     {
         // Arrange
@@ -344,6 +355,10 @@ public class OnDemandSandboxActivitiesClientTests
             options.EnvironmentVariables["CUSTOM_ENV"] = "configured-value";
             options.AddActivity("ConfiguredRemoteHello");
         }
+    }
+
+    sealed class ProfileWithoutInterface
+    {
     }
 
     sealed class EnvironmentVariableScope : IDisposable

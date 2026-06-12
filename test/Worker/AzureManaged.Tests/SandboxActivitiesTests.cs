@@ -969,7 +969,7 @@ public class SandboxActivitiesTests
                     }
                 }
 
-                await Task.Delay(TimeSpan.FromMilliseconds(10), timeout.Token);
+                await Task.Delay(TimeSpan.FromMilliseconds(10));
             }
 
             throw new TimeoutException("Timed out waiting for on-demand sandbox worker message.");

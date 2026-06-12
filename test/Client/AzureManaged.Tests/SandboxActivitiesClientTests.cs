@@ -223,6 +223,7 @@ public class SandboxActivitiesClientTests
         // Assert
         callInvoker.RemoveRequest.Should().NotBeNull();
         callInvoker.RemoveRequest!.WorkerProfileId.Should().Be("default");
+        callInvoker.RemoveHeaders.Should().Contain(header => header.Key == "taskhub" && header.Value == "client-test-taskhub");
     }
 
     [Fact]

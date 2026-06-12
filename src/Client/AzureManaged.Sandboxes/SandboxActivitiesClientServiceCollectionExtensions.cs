@@ -52,9 +52,7 @@ public static class SandboxActivitiesClientServiceCollectionExtensions
             if (options.CallInvoker is { } callInvoker)
             {
                 return new SandboxActivitiesClient(
-                    new SandboxActivitiesGrpcTransport(
-                        new Proto.SandboxActivities.SandboxActivitiesClient(callInvoker),
-                        attachTaskHubMetadata: false),
+                    new SandboxActivitiesGrpcTransport(new Proto.SandboxActivities.SandboxActivitiesClient(callInvoker)),
                     schedulerOptions.TaskHubName,
                     declarationProvider);
             }

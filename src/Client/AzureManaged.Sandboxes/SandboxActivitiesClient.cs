@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.AzureManaged.Internal;
-using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
+using Proto = Microsoft.DurableTask.Protobuf.Sandboxes;
 
 namespace Microsoft.DurableTask.Client.AzureManaged;
 
@@ -49,9 +49,9 @@ public sealed class SandboxActivitiesClient
                 continue;
             }
 
-            Proto.OnDemandSandboxActivityDeclaration declaration =
+            Proto.SandboxActivityDeclaration declaration =
                 SandboxActivityDeclarationBuilder.BuildDeclaration(options, activityNames);
-            await this.transport.DeclareOnDemandSandboxActivitiesAsync(
+            await this.transport.DeclareSandboxActivitiesAsync(
                     declaration,
                     this.taskHub,
                     cancellation)

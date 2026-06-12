@@ -7,7 +7,7 @@ using Azure.Core;
 using Azure.Identity;
 using Grpc.Net.Client;
 using Microsoft.DurableTask.AzureManaged.Internal;
-using Microsoft.DurableTask.Protobuf.OnDemandSandbox;
+using Microsoft.DurableTask.Protobuf.Sandboxes;
 using Microsoft.DurableTask.Worker.AzureManaged.Sandboxes;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
@@ -118,13 +118,13 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
         GrpcDurableTaskWorkerOptions options = services.GetRequiredService<IOptionsMonitor<GrpcDurableTaskWorkerOptions>>().Get(builderName);
         if (options.CallInvoker is { } callInvoker)
         {
-            return new SandboxActivitiesGrpcTransport(new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker));
+            return new SandboxActivitiesGrpcTransport(new SandboxActivities.SandboxActivitiesClient(callInvoker));
         }
 
         if (options.Channel is { } channel)
         {
             return new SandboxActivitiesGrpcTransport(
-                new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(channel.CreateCallInvoker()),
+                new SandboxActivities.SandboxActivitiesClient(channel.CreateCallInvoker()),
                 attachTaskHubMetadata: false);
         }
 
@@ -173,7 +173,7 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
 
     static void ApplyWorkerEnvironmentOverrides(SandboxWorkerRuntimeOptions options)
     {
-        ValidateSandboxWorkerSubstrate(GetRequiredEnvironmentVariable("DTS_SUBSTRATE"));
+        ValidateSandboxWorkerSandboxProvider(GetRequiredEnvironmentVariable("DTS_SUBSTRATE"));
 
         string? workerProfileId = Environment.GetEnvironmentVariable("DTS_WORKER_PROFILE_ID");
         if (!string.IsNullOrWhiteSpace(workerProfileId))
@@ -187,7 +187,7 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
         }
     }
 
-    static void ValidateSandboxWorkerSubstrate(string substrate)
+    static void ValidateSandboxWorkerSandboxProvider(string substrate)
     {
         if (!string.Equals(substrate, "Sandbox", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(substrate, "AcaSessionPool", StringComparison.OrdinalIgnoreCase))

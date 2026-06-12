@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using Grpc.Core;
-using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
+using Proto = Microsoft.DurableTask.Protobuf.Sandboxes;
 
 namespace Microsoft.DurableTask.AzureManaged.Internal;
 
@@ -18,8 +18,8 @@ interface ISandboxActivitiesTransport
     /// <param name="taskHub">The task hub that owns the declaration.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The declaration result.</returns>
-    Task<Proto.OnDemandSandboxActivityDeclarationResult> DeclareOnDemandSandboxActivitiesAsync(
-        Proto.OnDemandSandboxActivityDeclaration declaration,
+    Task<Proto.SandboxActivityDeclarationResult> DeclareSandboxActivitiesAsync(
+        Proto.SandboxActivityDeclaration declaration,
         string taskHub,
         CancellationToken cancellationToken);
 
@@ -30,7 +30,7 @@ interface ISandboxActivitiesTransport
     /// <param name="taskHub">The task hub that owns the declaration.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The removal result.</returns>
-    Task<Proto.RemoveOnDemandSandboxActivityDeclarationResult> RemoveSandboxActivityDeclarationAsync(
+    Task<Proto.RemoveSandboxActivityDeclarationResult> RemoveSandboxActivityDeclarationAsync(
         string workerProfileId,
         string taskHub,
         CancellationToken cancellationToken);
@@ -41,7 +41,7 @@ interface ISandboxActivitiesTransport
     /// <param name="taskHub">The task hub that owns the worker session.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The worker registration session.</returns>
-    ISandboxActivityWorkerSession OpenOnDemandSandboxActivityWorkerSession(string taskHub, CancellationToken cancellationToken);
+    ISandboxActivityWorkerSession OpenSandboxActivityWorkerSession(string taskHub, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -54,13 +54,13 @@ interface ISandboxActivityWorkerSession : IAsyncDisposable
     /// </summary>
     /// <param name="message">The message to write.</param>
     /// <returns>A task that completes when the message is written.</returns>
-    Task WriteMessageAsync(Proto.OnDemandSandboxActivityWorkerMessage message);
+    Task WriteMessageAsync(Proto.SandboxActivityWorkerMessage message);
 
     /// <summary>
     /// Waits for the server to complete the worker registration session.
     /// </summary>
     /// <returns>The worker session result.</returns>
-    Task<Proto.OnDemandSandboxActivityWorkerSessionResult> WaitForCompletionAsync();
+    Task<Proto.SandboxActivityWorkerSessionResult> WaitForCompletionAsync();
 
     /// <summary>
     /// Completes the request stream and waits for the server response.
@@ -74,7 +74,7 @@ interface ISandboxActivityWorkerSession : IAsyncDisposable
 /// </summary>
 sealed class SandboxActivitiesGrpcTransport : ISandboxActivitiesTransport
 {
-    readonly Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient client;
+    readonly Proto.SandboxActivities.SandboxActivitiesClient client;
     readonly bool attachTaskHubMetadata;
 
     /// <summary>
@@ -83,7 +83,7 @@ sealed class SandboxActivitiesGrpcTransport : ISandboxActivitiesTransport
     /// <param name="client">The generated on-demand sandbox activities gRPC client.</param>
     /// <param name="attachTaskHubMetadata">True to add per-call task hub metadata when the underlying channel does not already do so.</param>
     public SandboxActivitiesGrpcTransport(
-        Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient client,
+        Proto.SandboxActivities.SandboxActivitiesClient client,
         bool attachTaskHubMetadata = true)
     {
         this.client = Check.NotNull(client);
@@ -91,13 +91,13 @@ sealed class SandboxActivitiesGrpcTransport : ISandboxActivitiesTransport
     }
 
     /// <inheritdoc/>
-    public async Task<Proto.OnDemandSandboxActivityDeclarationResult> DeclareOnDemandSandboxActivitiesAsync(
-        Proto.OnDemandSandboxActivityDeclaration declaration,
+    public async Task<Proto.SandboxActivityDeclarationResult> DeclareSandboxActivitiesAsync(
+        Proto.SandboxActivityDeclaration declaration,
         string taskHub,
         CancellationToken cancellationToken)
     {
-        using AsyncUnaryCall<Proto.OnDemandSandboxActivityDeclarationResult> call =
-            this.client.DeclareOnDemandSandboxActivitiesAsync(
+        using AsyncUnaryCall<Proto.SandboxActivityDeclarationResult> call =
+            this.client.DeclareSandboxActivitiesAsync(
                 declaration,
                 headers: this.CreateTaskHubHeaders(taskHub),
                 cancellationToken: cancellationToken);
@@ -105,18 +105,18 @@ sealed class SandboxActivitiesGrpcTransport : ISandboxActivitiesTransport
     }
 
     /// <inheritdoc/>
-    public async Task<Proto.RemoveOnDemandSandboxActivityDeclarationResult> RemoveSandboxActivityDeclarationAsync(
+    public async Task<Proto.RemoveSandboxActivityDeclarationResult> RemoveSandboxActivityDeclarationAsync(
         string workerProfileId,
         string taskHub,
         CancellationToken cancellationToken)
     {
-        Proto.RemoveOnDemandSandboxActivityDeclarationRequest request = new()
+        Proto.RemoveSandboxActivityDeclarationRequest request = new()
         {
             WorkerProfileId = workerProfileId,
         };
 
-        using AsyncUnaryCall<Proto.RemoveOnDemandSandboxActivityDeclarationResult> call =
-            this.client.RemoveOnDemandSandboxActivityDeclarationAsync(
+        using AsyncUnaryCall<Proto.RemoveSandboxActivityDeclarationResult> call =
+            this.client.RemoveSandboxActivityDeclarationAsync(
                 request,
                 headers: this.CreateTaskHubHeaders(taskHub),
                 cancellationToken: cancellationToken);
@@ -124,13 +124,13 @@ sealed class SandboxActivitiesGrpcTransport : ISandboxActivitiesTransport
     }
 
     /// <inheritdoc/>
-    public ISandboxActivityWorkerSession OpenOnDemandSandboxActivityWorkerSession(string taskHub, CancellationToken cancellationToken)
+    public ISandboxActivityWorkerSession OpenSandboxActivityWorkerSession(string taskHub, CancellationToken cancellationToken)
     {
-        AsyncClientStreamingCall<Proto.OnDemandSandboxActivityWorkerMessage, Proto.OnDemandSandboxActivityWorkerSessionResult> call =
-            this.client.ConnectOnDemandSandboxActivityWorker(
+        AsyncClientStreamingCall<Proto.SandboxActivityWorkerMessage, Proto.SandboxActivityWorkerSessionResult> call =
+            this.client.ConnectSandboxActivityWorker(
                 headers: this.CreateTaskHubHeaders(taskHub),
                 cancellationToken: cancellationToken);
-        return new GrpcOnDemandSandboxActivityWorkerSession(call);
+        return new GrpcSandboxActivityWorkerSession(call);
     }
 
     Metadata? CreateTaskHubHeaders(string taskHub) => this.attachTaskHubMetadata
@@ -140,25 +140,25 @@ sealed class SandboxActivitiesGrpcTransport : ISandboxActivitiesTransport
     /// <summary>
     /// gRPC-backed on-demand sandbox activity worker registration session.
     /// </summary>
-    sealed class GrpcOnDemandSandboxActivityWorkerSession : ISandboxActivityWorkerSession
+    sealed class GrpcSandboxActivityWorkerSession : ISandboxActivityWorkerSession
     {
-        readonly AsyncClientStreamingCall<Proto.OnDemandSandboxActivityWorkerMessage, Proto.OnDemandSandboxActivityWorkerSessionResult> call;
+        readonly AsyncClientStreamingCall<Proto.SandboxActivityWorkerMessage, Proto.SandboxActivityWorkerSessionResult> call;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="GrpcOnDemandSandboxActivityWorkerSession"/> class.
+        /// Initializes a new instance of the <see cref="GrpcSandboxActivityWorkerSession"/> class.
         /// </summary>
         /// <param name="call">The active gRPC client-streaming call.</param>
-        public GrpcOnDemandSandboxActivityWorkerSession(AsyncClientStreamingCall<Proto.OnDemandSandboxActivityWorkerMessage, Proto.OnDemandSandboxActivityWorkerSessionResult> call)
+        public GrpcSandboxActivityWorkerSession(AsyncClientStreamingCall<Proto.SandboxActivityWorkerMessage, Proto.SandboxActivityWorkerSessionResult> call)
         {
             this.call = call;
         }
 
         /// <inheritdoc/>
-        public Task WriteMessageAsync(Proto.OnDemandSandboxActivityWorkerMessage message) =>
+        public Task WriteMessageAsync(Proto.SandboxActivityWorkerMessage message) =>
             this.call.RequestStream.WriteAsync(message);
 
         /// <inheritdoc/>
-        public async Task<Proto.OnDemandSandboxActivityWorkerSessionResult> WaitForCompletionAsync() =>
+        public async Task<Proto.SandboxActivityWorkerSessionResult> WaitForCompletionAsync() =>
             await this.call.ResponseAsync.ConfigureAwait(false);
 
         /// <inheritdoc/>

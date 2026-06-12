@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.AzureManaged.Internal;
-using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
+using Proto = Microsoft.DurableTask.Protobuf.Sandboxes;
 
 namespace Microsoft.DurableTask.Worker.AzureManaged.Sandboxes;
 
@@ -17,7 +17,7 @@ static class SandboxWorkerMessageBuilder
     /// <param name="options">The on-demand sandbox options.</param>
     /// <param name="registeredActivityNames">The activity handlers registered by the worker process.</param>
     /// <returns>The worker start protocol message.</returns>
-    public static Proto.OnDemandSandboxActivityWorkerMessage BuildWorkerStart(
+    public static Proto.SandboxActivityWorkerMessage BuildWorkerStart(
         SandboxWorkerRuntimeOptions options,
         IReadOnlyCollection<string> registeredActivityNames)
     {
@@ -45,17 +45,17 @@ static class SandboxWorkerMessageBuilder
             Environment.GetEnvironmentVariable("DTS_SANDBOX_ID") ?? string.Empty,
             "On-demand sandbox activity worker registration requires a DTS sandbox ID.");
 
-        Proto.OnDemandSandboxActivityWorkerStart start = new()
+        Proto.SandboxActivityWorkerStart start = new()
         {
             TaskHub = taskHub,
             WorkerProfileId = workerProfileId,
             MaxActivitiesCount = options.MaxConcurrentActivities,
-            Substrate = GetSubstrateFromEnvironment(),
+            SandboxProvider = GetSandboxProviderFromEnvironment(),
             DtsSandboxIdentifier = dtsSandboxIdentifier,
         };
         start.ActivityNames.AddRange(activityNames);
 
-        return new Proto.OnDemandSandboxActivityWorkerMessage { Start = start };
+        return new Proto.SandboxActivityWorkerMessage { Start = start };
     }
 
     /// <summary>
@@ -63,40 +63,40 @@ static class SandboxWorkerMessageBuilder
     /// </summary>
     /// <param name="activeActivitiesCount">The number of activities currently executing.</param>
     /// <returns>The heartbeat protocol message.</returns>
-    public static Proto.OnDemandSandboxActivityWorkerMessage BuildWorkerHeartbeat(int activeActivitiesCount)
+    public static Proto.SandboxActivityWorkerMessage BuildWorkerHeartbeat(int activeActivitiesCount)
     {
         if (activeActivitiesCount < 0)
         {
             throw new InvalidOperationException("On-demand sandbox activity worker active activity count cannot be negative.");
         }
 
-        return new Proto.OnDemandSandboxActivityWorkerMessage
+        return new Proto.SandboxActivityWorkerMessage
         {
-            Heartbeat = new Proto.OnDemandSandboxActivityWorkerHeartbeat
+            Heartbeat = new Proto.SandboxActivityWorkerHeartbeat
             {
                 ActiveActivitiesCount = activeActivitiesCount,
             },
         };
     }
 
-    static Proto.SubstrateKind GetSubstrateFromEnvironment()
+    static Proto.SandboxProviderKind GetSandboxProviderFromEnvironment()
     {
         string? substrate = Environment.GetEnvironmentVariable("DTS_SUBSTRATE");
         if (substrate is null)
         {
-            return Proto.SubstrateKind.Unspecified;
+            return Proto.SandboxProviderKind.Unspecified;
         }
 
         if (substrate.Equals("Sandbox", StringComparison.OrdinalIgnoreCase))
         {
-            return Proto.SubstrateKind.Sandbox;
+            return Proto.SandboxProviderKind.Sandbox;
         }
 
         if (substrate.Equals("AcaSessionPool", StringComparison.OrdinalIgnoreCase))
         {
-            return Proto.SubstrateKind.AcaSessionPool;
+            return Proto.SandboxProviderKind.AcaSessionPool;
         }
 
-        return Proto.SubstrateKind.Unspecified;
+        return Proto.SandboxProviderKind.Unspecified;
     }
 }

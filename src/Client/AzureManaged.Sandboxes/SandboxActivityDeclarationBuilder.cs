@@ -3,7 +3,7 @@
 
 using System.Globalization;
 using Microsoft.DurableTask.AzureManaged.Internal;
-using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
+using Proto = Microsoft.DurableTask.Protobuf.Sandboxes;
 
 namespace Microsoft.DurableTask.Client.AzureManaged;
 
@@ -28,7 +28,7 @@ static class SandboxActivityDeclarationBuilder
     /// <param name="options">The on-demand sandbox options.</param>
     /// <param name="activityNames">The activity names included in the declaration.</param>
     /// <returns>The declaration protocol message.</returns>
-    public static Proto.OnDemandSandboxActivityDeclaration BuildDeclaration(
+    public static Proto.SandboxActivityDeclaration BuildDeclaration(
         SandboxWorkerProfileOptions options,
         IReadOnlyCollection<string> activityNames)
     {
@@ -53,7 +53,7 @@ static class SandboxActivityDeclarationBuilder
             options.SchedulerManagedIdentityClientId ?? string.Empty,
             "On-demand sandbox activity declaration requires the managed identity client ID workers use to connect to the DTS scheduler.");
 
-        Proto.OnDemandSandboxActivityDeclaration declaration = new()
+        Proto.SandboxActivityDeclaration declaration = new()
         {
             WorkerProfileId = workerProfileId,
             Image = BuildImage(options),
@@ -91,13 +91,13 @@ static class SandboxActivityDeclarationBuilder
         return SandboxActivityMetadata.NormalizeRequired(value, errorMessage);
     }
 
-    static Proto.OnDemandSandboxActivityImage BuildImage(SandboxWorkerProfileOptions options)
+    static Proto.SandboxActivityImage BuildImage(SandboxWorkerProfileOptions options)
     {
         string imageRef = NormalizeRequired(
             options.ContainerImage ?? string.Empty,
             "On-demand sandbox activity image metadata requires a container image reference like 'myregistry.azurecr.io/workers/hello:1.0' or 'myregistry.azurecr.io/workers/hello@sha256:...'.");
 
-        Proto.OnDemandSandboxActivityImage image = new()
+        Proto.SandboxActivityImage image = new()
         {
             ImageRef = imageRef,
             ManagedIdentityClientId = NormalizeRequired(
@@ -108,12 +108,12 @@ static class SandboxActivityDeclarationBuilder
         return image;
     }
 
-    static Proto.OnDemandSandboxActivityResources BuildResources(SandboxWorkerProfileOptions options)
+    static Proto.SandboxActivityResources BuildResources(SandboxWorkerProfileOptions options)
     {
         string cpu = NormalizeCpu(options.Cpu);
         string memory = NormalizeMemory(options.Memory);
 
-        return new Proto.OnDemandSandboxActivityResources
+        return new Proto.SandboxActivityResources
         {
             Cpu = cpu,
             Memory = memory,

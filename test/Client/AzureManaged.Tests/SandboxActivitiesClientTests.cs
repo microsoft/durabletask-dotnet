@@ -6,7 +6,7 @@ using FluentAssertions;
 using Grpc.Core;
 using Microsoft.DurableTask.AzureManaged.Internal;
 using Microsoft.DurableTask.Client.Grpc;
-using Microsoft.DurableTask.Protobuf.OnDemandSandbox;
+using Microsoft.DurableTask.Protobuf.Sandboxes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -36,7 +36,7 @@ public class SandboxActivitiesClientTests
         typeof(SandboxWorkerProfileOptions).GetProperty(
             "Mode",
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Should().BeNull();
-        typeof(OnDemandSandboxActivityDeclaration).GetProperty("LaunchCommand").Should().BeNull();
+        typeof(SandboxActivityDeclaration).GetProperty("LaunchCommand").Should().BeNull();
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public class SandboxActivitiesClientTests
         options.Memory = memory;
 
         // Act
-        OnDemandSandboxActivityDeclaration declaration = SandboxActivityDeclarationBuilder.BuildDeclaration(
+        SandboxActivityDeclaration declaration = SandboxActivityDeclarationBuilder.BuildDeclaration(
             options,
             SandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
 
@@ -153,7 +153,7 @@ public class SandboxActivitiesClientTests
         // Act
         SandboxWorkerProfileOptions options = provider.ResolveDeclarations(TaskHub)
             .Single(options => options.WorkerProfileId == "annotated-profile");
-        OnDemandSandboxActivityDeclaration declaration = SandboxActivityDeclarationBuilder.BuildDeclaration(
+        SandboxActivityDeclaration declaration = SandboxActivityDeclarationBuilder.BuildDeclaration(
             options,
             SandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames));
 
@@ -212,7 +212,7 @@ public class SandboxActivitiesClientTests
         // Arrange
         RecordingOnDemandSandboxLogCallInvoker callInvoker = new();
         SandboxActivitiesClient client = new(
-            new SandboxActivitiesGrpcTransport(new OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker)),
+            new SandboxActivitiesGrpcTransport(new SandboxActivities.SandboxActivitiesClient(callInvoker)),
             "client-test-taskhub",
             new SandboxActivityDeclarationProvider());
 
@@ -220,7 +220,7 @@ public class SandboxActivitiesClientTests
         await client.EnableSandboxActivitiesAsync();
 
         // Assert
-        OnDemandSandboxActivityDeclaration declaration = callInvoker.DeclareRequests
+        SandboxActivityDeclaration declaration = callInvoker.DeclareRequests
             .Should()
             .ContainSingle(request => request.WorkerProfileId == "client-test-profile")
             .Subject;
@@ -232,11 +232,11 @@ public class SandboxActivitiesClientTests
 
     sealed class RecordingOnDemandSandboxLogCallInvoker : CallInvoker
     {
-        public List<OnDemandSandboxActivityDeclaration> DeclareRequests { get; } = [];
+        public List<SandboxActivityDeclaration> DeclareRequests { get; } = [];
 
         public Metadata DeclareHeaders { get; private set; } = [];
 
-        public RemoveOnDemandSandboxActivityDeclarationRequest? RemoveRequest { get; private set; }
+        public RemoveSandboxActivityDeclarationRequest? RemoveRequest { get; private set; }
 
         public Metadata RemoveHeaders { get; private set; } = [];
 
@@ -257,18 +257,18 @@ public class SandboxActivitiesClientTests
             CallOptions options,
             TRequest request)
         {
-            if (method.FullName.EndsWith("/DeclareOnDemandSandboxActivities", StringComparison.Ordinal))
+            if (method.FullName.EndsWith("/DeclareSandboxActivities", StringComparison.Ordinal))
             {
-                this.DeclareRequests.Add(((OnDemandSandboxActivityDeclaration)(object)request).Clone());
+                this.DeclareRequests.Add(((SandboxActivityDeclaration)(object)request).Clone());
                 this.DeclareHeaders = options.Headers ?? [];
-                return CreateUnaryCall((TResponse)(object)new OnDemandSandboxActivityDeclarationResult());
+                return CreateUnaryCall((TResponse)(object)new SandboxActivityDeclarationResult());
             }
 
-            if (method.FullName.EndsWith("/RemoveOnDemandSandboxActivityDeclaration", StringComparison.Ordinal))
+            if (method.FullName.EndsWith("/RemoveSandboxActivityDeclaration", StringComparison.Ordinal))
             {
-                this.RemoveRequest = (RemoveOnDemandSandboxActivityDeclarationRequest)(object)request;
+                this.RemoveRequest = (RemoveSandboxActivityDeclarationRequest)(object)request;
                 this.RemoveHeaders = options.Headers ?? [];
-                return CreateUnaryCall((TResponse)(object)new RemoveOnDemandSandboxActivityDeclarationResult());
+                return CreateUnaryCall((TResponse)(object)new RemoveSandboxActivityDeclarationResult());
             }
 
             throw new NotSupportedException(method.FullName);

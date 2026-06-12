@@ -7,7 +7,7 @@ using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
-using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
+using Proto = Microsoft.DurableTask.Protobuf.Sandboxes;
 
 namespace Microsoft.DurableTask.Client.AzureManaged;
 
@@ -53,7 +53,7 @@ public static class SandboxActivitiesClientServiceCollectionExtensions
             {
                 return new SandboxActivitiesClient(
                     new SandboxActivitiesGrpcTransport(
-                        new Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(callInvoker),
+                        new Proto.SandboxActivities.SandboxActivitiesClient(callInvoker),
                         attachTaskHubMetadata: false),
                     schedulerOptions.TaskHubName,
                     declarationProvider);
@@ -63,7 +63,7 @@ public static class SandboxActivitiesClientServiceCollectionExtensions
             {
                 return new SandboxActivitiesClient(
                     new SandboxActivitiesGrpcTransport(
-                        new Proto.OnDemandSandboxActivities.OnDemandSandboxActivitiesClient(channel.CreateCallInvoker()),
+                        new Proto.SandboxActivities.SandboxActivitiesClient(channel.CreateCallInvoker()),
                         attachTaskHubMetadata: false),
                     schedulerOptions.TaskHubName,
                     declarationProvider);

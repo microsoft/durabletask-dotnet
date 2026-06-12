@@ -6,7 +6,7 @@ using Grpc.Core;
 using Microsoft.DurableTask.AzureManaged.Internal;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Proto = Microsoft.DurableTask.Protobuf.OnDemandSandbox;
+using Proto = Microsoft.DurableTask.Protobuf.Sandboxes;
 
 namespace Microsoft.DurableTask.Worker.AzureManaged.Sandboxes;
 
@@ -96,7 +96,7 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
             }
             catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or RpcException)
             {
-                Logs.OnDemandSandboxWorkerSessionCompletionFailureIgnored(this.logger, ex);
+                Logs.SandboxWorkerSessionCompletionFailureIgnored(this.logger, ex);
             }
         }
 
@@ -108,11 +108,11 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
             }
             catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
             {
-                Logs.OnDemandSandboxWorkerRegistrationPumpCancellationIgnored(this.logger, ex);
+                Logs.SandboxWorkerRegistrationPumpCancellationIgnored(this.logger, ex);
             }
             catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or RpcException)
             {
-                Logs.OnDemandSandboxWorkerRegistrationPumpFailureIgnored(this.logger, ex);
+                Logs.SandboxWorkerRegistrationPumpFailureIgnored(this.logger, ex);
             }
         }
 
@@ -168,7 +168,7 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
         }
         catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or RpcException)
         {
-            Logs.OnDemandSandboxWorkerSessionDisposeFailureIgnored(logger, ex);
+            Logs.SandboxWorkerSessionDisposeFailureIgnored(logger, ex);
         }
     }
 
@@ -190,16 +190,16 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
             ISandboxActivityWorkerSession? registrationSession = null;
             try
             {
-                registrationSession = this.transport.OpenOnDemandSandboxActivityWorkerSession(this.options.TaskHub, cancellationToken);
+                registrationSession = this.transport.OpenSandboxActivityWorkerSession(this.options.TaskHub, cancellationToken);
                 this.SetCurrentSession(registrationSession);
 
-                Proto.OnDemandSandboxActivityWorkerMessage startMessage = SandboxWorkerMessageBuilder.BuildWorkerStart(this.options, this.registeredActivityNames);
+                Proto.SandboxActivityWorkerMessage startMessage = SandboxWorkerMessageBuilder.BuildWorkerStart(this.options, this.registeredActivityNames);
                 await this.WriteSessionMessageAsync(registrationSession, startMessage, cancellationToken).ConfigureAwait(false);
-                Logs.OnDemandSandboxActivityWorkerRegistered(
+                Logs.SandboxActivityWorkerRegistered(
                     this.logger,
                     startMessage.Start.TaskHub,
                     activityCount,
-                    startMessage.Start.Substrate,
+                    startMessage.Start.SandboxProvider,
                     startMessage.Start.DtsSandboxIdentifier);
 
                 retryDelay = this.GetInitialRetryDelay();
@@ -239,7 +239,7 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
             }
             catch (Exception ex) when (!IsFatalException(ex))
             {
-                Logs.OnDemandSandboxActivityWorkerRegistrationFailed(this.logger, ex, this.options.TaskHub);
+                Logs.SandboxActivityWorkerRegistrationFailed(this.logger, ex, this.options.TaskHub);
                 this.lifetime?.StopApplication();
                 break;
             }
@@ -259,7 +259,7 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
         TimeSpan retryDelay,
         CancellationToken cancellationToken)
     {
-        Logs.OnDemandSandboxActivityWorkerRegistrationFailed(this.logger, exception, this.options.TaskHub);
+        Logs.SandboxActivityWorkerRegistrationFailed(this.logger, exception, this.options.TaskHub);
         await this.DelayBeforeReconnectAsync(retryDelay, cancellationToken).ConfigureAwait(false);
         return this.GetNextRetryDelay(retryDelay);
     }
@@ -270,7 +270,7 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
     {
         using CancellationTokenSource heartbeatCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task heartbeatTask = this.PumpHeartbeatsAsync(registrationSession, heartbeatCts.Token);
-        Task<Proto.OnDemandSandboxActivityWorkerSessionResult> completionTask = registrationSession.WaitForCompletionAsync();
+        Task<Proto.SandboxActivityWorkerSessionResult> completionTask = registrationSession.WaitForCompletionAsync();
         Task completedTask = await Task.WhenAny(heartbeatTask, completionTask).ConfigureAwait(false);
 
         if (ReferenceEquals(completedTask, completionTask))
@@ -282,22 +282,22 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
             }
             catch (OperationCanceledException ex) when (heartbeatCts.IsCancellationRequested)
             {
-                Logs.OnDemandSandboxHeartbeatPumpCancellationIgnored(this.logger, ex);
+                Logs.SandboxHeartbeatPumpCancellationIgnored(this.logger, ex);
             }
             catch (RpcException ex)
             {
                 // The server response is authoritative once the response task wins the race.
-                Logs.OnDemandSandboxHeartbeatPumpFailureIgnored(this.logger, ex);
+                Logs.SandboxHeartbeatPumpFailureIgnored(this.logger, ex);
             }
             catch (IOException ex)
             {
                 // The server response is authoritative once the response task wins the race.
-                Logs.OnDemandSandboxHeartbeatPumpFailureIgnored(this.logger, ex);
+                Logs.SandboxHeartbeatPumpFailureIgnored(this.logger, ex);
             }
             catch (ObjectDisposedException ex)
             {
                 // The server response is authoritative once the response task wins the race.
-                Logs.OnDemandSandboxHeartbeatPumpFailureIgnored(this.logger, ex);
+                Logs.SandboxHeartbeatPumpFailureIgnored(this.logger, ex);
             }
 
             await completionTask.ConfigureAwait(false);
@@ -324,7 +324,7 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
 
     async Task WriteSessionMessageAsync(
         ISandboxActivityWorkerSession registrationSession,
-        Proto.OnDemandSandboxActivityWorkerMessage message,
+        Proto.SandboxActivityWorkerMessage message,
         CancellationToken cancellationToken)
     {
         await this.streamSync.WaitAsync(cancellationToken).ConfigureAwait(false);

@@ -466,7 +466,10 @@ sealed partial class GrpcDurableTaskWorker
             {
                 this.internalOptions.NotifyActivity?.Invoke(phase);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException
+                and not StackOverflowException
+                and not AccessViolationException
+                and not ThreadAbortException)
             {
                 this.Logger.ActivityNotificationFailed(phase, ex);
             }

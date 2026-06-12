@@ -347,6 +347,54 @@ public class SandboxActivitiesTests
     }
 
     [Fact]
+    public async Task SandboxActivityWorkerRegistrationHostedService_DoesNotResetBackoffAfterStartMessageOnly()
+    {
+        // Arrange
+        using EnvironmentVariableScope sandboxId = new("DTS_SANDBOX_ID", "sandbox-1");
+        SandboxWorkerRuntimeOptions options = new()
+        {
+            TaskHub = TaskHub,
+            WorkerProfileId = "profile-a",
+            MaxConcurrentActivities = 3,
+            HeartbeatInterval = TimeSpan.FromDays(1),
+            WorkerRegistrationRetryInitialDelay = TimeSpan.FromMilliseconds(250),
+            WorkerRegistrationRetryMaxDelay = TimeSpan.FromSeconds(1),
+        };
+
+        FakeSandboxActivityWorkerSession firstFailedSession = new();
+        FakeSandboxActivityWorkerSession secondFailedSession = new();
+        FakeSandboxActivityWorkerSession recoveredSession = new();
+        FakeSandboxActivitiesTransport client = new();
+        client.QueueSession(firstFailedSession);
+        client.QueueSession(secondFailedSession);
+        client.QueueSession(recoveredSession);
+
+        SandboxActivityWorkerRegistrationHostedService service = new(
+            client,
+            options,
+            ["RemoteHello"],
+            NullLogger<SandboxActivityWorkerRegistrationHostedService>.Instance,
+            reconnectJitter: new DeterministicRandom(0.999999));
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+        await firstFailedSession.WaitForMessageAsync(message => message.Start != null);
+        firstFailedSession.FailCompletion(new RpcException(new Status(StatusCode.Unavailable, "terminal-1")));
+        await secondFailedSession.WaitForMessageAsync(message => message.Start != null);
+        secondFailedSession.FailCompletion(new RpcException(new Status(StatusCode.Unavailable, "terminal-2")));
+        Task recoveredStartTask = recoveredSession.WaitForMessageAsync(message => message.Start != null);
+        Task completedTooEarly = await Task.WhenAny(
+            recoveredStartTask,
+            Task.Delay(TimeSpan.FromMilliseconds(375)));
+        await recoveredStartTask.WaitAsync(TimeSpan.FromSeconds(5));
+        await service.StopAsync(CancellationToken.None);
+
+        // Assert
+        completedTooEarly.Should().NotBe(recoveredStartTask);
+        client.SessionTaskHubs.Should().Equal(TaskHub, TaskHub, TaskHub);
+    }
+
+    [Fact]
     public void SandboxActivityWorkerRegistrationHostedService_ComputeJitteredReconnectDelay_UsesFullJitterWindow()
     {
         // Arrange

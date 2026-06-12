@@ -207,8 +207,8 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
                     startMessage.Start.SandboxProvider,
                     startMessage.Start.DtsSandboxIdentifier);
 
-                retryDelay = this.GetInitialRetryDelay();
                 await this.RunRegistrationSessionAsync(registrationSession, cancellationToken).ConfigureAwait(false);
+                retryDelay = this.GetInitialRetryDelay();
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {

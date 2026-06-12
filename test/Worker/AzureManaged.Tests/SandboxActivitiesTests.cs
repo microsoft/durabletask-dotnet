@@ -313,7 +313,7 @@ public class SandboxActivitiesTests
         using EnvironmentVariableScope sandboxId = new("DTS_SANDBOX_ID", "sandbox-1");
         SandboxWorkerRuntimeOptions options = new()
         {
-            TaskHub = TaskHub,
+            TaskHub = $" {TaskHub} ",
             WorkerProfileId = "profile-a",
             MaxConcurrentActivities = 3,
             HeartbeatInterval = TimeSpan.FromDays(1),
@@ -458,6 +458,7 @@ public class SandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "None");
         using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", "Sandbox");
         using EnvironmentVariableScope maxActivities = new("DTS_ON_DEMAND_SANDBOX_MAX_ACTIVITIES", "3");
         ServiceCollection services = new();
@@ -490,6 +491,7 @@ public class SandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "None");
         using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", "Sandbox");
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
@@ -516,6 +518,7 @@ public class SandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "None");
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
         mockBuilder.Setup(builder => builder.Services).Returns(services);
@@ -534,6 +537,51 @@ public class SandboxActivitiesTests
         options.TaskHubName.Should().Be(TaskHub);
         options.Credential.Should().BeNull();
         options.AllowInsecureCredentials.Should().BeTrue();
+    }
+
+    [Fact]
+    public void UseSandboxWorker_MissingAuthentication_Throws()
+    {
+        // Arrange
+        using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
+        using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", null);
+        ServiceCollection services = new();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
+        mockBuilder.Setup(builder => builder.Services).Returns(services);
+        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
+
+        // Act
+        Action action = () => mockBuilder.Object.UseSandboxWorker();
+
+        // Assert
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("DTS_AUTHENTICATION must be injected by DTS for on-demand sandbox workers.");
+    }
+
+    [Fact]
+    public async Task UseSandboxWorker_InvalidAuthentication_ThrowsWhenSchedulerOptionsAreResolved()
+    {
+        // Arrange
+        using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
+        using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "ManagedIdentty");
+        ServiceCollection services = new();
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
+        mockBuilder.Setup(builder => builder.Services).Returns(services);
+        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
+
+        mockBuilder.Object.UseSandboxWorker();
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act
+        Action action = () => provider
+            .GetRequiredService<IOptionsMonitor<DurableTaskSchedulerWorkerOptions>>()
+            .Get(Options.DefaultName);
+
+        // Assert
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("DTS_AUTHENTICATION must be 'ManagedIdentity' or 'None' for on-demand sandbox workers.");
     }
 
     [Fact]
@@ -595,6 +643,7 @@ public class SandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "None");
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
         mockBuilder.Setup(builder => builder.Services).Returns(services);
@@ -651,6 +700,7 @@ public class SandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "None");
         using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", null);
         ServiceCollection services = new();
         services.Configure<DurableTaskRegistry>(
@@ -679,6 +729,7 @@ public class SandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "None");
         using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", "ContainerApp");
         ServiceCollection services = new();
         services.Configure<DurableTaskRegistry>(

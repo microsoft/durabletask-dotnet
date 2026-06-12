@@ -184,6 +184,25 @@ public class SandboxActivitiesClientTests
     }
 
     [Fact]
+    public void SandboxActivityDeclarationProvider_ResolveDeclarations_DetectsCaseInsensitiveActivityOwnership()
+    {
+        // Arrange
+        using EnvironmentVariableScope enableDuplicateCaseProfiles = new(
+            "DTS_TEST_ENABLE_CASE_DUPLICATE_SANDBOX_PROFILES",
+            "true");
+        SandboxActivityDeclarationProvider provider = new();
+
+        // Act
+        Action action = () => provider.ResolveDeclarations(TaskHub);
+
+        // Assert
+        action.Should().Throw<InvalidOperationException>()
+            .Where(ex => ex.Message.Contains("CaseActivity", StringComparison.OrdinalIgnoreCase)
+                && ex.Message.Contains("case-profile-a", StringComparison.Ordinal)
+                && ex.Message.Contains("case-profile-b", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task AddDurableTaskSchedulerSandboxActivitiesClient_UsesConfiguredDurableTaskClientInvoker()
     {
         // Arrange
@@ -358,6 +377,30 @@ public class SandboxActivitiesClientTests
             options.MaxConcurrentActivities = 4;
             options.EnvironmentVariables["CUSTOM_ENV"] = "configured-value";
             options.AddActivity("ConfiguredRemoteHello");
+        }
+    }
+
+    [SandboxWorkerProfile("case-profile-a")]
+    sealed class CaseDuplicateWorkerProfileA : ISandboxWorkerProfile
+    {
+        public void Configure(SandboxWorkerProfileOptions options)
+        {
+            if (Environment.GetEnvironmentVariable("DTS_TEST_ENABLE_CASE_DUPLICATE_SANDBOX_PROFILES") == "true")
+            {
+                options.AddActivity("CaseActivity");
+            }
+        }
+    }
+
+    [SandboxWorkerProfile("case-profile-b")]
+    sealed class CaseDuplicateWorkerProfileB : ISandboxWorkerProfile
+    {
+        public void Configure(SandboxWorkerProfileOptions options)
+        {
+            if (Environment.GetEnvironmentVariable("DTS_TEST_ENABLE_CASE_DUPLICATE_SANDBOX_PROFILES") == "true")
+            {
+                options.AddActivity("caseactivity");
+            }
         }
     }
 

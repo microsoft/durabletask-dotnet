@@ -182,6 +182,11 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
                 or StatusCode.Unavailable
                 or StatusCode.Unknown);
 
+    static bool IsFatalException(Exception ex) => ex is OutOfMemoryException
+        or StackOverflowException
+        or AccessViolationException
+        or ThreadAbortException;
+
     async Task RunRegistrationLoopAsync(int activityCount, CancellationToken cancellationToken)
     {
         TimeSpan retryDelay = this.GetInitialRetryDelay();
@@ -190,10 +195,10 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
             ISandboxActivityWorkerSession? registrationSession = null;
             try
             {
-                registrationSession = this.transport.OpenSandboxActivityWorkerSession(this.options.TaskHub, cancellationToken);
+                Proto.SandboxActivityWorkerMessage startMessage = SandboxWorkerMessageBuilder.BuildWorkerStart(this.options, this.registeredActivityNames);
+                registrationSession = this.transport.OpenSandboxActivityWorkerSession(startMessage.Start.TaskHub, cancellationToken);
                 this.SetCurrentSession(registrationSession);
 
-                Proto.SandboxActivityWorkerMessage startMessage = SandboxWorkerMessageBuilder.BuildWorkerStart(this.options, this.registeredActivityNames);
                 await this.WriteSessionMessageAsync(registrationSession, startMessage, cancellationToken).ConfigureAwait(false);
                 Logs.SandboxActivityWorkerRegistered(
                     this.logger,
@@ -397,9 +402,4 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
             await Task.Delay(jitteredDelay, cancellationToken).ConfigureAwait(false);
         }
     }
-
-    static bool IsFatalException(Exception ex) => ex is OutOfMemoryException
-        or StackOverflowException
-        or AccessViolationException
-        or ThreadAbortException;
 }

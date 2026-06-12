@@ -128,7 +128,7 @@ sealed class SandboxActivityDeclarationProvider
 
     static void ValidateActivityOwnership(IEnumerable<SandboxWorkerProfileOptions> declarations)
     {
-        Dictionary<string, string> activityOwners = new(StringComparer.Ordinal);
+        Dictionary<string, string> activityOwners = new(StringComparer.OrdinalIgnoreCase);
         foreach (SandboxWorkerProfileOptions declaration in declarations)
         {
             foreach (string activityName in SandboxActivityDeclarationBuilder.ResolveActivityNames(declaration.ActivityNames))

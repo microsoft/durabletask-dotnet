@@ -27,6 +27,10 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
         "On-demand sandbox workers require at least one registered activity. " +
         "Register an activity on this worker before starting the sandbox worker.";
 
+    const string ManagedIdentityAuthentication = "ManagedIdentity";
+
+    const string NoAuthentication = "None";
+
     /// <summary>
     /// Configures this worker as an on-demand sandbox activity worker that connects to DTS to receive and execute
     /// on-demand sandbox activities. Use this on a dedicated worker binary that runs inside sandbox infrastructure.
@@ -143,24 +147,35 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
     {
         string endpoint = GetRequiredEnvironmentVariable("DTS_ENDPOINT");
         string taskHub = GetRequiredEnvironmentVariable("DTS_TASK_HUB");
+        string authentication = GetRequiredEnvironmentVariable("DTS_AUTHENTICATION");
 
         builder.UseDurableTaskScheduler(options =>
         {
             options.EndpointAddress = endpoint;
             options.TaskHubName = taskHub;
-            options.AllowInsecureCredentials = true;
-            if (UsesManagedIdentityAuthentication(Environment.GetEnvironmentVariable("DTS_AUTHENTICATION")))
+            if (UsesManagedIdentityAuthentication(authentication))
             {
                 options.Credential = CreateManagedIdentityCredential();
-                options.AllowInsecureCredentials = false;
+            }
+            else if (UsesNoAuthentication(authentication))
+            {
+                options.AllowInsecureCredentials = true;
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"DTS_AUTHENTICATION must be '{ManagedIdentityAuthentication}' or '{NoAuthentication}' for on-demand sandbox workers.");
             }
         });
     }
 
-    static bool UsesManagedIdentityAuthentication(string? authentication) =>
-        string.Equals(authentication, "ManagedIdentity", StringComparison.OrdinalIgnoreCase);
+    static bool UsesManagedIdentityAuthentication(string authentication) =>
+        string.Equals(authentication, ManagedIdentityAuthentication, StringComparison.OrdinalIgnoreCase);
 
-    static TokenCredential CreateManagedIdentityCredential() =>
+    static bool UsesNoAuthentication(string authentication) =>
+        string.Equals(authentication, NoAuthentication, StringComparison.OrdinalIgnoreCase);
+
+    static ManagedIdentityCredential CreateManagedIdentityCredential() =>
         new ManagedIdentityCredential(ManagedIdentityId.FromUserAssignedClientId(GetRequiredEnvironmentVariable("DTS_UMI_CLIENT_ID")));
 
     static string GetRequiredEnvironmentVariable(string name)

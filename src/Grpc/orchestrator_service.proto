@@ -377,7 +377,7 @@ message OrchestratorResponse {
 
     // Zero-based position of the current chunk within a chunked completion sequence.
     // This field is omitted for non-chunked completions.
-    google.protobuf.Int32Value chunkIndex = 9 [deprecated=true];;
+    google.protobuf.Int32Value chunkIndex = 9 [deprecated=true];
 }
 
 message CreateInstanceRequest {

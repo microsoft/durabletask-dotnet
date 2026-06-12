@@ -218,11 +218,11 @@ public class SandboxActivitiesClientTests
         SandboxActivitiesClient client = provider.GetRequiredService<SandboxActivitiesClient>();
 
         // Act
-        await client.RemoveSandboxActivityDeclarationAsync("default");
+        await client.RemoveSandboxActivityDeclarationAsync("profile-a");
 
         // Assert
         callInvoker.RemoveRequest.Should().NotBeNull();
-        callInvoker.RemoveRequest!.WorkerProfileId.Should().Be("default");
+        callInvoker.RemoveRequest!.WorkerProfileId.Should().Be("profile-a");
         callInvoker.RemoveHeaders.Should().Contain(header => header.Key == "taskhub" && header.Value == "client-test-taskhub");
     }
 

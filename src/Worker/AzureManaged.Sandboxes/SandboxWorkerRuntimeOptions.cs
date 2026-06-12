@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.DurableTask.AzureManaged.Internal;
-
 namespace Microsoft.DurableTask.Worker.AzureManaged.Sandboxes;
 
 /// <summary>
@@ -18,7 +16,7 @@ internal sealed class SandboxWorkerRuntimeOptions
     /// <summary>
     /// Gets or sets the worker profile ID used by on-demand sandbox worker registration.
     /// </summary>
-    public string WorkerProfileId { get; set; } = SandboxActivityMetadata.DefaultWorkerProfileId;
+    public string WorkerProfileId { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the maximum number of concurrent activities expected from this on-demand sandbox worker.

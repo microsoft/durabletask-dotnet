@@ -506,6 +506,7 @@ public class SandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope workerProfile = new("DTS_WORKER_PROFILE_ID", "profile-a");
         using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "ManagedIdentity");
         using EnvironmentVariableScope clientId = new("DTS_UMI_CLIENT_ID", "worker-client-id");
         using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", "Sandbox");
@@ -540,6 +541,7 @@ public class SandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope workerProfile = new("DTS_WORKER_PROFILE_ID", "profile-a");
         using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "ManagedIdentity");
         using EnvironmentVariableScope clientId = new("DTS_UMI_CLIENT_ID", "worker-client-id");
         using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", "Sandbox");
@@ -568,6 +570,7 @@ public class SandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope workerProfile = new("DTS_WORKER_PROFILE_ID", "profile-a");
         using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "ManagedIdentity");
         using EnvironmentVariableScope clientId = new("DTS_UMI_CLIENT_ID", "worker-client-id");
         ServiceCollection services = new();
@@ -596,6 +599,7 @@ public class SandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope workerProfile = new("DTS_WORKER_PROFILE_ID", "profile-a");
         using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", null);
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
@@ -616,6 +620,7 @@ public class SandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope workerProfile = new("DTS_WORKER_PROFILE_ID", "profile-a");
         using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "ManagedIdentty");
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
@@ -641,6 +646,7 @@ public class SandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope workerProfile = new("DTS_WORKER_PROFILE_ID", "profile-a");
         using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "ManagedIdentity");
         using EnvironmentVariableScope clientId = new("DTS_UMI_CLIENT_ID", "worker-client-id");
         ServiceCollection services = new();
@@ -669,6 +675,7 @@ public class SandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope workerProfile = new("DTS_WORKER_PROFILE_ID", "profile-a");
         using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "ManagedIdentity");
         using EnvironmentVariableScope clientId = new("DTS_UMI_CLIENT_ID", null);
         ServiceCollection services = new();
@@ -694,6 +701,7 @@ public class SandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope workerProfile = new("DTS_WORKER_PROFILE_ID", "profile-a");
         using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "ManagedIdentity");
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
@@ -713,6 +721,7 @@ public class SandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", null);
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope workerProfile = new("DTS_WORKER_PROFILE_ID", "profile-a");
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
         mockBuilder.Setup(builder => builder.Services).Returns(services);
@@ -751,6 +760,7 @@ public class SandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope workerProfile = new("DTS_WORKER_PROFILE_ID", "profile-a");
         using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "ManagedIdentity");
         using EnvironmentVariableScope clientId = new("DTS_UMI_CLIENT_ID", "worker-client-id");
         using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", null);
@@ -781,6 +791,7 @@ public class SandboxActivitiesTests
         // Arrange
         using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
         using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope workerProfile = new("DTS_WORKER_PROFILE_ID", "profile-a");
         using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "ManagedIdentity");
         using EnvironmentVariableScope clientId = new("DTS_UMI_CLIENT_ID", "worker-client-id");
         using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", "ContainerApp");

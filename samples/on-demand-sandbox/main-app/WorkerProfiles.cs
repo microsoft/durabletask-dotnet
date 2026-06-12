@@ -6,8 +6,8 @@ using Microsoft.DurableTask.Samples.OnDemandSandbox.Shared;
 
 namespace Microsoft.DurableTask.Samples.OnDemandSandbox.MainApp;
 
-[SandboxWorkerProfile("default")]
-internal sealed class DefaultSandboxWorkerProfile : ISandboxWorkerProfile
+[SandboxWorkerProfile("remote-hello-profile")]
+internal sealed class RemoteHelloSandboxWorkerProfile : ISandboxWorkerProfile
 {
     public void Configure(SandboxWorkerProfileOptions options)
     {

@@ -9,11 +9,6 @@ namespace Microsoft.DurableTask.AzureManaged.Internal;
 static class SandboxActivityMetadata
 {
     /// <summary>
-    /// Default worker profile ID used when no profile is specified.
-    /// </summary>
-    public const string DefaultWorkerProfileId = "default";
-
-    /// <summary>
     /// Resolves configured activity names for on-demand sandbox activity execution.
     /// </summary>
     /// <param name="configuredNames">The configured activity names.</param>

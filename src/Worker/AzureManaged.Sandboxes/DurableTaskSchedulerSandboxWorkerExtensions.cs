@@ -182,11 +182,7 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
     {
         ValidateSandboxWorkerSandboxProvider(GetRequiredEnvironmentVariable("DTS_SUBSTRATE"));
 
-        string? workerProfileId = Environment.GetEnvironmentVariable("DTS_WORKER_PROFILE_ID");
-        if (!string.IsNullOrWhiteSpace(workerProfileId))
-        {
-            options.WorkerProfileId = workerProfileId.Trim();
-        }
+        options.WorkerProfileId = GetRequiredEnvironmentVariable("DTS_WORKER_PROFILE_ID");
 
         if (int.TryParse(Environment.GetEnvironmentVariable("DTS_ON_DEMAND_SANDBOX_MAX_ACTIVITIES"), out int maxActivities) && maxActivities > 0)
         {

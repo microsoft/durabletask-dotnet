@@ -13,19 +13,15 @@ namespace Microsoft.DurableTask.Client.AzureManaged;
 public sealed class SandboxWorkerProfileOptions
 {
     /// <summary>
-    /// Default worker profile ID used when no profile is specified.
-    /// </summary>
-    internal const string DefaultWorkerProfileId = SandboxActivityMetadata.DefaultWorkerProfileId;
-
-    /// <summary>
     /// Gets or sets the task hub where the on-demand sandbox activity declaration is stored.
     /// </summary>
     public string TaskHub { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the worker profile ID used for the on-demand sandbox activity pool.
+    /// This value must be set explicitly.
     /// </summary>
-    public string WorkerProfileId { get; set; } = DefaultWorkerProfileId;
+    public string WorkerProfileId { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the full OCI container image reference for on-demand sandbox workers.

@@ -187,6 +187,20 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
         or AccessViolationException
         or ThreadAbortException;
 
+    static async Task ObserveCompletionFailureAfterHeartbeatFailureAsync(
+        Task<Proto.SandboxActivityWorkerSessionResult> completionTask,
+        ILogger logger)
+    {
+        try
+        {
+            await completionTask.ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!IsFatalException(ex))
+        {
+            Logs.SandboxWorkerSessionCompletionAfterHeartbeatFailureIgnored(logger, ex);
+        }
+    }
+
     async Task RunRegistrationLoopAsync(int activityCount, CancellationToken cancellationToken)
     {
         TimeSpan retryDelay = this.GetInitialRetryDelay();
@@ -309,7 +323,14 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
             return;
         }
 
-        await heartbeatTask.ConfigureAwait(false);
+        try
+        {
+            await heartbeatTask.ConfigureAwait(false);
+        }
+        finally
+        {
+            _ = ObserveCompletionFailureAfterHeartbeatFailureAsync(completionTask, this.logger);
+        }
     }
 
     async Task PumpHeartbeatsAsync(

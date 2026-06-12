@@ -59,4 +59,10 @@ static partial class Logs
         Level = LogLevel.Debug,
         Message = "Ignoring on-demand sandbox heartbeat pump failure after registration session completion.")]
     public static partial void SandboxHeartbeatPumpFailureIgnored(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 709,
+        Level = LogLevel.Debug,
+        Message = "Ignoring on-demand sandbox worker session completion failure after heartbeat pump failure.")]
+    public static partial void SandboxWorkerSessionCompletionAfterHeartbeatFailureIgnored(ILogger logger, Exception exception);
 }

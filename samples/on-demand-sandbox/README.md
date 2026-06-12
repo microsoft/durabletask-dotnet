@@ -66,6 +66,6 @@ Output: "hello locally: on-demand-sandbox-sample; hello remotely from <sandbox> 
 Use the Durable Task Scheduler dashboard's On-demand sandbox preview tab to inspect sandboxes and stream runtime logs.
 
 The remote worker image does not need customer-provided DTS runtime settings.
-DTS injects the scheduler endpoint, task hub, worker profile, capacity, substrate,
+DTS injects the scheduler endpoint, task hub, worker profile, capacity, sandbox provider,
 and sandbox identifier when it starts the sandbox. The worker reports the
 activities registered in the image when it connects.

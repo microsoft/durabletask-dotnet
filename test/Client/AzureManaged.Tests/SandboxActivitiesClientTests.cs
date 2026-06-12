@@ -146,7 +146,7 @@ public class SandboxActivitiesClientTests
         using EnvironmentVariableScope image = new("DTS_ON_DEMAND_SANDBOX_ACTIVITY_IMAGE", "example.com/not-used:latest");
         using EnvironmentVariableScope cpu = new("DTS_ON_DEMAND_SANDBOX_CPU", "2000m");
         using EnvironmentVariableScope memory = new("DTS_ON_DEMAND_SANDBOX_MEMORY", "4096Mi");
-        using EnvironmentVariableScope maxActivities = new("DTS_ON_DEMAND_SANDBOX_MAX_ACTIVITIES", "99");
+        using EnvironmentVariableScope maxActivities = new("DTS_SANDBOX_MAX_ACTIVITIES", "99");
 
         SandboxActivityDeclarationProvider provider = new();
 

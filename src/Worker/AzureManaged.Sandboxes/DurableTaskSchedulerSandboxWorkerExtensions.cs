@@ -180,23 +180,23 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
 
     static void ApplyWorkerEnvironmentOverrides(SandboxWorkerRuntimeOptions options)
     {
-        ValidateSandboxWorkerSandboxProvider(GetRequiredEnvironmentVariable("DTS_SUBSTRATE"));
+        ValidateSandboxWorkerSandboxProvider(GetRequiredEnvironmentVariable("DTS_SANDBOX_PROVIDER"));
 
         options.WorkerProfileId = GetRequiredEnvironmentVariable("DTS_WORKER_PROFILE_ID");
 
-        if (int.TryParse(Environment.GetEnvironmentVariable("DTS_ON_DEMAND_SANDBOX_MAX_ACTIVITIES"), out int maxActivities) && maxActivities > 0)
+        if (int.TryParse(Environment.GetEnvironmentVariable("DTS_SANDBOX_MAX_ACTIVITIES"), out int maxActivities) && maxActivities > 0)
         {
             options.MaxConcurrentActivities = maxActivities;
         }
     }
 
-    static void ValidateSandboxWorkerSandboxProvider(string substrate)
+    static void ValidateSandboxWorkerSandboxProvider(string sandboxProvider)
     {
-        if (!string.Equals(substrate, "Sandbox", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(substrate, "AcaSessionPool", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(sandboxProvider, "Sandbox", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(sandboxProvider, "AcaSessionPool", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                "DTS_SUBSTRATE must be 'Sandbox' or 'AcaSessionPool' for on-demand sandbox workers.");
+                "DTS_SANDBOX_PROVIDER must be 'Sandbox' or 'AcaSessionPool' for on-demand sandbox workers.");
         }
     }
 

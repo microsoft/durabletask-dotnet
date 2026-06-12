@@ -81,18 +81,18 @@ static class SandboxWorkerMessageBuilder
 
     static Proto.SandboxProviderKind GetSandboxProviderFromEnvironment()
     {
-        string? substrate = Environment.GetEnvironmentVariable("DTS_SUBSTRATE");
-        if (substrate is null)
+        string? sandboxProvider = Environment.GetEnvironmentVariable("DTS_SANDBOX_PROVIDER");
+        if (sandboxProvider is null)
         {
             return Proto.SandboxProviderKind.Unspecified;
         }
 
-        if (substrate.Equals("Sandbox", StringComparison.OrdinalIgnoreCase))
+        if (sandboxProvider.Equals("Sandbox", StringComparison.OrdinalIgnoreCase))
         {
             return Proto.SandboxProviderKind.Sandbox;
         }
 
-        if (substrate.Equals("AcaSessionPool", StringComparison.OrdinalIgnoreCase))
+        if (sandboxProvider.Equals("AcaSessionPool", StringComparison.OrdinalIgnoreCase))
         {
             return Proto.SandboxProviderKind.AcaSessionPool;
         }

@@ -93,9 +93,9 @@ public class SandboxActivitiesTests
     public async Task SandboxActivityWorkerRegistrationHostedService_SendsLiveWorkerMetadataWithRegisteredActivities()
     {
         // Arrange
-        string? originalSandboxProvider = Environment.GetEnvironmentVariable("DTS_SUBSTRATE");
+        string? originalSandboxProvider = Environment.GetEnvironmentVariable("DTS_SANDBOX_PROVIDER");
         string? originalSandboxId = Environment.GetEnvironmentVariable("DTS_SANDBOX_ID");
-        Environment.SetEnvironmentVariable("DTS_SUBSTRATE", "Sandbox");
+        Environment.SetEnvironmentVariable("DTS_SANDBOX_PROVIDER", "Sandbox");
         Environment.SetEnvironmentVariable("DTS_SANDBOX_ID", "sandbox-1");
 
         try
@@ -132,7 +132,7 @@ public class SandboxActivitiesTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable("DTS_SUBSTRATE", originalSandboxProvider);
+            Environment.SetEnvironmentVariable("DTS_SANDBOX_PROVIDER", originalSandboxProvider);
             Environment.SetEnvironmentVariable("DTS_SANDBOX_ID", originalSandboxId);
         }
     }
@@ -509,8 +509,8 @@ public class SandboxActivitiesTests
         using EnvironmentVariableScope workerProfile = new("DTS_WORKER_PROFILE_ID", "profile-a");
         using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "ManagedIdentity");
         using EnvironmentVariableScope clientId = new("DTS_UMI_CLIENT_ID", "worker-client-id");
-        using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", "Sandbox");
-        using EnvironmentVariableScope maxActivities = new("DTS_ON_DEMAND_SANDBOX_MAX_ACTIVITIES", "3");
+        using EnvironmentVariableScope sandboxProvider = new("DTS_SANDBOX_PROVIDER", "Sandbox");
+        using EnvironmentVariableScope maxActivities = new("DTS_SANDBOX_MAX_ACTIVITIES", "3");
         ServiceCollection services = new();
         services.Configure<DurableTaskRegistry>(
             Options.DefaultName,
@@ -544,7 +544,7 @@ public class SandboxActivitiesTests
         using EnvironmentVariableScope workerProfile = new("DTS_WORKER_PROFILE_ID", "profile-a");
         using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "ManagedIdentity");
         using EnvironmentVariableScope clientId = new("DTS_UMI_CLIENT_ID", "worker-client-id");
-        using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", "Sandbox");
+        using EnvironmentVariableScope sandboxProvider = new("DTS_SANDBOX_PROVIDER", "Sandbox");
         ServiceCollection services = new();
         Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
         mockBuilder.Setup(builder => builder.Services).Returns(services);
@@ -763,7 +763,7 @@ public class SandboxActivitiesTests
         using EnvironmentVariableScope workerProfile = new("DTS_WORKER_PROFILE_ID", "profile-a");
         using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "ManagedIdentity");
         using EnvironmentVariableScope clientId = new("DTS_UMI_CLIENT_ID", "worker-client-id");
-        using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", null);
+        using EnvironmentVariableScope sandboxProvider = new("DTS_SANDBOX_PROVIDER", null);
         ServiceCollection services = new();
         services.Configure<DurableTaskRegistry>(
             Options.DefaultName,
@@ -782,7 +782,7 @@ public class SandboxActivitiesTests
 
         // Assert
         action.Should().Throw<InvalidOperationException>()
-            .WithMessage("DTS_SUBSTRATE must be injected by DTS for on-demand sandbox workers.");
+            .WithMessage("DTS_SANDBOX_PROVIDER must be injected by DTS for on-demand sandbox workers.");
     }
 
     [Fact]
@@ -794,7 +794,7 @@ public class SandboxActivitiesTests
         using EnvironmentVariableScope workerProfile = new("DTS_WORKER_PROFILE_ID", "profile-a");
         using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "ManagedIdentity");
         using EnvironmentVariableScope clientId = new("DTS_UMI_CLIENT_ID", "worker-client-id");
-        using EnvironmentVariableScope substrate = new("DTS_SUBSTRATE", "ContainerApp");
+        using EnvironmentVariableScope sandboxProvider = new("DTS_SANDBOX_PROVIDER", "ContainerApp");
         ServiceCollection services = new();
         services.Configure<DurableTaskRegistry>(
             Options.DefaultName,
@@ -813,7 +813,7 @@ public class SandboxActivitiesTests
 
         // Assert
         action.Should().Throw<InvalidOperationException>()
-            .WithMessage("DTS_SUBSTRATE must be 'Sandbox' or 'AcaSessionPool' for on-demand sandbox workers.");
+            .WithMessage("DTS_SANDBOX_PROVIDER must be 'Sandbox' or 'AcaSessionPool' for on-demand sandbox workers.");
     }
 
     sealed class FakeSandboxActivitiesTransport : ISandboxActivitiesTransport

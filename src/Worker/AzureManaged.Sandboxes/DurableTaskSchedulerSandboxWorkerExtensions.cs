@@ -29,8 +29,6 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
 
     const string ManagedIdentityAuthentication = "ManagedIdentity";
 
-    const string NoAuthentication = "None";
-
     /// <summary>
     /// Configures this worker as an on-demand sandbox activity worker that connects to DTS to receive and execute
     /// on-demand sandbox activities. Use this on a dedicated worker binary that runs inside sandbox infrastructure.
@@ -156,24 +154,18 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
             if (UsesManagedIdentityAuthentication(authentication))
             {
                 options.Credential = CreateManagedIdentityCredential();
-            }
-            else if (UsesNoAuthentication(authentication))
-            {
-                options.AllowInsecureCredentials = true;
+                options.AllowInsecureCredentials = false;
             }
             else
             {
                 throw new InvalidOperationException(
-                    $"DTS_AUTHENTICATION must be '{ManagedIdentityAuthentication}' or '{NoAuthentication}' for on-demand sandbox workers.");
+                    $"DTS_AUTHENTICATION must be '{ManagedIdentityAuthentication}' for on-demand sandbox workers.");
             }
         });
     }
 
     static bool UsesManagedIdentityAuthentication(string authentication) =>
         string.Equals(authentication, ManagedIdentityAuthentication, StringComparison.OrdinalIgnoreCase);
-
-    static bool UsesNoAuthentication(string authentication) =>
-        string.Equals(authentication, NoAuthentication, StringComparison.OrdinalIgnoreCase);
 
     static ManagedIdentityCredential CreateManagedIdentityCredential() =>
         new ManagedIdentityCredential(ManagedIdentityId.FromUserAssignedClientId(GetRequiredEnvironmentVariable("DTS_UMI_CLIENT_ID")));

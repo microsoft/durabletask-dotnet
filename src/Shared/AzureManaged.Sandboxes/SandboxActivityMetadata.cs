@@ -18,7 +18,7 @@ static class SandboxActivityMetadata
         return configuredNames
             .Where(static name => !string.IsNullOrWhiteSpace(name))
             .Select(static name => name.Trim())
-            .Distinct(StringComparer.Ordinal)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 

@@ -150,12 +150,12 @@ static class SandboxActivityDeclarationBuilder
     {
         if (value.EndsWith('m') || value.EndsWith('M'))
         {
-            return decimal.TryParse(
+            return long.TryParse(
                 value[..^1],
-                NumberStyles.Number,
+                NumberStyles.Integer,
                 CultureInfo.InvariantCulture,
-                out decimal milliCpu)
-                ? (long)milliCpu
+                out long milliCpu)
+                ? milliCpu
                 : null;
         }
 

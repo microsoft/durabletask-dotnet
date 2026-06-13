@@ -81,6 +81,7 @@ public class SandboxActivitiesClientTests
     [Theory]
     [InlineData("0", "1024Mi", "CPU")]
     [InlineData("0m", "1024Mi", "CPU")]
+    [InlineData("500.5m", "1024Mi", "CPU")]
     [InlineData("500Mi", "1024Mi", "CPU")]
     [InlineData("500m", "0", "memory")]
     [InlineData("500m", "0Mi", "memory")]
@@ -103,6 +104,22 @@ public class SandboxActivitiesClientTests
         // Assert
         action.Should().Throw<InvalidOperationException>()
             .WithMessage($"*{expectedMessage}*");
+    }
+
+    [Fact]
+    public void SandboxActivityDeclarationBuilder_ResolveActivityNames_DeduplicatesCaseInsensitively()
+    {
+        // Arrange
+        SandboxWorkerProfileOptions options = CreateDeclarationOptions();
+        options.AddActivity(" RemoteHello ");
+        options.AddActivity("remotehello");
+        options.AddActivity("Other");
+
+        // Act
+        string[] activityNames = SandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames);
+
+        // Assert
+        activityNames.Should().Equal("RemoteHello", "Other");
     }
 
     [Fact]

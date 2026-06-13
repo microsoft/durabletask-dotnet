@@ -184,8 +184,8 @@ public class SandboxActivitiesClientTests
         declaration.Resources.Memory.Should().Be("1024Mi");
         declaration.MaxConcurrentActivities.Should().Be(4);
         declaration.EnvironmentVariables.Should().ContainKey("CUSTOM_ENV").WhoseValue.Should().Be("configured-value");
-        declaration.Entrypoint.Should().BeEmpty();
-        declaration.Cmd.Should().BeEmpty();
+        declaration.Image.Entrypoint.Should().BeEmpty();
+        declaration.Image.Cmd.Should().BeEmpty();
     }
 
     [Fact]

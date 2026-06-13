@@ -64,8 +64,8 @@ static class SandboxActivityDeclarationBuilder
 
         declaration.ActivityNames.AddRange(activityNames);
         declaration.EnvironmentVariables.Add(options.EnvironmentVariables);
-        declaration.Entrypoint.AddRange(NormalizeOptionalStrings(options.Entrypoint));
-        declaration.Cmd.AddRange(NormalizeOptionalStrings(options.Cmd));
+        declaration.Image.Entrypoint.AddRange(NormalizeOptionalStrings(options.Entrypoint));
+        declaration.Image.Cmd.AddRange(NormalizeOptionalStrings(options.Cmd));
         return declaration;
     }
 

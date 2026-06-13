@@ -535,6 +535,42 @@ public class SandboxActivitiesTests
         workerOptions.Concurrency.MaximumConcurrentEntityWorkItems.Should().Be(0);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("many")]
+    public async Task UseSandboxWorker_InvalidMaxActivities_ThrowsWhenWorkerOptionsAreResolved(string maxActivitiesValue)
+    {
+        // Arrange
+        using EnvironmentVariableScope endpoint = new("DTS_ENDPOINT", "https://example.scheduler");
+        using EnvironmentVariableScope taskHub = new("DTS_TASK_HUB", TaskHub);
+        using EnvironmentVariableScope workerProfile = new("DTS_WORKER_PROFILE_ID", "profile-a");
+        using EnvironmentVariableScope auth = new("DTS_AUTHENTICATION", "ManagedIdentity");
+        using EnvironmentVariableScope clientId = new("DTS_UMI_CLIENT_ID", "worker-client-id");
+        using EnvironmentVariableScope sandboxProvider = new("DTS_SANDBOX_PROVIDER", "Sandbox");
+        using EnvironmentVariableScope maxActivities = new("DTS_SANDBOX_MAX_ACTIVITIES", maxActivitiesValue);
+        ServiceCollection services = new();
+        services.Configure<DurableTaskRegistry>(
+            Options.DefaultName,
+            registry => registry.AddActivityFunc<string, string>(new TaskName("RemoteHello"), (_, input) => input));
+        Mock<IDurableTaskWorkerBuilder> mockBuilder = new();
+        mockBuilder.Setup(builder => builder.Services).Returns(services);
+        mockBuilder.Setup(builder => builder.Name).Returns(Options.DefaultName);
+
+        mockBuilder.Object.UseSandboxWorker();
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act
+        Action action = () => provider
+            .GetRequiredService<IOptionsMonitor<DurableTaskWorkerOptions>>()
+            .Get(Options.DefaultName);
+
+        // Assert
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("DTS_SANDBOX_MAX_ACTIVITIES must be a positive integer when injected by DTS for on-demand sandbox workers.");
+    }
+
     [Fact]
     public async Task UseSandboxWorker_WithNoRegisteredActivities_FailsWhenWorkerFiltersAreResolved()
     {

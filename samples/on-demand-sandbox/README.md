@@ -30,12 +30,15 @@ docker push $image
 ## Run a hello orchestration
 
 The main app uses `DefaultAzureCredential`; sign in with Azure CLI or configure another supported Azure identity before running it.
-After pushing the remote worker image, set `ContainerImage` in
-`main-app/WorkerProfiles.cs` to the pushed image reference. The worker profile
-class declares the image, CPU, memory, max concurrency, and on-demand sandbox activity
-names with `options.AddActivity(...)`. The main app and remote worker both use
-the `shared/ActivityNames.cs` constants so the declaration and worker registration
-stay in sync.
+After pushing the remote worker image, set these environment variables:
+
+```powershell
+$env:DTS_SANDBOX_CONTAINER_IMAGE = "<container image reference>"
+$env:DTS_SANDBOX_IMAGE_PULL_UMI_CLIENT_ID = "<image-pull UMI client ID>"
+$env:DTS_SANDBOX_SCHEDULER_UMI_CLIENT_ID = "<scheduler UMI client ID>"
+```
+
+The worker profile class declares the image, CPU, memory, max concurrency, and on-demand sandbox activity names with `options.AddActivity(...)`. The main app and remote worker both use the `shared/ActivityNames.cs` constants so the declaration and worker registration stay in sync.
 
 Update `main-app/appsettings.json` with your scheduler endpoint and task hub:
 

@@ -184,10 +184,19 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
 
         options.WorkerProfileId = GetRequiredEnvironmentVariable("DTS_WORKER_PROFILE_ID");
 
-        if (int.TryParse(Environment.GetEnvironmentVariable("DTS_SANDBOX_MAX_ACTIVITIES"), out int maxActivities) && maxActivities > 0)
+        string? maxActivitiesValue = Environment.GetEnvironmentVariable("DTS_SANDBOX_MAX_ACTIVITIES");
+        if (maxActivitiesValue is null)
         {
-            options.MaxConcurrentActivities = maxActivities;
+            return;
         }
+
+        if (!int.TryParse(maxActivitiesValue.Trim(), out int maxActivities) || maxActivities <= 0)
+        {
+            throw new InvalidOperationException(
+                "DTS_SANDBOX_MAX_ACTIVITIES must be a positive integer when injected by DTS for on-demand sandbox workers.");
+        }
+
+        options.MaxConcurrentActivities = maxActivities;
     }
 
     static void ValidateSandboxWorkerSandboxProvider(string sandboxProvider)

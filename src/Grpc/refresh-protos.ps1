@@ -17,15 +17,23 @@ $commitDetails = Invoke-RestMethod -Uri "https://api.github.com/repos/microsoft/
 $commitId = $commitDetails.sha
 
 # These are the proto files we need to download from the durabletask-protobuf repository.
-$protoFileNames = @(
-    "orchestrator_service.proto",
-    "sandbox_service.proto"
+$protoFiles = @(
+    @{
+        SourcePath = "orchestrator_service.proto"
+        OutputFileName = "orchestrator_service.proto"
+    },
+    @{
+        SourcePath = "durable-task-scheduler/sandbox_service.proto"
+        OutputFileName = "sandbox_service.proto"
+    }
 )
 
 # Download each proto file to the local directory using the above commit ID
-foreach ($protoFileName in $protoFileNames) {
-    $url = "https://raw.githubusercontent.com/microsoft/durabletask-protobuf/$commitId/protos/$protoFileName"
-    $outputFile = "$PSScriptRoot\$protoFileName"
+foreach ($protoFile in $protoFiles) {
+    $sourcePath = $protoFile.SourcePath
+    $outputFileName = $protoFile.OutputFileName
+    $url = "https://raw.githubusercontent.com/microsoft/durabletask-protobuf/$commitId/protos/$sourcePath"
+    $outputFile = "$PSScriptRoot\$outputFileName"
 
     try {
         Invoke-WebRequest -Uri $url -OutFile $outputFile        
@@ -47,10 +55,11 @@ Add-Content `
     -Path $versionsFile `
     -Value "# The following files were downloaded from branch $branch at $(Get-Date -Format "yyyy-MM-dd HH:mm:ss" -AsUTC) UTC"
 
-foreach ($protoFileName in $protoFileNames) {
+foreach ($protoFile in $protoFiles) {
+    $sourcePath = $protoFile.SourcePath
     Add-Content `
         -Path $versionsFile `
-        -Value "https://raw.githubusercontent.com/microsoft/durabletask-protobuf/$commitId/protos/$protoFileName"
+        -Value "https://raw.githubusercontent.com/microsoft/durabletask-protobuf/$commitId/protos/$sourcePath"
 }
 
 Write-Host "Wrote commit ID $commitId to $versionsFile" -ForegroundColor Green

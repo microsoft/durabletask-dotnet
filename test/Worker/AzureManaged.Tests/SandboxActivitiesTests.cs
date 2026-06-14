@@ -27,7 +27,7 @@ public class SandboxActivitiesTests
         // Arrange
         RecordingSandboxActivitiesCallInvoker callInvoker = new();
         SandboxActivitiesGrpcTransport transport = new(new SandboxActivities.SandboxActivitiesClient(callInvoker));
-        SandboxActivityDeclaration declaration = new()
+        SandboxWorkerProfile workerProfile = new()
         {
             WorkerProfileId = "profile-a",
             Image = new SandboxActivityImage
@@ -41,16 +41,16 @@ public class SandboxActivitiesTests
             },
             MaxConcurrentActivities = 7,
         };
-        declaration.ActivityNames.Add("RemoteHello");
+        workerProfile.ActivityNames.Add("RemoteHello");
 
         // Act
-        await transport.DeclareSandboxActivitiesAsync(declaration, TaskHub, CancellationToken.None);
+        await transport.DeclareSandboxWorkerProfileAsync(workerProfile, TaskHub, CancellationToken.None);
         await using ISandboxActivityWorkerSession session = transport.OpenSandboxActivityWorkerSession(
             TaskHub,
             CancellationToken.None);
 
         // Assert
-        callInvoker.DeclarationHeaders.Should().Contain(header => header.Key == "taskhub" && header.Value == TaskHub);
+        callInvoker.WorkerProfileHeaders.Should().Contain(header => header.Key == "taskhub" && header.Value == TaskHub);
         callInvoker.WorkerSessionHeaders.Should().Contain(header => header.Key == "taskhub" && header.Value == TaskHub);
     }
 
@@ -62,7 +62,7 @@ public class SandboxActivitiesTests
         SandboxActivitiesGrpcTransport transport = new(
             new SandboxActivities.SandboxActivitiesClient(callInvoker),
             attachTaskHubMetadata: false);
-        SandboxActivityDeclaration declaration = new()
+        SandboxWorkerProfile workerProfile = new()
         {
             WorkerProfileId = "profile-a",
             Image = new SandboxActivityImage
@@ -76,16 +76,16 @@ public class SandboxActivitiesTests
             },
             MaxConcurrentActivities = 7,
         };
-        declaration.ActivityNames.Add("RemoteHello");
+        workerProfile.ActivityNames.Add("RemoteHello");
 
         // Act
-        await transport.DeclareSandboxActivitiesAsync(declaration, TaskHub, CancellationToken.None);
+        await transport.DeclareSandboxWorkerProfileAsync(workerProfile, TaskHub, CancellationToken.None);
         await using ISandboxActivityWorkerSession session = transport.OpenSandboxActivityWorkerSession(
             TaskHub,
             CancellationToken.None);
 
         // Assert
-        callInvoker.DeclarationHeaders.Should().NotContain(header => header.Key == "taskhub");
+        callInvoker.WorkerProfileHeaders.Should().NotContain(header => header.Key == "taskhub");
         callInvoker.WorkerSessionHeaders.Should().NotContain(header => header.Key == "taskhub");
     }
 
@@ -864,15 +864,15 @@ public class SandboxActivitiesTests
 
         public void QueueSession(FakeSandboxActivityWorkerSession session) => this.queuedSessions.Enqueue(session);
 
-        public Task<SandboxActivityDeclarationResult> DeclareSandboxActivitiesAsync(
-            SandboxActivityDeclaration declaration,
+        public Task<DeclareSandboxWorkerProfileResult> DeclareSandboxWorkerProfileAsync(
+            SandboxWorkerProfile workerProfile,
             string taskHub,
             CancellationToken cancellationToken)
         {
             throw new NotSupportedException();
         }
 
-        public Task<RemoveSandboxActivityDeclarationResult> RemoveSandboxActivityDeclarationAsync(
+        public Task<RemoveSandboxWorkerProfileResult> RemoveSandboxWorkerProfileAsync(
             string workerProfileId,
             string taskHub,
             CancellationToken cancellationToken)
@@ -893,7 +893,7 @@ public class SandboxActivitiesTests
 
     sealed class RecordingSandboxActivitiesCallInvoker : CallInvoker
     {
-        public Metadata DeclarationHeaders { get; private set; } = [];
+        public Metadata WorkerProfileHeaders { get; private set; } = [];
 
         public Metadata WorkerSessionHeaders { get; private set; } = [];
 
@@ -912,11 +912,11 @@ public class SandboxActivitiesTests
             CallOptions options,
             TRequest request)
         {
-            method.FullName.Should().EndWith("/DeclareSandboxActivities");
-            this.DeclarationHeaders = options.Headers ?? [];
+            method.FullName.Should().EndWith("/DeclareSandboxWorkerProfile");
+            this.WorkerProfileHeaders = options.Headers ?? [];
 
             return new AsyncUnaryCall<TResponse>(
-                Task.FromResult((TResponse)(object)new SandboxActivityDeclarationResult()),
+                Task.FromResult((TResponse)(object)new DeclareSandboxWorkerProfileResult()),
                 Task.FromResult(new Metadata()),
                 () => new Status(StatusCode.OK, string.Empty),
                 () => [],

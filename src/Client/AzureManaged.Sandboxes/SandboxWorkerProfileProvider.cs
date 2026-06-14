@@ -7,42 +7,42 @@ using System.Threading;
 namespace Microsoft.DurableTask.Client.AzureManaged;
 
 /// <summary>
-/// Provides on-demand sandbox activity declarations from worker profile configuration.
+/// Provides on-demand sandbox activity workerProfiles from worker profile configuration.
 /// </summary>
-sealed class SandboxActivityDeclarationProvider
+sealed class SandboxWorkerProfileProvider
 {
     readonly Lazy<ProfileMetadata[]> profiles;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="SandboxActivityDeclarationProvider"/> class.
+    /// Initializes a new instance of the <see cref="SandboxWorkerProfileProvider"/> class.
     /// </summary>
-    public SandboxActivityDeclarationProvider()
+    public SandboxWorkerProfileProvider()
     {
         this.profiles = new Lazy<ProfileMetadata[]>(ScanProfiles, LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     /// <summary>
-    /// Resolves on-demand sandbox declarations for the specified task hub.
+    /// Resolves on-demand sandbox workerProfiles for the specified task hub.
     /// </summary>
     /// <param name="taskHub">The task hub name.</param>
-    /// <returns>The resolved on-demand sandbox declaration options.</returns>
-    public IReadOnlyList<SandboxWorkerProfileOptions> ResolveDeclarations(string taskHub)
+    /// <returns>The resolved on-demand sandbox workerProfile options.</returns>
+    public IReadOnlyList<SandboxWorkerProfileOptions> ResolveWorkerProfiles(string taskHub)
     {
         string normalizedTaskHub = string.IsNullOrWhiteSpace(taskHub)
-            ? throw new InvalidOperationException("On-demand sandbox activity declaration requires a task hub name.")
+            ? throw new InvalidOperationException("On-demand sandbox activity workerProfile requires a task hub name.")
             : taskHub.Trim();
 
-        SandboxWorkerProfileOptions[] declarations = this.profiles.Value
+        SandboxWorkerProfileOptions[] workerProfiles = this.profiles.Value
             .Select(profile => CreateOptions(normalizedTaskHub, profile))
-            .Where(static options => SandboxActivityDeclarationBuilder.ResolveActivityNames(options.ActivityNames).Length > 0)
+            .Where(static options => SandboxWorkerProfileBuilder.ResolveActivityNames(options.ActivityNames).Length > 0)
             .ToArray();
 
-        ValidateActivityOwnership(declarations);
-        return declarations;
+        ValidateActivityOwnership(workerProfiles);
+        return workerProfiles;
     }
 
     /// <summary>
-    /// Validates that a profile type can configure on-demand sandbox declarations.
+    /// Validates that a profile type can configure on-demand sandbox workerProfiles.
     /// </summary>
     /// <param name="profileType">The profile type.</param>
     internal static void ValidateProfileType(Type profileType)
@@ -126,20 +126,20 @@ sealed class SandboxActivityDeclarationProvider
         }
     }
 
-    static void ValidateActivityOwnership(IEnumerable<SandboxWorkerProfileOptions> declarations)
+    static void ValidateActivityOwnership(IEnumerable<SandboxWorkerProfileOptions> workerProfiles)
     {
         Dictionary<string, string> activityOwners = new(StringComparer.OrdinalIgnoreCase);
-        foreach (SandboxWorkerProfileOptions declaration in declarations)
+        foreach (SandboxWorkerProfileOptions workerProfile in workerProfiles)
         {
-            foreach (string activityName in SandboxActivityDeclarationBuilder.ResolveActivityNames(declaration.ActivityNames))
+            foreach (string activityName in SandboxWorkerProfileBuilder.ResolveActivityNames(workerProfile.ActivityNames))
             {
                 if (activityOwners.TryGetValue(activityName, out string? existingProfile)
-                    && !string.Equals(existingProfile, declaration.WorkerProfileId, StringComparison.Ordinal))
+                    && !string.Equals(existingProfile, workerProfile.WorkerProfileId, StringComparison.Ordinal))
                 {
-                    throw new InvalidOperationException($"On-demand sandbox activity '{activityName}' is assigned to both worker profile '{existingProfile}' and '{declaration.WorkerProfileId}'.");
+                    throw new InvalidOperationException($"On-demand sandbox activity '{activityName}' is assigned to both worker profile '{existingProfile}' and '{workerProfile.WorkerProfileId}'.");
                 }
 
-                activityOwners[activityName] = declaration.WorkerProfileId;
+                activityOwners[activityName] = workerProfile.WorkerProfileId;
             }
         }
     }

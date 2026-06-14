@@ -37,7 +37,7 @@ public static class SandboxActivitiesClientServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(clientName);
 
-        services.TryAddSingleton<SandboxActivityDeclarationProvider>();
+        services.TryAddSingleton<SandboxWorkerProfileProvider>();
 
         services.AddSingleton(provider =>
         {
@@ -47,14 +47,14 @@ public static class SandboxActivitiesClientServiceCollectionExtensions
             GrpcDurableTaskClientOptions options = provider
                 .GetRequiredService<IOptionsMonitor<GrpcDurableTaskClientOptions>>()
                 .Get(clientName);
-            SandboxActivityDeclarationProvider declarationProvider = provider.GetRequiredService<SandboxActivityDeclarationProvider>();
+            SandboxWorkerProfileProvider workerProfileProvider = provider.GetRequiredService<SandboxWorkerProfileProvider>();
 
             if (options.CallInvoker is { } callInvoker)
             {
                 return new SandboxActivitiesClient(
                     new SandboxActivitiesGrpcTransport(new Proto.SandboxActivities.SandboxActivitiesClient(callInvoker)),
                     schedulerOptions.TaskHubName,
-                    declarationProvider);
+                    workerProfileProvider);
             }
 
             if (options.Channel is GrpcChannel channel)
@@ -64,7 +64,7 @@ public static class SandboxActivitiesClientServiceCollectionExtensions
                         new Proto.SandboxActivities.SandboxActivitiesClient(channel.CreateCallInvoker()),
                         attachTaskHubMetadata: false),
                     schedulerOptions.TaskHubName,
-                    declarationProvider);
+                    workerProfileProvider);
             }
 
             throw new InvalidOperationException("DTS on-demand sandbox activity management requires a configured Durable Task Scheduler client.");

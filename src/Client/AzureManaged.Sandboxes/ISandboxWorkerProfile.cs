@@ -4,13 +4,13 @@
 namespace Microsoft.DurableTask.Client.AzureManaged;
 
 /// <summary>
-/// Configures an on-demand sandbox worker profile declaration.
+/// Configures an on-demand sandbox worker profile workerProfile.
 /// </summary>
 public interface ISandboxWorkerProfile
 {
     /// <summary>
-    /// Configures the on-demand sandbox worker profile declaration options.
+    /// Configures the on-demand sandbox worker profile workerProfile options.
     /// </summary>
-    /// <param name="options">The declaration options to configure.</param>
+    /// <param name="options">The workerProfile options to configure.</param>
     void Configure(SandboxWorkerProfileOptions options);
 }

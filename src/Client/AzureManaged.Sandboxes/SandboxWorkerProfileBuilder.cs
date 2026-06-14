@@ -8,9 +8,9 @@ using Proto = Microsoft.DurableTask.Protobuf.Sandboxes;
 namespace Microsoft.DurableTask.Client.AzureManaged;
 
 /// <summary>
-/// Builds and normalizes on-demand sandbox activity declaration protocol messages.
+/// Builds and normalizes on-demand sandbox activity workerProfile protocol messages.
 /// </summary>
-static class SandboxActivityDeclarationBuilder
+static class SandboxWorkerProfileBuilder
 {
     /// <summary>
     /// Resolves configured activity names for on-demand sandbox activity execution.
@@ -23,27 +23,27 @@ static class SandboxActivityDeclarationBuilder
     }
 
     /// <summary>
-    /// Builds an on-demand sandbox activity declaration protocol message.
+    /// Builds an on-demand sandbox activity workerProfile protocol message.
     /// </summary>
     /// <param name="options">The on-demand sandbox options.</param>
-    /// <param name="activityNames">The activity names included in the declaration.</param>
-    /// <returns>The declaration protocol message.</returns>
-    public static Proto.SandboxActivityDeclaration BuildDeclaration(
+    /// <param name="activityNames">The activity names included in the workerProfile.</param>
+    /// <returns>The workerProfile protocol message.</returns>
+    public static Proto.SandboxWorkerProfile BuildWorkerProfile(
         SandboxWorkerProfileOptions options,
         IReadOnlyCollection<string> activityNames)
     {
         Check.NotNull(options);
         Check.NotNull(activityNames);
 
-        _ = NormalizeRequired(options.TaskHub, "On-demand sandbox activity declaration requires a task hub name.");
+        _ = NormalizeRequired(options.TaskHub, "On-demand sandbox activity workerProfile requires a task hub name.");
         if (activityNames.Count == 0)
         {
-            throw new InvalidOperationException("On-demand sandbox activity declaration requires at least one activity name.");
+            throw new InvalidOperationException("On-demand sandbox activity workerProfile requires at least one activity name.");
         }
 
         string workerProfileId = NormalizeWorkerProfileId(
             options.WorkerProfileId,
-            "On-demand sandbox activity declaration requires a worker profile ID.");
+            "On-demand sandbox activity workerProfile requires a worker profile ID.");
         if (options.MaxConcurrentActivities <= 0)
         {
             throw new InvalidOperationException("On-demand sandbox activity max concurrent activities must be greater than zero.");
@@ -51,9 +51,9 @@ static class SandboxActivityDeclarationBuilder
 
         string schedulerManagedIdentityClientId = NormalizeRequired(
             options.SchedulerManagedIdentityClientId ?? string.Empty,
-            "On-demand sandbox activity declaration requires the managed identity client ID workers use to connect to the DTS scheduler.");
+            "On-demand sandbox activity workerProfile requires the managed identity client ID workers use to connect to the DTS scheduler.");
 
-        Proto.SandboxActivityDeclaration declaration = new()
+        Proto.SandboxWorkerProfile workerProfile = new()
         {
             WorkerProfileId = workerProfileId,
             Image = BuildImage(options),
@@ -62,11 +62,11 @@ static class SandboxActivityDeclarationBuilder
             SchedulerManagedIdentityClientId = schedulerManagedIdentityClientId,
         };
 
-        declaration.ActivityNames.AddRange(activityNames);
-        declaration.EnvironmentVariables.Add(options.EnvironmentVariables);
-        declaration.Image.Entrypoint.AddRange(NormalizeOptionalStrings(options.Entrypoint));
-        declaration.Image.Cmd.AddRange(NormalizeOptionalStrings(options.Cmd));
-        return declaration;
+        workerProfile.ActivityNames.AddRange(activityNames);
+        workerProfile.EnvironmentVariables.Add(options.EnvironmentVariables);
+        workerProfile.Image.Entrypoint.AddRange(NormalizeOptionalStrings(options.Entrypoint));
+        workerProfile.Image.Cmd.AddRange(NormalizeOptionalStrings(options.Cmd));
+        return workerProfile;
     }
 
     /// <summary>
@@ -102,7 +102,7 @@ static class SandboxActivityDeclarationBuilder
             ImageRef = imageRef,
             ManagedIdentityClientId = NormalizeRequired(
                 options.ImagePullManagedIdentityClientId ?? string.Empty,
-                "On-demand sandbox activity declaration requires the managed identity client ID ADC uses to pull the worker image."),
+                "On-demand sandbox activity workerProfile requires the managed identity client ID ADC uses to pull the worker image."),
         };
 
         return image;
@@ -122,7 +122,7 @@ static class SandboxActivityDeclarationBuilder
 
     static string NormalizeCpu(string value)
     {
-        string normalized = NormalizeRequired(value, "On-demand sandbox activity declaration requires CPU resources.");
+        string normalized = NormalizeRequired(value, "On-demand sandbox activity workerProfile requires CPU resources.");
         if (TryParseCpuMillicores(normalized) is not { } milliCpu || milliCpu <= 0)
         {
             throw new InvalidOperationException(
@@ -135,7 +135,7 @@ static class SandboxActivityDeclarationBuilder
 
     static string NormalizeMemory(string value)
     {
-        string normalized = NormalizeRequired(value, "On-demand sandbox activity declaration requires memory resources.");
+        string normalized = NormalizeRequired(value, "On-demand sandbox activity workerProfile requires memory resources.");
         if (TryParseMemoryMiB(normalized) is not { } memoryMiB || memoryMiB <= 0)
         {
             throw new InvalidOperationException(

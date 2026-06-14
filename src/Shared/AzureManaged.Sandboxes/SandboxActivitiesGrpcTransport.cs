@@ -14,23 +14,23 @@ interface ISandboxActivitiesTransport
     /// <summary>
     /// Declares on-demand sandbox activities to DTS.
     /// </summary>
-    /// <param name="declaration">The declaration message.</param>
-    /// <param name="taskHub">The task hub that owns the declaration.</param>
+    /// <param name="workerProfile">The workerProfile message.</param>
+    /// <param name="taskHub">The task hub that owns the workerProfile.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The declaration result.</returns>
-    Task<Proto.SandboxActivityDeclarationResult> DeclareSandboxActivitiesAsync(
-        Proto.SandboxActivityDeclaration declaration,
+    /// <returns>The workerProfile result.</returns>
+    Task<Proto.DeclareSandboxWorkerProfileResult> DeclareSandboxWorkerProfileAsync(
+        Proto.SandboxWorkerProfile workerProfile,
         string taskHub,
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Removes an on-demand sandbox activity declaration from DTS.
+    /// Removes an on-demand sandbox activity workerProfile from DTS.
     /// </summary>
-    /// <param name="workerProfileId">The worker profile ID whose declaration should be removed.</param>
-    /// <param name="taskHub">The task hub that owns the declaration.</param>
+    /// <param name="workerProfileId">The worker profile ID whose workerProfile should be removed.</param>
+    /// <param name="taskHub">The task hub that owns the workerProfile.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The removal result.</returns>
-    Task<Proto.RemoveSandboxActivityDeclarationResult> RemoveSandboxActivityDeclarationAsync(
+    Task<Proto.RemoveSandboxWorkerProfileResult> RemoveSandboxWorkerProfileAsync(
         string workerProfileId,
         string taskHub,
         CancellationToken cancellationToken);
@@ -91,32 +91,32 @@ sealed class SandboxActivitiesGrpcTransport : ISandboxActivitiesTransport
     }
 
     /// <inheritdoc/>
-    public async Task<Proto.SandboxActivityDeclarationResult> DeclareSandboxActivitiesAsync(
-        Proto.SandboxActivityDeclaration declaration,
+    public async Task<Proto.DeclareSandboxWorkerProfileResult> DeclareSandboxWorkerProfileAsync(
+        Proto.SandboxWorkerProfile workerProfile,
         string taskHub,
         CancellationToken cancellationToken)
     {
-        using AsyncUnaryCall<Proto.SandboxActivityDeclarationResult> call =
-            this.client.DeclareSandboxActivitiesAsync(
-                declaration,
+        using AsyncUnaryCall<Proto.DeclareSandboxWorkerProfileResult> call =
+            this.client.DeclareSandboxWorkerProfileAsync(
+                workerProfile,
                 headers: this.CreateTaskHubHeaders(taskHub),
                 cancellationToken: cancellationToken);
         return await call.ResponseAsync.ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public async Task<Proto.RemoveSandboxActivityDeclarationResult> RemoveSandboxActivityDeclarationAsync(
+    public async Task<Proto.RemoveSandboxWorkerProfileResult> RemoveSandboxWorkerProfileAsync(
         string workerProfileId,
         string taskHub,
         CancellationToken cancellationToken)
     {
-        Proto.RemoveSandboxActivityDeclarationRequest request = new()
+        Proto.RemoveSandboxWorkerProfileRequest request = new()
         {
             WorkerProfileId = workerProfileId,
         };
 
-        using AsyncUnaryCall<Proto.RemoveSandboxActivityDeclarationResult> call =
-            this.client.RemoveSandboxActivityDeclarationAsync(
+        using AsyncUnaryCall<Proto.RemoveSandboxWorkerProfileResult> call =
+            this.client.RemoveSandboxWorkerProfileAsync(
                 request,
                 headers: this.CreateTaskHubHeaders(taskHub),
                 cancellationToken: cancellationToken);

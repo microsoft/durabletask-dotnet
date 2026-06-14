@@ -13,17 +13,17 @@ service SandboxActivities {
   // dynamic state only. Closing the stream deregisters the worker.
   rpc ConnectSandboxActivityWorker(stream SandboxActivityWorkerMessage) returns (SandboxActivityWorkerSessionResult);
 
-  // Declares sandbox activities before any live worker stream exists.
+  // Creates or updates a sandbox worker profile before any live worker stream exists.
   // This private preview supports activity execution only as a business
   // decision; orchestrations and entities are not part of this contract.
   // This is a configuration contract and does not advertise active worker
   // capacity.
-  rpc DeclareSandboxActivities(SandboxActivityDeclaration) returns (SandboxActivityDeclarationResult);
+  rpc DeclareSandboxWorkerProfile(SandboxWorkerProfile) returns (DeclareSandboxWorkerProfileResult);
 
-  // Removes a sandbox activity declaration so the backend stops
+  // Removes a sandbox worker profile so the backend stops
   // waking new sandbox workers for the specified worker profile. Existing
   // workers are not terminated by this RPC.
-  rpc RemoveSandboxActivityDeclaration(RemoveSandboxActivityDeclarationRequest) returns (RemoveSandboxActivityDeclarationResult);
+  rpc RemoveSandboxWorkerProfile(RemoveSandboxWorkerProfileRequest) returns (RemoveSandboxWorkerProfileResult);
 }
 
 message SandboxActivityWorkerMessage {
@@ -42,11 +42,11 @@ message SandboxActivityWorkerStart {
   // DTS-generated sandbox identifier injected as DTS_SANDBOX_ID. This is not
   // the ADC provider sandbox resource id.
   string dts_sandbox_identifier = 4;
-  // Caller-defined profile/catalog ID shared by declarations and live worker
+  // Caller-defined profile/catalog ID shared by worker profiles and live worker
   // registration. This is not a live worker process/session ID.
   string worker_profile_id = 5;
   // Activity handlers registered by the worker process. DTS validates this
-  // matches the declaration before advertising worker capacity.
+  // matches the worker profile before advertising worker capacity.
   repeated string activity_names = 6;
 }
 
@@ -58,8 +58,8 @@ message SandboxActivityWorkerSessionResult {
   string message = 1;
 }
 
-message SandboxActivityDeclaration {
-  // Caller-defined profile/catalog ID shared by declarations and live worker
+message SandboxWorkerProfile {
+  // Caller-defined profile/catalog ID shared by worker profiles and live worker
   // registration. This is not a live worker process/session ID.
   string worker_profile_id = 1;
   repeated string activity_names = 2;
@@ -82,14 +82,14 @@ message SandboxActivityResources {
   string memory = 2;
 }
 
-message SandboxActivityDeclarationResult {
+message DeclareSandboxWorkerProfileResult {
 }
 
-message RemoveSandboxActivityDeclarationRequest {
+message RemoveSandboxWorkerProfileRequest {
   string worker_profile_id = 1;
 }
 
-message RemoveSandboxActivityDeclarationResult {
+message RemoveSandboxWorkerProfileResult {
 }
 
 // Sandbox provider executing the activity worker.

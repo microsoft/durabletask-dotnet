@@ -13,7 +13,7 @@ namespace Microsoft.DurableTask.Client.AzureManaged;
 public sealed class SandboxWorkerProfileOptions
 {
     /// <summary>
-    /// Gets or sets the task hub where the on-demand sandbox activity declaration is stored.
+    /// Gets or sets the task hub where the on-demand sandbox activity workerProfile is stored.
     /// </summary>
     public string TaskHub { get; set; } = string.Empty;
 
@@ -51,7 +51,7 @@ public sealed class SandboxWorkerProfileOptions
     public string Memory { get; set; } = "2048Mi";
 
     /// <summary>
-    /// Gets custom environment variables DTS should provide to on-demand sandbox workers created from this declaration.
+    /// Gets custom environment variables DTS should provide to on-demand sandbox workers created from this workerProfile.
     /// DTS-owned runtime variables such as <c>DTS_ENDPOINT</c>, <c>DTS_TASK_HUB</c>, and
     /// <c>DTS_SANDBOX_ID</c> are injected by the backend and should not be supplied here.
     /// </summary>
@@ -79,7 +79,7 @@ public sealed class SandboxWorkerProfileOptions
     internal IList<string> ActivityNames { get; } = new List<string>();
 
     /// <summary>
-    /// Adds an activity name to the on-demand sandbox worker profile declaration.
+    /// Adds an activity name to the on-demand sandbox worker profile workerProfile.
     /// </summary>
     /// <param name="activityName">The activity name.</param>
     public void AddActivity(string activityName)
@@ -93,7 +93,7 @@ public sealed class SandboxWorkerProfileOptions
     }
 
     /// <summary>
-    /// Adds an activity to the on-demand sandbox worker profile declaration using its durable task name.
+    /// Adds an activity to the on-demand sandbox worker profile workerProfile using its durable task name.
     /// </summary>
     /// <typeparam name="TActivity">The activity type.</typeparam>
     public void AddActivity<TActivity>() where TActivity : class, ITaskActivity

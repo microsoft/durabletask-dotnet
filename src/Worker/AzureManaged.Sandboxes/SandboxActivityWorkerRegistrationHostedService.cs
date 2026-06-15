@@ -138,7 +138,11 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
     }
 
     /// <inheritdoc/>
-    public ValueTask DisposeAsync() => new(this.StopAsync(CancellationToken.None));
+    public async ValueTask DisposeAsync()
+    {
+        await this.StopAsync(CancellationToken.None).ConfigureAwait(false);
+        this.streamSync.Dispose();
+    }
 
     /// <summary>
     /// Computes a full-jitter reconnect delay in the range <c>[0, retryDelay)</c>.
@@ -156,6 +160,27 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
 
         long jitteredTicks = (long)(random.NextDouble() * retryDelay.Ticks);
         return TimeSpan.FromTicks(jitteredTicks);
+    }
+
+    /// <summary>
+    /// Computes the next exponential retry delay, capped at the configured maximum delay.
+    /// </summary>
+    /// <param name="retryDelay">The current retry delay.</param>
+    /// <param name="maxDelay">The maximum retry delay.</param>
+    /// <returns>The next retry delay.</returns>
+    internal static TimeSpan ComputeNextRetryDelay(TimeSpan retryDelay, TimeSpan maxDelay)
+    {
+        if (retryDelay <= TimeSpan.Zero)
+        {
+            return retryDelay;
+        }
+
+        if (retryDelay >= maxDelay || retryDelay.Ticks > maxDelay.Ticks / 2)
+        {
+            return maxDelay;
+        }
+
+        return TimeSpan.FromTicks(retryDelay.Ticks * 2);
     }
 
     static async ValueTask DisposeSessionAsync(
@@ -404,16 +429,8 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
             ? this.options.WorkerRegistrationRetryInitialDelay
             : this.options.WorkerRegistrationRetryMaxDelay;
 
-    TimeSpan GetNextRetryDelay(TimeSpan retryDelay)
-    {
-        if (retryDelay <= TimeSpan.Zero)
-        {
-            return retryDelay;
-        }
-
-        long nextTicks = Math.Min(retryDelay.Ticks * 2, this.options.WorkerRegistrationRetryMaxDelay.Ticks);
-        return TimeSpan.FromTicks(nextTicks);
-    }
+    TimeSpan GetNextRetryDelay(TimeSpan retryDelay) =>
+        ComputeNextRetryDelay(retryDelay, this.options.WorkerRegistrationRetryMaxDelay);
 
     async Task DelayBeforeReconnectAsync(TimeSpan retryDelay, CancellationToken cancellationToken)
     {

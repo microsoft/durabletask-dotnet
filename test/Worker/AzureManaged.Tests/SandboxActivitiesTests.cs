@@ -424,6 +424,19 @@ public class SandboxActivitiesTests
     }
 
     [Fact]
+    public void SandboxActivityWorkerRegistrationHostedService_GetNextRetryDelay_SaturatesBeforeTickOverflow()
+    {
+        // Arrange
+        // Act
+        TimeSpan nextRetryDelay = SandboxActivityWorkerRegistrationHostedService.ComputeNextRetryDelay(
+            TimeSpan.FromTicks((TimeSpan.MaxValue.Ticks / 2) + 1),
+            TimeSpan.MaxValue);
+
+        // Assert
+        nextRetryDelay.Should().Be(TimeSpan.MaxValue);
+    }
+
+    [Fact]
     public async Task SandboxActivityWorkerRegistrationHostedService_AppliesJitterToReconnectDelay()
     {
         // Arrange

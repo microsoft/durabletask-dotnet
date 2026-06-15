@@ -462,16 +462,25 @@ sealed partial class GrpcDurableTaskWorker
 
         void NotifyActivity(ActivityNotificationPhase phase)
         {
-            try
+            MulticastDelegate? callbacks = this.internalOptions.NotifyActivity;
+            if (callbacks is null)
             {
-                this.internalOptions.NotifyActivity?.Invoke(phase);
+                return;
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException
-                and not StackOverflowException
-                and not AccessViolationException
-                and not ThreadAbortException)
+
+            foreach (Action<ActivityNotificationPhase> callback in callbacks.GetInvocationList().Cast<Action<ActivityNotificationPhase>>())
             {
-                this.Logger.ActivityNotificationFailed(phase, ex);
+                try
+                {
+                    callback(phase);
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException
+                    and not StackOverflowException
+                    and not AccessViolationException
+                    and not ThreadAbortException)
+                {
+                    this.Logger.ActivityNotificationFailed(phase, ex);
+                }
             }
         }
 

@@ -25,4 +25,10 @@ public abstract class TaskActivityContext
     /// Gets the unique ID of the current orchestration instance.
     /// </summary>
     public abstract string InstanceId { get; }
+
+    /// <summary>
+    /// Gets the version that the activity was scheduled with, or <see cref="string.Empty"/> if the activity is
+    /// unversioned.
+    /// </summary>
+    public virtual string Version => string.Empty;
 }

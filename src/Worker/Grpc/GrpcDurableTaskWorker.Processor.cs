@@ -884,10 +884,10 @@ sealed partial class GrpcDurableTaskWorker
             this.Logger.ReceivedActivityRequest(request.Name, request.TaskId, instance.InstanceId, inputSize);
 
             P.TaskFailureDetails? failureDetails = null;
-            TaskContext innerContext = new(instance);
+            TaskName name = new(request.Name);
+            TaskContext innerContext = new(instance, request.Name, request.Version ?? string.Empty, request.TaskId);
             innerContext.ExceptionPropertiesProvider = this.exceptionPropertiesProvider;
 
-            TaskName name = new(request.Name);
             string? output = null;
 
             failureDetails = EvaluateOrchestrationVersioning(this.worker.workerOptions.Versioning, request.Version, out bool versioningFailed);

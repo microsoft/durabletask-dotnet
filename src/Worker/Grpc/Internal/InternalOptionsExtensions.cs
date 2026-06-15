@@ -57,7 +57,7 @@ public static class InternalOptionsExtensions
         this GrpcDurableTaskWorkerOptions options,
         Action<ActivityNotificationPhase> notification)
     {
-        options.Internal.NotifyActivity += notification ?? throw new ArgumentNullException(nameof(notification));
+        options.Internal.NotifyActivity = notification ?? throw new ArgumentNullException(nameof(notification));
     }
 
     /// <summary>

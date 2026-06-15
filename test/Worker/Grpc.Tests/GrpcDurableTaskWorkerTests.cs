@@ -312,10 +312,8 @@ public class GrpcDurableTaskWorkerTests
     {
         // Arrange
         TaskCompletionSource activityCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        ConcurrentQueue<ActivityNotificationPhase> successfulNotifications = new();
         GrpcDurableTaskWorkerOptions grpcOptions = new();
         grpcOptions.ConfigureActivityNotification(phase => throw new InvalidOperationException($"Notification failed: {phase}"));
-        grpcOptions.ConfigureActivityNotification(successfulNotifications.Enqueue);
 
         P.WorkItem activityWorkItem = new()
         {
@@ -357,7 +355,6 @@ public class GrpcDurableTaskWorkerTests
 
         // Assert
         clientMock.VerifyAll();
-        successfulNotifications.Should().Equal(ActivityNotificationPhase.Started, ActivityNotificationPhase.Completed);
         logProvider.TryGetLogs(Category, out IReadOnlyCollection<LogEntry>? logs).Should().BeTrue();
         logs!.Should().Contain(log => log.Message.Contains("Activity notification callback failed for phase 'Started'"));
         logs.Should().Contain(log => log.Message.Contains("Activity notification callback failed for phase 'Completed'"));

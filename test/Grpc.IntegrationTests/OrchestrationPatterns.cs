@@ -792,6 +792,34 @@ public class OrchestrationPatterns : IntegrationTestBase
     }
 
     [Fact]
+    public async Task ActivityVersionPassedThroughContext()
+    {
+        var version = "0.1";
+        await using HostTestLifetime server = await this.StartWorkerAsync(b =>
+        {
+            b.AddTasks(tasks => tasks
+                .AddOrchestratorFunc<string, string>("Versioned_Orchestration", (ctx, input) =>
+                {
+                    return ctx.CallActivityAsync<string>("Versioned_Activity", input);
+                })
+                .AddActivityFunc<string, string>("Versioned_Activity", (ctx, input) =>
+                {
+                    return $"Activity version: {ctx.Version}";
+                }));
+        }, c =>
+        {
+            c.UseDefaultVersion(version);
+        });
+
+        var instanceId = await server.Client.ScheduleNewOrchestrationInstanceAsync("Versioned_Orchestration", input: string.Empty);
+        var result = await server.Client.WaitForInstanceCompletionAsync(instanceId, getInputsAndOutputs: true, this.TimeoutToken);
+        var output = result.ReadOutputAs<string>();
+
+        Assert.NotNull(output);
+        Assert.Equal(output, $"Activity version: {version}");
+    }
+
+    [Fact]
     public async Task OrchestrationVersioning_MatchTypeNotSpecified_NoVersionFailure()
     {
         var workerVersion = "0.1";

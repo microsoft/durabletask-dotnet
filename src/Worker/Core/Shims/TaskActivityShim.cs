@@ -92,5 +92,7 @@ class TaskActivityShim : TaskActivity
         public override TaskName Name => this.name;
 
         public override string InstanceId => this.innerContext.OrchestrationInstance.InstanceId;
+
+        public override string Version => this.innerContext.Version ?? string.Empty;
     }
 }

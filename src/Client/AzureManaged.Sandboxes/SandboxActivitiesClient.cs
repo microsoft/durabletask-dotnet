@@ -43,14 +43,14 @@ public sealed class SandboxActivitiesClient
         IReadOnlyList<SandboxWorkerProfileOptions> workerProfiles = this.workerProfileProvider.ResolveWorkerProfiles(this.taskHub);
         foreach (SandboxWorkerProfileOptions options in workerProfiles)
         {
-            string[] activityNames = SandboxWorkerProfileBuilder.ResolveActivityNames(options.ActivityNames);
-            if (activityNames.Length == 0)
+            SandboxActivityMetadata.Activity[] activities = SandboxWorkerProfileBuilder.ResolveActivities(options.Activities);
+            if (activities.Length == 0)
             {
                 continue;
             }
 
             Proto.SandboxWorkerProfile workerProfile =
-                SandboxWorkerProfileBuilder.BuildWorkerProfile(options, activityNames);
+                SandboxWorkerProfileBuilder.BuildWorkerProfile(options, activities);
             await this.transport.DeclareSandboxWorkerProfileAsync(
                     workerProfile,
                     this.taskHub,

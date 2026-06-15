@@ -18,7 +18,7 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
     readonly object sync = new();
     readonly ISandboxActivitiesTransport transport;
     readonly SandboxWorkerRuntimeOptions options;
-    readonly IReadOnlyCollection<string> registeredActivityNames;
+    readonly IReadOnlyCollection<SandboxActivityMetadata.Activity> registeredActivities;
     readonly ILogger<SandboxActivityWorkerRegistrationHostedService> logger;
     readonly IHostApplicationLifetime? lifetime;
     readonly SandboxActivityTracker? activityTracker;
@@ -33,7 +33,7 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
     /// </summary>
     /// <param name="transport">The on-demand sandbox activities transport.</param>
     /// <param name="options">The on-demand sandbox worker runtime options.</param>
-    /// <param name="registeredActivityNames">The activity handlers registered by this worker process.</param>
+    /// <param name="registeredActivities">The activity handlers registered by this worker process.</param>
     /// <param name="logger">The logger.</param>
     /// <param name="lifetime">The optional application lifetime used to stop the host when a non-retriable registration stream failure occurs.</param>
     /// <param name="activityTracker">The optional activity tracker used to report live in-flight activity count.</param>
@@ -41,7 +41,7 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
     public SandboxActivityWorkerRegistrationHostedService(
         ISandboxActivitiesTransport transport,
         SandboxWorkerRuntimeOptions options,
-        IReadOnlyCollection<string> registeredActivityNames,
+        IReadOnlyCollection<SandboxActivityMetadata.Activity> registeredActivities,
         ILogger<SandboxActivityWorkerRegistrationHostedService> logger,
         IHostApplicationLifetime? lifetime = null,
         SandboxActivityTracker? activityTracker = null,
@@ -49,7 +49,7 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
     {
         this.transport = Check.NotNull(transport);
         this.options = Check.NotNull(options);
-        this.registeredActivityNames = Check.NotNull(registeredActivityNames);
+        this.registeredActivities = Check.NotNull(registeredActivities);
         this.logger = Check.NotNull(logger);
         this.lifetime = lifetime;
         this.activityTracker = activityTracker;
@@ -59,10 +59,10 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
     /// <inheritdoc/>
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        string[] activityNames = SandboxActivityMetadata.ResolveActivityNames(this.registeredActivityNames);
+        SandboxActivityMetadata.Activity[] activities = SandboxActivityMetadata.ResolveActivities(this.registeredActivities);
         CancellationTokenSource registrationCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task registrationPump = Task.Run(
-            () => this.RunRegistrationLoopAsync(activityNames.Length, registrationCts.Token),
+            () => this.RunRegistrationLoopAsync(activities.Length, registrationCts.Token),
             CancellationToken.None);
         lock (this.sync)
         {
@@ -209,7 +209,7 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
             ISandboxActivityWorkerSession? registrationSession = null;
             try
             {
-                Proto.SandboxActivityWorkerMessage startMessage = SandboxWorkerMessageBuilder.BuildWorkerStart(this.options, this.registeredActivityNames);
+                Proto.SandboxActivityWorkerMessage startMessage = SandboxWorkerMessageBuilder.BuildWorkerStart(this.options, this.registeredActivities);
                 registrationSession = this.transport.OpenSandboxActivityWorkerSession(startMessage.Start.TaskHub, cancellationToken);
                 this.SetCurrentSession(registrationSession);
 

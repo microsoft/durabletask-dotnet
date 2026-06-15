@@ -73,23 +73,26 @@ public sealed class SandboxWorkerProfileOptions
     public int MaxConcurrentActivities { get; set; } = 100;
 
     /// <summary>
-    /// Gets the on-demand sandbox activity names to declare. Remote workers report their registered
-    /// activities separately when they connect.
+    /// Gets the on-demand sandbox activity identities to declare. Remote workers report their
+    /// registered activities separately when they connect.
     /// </summary>
-    internal IList<string> ActivityNames { get; } = new List<string>();
+    internal IList<SandboxActivityMetadata.Activity> Activities { get; } = new List<SandboxActivityMetadata.Activity>();
 
     /// <summary>
-    /// Adds an activity name to the on-demand sandbox worker profile workerProfile.
+    /// Adds an activity name and version to the on-demand sandbox worker profile workerProfile.
     /// </summary>
     /// <param name="activityName">The activity name.</param>
-    public void AddActivity(string activityName)
+    /// <param name="version">The activity version, or <see langword="null" /> for unversioned/wildcard activity execution.</param>
+    public void AddActivity(string activityName, string? version)
     {
         if (string.IsNullOrWhiteSpace(activityName))
         {
             throw new ArgumentException("On-demand sandbox activity name cannot be empty.", nameof(activityName));
         }
 
-        this.ActivityNames.Add(activityName.Trim());
+        this.Activities.Add(new SandboxActivityMetadata.Activity(
+            activityName.Trim(),
+            SandboxActivityMetadata.NormalizeOptional(version)));
     }
 
     /// <summary>
@@ -101,6 +104,8 @@ public sealed class SandboxWorkerProfileOptions
         Type activityType = typeof(TActivity);
         DurableTaskAttribute? attribute = activityType.GetCustomAttribute<DurableTaskAttribute>();
         string? activityName = attribute?.Name.Name;
-        this.AddActivity(string.IsNullOrWhiteSpace(activityName) ? activityType.Name : activityName);
+        this.AddActivity(
+            string.IsNullOrWhiteSpace(activityName) ? activityType.Name : activityName,
+            attribute?.Version);
     }
 }

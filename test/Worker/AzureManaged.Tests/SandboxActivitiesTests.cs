@@ -41,7 +41,7 @@ public class SandboxActivitiesTests
             },
             MaxConcurrentActivities = 7,
         };
-        workerProfile.ActivityNames.Add("RemoteHello");
+        workerProfile.Activities.Add(new SandboxActivity { Name = "RemoteHello" });
 
         // Act
         await transport.DeclareSandboxWorkerProfileAsync(workerProfile, TaskHub, CancellationToken.None);
@@ -76,7 +76,7 @@ public class SandboxActivitiesTests
             },
             MaxConcurrentActivities = 7,
         };
-        workerProfile.ActivityNames.Add("RemoteHello");
+        workerProfile.Activities.Add(new SandboxActivity { Name = "RemoteHello" });
 
         // Act
         await transport.DeclareSandboxWorkerProfileAsync(workerProfile, TaskHub, CancellationToken.None);
@@ -111,7 +111,7 @@ public class SandboxActivitiesTests
             SandboxActivityWorkerRegistrationHostedService service = new(
                 client,
                 options,
-                ["RemoteHello"],
+                Activities("RemoteHello"),
                 NullLogger<SandboxActivityWorkerRegistrationHostedService>.Instance);
 
             // Act
@@ -128,7 +128,8 @@ public class SandboxActivitiesTests
             start.MaxActivitiesCount.Should().Be(3);
             start.SandboxProvider.Should().Be(SandboxProviderKind.Sandbox);
             start.DtsSandboxIdentifier.Should().Be("sandbox-1");
-            start.ActivityNames.Should().Equal("RemoteHello");
+            start.Activities.Select(static activity => activity.Name).Should().Equal("RemoteHello");
+            start.Activities.Select(static activity => activity.Version).Should().Equal(string.Empty);
         }
         finally
         {
@@ -156,7 +157,7 @@ public class SandboxActivitiesTests
             // Act
             SandboxActivityWorkerMessage message = SandboxWorkerMessageBuilder.BuildWorkerStart(
                 options,
-                ["RemoteHello"]);
+                Activities("RemoteHello"));
 
             // Assert
             SandboxActivityWorkerStart start = message.Start;
@@ -191,7 +192,7 @@ public class SandboxActivitiesTests
             // Act
             Action action = () => SandboxWorkerMessageBuilder.BuildWorkerStart(
                 options,
-                ["RemoteHello"]);
+                Activities("RemoteHello"));
 
             // Assert
             action.Should().Throw<InvalidOperationException>()
@@ -251,7 +252,7 @@ public class SandboxActivitiesTests
         SandboxActivityWorkerRegistrationHostedService service = new(
             client,
             options,
-            ["RemoteHello"],
+            Activities("RemoteHello"),
             NullLogger<SandboxActivityWorkerRegistrationHostedService>.Instance,
             activityTracker: activityTracker);
 
@@ -291,7 +292,7 @@ public class SandboxActivitiesTests
         SandboxActivityWorkerRegistrationHostedService service = new(
             client,
             options,
-            ["RemoteHello"],
+            Activities("RemoteHello"),
             NullLogger<SandboxActivityWorkerRegistrationHostedService>.Instance);
 
         // Act
@@ -330,7 +331,7 @@ public class SandboxActivitiesTests
         SandboxActivityWorkerRegistrationHostedService service = new(
             client,
             options,
-            ["RemoteHello"],
+            Activities("RemoteHello"),
             NullLogger<SandboxActivityWorkerRegistrationHostedService>.Instance);
 
         // Act
@@ -372,7 +373,7 @@ public class SandboxActivitiesTests
         SandboxActivityWorkerRegistrationHostedService service = new(
             client,
             options,
-            ["RemoteHello"],
+            Activities("RemoteHello"),
             NullLogger<SandboxActivityWorkerRegistrationHostedService>.Instance,
             reconnectJitter: new DeterministicRandom(0.999999));
 
@@ -446,7 +447,7 @@ public class SandboxActivitiesTests
         SandboxActivityWorkerRegistrationHostedService service = new(
             client,
             options,
-            ["RemoteHello"],
+            Activities("RemoteHello"),
             NullLogger<SandboxActivityWorkerRegistrationHostedService>.Instance,
             reconnectJitter: new DeterministicRandom(0.0));
 
@@ -480,7 +481,7 @@ public class SandboxActivitiesTests
         SandboxActivityWorkerRegistrationHostedService service = new(
             client,
             options,
-            ["RemoteHello"],
+            Activities("RemoteHello"),
             NullLogger<SandboxActivityWorkerRegistrationHostedService>.Instance);
 
         // Act
@@ -851,6 +852,9 @@ public class SandboxActivitiesTests
         action.Should().Throw<InvalidOperationException>()
             .WithMessage("DTS_SANDBOX_PROVIDER must be 'Sandbox' or 'AcaSessionPool' for on-demand sandbox workers.");
     }
+
+    static IReadOnlyCollection<SandboxActivityMetadata.Activity> Activities(params string[] names) =>
+        names.Select(static name => new SandboxActivityMetadata.Activity(name, Version: null)).ToArray();
 
     sealed class FakeSandboxActivitiesTransport : ISandboxActivitiesTransport
     {

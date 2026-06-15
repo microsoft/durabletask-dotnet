@@ -3,6 +3,7 @@
 
 using System.Reflection;
 using System.Threading;
+using Microsoft.DurableTask.AzureManaged.Internal;
 
 namespace Microsoft.DurableTask.Client.AzureManaged;
 
@@ -34,7 +35,7 @@ sealed class SandboxWorkerProfileProvider
 
         SandboxWorkerProfileOptions[] workerProfiles = this.profiles.Value
             .Select(profile => CreateOptions(normalizedTaskHub, profile))
-            .Where(static options => SandboxWorkerProfileBuilder.ResolveActivityNames(options.ActivityNames).Length > 0)
+            .Where(static options => SandboxWorkerProfileBuilder.ResolveActivities(options.Activities).Length > 0)
             .ToArray();
 
         ValidateActivityOwnership(workerProfiles);
@@ -128,18 +129,21 @@ sealed class SandboxWorkerProfileProvider
 
     static void ValidateActivityOwnership(IEnumerable<SandboxWorkerProfileOptions> workerProfiles)
     {
-        Dictionary<string, string> activityOwners = new(StringComparer.OrdinalIgnoreCase);
+        List<(SandboxActivityMetadata.Activity Activity, string WorkerProfileId)> activityOwners = [];
         foreach (SandboxWorkerProfileOptions workerProfile in workerProfiles)
         {
-            foreach (string activityName in SandboxWorkerProfileBuilder.ResolveActivityNames(workerProfile.ActivityNames))
+            foreach (SandboxActivityMetadata.Activity activity in SandboxWorkerProfileBuilder.ResolveActivities(workerProfile.Activities))
             {
-                if (activityOwners.TryGetValue(activityName, out string? existingProfile)
-                    && !string.Equals(existingProfile, workerProfile.WorkerProfileId, StringComparison.Ordinal))
+                string? existingProfile = activityOwners
+                    .Where(owner => SandboxActivityMetadata.ActivitiesOverlap(owner.Activity, activity))
+                    .Select(static owner => owner.WorkerProfileId)
+                    .FirstOrDefault(profileId => !string.Equals(profileId, workerProfile.WorkerProfileId, StringComparison.Ordinal));
+                if (existingProfile is not null)
                 {
-                    throw new InvalidOperationException($"On-demand sandbox activity '{activityName}' is assigned to both worker profile '{existingProfile}' and '{workerProfile.WorkerProfileId}'.");
+                    throw new InvalidOperationException($"On-demand sandbox activity '{SandboxActivityMetadata.FormatActivity(activity)}' is assigned to both worker profile '{existingProfile}' and '{workerProfile.WorkerProfileId}'.");
                 }
 
-                activityOwners[activityName] = workerProfile.WorkerProfileId;
+                activityOwners.Add((activity, workerProfile.WorkerProfileId));
             }
         }
     }

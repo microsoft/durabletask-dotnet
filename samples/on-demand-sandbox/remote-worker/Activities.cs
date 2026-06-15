@@ -6,7 +6,7 @@ using Microsoft.DurableTask.Samples.OnDemandSandbox.Shared;
 
 namespace Microsoft.DurableTask.Samples.OnDemandSandbox.RemoteWorker;
 
-[DurableTask(ActivityNames.RemoteHello)]
+[DurableTask(SandboxActivities.RemoteHelloName)]
 internal sealed class RemoteHelloActivity : TaskActivity<string, string>
 {
     public override Task<string> RunAsync(TaskActivityContext context, string input)

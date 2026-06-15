@@ -6,7 +6,7 @@ The sample is intentionally split into two projects:
 
 | Path | Purpose |
 | --- | --- |
-| `shared/` | Defines activity name constants shared by the main app and remote worker. |
+| `shared/` | Defines activity identity constants shared by the main app and remote worker. |
 | `main-app/` | Runs locally or in a normal app host. It declares the on-demand sandbox activity and starts one hello orchestration. |
 | `remote-worker/` | Builds the container image that DTS starts inside a sandbox. It contains the remote hello activity. |
 
@@ -38,7 +38,7 @@ $env:DTS_SANDBOX_IMAGE_PULL_UMI_CLIENT_ID = "<image-pull UMI client ID>"
 $env:DTS_SANDBOX_SCHEDULER_UMI_CLIENT_ID = "<scheduler UMI client ID>"
 ```
 
-The worker profile class declares the image, CPU, memory, max concurrency, and on-demand sandbox activity names with `options.AddActivity(...)`. The main app and remote worker both use the `shared/ActivityNames.cs` constants so the workerProfile and worker registration stay in sync.
+The worker profile class declares the image, CPU, memory, max concurrency, and on-demand sandbox activity identities with `options.AddActivity(name, version)`. The main app and remote worker both use the `shared/SandboxActivities.cs` constants so the workerProfile and worker registration stay in sync.
 
 Update `main-app/appsettings.json` with your scheduler endpoint and task hub:
 
@@ -71,4 +71,4 @@ Use the Durable Task Scheduler dashboard's On-demand sandbox preview tab to insp
 The remote worker image does not need customer-provided DTS runtime settings.
 DTS injects the scheduler endpoint, task hub, worker profile, capacity, sandbox provider,
 and sandbox identifier when it starts the sandbox. The worker reports the
-activities registered in the image when it connects.
+activity identities registered in the image when it connects.

@@ -13,32 +13,32 @@ namespace Microsoft.DurableTask.Client.AzureManaged;
 static class SandboxWorkerProfileBuilder
 {
     /// <summary>
-    /// Resolves configured activity names for on-demand sandbox activity execution.
+    /// Resolves configured activity identities for on-demand sandbox activity execution.
     /// </summary>
-    /// <param name="configuredNames">The configured activity names.</param>
-    /// <returns>The normalized activity names.</returns>
-    public static string[] ResolveActivityNames(IEnumerable<string> configuredNames)
+    /// <param name="configuredActivities">The configured activity identities.</param>
+    /// <returns>The normalized activity identities.</returns>
+    public static SandboxActivityMetadata.Activity[] ResolveActivities(IEnumerable<SandboxActivityMetadata.Activity> configuredActivities)
     {
-        return SandboxActivityMetadata.ResolveActivityNames(configuredNames);
+        return SandboxActivityMetadata.ResolveActivities(configuredActivities);
     }
 
     /// <summary>
     /// Builds an on-demand sandbox activity workerProfile protocol message.
     /// </summary>
     /// <param name="options">The on-demand sandbox options.</param>
-    /// <param name="activityNames">The activity names included in the workerProfile.</param>
+    /// <param name="activities">The activity identities included in the workerProfile.</param>
     /// <returns>The workerProfile protocol message.</returns>
     public static Proto.SandboxWorkerProfile BuildWorkerProfile(
         SandboxWorkerProfileOptions options,
-        IReadOnlyCollection<string> activityNames)
+        IReadOnlyCollection<SandboxActivityMetadata.Activity> activities)
     {
         Check.NotNull(options);
-        Check.NotNull(activityNames);
+        Check.NotNull(activities);
 
         _ = NormalizeRequired(options.TaskHub, "On-demand sandbox activity workerProfile requires a task hub name.");
-        if (activityNames.Count == 0)
+        if (activities.Count == 0)
         {
-            throw new InvalidOperationException("On-demand sandbox activity workerProfile requires at least one activity name.");
+            throw new InvalidOperationException("On-demand sandbox activity workerProfile requires at least one activity.");
         }
 
         string workerProfileId = NormalizeWorkerProfileId(
@@ -62,7 +62,7 @@ static class SandboxWorkerProfileBuilder
             SchedulerManagedIdentityClientId = schedulerManagedIdentityClientId,
         };
 
-        workerProfile.ActivityNames.AddRange(activityNames);
+        workerProfile.Activities.AddRange(activities.Select(ToProtoActivity));
         workerProfile.EnvironmentVariables.Add(options.EnvironmentVariables);
         workerProfile.Image.Entrypoint.AddRange(NormalizeOptionalStrings(options.Entrypoint));
         workerProfile.Image.Cmd.AddRange(NormalizeOptionalStrings(options.Cmd));
@@ -107,6 +107,12 @@ static class SandboxWorkerProfileBuilder
 
         return image;
     }
+
+    static Proto.SandboxActivity ToProtoActivity(SandboxActivityMetadata.Activity activity) => new()
+    {
+        Name = activity.Name,
+        Version = activity.Version ?? string.Empty,
+    };
 
     static Proto.SandboxActivityResources BuildResources(SandboxWorkerProfileOptions options)
     {

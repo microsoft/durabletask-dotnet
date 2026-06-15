@@ -109,7 +109,7 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
         return new SandboxActivityWorkerRegistrationHostedService(
             CreateSandboxActivitiesTransport(services, builderName),
             options,
-            ResolveActivityFilterNames(filters.Activities),
+            ResolveActivityFilters(filters.Activities),
             loggerFactory.CreateLogger<SandboxActivityWorkerRegistrationHostedService>(),
             lifetime,
             activityTracker);
@@ -209,13 +209,11 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
         }
     }
 
-    static string[] ResolveActivityFilterNames(IReadOnlyList<DurableTaskWorkerWorkItemFilters.ActivityFilter> activityFilters)
+    static SandboxActivityMetadata.Activity[] ResolveActivityFilters(IReadOnlyList<DurableTaskWorkerWorkItemFilters.ActivityFilter> activityFilters)
     {
-        return activityFilters
-            .Select(static filter => filter.Name)
-            .Where(static name => !string.IsNullOrWhiteSpace(name))
-            .Select(static name => name.Trim())
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
+        return SandboxActivityMetadata.ResolveActivities(activityFilters.SelectMany(static filter =>
+            filter.Versions.Count == 0
+                ? [new SandboxActivityMetadata.Activity(filter.Name, Version: null)]
+                : filter.Versions.Select(version => new SandboxActivityMetadata.Activity(filter.Name, version))));
     }
 }

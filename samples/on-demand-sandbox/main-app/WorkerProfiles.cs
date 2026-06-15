@@ -19,7 +19,7 @@ internal sealed class RemoteHelloSandboxWorkerProfile : ISandboxWorkerProfile
         options.MaxConcurrentActivities = 1;
         AddEnvironmentVariable(options, "SAMPLE_REMOTE_MARKER");
         AddEnvironmentVariable(options, "SAMPLE_REMOTE_DELAY_MS");
-        options.AddActivity(ActivityNames.RemoteHello);
+        options.AddActivity(SandboxActivities.RemoteHelloName, SandboxActivities.RemoteHelloVersion);
     }
 
     static void AddEnvironmentVariable(SandboxWorkerProfileOptions options, string name)

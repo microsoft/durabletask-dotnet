@@ -49,7 +49,8 @@ public class SandboxActivitiesClientTests
 
         // Act/Assert
         optionsType.GetProperty("ActivityNames").Should().BeNull();
-        optionsType.GetMethod("AddActivity", [typeof(string)]).Should().NotBeNull();
+        optionsType.GetMethod("AddActivity", [typeof(string)]).Should().BeNull();
+        optionsType.GetMethod("AddActivity", [typeof(string), typeof(string)]).Should().NotBeNull();
         optionsType.GetMethods().Should().Contain(method =>
             method.Name == "AddActivity" && method.IsGenericMethodDefinition);
         activityAttributeType.Should().BeNull();
@@ -71,7 +72,7 @@ public class SandboxActivitiesClientTests
         // Act
         SandboxWorkerProfile workerProfile = SandboxWorkerProfileBuilder.BuildWorkerProfile(
             options,
-            SandboxWorkerProfileBuilder.ResolveActivityNames(options.ActivityNames));
+            SandboxWorkerProfileBuilder.ResolveActivities(options.Activities));
 
         // Assert
         workerProfile.Resources.Cpu.Should().Be(cpu);
@@ -99,7 +100,7 @@ public class SandboxActivitiesClientTests
         // Act
         Action action = () => SandboxWorkerProfileBuilder.BuildWorkerProfile(
             options,
-            SandboxWorkerProfileBuilder.ResolveActivityNames(options.ActivityNames));
+            SandboxWorkerProfileBuilder.ResolveActivities(options.Activities));
 
         // Assert
         action.Should().Throw<InvalidOperationException>()
@@ -107,19 +108,21 @@ public class SandboxActivitiesClientTests
     }
 
     [Fact]
-    public void SandboxWorkerProfileBuilder_ResolveActivityNames_DeduplicatesCaseInsensitively()
+    public void SandboxWorkerProfileBuilder_ResolveActivities_DeduplicatesCaseInsensitively()
     {
         // Arrange
         SandboxWorkerProfileOptions options = CreateWorkerProfileOptions();
-        options.AddActivity(" RemoteHello ");
-        options.AddActivity("remotehello");
-        options.AddActivity("Other");
+        options.AddActivity(" RemoteHello ", version: null);
+        options.AddActivity("remotehello", version: null);
+        options.AddActivity("Other", "v1");
 
         // Act
-        string[] activityNames = SandboxWorkerProfileBuilder.ResolveActivityNames(options.ActivityNames);
+        SandboxActivityMetadata.Activity[] activities = SandboxWorkerProfileBuilder.ResolveActivities(options.Activities);
 
         // Assert
-        activityNames.Should().Equal("RemoteHello", "Other");
+        activities.Should().Equal(
+            new SandboxActivityMetadata.Activity("RemoteHello", Version: null),
+            new SandboxActivityMetadata.Activity("Other", "v1"));
     }
 
     [Fact]
@@ -132,7 +135,7 @@ public class SandboxActivitiesClientTests
         // Act
         Action action = () => SandboxWorkerProfileBuilder.BuildWorkerProfile(
             options,
-            SandboxWorkerProfileBuilder.ResolveActivityNames(options.ActivityNames));
+            SandboxWorkerProfileBuilder.ResolveActivities(options.Activities));
 
         // Assert
         action.Should().Throw<InvalidOperationException>()
@@ -149,7 +152,7 @@ public class SandboxActivitiesClientTests
         // Act
         Action action = () => SandboxWorkerProfileBuilder.BuildWorkerProfile(
             options,
-            SandboxWorkerProfileBuilder.ResolveActivityNames(options.ActivityNames));
+            SandboxWorkerProfileBuilder.ResolveActivities(options.Activities));
 
         // Assert
         action.Should().Throw<InvalidOperationException>()
@@ -172,11 +175,12 @@ public class SandboxActivitiesClientTests
             .Single(options => options.WorkerProfileId == "annotated-profile");
         SandboxWorkerProfile workerProfile = SandboxWorkerProfileBuilder.BuildWorkerProfile(
             options,
-            SandboxWorkerProfileBuilder.ResolveActivityNames(options.ActivityNames));
+            SandboxWorkerProfileBuilder.ResolveActivities(options.Activities));
 
         // Assert
         workerProfile.WorkerProfileId.Should().Be("annotated-profile");
-        workerProfile.ActivityNames.Should().Equal("ConfiguredRemoteHello");
+        workerProfile.Activities.Select(static activity => activity.Name).Should().Equal("ConfiguredRemoteHello");
+        workerProfile.Activities.Select(static activity => activity.Version).Should().Equal("v1");
         workerProfile.Image.ImageRef.Should().Be("example.com/repo/annotated-worker:latest");
         workerProfile.Image.ManagedIdentityClientId.Should().Be("image-pull-client-id");
         workerProfile.SchedulerManagedIdentityClientId.Should().Be("scheduler-client-id");
@@ -261,7 +265,8 @@ public class SandboxActivitiesClientTests
             .Should()
             .ContainSingle(request => request.WorkerProfileId == "client-test-profile")
             .Subject;
-        workerProfile.ActivityNames.Should().Equal("ClientTestRemoteActivity");
+        workerProfile.Activities.Select(static activity => activity.Name).Should().Equal("ClientTestRemoteActivity");
+        workerProfile.Activities.Select(static activity => activity.Version).Should().Equal("v1");
         workerProfile.Image.ImageRef.Should().Be("example.com/client-test-worker:latest");
         callInvoker.DeclareHeaders.Should().Contain(header => header.Key == "taskhub" && header.Value == "client-test-taskhub");
         callInvoker.UnaryDisposeCount.Should().BeGreaterThan(0);
@@ -360,7 +365,7 @@ public class SandboxActivitiesClientTests
             Memory = "1024Mi",
             MaxConcurrentActivities = 7,
         };
-        options.AddActivity("RemoteHello");
+        options.AddActivity("RemoteHello", version: null);
         return options;
     }
 
@@ -375,7 +380,7 @@ public class SandboxActivitiesClientTests
             options.Cpu = "500m";
             options.Memory = "1024Mi";
             options.MaxConcurrentActivities = 4;
-            options.AddActivity("ClientTestRemoteActivity");
+            options.AddActivity("ClientTestRemoteActivity", "v1");
         }
     }
 
@@ -394,7 +399,7 @@ public class SandboxActivitiesClientTests
             options.Memory = "1024Mi";
             options.MaxConcurrentActivities = 4;
             options.EnvironmentVariables["CUSTOM_ENV"] = "configured-value";
-            options.AddActivity("ConfiguredRemoteHello");
+            options.AddActivity("ConfiguredRemoteHello", "v1");
         }
     }
 
@@ -405,7 +410,7 @@ public class SandboxActivitiesClientTests
         {
             if (Environment.GetEnvironmentVariable("DTS_TEST_ENABLE_CASE_DUPLICATE_SANDBOX_PROFILES") == "true")
             {
-                options.AddActivity("CaseActivity");
+                options.AddActivity("CaseActivity", version: null);
             }
         }
     }
@@ -417,7 +422,7 @@ public class SandboxActivitiesClientTests
         {
             if (Environment.GetEnvironmentVariable("DTS_TEST_ENABLE_CASE_DUPLICATE_SANDBOX_PROFILES") == "true")
             {
-                options.AddActivity("caseactivity");
+                options.AddActivity("caseactivity", version: null);
             }
         }
     }

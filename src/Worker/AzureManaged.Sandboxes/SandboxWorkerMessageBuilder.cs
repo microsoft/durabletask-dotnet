@@ -15,20 +15,20 @@ static class SandboxWorkerMessageBuilder
     /// Builds the initial on-demand sandbox activity worker registration message.
     /// </summary>
     /// <param name="options">The on-demand sandbox options.</param>
-    /// <param name="registeredActivityNames">The activity handlers registered by the worker process.</param>
+    /// <param name="registeredActivities">The activity handlers registered by the worker process.</param>
     /// <returns>The worker start protocol message.</returns>
     public static Proto.SandboxActivityWorkerMessage BuildWorkerStart(
         SandboxWorkerRuntimeOptions options,
-        IReadOnlyCollection<string> registeredActivityNames)
+        IReadOnlyCollection<SandboxActivityMetadata.Activity> registeredActivities)
     {
         Check.NotNull(options);
-        Check.NotNull(registeredActivityNames);
+        Check.NotNull(registeredActivities);
 
         string taskHub = SandboxActivityMetadata.NormalizeRequired(
             options.TaskHub,
             "On-demand sandbox activity worker registration requires a task hub name.");
-        string[] activityNames = SandboxActivityMetadata.ResolveActivityNames(registeredActivityNames);
-        if (activityNames.Length == 0)
+        SandboxActivityMetadata.Activity[] activities = SandboxActivityMetadata.ResolveActivities(registeredActivities);
+        if (activities.Length == 0)
         {
             throw new InvalidOperationException("On-demand sandbox activity worker registration requires at least one registered activity.");
         }
@@ -53,7 +53,7 @@ static class SandboxWorkerMessageBuilder
             SandboxProvider = GetSandboxProviderFromEnvironment(),
             DtsSandboxIdentifier = dtsSandboxIdentifier,
         };
-        start.ActivityNames.AddRange(activityNames);
+        start.Activities.AddRange(activities.Select(ToProtoActivity));
 
         return new Proto.SandboxActivityWorkerMessage { Start = start };
     }
@@ -78,6 +78,12 @@ static class SandboxWorkerMessageBuilder
             },
         };
     }
+
+    static Proto.SandboxActivity ToProtoActivity(SandboxActivityMetadata.Activity activity) => new()
+    {
+        Name = activity.Name,
+        Version = activity.Version ?? string.Empty,
+    };
 
     static Proto.SandboxProviderKind GetSandboxProviderFromEnvironment()
     {

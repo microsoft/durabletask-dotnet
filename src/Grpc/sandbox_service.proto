@@ -47,7 +47,7 @@ message SandboxActivityWorkerStart {
   string worker_profile_id = 5;
   // Activity handlers registered by the worker process. DTS validates this
   // matches the worker profile before advertising worker capacity.
-  repeated string activity_names = 6;
+  repeated SandboxActivity activities = 6;
 }
 
 message SandboxActivityWorkerHeartbeat {
@@ -62,12 +62,17 @@ message SandboxWorkerProfile {
   // Caller-defined profile/catalog ID shared by worker profiles and live worker
   // registration. This is not a live worker process/session ID.
   string worker_profile_id = 1;
-  repeated string activity_names = 2;
+  repeated SandboxActivity activities = 2;
   SandboxActivityImage image = 3;
   map<string, string> environment_variables = 4;
   int32 max_concurrent_activities = 5;
   SandboxActivityResources resources = 6;
   string scheduler_managed_identity_client_id = 7;
+}
+
+message SandboxActivity {
+  string name = 1;
+  string version = 2;
 }
 
 message SandboxActivityImage {

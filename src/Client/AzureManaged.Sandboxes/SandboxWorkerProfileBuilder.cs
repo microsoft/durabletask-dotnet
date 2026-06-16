@@ -154,7 +154,7 @@ static class SandboxWorkerProfileBuilder
 
     static long? TryParseCpuMillicores(string value)
     {
-        if (value.EndsWith('m') || value.EndsWith('M'))
+        if (value.EndsWith('m'))
         {
             return long.TryParse(
                 value[..^1],
@@ -198,13 +198,7 @@ static class SandboxWorkerProfileBuilder
                 : null;
         }
 
-        return decimal.TryParse(
-            value,
-            NumberStyles.Number,
-            CultureInfo.InvariantCulture,
-            out decimal parsed)
-            ? (long)parsed
-            : null;
+        return null;
     }
 
     static string[] NormalizeOptionalStrings(IEnumerable<string> values)

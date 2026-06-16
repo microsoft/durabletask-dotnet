@@ -46,7 +46,7 @@ public sealed class SandboxWorkerProfileOptions
     public string Cpu { get; set; } = "1000m";
 
     /// <summary>
-    /// Gets or sets the memory quantity declared for each sandbox. Supported formats include <c>256Mi</c>, <c>1Gi</c>, and <c>2048</c>.
+    /// Gets or sets the memory quantity declared for each sandbox. Supported formats include <c>256Mi</c> and <c>1Gi</c>.
     /// </summary>
     public string Memory { get; set; } = "2048Mi";
 

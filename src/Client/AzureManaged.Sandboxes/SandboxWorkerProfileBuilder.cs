@@ -171,7 +171,7 @@ static class SandboxWorkerProfileBuilder
 
     static long? TryParseCpuMillicores(string value)
     {
-        if (value.EndsWith('m'))
+        if (value.EndsWith('m') || value.EndsWith('M'))
         {
             return long.TryParse(
                 value[..^1],

@@ -54,9 +54,7 @@ Update `main-app/appsettings.json` with your scheduler endpoint and task hub:
 Then run the main app:
 
 ```powershell
-Push-Location .\samples\on-demand-sandbox\main-app
-dotnet run
-Pop-Location
+dotnet run --project .\samples\on-demand-sandbox\main-app\main-app.csproj
 ```
 
 Expected output includes the on-demand sandbox activity result:

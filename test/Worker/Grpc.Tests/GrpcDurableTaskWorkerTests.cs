@@ -713,8 +713,12 @@ public class GrpcDurableTaskWorkerTests
                 out It.Ref<ITaskOrchestrator?>.IsAny))
             .Returns(false);
 
-        ServiceProvider services = new ServiceCollection().BuildServiceProvider();
-        return CreateWorker(grpcOptions, workerOptions, loggerFactory, factoryMock.Object, services);
+        return CreateWorker(
+            grpcOptions,
+            workerOptions,
+            loggerFactory,
+            factoryMock.Object,
+            Mock.Of<IServiceProvider>());
     }
 
     static GrpcDurableTaskWorker CreateWorker(

@@ -1,11 +1,11 @@
 # Changelog
 
 ## Unreleased
-
 - Split private preview on-demand sandbox APIs into opt-in `Microsoft.DurableTask.Client.AzureManaged.Sandboxes` and `Microsoft.DurableTask.Worker.AzureManaged.Sandboxes` packages.
 - Updated private preview on-demand sandbox worker profile declarations to use `SandboxWorkerProfileOptions.AddActivity(...)`, and updated the on-demand sandbox sample to share activity name constants between the main app and remote worker.
 - Added SDK-side validation for private preview on-demand sandbox CPU and memory resource quantities.
-- Fix DURABLE0010 false positives when a replay-safe logger created via `TaskOrchestrationContext.CreateReplaySafeLogger` is passed to a helper method ([#717](https://github.com/microsoft/durabletask-dotnet/issues/717)).
+- Fix DURABLE0010 false positives when a replay-safe logger created via `TaskOrchestrationContext.CreateReplaySafeLogger` is passed to a helper method ([#717](https://github.com/microsoft/durabletask-dotnet/issues/717))
+
 
 
 ## v1.25.0-preview.1
@@ -163,13 +163,13 @@
 ## v1.16.0
 - Include Exception Properties at FailureDetails by nytian in([#474](https://github.com/microsoft/durabletask-dotnet/pull/474))
 
-## v1.15.1
+## v1.15.1 
 - Add version check to activities by @halspang in ([#472](https://github.com/microsoft/durabletask-dotnet/pull/472))
 
 ## v1.15.0
 - Abandon workitem if processing workitem failed by @YunchuWang in ([#467](https://github.com/microsoft/durabletask-dotnet/pull/467))
 - Extended Sessions for Isolated (Orchestrations) by @sophiatev in ([#449](https://github.com/microsoft/durabletask-dotnet/pull/449))
-
+  
 ## v1.14.0
 - Add RestartAsync API Support at DurableTaskClient ([#456](https://github.com/microsoft/durabletask-dotnet/pull/456))
 

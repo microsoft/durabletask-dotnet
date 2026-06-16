@@ -299,7 +299,7 @@ public class SandboxActivitiesClientTests
     }
 
     [Fact]
-    public async Task EnableSandboxActivitiesAsync_SendsWorkerProfileWorkerProfiles()
+    public async Task EnableSandboxActivitiesAsync_SendsWorkerProfiles()
     {
         // Arrange
         RecordingOnDemandSandboxLogCallInvoker callInvoker = new();

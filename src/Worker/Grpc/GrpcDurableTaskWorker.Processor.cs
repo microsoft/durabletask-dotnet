@@ -1210,6 +1210,7 @@ sealed partial class GrpcDurableTaskWorker
                 }
 
                 // Determine if this is a partial chunk (more actions remaining)
+#pragma warning disable CS0612 // isPartial/chunkIndex are deprecated but still required for chunked response wire compatibility.
                 isPartial = actionsCompletedSoFar < allActions.Count;
                 chunkedResponse.IsPartial = isPartial;
 
@@ -1226,6 +1227,7 @@ sealed partial class GrpcDurableTaskWorker
                 {
                     chunkedResponse.ChunkIndex = chunkIndex;
                 }
+#pragma warning restore CS0612
 
                 if (chunkIndex == 0)
                 {

@@ -145,6 +145,7 @@ public class SandboxActivitiesClientTests
         options.AddActivity(" RemoteHello ", version: null);
         options.AddActivity("remotehello", version: null);
         options.AddActivity("Other", "v1");
+        options.AddActivity("other", "V1");
 
         // Act
         SandboxActivityMetadata.Activity[] activities = SandboxWorkerProfileBuilder.ResolveActivities(options.Activities);
@@ -153,6 +154,25 @@ public class SandboxActivitiesClientTests
         activities.Should().Equal(
             new SandboxActivityMetadata.Activity("RemoteHello", Version: null),
             new SandboxActivityMetadata.Activity("Other", "v1"));
+    }
+
+    [Fact]
+    public void SandboxWorkerProfileProvider_ResolveWorkerProfiles_DetectsVersionCaseInsensitiveActivityOwnership()
+    {
+        // Arrange
+        using EnvironmentVariableScope enableDuplicateVersionCaseProfiles = new(
+            "DTS_TEST_ENABLE_VERSION_CASE_DUPLICATE_SANDBOX_PROFILES",
+            "true");
+        SandboxWorkerProfileProvider provider = new();
+
+        // Act
+        Action action = () => provider.ResolveWorkerProfiles(TaskHub);
+
+        // Assert
+        action.Should().Throw<InvalidOperationException>()
+            .Where(ex => ex.Message.Contains("VersionCaseActivity", StringComparison.OrdinalIgnoreCase)
+                && ex.Message.Contains("version-case-profile-a", StringComparison.Ordinal)
+                && ex.Message.Contains("version-case-profile-b", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -474,6 +494,30 @@ public class SandboxActivitiesClientTests
             if (Environment.GetEnvironmentVariable("DTS_TEST_ENABLE_CASE_DUPLICATE_SANDBOX_PROFILES") == "true")
             {
                 options.AddActivity("caseactivity", version: null);
+            }
+        }
+    }
+
+    [SandboxWorkerProfile("version-case-profile-a")]
+    sealed class VersionCaseDuplicateWorkerProfileA : ISandboxWorkerProfile
+    {
+        public void Configure(SandboxWorkerProfileOptions options)
+        {
+            if (Environment.GetEnvironmentVariable("DTS_TEST_ENABLE_VERSION_CASE_DUPLICATE_SANDBOX_PROFILES") == "true")
+            {
+                options.AddActivity("VersionCaseActivity", version: "v1");
+            }
+        }
+    }
+
+    [SandboxWorkerProfile("version-case-profile-b")]
+    sealed class VersionCaseDuplicateWorkerProfileB : ISandboxWorkerProfile
+    {
+        public void Configure(SandboxWorkerProfileOptions options)
+        {
+            if (Environment.GetEnvironmentVariable("DTS_TEST_ENABLE_VERSION_CASE_DUPLICATE_SANDBOX_PROFILES") == "true")
+            {
+                options.AddActivity("versioncaseactivity", version: "V1");
             }
         }
     }

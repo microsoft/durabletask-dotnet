@@ -10,7 +10,6 @@ using Microsoft.DurableTask;
 using Microsoft.DurableTask.Tests.Logging;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using P = Microsoft.DurableTask.Protobuf;

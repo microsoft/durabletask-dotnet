@@ -51,7 +51,7 @@ static class SandboxActivityMetadata
     /// <returns><see langword="true" /> if the activities are equal; otherwise, <see langword="false" />.</returns>
     public static bool ActivityEquals(Activity left, Activity right) =>
         string.Equals(left.Name, right.Name, StringComparison.OrdinalIgnoreCase)
-        && string.Equals(left.Version, right.Version, StringComparison.Ordinal);
+        && string.Equals(left.Version, right.Version, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Determines whether two activity filters can match overlapping work.
@@ -63,7 +63,7 @@ static class SandboxActivityMetadata
         string.Equals(left.Name, right.Name, StringComparison.OrdinalIgnoreCase)
         && (left.Version is null
             || right.Version is null
-            || string.Equals(left.Version, right.Version, StringComparison.Ordinal));
+            || string.Equals(left.Version, right.Version, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Formats an activity identity for messages.

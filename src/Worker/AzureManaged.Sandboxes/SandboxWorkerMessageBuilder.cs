@@ -42,7 +42,7 @@ static class SandboxWorkerMessageBuilder
             options.WorkerProfileId,
             "On-demand sandbox activity worker registration requires a worker profile ID.");
         string dtsSandboxIdentifier = SandboxActivityMetadata.NormalizeRequired(
-            Environment.GetEnvironmentVariable("DTS_SANDBOX_ID") ?? string.Empty,
+            Environment.GetEnvironmentVariable(SandboxWorkerEnvironmentVariables.SandboxId) ?? string.Empty,
             "On-demand sandbox activity worker registration requires a DTS sandbox ID.");
 
         Proto.SandboxActivityWorkerStart start = new()
@@ -87,7 +87,7 @@ static class SandboxWorkerMessageBuilder
 
     static Proto.SandboxProviderKind GetSandboxProviderFromEnvironment()
     {
-        string? sandboxProvider = Environment.GetEnvironmentVariable("DTS_SANDBOX_PROVIDER");
+        string? sandboxProvider = Environment.GetEnvironmentVariable(SandboxWorkerEnvironmentVariables.SandboxProvider);
         if (sandboxProvider is null)
         {
             return Proto.SandboxProviderKind.Unspecified;

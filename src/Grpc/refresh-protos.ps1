@@ -20,20 +20,22 @@ $commitId = $commitDetails.sha
 $protoFiles = @(
     @{
         SourcePath = "orchestrator_service.proto"
-        OutputFileName = "orchestrator_service.proto"
     },
     @{
         SourcePath = "durable-task-scheduler/sandbox_service.proto"
-        OutputFileName = "sandbox_service.proto"
     }
 )
 
 # Download each proto file to the local directory using the above commit ID
 foreach ($protoFile in $protoFiles) {
     $sourcePath = $protoFile.SourcePath
-    $outputFileName = $protoFile.OutputFileName
     $url = "https://raw.githubusercontent.com/microsoft/durabletask-protobuf/$commitId/protos/$sourcePath"
-    $outputFile = "$PSScriptRoot\$outputFileName"
+    $outputFile = Join-Path $PSScriptRoot $sourcePath
+    $outputDirectory = Split-Path -Path $outputFile -Parent
+
+    if (-not (Test-Path -Path $outputDirectory)) {
+        New-Item -ItemType Directory -Path $outputDirectory | Out-Null
+    }
 
     try {
         Invoke-WebRequest -Uri $url -OutFile $outputFile        

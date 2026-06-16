@@ -26,7 +26,7 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
     readonly SemaphoreSlim streamSync = new(1, 1);
     CancellationTokenSource? cts;
     ISandboxActivityWorkerSession? session;
-    Task? pump;
+    Task? registrationLoopTask;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SandboxActivityWorkerRegistrationHostedService"/> class.
@@ -61,13 +61,13 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
     {
         SandboxActivityMetadata.Activity[] activities = SandboxActivityMetadata.ResolveActivities(this.registeredActivities);
         CancellationTokenSource registrationCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        Task registrationPump = Task.Run(
+        Task startedRegistrationLoopTask = Task.Run(
             () => this.RunRegistrationLoopAsync(activities.Length, registrationCts.Token),
             CancellationToken.None);
         lock (this.sync)
         {
             this.cts = registrationCts;
-            this.pump = registrationPump;
+            this.registrationLoopTask = startedRegistrationLoopTask;
         }
 
         return Task.CompletedTask;
@@ -78,12 +78,12 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
     {
         CancellationTokenSource? localCts;
         ISandboxActivityWorkerSession? localSession;
-        Task? localPump;
+        Task? localRegistrationLoopTask;
         lock (this.sync)
         {
             localCts = this.cts;
             localSession = this.session;
-            localPump = this.pump;
+            localRegistrationLoopTask = this.registrationLoopTask;
         }
 
         localCts?.Cancel();
@@ -100,19 +100,19 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
             }
         }
 
-        if (localPump is not null)
+        if (localRegistrationLoopTask is not null)
         {
             try
             {
-                await localPump.WaitAsync(cancellationToken).ConfigureAwait(false);
+                await localRegistrationLoopTask.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
             {
-                Logs.SandboxWorkerRegistrationPumpCancellationIgnored(this.logger, ex);
+                Logs.SandboxWorkerRegistrationLoopCancellationIgnored(this.logger, ex);
             }
             catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or RpcException)
             {
-                Logs.SandboxWorkerRegistrationPumpFailureIgnored(this.logger, ex);
+                Logs.SandboxWorkerRegistrationLoopFailureIgnored(this.logger, ex);
             }
         }
 
@@ -128,9 +128,9 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
                 this.session = null;
             }
 
-            if (ReferenceEquals(this.pump, localPump))
+            if (ReferenceEquals(this.registrationLoopTask, localRegistrationLoopTask))
             {
-                this.pump = Task.CompletedTask;
+                this.registrationLoopTask = Task.CompletedTask;
             }
         }
 
@@ -313,7 +313,7 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
         CancellationToken cancellationToken)
     {
         using CancellationTokenSource heartbeatCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        Task heartbeatTask = this.PumpHeartbeatsAsync(registrationSession, heartbeatCts.Token);
+        Task heartbeatTask = this.RunHeartbeatLoopAsync(registrationSession, heartbeatCts.Token);
         Task<Proto.SandboxActivityWorkerSessionResult> completionTask = registrationSession.WaitForCompletionAsync();
         Task completedTask = await Task.WhenAny(heartbeatTask, completionTask).ConfigureAwait(false);
 
@@ -326,22 +326,22 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
             }
             catch (OperationCanceledException ex) when (heartbeatCts.IsCancellationRequested)
             {
-                Logs.SandboxHeartbeatPumpCancellationIgnored(this.logger, ex);
+                Logs.SandboxHeartbeatLoopCancellationIgnored(this.logger, ex);
             }
             catch (RpcException ex)
             {
                 // The server response is authoritative once the response task wins the race.
-                Logs.SandboxHeartbeatPumpFailureIgnored(this.logger, ex);
+                Logs.SandboxHeartbeatLoopFailureIgnored(this.logger, ex);
             }
             catch (IOException ex)
             {
                 // The server response is authoritative once the response task wins the race.
-                Logs.SandboxHeartbeatPumpFailureIgnored(this.logger, ex);
+                Logs.SandboxHeartbeatLoopFailureIgnored(this.logger, ex);
             }
             catch (ObjectDisposedException ex)
             {
                 // The server response is authoritative once the response task wins the race.
-                Logs.SandboxHeartbeatPumpFailureIgnored(this.logger, ex);
+                Logs.SandboxHeartbeatLoopFailureIgnored(this.logger, ex);
             }
 
             await completionTask.ConfigureAwait(false);
@@ -358,7 +358,7 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
         }
     }
 
-    async Task PumpHeartbeatsAsync(
+    async Task RunHeartbeatLoopAsync(
         ISandboxActivityWorkerSession registrationSession,
         CancellationToken cancellationToken)
     {

@@ -33,14 +33,14 @@ static partial class Logs
     [LoggerMessage(
         EventId = 704,
         Level = LogLevel.Debug,
-        Message = "Ignoring on-demand sandbox worker registration pump cancellation during shutdown.")]
-    public static partial void SandboxWorkerRegistrationPumpCancellationIgnored(ILogger logger, Exception exception);
+        Message = "Ignoring on-demand sandbox worker registration loop cancellation during shutdown.")]
+    public static partial void SandboxWorkerRegistrationLoopCancellationIgnored(ILogger logger, Exception exception);
 
     [LoggerMessage(
         EventId = 705,
         Level = LogLevel.Debug,
-        Message = "Ignoring on-demand sandbox worker registration pump failure during shutdown.")]
-    public static partial void SandboxWorkerRegistrationPumpFailureIgnored(ILogger logger, Exception exception);
+        Message = "Ignoring on-demand sandbox worker registration loop failure during shutdown.")]
+    public static partial void SandboxWorkerRegistrationLoopFailureIgnored(ILogger logger, Exception exception);
 
     [LoggerMessage(
         EventId = 706,
@@ -51,18 +51,18 @@ static partial class Logs
     [LoggerMessage(
         EventId = 707,
         Level = LogLevel.Debug,
-        Message = "Ignoring on-demand sandbox heartbeat pump cancellation after registration session completion.")]
-    public static partial void SandboxHeartbeatPumpCancellationIgnored(ILogger logger, Exception exception);
+        Message = "Ignoring on-demand sandbox heartbeat loop cancellation after registration session completion.")]
+    public static partial void SandboxHeartbeatLoopCancellationIgnored(ILogger logger, Exception exception);
 
     [LoggerMessage(
         EventId = 708,
         Level = LogLevel.Debug,
-        Message = "Ignoring on-demand sandbox heartbeat pump failure after registration session completion.")]
-    public static partial void SandboxHeartbeatPumpFailureIgnored(ILogger logger, Exception exception);
+        Message = "Ignoring on-demand sandbox heartbeat loop failure after registration session completion.")]
+    public static partial void SandboxHeartbeatLoopFailureIgnored(ILogger logger, Exception exception);
 
     [LoggerMessage(
         EventId = 709,
         Level = LogLevel.Debug,
-        Message = "Ignoring on-demand sandbox worker session completion failure after heartbeat pump failure.")]
+        Message = "Ignoring on-demand sandbox worker session completion failure after heartbeat loop failure.")]
     public static partial void SandboxWorkerSessionCompletionAfterHeartbeatFailureIgnored(ILogger logger, Exception exception);
 }

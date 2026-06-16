@@ -143,9 +143,9 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
 
     static void ConfigureDurableTaskSchedulerFromEnvironment(IDurableTaskWorkerBuilder builder)
     {
-        string endpoint = GetRequiredEnvironmentVariable("DTS_ENDPOINT");
-        string taskHub = GetRequiredEnvironmentVariable("DTS_TASK_HUB");
-        string authentication = GetRequiredEnvironmentVariable("DTS_AUTHENTICATION");
+        string endpoint = GetRequiredEnvironmentVariable(SandboxWorkerEnvironmentVariables.Endpoint);
+        string taskHub = GetRequiredEnvironmentVariable(SandboxWorkerEnvironmentVariables.TaskHub);
+        string authentication = GetRequiredEnvironmentVariable(SandboxWorkerEnvironmentVariables.Authentication);
 
         builder.UseDurableTaskScheduler(options =>
         {
@@ -159,7 +159,7 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
             else
             {
                 throw new InvalidOperationException(
-                    $"DTS_AUTHENTICATION must be '{ManagedIdentityAuthentication}' for on-demand sandbox workers.");
+                    $"{SandboxWorkerEnvironmentVariables.Authentication} must be '{ManagedIdentityAuthentication}' for on-demand sandbox workers.");
             }
         });
     }
@@ -168,7 +168,7 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
         string.Equals(authentication, ManagedIdentityAuthentication, StringComparison.OrdinalIgnoreCase);
 
     static ManagedIdentityCredential CreateManagedIdentityCredential() =>
-        new ManagedIdentityCredential(ManagedIdentityId.FromUserAssignedClientId(GetRequiredEnvironmentVariable("DTS_UMI_CLIENT_ID")));
+        new ManagedIdentityCredential(ManagedIdentityId.FromUserAssignedClientId(GetRequiredEnvironmentVariable(SandboxWorkerEnvironmentVariables.ManagedIdentityClientId)));
 
     static string GetRequiredEnvironmentVariable(string name)
     {
@@ -180,11 +180,11 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
 
     static void ApplyWorkerEnvironmentOverrides(SandboxWorkerRuntimeOptions options)
     {
-        ValidateSandboxWorkerSandboxProvider(GetRequiredEnvironmentVariable("DTS_SANDBOX_PROVIDER"));
+        ValidateSandboxWorkerSandboxProvider(GetRequiredEnvironmentVariable(SandboxWorkerEnvironmentVariables.SandboxProvider));
 
-        options.WorkerProfileId = GetRequiredEnvironmentVariable("DTS_WORKER_PROFILE_ID");
+        options.WorkerProfileId = GetRequiredEnvironmentVariable(SandboxWorkerEnvironmentVariables.WorkerProfileId);
 
-        string? maxActivitiesValue = Environment.GetEnvironmentVariable("DTS_SANDBOX_MAX_ACTIVITIES");
+        string? maxActivitiesValue = Environment.GetEnvironmentVariable(SandboxWorkerEnvironmentVariables.MaxActivities);
         if (maxActivitiesValue is null)
         {
             return;
@@ -193,7 +193,7 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
         if (!int.TryParse(maxActivitiesValue.Trim(), out int maxActivities) || maxActivities <= 0)
         {
             throw new InvalidOperationException(
-                "DTS_SANDBOX_MAX_ACTIVITIES must be a positive integer when injected by DTS for on-demand sandbox workers.");
+                $"{SandboxWorkerEnvironmentVariables.MaxActivities} must be a positive integer when injected by DTS for on-demand sandbox workers.");
         }
 
         options.MaxConcurrentActivities = maxActivities;
@@ -205,7 +205,7 @@ public static class DurableTaskSchedulerSandboxWorkerExtensions
             && !string.Equals(sandboxProvider, "AcaSessionPool", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                "DTS_SANDBOX_PROVIDER must be 'Sandbox' or 'AcaSessionPool' for on-demand sandbox workers.");
+                $"{SandboxWorkerEnvironmentVariables.SandboxProvider} must be 'Sandbox' or 'AcaSessionPool' for on-demand sandbox workers.");
         }
     }
 

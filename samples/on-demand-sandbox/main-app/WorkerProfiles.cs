@@ -11,8 +11,8 @@ internal sealed class RemoteHelloSandboxWorkerProfile : ISandboxWorkerProfile
 {
     public void Configure(SandboxWorkerProfileOptions options)
     {
-        options.ContainerImage = GetRequiredEnvironmentVariable("DTS_SANDBOX_CONTAINER_IMAGE");
-        options.ImagePullManagedIdentityClientId = GetRequiredEnvironmentVariable("DTS_SANDBOX_IMAGE_PULL_UMI_CLIENT_ID");
+        options.Image.ImageRef = GetRequiredEnvironmentVariable("DTS_SANDBOX_CONTAINER_IMAGE");
+        options.Image.ManagedIdentityClientId = GetRequiredEnvironmentVariable("DTS_SANDBOX_IMAGE_PULL_UMI_CLIENT_ID");
         options.SchedulerManagedIdentityClientId = GetRequiredEnvironmentVariable("DTS_SANDBOX_SCHEDULER_UMI_CLIENT_ID");
         options.Cpu = "1000m";
         options.Memory = "2048Mi";

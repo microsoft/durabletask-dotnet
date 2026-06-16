@@ -69,8 +69,6 @@ static class SandboxWorkerProfileBuilder
 
         workerProfile.Activities.AddRange(activities.Select(ToProtoActivity));
         workerProfile.EnvironmentVariables.Add(options.EnvironmentVariables);
-        workerProfile.Image.Entrypoint.AddRange(NormalizeOptionalStrings(options.Entrypoint));
-        workerProfile.Image.Cmd.AddRange(NormalizeOptionalStrings(options.Cmd));
         return workerProfile;
     }
 
@@ -98,18 +96,21 @@ static class SandboxWorkerProfileBuilder
 
     static Proto.SandboxActivityImage BuildImage(SandboxWorkerProfileOptions options)
     {
+        SandboxWorkerProfileOptions.ImageOptions imageOptions = options.Image;
         string imageRef = NormalizeRequired(
-            options.ContainerImage ?? string.Empty,
+            imageOptions.ImageRef ?? string.Empty,
             "On-demand sandbox activity image metadata requires a container image reference like 'myregistry.azurecr.io/workers/hello:1.0' or 'myregistry.azurecr.io/workers/hello@sha256:...'.");
 
         Proto.SandboxActivityImage image = new()
         {
             ImageRef = imageRef,
             ManagedIdentityClientId = NormalizeRequired(
-                options.ImagePullManagedIdentityClientId ?? string.Empty,
+                imageOptions.ManagedIdentityClientId ?? string.Empty,
                 "On-demand sandbox activity workerProfile requires the managed identity client ID ADC uses to pull the worker image."),
         };
 
+        image.Entrypoint.AddRange(NormalizeOptionalStrings(imageOptions.Entrypoint));
+        image.Cmd.AddRange(NormalizeOptionalStrings(imageOptions.Cmd));
         return image;
     }
 

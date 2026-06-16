@@ -24,16 +24,9 @@ public sealed class SandboxWorkerProfileOptions
     public string WorkerProfileId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the full OCI container image reference for on-demand sandbox workers.
-    /// Examples: <c>myregistry.azurecr.io/workers/hello:1.0</c> or
-    /// <c>myregistry.azurecr.io/workers/hello@sha256:0123456789abcdef...</c>.
+    /// Gets the on-demand sandbox worker image configuration.
     /// </summary>
-    public string? ContainerImage { get; set; }
-
-    /// <summary>
-    /// Gets or sets the user-assigned managed identity client ID ADC uses to pull the on-demand sandbox worker image.
-    /// </summary>
-    public string? ImagePullManagedIdentityClientId { get; set; }
+    public ImageOptions Image { get; } = new();
 
     /// <summary>
     /// Gets or sets the user-assigned managed identity client ID workers use to authenticate to the DTS scheduler.
@@ -58,16 +51,6 @@ public sealed class SandboxWorkerProfileOptions
     /// <c>DTS_SANDBOX_ID</c> are injected by the backend and should not be supplied here.
     /// </summary>
     public IDictionary<string, string> EnvironmentVariables { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
-
-    /// <summary>
-    /// Gets the sandbox entrypoint declared for on-demand sandbox workers.
-    /// </summary>
-    public IList<string> Entrypoint { get; } = new List<string>();
-
-    /// <summary>
-    /// Gets the sandbox command declared for on-demand sandbox workers.
-    /// </summary>
-    public IList<string> Cmd { get; } = new List<string>();
 
     /// <summary>
     /// Gets or sets the maximum number of concurrent activities expected from each on-demand sandbox worker.
@@ -131,4 +114,32 @@ public sealed class SandboxWorkerProfileOptions
     /// <param name="Name">The activity name.</param>
     /// <param name="Version">The activity version, or <see langword="null" /> for unversioned/wildcard activity execution.</param>
     public readonly record struct Activity(string Name, string? Version);
+
+    /// <summary>
+    /// Options for the on-demand sandbox worker image DTS should start.
+    /// </summary>
+    public sealed class ImageOptions
+    {
+        /// <summary>
+        /// Gets or sets the full OCI container image reference for on-demand sandbox workers.
+        /// Examples: <c>myregistry.azurecr.io/workers/hello:1.0</c> or
+        /// <c>myregistry.azurecr.io/workers/hello@sha256:0123456789abcdef...</c>.
+        /// </summary>
+        public string? ImageRef { get; set; }
+
+        /// <summary>
+        /// Gets or sets the user-assigned managed identity client ID ADC uses to pull the on-demand sandbox worker image.
+        /// </summary>
+        public string? ManagedIdentityClientId { get; set; }
+
+        /// <summary>
+        /// Gets the sandbox entrypoint declared for on-demand sandbox workers.
+        /// </summary>
+        public IList<string> Entrypoint { get; } = new List<string>();
+
+        /// <summary>
+        /// Gets the sandbox command declared for on-demand sandbox workers.
+        /// </summary>
+        public IList<string> Cmd { get; } = new List<string>();
+    }
 }

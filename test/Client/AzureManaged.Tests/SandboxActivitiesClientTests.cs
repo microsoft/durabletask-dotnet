@@ -23,10 +23,14 @@ public class SandboxActivitiesClientTests
         typeof(SandboxWorkerProfileOptions).GetProperty("LaunchCommand").Should().BeNull();
         typeof(SandboxWorkerProfileOptions).GetProperty("WorkerProfileRetryMaxAttempts").Should().BeNull();
         typeof(SandboxWorkerProfileOptions).GetProperty("WorkerProfileRetryDelay").Should().BeNull();
+        typeof(SandboxWorkerProfileOptions).GetProperty("ContainerImage").Should().BeNull();
+        typeof(SandboxWorkerProfileOptions).GetProperty("ImagePullManagedIdentityClientId").Should().BeNull();
         typeof(SandboxWorkerProfileOptions).GetProperty(
             "HeartbeatInterval",
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Should().BeNull();
         typeof(SandboxWorkerProfileOptions).GetProperty("WakeupPort").Should().BeNull();
+        typeof(SandboxWorkerProfileOptions).GetProperty("Entrypoint").Should().BeNull();
+        typeof(SandboxWorkerProfileOptions).GetProperty("Cmd").Should().BeNull();
         typeof(SandboxWorkerProfileOptions).GetProperty(
             "WorkerRegistrationRetryInitialDelay",
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Should().BeNull();
@@ -55,6 +59,20 @@ public class SandboxActivitiesClientTests
         optionsType.GetMethods().Should().Contain(method =>
             method.Name == "AddActivity" && method.IsGenericMethodDefinition);
         activityAttributeType.Should().BeNull();
+    }
+
+    [Fact]
+    public void OnDemandSandboxWorkerProfileContract_ExposesImageOptionsObject()
+    {
+        // Arrange
+        Type imageOptionsType = typeof(SandboxWorkerProfileOptions.ImageOptions);
+
+        // Act/Assert
+        typeof(SandboxWorkerProfileOptions).GetProperty("Image")!.PropertyType.Should().Be(imageOptionsType);
+        imageOptionsType.GetProperty("ImageRef").Should().NotBeNull();
+        imageOptionsType.GetProperty("ManagedIdentityClientId").Should().NotBeNull();
+        imageOptionsType.GetProperty("Entrypoint").Should().NotBeNull();
+        imageOptionsType.GetProperty("Cmd").Should().NotBeNull();
     }
 
     [Theory]
@@ -176,11 +194,11 @@ public class SandboxActivitiesClientTests
     }
 
     [Fact]
-    public void SandboxWorkerProfileBuilder_BuildWorkerProfile_RequiresImagePullManagedIdentityClientId()
+    public void SandboxWorkerProfileBuilder_BuildWorkerProfile_RequiresImageManagedIdentityClientId()
     {
         // Arrange
         SandboxWorkerProfileOptions options = CreateWorkerProfileOptions();
-        options.ImagePullManagedIdentityClientId = " ";
+        options.Image.ManagedIdentityClientId = " ";
 
         // Act
         Action action = () => SandboxWorkerProfileBuilder.BuildWorkerProfile(
@@ -391,13 +409,13 @@ public class SandboxActivitiesClientTests
         {
             TaskHub = TaskHub,
             WorkerProfileId = "profile-a",
-            ContainerImage = "mcr.microsoft.com/durabletask/demo-worker:1.0",
-            ImagePullManagedIdentityClientId = "image-pull-client-id",
             SchedulerManagedIdentityClientId = "scheduler-client-id",
             Cpu = "500m",
             Memory = "1024Mi",
             MaxConcurrentActivities = 7,
         };
+        options.Image.ImageRef = "mcr.microsoft.com/durabletask/demo-worker:1.0";
+        options.Image.ManagedIdentityClientId = "image-pull-client-id";
         options.AddActivity("RemoteHello", version: null);
         return options;
     }
@@ -407,8 +425,8 @@ public class SandboxActivitiesClientTests
     {
         public void Configure(SandboxWorkerProfileOptions options)
         {
-            options.ContainerImage = "example.com/client-test-worker:latest";
-            options.ImagePullManagedIdentityClientId = "image-pull-client-id";
+            options.Image.ImageRef = "example.com/client-test-worker:latest";
+            options.Image.ManagedIdentityClientId = "image-pull-client-id";
             options.SchedulerManagedIdentityClientId = "scheduler-client-id";
             options.Cpu = "500m";
             options.Memory = "1024Mi";
@@ -425,8 +443,8 @@ public class SandboxActivitiesClientTests
         public void Configure(SandboxWorkerProfileOptions options)
         {
             ConfigureCallCount++;
-            options.ContainerImage = "example.com/repo/annotated-worker:latest";
-            options.ImagePullManagedIdentityClientId = "image-pull-client-id";
+            options.Image.ImageRef = "example.com/repo/annotated-worker:latest";
+            options.Image.ManagedIdentityClientId = "image-pull-client-id";
             options.SchedulerManagedIdentityClientId = "scheduler-client-id";
             options.Cpu = "500m";
             options.Memory = "1024Mi";

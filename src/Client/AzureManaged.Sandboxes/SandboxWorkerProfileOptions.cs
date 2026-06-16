@@ -98,6 +98,20 @@ public sealed class SandboxWorkerProfileOptions
     }
 
     /// <summary>
+    /// Adds activity names and versions to the on-demand sandbox worker profile workerProfile.
+    /// </summary>
+    /// <param name="activities">The activities to add.</param>
+    public void AddActivities(IList<Activity> activities)
+    {
+        ArgumentNullException.ThrowIfNull(activities);
+
+        foreach (Activity activity in activities)
+        {
+            this.AddActivity(activity.Name, activity.Version);
+        }
+    }
+
+    /// <summary>
     /// Adds an activity to the on-demand sandbox worker profile workerProfile using its durable task name.
     /// </summary>
     /// <typeparam name="TActivity">The activity type.</typeparam>
@@ -110,4 +124,11 @@ public sealed class SandboxWorkerProfileOptions
             string.IsNullOrWhiteSpace(activityName) ? activityType.Name : activityName,
             attribute?.Version);
     }
+
+    /// <summary>
+    /// Represents an activity name and version to add to an on-demand sandbox worker profile.
+    /// </summary>
+    /// <param name="Name">The activity name.</param>
+    /// <param name="Version">The activity version, or <see langword="null" /> for unversioned/wildcard activity execution.</param>
+    public readonly record struct Activity(string Name, string? Version);
 }

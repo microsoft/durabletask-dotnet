@@ -40,7 +40,7 @@ public class SandboxActivitiesClientTests
     }
 
     [Fact]
-    public void OnDemandSandboxWorkerProfileContract_ExposesProfileAddActivityOnly()
+    public void OnDemandSandboxWorkerProfileContract_ExposesProfileActivityMethods()
     {
         // Arrange
         Type optionsType = typeof(SandboxWorkerProfileOptions);
@@ -51,6 +51,7 @@ public class SandboxActivitiesClientTests
         optionsType.GetProperty("ActivityNames").Should().BeNull();
         optionsType.GetMethod("AddActivity", [typeof(string)]).Should().BeNull();
         optionsType.GetMethod("AddActivity", [typeof(string), typeof(string)]).Should().NotBeNull();
+        optionsType.GetMethod("AddActivities", [typeof(IList<SandboxWorkerProfileOptions.Activity>)]).Should().NotBeNull();
         optionsType.GetMethods().Should().Contain(method =>
             method.Name == "AddActivity" && method.IsGenericMethodDefinition);
         activityAttributeType.Should().BeNull();
@@ -134,6 +135,27 @@ public class SandboxActivitiesClientTests
         activities.Should().Equal(
             new SandboxActivityMetadata.Activity("RemoteHello", Version: null),
             new SandboxActivityMetadata.Activity("Other", "v1"));
+    }
+
+    [Fact]
+    public void SandboxWorkerProfileBuilder_ResolveActivities_UsesAddedActivityRange()
+    {
+        // Arrange
+        SandboxWorkerProfileOptions options = CreateWorkerProfileOptions();
+        options.AddActivities(
+            [
+                new SandboxWorkerProfileOptions.Activity(" RangeA ", Version: null),
+                new SandboxWorkerProfileOptions.Activity("RangeB", " v1 "),
+            ]);
+
+        // Act
+        SandboxActivityMetadata.Activity[] activities = SandboxWorkerProfileBuilder.ResolveActivities(options.Activities);
+
+        // Assert
+        activities.Should().ContainInOrder(
+            new SandboxActivityMetadata.Activity("RemoteHello", Version: null),
+            new SandboxActivityMetadata.Activity("RangeA", Version: null),
+            new SandboxActivityMetadata.Activity("RangeB", "v1"));
     }
 
     [Fact]

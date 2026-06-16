@@ -207,7 +207,7 @@ public class SandboxActivitiesClientTests
 
         // Assert
         action.Should().Throw<InvalidOperationException>()
-            .WithMessage("*managed identity client ID the container provider uses to pull the worker image*");
+            .WithMessage("*managed identity client ID used to pull the worker image*");
     }
 
     [Fact]

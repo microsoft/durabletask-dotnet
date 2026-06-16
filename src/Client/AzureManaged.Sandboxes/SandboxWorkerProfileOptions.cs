@@ -128,7 +128,7 @@ public sealed class SandboxWorkerProfileOptions
         public string? ImageRef { get; set; }
 
         /// <summary>
-        /// Gets or sets the user-assigned managed identity client ID the container provider uses to pull the on-demand sandbox worker image.
+        /// Gets or sets the user-assigned managed identity client ID used to pull the on-demand sandbox worker image.
         /// </summary>
         public string? ManagedIdentityClientId { get; set; }
 

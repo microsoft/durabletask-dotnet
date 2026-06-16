@@ -106,7 +106,7 @@ static class SandboxWorkerProfileBuilder
             ImageRef = imageRef,
             ManagedIdentityClientId = NormalizeRequired(
                 imageOptions.ManagedIdentityClientId ?? string.Empty,
-                "On-demand sandbox activity workerProfile requires the managed identity client ID the container provider uses to pull the worker image."),
+                "On-demand sandbox activity workerProfile requires the managed identity client ID used to pull the worker image."),
         };
 
         image.Entrypoint.AddRange(NormalizeOptionalStrings(imageOptions.Entrypoint));

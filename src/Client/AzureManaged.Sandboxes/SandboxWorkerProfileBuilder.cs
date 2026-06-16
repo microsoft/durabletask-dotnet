@@ -243,7 +243,8 @@ static class SandboxWorkerProfileBuilder
             return null;
         }
 
-        return (long)(value * multiplier);
+        decimal memoryMiB = value * multiplier;
+        return memoryMiB == decimal.Truncate(memoryMiB) ? (long)memoryMiB : null;
     }
 
     static long GetMaxMemoryMiB(long cpuMillicores)

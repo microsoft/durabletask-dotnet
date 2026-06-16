@@ -12,6 +12,11 @@ namespace Microsoft.DurableTask.Client.AzureManaged;
 /// </summary>
 static class SandboxWorkerProfileBuilder
 {
+    const long MinCpuMillicores = 250;
+    const long MaxCpuMillicores = 16_000;
+    const long CpuStepMillicores = 250;
+    const long MemoryMiBPerCore = 2 * 1024;
+
     /// <summary>
     /// Resolves configured activity identities for on-demand sandbox activity execution.
     /// </summary>
@@ -116,8 +121,8 @@ static class SandboxWorkerProfileBuilder
 
     static Proto.SandboxActivityResources BuildResources(SandboxWorkerProfileOptions options)
     {
-        string cpu = NormalizeCpu(options.Cpu);
-        string memory = NormalizeMemory(options.Memory);
+        string cpu = NormalizeCpu(options.Cpu, out long cpuMillicores);
+        string memory = NormalizeMemory(options.Memory, cpuMillicores);
 
         return new Proto.SandboxActivityResources
         {
@@ -126,27 +131,39 @@ static class SandboxWorkerProfileBuilder
         };
     }
 
-    static string NormalizeCpu(string value)
+    static string NormalizeCpu(string value, out long cpuMillicores)
     {
         string normalized = NormalizeRequired(value, "On-demand sandbox activity workerProfile requires CPU resources.");
-        if (TryParseCpuMillicores(normalized) is not { } milliCpu || milliCpu <= 0)
+        if (TryParseCpuMillicores(normalized) is not { } milliCpu
+            || milliCpu < MinCpuMillicores
+            || milliCpu > MaxCpuMillicores
+            || milliCpu % CpuStepMillicores != 0)
         {
             throw new InvalidOperationException(
-                "On-demand sandbox activity CPU resources must be a positive Kubernetes-style CPU quantity. " +
-                "Use formats like '500m', '2', or '0.5'.");
+                "On-demand sandbox activity CPU resources must match an ADC sandbox CPU tier: " +
+                "250m through 16000m, in 250m increments. Use formats like '500m', '2', or '0.5'.");
         }
 
+        cpuMillicores = milliCpu;
         return normalized;
     }
 
-    static string NormalizeMemory(string value)
+    static string NormalizeMemory(string value, long cpuMillicores)
     {
         string normalized = NormalizeRequired(value, "On-demand sandbox activity workerProfile requires memory resources.");
+        long maxMemoryMiB = GetMaxMemoryMiB(cpuMillicores);
         if (TryParseMemoryMiB(normalized) is not { } memoryMiB || memoryMiB <= 0)
         {
             throw new InvalidOperationException(
                 "On-demand sandbox activity memory resources must be a positive Kubernetes-style memory quantity. " +
                 "Use formats like '256Mi', '1Gi', or '2048'.");
+        }
+
+        if (memoryMiB > maxMemoryMiB)
+        {
+            throw new InvalidOperationException(
+                "On-demand sandbox activity memory resources exceed the ADC sandbox tier maximum for the configured CPU. " +
+                $"Maximum memory for CPU '{cpuMillicores}m' is {maxMemoryMiB}Mi.");
         }
 
         return normalized;
@@ -170,7 +187,7 @@ static class SandboxWorkerProfileBuilder
             NumberStyles.Number,
             CultureInfo.InvariantCulture,
             out decimal cores)
-            ? (long)(cores * 1000)
+            ? TryConvertCoresToMillicores(cores)
             : null;
     }
 
@@ -183,7 +200,7 @@ static class SandboxWorkerProfileBuilder
                 NumberStyles.Number,
                 CultureInfo.InvariantCulture,
                 out decimal gib)
-                ? (long)(gib * 1024)
+                ? TryConvertMemoryToMiB(gib, 1024)
                 : null;
         }
 
@@ -194,11 +211,43 @@ static class SandboxWorkerProfileBuilder
                 NumberStyles.Number,
                 CultureInfo.InvariantCulture,
                 out decimal mib)
-                ? (long)mib
+                ? TryConvertMemoryToMiB(mib, 1)
                 : null;
         }
 
-        return null;
+        return decimal.TryParse(
+            value,
+            NumberStyles.Number,
+            CultureInfo.InvariantCulture,
+            out decimal bareMiB)
+            ? TryConvertMemoryToMiB(bareMiB, 1)
+            : null;
+    }
+
+    static long? TryConvertCoresToMillicores(decimal cores)
+    {
+        if (cores < 0 || cores > MaxCpuMillicores / 1000m)
+        {
+            return null;
+        }
+
+        decimal millicores = cores * 1000;
+        return millicores == decimal.Truncate(millicores) ? (long)millicores : null;
+    }
+
+    static long? TryConvertMemoryToMiB(decimal value, decimal multiplier)
+    {
+        if (value < 0 || value > long.MaxValue / multiplier)
+        {
+            return null;
+        }
+
+        return (long)(value * multiplier);
+    }
+
+    static long GetMaxMemoryMiB(long cpuMillicores)
+    {
+        return cpuMillicores * MemoryMiBPerCore / 1000;
     }
 
     static string[] NormalizeOptionalStrings(IEnumerable<string> values)

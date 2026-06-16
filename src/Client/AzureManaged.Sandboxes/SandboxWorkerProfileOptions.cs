@@ -42,11 +42,13 @@ public sealed class SandboxWorkerProfileOptions
 
     /// <summary>
     /// Gets or sets the CPU quantity declared for each sandbox. Supported formats include <c>500m</c>, <c>2</c>, and <c>0.5</c>.
+    /// ADC sandbox CPU tiers range from <c>250m</c> through <c>16000m</c> in <c>250m</c> increments.
     /// </summary>
     public string Cpu { get; set; } = "1000m";
 
     /// <summary>
-    /// Gets or sets the memory quantity declared for each sandbox. Supported formats include <c>256Mi</c> and <c>1Gi</c>.
+    /// Gets or sets the memory quantity declared for each sandbox. Supported formats include <c>256Mi</c>, <c>1Gi</c>, and bare MiB values like <c>2048</c>.
+    /// ADC sandbox memory must not exceed <c>2Gi</c> per CPU core.
     /// </summary>
     public string Memory { get; set; } = "2048Mi";
 

@@ -57,8 +57,12 @@ public class SandboxActivitiesClientTests
     }
 
     [Theory]
+    [InlineData("250m", "512Mi")]
     [InlineData("500m", "1024Mi")]
     [InlineData("0.5", "1Gi")]
+    [InlineData("0.25", "512")]
+    [InlineData("1", "1024mi")]
+    [InlineData("16", "32768Mi")]
     public void SandboxWorkerProfileBuilder_BuildWorkerProfile_AcceptsAdcResourceQuantities(
         string cpu,
         string memory)
@@ -81,12 +85,18 @@ public class SandboxActivitiesClientTests
     [Theory]
     [InlineData("0", "1024Mi", "CPU")]
     [InlineData("0m", "1024Mi", "CPU")]
+    [InlineData("125m", "1024Mi", "CPU")]
+    [InlineData("300m", "1024Mi", "CPU")]
     [InlineData("500M", "1024Mi", "CPU")]
     [InlineData("500.5m", "1024Mi", "CPU")]
     [InlineData("500Mi", "1024Mi", "CPU")]
+    [InlineData("17", "1024Mi", "CPU")]
+    [InlineData("999999999999999999999999999999", "1024Mi", "CPU")]
     [InlineData("500m", "0", "memory")]
     [InlineData("500m", "0Mi", "memory")]
-    [InlineData("500m", "2048", "memory")]
+    [InlineData("250m", "513Mi", "memory")]
+    [InlineData("500m", "2048Mi", "memory")]
+    [InlineData("500m", "999999999999999999999999999999Gi", "memory")]
     [InlineData("500m", "500m", "memory")]
     public void SandboxWorkerProfileBuilder_BuildWorkerProfile_RejectsInvalidAdcResourceQuantities(
         string cpu,

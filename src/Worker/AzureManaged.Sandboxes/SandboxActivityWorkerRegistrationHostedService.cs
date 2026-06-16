@@ -77,28 +77,14 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         CancellationTokenSource? localCts;
-        ISandboxActivityWorkerSession? localSession;
         Task? localRegistrationLoopTask;
         lock (this.sync)
         {
             localCts = this.cts;
-            localSession = this.session;
             localRegistrationLoopTask = this.registrationLoopTask;
         }
 
         localCts?.Cancel();
-
-        if (localSession is not null)
-        {
-            try
-            {
-                await this.CompleteSessionAsync(localSession, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or RpcException)
-            {
-                Logs.SandboxWorkerSessionCompletionFailureIgnored(this.logger, ex);
-            }
-        }
 
         if (localRegistrationLoopTask is not null)
         {
@@ -121,11 +107,6 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
             if (ReferenceEquals(this.cts, localCts))
             {
                 this.cts = null;
-            }
-
-            if (ReferenceEquals(this.session, localSession))
-            {
-                this.session = null;
             }
 
             if (ReferenceEquals(this.registrationLoopTask, localRegistrationLoopTask))
@@ -181,20 +162,6 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
         }
 
         return TimeSpan.FromTicks(retryDelay.Ticks * 2);
-    }
-
-    static async ValueTask DisposeSessionAsync(
-        ISandboxActivityWorkerSession registrationSession,
-        ILogger logger)
-    {
-        try
-        {
-            await registrationSession.DisposeAsync().ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or RpcException)
-        {
-            Logs.SandboxWorkerSessionDisposeFailureIgnored(logger, ex);
-        }
     }
 
     static bool IsRetriableRegistrationFailure(Exception exception) =>
@@ -292,7 +259,12 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
                 if (registrationSession is not null)
                 {
                     this.ClearCurrentSession(registrationSession);
-                    await DisposeSessionAsync(registrationSession, this.logger).ConfigureAwait(false);
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        await this.CompleteSessionAsync(registrationSession, CancellationToken.None).ConfigureAwait(false);
+                    }
+
+                    await this.DisposeSessionAsync(registrationSession, CancellationToken.None).ConfigureAwait(false);
                 }
             }
         }
@@ -394,10 +366,35 @@ sealed class SandboxActivityWorkerRegistrationHostedService : IHostedService, IA
         ISandboxActivityWorkerSession registrationSession,
         CancellationToken cancellationToken)
     {
+        await this.WithSessionStreamLockAsync(
+            registrationSession.CompleteAsync,
+            Logs.SandboxWorkerSessionCompletionFailureIgnored,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    async ValueTask DisposeSessionAsync(
+        ISandboxActivityWorkerSession registrationSession,
+        CancellationToken cancellationToken)
+    {
+        await this.WithSessionStreamLockAsync(
+            async () => await registrationSession.DisposeAsync().ConfigureAwait(false),
+            Logs.SandboxWorkerSessionDisposeFailureIgnored,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    async Task WithSessionStreamLockAsync(
+        Func<Task> sessionOperation,
+        Action<ILogger, Exception> logIgnoredFailure,
+        CancellationToken cancellationToken)
+    {
         await this.streamSync.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await registrationSession.CompleteAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+            await sessionOperation().WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or RpcException)
+        {
+            logIgnoredFailure(this.logger, ex);
         }
         finally
         {

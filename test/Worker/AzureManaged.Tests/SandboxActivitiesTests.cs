@@ -515,6 +515,48 @@ public class SandboxActivitiesTests
     }
 
     [Fact]
+    public async Task SandboxActivityWorkerRegistrationHostedService_StopAsync_DisposesSessionAfterCompletion()
+    {
+        // Arrange
+        using EnvironmentVariableScope sandboxId = new("DTS_SANDBOX_ID", "sandbox-1");
+        SandboxWorkerRuntimeOptions options = new()
+        {
+            TaskHub = TaskHub,
+            WorkerProfileId = "profile-a",
+            MaxConcurrentActivities = 3,
+            HeartbeatInterval = TimeSpan.FromMilliseconds(10),
+        };
+
+        FakeSandboxActivityWorkerSession session = new() { BlockComplete = true };
+        FakeSandboxActivitiesTransport client = new();
+        client.QueueSession(session);
+
+        SandboxActivityWorkerRegistrationHostedService service = new(
+            client,
+            options,
+            Activities("RemoteHello"),
+            NullLogger<SandboxActivityWorkerRegistrationHostedService>.Instance);
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+        await session.WaitForMessageAsync(message => message.Start != null);
+        Task stopTask = service.StopAsync(CancellationToken.None);
+        await session.WaitForBlockedCompleteAsync();
+        Task disposeDelay = Task.Delay(TimeSpan.FromMilliseconds(100));
+        Task disposeBeforeCompleteReleased = await Task.WhenAny(
+            session.WaitForDisposeAsync(),
+            disposeDelay);
+        session.ReleaseBlockedComplete();
+        await stopTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Assert
+        disposeBeforeCompleteReleased.Should().Be(disposeDelay);
+        session.CompleteCalled.Should().BeTrue();
+        session.DisposeCalled.Should().BeTrue();
+        session.DisposeCalledWhileCompleteActive.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task UseSandboxWorker_ConfiguresRegisteredActivityWorkerFilter()
     {
         // Arrange
@@ -993,8 +1035,15 @@ public class SandboxActivitiesTests
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         readonly TaskCompletionSource releaseBlockedWrite =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+        readonly TaskCompletionSource blockedCompleteStarted =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        readonly TaskCompletionSource releaseBlockedComplete =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        readonly TaskCompletionSource disposed =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
         int writeAttempts;
         int activeWrites;
+        int activeCompletes;
 
         public List<SandboxActivityWorkerMessage> Messages { get; } = [];
 
@@ -1002,13 +1051,23 @@ public class SandboxActivitiesTests
 
         public int? BlockWriteAttempt { get; init; }
 
+        public bool BlockComplete { get; init; }
+
         public bool CompleteCalled { get; private set; }
 
         public bool CompleteCalledWhileWriteActive { get; private set; }
 
+        public bool DisposeCalled { get; private set; }
+
+        public bool DisposeCalledWhileCompleteActive { get; private set; }
+
         public void FailCompletion(Exception exception) => this.completion.TrySetException(exception);
 
         public Task WaitForBlockedWriteAsync() => this.blockedWriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        public Task WaitForBlockedCompleteAsync() => this.blockedCompleteStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        public Task WaitForDisposeAsync() => this.disposed.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         public Task WaitForCompleteAsync()
         {
@@ -1019,6 +1078,8 @@ public class SandboxActivitiesTests
         }
 
         public void ReleaseBlockedWrite() => this.releaseBlockedWrite.TrySetResult();
+
+        public void ReleaseBlockedComplete() => this.releaseBlockedComplete.TrySetResult();
 
         public async Task WaitForMessageAsync(Func<SandboxActivityWorkerMessage, bool> predicate)
         {
@@ -1066,17 +1127,49 @@ public class SandboxActivitiesTests
 
         public async Task CompleteAsync()
         {
+            bool blockComplete;
             lock (this.sync)
             {
                 this.CompleteCalled = true;
                 this.CompleteCalledWhileWriteActive = this.activeWrites > 0;
+                this.activeCompletes++;
+                blockComplete = this.BlockComplete;
+                if (blockComplete)
+                {
+                    this.blockedCompleteStarted.TrySetResult();
+                }
             }
 
-            this.completion.TrySetResult(new SandboxActivityWorkerSessionResult());
-            await this.completion.Task.ConfigureAwait(false);
+            try
+            {
+                if (blockComplete)
+                {
+                    await this.releaseBlockedComplete.Task.ConfigureAwait(false);
+                }
+
+                this.completion.TrySetResult(new SandboxActivityWorkerSessionResult());
+                await this.completion.Task.ConfigureAwait(false);
+            }
+            finally
+            {
+                lock (this.sync)
+                {
+                    this.activeCompletes--;
+                }
+            }
         }
 
-        public ValueTask DisposeAsync() => default;
+        public ValueTask DisposeAsync()
+        {
+            lock (this.sync)
+            {
+                this.DisposeCalled = true;
+                this.DisposeCalledWhileCompleteActive = this.activeCompletes > 0;
+                this.disposed.TrySetResult();
+            }
+
+            return default;
+        }
 
         async Task WriteMessageCoreAsync(SandboxActivityWorkerMessage message, bool blockWrite)
         {

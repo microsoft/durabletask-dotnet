@@ -21,7 +21,7 @@
   <PropertyGroup>
     <!-- This file intentionally versions separately from the other packages. -->
     <VersionPrefix>2.1.0</VersionPrefix>
-    <VersionSuffix>preview.1</VersionSuffix>
+    <VersionSuffix>preview.2</VersionSuffix>
   </PropertyGroup>
 
   <ItemGroup>

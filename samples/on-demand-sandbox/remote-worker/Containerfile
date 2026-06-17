@@ -4,7 +4,9 @@ FROM --platform=$TARGETPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 ARG TARGETARCH
 
-COPY . /src/durabletask-dotnet
+COPY samples/Directory.Build.props samples/Directory.Packages.props /src/durabletask-dotnet/samples/
+COPY Directory.Build.props Directory.Packages.props global.json nuget.config /src/durabletask-dotnet/
+COPY samples/on-demand-sandbox /src/durabletask-dotnet/samples/on-demand-sandbox
 
 WORKDIR /src/durabletask-dotnet/samples/on-demand-sandbox/remote-worker
 RUN case "$TARGETARCH" in \
@@ -18,6 +20,7 @@ RUN case "$TARGETARCH" in \
     --self-contained false \
     -o /app/publish \
     --configfile /src/durabletask-dotnet/nuget.config \
+    /p:SignAssembly=false \
     /p:DebugSymbols=false \
     /p:DebugType=None \
     && find /app/publish -type f \( -name '*.xml' -o -name '*.pdb' \) -delete

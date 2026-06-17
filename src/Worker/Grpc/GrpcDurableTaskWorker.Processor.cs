@@ -405,12 +405,23 @@ sealed partial class GrpcDurableTaskWorker
             }
             else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.ActivityRequest)
             {
+                this.NotifyActivity(ActivityNotificationPhase.Started);
                 this.RunBackgroundTask(
                     workItem,
-                    () => this.OnRunActivityAsync(
-                        workItem.ActivityRequest,
-                        workItem.CompletionToken,
-                        cancellation),
+                    async () =>
+                    {
+                        try
+                        {
+                            await this.OnRunActivityAsync(
+                                workItem.ActivityRequest,
+                                workItem.CompletionToken,
+                                cancellation).ConfigureAwait(false);
+                        }
+                        finally
+                        {
+                            this.NotifyActivity(ActivityNotificationPhase.Completed);
+                        }
+                    },
                     cancellation);
             }
             else if (workItem.RequestCase == P.WorkItem.RequestOneofCase.EntityRequest)
@@ -446,6 +457,27 @@ sealed partial class GrpcDurableTaskWorker
             else
             {
                 this.Logger.UnexpectedWorkItemType(workItem.RequestCase.ToString());
+            }
+        }
+
+        void NotifyActivity(ActivityNotificationPhase phase)
+        {
+            Action<ActivityNotificationPhase>? callback = this.internalOptions.NotifyActivity;
+            if (callback is null)
+            {
+                return;
+            }
+
+            try
+            {
+                callback(phase);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException
+                and not StackOverflowException
+                and not AccessViolationException
+                and not ThreadAbortException)
+            {
+                this.Logger.ActivityNotificationFailed(phase, ex);
             }
         }
 
@@ -1178,6 +1210,7 @@ sealed partial class GrpcDurableTaskWorker
                 }
 
                 // Determine if this is a partial chunk (more actions remaining)
+#pragma warning disable CS0612 // isPartial/chunkIndex are deprecated but still required for chunked response wire compatibility.
                 isPartial = actionsCompletedSoFar < allActions.Count;
                 chunkedResponse.IsPartial = isPartial;
 
@@ -1194,6 +1227,7 @@ sealed partial class GrpcDurableTaskWorker
                 {
                     chunkedResponse.ChunkIndex = chunkIndex;
                 }
+#pragma warning restore CS0612
 
                 if (chunkIndex == 0)
                 {

@@ -137,7 +137,7 @@ extends:
             # the packages to push pattern explicitly excludes:
             # - 'Microsoft.DurableTask.Client.Grpc'
             # - 'Microsoft.DurableTask.Client.OrchestrationServiceClientShim'
-            # - 'Microsoft.DurableTask.Client.AzureManaged'
+            # - 'Microsoft.DurableTask.Client.AzureManaged.*'
             # which are pushed by their respective jobs
             packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.Grpc.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.OrchestrationServiceClientShim.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.AzureManaged.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
             packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
@@ -324,7 +324,30 @@ extends:
             command: push
             nuGetFeedType: external
             publishFeedCredentials: 'DurableTask org NuGet API Key'
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.AzureManaged.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.AzureManaged.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.AzureManaged.Sandboxes.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
+            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+
+      # NuGet release (Microsoft.DurableTask.Client.AzureManaged.Sandboxes)
+      - job: nugetRelease_Microsoft_DurableTask_Client_AzureManaged_Sandboxes
+        displayName: NuGet Release (Microsoft.DurableTask.Client.AzureManaged.Sandboxes)
+        dependsOn: nugetApproval
+        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        templateContext:
+          type: releaseJob
+          isProduction: true
+          inputs:
+          - input: pipelineArtifact
+            pipeline: officialPipeline  # Pipeline reference as defined in the resources section
+            artifactName: drop
+            targetPath: $(System.DefaultWorkingDirectory)/drop
+        steps:
+        - task: 1ES.PublishNuget@1
+          displayName: 'NuGet push (Microsoft.DurableTask.Client.AzureManaged.Sandboxes)'
+          inputs:
+            command: push
+            nuGetFeedType: external
+            publishFeedCredentials: 'DurableTask org NuGet API Key'
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Client.AzureManaged.Sandboxes.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
             packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
 
       # NuGet release (Microsoft.DurableTask.Worker.AzureManaged)
@@ -347,7 +370,30 @@ extends:
             command: push
             nuGetFeedType: external
             publishFeedCredentials: 'DurableTask org NuGet API Key'
-            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.AzureManaged.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.AzureManaged.*.nupkg;!$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.AzureManaged.Sandboxes.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
+            packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
+
+      # NuGet release (Microsoft.DurableTask.Worker.AzureManaged.Sandboxes)
+      - job: nugetRelease_Microsoft_DurableTask_Worker_AzureManaged_Sandboxes
+        displayName: NuGet Release (Microsoft.DurableTask.Worker.AzureManaged.Sandboxes)
+        dependsOn: nugetApproval
+        condition: succeeded('nugetApproval') # nuget packages need to be on ADO first
+        templateContext:
+          type: releaseJob
+          isProduction: true
+          inputs:
+          - input: pipelineArtifact
+            pipeline: officialPipeline  # Pipeline reference as defined in the resources section
+            artifactName: drop
+            targetPath: $(System.DefaultWorkingDirectory)/drop
+        steps:
+        - task: 1ES.PublishNuget@1
+          displayName: 'NuGet push (Microsoft.DurableTask.Worker.AzureManaged.Sandboxes)'
+          inputs:
+            command: push
+            nuGetFeedType: external
+            publishFeedCredentials: 'DurableTask org NuGet API Key'
+            packagesToPush: '$(System.DefaultWorkingDirectory)/drop/Microsoft.DurableTask.Worker.AzureManaged.Sandboxes.*.nupkg;!$(System.DefaultWorkingDirectory)/**/*.symbols.nupkg' # Despite this being a custom command, we need to keep this for 1ES validation
             packageParentPath: $(System.DefaultWorkingDirectory) # This needs to be set to some prefix of the `packagesToPush` parameter. Apparently it helps with SDL tooling
 
       # NuGet release (Microsoft.DurableTask.ScheduledTasks)

@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- Split private preview on-demand sandbox APIs into opt-in `Microsoft.DurableTask.Client.AzureManaged.Sandboxes` and `Microsoft.DurableTask.Worker.AzureManaged.Sandboxes` packages.
+- Updated private preview on-demand sandbox worker profile declarations to use `SandboxWorkerProfileOptions.AddActivity(...)`, and updated the on-demand sandbox sample to share activity name constants between the main app and remote worker.
+- Added SDK-side validation for private preview on-demand sandbox CPU and memory resource quantities.
 - Fix DURABLE0010 false positives when a replay-safe logger created via `TaskOrchestrationContext.CreateReplaySafeLogger` is passed to a helper method ([#717](https://github.com/microsoft/durabletask-dotnet/issues/717))
 
 

@@ -300,6 +300,7 @@ public static class DurableTaskSchedulerWorkerExtensions
                     }
                 }
             }
+
             GC.SuppressFinalize(this);
         }
 

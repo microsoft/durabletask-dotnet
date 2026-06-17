@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Concurrent;
 using System.IO;
 using System.Reflection;
 using Google.Protobuf.WellKnownTypes;
@@ -28,6 +29,9 @@ public class GrpcDurableTaskWorkerTests
     static readonly MethodInfo ProcessorConnectAsyncMethod = typeof(GrpcDurableTaskWorker)
         .GetNestedType("Processor", BindingFlags.NonPublic)!
         .GetMethod("ConnectAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+    static readonly MethodInfo DispatchWorkItemMethod = typeof(GrpcDurableTaskWorker)
+        .GetNestedType("Processor", BindingFlags.NonPublic)!
+        .GetMethod("DispatchWorkItem", BindingFlags.Instance | BindingFlags.NonPublic)!;
     static readonly MethodInfo TryRecreateChannelAsyncMethod = typeof(GrpcDurableTaskWorker)
         .GetMethod("TryRecreateChannelAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
@@ -248,6 +252,111 @@ public class GrpcDurableTaskWorkerTests
         logProvider.TryGetLogs(Category, out IReadOnlyCollection<LogEntry>? logs).Should().BeTrue();
         logs!.Should().Contain(log => log.Message.Contains("Work-item stream ended by the backend"));
         logs.Should().NotContain(log => log.Message.Contains("Recreating gRPC channel to backend"));
+    }
+
+    [Fact]
+    public async Task DispatchWorkItem_ActivityRequest_NotifiesActivityStartAndCompletion()
+    {
+        // Arrange
+        ConcurrentQueue<ActivityNotificationPhase> notifications = new();
+        TaskCompletionSource completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        GrpcDurableTaskWorkerOptions grpcOptions = new();
+        grpcOptions.ConfigureActivityNotification(phase =>
+        {
+            notifications.Enqueue(phase);
+            if (phase == ActivityNotificationPhase.Completed)
+            {
+                completed.TrySetResult();
+            }
+        });
+
+        P.WorkItem activityWorkItem = new()
+        {
+            ActivityRequest = new P.ActivityRequest
+            {
+                Name = "MyActivity",
+                TaskId = 42,
+                OrchestrationInstance = new P.OrchestrationInstance
+                {
+                    InstanceId = "instance1",
+                    ExecutionId = "execution1",
+                },
+            },
+            CompletionToken = "completion1",
+        };
+
+        GrpcDurableTaskWorker worker = CreateActivityWorker(grpcOptions);
+        Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient> clientMock = new(
+            MockBehavior.Strict,
+            new object[] { Mock.Of<CallInvoker>() });
+        clientMock
+            .Setup(client => client.CompleteActivityTaskAsync(
+                It.IsAny<P.ActivityResponse>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(CreateUnaryCall(Task.FromResult(new P.CompleteTaskResponse())));
+        object processor = CreateProcessor(worker, clientMock.Object);
+
+        // Act
+        InvokeDispatchWorkItem(processor, activityWorkItem, CancellationToken.None);
+        await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Assert
+        notifications.Should().Equal(ActivityNotificationPhase.Started, ActivityNotificationPhase.Completed);
+    }
+
+    [Fact]
+    public async Task DispatchWorkItem_ActivityRequest_NotificationFailure_CompletesActivity()
+    {
+        // Arrange
+        TaskCompletionSource activityCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        GrpcDurableTaskWorkerOptions grpcOptions = new();
+        grpcOptions.ConfigureActivityNotification(phase => throw new InvalidOperationException($"Notification failed: {phase}"));
+
+        P.WorkItem activityWorkItem = new()
+        {
+            ActivityRequest = new P.ActivityRequest
+            {
+                Name = "MyActivity",
+                TaskId = 42,
+                OrchestrationInstance = new P.OrchestrationInstance
+                {
+                    InstanceId = "instance1",
+                    ExecutionId = "execution1",
+                },
+            },
+            CompletionToken = "completion1",
+        };
+
+        DurableTaskWorkerOptions workerOptions = new()
+        {
+            Logging = { UseLegacyCategories = false },
+        };
+        TestLogProvider logProvider = new(new NullOutput());
+        GrpcDurableTaskWorker worker = CreateActivityWorker(grpcOptions, workerOptions, new SimpleLoggerFactory(logProvider));
+        Mock<P.TaskHubSidecarService.TaskHubSidecarServiceClient> clientMock = new(
+            MockBehavior.Strict,
+            new object[] { Mock.Of<CallInvoker>() });
+        clientMock
+            .Setup(client => client.CompleteActivityTaskAsync(
+                It.IsAny<P.ActivityResponse>(),
+                It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback(() => activityCompleted.TrySetResult())
+            .Returns(CreateUnaryCall(Task.FromResult(new P.CompleteTaskResponse())));
+        object processor = CreateProcessor(worker, clientMock.Object);
+
+        // Act
+        InvokeDispatchWorkItem(processor, activityWorkItem, CancellationToken.None);
+        await activityCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Assert
+        clientMock.VerifyAll();
+        logProvider.TryGetLogs(Category, out IReadOnlyCollection<LogEntry>? logs).Should().BeTrue();
+        logs!.Should().Contain(log => log.Message.Contains("Activity notification callback failed for phase 'Started'"));
+        logs.Should().Contain(log => log.Message.Contains("Activity notification callback failed for phase 'Completed'"));
     }
 
     [Fact]
@@ -571,16 +680,75 @@ public class GrpcDurableTaskWorkerTests
         ILoggerFactory loggerFactory,
         IDurableTaskFactory factory)
     {
+        return CreateWorker(grpcOptions, workerOptions, loggerFactory, factory, Mock.Of<IServiceProvider>());
+    }
+
+    static GrpcDurableTaskWorker CreateActivityWorker(GrpcDurableTaskWorkerOptions grpcOptions)
+    {
+        return CreateActivityWorker(grpcOptions, new DurableTaskWorkerOptions(), NullLoggerFactory.Instance);
+    }
+
+    static GrpcDurableTaskWorker CreateActivityWorker(
+        GrpcDurableTaskWorkerOptions grpcOptions,
+        DurableTaskWorkerOptions workerOptions,
+        ILoggerFactory loggerFactory)
+    {
+        Mock<IDurableTaskFactory> factoryMock = new(MockBehavior.Strict);
+        factoryMock
+            .Setup(factory => factory.TryCreateActivity(
+                It.Is<TaskName>(name => name.Name == "MyActivity"),
+                It.IsAny<IServiceProvider>(),
+                out It.Ref<ITaskActivity?>.IsAny))
+            .Returns((TaskName name, IServiceProvider serviceProvider, out ITaskActivity? activity) =>
+            {
+                activity = new TestActivity();
+                return true;
+            });
+
+        factoryMock
+            .Setup(factory => factory.TryCreateOrchestrator(
+                It.IsAny<TaskName>(),
+                It.IsAny<IServiceProvider>(),
+                out It.Ref<ITaskOrchestrator?>.IsAny))
+            .Returns(false);
+
+        return CreateWorker(
+            grpcOptions,
+            workerOptions,
+            loggerFactory,
+            factoryMock.Object,
+            Mock.Of<IServiceProvider>());
+    }
+
+    static GrpcDurableTaskWorker CreateWorker(
+        GrpcDurableTaskWorkerOptions grpcOptions,
+        DurableTaskWorkerOptions workerOptions,
+        ILoggerFactory loggerFactory,
+        IDurableTaskFactory factory,
+        IServiceProvider services)
+    {
         return new GrpcDurableTaskWorker(
             name: "Test",
             factory: factory,
             grpcOptions: new OptionsMonitorStub<GrpcDurableTaskWorkerOptions>(grpcOptions),
             workerOptions: new OptionsMonitorStub<DurableTaskWorkerOptions>(workerOptions),
-            services: Mock.Of<IServiceProvider>(),
+            services: services,
             loggerFactory: loggerFactory,
             orchestrationFilter: null,
             exceptionPropertiesProvider: null,
             workItemFiltersMonitor: null);
+    }
+
+    sealed class TestActivity : ITaskActivity
+    {
+        public System.Type InputType => typeof(object);
+
+        public System.Type OutputType => typeof(object);
+
+        public Task<object?> RunAsync(TaskActivityContext context, object? input)
+        {
+            return Task.FromResult<object?>(input);
+        }
     }
 
     static Task InvokeExecuteAsync(GrpcDurableTaskWorker worker, CancellationToken cancellationToken)
@@ -611,6 +779,11 @@ public class GrpcDurableTaskWorkerTests
         Task task = (Task)ProcessorExecuteAsyncMethod.Invoke(processor, new object?[] { cancellationToken })!;
         await task;
         return (ProcessorExitReason)task.GetType().GetProperty("Result")!.GetValue(task)!;
+    }
+
+    static void InvokeDispatchWorkItem(object processor, P.WorkItem workItem, CancellationToken cancellationToken)
+    {
+        DispatchWorkItemMethod.Invoke(processor, new object?[] { workItem, cancellationToken });
     }
 
     static void InvokeApplySuccessfulRecreate(

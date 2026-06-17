@@ -2,10 +2,24 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Microsoft.DurableTask.Worker.Grpc.Internal;
+
+/// <summary>
+/// Identifies the phase of activity execution being reported to internal worker hooks.
+/// </summary>
+public enum ActivityNotificationPhase
+{
+    /// <summary>
+    /// The worker has received and started processing an activity work item.
+    /// </summary>
+    Started,
+
+    /// <summary>
+    /// The worker has finished processing an activity work item.
+    /// </summary>
+    Completed,
+}
 
 /// <summary>
 /// Provides access to configuring internal options for the gRPC worker.
@@ -26,6 +40,24 @@ public static class InternalOptionsExtensions
     {
         options.Internal.ConvertOrchestrationEntityEvents = true;
         options.Internal.InsertEntityUnlocksOnCompletion = true;
+    }
+
+    /// <summary>
+    /// Registers a callback invoked when activity work items start and finish execution.
+    /// </summary>
+    /// <param name="options">The gRPC worker options.</param>
+    /// <param name="notification">The activity notification callback.</param>
+    /// <remarks>
+    /// This is an internal API that supports the DurableTask infrastructure and not subject to
+    /// the same compatibility standards as public APIs. It may be changed or removed without notice in
+    /// any release. You should only use it directly in your code with extreme caution and knowing that
+    /// doing so can result in application failures when updating to a new DurableTask release.
+    /// </remarks>
+    public static void ConfigureActivityNotification(
+        this GrpcDurableTaskWorkerOptions options,
+        Action<ActivityNotificationPhase> notification)
+    {
+        options.Internal.NotifyActivity = notification ?? throw new ArgumentNullException(nameof(notification));
     }
 
     /// <summary>

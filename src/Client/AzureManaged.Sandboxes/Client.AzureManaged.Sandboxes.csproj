@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageDescription>Azure Managed on-demand sandbox activity management extensions for the Durable Task Framework client.</PackageDescription>
+    <AssemblyName>Microsoft.DurableTask.Client.AzureManaged.Sandboxes</AssemblyName>
+    <EnableStyleCop>true</EnableStyleCop>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.Net.Client" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AzureManaged\Client.AzureManaged.csproj" />
+    <ProjectReference Include="..\..\Grpc\Grpc.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <SharedSection Include="AzureManaged.Sandboxes" />
+    <SharedSection Include="Core" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.DurableTask.Client.AzureManaged.Tests" Key="$(StrongNamePublicKey)" />
+  </ItemGroup>
+
+</Project>

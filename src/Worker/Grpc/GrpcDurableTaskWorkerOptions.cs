@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.DurableTask.Worker.Grpc.Internal;
 using P = Microsoft.DurableTask.Protobuf;
 
 namespace Microsoft.DurableTask.Worker.Grpc;
@@ -165,5 +166,10 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
         /// deferring disposal of the old channel so in-flight RPCs already using it are not interrupted.
         /// </summary>
         public Func<GrpcChannel, CancellationToken, Task<GrpcChannel>>? ChannelRecreator { get; set; }
+
+        /// <summary>
+        /// Gets or sets a callback that is invoked when activity work items are received or finished.
+        /// </summary>
+        public Action<ActivityNotificationPhase>? NotifyActivity { get; set; }
     }
 }

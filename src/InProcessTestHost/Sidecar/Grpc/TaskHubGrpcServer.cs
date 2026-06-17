@@ -581,7 +581,9 @@ public class TaskHubGrpcServer : P.TaskHubSidecarService.TaskHubSidecarServiceBa
     /// <returns>Returns an empty ack back to the remote SDK that we've received the completion.</returns>
     public override Task<P.CompleteTaskResponse> CompleteOrchestratorTask(P.OrchestratorResponse request, ServerCallContext context)
     {
+#pragma warning disable CS0612 // isPartial is deprecated but still required for chunked response wire compatibility.
         if (request.IsPartial)
+#pragma warning restore CS0612
         {
             // This is a partial chunk - accumulate actions but don't complete yet
             PartialOrchestratorChunk partialChunk = this.partialOrchestratorChunks.GetOrAdd(

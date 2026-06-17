@@ -74,17 +74,6 @@ static class SandboxActivityMetadata
         activity.Version is null ? activity.Name : $"{activity.Name}@{activity.Version}";
 
     /// <summary>
-    /// Normalizes a worker profile ID.
-    /// </summary>
-    /// <param name="value">The worker profile ID.</param>
-    /// <param name="errorMessage">The exception message to use when the value is empty.</param>
-    /// <returns>The normalized worker profile ID.</returns>
-    public static string NormalizeWorkerProfileId(string value, string errorMessage)
-    {
-        return NormalizeRequired(value, errorMessage);
-    }
-
-    /// <summary>
     /// Normalizes a required string.
     /// </summary>
     /// <param name="value">The value to normalize.</param>

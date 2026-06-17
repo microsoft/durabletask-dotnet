@@ -38,7 +38,7 @@ static class SandboxWorkerMessageBuilder
             throw new InvalidOperationException("On-demand sandbox activity worker max activity count must be greater than zero.");
         }
 
-        string workerProfileId = SandboxActivityMetadata.NormalizeWorkerProfileId(
+        string workerProfileId = SandboxActivityMetadata.NormalizeRequired(
             options.WorkerProfileId,
             "On-demand sandbox activity worker registration requires a worker profile ID.");
         string dtsSandboxIdentifier = SandboxActivityMetadata.NormalizeRequired(

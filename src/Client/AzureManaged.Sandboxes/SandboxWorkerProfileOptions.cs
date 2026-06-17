@@ -31,7 +31,7 @@ public sealed class SandboxWorkerProfileOptions
     /// <summary>
     /// Gets or sets the user-assigned managed identity client ID workers use to authenticate to the DTS scheduler.
     /// </summary>
-    public string? SchedulerManagedIdentityClientId { get; set; }
+    public string SchedulerManagedIdentityClientId { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the CPU quantity declared for each sandbox. Supported formats include <c>500m</c>, <c>2</c>, and <c>0.5</c>.
@@ -125,12 +125,12 @@ public sealed class SandboxWorkerProfileOptions
         /// Examples: <c>myregistry.azurecr.io/workers/hello:1.0</c> or
         /// <c>myregistry.azurecr.io/workers/hello@sha256:0123456789abcdef...</c>.
         /// </summary>
-        public string? ImageRef { get; set; }
+        public string ImageRef { get; set; } = string.Empty;
 
         /// <summary>
         /// Gets or sets the user-assigned managed identity client ID used to pull the on-demand sandbox worker image.
         /// </summary>
-        public string? ManagedIdentityClientId { get; set; }
+        public string ManagedIdentityClientId { get; set; } = string.Empty;
 
         /// <summary>
         /// Gets the sandbox entrypoint declared for on-demand sandbox workers.

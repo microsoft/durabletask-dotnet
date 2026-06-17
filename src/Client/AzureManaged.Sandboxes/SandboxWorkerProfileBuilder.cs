@@ -46,7 +46,7 @@ static class SandboxWorkerProfileBuilder
             throw new InvalidOperationException("On-demand sandbox activity workerProfile requires at least one activity.");
         }
 
-        string workerProfileId = NormalizeWorkerProfileId(
+        string workerProfileId = NormalizeRequired(
             options.WorkerProfileId,
             "On-demand sandbox activity workerProfile requires a worker profile ID.");
         if (options.MaxConcurrentActivities <= 0)
@@ -55,7 +55,7 @@ static class SandboxWorkerProfileBuilder
         }
 
         string schedulerManagedIdentityClientId = NormalizeRequired(
-            options.SchedulerManagedIdentityClientId ?? string.Empty,
+            options.SchedulerManagedIdentityClientId,
             "On-demand sandbox activity workerProfile requires the managed identity client ID workers use to connect to the DTS scheduler.");
 
         Proto.SandboxWorkerProfile workerProfile = new()
@@ -73,17 +73,6 @@ static class SandboxWorkerProfileBuilder
     }
 
     /// <summary>
-    /// Normalizes a worker profile ID and throws with the supplied message if it is missing.
-    /// </summary>
-    /// <param name="value">The worker profile ID value.</param>
-    /// <param name="errorMessage">The error message to use when the value is missing.</param>
-    /// <returns>The normalized worker profile ID.</returns>
-    internal static string NormalizeWorkerProfileId(string value, string errorMessage)
-    {
-        return SandboxActivityMetadata.NormalizeRequired(value, errorMessage);
-    }
-
-    /// <summary>
     /// Normalizes a required string and throws with the supplied message if it is missing.
     /// </summary>
     /// <param name="value">The value.</param>
@@ -98,14 +87,14 @@ static class SandboxWorkerProfileBuilder
     {
         SandboxWorkerProfileOptions.ImageOptions imageOptions = options.Image;
         string imageRef = NormalizeRequired(
-            imageOptions.ImageRef ?? string.Empty,
+            imageOptions.ImageRef,
             "On-demand sandbox activity image metadata requires a container image reference like 'myregistry.azurecr.io/workers/hello:1.0' or 'myregistry.azurecr.io/workers/hello@sha256:...'.");
 
         Proto.SandboxActivityImage image = new()
         {
             ImageRef = imageRef,
             ManagedIdentityClientId = NormalizeRequired(
-                imageOptions.ManagedIdentityClientId ?? string.Empty,
+                imageOptions.ManagedIdentityClientId,
                 "On-demand sandbox activity workerProfile requires the managed identity client ID used to pull the worker image."),
         };
 

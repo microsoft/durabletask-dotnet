@@ -7,5 +7,5 @@ public static class SandboxActivities
 {
     public const string RemoteHelloName = "RemoteHello";
 
-    public const string RemoteHelloVersion = "";
+    public const string RemoteHelloVersion = "v1";
 }

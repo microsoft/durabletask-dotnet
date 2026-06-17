@@ -3,6 +3,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.DurableTask.Entities;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.DurableTask.Worker;
 
@@ -16,6 +17,9 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
     readonly IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities;
     readonly HashSet<string> versionedOrchestratorNames;
     readonly HashSet<string> versionedActivityNames;
+    readonly DurableTaskWorkerOptions.UnversionedFallbackMode orchestratorFallbackMode;
+    readonly DurableTaskWorkerOptions.UnversionedFallbackMode activityFallbackMode;
+    readonly ILogger? logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DurableTaskFactory" /> class.
@@ -23,19 +27,28 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
     /// <param name="activities">The activity factories.</param>
     /// <param name="orchestrators">The orchestrator factories.</param>
     /// <param name="entities">The entity factories.</param>
+    /// <param name="orchestratorUnversionedFallback">The unversioned fallback mode for orchestrators.</param>
+    /// <param name="activityUnversionedFallback">The unversioned fallback mode for activities.</param>
+    /// <param name="loggerFactory">Optional logger factory used to emit per-dispatch fallback diagnostics.</param>
     internal DurableTaskFactory(
         IDictionary<TaskVersionKey, Func<IServiceProvider, ITaskActivity>> activities,
         IDictionary<TaskVersionKey, Func<IServiceProvider, ITaskOrchestrator>> orchestrators,
-        IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities)
+        IDictionary<TaskName, Func<IServiceProvider, ITaskEntity>> entities,
+        DurableTaskWorkerOptions.UnversionedFallbackMode orchestratorUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.Implicit,
+        DurableTaskWorkerOptions.UnversionedFallbackMode activityUnversionedFallback = DurableTaskWorkerOptions.UnversionedFallbackMode.Implicit,
+        ILoggerFactory? loggerFactory = null)
     {
         this.activities = Check.NotNull(activities);
         this.orchestrators = Check.NotNull(orchestrators);
         this.entities = Check.NotNull(entities);
+        this.orchestratorFallbackMode = orchestratorUnversionedFallback;
+        this.activityFallbackMode = activityUnversionedFallback;
+        this.logger = loggerFactory is not null ? Logs.CreateWorkerLogger(loggerFactory) : null;
 
-        // Snapshot the set of logical names that have at least one versioned registration. Used to gate the
-        // unversioned-fallback path: when a logical name has any versioned registration, we refuse to fall
-        // back to its unversioned registration for an unmatched versioned request — that would silently
-        // route the call to a different implementation than the caller asked for.
+        // Snapshot the set of logical names that have at least one versioned registration. Used by the
+        // Implicit fallback mode to recognize "unversioned-only" names, where a versioned request is allowed
+        // to resolve through the unversioned registration. CatchAll widens this for mixed names; StrictExactOnly
+        // disables fallback entirely.
         this.versionedOrchestratorNames = new HashSet<string>(
             this.orchestrators.Keys
                 .Where(k => !string.IsNullOrWhiteSpace(k.Version))
@@ -63,14 +76,13 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
             return true;
         }
 
-        // Unversioned registrations remain the compatibility fallback for a versioned request, but ONLY when
-        // no versioned registration exists for the same logical name. This mirrors the orchestrator rule:
-        // once a name has any versioned registration, an unmatched versioned request returns "not found"
-        // rather than silently routing to a catch-all the caller did not ask for.
+        // Resolve a versioned request through the unversioned registration when the mode allows it.
+        // See UnversionedFallbackMode for the dispatch matrix.
         if (!string.IsNullOrWhiteSpace(version.Version)
-            && !this.versionedActivityNames.Contains(name.Name)
+            && ShouldUseUnversionedFallback(this.activityFallbackMode, this.versionedActivityNames, name.Name)
             && this.activities.TryGetValue(new TaskVersionKey(name, default(TaskVersion)), out factory))
         {
+            this.logger?.ActivityDispatchedToUnversionedFallback(name.Name, version.Version);
             activity = factory.Invoke(serviceProvider);
             return true;
         }
@@ -99,14 +111,13 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
             return true;
         }
 
-        // Unversioned registrations remain the compatibility fallback for a versioned request, but ONLY when
-        // no versioned registration exists for the same logical name. If any versioned registration is present
-        // (e.g., v1 and v2 are registered, request asks for v3), we refuse to silently route the call to a
-        // catch-all registration the caller did not ask for.
+        // Resolve a versioned request through the unversioned registration when the mode allows it.
+        // See UnversionedFallbackMode for the dispatch matrix.
         if (!string.IsNullOrWhiteSpace(version.Version)
-            && !this.versionedOrchestratorNames.Contains(name.Name)
+            && ShouldUseUnversionedFallback(this.orchestratorFallbackMode, this.versionedOrchestratorNames, name.Name)
             && this.orchestrators.TryGetValue(new TaskVersionKey(name, default(TaskVersion)), out factory))
         {
+            this.logger?.OrchestratorDispatchedToUnversionedFallback(name.Name, version.Version);
             orchestrator = factory.Invoke(serviceProvider);
             return true;
         }
@@ -132,5 +143,19 @@ sealed class DurableTaskFactory : IDurableTaskFactory2, IVersionedTaskFactory
 
         entity = null;
         return false;
+    }
+
+    static bool ShouldUseUnversionedFallback(
+        DurableTaskWorkerOptions.UnversionedFallbackMode mode,
+        HashSet<string> versionedNames,
+        string requestedName)
+    {
+        return mode switch
+        {
+            DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly => false,
+            DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll => true,
+            DurableTaskWorkerOptions.UnversionedFallbackMode.Implicit => !versionedNames.Contains(requestedName),
+            _ => !versionedNames.Contains(requestedName),
+        };
     }
 }

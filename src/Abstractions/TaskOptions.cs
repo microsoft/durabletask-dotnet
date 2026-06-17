@@ -62,9 +62,16 @@ public record TaskOptions
     /// </para>
     /// <para>
     /// When non-<c>null</c> (including <see cref="TaskVersion.Unversioned"/>), the task is scheduled with the
-    /// specified version explicitly. The worker dispatches to the registered <c>(name, version)</c> exactly;
-    /// when no exact match exists, it falls back to an unversioned registration only when the name has no
-    /// versioned registrations at all.
+    /// specified version explicitly, overriding any inherited version.
+    /// </para>
+    /// <para>
+    /// The receiving worker is responsible for resolving the scheduled version to a registered implementation
+    /// according to its own versioning configuration. That resolution is not visible to the scheduling client.
+    /// </para>
+    /// <para>
+    /// When deploying versioned workloads, treat each worker's versioning configuration as a deployment-time
+    /// policy: the same version value may dispatch to different registrations across deployments. Use the
+    /// worker's startup and per-dispatch diagnostic logs to verify behavior across environments.
     /// </para>
     /// </remarks>
     public TaskVersion? Version { get; init; }

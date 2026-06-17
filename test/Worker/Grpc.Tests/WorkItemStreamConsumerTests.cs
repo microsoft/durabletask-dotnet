@@ -142,9 +142,22 @@ public class WorkItemStreamConsumerTests
         // Feed one item, wait long enough that the original timer would have expired, then complete.
         // Synchronize on the first item actually being processed so the second delay is measured from
         // the consumer's timer reset instead of from the test thread's write timing.
+        //
+        // Timing budget (with 500ms slack on both sides of the assertion to survive CI scheduling jitter):
+        //   - The consumer arms a 2000ms silent-disconnect timer.
+        //   - Test thread delays 1000ms, then writes the 1st item.
+        //   - Test thread awaits firstItemProcessed; the consumer dequeues the 1st item and re-arms the
+        //     timer at T = 1000ms + (small, variable processing delay).
+        //   - Test thread delays another 1500ms, then writes the 2nd item.
+        //   - Total elapsed before the 2nd write is at least 2500ms (1000 + 1500) plus the variable
+        //     time to process the 1st item — well past the original 2000ms timer, which proves the test
+        //     exercises the per-item reset path.
+        //   - After the reset, the new timer fires ~2000ms after the 1st item was dequeued, leaving
+        //     ~500ms margin between the 2nd item write and the new timer expiry.
         Channel<P.WorkItem> channel = Channel.CreateUnbounded<P.WorkItem>();
-        TimeSpan timeout = TimeSpan.FromMilliseconds(500);
+        TimeSpan timeout = TimeSpan.FromMilliseconds(2000);
         TaskCompletionSource firstItemProcessed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource secondItemProcessed = new(TaskCreationOptions.RunContinuationsAsynchronously);
         int itemCount = 0;
 
         Task<WorkItemStreamResult> consumeTask = WorkItemStreamConsumer.ConsumeAsync(
@@ -152,21 +165,31 @@ public class WorkItemStreamConsumerTests
             silentDisconnectTimeout: timeout,
             onItem: _ =>
             {
-                if (Interlocked.Increment(ref itemCount) == 1)
+                int seen = Interlocked.Increment(ref itemCount);
+                if (seen == 1)
                 {
                     firstItemProcessed.TrySetResult();
+                }
+                else if (seen == 2)
+                {
+                    secondItemProcessed.TrySetResult();
                 }
             },
             onFirstMessage: null,
             cancellation: CancellationToken.None);
 
-        await Task.Delay(TimeSpan.FromMilliseconds(150));
+        await Task.Delay(TimeSpan.FromMilliseconds(1000));
         await channel.Writer.WriteAsync(new P.WorkItem { HealthPing = new P.HealthPing() });
-        await firstItemProcessed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await firstItemProcessed.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         // Without the per-item reset, the original timer would fire before this second item arrives.
-        await Task.Delay(TimeSpan.FromMilliseconds(400));
+        await Task.Delay(TimeSpan.FromMilliseconds(1500));
         await channel.Writer.WriteAsync(new P.WorkItem { HealthPing = new P.HealthPing() });
+
+        // Wait for the consumer to actually dequeue and process the 2nd item (which re-arms the timer)
+        // before completing the channel. Without this barrier, the test could observe a SilentDisconnect
+        // if the timer fires after the test writes the 2nd item but before the consumer dequeues it.
+        await secondItemProcessed.Task.WaitAsync(TimeSpan.FromSeconds(10));
         channel.Writer.Complete();
 
         WorkItemStreamResult result = await consumeTask;

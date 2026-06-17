@@ -7,8 +7,10 @@ namespace Microsoft.DurableTask.Worker;
 /// A class that represents work item filters for a Durable Task Worker. These filters are passed to the backend
 /// and only work items matching the filters will be processed by the worker. If no filters are provided,
 /// the worker will process all work items. To opt-in to work item filtering, call
-/// <see cref="DurableTaskWorkerBuilderExtensions.UseWorkItemFilters"/> on the worker builder with either
-/// explicit filters or auto-generated filters from the <see cref="DurableTaskRegistry"/>.
+/// <see cref="DurableTaskWorkerBuilderExtensions.UseWorkItemFilters(IDurableTaskWorkerBuilder)"/> for the
+/// auto-generated filters from the worker's <see cref="DurableTaskRegistry"/>, or
+/// <see cref="DurableTaskWorkerBuilderExtensions.UseWorkItemFilters(IDurableTaskWorkerBuilder, DurableTaskWorkerWorkItemFilters)"/>
+/// to supply explicit filters.
 /// </summary>
 public class DurableTaskWorkerWorkItemFilters
 {
@@ -36,49 +38,56 @@ public class DurableTaskWorkerWorkItemFilters
     internal static DurableTaskWorkerWorkItemFilters FromDurableTaskRegistry(DurableTaskRegistry registry, DurableTaskWorkerOptions? workerOptions)
     {
         // Under MatchStrategy.Strict the worker accepts only instances whose version matches the
-        // worker's configured Version exactly — including the empty/unversioned case. The filter must
-        // narrow each name's version list to that single value (treating null as empty) so the backend
-        // does not stream work items the worker will then reject after the fact.
-        IReadOnlyList<string>? strictWorkerVersions =
+        // worker's configured Version exactly (including the empty/unversioned case). The filter must
+        // then advertise that single value for each name the worker can actually serve under that
+        // version — and omit names the worker would reject either at the pre-dispatch gate or in the
+        // factory. The strict version is captured here so per-name dispatch-capability checks below
+        // can decide whether to advertise it.
+        string? strictWorkerVersion =
             workerOptions?.Versioning?.MatchStrategy == DurableTaskWorkerOptions.VersionMatchStrategy.Strict
-                ? [workerOptions.Versioning.Version ?? string.Empty]
+                ? workerOptions.Versioning.Version ?? string.Empty
                 : null;
+        DurableTaskWorkerOptions.UnversionedFallbackMode orchestratorFallbackMode =
+            workerOptions?.Versioning?.OrchestratorUnversionedFallback
+                ?? DurableTaskWorkerOptions.UnversionedFallbackMode.Implicit;
+        DurableTaskWorkerOptions.UnversionedFallbackMode activityFallbackMode =
+            workerOptions?.Versioning?.ActivityUnversionedFallback
+                ?? DurableTaskWorkerOptions.UnversionedFallbackMode.Implicit;
 
         // Orchestration filters group registrations by logical name and emit the concrete distinct
-        // version set actually registered (treating null/unversioned as ""). Strict mode overrides
-        // this with the single configured worker version. For unversioned-only names (no versioned
-        // registration exists for the name), we emit an empty version list — the filter wildcard —
-        // so the backend can deliver versioned work items that the factory will then resolve via
-        // the documented unversioned fallback in DurableTaskFactory.TryCreateOrchestrator. When a
-        // name has at least one versioned registration, the factory refuses unversioned-fallback,
-        // so emitting the concrete version set prevents the backend from streaming work items the
+        // version set actually registered (treating null/unversioned as ""). When the factory can
+        // resolve unmatched versions via the unversioned registration (unversioned-only names under
+        // Implicit, or any name with an unversioned registration under CatchAll), we emit an empty
+        // version list — the filter wildcard — so the backend delivers versioned work items the
+        // factory can handle. Under StrictExactOnly the factory rejects unmatched versioned requests
+        // for every name, so the filter emits the concrete version set instead of widening.
+        //
+        // Under MatchStrategy.Strict the filter narrows to the single configured worker version, but
+        // only for names the worker can actually serve under that version. Names that have neither an
+        // exact (name, V) registration nor a fallback-serviceable registration under the configured
+        // mode are omitted from the filter entirely so the backend does not stream work items the
         // worker would then reject after the fact.
+        //
+        // Orchestrator and activity fallback are configured independently, so each filter set
+        // consults its own mode.
         List<OrchestrationFilter> orchestrationFilters = registry.OrchestratorsByVersion
             .GroupBy(orchestration => orchestration.Key.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(group =>
-            {
-                IReadOnlyList<string> versions = strictWorkerVersions ?? GetFilterVersions(group.Select(entry => entry.Key.Version));
-
-                return new OrchestrationFilter
-                {
-                    Name = group.Key,
-                    Versions = versions,
-                };
-            })
+            .SelectMany(group => BuildFilter(
+                group.Key,
+                group.Select(entry => entry.Key.Version),
+                strictWorkerVersion,
+                orchestratorFallbackMode,
+                static (name, versions) => new OrchestrationFilter { Name = name, Versions = versions }))
             .ToList();
 
         List<ActivityFilter> activityFilters = registry.ActivitiesByVersion
             .GroupBy(activity => activity.Key.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(group =>
-            {
-                IReadOnlyList<string> versions = strictWorkerVersions ?? GetFilterVersions(group.Select(entry => entry.Key.Version));
-
-                return new ActivityFilter
-                {
-                    Name = group.Key,
-                    Versions = versions,
-                };
-            })
+            .SelectMany(group => BuildFilter(
+                group.Key,
+                group.Select(entry => entry.Key.Version),
+                strictWorkerVersion,
+                activityFallbackMode,
+                static (name, versions) => new ActivityFilter { Name = name, Versions = versions }))
             .ToList();
 
         return new DurableTaskWorkerWorkItemFilters
@@ -92,20 +101,96 @@ public class DurableTaskWorkerWorkItemFilters
             }).ToList(),
         };
 
-        static IReadOnlyList<string> GetFilterVersions(IEnumerable<string?> versions)
+        static IEnumerable<TFilter> BuildFilter<TFilter>(
+            string name,
+            IEnumerable<string?> registeredVersions,
+            string? strictWorkerVersion,
+            DurableTaskWorkerOptions.UnversionedFallbackMode mode,
+            Func<string, IReadOnlyList<string>, TFilter> create)
         {
-            // Normalize null to "" so an unversioned registration appears consistently.
-            string[] normalized = versions
+            string[] normalized = NormalizeVersions(registeredVersions);
+
+            if (strictWorkerVersion is not null)
+            {
+                // Strict mode: advertise the single worker version, but only for names the worker can
+                // actually serve under it. Omit names that would always be rejected.
+                if (CanServeStrictVersion(normalized, strictWorkerVersion, mode))
+                {
+                    yield return create(name, [strictWorkerVersion]);
+                }
+
+                yield break;
+            }
+
+            yield return create(name, GetFilterVersions(normalized, mode));
+        }
+
+        static string[] NormalizeVersions(IEnumerable<string?> versions)
+            => versions
                 .Select(version => version ?? string.Empty)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
-            // Unversioned-only: emit the wildcard match-all (empty list) so the backend can deliver
-            // versioned work items that the factory will resolve via unversioned fallback. Without
-            // this, callers asking for a specific version would be filtered out at the backend even
-            // though the worker can handle them.
-            if (normalized.Length == 1 && normalized[0].Length == 0)
+        static bool CanServeStrictVersion(
+            string[] registeredVersions,
+            string strictVersion,
+            DurableTaskWorkerOptions.UnversionedFallbackMode mode)
+        {
+            // Exact match always wins, regardless of mode. The empty-version case is covered by the
+            // same check: strictVersion == "" only matches an unversioned registration.
+            bool hasExact = registeredVersions.Contains(strictVersion, StringComparer.OrdinalIgnoreCase);
+            if (hasExact)
+            {
+                return true;
+            }
+
+            // No exact match: only fallback can save us. Replicates DurableTaskFactory's
+            // ShouldUseUnversionedFallback logic so the filter agrees with the factory's dispatch
+            // decision.
+            bool hasUnversioned = registeredVersions.Contains(string.Empty, StringComparer.OrdinalIgnoreCase);
+            if (!hasUnversioned)
+            {
+                return false;
+            }
+
+            bool hasAnyVersioned = registeredVersions.Any(v => v.Length > 0);
+            return mode switch
+            {
+                DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll => true,
+                DurableTaskWorkerOptions.UnversionedFallbackMode.Implicit => !hasAnyVersioned,
+                DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly => false,
+                _ => !hasAnyVersioned,
+            };
+        }
+
+        static IReadOnlyList<string> GetFilterVersions(
+            string[] normalized,
+            DurableTaskWorkerOptions.UnversionedFallbackMode mode)
+        {
+            // StrictExactOnly disables every fallback path, including the long-standing implicit
+            // unversioned-only fallback. Emit the concrete registered version set so the backend
+            // does not deliver versioned work items the factory will reject after the fact.
+            if (mode == DurableTaskWorkerOptions.UnversionedFallbackMode.StrictExactOnly)
+            {
+                return normalized;
+            }
+
+            // Otherwise, widen to a wildcard when the factory can actually resolve unmatched versions:
+            //   - Implicit: only when the registry has no versioned siblings for this name (i.e.
+            //     normalized is exactly [""]).
+            //   - CatchAll: whenever the registry has an unversioned registration for this name.
+            bool hasUnversionedRegistration =
+                normalized.Contains(string.Empty, StringComparer.OrdinalIgnoreCase);
+            bool implicitWildcard =
+                mode == DurableTaskWorkerOptions.UnversionedFallbackMode.Implicit
+                && normalized.Length == 1
+                && normalized[0].Length == 0;
+            bool catchAllWildcard =
+                mode == DurableTaskWorkerOptions.UnversionedFallbackMode.CatchAll
+                && hasUnversionedRegistration;
+
+            if (implicitWildcard || catchAllWildcard)
             {
                 return [];
             }

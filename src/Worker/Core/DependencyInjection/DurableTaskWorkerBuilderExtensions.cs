@@ -106,6 +106,8 @@ public static class DurableTaskWorkerBuilderExtensions
                 DefaultVersion = versionOptions.DefaultVersion,
                 MatchStrategy = versionOptions.MatchStrategy,
                 FailureStrategy = versionOptions.FailureStrategy,
+                OrchestratorUnversionedFallback = versionOptions.OrchestratorUnversionedFallback,
+                ActivityUnversionedFallback = versionOptions.ActivityUnversionedFallback,
             };
         });
         return builder;
@@ -221,6 +223,15 @@ public static class DurableTaskWorkerBuilderExtensions
     /// <para>
     /// Only use this method when all task types referenced by orchestrations are guaranteed to be
     /// registered with at least one connected worker.
+    /// </para>
+    /// <para>
+    /// Generated filters honor the worker's versioning configuration. Names that the worker cannot
+    /// serve under the current <see cref="DurableTaskWorkerOptions.VersioningOptions.MatchStrategy"/>
+    /// and <see cref="DurableTaskWorkerOptions.UnversionedFallbackMode"/> settings — for example, a
+    /// strict-versioned worker whose configured <see cref="DurableTaskWorkerOptions.VersioningOptions.Version"/>
+    /// has no exact registration and no enabled fallback path — are omitted from the generated filter
+    /// so the backend does not dispatch work items the worker would reject. If no connected worker
+    /// advertises a name, work items for that name remain undispatched until one does.
     /// </para>
     /// </remarks>
     public static IDurableTaskWorkerBuilder UseWorkItemFilters(this IDurableTaskWorkerBuilder builder)

@@ -127,6 +127,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ActivityVersioningSample", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EntityWithVersionedOrchestrationSample", "samples\EntityWithVersionedOrchestrationSample\EntityWithVersionedOrchestrationSample.csproj", "{8E0D27B3-2B5D-4B6F-A4E6-5C8E7B0F7DD2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnversionedFallbackSample", "samples\UnversionedFallbackSample\UnversionedFallbackSample.csproj", "{1C0E65CE-1B36-48BB-B688-FA3AAFDE8A25}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -761,6 +763,18 @@ Global
 		{8E0D27B3-2B5D-4B6F-A4E6-5C8E7B0F7DD2}.Release|x64.Build.0 = Release|Any CPU
 		{8E0D27B3-2B5D-4B6F-A4E6-5C8E7B0F7DD2}.Release|x86.ActiveCfg = Release|Any CPU
 		{8E0D27B3-2B5D-4B6F-A4E6-5C8E7B0F7DD2}.Release|x86.Build.0 = Release|Any CPU
+		{1C0E65CE-1B36-48BB-B688-FA3AAFDE8A25}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1C0E65CE-1B36-48BB-B688-FA3AAFDE8A25}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1C0E65CE-1B36-48BB-B688-FA3AAFDE8A25}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1C0E65CE-1B36-48BB-B688-FA3AAFDE8A25}.Debug|x64.Build.0 = Debug|Any CPU
+		{1C0E65CE-1B36-48BB-B688-FA3AAFDE8A25}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1C0E65CE-1B36-48BB-B688-FA3AAFDE8A25}.Debug|x86.Build.0 = Debug|Any CPU
+		{1C0E65CE-1B36-48BB-B688-FA3AAFDE8A25}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1C0E65CE-1B36-48BB-B688-FA3AAFDE8A25}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1C0E65CE-1B36-48BB-B688-FA3AAFDE8A25}.Release|x64.ActiveCfg = Release|Any CPU
+		{1C0E65CE-1B36-48BB-B688-FA3AAFDE8A25}.Release|x64.Build.0 = Release|Any CPU
+		{1C0E65CE-1B36-48BB-B688-FA3AAFDE8A25}.Release|x86.ActiveCfg = Release|Any CPU
+		{1C0E65CE-1B36-48BB-B688-FA3AAFDE8A25}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -824,6 +838,7 @@ Global
 		{1E30F09F-1ADA-4375-81CC-F0FBC74D5621} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
 		{3FBCFDBA-F547-4FD5-B8C6-0B645EF73E3A} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
 		{8E0D27B3-2B5D-4B6F-A4E6-5C8E7B0F7DD2} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
+		{1C0E65CE-1B36-48BB-B688-FA3AAFDE8A25} = {EFF7632B-821E-4CFC-B4A0-ED4B24296B17}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AB41CB55-35EA-4986-A522-387AB3402E71}

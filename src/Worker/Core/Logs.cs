@@ -35,6 +35,30 @@ namespace Microsoft.DurableTask
         [LoggerMessage(EventId = 605, Level = LogLevel.Information, Message = "'{Name}' activity of orchestration ID '{InstanceId}' failed.")]
         public static partial void ActivityFailed(this ILogger logger, Exception ex, string instanceId, string name);
 
+        [LoggerMessage(
+            EventId = 606,
+            Level = LogLevel.Warning,
+            Message = "Orchestrator unversioned fallback is enabled for Durable Task worker '{workerName}'. Unmatched versioned orchestrators may run on the unversioned registration; ensure that implementation is replay-compatible with every version it may receive. Replaying existing histories against a different implementation can cause non-determinism or deserialization failures.")]
+        public static partial void OrchestratorUnversionedFallbackEnabled(this ILogger logger, string workerName);
+
+        [LoggerMessage(
+            EventId = 607,
+            Level = LogLevel.Warning,
+            Message = "Activity unversioned fallback is enabled for Durable Task worker '{workerName}'. Unmatched versioned activities may run on the unversioned registration; ensure that implementation accepts the input shapes produced by every version of the calling orchestrators.")]
+        public static partial void ActivityUnversionedFallbackEnabled(this ILogger logger, string workerName);
+
+        [LoggerMessage(
+            EventId = 608,
+            Level = LogLevel.Debug,
+            Message = "Orchestrator '{Name}' version '{RequestedVersion}' had no exact match; dispatching to the unversioned registration.")]
+        public static partial void OrchestratorDispatchedToUnversionedFallback(this ILogger logger, string name, string requestedVersion);
+
+        [LoggerMessage(
+            EventId = 609,
+            Level = LogLevel.Debug,
+            Message = "Activity '{Name}' version '{RequestedVersion}' had no exact match; dispatching to the unversioned registration.")]
+        public static partial void ActivityDispatchedToUnversionedFallback(this ILogger logger, string name, string requestedVersion);
+
         /// <summary>
         /// Creates a logger named "Microsoft.DurableTask.Worker" with an optional subcategory.
         /// </summary>

@@ -1,14 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Azure.Core;
-using Azure.Identity;
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.AzureManaged;
 using Microsoft.DurableTask.Samples.OnDemandSandbox.MainApp;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.AzureManaged;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -16,9 +15,8 @@ using Microsoft.Extensions.Logging;
 const string Input = "on-demand-sandbox-sample";
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
-string endpoint = GetRequiredConfigurationValue("OnDemandSandboxSample:EndpointAddress");
-string taskHub = GetRequiredConfigurationValue("OnDemandSandboxSample:TaskHubName");
-TokenCredential credential = new DefaultAzureCredential();
+string connectionString = builder.Configuration.GetValue<string>("DURABLE_TASK_SCHEDULER_CONNECTION_STRING")
+    ?? throw new InvalidOperationException("Missing required configuration 'DURABLE_TASK_SCHEDULER_CONNECTION_STRING'");
 builder.Logging.AddSimpleConsole(options =>
 {
     options.SingleLine = true;
@@ -30,22 +28,12 @@ builder.Services.AddDurableTaskWorker(workerBuilder =>
 {
     workerBuilder.AddTasks(tasks => tasks.AddAllGeneratedTasks());
     workerBuilder.UseWorkItemFilters();
-    workerBuilder.UseDurableTaskScheduler(options =>
-    {
-        options.EndpointAddress = endpoint;
-        options.TaskHubName = taskHub;
-        options.Credential = credential;
-    });
+    workerBuilder.UseDurableTaskScheduler(connectionString);
 });
 
 builder.Services.AddDurableTaskClient(clientBuilder =>
 {
-    clientBuilder.UseDurableTaskScheduler(options =>
-    {
-        options.EndpointAddress = endpoint;
-        options.TaskHubName = taskHub;
-        options.Credential = credential;
-    });
+    clientBuilder.UseDurableTaskScheduler(connectionString);
 });
 builder.Services.AddDurableTaskSchedulerSandboxActivitiesClient();
 
@@ -69,14 +57,3 @@ Console.WriteLine($"Runtime status: {result.RuntimeStatus}");
 Console.WriteLine($"Output: {result.SerializedOutput ?? "<null>"}");
 
 await host.StopAsync();
-
-string GetRequiredConfigurationValue(string key)
-{
-    string? value = builder.Configuration[key];
-    if (string.IsNullOrWhiteSpace(value))
-    {
-        throw new InvalidOperationException($"Configuration value '{key}' must be set.");
-    }
-
-    return value.Trim();
-}

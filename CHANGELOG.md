@@ -1,6 +1,18 @@
 # Changelog
 
 ## Unreleased
+
+
+## v1.25.0-preview.2
+- Ondemand sandbox ([#736](https://github.com/microsoft/durabletask-dotnet/pull/736))
+- Bump Grpc.AspNetCore.Server from 2.76.0 to 2.80.0 ([#747](https://github.com/microsoft/durabletask-dotnet/pull/747))
+- Bump Grpc.Net.Client from 2.76.0 to 2.80.0 ([#748](https://github.com/microsoft/durabletask-dotnet/pull/748))
+- Fix DURABLE0010 false positives when replay-safe logger is passed to helpers ([#717](https://github.com/microsoft/durabletask-dotnet/pull/717)) (#718)
+- Expose scheduled version on TaskActivityContext ([#744](https://github.com/microsoft/durabletask-dotnet/pull/744))
+- Bump Grpc.Tools from 2.78.0 to 2.81.0 ([#740](https://github.com/microsoft/durabletask-dotnet/pull/740))
+- Add PackageRequireLicenseAcceptance to Release.props for authoring requirements ([#733](https://github.com/microsoft/durabletask-dotnet/pull/733))
+- Remove Copilot agent GitHub Actions workflow ([#728](https://github.com/microsoft/durabletask-dotnet/pull/728))
+- Release v1.25.0-preview.1 ([#727](https://github.com/microsoft/durabletask-dotnet/pull/727))
 - Split private preview on-demand sandbox APIs into opt-in `Microsoft.DurableTask.Client.AzureManaged.Sandboxes` and `Microsoft.DurableTask.Worker.AzureManaged.Sandboxes` packages.
 - Updated private preview on-demand sandbox worker profile declarations to use `SandboxWorkerProfileOptions.AddActivity(...)`, and updated the on-demand sandbox sample to share activity name constants between the main app and remote worker.
 - Added SDK-side validation for private preview on-demand sandbox CPU and memory resource quantities.

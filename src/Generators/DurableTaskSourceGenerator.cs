@@ -264,31 +264,44 @@ namespace Microsoft.DurableTask.Generators
                 taskNameLocation = expression.GetLocation();
             }
 
-            string taskVersion = string.Empty;
+            List<string> taskVersions = new();
             Location? taskVersionLocation = null;
             bool hasWhitespaceVersion = false;
 
             // Read the optional named "Version = ..." argument off the [DurableTask] attribute itself.
-            // Whitespace-only values are kept as empty for downstream emission so we don't generate code
-            // that references the offending literal; DURABLE3005 will fail the build below.
+            // The value may be a single version ("v1") or a comma-separated list ("v1,v2"). Each entry is
+            // trimmed; truly-empty entries (e.g. a trailing comma) are skipped and duplicates are coalesced.
+            // Whitespace-only entries are flagged so DURABLE3005 fails the build below, and the offending
+            // value is not emitted into generated code.
             AttributeArgumentSyntax? versionArg = attribute.ArgumentList?.Arguments
                 .FirstOrDefault(arg => arg.NameEquals is { Name.Identifier.ValueText: "Version" });
             if (versionArg is not null
-                && context.SemanticModel.GetConstantValue(versionArg.Expression).Value is string version)
+                && context.SemanticModel.GetConstantValue(versionArg.Expression).Value is string version
+                && version.Length > 0)
             {
-                if (version.Length > 0 && string.IsNullOrWhiteSpace(version))
+                taskVersionLocation = versionArg.GetLocation();
+                foreach (string segment in version.Split(','))
                 {
-                    hasWhitespaceVersion = true;
-                    taskVersionLocation = versionArg.GetLocation();
-                    taskVersion = string.Empty;
-                }
-                else
-                {
-                    taskVersion = version;
+                    if (segment.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    string trimmed = segment.Trim();
+                    if (trimmed.Length == 0)
+                    {
+                        hasWhitespaceVersion = true;
+                        continue;
+                    }
+
+                    if (!taskVersions.Contains(trimmed, StringComparer.OrdinalIgnoreCase))
+                    {
+                        taskVersions.Add(trimmed);
+                    }
                 }
             }
 
-            return new DurableTaskTypeInfo(className, classNamespace, taskName, inputType, outputType, kind, taskVersion, taskNameLocation, taskVersionLocation, hasWhitespaceVersion);
+            return new DurableTaskTypeInfo(className, classNamespace, taskName, inputType, outputType, kind, taskVersions, taskNameLocation, taskVersionLocation, hasWhitespaceVersion);
         }
 
         static DurableEventTypeInfo? GetDurableEventTypeInfo(GeneratorSyntaxContext context)
@@ -424,26 +437,43 @@ namespace Microsoft.DurableTask.Generators
 
             Dictionary<string, DurableTaskTypeInfo> standaloneOrchestratorRegistrations = new(StringComparer.OrdinalIgnoreCase);
             Dictionary<string, DurableTaskTypeInfo> standaloneActivityRegistrations = new(StringComparer.OrdinalIgnoreCase);
+
+            // Reserves a standalone (name, version) registration key for each version the task declares.
+            // Returns false (after reporting DURABLE3003) when any of the task's keys is already taken,
+            // signaling the caller to skip the task. A task declaring multiple versions reserves one key
+            // per version so that two different classes cannot both claim the same name + version.
+            bool TryReserveStandaloneRegistration(Dictionary<string, DurableTaskTypeInfo> registrations, DurableTaskTypeInfo task)
+            {
+                foreach (string version in GetTaskVersionsOrUnversioned(task))
+                {
+                    string registrationKey = GetStandaloneTaskRegistrationKey(task.TaskName, version);
+                    if (registrations.ContainsKey(registrationKey))
+                    {
+                        Location location = task.TaskNameLocation ?? Location.None;
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            DuplicateStandaloneOrchestratorVersionRule,
+                            location,
+                            task.TaskName,
+                            version));
+                        return false;
+                    }
+                }
+
+                foreach (string version in GetTaskVersionsOrUnversioned(task))
+                {
+                    registrations[GetStandaloneTaskRegistrationKey(task.TaskName, version)] = task;
+                }
+
+                return true;
+            }
+
             foreach (DurableTaskTypeInfo task in validTasks)
             {
                 if (task.IsActivity)
                 {
-                    if (!isDurableFunctions)
+                    if (!isDurableFunctions && !TryReserveStandaloneRegistration(standaloneActivityRegistrations, task))
                     {
-                        string registrationKey = GetStandaloneTaskRegistrationKey(task.TaskName, task.TaskVersion);
-                        if (standaloneActivityRegistrations.ContainsKey(registrationKey))
-                        {
-                            Location location = task.TaskNameLocation ?? Location.None;
-                            Diagnostic diagnostic = Diagnostic.Create(
-                                DuplicateStandaloneOrchestratorVersionRule,
-                                location,
-                                task.TaskName,
-                                task.TaskVersion);
-                            context.ReportDiagnostic(diagnostic);
-                            continue;
-                        }
-
-                        standaloneActivityRegistrations.Add(registrationKey, task);
+                        continue;
                     }
 
                     activities.Add(task);
@@ -454,22 +484,9 @@ namespace Microsoft.DurableTask.Generators
                 }
                 else
                 {
-                    if (!isDurableFunctions)
+                    if (!isDurableFunctions && !TryReserveStandaloneRegistration(standaloneOrchestratorRegistrations, task))
                     {
-                        string registrationKey = GetStandaloneTaskRegistrationKey(task.TaskName, task.TaskVersion);
-                        if (standaloneOrchestratorRegistrations.ContainsKey(registrationKey))
-                        {
-                            Location location = task.TaskNameLocation ?? Location.None;
-                            Diagnostic diagnostic = Diagnostic.Create(
-                                DuplicateStandaloneOrchestratorVersionRule,
-                                location,
-                                task.TaskName,
-                                task.TaskVersion);
-                            context.ReportDiagnostic(diagnostic);
-                            continue;
-                        }
-
-                        standaloneOrchestratorRegistrations.Add(registrationKey, task);
+                        continue;
                     }
 
                     orchestrators.Add(task);
@@ -647,9 +664,9 @@ using Microsoft.Extensions.DependencyInjection;");
                 bool hasEvents = eventsInNamespace != null && eventsInNamespace.Count > 0;
                 bool hasRegistration = isMicrosoftDurableTask && needsRegistrationMethod;
                 bool hasVersionedStandaloneOrchestratorHelpers = !isDurableFunctions
-                    && orchestratorsInNs.Any(task => !string.IsNullOrEmpty(task.TaskVersion));
+                    && orchestratorsInNs.Any(task => task.IsVersioned);
                 bool hasVersionedStandaloneActivityHelpers = !isDurableFunctions
-                    && activitiesInNs.Any(task => !string.IsNullOrEmpty(task.TaskVersion));
+                    && activitiesInNs.Any(task => task.IsVersioned);
                 bool hasVersionedStandaloneHelpers = hasVersionedStandaloneOrchestratorHelpers || hasVersionedStandaloneActivityHelpers;
 
                 if (!hasOrchestratorMethods && !hasActivityMethods && !hasEntityFunctions
@@ -682,7 +699,7 @@ namespace {targetNamespace}
                     }
 
                     string helperRoot = GetStandaloneHelperRoot(orchestrator, isDurableFunctions, standaloneOrchestratorCountsByTaskName);
-                    bool applyGeneratedVersion = !isDurableFunctions && !string.IsNullOrEmpty(orchestrator.TaskVersion);
+                    bool applyGeneratedVersion = !isDurableFunctions && orchestrator.IsVersioned;
                     AddOrchestratorCallMethod(sourceBuilder, orchestrator, targetNamespace, helperRoot, applyGeneratedVersion);
                     AddSubOrchestratorCallMethod(sourceBuilder, orchestrator, targetNamespace, helperRoot, applyGeneratedVersion);
                 }
@@ -690,7 +707,7 @@ namespace {targetNamespace}
                 foreach (DurableTaskTypeInfo activity in activitiesInNs)
                 {
                     string helperRoot = GetStandaloneHelperRoot(activity, isDurableFunctions, standaloneActivityCountsByTaskName);
-                    bool applyGeneratedVersion = !isDurableFunctions && !string.IsNullOrEmpty(activity.TaskVersion);
+                    bool applyGeneratedVersion = !isDurableFunctions && activity.IsVersioned;
                     AddActivityCallMethod(sourceBuilder, activity, targetNamespace, helperRoot, applyGeneratedVersion);
 
                     if (isDurableFunctions)
@@ -828,7 +845,7 @@ namespace {targetNamespace}
             // generated helper unique without encoding the version into the method name. Single-class and
             // Azure Functions cases continue to use the durable task name unchanged.
             if (isDurableFunctions
-                || string.IsNullOrEmpty(task.TaskVersion)
+                || !task.IsVersioned
                 || !standaloneTaskCountsByTaskName.TryGetValue(task.TaskName, out int count)
                 || count <= 1)
             {
@@ -856,7 +873,32 @@ namespace {targetNamespace}
             return string.Concat(taskName, "\0", taskVersion);
         }
 
+        // Yields each declared version for the task, or a single empty (unversioned) entry when none are
+        // declared. Lets registration/dedup logic treat versioned and unversioned tasks uniformly.
+        static IEnumerable<string> GetTaskVersionsOrUnversioned(DurableTaskTypeInfo task)
+        {
+            return task.TaskVersions.Count > 0 ? task.TaskVersions : new[] { string.Empty };
+        }
+
         static string ToCSharpStringLiteral(string value) => SymbolDisplay.FormatLiteral(value, quote: true);
+
+        // Builds a runtime guard, emitted into a multi-version call helper, that rejects a caller-supplied
+        // version not declared on the task. The condition compares against each declared version literal so
+        // the wire only ever carries a version the task advertises.
+        static string BuildDeclaredVersionGuard(DurableTaskTypeInfo task, string callKind)
+        {
+            string condition = string.Join(
+                " || ", task.TaskVersions.Select(v => $"version == {ToCSharpStringLiteral(v)}"));
+            string declaredVersions = string.Join(", ", task.TaskVersions);
+            return $@"
+            if (!({condition}))
+            {{
+                throw new ArgumentException(
+                    ""Version '"" + version + ""' is not a declared version of {callKind} '{task.TaskName}'. Declared versions: {declaredVersions}."",
+                    nameof(version));
+            }}
+";
+        }
 
         static void AddOrchestratorFunctionDeclaration(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator, string targetNamespace)
         {
@@ -874,21 +916,39 @@ namespace {targetNamespace}
 
         static void AddOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator, string targetNamespace, string helperRoot, bool applyGeneratedVersion)
         {
+            bool multiVersion = applyGeneratedVersion && orchestrator.TaskVersions.Count > 1;
+
             string inputType = orchestrator.GetInputTypeForNamespace(targetNamespace);
             string inputParameter = inputType + " input";
-            if (inputType.EndsWith("?", StringComparison.Ordinal))
+            if (!multiVersion && inputType.EndsWith("?", StringComparison.Ordinal))
             {
                 inputParameter += " = default";
             }
 
             string simplifiedTypeName = SimplifyTypeName(orchestrator.TypeName, targetNamespace);
-            string optionsExpression = applyGeneratedVersion
-                ? $"ApplyGeneratedVersion(options, {ToCSharpStringLiteral(orchestrator.TaskVersion)})"
-                : "options";
-            string versionRemarks = applyGeneratedVersion
-                ? $@"
-        /// <remarks>Stamps version <c>{orchestrator.TaskVersion}</c> on the started instance. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>"
-                : string.Empty;
+            string versionParameter = multiVersion ? ", string version" : string.Empty;
+            string versionGuard = multiVersion ? BuildDeclaredVersionGuard(orchestrator, "orchestration") : string.Empty;
+            string optionsExpression;
+            string versionRemarks;
+            if (multiVersion)
+            {
+                string declaredVersions = string.Join(", ", orchestrator.TaskVersions);
+                optionsExpression = "ApplyGeneratedVersion(options, version)";
+                versionRemarks = $@"
+        /// <remarks>Stamps the supplied <paramref name=""version""/> on the started instance; it must be one of the declared versions: {declaredVersions}. A non-null <paramref name=""options""/>.Version overrides it.</remarks>
+        /// <param name=""version"">The declared task version to stamp on the call. Must be one of: {declaredVersions}.</param>";
+            }
+            else if (applyGeneratedVersion)
+            {
+                optionsExpression = $"ApplyGeneratedVersion(options, {ToCSharpStringLiteral(orchestrator.TaskVersions[0])})";
+                versionRemarks = $@"
+        /// <remarks>Stamps version <c>{orchestrator.TaskVersions[0]}</c> on the started instance. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>";
+            }
+            else
+            {
+                optionsExpression = "options";
+                versionRemarks = string.Empty;
+            }
 
             sourceBuilder.AppendLine($@"
         /// <summary>
@@ -896,30 +956,48 @@ namespace {targetNamespace}
         /// </summary>{versionRemarks}
         /// <inheritdoc cref=""IOrchestrationSubmitter.ScheduleNewOrchestrationInstanceAsync""/>
         public static Task<string> ScheduleNew{helperRoot}InstanceAsync(
-            this IOrchestrationSubmitter client, {inputParameter}, StartOrchestrationOptions? options = null)
-        {{
+            this IOrchestrationSubmitter client, {inputParameter}{versionParameter}, StartOrchestrationOptions? options = null)
+        {{{versionGuard}
             return client.ScheduleNewOrchestrationInstanceAsync(""{orchestrator.TaskName}"", input, {optionsExpression});
         }}");
         }
 
         static void AddSubOrchestratorCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo orchestrator, string targetNamespace, string helperRoot, bool applyGeneratedVersion)
         {
+            bool multiVersion = applyGeneratedVersion && orchestrator.TaskVersions.Count > 1;
+
             string inputType = orchestrator.GetInputTypeForNamespace(targetNamespace);
             string outputType = orchestrator.GetOutputTypeForNamespace(targetNamespace);
             string inputParameter = inputType + " input";
-            if (inputType.EndsWith("?", StringComparison.Ordinal))
+            if (!multiVersion && inputType.EndsWith("?", StringComparison.Ordinal))
             {
                 inputParameter += " = default";
             }
 
             string simplifiedTypeName = SimplifyTypeName(orchestrator.TypeName, targetNamespace);
-            string optionsExpression = applyGeneratedVersion
-                ? $"ApplyGeneratedVersion(options, {ToCSharpStringLiteral(orchestrator.TaskVersion)})"
-                : "options";
-            string versionRemarks = applyGeneratedVersion
-                ? $@"
-        /// <remarks>Stamps version <c>{orchestrator.TaskVersion}</c> on the sub-orchestration. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>"
-                : string.Empty;
+            string versionParameter = multiVersion ? ", string version" : string.Empty;
+            string versionGuard = multiVersion ? BuildDeclaredVersionGuard(orchestrator, "orchestration") : string.Empty;
+            string optionsExpression;
+            string versionRemarks;
+            if (multiVersion)
+            {
+                string declaredVersions = string.Join(", ", orchestrator.TaskVersions);
+                optionsExpression = "ApplyGeneratedVersion(options, version)";
+                versionRemarks = $@"
+        /// <remarks>Stamps the supplied <paramref name=""version""/> on the sub-orchestration; it must be one of the declared versions: {declaredVersions}. A non-null <paramref name=""options""/>.Version overrides it.</remarks>
+        /// <param name=""version"">The declared task version to stamp on the call. Must be one of: {declaredVersions}.</param>";
+            }
+            else if (applyGeneratedVersion)
+            {
+                optionsExpression = $"ApplyGeneratedVersion(options, {ToCSharpStringLiteral(orchestrator.TaskVersions[0])})";
+                versionRemarks = $@"
+        /// <remarks>Stamps version <c>{orchestrator.TaskVersions[0]}</c> on the sub-orchestration. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>";
+            }
+            else
+            {
+                optionsExpression = "options";
+                versionRemarks = string.Empty;
+            }
 
             sourceBuilder.AppendLine($@"
         /// <summary>
@@ -927,8 +1005,8 @@ namespace {targetNamespace}
         /// </summary>{versionRemarks}
         /// <inheritdoc cref=""TaskOrchestrationContext.CallSubOrchestratorAsync(TaskName, object?, TaskOptions?)""/>
         public static Task<{outputType}> Call{helperRoot}Async(
-            this TaskOrchestrationContext context, {inputParameter}, TaskOptions? options = null)
-        {{
+            this TaskOrchestrationContext context, {inputParameter}{versionParameter}, TaskOptions? options = null)
+        {{{versionGuard}
             return context.CallSubOrchestratorAsync<{outputType}>(""{orchestrator.TaskName}"", input, {optionsExpression});
         }}");
         }
@@ -1010,30 +1088,48 @@ namespace {targetNamespace}
 
         static void AddActivityCallMethod(StringBuilder sourceBuilder, DurableTaskTypeInfo activity, string targetNamespace, string helperRoot, bool applyGeneratedVersion)
         {
+            bool multiVersion = applyGeneratedVersion && activity.TaskVersions.Count > 1;
+
             string inputType = activity.GetInputTypeForNamespace(targetNamespace);
             string outputType = activity.GetOutputTypeForNamespace(targetNamespace);
             string inputParameter = inputType + " input";
-            if (inputType.EndsWith("?", StringComparison.Ordinal))
+            if (!multiVersion && inputType.EndsWith("?", StringComparison.Ordinal))
             {
                 inputParameter += " = default";
             }
 
             string simplifiedTypeName = SimplifyTypeName(activity.TypeName, targetNamespace);
-            string optionsExpression = applyGeneratedVersion
-                ? $"ApplyGeneratedActivityVersion(options, {ToCSharpStringLiteral(activity.TaskVersion)})"
-                : "options";
-            string versionRemarks = applyGeneratedVersion
-                ? $@"
-        /// <remarks>Stamps version <c>{activity.TaskVersion}</c> on the activity call. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>"
-                : string.Empty;
+            string versionParameter = multiVersion ? ", string version" : string.Empty;
+            string versionGuard = multiVersion ? BuildDeclaredVersionGuard(activity, "activity") : string.Empty;
+            string optionsExpression;
+            string versionRemarks;
+            if (multiVersion)
+            {
+                string declaredVersions = string.Join(", ", activity.TaskVersions);
+                optionsExpression = "ApplyGeneratedActivityVersion(options, version)";
+                versionRemarks = $@"
+        /// <remarks>Stamps the supplied <paramref name=""version""/> on the activity call; it must be one of the declared versions: {declaredVersions}. A non-null <paramref name=""options""/>.Version overrides it.</remarks>
+        /// <param name=""version"">The declared task version to stamp on the call. Must be one of: {declaredVersions}.</param>";
+            }
+            else if (applyGeneratedVersion)
+            {
+                optionsExpression = $"ApplyGeneratedActivityVersion(options, {ToCSharpStringLiteral(activity.TaskVersions[0])})";
+                versionRemarks = $@"
+        /// <remarks>Stamps version <c>{activity.TaskVersions[0]}</c> on the activity call. A non-null <paramref name=""options""/>.Version overrides this baked version.</remarks>";
+            }
+            else
+            {
+                optionsExpression = "options";
+                versionRemarks = string.Empty;
+            }
 
             sourceBuilder.AppendLine($@"
         /// <summary>
         /// Calls the <see cref=""{simplifiedTypeName}""/> activity.
         /// </summary>{versionRemarks}
         /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
-        public static Task<{outputType}> Call{helperRoot}Async(this TaskOrchestrationContext ctx, {inputParameter}, TaskOptions? options = null)
-        {{
+        public static Task<{outputType}> Call{helperRoot}Async(this TaskOrchestrationContext ctx, {inputParameter}{versionParameter}, TaskOptions? options = null)
+        {{{versionGuard}
             return ctx.CallActivityAsync<{outputType}>(""{activity.TaskName}"", input, {optionsExpression});
         }}");
         }
@@ -1210,7 +1306,7 @@ namespace {targetNamespace}
                 ITypeSymbol? inputType,
                 ITypeSymbol? outputType,
                 DurableTaskKind kind,
-                string taskVersion,
+                IReadOnlyList<string> taskVersions,
                 Location? taskNameLocation = null,
                 Location? taskVersionLocation = null,
                 bool hasWhitespaceVersion = false)
@@ -1219,7 +1315,7 @@ namespace {targetNamespace}
                 this.Namespace = taskNamespace;
                 this.TaskName = taskName;
                 this.Kind = kind;
-                this.TaskVersion = taskVersion;
+                this.TaskVersions = taskVersions;
                 this.TaskNameLocation = taskNameLocation;
                 this.TaskVersionLocation = taskVersionLocation;
                 this.HasWhitespaceVersion = hasWhitespaceVersion;
@@ -1230,7 +1326,17 @@ namespace {targetNamespace}
             public string TypeName { get; }
             public string Namespace { get; }
             public string TaskName { get; }
-            public string TaskVersion { get; }
+
+            /// <summary>
+            /// Gets the distinct versions declared on the task in declaration order. Empty for an unversioned task.
+            /// </summary>
+            public IReadOnlyList<string> TaskVersions { get; }
+
+            /// <summary>
+            /// Gets a value indicating whether the task declares one or more versions.
+            /// </summary>
+            public bool IsVersioned => this.TaskVersions.Count > 0;
+
             public DurableTaskKind Kind { get; }
             public Location? TaskNameLocation { get; }
             public Location? TaskVersionLocation { get; }

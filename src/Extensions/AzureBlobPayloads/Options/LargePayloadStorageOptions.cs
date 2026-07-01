@@ -26,7 +26,7 @@ namespace Microsoft.DurableTask;
 /// </summary>
 public sealed class LargePayloadStorageOptions
 {
-    int thresholdBytes = 900_000;
+    int thresholdBytes = 256 * 1024;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LargePayloadStorageOptions"/> class.
@@ -60,7 +60,7 @@ public sealed class LargePayloadStorageOptions
     }
 
     /// <summary>
-    /// Gets or sets the threshold in bytes at which payloads are externalized. Default is 900_000 bytes.
+    /// Gets or sets the threshold in bytes at which payloads are externalized. Default is 256 KiB (262,144 bytes).
     /// Value must not exceed 1 MiB (1,048,576 bytes).
     /// </summary>
     public int ThresholdBytes

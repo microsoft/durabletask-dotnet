@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Change the default large payload externalization threshold (`LargePayloadStorageOptions.ThresholdBytes`) from 900,000 bytes to 256 KiB (262,144 bytes)
 
 
 ## v1.25.0-preview.2

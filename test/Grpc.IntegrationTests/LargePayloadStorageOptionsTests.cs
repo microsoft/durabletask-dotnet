@@ -29,13 +29,13 @@ public class LargePayloadStorageOptionsTests
     }
 
     [Fact]
-    public void ThresholdBytes_DefaultValue_Is900000()
+    public void ThresholdBytes_DefaultValue_Is256KiB()
     {
         // Arrange & Act
         LargePayloadStorageOptions options = new();
 
         // Assert
-        Assert.Equal(900_000, options.ThresholdBytes);
+        Assert.Equal(256 * 1024, options.ThresholdBytes);
     }
 
     [Fact]

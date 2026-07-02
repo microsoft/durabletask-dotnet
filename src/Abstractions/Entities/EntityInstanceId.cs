@@ -12,6 +12,8 @@ namespace Microsoft.DurableTask.Entities;
 [JsonConverter(typeof(EntityInstanceId.JsonConverter))]
 public readonly record struct EntityInstanceId
 {
+    const int MaxInstanceIdLength = 100;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="EntityInstanceId"/> struct.
     /// </summary>
@@ -28,6 +30,12 @@ public readonly record struct EntityInstanceId
         Check.NotNull(key);
         this.Name = name.ToLowerInvariant();
         this.Key = key;
+
+        int length = this.ToString().Length;
+        if (length > MaxInstanceIdLength)
+        {
+            throw new ArgumentException($"entity instance ids may not exceed 100 characters in length, actual length {length}.");
+        }
     }
 
     /// <summary>

@@ -2,6 +2,7 @@
 
 ## Unreleased
 - Change the default large payload externalization threshold (`LargePayloadStorageOptions.ThresholdBytes`) from 900,000 bytes to 256 KiB (262,144 bytes)
+- **BREAKING**: `EntityInstanceId` now throws if its string form exceeds 100 characters (backend limit). Migration: shorten entity name/key; if entities already exist with overlong IDs, use the truncated 100-character value when addressing them.
 
 
 ## v1.25.0-preview.2

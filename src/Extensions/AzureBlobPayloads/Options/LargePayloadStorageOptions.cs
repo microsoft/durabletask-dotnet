@@ -115,4 +115,18 @@ public sealed class LargePayloadStorageOptions
     /// Defaults to true for reduced storage and bandwidth.
     /// </summary>
     public bool CompressionEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the client should start the singleton blob payload auto-purge
+    /// job. When enabled, the job periodically drains payload rows the backend has soft-deleted and deletes
+    /// the corresponding blobs from customer storage (the backend has no storage credentials of its own).
+    /// Defaults to <c>false</c> (opt-in).
+    /// </summary>
+    public bool AutoPurge { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum number of tombstoned payloads the auto-purge job requests from the backend
+    /// per cycle. Defaults to 500. Values less than or equal to zero are treated as the default.
+    /// </summary>
+    public int PayloadPurgeBatchSize { get; set; } = 500;
 }

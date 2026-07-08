@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.3.32901.215
@@ -144,6 +144,8 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "AzureManaged", "AzureManaged", "{53193780-CD18-2643-6953-C26F59EAEDF5}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Grpc", "Grpc", "{3B8F957E-7773-4C0C-ACD7-91A1591D9312}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AzureBlobPayloads.Tests", "test\AzureBlobPayloads.Tests\AzureBlobPayloads.Tests.csproj", "{531B29A0-B2AD-43E2-8F65-0BA85C82C4B5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -839,6 +841,18 @@ Global
 		{C1995163-1DCE-405D-BE82-8B4B2584893E}.Release|x64.Build.0 = Release|Any CPU
 		{C1995163-1DCE-405D-BE82-8B4B2584893E}.Release|x86.ActiveCfg = Release|Any CPU
 		{C1995163-1DCE-405D-BE82-8B4B2584893E}.Release|x86.Build.0 = Release|Any CPU
+		{531B29A0-B2AD-43E2-8F65-0BA85C82C4B5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{531B29A0-B2AD-43E2-8F65-0BA85C82C4B5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{531B29A0-B2AD-43E2-8F65-0BA85C82C4B5}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{531B29A0-B2AD-43E2-8F65-0BA85C82C4B5}.Debug|x64.Build.0 = Debug|Any CPU
+		{531B29A0-B2AD-43E2-8F65-0BA85C82C4B5}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{531B29A0-B2AD-43E2-8F65-0BA85C82C4B5}.Debug|x86.Build.0 = Debug|Any CPU
+		{531B29A0-B2AD-43E2-8F65-0BA85C82C4B5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{531B29A0-B2AD-43E2-8F65-0BA85C82C4B5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{531B29A0-B2AD-43E2-8F65-0BA85C82C4B5}.Release|x64.ActiveCfg = Release|Any CPU
+		{531B29A0-B2AD-43E2-8F65-0BA85C82C4B5}.Release|x64.Build.0 = Release|Any CPU
+		{531B29A0-B2AD-43E2-8F65-0BA85C82C4B5}.Release|x86.ActiveCfg = Release|Any CPU
+		{531B29A0-B2AD-43E2-8F65-0BA85C82C4B5}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -911,6 +925,7 @@ Global
 		{C1995163-1DCE-405D-BE82-8B4B2584893E} = {9686B8F9-2644-6C9B-E567-55B0471E4584}
 		{53193780-CD18-2643-6953-C26F59EAEDF5} = {5B448FF6-EC42-491D-A22E-1DC8B618E6D5}
 		{3B8F957E-7773-4C0C-ACD7-91A1591D9312} = {5B448FF6-EC42-491D-A22E-1DC8B618E6D5}
+		{531B29A0-B2AD-43E2-8F65-0BA85C82C4B5} = {E5637F81-2FB9-4CD7-900D-455363B142A7}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AB41CB55-35EA-4986-A522-387AB3402E71}

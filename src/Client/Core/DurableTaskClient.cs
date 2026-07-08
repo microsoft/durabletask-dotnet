@@ -549,6 +549,30 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
             $"{this.GetType()} does not support listing orchestration instance IDs filtered by completed time.");
     }
 
+    /// <summary>
+    /// Gets a batch of tombstoned (soft-deleted) externalized payloads whose backing blobs should be deleted
+    /// by a credentialed caller before the backend hard-deletes the rows.
+    /// </summary>
+    /// <param name="limit">The maximum number of tombstoned payloads to request.</param>
+    /// <param name="cancellation">The cancellation token.</param>
+    /// <returns>The batch of tombstoned payloads whose blobs should be deleted.</returns>
+    /// <exception cref="NotSupportedException">Thrown if this implementation does not support the operation.</exception>
+    public virtual Task<List<TombstonedPayloadDto>> GetTombstonedPayloadsAsync(
+        int limit, CancellationToken cancellation = default)
+        => throw new NotSupportedException($"{this.GetType()} does not support retrieving tombstoned payloads.");
+
+    /// <summary>
+    /// Acknowledges tombstoned payloads whose backing blobs have been deleted so the backend can hard-delete
+    /// the corresponding rows.
+    /// </summary>
+    /// <param name="acks">The payloads whose blobs have been deleted.</param>
+    /// <param name="cancellation">The cancellation token.</param>
+    /// <returns>A task that completes when the acknowledgement has been sent.</returns>
+    /// <exception cref="NotSupportedException">Thrown if this implementation does not support the operation.</exception>
+    public virtual Task AckPurgedPayloadsAsync(
+        IEnumerable<PayloadPurgeAckDto> acks, CancellationToken cancellation = default)
+        => throw new NotSupportedException($"{this.GetType()} does not support acknowledging purged payloads.");
+
     // TODO: Create task hub
 
     // TODO: Delete task hub

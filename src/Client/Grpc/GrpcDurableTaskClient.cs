@@ -624,6 +624,49 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
     }
 
+    /// <inheritdoc/>
+    public override async Task<List<TombstonedPayloadDto>> GetTombstonedPayloadsAsync(
+        int limit, CancellationToken cancellation = default)
+    {
+        P.GetTombstonedPayloadsResponse response = await this.sidecarClient.GetTombstonedPayloadsAsync(
+            new P.GetTombstonedPayloadsRequest { Limit = limit },
+            cancellationToken: cancellation);
+
+        List<TombstonedPayloadDto> result = new(response.Payloads.Count);
+        foreach (P.TombstonedPayload payload in response.Payloads)
+        {
+            result.Add(new TombstonedPayloadDto(
+                payload.PartitionId, payload.InstanceKey, payload.PayloadId, payload.Token));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public override async Task AckPurgedPayloadsAsync(
+        IEnumerable<PayloadPurgeAckDto> acks, CancellationToken cancellation = default)
+    {
+        Check.NotNull(acks);
+
+        P.AckPurgedPayloadsRequest request = new();
+        foreach (PayloadPurgeAckDto ack in acks)
+        {
+            request.Acks.Add(new P.PayloadPurgeAck
+            {
+                PartitionId = ack.PartitionId,
+                InstanceKey = ack.InstanceKey,
+                PayloadId = ack.PayloadId,
+            });
+        }
+
+        if (request.Acks.Count == 0)
+        {
+            return;
+        }
+
+        await this.sidecarClient.AckPurgedPayloadsAsync(request, cancellationToken: cancellation);
+    }
+
     static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, ILogger logger, out CallInvoker callInvoker)
     {
         Func<GrpcChannel, CancellationToken, Task<GrpcChannel>>? recreator = options.Internal.ChannelRecreator;

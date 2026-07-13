@@ -82,6 +82,11 @@ sealed partial class TaskOrchestrationContextWrapper
 
             if (result.IsError)
             {
+                foreach (EntityMessageEvent releaseMessage in this.EntityContext.EmitLockReleaseMessages())
+                {
+                    this.wrapper.innerContext.SendEvent(releaseMessage.TargetInstance, releaseMessage.EventName, releaseMessage.AsRawInput());
+                }
+
                 this.EntityContext.AbandonAcquire();
                 throw new EntityLockAcquisitionFailedException(entityIds, ConvertFailureDetails(result.FailureDetails!));
             }

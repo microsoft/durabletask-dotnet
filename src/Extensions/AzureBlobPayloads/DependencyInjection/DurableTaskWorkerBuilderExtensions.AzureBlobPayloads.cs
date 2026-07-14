@@ -6,6 +6,7 @@ using Microsoft.DurableTask.AzureBlobPayloads;
 using Microsoft.DurableTask.Worker;
 using Microsoft.DurableTask.Worker.Grpc;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using P = Microsoft.DurableTask.Protobuf;
 
@@ -30,11 +31,6 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
         Check.NotNull(configure);
 
         builder.Services.Configure(builder.Name, configure);
-        builder.Services.AddSingleton<PayloadStore>(sp =>
-        {
-            LargePayloadStorageOptions opts = sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(builder.Name);
-            return new BlobPayloadStore(opts);
-        });
 
         return UseExternalizedPayloadsCore(builder);
     }
@@ -54,6 +50,15 @@ public static class DurableTaskWorkerBuilderExtensionsAzureBlobPayloads
 
     static IDurableTaskWorkerBuilder UseExternalizedPayloadsCore(IDurableTaskWorkerBuilder builder)
     {
+        // Reuse the shared payload store when one is already registered (e.g. via AddExternalizedPayloadStore or
+        // the client builder in the same process); only register our own as a fallback so we never create a
+        // second, redundant PayloadStore.
+        builder.Services.TryAddSingleton<PayloadStore>(sp =>
+        {
+            LargePayloadStorageOptions opts = sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(builder.Name);
+            return new BlobPayloadStore(opts);
+        });
+
         // Wrap the gRPC CallInvoker with our interceptor when using the gRPC worker
         builder.Services
             .AddOptions<GrpcDurableTaskWorkerOptions>(builder.Name)

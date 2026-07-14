@@ -35,15 +35,6 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
 
         builder.Services.Configure(builder.Name, configure);
 
-        // Reuse the shared payload store when one is already registered (e.g. via AddExternalizedPayloadStore or
-        // the worker builder in the same process); only register our own as a fallback so we never create a
-        // second, redundant PayloadStore.
-        builder.Services.TryAddSingleton<PayloadStore>(sp =>
-        {
-            LargePayloadStorageOptions opts = sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(builder.Name);
-            return new BlobPayloadStore(opts);
-        });
-
         UseExternalizedPayloadsCore(builder);
 
         // Conditional DI: register the auto-purge starter only when the caller opted into auto-purge. Peek the
@@ -73,6 +64,15 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
 
     static IDurableTaskClientBuilder UseExternalizedPayloadsCore(IDurableTaskClientBuilder builder)
     {
+        // Reuse the shared payload store when one is already registered (e.g. via AddExternalizedPayloadStore or
+        // the worker builder in the same process); only register our own as a fallback so we never create a
+        // second, redundant PayloadStore.
+        builder.Services.TryAddSingleton<PayloadStore>(sp =>
+        {
+            LargePayloadStorageOptions opts = sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(builder.Name);
+            return new BlobPayloadStore(opts);
+        });
+
         // Wrap the gRPC CallInvoker with our interceptor when using the gRPC client
         builder.Services
             .AddOptions<GrpcDurableTaskClientOptions>(builder.Name)

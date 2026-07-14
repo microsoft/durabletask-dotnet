@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using DurableTask.Core.Exceptions;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Hosting;
@@ -79,8 +80,24 @@ sealed class BlobPurgeJobStarter : IHostedService
             try
             {
                 // The singleton is already guaranteed by the entity's fixed key (Create no-ops when the job is
-                // active) and the orchestrator's fixed instance id, so just schedule the bridge once with a
-                // fixed instance id. Retry only if the backend is unreachable at startup.
+                // active) and the orchestrator's fixed instance id. The bridge orchestration's only job is to
+                // apply the entity's Create once, under a fixed instance id. Before (re)scheduling it, check the
+                // existing bridge: if it already Completed - or is still alive (Running/Pending/Suspended) - the
+                // job is set up, so do not reschedule. (Re-running a Completed bridge is wasteful: with a fixed
+                // id and no dedupe policy the backend would purge and replace the terminal instance on every
+                // host restart.) Only (re)schedule when the bridge is absent, or ended in a Failed/Terminated
+                // state that may never have applied Create - which lets a failed setup self-heal.
+                OrchestrationMetadata? existing = await this.client.GetInstanceAsync(
+                    BlobPurgeConstants.StarterInstanceId, cancellationToken);
+
+                bool needsSchedule = existing is null
+                    or { RuntimeStatus: OrchestrationRuntimeStatus.Failed or OrchestrationRuntimeStatus.Terminated };
+                if (!needsSchedule)
+                {
+                    this.logger.BlobPurgeJobEnsured();
+                    return;
+                }
+
                 BlobPurgeJobOperationRequest request = new(
                     this.entityId, nameof(BlobPurgeJob.Create), batchSize);
 
@@ -90,6 +107,13 @@ sealed class BlobPurgeJobStarter : IHostedService
                     new StartOrchestrationOptions(BlobPurgeConstants.StarterInstanceId),
                     cancellationToken);
 
+                this.logger.BlobPurgeJobEnsured();
+                return;
+            }
+            catch (OrchestrationAlreadyExistsException)
+            {
+                // Race: another client scheduled the bridge between our status check and schedule call. That is
+                // fine - the singleton is already kicked off; treat it as ensured and stop.
                 this.logger.BlobPurgeJobEnsured();
                 return;
             }

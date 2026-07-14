@@ -8,6 +8,7 @@ using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.DurableTask.Converters;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -33,13 +34,28 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
         Check.NotNull(configure);
 
         builder.Services.Configure(builder.Name, configure);
-        builder.Services.AddSingleton<PayloadStore>(sp =>
+
+        // Reuse the shared payload store when one is already registered (e.g. via AddExternalizedPayloadStore or
+        // the worker builder in the same process); only register our own as a fallback so we never create a
+        // second, redundant PayloadStore.
+        builder.Services.TryAddSingleton<PayloadStore>(sp =>
         {
             LargePayloadStorageOptions opts = sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>().Get(builder.Name);
             return new BlobPayloadStore(opts);
         });
 
-        return UseExternalizedPayloadsCore(builder);
+        UseExternalizedPayloadsCore(builder);
+
+        // Conditional DI: register the auto-purge starter only when the caller opted into auto-purge. Peek the
+        // flag now by running the configure delegate against a probe (options configurators are pure setters).
+        LargePayloadStorageOptions probe = new();
+        configure(probe);
+        if (probe.AutoPurge)
+        {
+            RegisterBlobPurgeJobStarter(builder);
+        }
+
+        return builder;
     }
 
     /// <summary>
@@ -81,8 +97,6 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
                         "Channel or CallInvoker must be provided to use Azure Blob Payload Externalization feature");
                 }
             });
-
-        RegisterBlobPurgeJobStarter(builder);
 
         return builder;
     }

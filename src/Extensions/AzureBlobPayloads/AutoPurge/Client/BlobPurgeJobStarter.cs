@@ -11,10 +11,11 @@ using Microsoft.Extensions.Options;
 namespace Microsoft.DurableTask.AzureBlobPayloads;
 
 /// <summary>
-/// Client-side hosted service that ensures the singleton blob payload auto-purge job exists when auto-purge
-/// is enabled via <see cref="LargePayloadStorageOptions.AutoPurge"/>. It never blocks host startup: it runs
-/// on a background task and retries until the backend is reachable. The job is a whole-scheduler singleton,
-/// so racing client processes simply no-op.
+/// Client-side hosted service that ensures the singleton blob payload auto-purge job exists. It is registered
+/// only when auto-purge is enabled at registration time (see the UseExternalizedPayloads configure overload),
+/// so it does not re-check the flag here. It never blocks host startup: it runs on a background task and
+/// retries until the backend is reachable. The job is a whole-scheduler singleton, so racing client processes
+/// simply no-op.
 /// </summary>
 sealed class BlobPurgeJobStarter : IHostedService
 {
@@ -45,12 +46,6 @@ sealed class BlobPurgeJobStarter : IHostedService
     public Task StartAsync(CancellationToken cancellationToken)
     {
         LargePayloadStorageOptions opts = this.options.Get(this.builderName);
-        if (!opts.AutoPurge)
-        {
-            this.logger.BlobPurgeDisabled();
-            return Task.CompletedTask;
-        }
-
         int batchSize = opts.PayloadPurgeBatchSize > 0 ? opts.PayloadPurgeBatchSize : BlobPurgeConstants.DefaultBatchSize;
 
         // Do not block host startup; ensure the job on a background task with basic retry until the backend

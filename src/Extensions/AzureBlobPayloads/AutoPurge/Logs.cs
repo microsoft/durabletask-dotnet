@@ -28,9 +28,6 @@ static partial class Logs
     [LoggerMessage(EventId = 815, Level = LogLevel.Debug, Message = "Blob payload auto-purge acknowledged {count} purged payload(s) to the backend.")]
     public static partial void BlobPurgeAckedPayloads(this ILogger logger, int count);
 
-    [LoggerMessage(EventId = 816, Level = LogLevel.Information, Message = "Blob payload auto-purge is disabled; the singleton purge job will not be started.")]
-    public static partial void BlobPurgeDisabled(this ILogger logger);
-
     [LoggerMessage(EventId = 817, Level = LogLevel.Information, Message = "Blob payload auto-purge singleton job ensured.")]
     public static partial void BlobPurgeJobEnsured(this ILogger logger);
 

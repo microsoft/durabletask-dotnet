@@ -18,11 +18,11 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
     /// client processes racing to create it do not disturb the running job.
     /// </summary>
     /// <param name="context">The entity context.</param>
-    /// <param name="creationOptions">The job creation options.</param>
-    public void Create(TaskEntityContext context, BlobPurgeJobCreationOptions creationOptions)
+    /// <param name="purgeBatchSize">
+    /// The maximum number of tombstoned payloads to request from the backend per cycle.
+    /// </param>
+    public void Create(TaskEntityContext context, int purgeBatchSize)
     {
-        Check.NotNull(creationOptions, nameof(creationOptions));
-
         if (this.State.Status == BlobPurgeJobStatus.Active)
         {
             logger.BlobPurgeJobAlreadyRunning(context.Id.Key);
@@ -30,7 +30,7 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
         }
 
         this.State.Status = BlobPurgeJobStatus.Active;
-        this.State.PurgeBatchSize = creationOptions.PurgeBatchSize > 0 ? creationOptions.PurgeBatchSize : 500;
+        this.State.PurgeBatchSize = purgeBatchSize > 0 ? purgeBatchSize : BlobPurgeConstants.DefaultBatchSize;
         this.State.CreatedAt ??= DateTimeOffset.UtcNow;
         this.State.LastModifiedAt = DateTimeOffset.UtcNow;
         this.State.LastError = null;

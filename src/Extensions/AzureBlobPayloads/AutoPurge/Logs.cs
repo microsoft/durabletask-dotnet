@@ -36,4 +36,10 @@ static partial class Logs
 
     [LoggerMessage(EventId = 818, Level = LogLevel.Warning, Message = "Blob payload auto-purge starter could not ensure the singleton job; retrying.")]
     public static partial void BlobPurgeStarterRetry(this ILogger logger, Exception exception);
+
+    [LoggerMessage(EventId = 819, Level = LogLevel.Warning, Message = "Discarding poison externalized payload token '{token}'; it can never be deleted, acknowledging it so the backend can clear the row.")]
+    public static partial void BlobPurgeDeleteDiscarded(this ILogger logger, Exception exception, string token);
+
+    [LoggerMessage(EventId = 820, Level = LogLevel.Warning, Message = "Blob payload auto-purge cycle for job '{jobId}' failed; backing off before retrying so the job keeps running.")]
+    public static partial void BlobPurgeCycleFailed(this ILogger logger, Exception exception, string? jobId);
 }

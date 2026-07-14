@@ -10,4 +10,4 @@ namespace Microsoft.DurableTask.Client;
 /// <param name="PartitionId">The backend partition that owns the payload row.</param>
 /// <param name="InstanceKey">The orchestration instance key the payload belongs to.</param>
 /// <param name="PayloadId">The backend identifier of the soft-deleted payload row.</param>
-public sealed record PayloadPurgeAckDto(int PartitionId, long InstanceKey, long PayloadId);
+public sealed record PayloadPurgeAck(int PartitionId, long InstanceKey, long PayloadId);

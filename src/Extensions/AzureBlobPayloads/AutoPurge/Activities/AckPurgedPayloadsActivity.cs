@@ -16,13 +16,13 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 public class AckPurgedPayloadsActivity(
     DurableTaskClient client,
     ILogger<AckPurgedPayloadsActivity> logger)
-    : TaskActivity<List<PayloadPurgeAckDto>, object?>
+    : TaskActivity<List<PayloadPurgeAck>, object?>
 {
     readonly DurableTaskClient client = Check.NotNull(client);
     readonly ILogger<AckPurgedPayloadsActivity> logger = Check.NotNull(logger);
 
     /// <inheritdoc/>
-    public override async Task<object?> RunAsync(TaskActivityContext context, List<PayloadPurgeAckDto> input)
+    public override async Task<object?> RunAsync(TaskActivityContext context, List<PayloadPurgeAck> input)
     {
         if (input is null || input.Count == 0)
         {

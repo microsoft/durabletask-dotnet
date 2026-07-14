@@ -557,7 +557,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <param name="cancellation">The cancellation token.</param>
     /// <returns>The batch of tombstoned payloads whose blobs should be deleted.</returns>
     /// <exception cref="NotSupportedException">Thrown if this implementation does not support the operation.</exception>
-    public virtual Task<List<TombstonedPayloadDto>> GetTombstonedPayloadsAsync(
+    public virtual Task<List<TombstonedPayload>> GetTombstonedPayloadsAsync(
         int limit, CancellationToken cancellation = default)
         => throw new NotSupportedException($"{this.GetType()} does not support retrieving tombstoned payloads.");
 
@@ -570,7 +570,7 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
     /// <returns>A task that completes when the acknowledgement has been sent.</returns>
     /// <exception cref="NotSupportedException">Thrown if this implementation does not support the operation.</exception>
     public virtual Task AckPurgedPayloadsAsync(
-        IEnumerable<PayloadPurgeAckDto> acks, CancellationToken cancellation = default)
+        IEnumerable<PayloadPurgeAck> acks, CancellationToken cancellation = default)
         => throw new NotSupportedException($"{this.GetType()} does not support acknowledging purged payloads.");
 
     // TODO: Create task hub

@@ -19,7 +19,7 @@ public class BlobPurgeJobTests
         TestEntityOperation operation = new(
             nameof(BlobPurgeJob.Create),
             new TestEntityState(null),
-            new BlobPurgeJobCreationOptions(250));
+            250);
 
         // Act
         await this.job.RunAsync(operation);
@@ -45,7 +45,7 @@ public class BlobPurgeJobTests
         TestEntityOperation operation = new(
             nameof(BlobPurgeJob.Create),
             new TestEntityState(existing),
-            new BlobPurgeJobCreationOptions(999));
+            999);
 
         // Act
         await this.job.RunAsync(operation);
@@ -64,7 +64,7 @@ public class BlobPurgeJobTests
         TestEntityOperation operation = new(
             nameof(BlobPurgeJob.Create),
             new TestEntityState(null),
-            new BlobPurgeJobCreationOptions(0));
+            0);
 
         // Act
         await this.job.RunAsync(operation);

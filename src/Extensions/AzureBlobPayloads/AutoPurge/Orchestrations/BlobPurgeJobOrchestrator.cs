@@ -26,8 +26,8 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
 {
     const int ContinueAsNewFrequency = 5;
     const int MaxParallelDeletes = 32;
-    const int DefaultPurgeBatchSize = 500;
     static readonly TimeSpan IdleDelay = TimeSpan.FromMinutes(1);
+    static readonly TimeSpan ErrorBackoff = TimeSpan.FromMinutes(1);
 
     // Retry policy for the purge activities: 3 attempts with exponential backoff (15s, 30s, capped at 60s).
     static readonly RetryPolicy PurgeActivityRetryPolicy = new(
@@ -42,7 +42,7 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
         ILogger logger = context.CreateReplaySafeLogger<BlobPurgeJobOrchestrator>();
         string jobId = input.JobEntityId.Key;
 
-        int batchSize = input.PurgeBatchSize > 0 ? input.PurgeBatchSize : DefaultPurgeBatchSize;
+        int batchSize = input.PurgeBatchSize > 0 ? input.PurgeBatchSize : BlobPurgeConstants.DefaultBatchSize;
         int processedCycles = input.ProcessedCycles;
 
         while (true)
@@ -54,92 +54,103 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
                 return null!;
             }
 
-            // Stop cleanly if the job has been stopped or removed.
-            BlobPurgeJobState? state = await context.Entities.CallEntityAsync<BlobPurgeJobState?>(
-                input.JobEntityId, nameof(BlobPurgeJob.Get), null);
-
-            if (state is null || state.Status != BlobPurgeJobStatus.Active)
+            try
             {
-                logger.BlobPurgeJobOrchestratorStopping(jobId, state?.Status.ToString() ?? "null");
-                return null;
-            }
+                // Stop cleanly if the job has been stopped or removed.
+                BlobPurgeJobState? state = await context.Entities.CallEntityAsync<BlobPurgeJobState?>(
+                    input.JobEntityId, nameof(BlobPurgeJob.Get), null);
 
-            List<TombstonedPayloadDto> tombstones = await context.CallActivityAsync<List<TombstonedPayloadDto>>(
-                nameof(GetTombstonedPayloadsActivity),
-                batchSize,
-                new TaskOptions(PurgeActivityRetryPolicy));
+                if (state is null || state.Status != BlobPurgeJobStatus.Active)
+                {
+                    logger.BlobPurgeJobOrchestratorStopping(jobId, state?.Status.ToString() ?? "null");
+                    return null;
+                }
 
-            if (tombstones is null || tombstones.Count == 0)
-            {
-                // Nothing to purge right now: block on a timer (push-free idle) then check again.
-                await context.CreateTimer(IdleDelay, default);
-                continue;
-            }
-
-            List<PayloadPurgeAckDto> deleted = await this.DeleteBatchAsync(context, tombstones);
-
-            if (deleted.Count > 0)
-            {
-                await context.CallActivityAsync(
-                    nameof(AckPurgedPayloadsActivity),
-                    deleted,
+                List<TombstonedPayload> tombstones = await context.CallActivityAsync<List<TombstonedPayload>>(
+                    nameof(GetTombstonedPayloadsActivity),
+                    batchSize,
                     new TaskOptions(PurgeActivityRetryPolicy));
 
-                await context.Entities.CallEntityAsync(
-                    input.JobEntityId, nameof(BlobPurgeJob.RecordPurged), (long)deleted.Count);
+                if (tombstones is null || tombstones.Count == 0)
+                {
+                    // Nothing to purge right now: block on a timer (push-free idle) then check again.
+                    await context.CreateTimer(IdleDelay, default);
+                    continue;
+                }
+
+                List<PayloadPurgeAck> acks = await this.DeleteBatchAsync(context, tombstones);
+
+                if (acks.Count > 0)
+                {
+                    await context.CallActivityAsync(
+                        nameof(AckPurgedPayloadsActivity),
+                        acks,
+                        new TaskOptions(PurgeActivityRetryPolicy));
+
+                    await context.Entities.CallEntityAsync(
+                        input.JobEntityId, nameof(BlobPurgeJob.RecordPurged), (long)acks.Count);
+                }
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+            {
+                // A single bad cycle (transient backend/entity/activity failure) must not kill the perpetual
+                // loop. Log, back off, then continue so the job self-heals and keeps draining.
+                logger.BlobPurgeCycleFailed(ex, jobId);
+                await context.CreateTimer(ErrorBackoff, default);
+                continue;
             }
         }
     }
 
-    async Task<List<PayloadPurgeAckDto>> DeleteBatchAsync(
-        TaskOrchestrationContext context, List<TombstonedPayloadDto> tombstones)
+    async Task<List<PayloadPurgeAck>> DeleteBatchAsync(
+        TaskOrchestrationContext context, List<TombstonedPayload> tombstones)
     {
-        List<PayloadPurgeAckDto> deleted = new(tombstones.Count);
+        List<PayloadPurgeAck> acks = new(tombstones.Count);
         List<Task<DeleteOutcome>> tasks = new();
 
-        foreach (TombstonedPayloadDto tombstone in tombstones)
+        foreach (TombstonedPayload tombstone in tombstones)
         {
             tasks.Add(this.DeleteOneAsync(context, tombstone));
 
             if (tasks.Count >= MaxParallelDeletes)
             {
-                await DrainAsync(tasks, deleted);
+                await DrainAsync(tasks, acks);
                 tasks.Clear();
             }
         }
 
         if (tasks.Count > 0)
         {
-            await DrainAsync(tasks, deleted);
+            await DrainAsync(tasks, acks);
         }
 
-        return deleted;
+        return acks;
     }
 
-    static async Task DrainAsync(List<Task<DeleteOutcome>> tasks, List<PayloadPurgeAckDto> deleted)
+    static async Task DrainAsync(List<Task<DeleteOutcome>> tasks, List<PayloadPurgeAck> acks)
     {
         DeleteOutcome[] outcomes = await Task.WhenAll(tasks);
         foreach (DeleteOutcome outcome in outcomes)
         {
-            // Only acknowledge blobs that were actually deleted; failed tokens stay tombstoned to retry.
-            if (outcome.Deleted)
+            // Acknowledge blobs that were deleted (or already gone) and poison tokens that can never succeed
+            // so the backend can hard-delete their rows; transient failures stay tombstoned to retry.
+            if (outcome.ShouldAck)
             {
-                deleted.Add(outcome.Ack);
+                acks.Add(outcome.Ack);
             }
         }
     }
 
-    async Task<DeleteOutcome> DeleteOneAsync(TaskOrchestrationContext context, TombstonedPayloadDto tombstone)
+    async Task<DeleteOutcome> DeleteOneAsync(TaskOrchestrationContext context, TombstonedPayload tombstone)
     {
-        bool deleted = await context.CallActivityAsync<bool>(
+        BlobDeleteResult result = await context.CallActivityAsync<BlobDeleteResult>(
             nameof(DeleteExternalBlobActivity),
-            tombstone.Token,
-            new TaskOptions(PurgeActivityRetryPolicy));
+            tombstone.Token);
 
         return new DeleteOutcome(
-            deleted,
-            new PayloadPurgeAckDto(tombstone.PartitionId, tombstone.InstanceKey, tombstone.PayloadId));
+            result != BlobDeleteResult.Retry,
+            new PayloadPurgeAck(tombstone.PartitionId, tombstone.InstanceKey, tombstone.PayloadId));
     }
 
-    readonly record struct DeleteOutcome(bool Deleted, PayloadPurgeAckDto Ack);
+    readonly record struct DeleteOutcome(bool ShouldAck, PayloadPurgeAck Ack);
 }

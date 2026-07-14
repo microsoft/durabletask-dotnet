@@ -12,4 +12,4 @@ namespace Microsoft.DurableTask.Client;
 /// <param name="InstanceKey">The orchestration instance key the payload belongs to.</param>
 /// <param name="PayloadId">The backend identifier of the soft-deleted payload row.</param>
 /// <param name="Token">The externalized payload token whose backing blob should be deleted.</param>
-public sealed record TombstonedPayloadDto(int PartitionId, long InstanceKey, long PayloadId, string Token);
+public sealed record TombstonedPayload(int PartitionId, long InstanceKey, long PayloadId, string Token);

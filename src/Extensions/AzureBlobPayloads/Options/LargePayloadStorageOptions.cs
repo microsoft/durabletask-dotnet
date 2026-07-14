@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Azure.Core;
+using Microsoft.DurableTask.AzureBlobPayloads;
 
 // Intentionally no DataAnnotations to avoid extra package requirements in minimal hosts.
 namespace Microsoft.DurableTask;
@@ -128,5 +129,5 @@ public sealed class LargePayloadStorageOptions
     /// Gets or sets the maximum number of tombstoned payloads the auto-purge job requests from the backend
     /// per cycle. Defaults to 500. Values less than or equal to zero are treated as the default.
     /// </summary>
-    public int PayloadPurgeBatchSize { get; set; } = 500;
+    public int PayloadPurgeBatchSize { get; set; } = BlobPurgeConstants.DefaultBatchSize;
 }

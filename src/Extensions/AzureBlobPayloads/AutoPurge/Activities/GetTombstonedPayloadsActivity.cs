@@ -15,16 +15,16 @@ namespace Microsoft.DurableTask.AzureBlobPayloads;
 public class GetTombstonedPayloadsActivity(
     DurableTaskClient client,
     ILogger<GetTombstonedPayloadsActivity> logger)
-    : TaskActivity<int, List<TombstonedPayloadDto>>
+    : TaskActivity<int, List<TombstonedPayload>>
 {
     readonly DurableTaskClient client = Check.NotNull(client);
     readonly ILogger<GetTombstonedPayloadsActivity> logger = Check.NotNull(logger);
 
     /// <inheritdoc/>
-    public override async Task<List<TombstonedPayloadDto>> RunAsync(TaskActivityContext context, int input)
+    public override async Task<List<TombstonedPayload>> RunAsync(TaskActivityContext context, int input)
     {
-        int limit = input > 0 ? input : 500;
-        List<TombstonedPayloadDto> payloads =
+        int limit = input > 0 ? input : BlobPurgeConstants.DefaultBatchSize;
+        List<TombstonedPayload> payloads =
             await this.client.GetTombstonedPayloadsAsync(limit, CancellationToken.None);
         this.logger.BlobPurgeFetchedTombstones(payloads.Count);
         return payloads;

@@ -625,17 +625,23 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     }
 
     /// <inheritdoc/>
-    public override async Task<List<TombstonedPayloadDto>> GetTombstonedPayloadsAsync(
+    public override async Task<List<TombstonedPayload>> GetTombstonedPayloadsAsync(
         int limit, CancellationToken cancellation = default)
     {
+        if (limit <= 0 || limit >= 1000)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(limit), limit, "Limit must be greater than 0 and less than 1000.");
+        }
+
         P.GetTombstonedPayloadsResponse response = await this.sidecarClient.GetTombstonedPayloadsAsync(
             new P.GetTombstonedPayloadsRequest { Limit = limit },
             cancellationToken: cancellation);
 
-        List<TombstonedPayloadDto> result = new(response.Payloads.Count);
+        List<TombstonedPayload> result = new(response.Payloads.Count);
         foreach (P.TombstonedPayload payload in response.Payloads)
         {
-            result.Add(new TombstonedPayloadDto(
+            result.Add(new TombstonedPayload(
                 payload.PartitionId, payload.InstanceKey, payload.PayloadId, payload.Token));
         }
 
@@ -644,12 +650,12 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
 
     /// <inheritdoc/>
     public override async Task AckPurgedPayloadsAsync(
-        IEnumerable<PayloadPurgeAckDto> acks, CancellationToken cancellation = default)
+        IEnumerable<PayloadPurgeAck> acks, CancellationToken cancellation = default)
     {
         Check.NotNull(acks);
 
         P.AckPurgedPayloadsRequest request = new();
-        foreach (PayloadPurgeAckDto ack in acks)
+        foreach (PayloadPurgeAck ack in acks)
         {
             request.Acks.Add(new P.PayloadPurgeAck
             {

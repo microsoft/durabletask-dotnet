@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using Microsoft.DurableTask.Client;
-using Microsoft.DurableTask.Client.Entities;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -51,7 +50,7 @@ sealed class BlobPurgeJobStarter : IHostedService
             return Task.CompletedTask;
         }
 
-        int batchSize = opts.PayloadPurgeBatchSize > 0 ? opts.PayloadPurgeBatchSize : 500;
+        int batchSize = opts.PayloadPurgeBatchSize > 0 ? opts.PayloadPurgeBatchSize : BlobPurgeConstants.DefaultBatchSize;
 
         // Do not block host startup; ensure the job on a background task with basic retry until the backend
         // is reachable.
@@ -79,19 +78,16 @@ sealed class BlobPurgeJobStarter : IHostedService
         {
             try
             {
-                if (await this.IsJobActiveAsync(cancellationToken))
-                {
-                    return;
-                }
-
+                // The singleton is already guaranteed by the entity's fixed key (Create no-ops when the job is
+                // active) and the orchestrator's fixed instance id, so just schedule the bridge once with a
+                // fixed instance id. Retry only if the backend is unreachable at startup.
                 BlobPurgeJobOperationRequest request = new(
-                    this.entityId,
-                    nameof(BlobPurgeJob.Create),
-                    new BlobPurgeJobCreationOptions(batchSize));
+                    this.entityId, nameof(BlobPurgeJob.Create), batchSize);
 
                 await this.client.ScheduleNewOrchestrationInstanceAsync(
                     new TaskName(nameof(ExecuteBlobPurgeJobOperationOrchestrator)),
                     request,
+                    new StartOrchestrationOptions(BlobPurgeConstants.StarterInstanceId),
                     cancellationToken);
 
                 this.logger.BlobPurgeJobEnsured();
@@ -113,23 +109,6 @@ sealed class BlobPurgeJobStarter : IHostedService
                     return;
                 }
             }
-        }
-    }
-
-    async Task<bool> IsJobActiveAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            EntityMetadata<BlobPurgeJobState>? metadata =
-                await this.client.Entities.GetEntityAsync<BlobPurgeJobState>(
-                    this.entityId, cancellation: cancellationToken);
-            return metadata is not null && metadata.State.Status == BlobPurgeJobStatus.Active;
-        }
-        catch (NotSupportedException)
-        {
-            // The entity-query API is unavailable on this client; fall back to scheduling the idempotent
-            // Create, which no-ops if the job is already active.
-            return false;
         }
     }
 }

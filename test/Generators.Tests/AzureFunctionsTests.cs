@@ -203,12 +203,11 @@ public static Task CallFlakeyActivityAsync(this TaskOrchestrationContext ctx, ob
     [InlineData("int", "string")]
     [InlineData("string", "int")]
     [InlineData("Guid", "TimeSpan")]
+    [InlineData("object?", "string")]
     public async Task Activities_ClassBasedSyntax(string inputType, string outputType)
     {
-        // Nullable reference types need to be used for input expressions
-        string defaultInputType = TestHelpers.GetDefaultInputType(inputType);
-
         string code = $@"
+#nullable enable
 using System;
 using System.Threading.Tasks;
 using Microsoft.DurableTask;
@@ -219,11 +218,13 @@ public class MyActivity : TaskActivity<{inputType}, {outputType}>
     public override Task<{outputType}> RunAsync(TaskActivityContext context, {inputType} input) => Task.FromResult<{outputType}>(default!);
 }}";
 
-        // Build the expected InputParameter format (matches generator logic)
-        string expectedInputParameter = inputType + " input";
+        // The generated CallMyActivityAsync helper appends "= default" for nullable inputs because the
+        // input is followed by an optional options parameter. The [ActivityTrigger] function does not,
+        // because its input is followed by required parameters (see issue #730).
+        string expectedCallInputParameter = inputType + " input";
         if (inputType.EndsWith('?'))
         {
-            expectedInputParameter += " = default";
+            expectedCallInputParameter += " = default";
         }
 
         string expectedOutput = TestHelpers.WrapAndFormat(
@@ -233,13 +234,13 @@ public class MyActivity : TaskActivity<{inputType}, {outputType}>
 /// Calls the <see cref=""MyActivity""/> activity.
 /// </summary>
 /// <inheritdoc cref=""TaskOrchestrationContext.CallActivityAsync(TaskName, object?, TaskOptions?)""/>
-public static Task<{outputType}> CallMyActivityAsync(this TaskOrchestrationContext ctx, {inputType} input, TaskOptions? options = null)
+public static Task<{outputType}> CallMyActivityAsync(this TaskOrchestrationContext ctx, {expectedCallInputParameter}, TaskOptions? options = null)
 {{
     return ctx.CallActivityAsync<{outputType}>(""MyActivity"", input, options);
 }}
 
 [Function(nameof(MyActivity))]
-public static async Task<{outputType}> MyActivity([ActivityTrigger] {expectedInputParameter}, string instanceId, FunctionContext executionContext)
+public static async Task<{outputType}> MyActivity([ActivityTrigger] {inputType} input, string instanceId, FunctionContext executionContext)
 {{
     ITaskActivity activity = ActivatorUtilities.GetServiceOrCreateInstance<MyActivity>(executionContext.InstanceServices);
     TaskActivityContext context = new GeneratedActivityContext(""MyActivity"", instanceId);

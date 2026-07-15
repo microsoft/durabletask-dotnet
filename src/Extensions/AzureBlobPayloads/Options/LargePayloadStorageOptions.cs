@@ -128,7 +128,7 @@ public sealed class LargePayloadStorageOptions
 
     /// <summary>
     /// Gets or sets the maximum number of tombstoned payloads the auto-purge job requests from the backend
-    /// per cycle. Must be between 1 and 999 (inclusive); values outside this range throw
+    /// per cycle. Must be between 1 and 1000 (inclusive); values outside this range throw
     /// <see cref="ArgumentOutOfRangeException"/>. Defaults to 500.
     /// </summary>
     public int PayloadPurgeBatchSize

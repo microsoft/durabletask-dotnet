@@ -22,7 +22,6 @@ public class LargePayloadStorageOptionsTests
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
-    [InlineData(1000)]
     [InlineData(1001)]
     public void PayloadPurgeBatchSize_OutOfRange_Throws(int value)
     {
@@ -40,6 +39,7 @@ public class LargePayloadStorageOptionsTests
     [InlineData(1)]
     [InlineData(500)]
     [InlineData(999)]
+    [InlineData(1000)]
     public void PayloadPurgeBatchSize_InRange_IsAccepted(int value)
     {
         // Arrange

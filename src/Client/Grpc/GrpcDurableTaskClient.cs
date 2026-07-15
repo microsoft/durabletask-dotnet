@@ -628,10 +628,10 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
     public override async Task<List<TombstonedPayload>> GetTombstonedPayloadsAsync(
         int limit, CancellationToken cancellation = default)
     {
-        if (limit <= 0 || limit >= 1000)
+        if (limit <= 0 || limit > 1000)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(limit), limit, "Limit must be greater than 0 and less than 1000.");
+                nameof(limit), limit, "Limit must be greater than 0 and less than or equal to 1000.");
         }
 
         P.GetTombstonedPayloadsResponse response;

@@ -40,11 +40,12 @@ public class ExternalEventTests
 
         string instanceId = await host.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
 
-        // Give the instance a moment to start before raising the event.
-        await Task.Delay(TimeSpan.FromSeconds(1));
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(30));
+
+        // Wait for the orchestration to start before raising the event.
+        await host.Client.WaitForInstanceStartAsync(instanceId, cts.Token);
         await host.Client.RaiseEventAsync(instanceId, "MyEvent", "hello");
 
-        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(30));
         OrchestrationMetadata metadata = await host.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, cts.Token);
 
@@ -65,7 +66,8 @@ public class ExternalEventTests
             tasks.AddOrchestratorFunc<string>(orchestratorName, async ctx =>
             {
                 using CancellationTokenSource timerCts = new();
-                Task<string> eventTask = ctx.WaitForExternalEvent<string>("MyEvent");
+                using CancellationTokenSource eventCts = new();
+                Task<string> eventTask = ctx.WaitForExternalEvent<string>("MyEvent", eventCts.Token);
                 Task timerTask = ctx.CreateTimer(TimeSpan.FromMinutes(5), timerCts.Token);
                 Task winner = await Task.WhenAny(eventTask, timerTask);
                 if (winner == eventTask)
@@ -75,17 +77,21 @@ public class ExternalEventTests
                     return await eventTask;
                 }
 
+                // Cancel the losing external-event wait, mirroring the SDK's WaitForExternalEvent(name, timeout) helper.
+                eventCts.Cancel();
                 return "timeout";
             });
         });
 
         string instanceId = await host.Client.ScheduleNewOrchestrationInstanceAsync(orchestratorName);
 
-        // Raise the event shortly after start, while the 5-minute timer is still pending.
-        await Task.Delay(TimeSpan.FromSeconds(1));
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(30));
+
+        // Wait for the orchestration to start (and begin waiting on the event) before raising it,
+        // while the 5-minute timer is still pending.
+        await host.Client.WaitForInstanceStartAsync(instanceId, cts.Token);
         await host.Client.RaiseEventAsync(instanceId, "MyEvent", "event");
 
-        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(30));
         OrchestrationMetadata metadata = await host.Client.WaitForInstanceCompletionAsync(
             instanceId, getInputsAndOutputs: true, cts.Token);
 
@@ -105,7 +111,8 @@ public class ExternalEventTests
             tasks.AddOrchestratorFunc<string>(orchestratorName, async ctx =>
             {
                 using CancellationTokenSource timerCts = new();
-                Task<string> eventTask = ctx.WaitForExternalEvent<string>("MyEvent");
+                using CancellationTokenSource eventCts = new();
+                Task<string> eventTask = ctx.WaitForExternalEvent<string>("MyEvent", eventCts.Token);
                 Task timerTask = ctx.CreateTimer(TimeSpan.FromSeconds(2), timerCts.Token);
                 Task winner = await Task.WhenAny(eventTask, timerTask);
                 if (winner == eventTask)
@@ -114,6 +121,8 @@ public class ExternalEventTests
                     return await eventTask;
                 }
 
+                // The timer won: cancel the losing external-event wait so no wait is left outstanding.
+                eventCts.Cancel();
                 return "timeout";
             });
         });

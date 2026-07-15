@@ -634,9 +634,18 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
                 nameof(limit), limit, "Limit must be greater than 0 and less than 1000.");
         }
 
-        P.GetTombstonedPayloadsResponse response = await this.sidecarClient.GetTombstonedPayloadsAsync(
-            new P.GetTombstonedPayloadsRequest { Limit = limit },
-            cancellationToken: cancellation);
+        P.GetTombstonedPayloadsResponse response;
+        try
+        {
+            response = await this.sidecarClient.GetTombstonedPayloadsAsync(
+                new P.GetTombstonedPayloadsRequest { Limit = limit },
+                cancellationToken: cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.GetTombstonedPayloadsAsync)} operation was canceled.", e, cancellation);
+        }
 
         List<TombstonedPayload> result = new(response.Payloads.Count);
         foreach (P.TombstonedPayload payload in response.Payloads)
@@ -670,7 +679,15 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
             return;
         }
 
-        await this.sidecarClient.AckPurgedPayloadsAsync(request, cancellationToken: cancellation);
+        try
+        {
+            await this.sidecarClient.AckPurgedPayloadsAsync(request, cancellationToken: cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.AckPurgedPayloadsAsync)} operation was canceled.", e, cancellation);
+        }
     }
 
     static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, ILogger logger, out CallInvoker callInvoker)

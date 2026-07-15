@@ -16,9 +16,15 @@ static class BlobPurgeConstants
 
     /// <summary>
     /// The default number of tombstoned payloads the auto-purge job requests from the backend per cycle,
-    /// used whenever a configured batch size is missing or non-positive.
+    /// used whenever a batch size is not explicitly configured.
     /// </summary>
     public const int DefaultBatchSize = 500;
+
+    /// <summary>
+    /// The maximum batch size the auto-purge job may request per cycle. Mirrors the gRPC
+    /// GetTombstonedPayloadsAsync contract, which rejects limits >= 1000.
+    /// </summary>
+    public const int MaxBatchSize = 999;
 
     /// <summary>
     /// The fixed instance ID of the client-to-entity bridge orchestration the starter schedules to ensure the

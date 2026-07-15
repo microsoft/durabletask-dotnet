@@ -30,7 +30,7 @@ class BlobPurgeJob(ILogger<BlobPurgeJob> logger) : TaskEntity<BlobPurgeJobState>
         }
 
         this.State.Status = BlobPurgeJobStatus.Active;
-        this.State.PurgeBatchSize = purgeBatchSize > 0 ? purgeBatchSize : BlobPurgeConstants.DefaultBatchSize;
+        this.State.PurgeBatchSize = purgeBatchSize;
         this.State.CreatedAt ??= DateTimeOffset.UtcNow;
         this.State.LastModifiedAt = DateTimeOffset.UtcNow;
         this.State.LastError = null;

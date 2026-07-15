@@ -46,7 +46,7 @@ sealed class BlobPurgeJobStarter : IHostedService
     public Task StartAsync(CancellationToken cancellationToken)
     {
         LargePayloadStorageOptions opts = this.options.Get(this.builderName);
-        int batchSize = opts.PayloadPurgeBatchSize > 0 ? opts.PayloadPurgeBatchSize : BlobPurgeConstants.DefaultBatchSize;
+        int batchSize = opts.PayloadPurgeBatchSize;
 
         // Do not block host startup; ensure the job on a background task with basic retry until the backend
         // is reachable.

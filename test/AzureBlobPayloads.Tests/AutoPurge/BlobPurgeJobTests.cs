@@ -58,9 +58,11 @@ public class BlobPurgeJobTests
     }
 
     [Fact]
-    public async Task Create_WithNonPositiveBatchSize_FallsBackToDefault()
+    public async Task Create_StoresBatchSizeVerbatim_WithoutCoercion()
     {
-        // Arrange
+        // Arrange - the batch size is validated once at specification (LargePayloadStorageOptions), so the
+        // entity trusts its input and performs no coercion of its own. A zero here is stored as-is, proving
+        // the previous non-positive-to-default fallback was removed.
         TestEntityOperation operation = new(
             nameof(BlobPurgeJob.Create),
             new TestEntityState(null),
@@ -72,7 +74,7 @@ public class BlobPurgeJobTests
         // Assert
         BlobPurgeJobState state = Assert.IsType<BlobPurgeJobState>(
             operation.State.GetState(typeof(BlobPurgeJobState)));
-        state.PurgeBatchSize.Should().Be(500);
+        state.PurgeBatchSize.Should().Be(0);
     }
 
     [Fact]

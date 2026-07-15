@@ -23,7 +23,7 @@ public class GetTombstonedPayloadsActivity(
     /// <inheritdoc/>
     public override async Task<List<TombstonedPayload>> RunAsync(TaskActivityContext context, int input)
     {
-        int limit = input > 0 ? input : BlobPurgeConstants.DefaultBatchSize;
+        int limit = input;
         List<TombstonedPayload> payloads =
             await this.client.GetTombstonedPayloadsAsync(limit, CancellationToken.None);
         this.logger.BlobPurgeFetchedTombstones(payloads.Count);

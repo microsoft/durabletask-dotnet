@@ -28,6 +28,7 @@ namespace Microsoft.DurableTask;
 public sealed class LargePayloadStorageOptions
 {
     int thresholdBytes = 256 * 1024;
+    int payloadPurgeBatchSize = BlobPurgeConstants.DefaultBatchSize;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LargePayloadStorageOptions"/> class.
@@ -127,7 +128,22 @@ public sealed class LargePayloadStorageOptions
 
     /// <summary>
     /// Gets or sets the maximum number of tombstoned payloads the auto-purge job requests from the backend
-    /// per cycle. Defaults to 500. Values less than or equal to zero are treated as the default.
+    /// per cycle. Must be between 1 and 999 (inclusive); values outside this range throw
+    /// <see cref="ArgumentOutOfRangeException"/>. Defaults to 500.
     /// </summary>
-    public int PayloadPurgeBatchSize { get; set; } = BlobPurgeConstants.DefaultBatchSize;
+    public int PayloadPurgeBatchSize
+    {
+        get => this.payloadPurgeBatchSize;
+        set
+        {
+            if (value < 1 || value > BlobPurgeConstants.MaxBatchSize)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(this.PayloadPurgeBatchSize), value,
+                    $"PayloadPurgeBatchSize must be between 1 and {BlobPurgeConstants.MaxBatchSize} (inclusive).");
+            }
+
+            this.payloadPurgeBatchSize = value;
+        }
+    }
 }

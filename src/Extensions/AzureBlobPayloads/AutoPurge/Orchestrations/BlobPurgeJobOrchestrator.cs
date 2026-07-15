@@ -42,7 +42,7 @@ public class BlobPurgeJobOrchestrator : TaskOrchestrator<BlobPurgeJobRunRequest,
         ILogger logger = context.CreateReplaySafeLogger<BlobPurgeJobOrchestrator>();
         string jobId = input.JobEntityId.Key;
 
-        int batchSize = input.PurgeBatchSize > 0 ? input.PurgeBatchSize : BlobPurgeConstants.DefaultBatchSize;
+        int batchSize = input.PurgeBatchSize;
         int processedCycles = input.ProcessedCycles;
 
         while (true)

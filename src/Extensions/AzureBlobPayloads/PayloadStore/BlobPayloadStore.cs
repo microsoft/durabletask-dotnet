@@ -68,6 +68,15 @@ public sealed class BlobPayloadStore : PayloadStore
     }
 
     /// <inheritdoc/>
+    public override Uri? ExternalPayloadStoreBaseUri => new BlobUriBuilder(this.containerClient.Uri)
+    {
+        BlobContainerName = string.Empty,
+        BlobName = string.Empty,
+        Sas = null,
+        Query = string.Empty,
+    }.ToUri();
+
+    /// <inheritdoc/>
     public override async Task<string> UploadAsync(string payLoad, CancellationToken cancellationToken)
     {
         // One blob per payload using GUID-based name for uniqueness (stable across retries)

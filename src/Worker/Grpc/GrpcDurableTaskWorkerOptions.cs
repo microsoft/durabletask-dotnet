@@ -45,6 +45,12 @@ public sealed class GrpcDurableTaskWorkerOptions : DurableTaskWorkerOptions
     public HashSet<P.WorkerCapability> Capabilities { get; } = new() { P.WorkerCapability.HistoryStreaming };
 
     /// <summary>
+    /// Gets or sets the non-secret external payload store base URI reported to the backend on the work-item
+    /// handshake. Empty/null when not using externalized payloads.
+    /// </summary>
+    public string? ExternalPayloadStoreUri { get; set; }
+
+    /// <summary>
     /// Gets or sets the maximum size of all actions in a complete orchestration work item chunk.
     /// The default value is 3.9MB. We leave some headroom to account for request size overhead.
     /// </summary>

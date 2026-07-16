@@ -333,6 +333,7 @@ sealed partial class GrpcDurableTaskWorker
                         workerOptions.Concurrency.MaximumConcurrentEntityWorkItems,
                     Capabilities = { this.worker.grpcOptions.Capabilities },
                     WorkItemFilters = this.worker.workItemFilters?.ToGrpcWorkItemFilters(),
+                    ExternalPayloadStoreUri = this.worker.grpcOptions.ExternalPayloadStoreUri ?? string.Empty,
                 },
                 cancellationToken: cancellation);
         }

@@ -9,6 +9,12 @@ namespace Microsoft.DurableTask;
 public abstract class PayloadStore
 {
     /// <summary>
+    /// Gets the non-secret base URI (scheme+host[+account path for emulator]) of the external payload store, or
+    /// <c>null</c> if not applicable. Never contains a secret/SAS/key.
+    /// </summary>
+    public virtual Uri? ExternalPayloadStoreBaseUri => null;
+
+    /// <summary>
     /// Uploads a payload and returns an opaque reference token that can be embedded in orchestration messages.
     /// </summary>
     /// <param name="payLoad">The payload.</param>

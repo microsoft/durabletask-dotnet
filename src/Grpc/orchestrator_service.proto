@@ -832,6 +832,10 @@ message GetWorkItemsRequest {
 
     repeated WorkerCapability capabilities = 10;
     WorkItemFilters workItemFilters = 11;
+
+    // Non-secret base URI of the external payload store (e.g. "https://<account>.blob.core.windows.net/") where this
+    // worker externalizes large payloads. Empty when no external payload store is configured. Never contains a secret.
+    string external_payload_store_uri = 12 [json_name = "externalPayloadStoreUri"];
 }
 
 enum WorkerCapability {

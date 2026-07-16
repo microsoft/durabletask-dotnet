@@ -129,7 +129,8 @@ builder.Services.AddDurableTaskWorker(b =>
                 return string.Empty;
             }
 
-            if (value.StartsWith("blob:v1:", StringComparison.Ordinal))
+            if (value.StartsWith("blob:v1:", StringComparison.Ordinal)
+                || value.StartsWith("blob:v2:", StringComparison.Ordinal))
             {
                 throw new InvalidOperationException("Activity received a payload token instead of raw input.");
             }

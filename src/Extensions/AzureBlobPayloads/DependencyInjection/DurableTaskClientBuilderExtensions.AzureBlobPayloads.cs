@@ -2,11 +2,14 @@
 // Licensed under the MIT License.
 
 using Grpc.Core.Interceptors;
+using Microsoft.DurableTask.AzureBlobPayloads;
 using Microsoft.DurableTask.Client;
 using Microsoft.DurableTask.Client.Grpc;
 using Microsoft.DurableTask.Converters;
 using Microsoft.DurableTask.Worker.Grpc.Internal;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Microsoft.DurableTask;
@@ -16,6 +19,35 @@ namespace Microsoft.DurableTask;
 /// </summary>
 public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
 {
+    /// <summary>
+    /// Enables externalized payload storage using Azure Blob Storage for the specified client builder.
+    /// </summary>
+    /// <param name="builder">The builder to configure.</param>
+    /// <param name="configure">The callback to configure the storage options.</param>
+    /// <returns>The original builder, for call chaining.</returns>
+    public static IDurableTaskClientBuilder UseExternalizedPayloads(
+        this IDurableTaskClientBuilder builder,
+        Action<LargePayloadStorageOptions> configure)
+    {
+        Check.NotNull(builder);
+        Check.NotNull(configure);
+
+        builder.Services.Configure(builder.Name, configure);
+
+        UseExternalizedPayloadsCore(builder);
+
+        // Conditional DI: register the auto-purge starter only when the caller opted into auto-purge. Peek the
+        // flag now by running the configure delegate against a probe (options configurators are pure setters).
+        LargePayloadStorageOptions probe = new();
+        configure(probe);
+        if (probe.AutoPurge)
+        {
+            RegisterBlobPurgeJobStarter(builder);
+        }
+
+        return builder;
+    }
+
     /// <summary>
     /// Enables externalized payload storage using a pre-configured shared payload store.
     /// This overload helps ensure client and worker use the same configuration.
@@ -57,5 +89,15 @@ public static class DurableTaskClientBuilderExtensionsAzureBlobPayloads
             });
 
         return builder;
+    }
+
+    static void RegisterBlobPurgeJobStarter(IDurableTaskClientBuilder builder)
+    {
+        string builderName = builder.Name;
+        builder.Services.AddSingleton<IHostedService>(sp => new BlobPurgeJobStarter(
+            sp.GetRequiredService<DurableTaskClient>(),
+            sp.GetRequiredService<IOptionsMonitor<LargePayloadStorageOptions>>(),
+            builderName,
+            sp.GetRequiredService<ILogger<BlobPurgeJobStarter>>()));
     }
 }

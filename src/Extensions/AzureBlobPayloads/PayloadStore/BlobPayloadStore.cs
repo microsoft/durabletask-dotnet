@@ -67,6 +67,18 @@ public sealed class BlobPayloadStore : PayloadStore
         this.containerClient = serviceClient.GetBlobContainerClient(options.ContainerName);
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BlobPayloadStore"/> class using a caller-supplied
+    /// container client. Intended for unit testing so a mocked <see cref="BlobContainerClient"/> can be injected.
+    /// </summary>
+    /// <param name="containerClient">The blob container client to use.</param>
+    /// <param name="options">The options for the blob payload store.</param>
+    internal BlobPayloadStore(BlobContainerClient containerClient, LargePayloadStorageOptions options)
+    {
+        this.containerClient = containerClient ?? throw new ArgumentNullException(nameof(containerClient));
+        this.options = options ?? throw new ArgumentNullException(nameof(options));
+    }
+
     /// <inheritdoc/>
     public override async Task<string> UploadAsync(string payLoad, CancellationToken cancellationToken)
     {
@@ -143,6 +155,25 @@ public sealed class BlobPayloadStore : PayloadStore
                 "The payload may have been deleted or the container was never created.",
                 ex);
         }
+    }
+
+    /// <inheritdoc/>
+    public override async Task DeleteAsync(string token, CancellationToken cancellationToken)
+    {
+        (string container, string name) = DecodeToken(token);
+        if (!string.Equals(container, this.containerClient.Name, StringComparison.Ordinal))
+        {
+            throw new ArgumentException("Token container does not match configured container.", nameof(token));
+        }
+
+        BlobClient blob = this.containerClient.GetBlobClient(name);
+
+        // Idempotent by design: DeleteIfExistsAsync returns false (rather than throwing) when the blob is
+        // already gone, so re-delivered tombstones and concurrent purges from multiple worker replicas are safe.
+        await blob.DeleteIfExistsAsync(
+            DeleteSnapshotsOption.IncludeSnapshots,
+            conditions: null,
+            cancellationToken);
     }
 
     /// <inheritdoc/>

@@ -624,6 +624,72 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
     }
 
+    /// <inheritdoc/>
+    public override async Task<List<TombstonedPayload>> GetTombstonedPayloadsAsync(
+        int limit, CancellationToken cancellation = default)
+    {
+        if (limit <= 0 || limit > 1000)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(limit), limit, "Limit must be greater than 0 and less than or equal to 1000.");
+        }
+
+        P.GetTombstonedPayloadsResponse response;
+        try
+        {
+            response = await this.sidecarClient.GetTombstonedPayloadsAsync(
+                new P.GetTombstonedPayloadsRequest { Limit = limit },
+                cancellationToken: cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.GetTombstonedPayloadsAsync)} operation was canceled.", e, cancellation);
+        }
+
+        List<TombstonedPayload> result = new(response.Payloads.Count);
+        foreach (P.TombstonedPayload payload in response.Payloads)
+        {
+            result.Add(new TombstonedPayload(
+                payload.PartitionId, payload.InstanceKey, payload.PayloadId, payload.Token));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public override async Task AckPurgedPayloadsAsync(
+        IEnumerable<PayloadPurgeAck> acks, CancellationToken cancellation = default)
+    {
+        Check.NotNull(acks);
+
+        P.AckPurgedPayloadsRequest request = new();
+        foreach (PayloadPurgeAck ack in acks)
+        {
+            request.Acks.Add(new P.PayloadPurgeAck
+            {
+                PartitionId = ack.PartitionId,
+                InstanceKey = ack.InstanceKey,
+                PayloadId = ack.PayloadId,
+            });
+        }
+
+        if (request.Acks.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await this.sidecarClient.AckPurgedPayloadsAsync(request, cancellationToken: cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.AckPurgedPayloadsAsync)} operation was canceled.", e, cancellation);
+        }
+    }
+
     static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, ILogger logger, out CallInvoker callInvoker)
     {
         Func<GrpcChannel, CancellationToken, Task<GrpcChannel>>? recreator = options.Internal.ChannelRecreator;

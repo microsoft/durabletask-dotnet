@@ -823,6 +823,53 @@ service TaskHubSidecarService {
     // "Skip" graceful termination of orchestrations by immediately changing their status in storage to "terminated".
     // Note that a maximum of 500 orchestrations can be terminated at a time using this method.
     rpc SkipGracefulOrchestrationTerminations(SkipGracefulOrchestrationTerminationsRequest) returns (SkipGracefulOrchestrationTerminationsResponse);
+
+    // Returns a batch of blob-externalized payload tombstones the backend has soft-deleted so the worker
+    // can delete the corresponding blobs from customer storage (the backend has no storage credentials of
+    // its own). The worker deletes each blob and then calls AckPurgedPayloads so the backend can
+    // hard-delete the soft-deleted rows. This is an opt-in, worker-driven pull model.
+    rpc GetTombstonedPayloads(GetTombstonedPayloadsRequest) returns (GetTombstonedPayloadsResponse);
+
+    // Acknowledges that the worker has deleted the blobs for the identified payloads so the backend can
+    // hard-delete the soft-deleted rows.
+    rpc AckPurgedPayloads(AckPurgedPayloadsRequest) returns (AckPurgedPayloadsResponse);
+}
+
+// Server -> client. Identifies a blob-externalized payload that the backend has soft-deleted and whose
+// blob the worker should delete from customer storage.
+message TombstonedPayload {
+    int32 partitionId = 1;
+    int64 instanceKey = 2;
+    int64 payloadId = 3;
+    // The externalized payload token (e.g. "blob:v1:<container>:<blobName>") whose backing blob should be deleted.
+    string token = 4;
+}
+
+// Client -> server. Acknowledges that the worker has deleted the blob for the identified payload so the
+// backend can hard-delete the soft-deleted row.
+message PayloadPurgeAck {
+    int32 partitionId = 1;
+    int64 instanceKey = 2;
+    int64 payloadId = 3;
+}
+
+// Client -> server. Requests up to `limit` tombstoned payloads for the worker to delete.
+message GetTombstonedPayloadsRequest {
+    int32 limit = 1;
+}
+
+// Server -> client. Carries the batch of tombstoned payloads for the worker to delete.
+message GetTombstonedPayloadsResponse {
+    repeated TombstonedPayload payloads = 1;
+}
+
+// Client -> server. Acknowledges a batch of payloads whose blobs the worker has deleted.
+message AckPurgedPayloadsRequest {
+    repeated PayloadPurgeAck acks = 1;
+}
+
+// Server -> client. Empty response acknowledging the acks were recorded.
+message AckPurgedPayloadsResponse {
 }
 
 message GetWorkItemsRequest {

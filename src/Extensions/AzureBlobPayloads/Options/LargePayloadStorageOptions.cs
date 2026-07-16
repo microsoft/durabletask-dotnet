@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Azure.Core;
+using Microsoft.DurableTask.AzureBlobPayloads;
 
 // Intentionally no DataAnnotations to avoid extra package requirements in minimal hosts.
 namespace Microsoft.DurableTask;
@@ -27,6 +28,7 @@ namespace Microsoft.DurableTask;
 public sealed class LargePayloadStorageOptions
 {
     int thresholdBytes = 256 * 1024;
+    int payloadPurgeBatchSize = BlobPurgeConstants.DefaultBatchSize;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LargePayloadStorageOptions"/> class.
@@ -115,4 +117,33 @@ public sealed class LargePayloadStorageOptions
     /// Defaults to true for reduced storage and bandwidth.
     /// </summary>
     public bool CompressionEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the client should start the singleton blob payload auto-purge
+    /// job. When enabled, the job periodically drains payload rows the backend has soft-deleted and deletes
+    /// the corresponding blobs from customer storage (the backend has no storage credentials of its own).
+    /// Defaults to <c>false</c> (opt-in).
+    /// </summary>
+    public bool AutoPurge { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum number of tombstoned payloads the auto-purge job requests from the backend
+    /// per cycle. Must be between 1 and 1000 (inclusive); values outside this range throw
+    /// <see cref="ArgumentOutOfRangeException"/>. Defaults to 500.
+    /// </summary>
+    public int PayloadPurgeBatchSize
+    {
+        get => this.payloadPurgeBatchSize;
+        set
+        {
+            if (value < 1 || value > BlobPurgeConstants.MaxBatchSize)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(this.PayloadPurgeBatchSize), value,
+                    $"PayloadPurgeBatchSize must be between 1 and {BlobPurgeConstants.MaxBatchSize} (inclusive).");
+            }
+
+            this.payloadPurgeBatchSize = value;
+        }
+    }
 }

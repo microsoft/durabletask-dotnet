@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <EnableStyleCop>true</EnableStyleCop>
+    <!-- Must match the src project's InternalsVisibleTo target ($(AssemblyName).Tests), which the
+         MSBuild default naming would otherwise compute as Microsoft.DurableTask.AzureBlobPayloads.Tests. -->
+    <AssemblyName>Microsoft.DurableTask.Extensions.AzureBlobPayloads.Tests</AssemblyName>
+    <RootNamespace>Microsoft.DurableTask.Extensions.AzureBlobPayloads.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.Storage.Blobs" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Extensions\AzureBlobPayloads\AzureBlobPayloads.csproj" />
+    <ProjectReference Include="..\Abstractions.Tests\Abstractions.Tests.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -13,11 +13,14 @@ namespace Microsoft.DurableTask;
 
 /// <summary>
 /// Azure Blob Storage implementation of <see cref="PayloadStore"/>.
-/// Stores payloads as blobs and returns opaque tokens in the form "blob:v1:&lt;container&gt;:&lt;blobName&gt;".
+/// Stores payloads as blobs and returns self-describing opaque tokens in the form
+/// "blob:v2:&lt;fullBlobUrl&gt;", where the URL is the blob's absolute URI including the storage account.
+/// Legacy "blob:v1:&lt;container&gt;:&lt;blobName&gt;" tokens are still recognized for read back-compatibility.
 /// </summary>
 public sealed class BlobPayloadStore : PayloadStore
 {
-    const string TokenPrefix = "blob:v1:";
+    const string TokenPrefixV1 = "blob:v1:";
+    const string TokenPrefixV2 = "blob:v2:";
     const string ContentEncodingGzip = "gzip";
     const int MaxRetryAttempts = 8;
     const int BaseDelayMs = 250;
@@ -25,6 +28,7 @@ public sealed class BlobPayloadStore : PayloadStore
     const int NetworkTimeoutMinutes = 2;
     readonly BlobContainerClient containerClient;
     readonly LargePayloadStorageOptions options;
+    readonly BlobClientOptions clientOptions;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BlobPayloadStore"/> class.
@@ -48,7 +52,7 @@ public sealed class BlobPayloadStore : PayloadStore
                 nameof(options));
         }
 
-        BlobClientOptions clientOptions = new()
+        this.clientOptions = new BlobClientOptions
         {
             Retry =
             {
@@ -61,8 +65,8 @@ public sealed class BlobPayloadStore : PayloadStore
         };
 
         BlobServiceClient serviceClient = hasIdentityAuth
-            ? new BlobServiceClient(options.AccountUri, options.Credential, clientOptions)
-            : new BlobServiceClient(options.ConnectionString, clientOptions);
+            ? new BlobServiceClient(options.AccountUri, options.Credential, this.clientOptions)
+            : new BlobServiceClient(options.ConnectionString, this.clientOptions);
 
         this.containerClient = serviceClient.GetBlobContainerClient(options.ContainerName);
     }
@@ -105,44 +109,48 @@ public sealed class BlobPayloadStore : PayloadStore
             await blobStream.FlushAsync(cancellationToken);
         }
 
-        return EncodeToken(this.containerClient.Name, blobName);
+        return EncodeToken(blob.Uri);
     }
 
     /// <inheritdoc/>
     public override async Task<string> DownloadAsync(string token, CancellationToken cancellationToken)
     {
-        (string container, string name) = DecodeToken(token);
-        if (!string.Equals(container, this.containerClient.Name, StringComparison.Ordinal))
+        (bool isV2, string container, string name, Uri? blobUri, Uri? containerUri) = DecodeToken(token);
+
+        if (!isV2)
         {
-            throw new ArgumentException("Token container does not match configured container.", nameof(token));
-        }
-
-        BlobClient blob = this.containerClient.GetBlobClient(name);
-
-        try
-        {
-            using BlobDownloadStreamingResult result = await blob.DownloadStreamingAsync(cancellationToken: cancellationToken);
-            Stream contentStream = result.Content;
-            bool isGzip = string.Equals(
-                result.Details.ContentEncoding, ContentEncodingGzip, StringComparison.OrdinalIgnoreCase);
-
-            if (isGzip)
+            // v1 tokens do not carry the account, so the payload is assumed to live in the configured container.
+            if (!string.Equals(container, this.containerClient.Name, StringComparison.Ordinal))
             {
-                using GZipStream decompressed = new(contentStream, CompressionMode.Decompress);
-                using StreamReader reader = new(decompressed, Encoding.UTF8);
-                return await ReadToEndAsync(reader, cancellationToken);
+                throw new ArgumentException("Token container does not match configured container.", nameof(token));
             }
 
-            using StreamReader uncompressedReader = new(contentStream, Encoding.UTF8);
-            return await ReadToEndAsync(uncompressedReader, cancellationToken);
+            return await DownloadFromBlobAsync(this.containerClient.GetBlobClient(name), cancellationToken);
         }
-        catch (RequestFailedException ex) when (ex.Status == (int)HttpStatusCode.NotFound)
+
+        // v2 tokens are self-describing: honor the account and container encoded in the token.
+        BlobClient blob;
+        if (this.IsConfiguredContainer(containerUri!))
+        {
+            // Same account and container as the configured store: reuse it (works with any auth mode).
+            blob = this.containerClient.GetBlobClient(name);
+        }
+        else if (this.options.Credential != null)
+        {
+            // The payload lives in a different account (e.g. the store was repointed). Identity auth can still
+            // read it as long as the credential has RBAC access to that account.
+            blob = new BlobClient(blobUri, this.options.Credential, this.clientOptions);
+        }
+        else
         {
             throw new PayloadStorageException(
-                $"The blob '{name}' was not found in container '{container}'. " +
-                "The payload may have been deleted or the container was never created.",
-                ex);
+                $"The externalized payload lives in a different storage account ('{containerUri}') than the " +
+                $"currently-configured payload store ('{this.containerClient.Uri}'). Cross-account payload reads " +
+                "require identity (AAD) authentication with access to both accounts; connection-string / " +
+                "account-key credentials are account-specific and cannot read another account.");
         }
+
+        return await DownloadFromBlobAsync(blob, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -153,7 +161,60 @@ public sealed class BlobPayloadStore : PayloadStore
             return false;
         }
 
-        return value.StartsWith(TokenPrefix, StringComparison.Ordinal);
+        return value.StartsWith(TokenPrefixV1, StringComparison.Ordinal)
+            || value.StartsWith(TokenPrefixV2, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Encodes a self-describing v2 payload token from the blob's absolute URI. The token carries the full blob
+    /// URL (including the storage account) so readers can locate the payload without relying on the currently
+    /// configured store. <c>BlobClient.Uri</c> contains no SAS or account key and is safe to persist.
+    /// </summary>
+    /// <param name="blobUri">The absolute URI of the blob holding the payload.</param>
+    /// <returns>An opaque payload token in the form "blob:v2:&lt;fullBlobUrl&gt;".</returns>
+    internal static string EncodeToken(Uri blobUri) => $"{TokenPrefixV2}{blobUri}";
+
+    /// <summary>
+    /// Decodes a payload token. Supports self-describing v2 tokens ("blob:v2:&lt;fullBlobUrl&gt;") and legacy v1
+    /// tokens ("blob:v1:&lt;container&gt;:&lt;blobName&gt;"), the latter for read back-compatibility.
+    /// </summary>
+    /// <param name="token">The payload token to decode.</param>
+    /// <returns>
+    /// A tuple describing the token: whether it is v2, the container and blob names, and (for v2 only) the
+    /// absolute blob URI and its container-level URI.
+    /// </returns>
+    internal static (bool IsV2, string Container, string Name, Uri? BlobUri, Uri? ContainerUri) DecodeToken(
+        string token)
+    {
+        if (token.StartsWith(TokenPrefixV2, StringComparison.Ordinal))
+        {
+            string rest = token.Substring(TokenPrefixV2.Length);
+            if (!Uri.TryCreate(rest, UriKind.Absolute, out Uri? blobUri))
+            {
+                throw new ArgumentException("Invalid external payload token format.", nameof(token));
+            }
+
+            BlobUriBuilder builder = new(blobUri);
+            string container = builder.BlobContainerName;
+            string name = builder.BlobName;
+            builder.BlobName = string.Empty;
+            Uri containerUri = builder.ToUri();
+            return (true, container, name, blobUri, containerUri);
+        }
+
+        if (token.StartsWith(TokenPrefixV1, StringComparison.Ordinal))
+        {
+            string rest = token.Substring(TokenPrefixV1.Length);
+            int sep = rest.IndexOf(':');
+            if (sep <= 0 || sep >= rest.Length - 1)
+            {
+                throw new ArgumentException("Invalid external payload token format.", nameof(token));
+            }
+
+            return (false, rest.Substring(0, sep), rest.Substring(sep + 1), null, null);
+        }
+
+        throw new ArgumentException("Invalid external payload token.", nameof(token));
     }
 
     static async Task WritePayloadAsync(byte[] payloadBuffer, Stream target, CancellationToken cancellationToken)
@@ -177,22 +238,43 @@ public sealed class BlobPayloadStore : PayloadStore
 #endif
     }
 
-    static string EncodeToken(string container, string name) => $"blob:v1:{container}:{name}";
-
-    static (string Container, string Name) DecodeToken(string token)
+    static async Task<string> DownloadFromBlobAsync(BlobClient blob, CancellationToken cancellationToken)
     {
-        if (!token.StartsWith(TokenPrefix, StringComparison.Ordinal))
+        try
         {
-            throw new ArgumentException("Invalid external payload token.", nameof(token));
-        }
+            using BlobDownloadStreamingResult result = await blob.DownloadStreamingAsync(cancellationToken: cancellationToken);
+            Stream contentStream = result.Content;
+            bool isGzip = string.Equals(
+                result.Details.ContentEncoding, ContentEncodingGzip, StringComparison.OrdinalIgnoreCase);
 
-        string rest = token.Substring(TokenPrefix.Length);
-        int sep = rest.IndexOf(':');
-        if (sep <= 0 || sep >= rest.Length - 1)
+            if (isGzip)
+            {
+                using GZipStream decompressed = new(contentStream, CompressionMode.Decompress);
+                using StreamReader reader = new(decompressed, Encoding.UTF8);
+                return await ReadToEndAsync(reader, cancellationToken);
+            }
+
+            using StreamReader uncompressedReader = new(contentStream, Encoding.UTF8);
+            return await ReadToEndAsync(uncompressedReader, cancellationToken);
+        }
+        catch (RequestFailedException ex) when (ex.Status == (int)HttpStatusCode.NotFound)
         {
-            throw new ArgumentException("Invalid external payload token format.", nameof(token));
+            throw new PayloadStorageException(
+                $"The blob '{blob.Name}' was not found in container '{blob.BlobContainerName}'. " +
+                "The payload may have been deleted or the container was never created.",
+                ex);
         }
+    }
 
-        return (rest.Substring(0, sep), rest.Substring(sep + 1));
+    bool IsConfiguredContainer(Uri tokenContainerUri)
+    {
+        Uri configured = this.containerClient.Uri;
+        return string.Equals(tokenContainerUri.Scheme, configured.Scheme, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(tokenContainerUri.Host, configured.Host, StringComparison.OrdinalIgnoreCase)
+            && tokenContainerUri.Port == configured.Port
+            && string.Equals(
+                tokenContainerUri.AbsolutePath.TrimEnd('/'),
+                configured.AbsolutePath.TrimEnd('/'),
+                StringComparison.Ordinal);
     }
 }

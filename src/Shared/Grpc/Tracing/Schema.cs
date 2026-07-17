@@ -60,5 +60,10 @@ static class Schema
         /// The time at which the timer is scheduled to fire.
         /// </summary>
         public const string FireAt = "durabletask.fire_at";
+
+        /// <summary>
+        /// The name of the entity operation being executed.
+        /// </summary>
+        public const string EntityOperationName = "durabletask.entity.operation";
     }
 }

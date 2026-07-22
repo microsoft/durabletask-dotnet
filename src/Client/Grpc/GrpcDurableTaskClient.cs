@@ -624,6 +624,39 @@ public sealed class GrpcDurableTaskClient : DurableTaskClient
         }
     }
 
+    /// <inheritdoc/>
+    public override async Task<bool> InstallInstanceAsync(
+        global::DurableTask.Core.OrchestrationState state,
+        IEnumerable<HistoryEvent> history,
+        CancellationToken cancellation = default)
+    {
+        Check.NotNull(state);
+        Check.NotNull(history);
+
+        P.InstallInstanceRequest request = new()
+        {
+            OrchestrationState = Microsoft.DurableTask.ProtoUtils.ToProtobuf(state),
+        };
+
+        request.History.AddRange(history.Select(Microsoft.DurableTask.ProtoUtils.ToHistoryEventProtobuf));
+
+        try
+        {
+            P.InstallInstanceResponse response = await this.sidecarClient.InstallInstanceAsync(
+                request, cancellationToken: cancellation);
+            return response.Installed;
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled)
+        {
+            throw new OperationCanceledException(
+                $"The {nameof(this.InstallInstanceAsync)} operation was canceled.", e, cancellation);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.Unimplemented)
+        {
+            throw new NotImplementedException(e.Status.Detail);
+        }
+    }
+
     static AsyncDisposable GetCallInvoker(GrpcDurableTaskClientOptions options, ILogger logger, out CallInvoker callInvoker)
     {
         Func<GrpcChannel, CancellationToken, Task<GrpcChannel>>? recreator = options.Internal.ChannelRecreator;

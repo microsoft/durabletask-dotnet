@@ -513,6 +513,28 @@ public abstract class DurableTaskClient : IOrchestrationSubmitter, IAsyncDisposa
         => throw new NotSupportedException($"{this.GetType()} does not support retrieving orchestration history.");
 
     /// <summary>
+    /// Installs an orchestration instance and its history directly into storage, without scheduling it
+    /// for execution. Unlike scheduling a new orchestration, this imports an already-existing instance
+    /// and its full history as-is.
+    /// </summary>
+    /// <param name="state">The orchestration state (metadata) of the instance to install.</param>
+    /// <param name="history">The ordered history events of the instance to install.</param>
+    /// <param name="cancellation">The cancellation token.</param>
+    /// <returns>
+    /// <c>true</c> if the instance was installed; <c>false</c> if an instance with the same ID already
+    /// existed (in which case nothing was installed).
+    /// </returns>
+    /// <exception cref="NotSupportedException">Thrown if this implementation of <see cref="DurableTaskClient"/> does not
+    /// support installing orchestration instances.</exception>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="state"/> or <paramref name="history"/> is null.</exception>
+    /// <exception cref="OperationCanceledException">Thrown if the operation is canceled via the <paramref name="cancellation"/> token.</exception>
+    public virtual Task<bool> InstallInstanceAsync(
+        global::DurableTask.Core.OrchestrationState state,
+        IEnumerable<HistoryEvent> history,
+        CancellationToken cancellation = default)
+        => throw new NotSupportedException($"{this.GetType()} does not support installing orchestration instances.");
+
+    /// <summary>
     /// Lists orchestration instance IDs that match the specified runtime status
     /// and completed time range, using key-based pagination.
     /// </summary>

@@ -743,6 +743,22 @@ message SkipGracefulOrchestrationTerminationsResponse {
     repeated string unterminatedInstanceIds = 1;
 }
 
+// Request payload for installing an orchestration instance and its history directly into storage.
+message InstallInstanceRequest {
+    // The metadata of the orchestration instance to install.
+    OrchestrationState orchestrationState = 1;
+
+    // The ordered history events of the orchestration instance to install.
+    repeated HistoryEvent history = 2;
+}
+
+// Response payload for installing an orchestration instance and its history.
+message InstallInstanceResponse {
+    // True if the instance was installed, or false if an instance with the same ID already existed
+    // (in which case nothing was installed).
+    bool installed = 1;
+}
+
 service TaskHubSidecarService {
     // Sends a hello request to the sidecar service.
     rpc Hello(google.protobuf.Empty) returns (google.protobuf.Empty);
@@ -823,6 +839,9 @@ service TaskHubSidecarService {
     // "Skip" graceful termination of orchestrations by immediately changing their status in storage to "terminated".
     // Note that a maximum of 500 orchestrations can be terminated at a time using this method.
     rpc SkipGracefulOrchestrationTerminations(SkipGracefulOrchestrationTerminationsRequest) returns (SkipGracefulOrchestrationTerminationsResponse);
+
+    // (Proof-of-concept) Installs an orchestration instance and its history directly into storage.
+    rpc InstallInstance(InstallInstanceRequest) returns (InstallInstanceResponse);
 }
 
 message GetWorkItemsRequest {

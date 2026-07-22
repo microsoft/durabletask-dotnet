@@ -1202,6 +1202,264 @@ static class ProtoUtils
     }
 
     /// <summary>
+    /// Converts a core <see cref="OrchestrationState"/> to its protobuf representation.
+    /// </summary>
+    /// <param name="state">The orchestration state to convert.</param>
+    /// <returns>The protobuf orchestration state.</returns>
+    internal static P.OrchestrationState ToProtobuf(this OrchestrationState state)
+    {
+        Check.NotNull(state);
+        P.OrchestrationState result = new()
+        {
+            InstanceId = state.OrchestrationInstance?.InstanceId ?? string.Empty,
+            ExecutionId = state.OrchestrationInstance?.ExecutionId,
+            Name = state.Name,
+            Version = state.Version,
+            OrchestrationStatus = (P.OrchestrationStatus)state.OrchestrationStatus,
+            CreatedTimestamp = Timestamp.FromDateTime(state.CreatedTime),
+            LastUpdatedTimestamp = Timestamp.FromDateTime(state.LastUpdatedTime),
+            ScheduledStartTimestamp = state.ScheduledStartTime.HasValue
+                ? Timestamp.FromDateTime(state.ScheduledStartTime.Value) : null,
+            Input = state.Input,
+            Output = state.Output,
+            CustomStatus = state.Status,
+            FailureDetails = state.FailureDetails.ToProtobuf(),
+            ParentInstanceId = state.ParentInstance?.OrchestrationInstance?.InstanceId,
+        };
+
+        if (state.CompletedTime != default)
+        {
+            result.CompletedTimestamp = Timestamp.FromDateTime(state.CompletedTime);
+        }
+
+        if (state.Tags is not null)
+        {
+            result.Tags.Add(state.Tags);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Converts a core <see cref="HistoryEvent"/> to its protobuf representation. Unlike the internal
+    /// <c>ToProtobuf</c> helper used when sending carryover events, this supports the full set of
+    /// history event types required for importing an orchestration history.
+    /// </summary>
+    /// <param name="e">The history event to convert.</param>
+    /// <returns>The protobuf history event.</returns>
+    /// <exception cref="NotSupportedException">Thrown when the event type is not supported.</exception>
+    internal static P.HistoryEvent ToHistoryEventProtobuf(HistoryEvent e)
+    {
+        Check.NotNull(e);
+        P.HistoryEvent payload = new()
+        {
+            EventId = e.EventId,
+            Timestamp = Timestamp.FromDateTime(e.Timestamp),
+        };
+
+        switch (e.EventType)
+        {
+            case EventType.ContinueAsNew:
+                ContinueAsNewEvent continueAsNew = (ContinueAsNewEvent)e;
+                payload.ContinueAsNew = new P.ContinueAsNewEvent
+                {
+                    Input = continueAsNew.Result,
+                };
+                break;
+            case EventType.EventRaised:
+                EventRaisedEvent eventRaised = (EventRaisedEvent)e;
+                payload.EventRaised = new P.EventRaisedEvent
+                {
+                    Name = eventRaised.Name,
+                    Input = eventRaised.Input,
+                };
+                break;
+            case EventType.EventSent:
+                EventSentEvent eventSent = (EventSentEvent)e;
+                payload.EventSent = new P.EventSentEvent
+                {
+                    Name = eventSent.Name,
+                    Input = eventSent.Input,
+                    InstanceId = eventSent.InstanceId,
+                };
+                break;
+            case EventType.ExecutionCompleted:
+                ExecutionCompletedEvent completedEvent = (ExecutionCompletedEvent)e;
+                payload.ExecutionCompleted = new P.ExecutionCompletedEvent
+                {
+                    OrchestrationStatus = P.OrchestrationStatus.Completed,
+                    Result = completedEvent.Result,
+                    FailureDetails = completedEvent.FailureDetails.ToProtobuf(),
+                };
+                break;
+            case EventType.ExecutionFailed:
+                ExecutionCompletedEvent failedEvent = (ExecutionCompletedEvent)e;
+                payload.ExecutionCompleted = new P.ExecutionCompletedEvent
+                {
+                    OrchestrationStatus = P.OrchestrationStatus.Failed,
+                    Result = failedEvent.Result,
+                    FailureDetails = failedEvent.FailureDetails.ToProtobuf(),
+                };
+                break;
+            case EventType.ExecutionStarted:
+                ExecutionStartedEvent startedEvent = (ExecutionStartedEvent)e;
+                payload.ExecutionStarted = new P.ExecutionStartedEvent
+                {
+                    Name = startedEvent.Name,
+                    Version = startedEvent.Version,
+                    Input = startedEvent.Input,
+                    OrchestrationInstance = new P.OrchestrationInstance
+                    {
+                        InstanceId = startedEvent.OrchestrationInstance.InstanceId,
+                        ExecutionId = startedEvent.OrchestrationInstance.ExecutionId,
+                    },
+                    ParentInstance = startedEvent.ParentInstance == null ? null : new P.ParentInstanceInfo
+                    {
+                        Name = startedEvent.ParentInstance.Name,
+                        Version = startedEvent.ParentInstance.Version,
+                        TaskScheduledId = startedEvent.ParentInstance.TaskScheduleId,
+                        OrchestrationInstance = new P.OrchestrationInstance
+                        {
+                            InstanceId = startedEvent.ParentInstance.OrchestrationInstance.InstanceId,
+                            ExecutionId = startedEvent.ParentInstance.OrchestrationInstance.ExecutionId,
+                        },
+                    },
+                    ScheduledStartTimestamp = startedEvent.ScheduledStartTime == null
+                        ? null : Timestamp.FromDateTime(startedEvent.ScheduledStartTime.Value),
+                    ParentTraceContext = startedEvent.ParentTraceContext is null ? null : new P.TraceContext
+                    {
+                        TraceParent = startedEvent.ParentTraceContext.TraceParent,
+                        TraceState = startedEvent.ParentTraceContext.TraceState,
+                    },
+                };
+
+                if (startedEvent.Tags is not null)
+                {
+                    payload.ExecutionStarted.Tags.Add(startedEvent.Tags);
+                }
+
+                break;
+            case EventType.ExecutionTerminated:
+                ExecutionTerminatedEvent terminatedEvent = (ExecutionTerminatedEvent)e;
+                payload.ExecutionTerminated = new P.ExecutionTerminatedEvent
+                {
+                    Input = terminatedEvent.Input,
+                };
+                break;
+            case EventType.TaskScheduled:
+                TaskScheduledEvent taskScheduledEvent = (TaskScheduledEvent)e;
+                payload.TaskScheduled = new P.TaskScheduledEvent
+                {
+                    Name = taskScheduledEvent.Name,
+                    Version = taskScheduledEvent.Version,
+                    Input = taskScheduledEvent.Input,
+                };
+
+                if (taskScheduledEvent.Tags is not null)
+                {
+                    payload.TaskScheduled.Tags.Add(taskScheduledEvent.Tags);
+                }
+
+                break;
+            case EventType.TaskCompleted:
+                TaskCompletedEvent taskCompletedEvent = (TaskCompletedEvent)e;
+                payload.TaskCompleted = new P.TaskCompletedEvent
+                {
+                    Result = taskCompletedEvent.Result,
+                    TaskScheduledId = taskCompletedEvent.TaskScheduledId,
+                };
+                break;
+            case EventType.TaskFailed:
+                TaskFailedEvent taskFailedEvent = (TaskFailedEvent)e;
+                payload.TaskFailed = new P.TaskFailedEvent
+                {
+                    FailureDetails = taskFailedEvent.FailureDetails.ToProtobuf(),
+                    TaskScheduledId = taskFailedEvent.TaskScheduledId,
+                };
+                break;
+            case EventType.SubOrchestrationInstanceCreated:
+                SubOrchestrationInstanceCreatedEvent subOrchestrationCreated = (SubOrchestrationInstanceCreatedEvent)e;
+                payload.SubOrchestrationInstanceCreated = new P.SubOrchestrationInstanceCreatedEvent
+                {
+                    Input = subOrchestrationCreated.Input,
+                    InstanceId = subOrchestrationCreated.InstanceId,
+                    Name = subOrchestrationCreated.Name,
+                    Version = subOrchestrationCreated.Version,
+                };
+                break;
+            case EventType.SubOrchestrationInstanceCompleted:
+                SubOrchestrationInstanceCompletedEvent subOrchestrationCompleted = (SubOrchestrationInstanceCompletedEvent)e;
+                payload.SubOrchestrationInstanceCompleted = new P.SubOrchestrationInstanceCompletedEvent
+                {
+                    Result = subOrchestrationCompleted.Result,
+                    TaskScheduledId = subOrchestrationCompleted.TaskScheduledId,
+                };
+                break;
+            case EventType.SubOrchestrationInstanceFailed:
+                SubOrchestrationInstanceFailedEvent subOrchestrationFailed = (SubOrchestrationInstanceFailedEvent)e;
+                payload.SubOrchestrationInstanceFailed = new P.SubOrchestrationInstanceFailedEvent
+                {
+                    FailureDetails = subOrchestrationFailed.FailureDetails.ToProtobuf(),
+                    TaskScheduledId = subOrchestrationFailed.TaskScheduledId,
+                };
+                break;
+            case EventType.TimerCreated:
+                TimerCreatedEvent timerCreatedEvent = (TimerCreatedEvent)e;
+                payload.TimerCreated = new P.TimerCreatedEvent
+                {
+                    FireAt = Timestamp.FromDateTime(timerCreatedEvent.FireAt),
+                };
+                break;
+            case EventType.TimerFired:
+                TimerFiredEvent timerFiredEvent = (TimerFiredEvent)e;
+                payload.TimerFired = new P.TimerFiredEvent
+                {
+                    FireAt = Timestamp.FromDateTime(timerFiredEvent.FireAt),
+                    TimerId = timerFiredEvent.TimerId,
+                };
+                break;
+            case EventType.OrchestratorStarted:
+                payload.OrchestratorStarted = new P.OrchestratorStartedEvent();
+                break;
+            case EventType.OrchestratorCompleted:
+                payload.OrchestratorCompleted = new P.OrchestratorCompletedEvent();
+                break;
+            case EventType.GenericEvent:
+                GenericEvent genericEvent = (GenericEvent)e;
+                payload.GenericEvent = new P.GenericEvent
+                {
+                    Data = genericEvent.Data,
+                };
+                break;
+            case EventType.HistoryState:
+                HistoryStateEvent historyStateEvent = (HistoryStateEvent)e;
+                payload.HistoryState = new P.HistoryStateEvent
+                {
+                    OrchestrationState = historyStateEvent.State.ToProtobuf(),
+                };
+                break;
+            case EventType.ExecutionSuspended:
+                ExecutionSuspendedEvent suspendedEvent = (ExecutionSuspendedEvent)e;
+                payload.ExecutionSuspended = new P.ExecutionSuspendedEvent
+                {
+                    Input = suspendedEvent.Reason,
+                };
+                break;
+            case EventType.ExecutionResumed:
+                ExecutionResumedEvent resumedEvent = (ExecutionResumedEvent)e;
+                payload.ExecutionResumed = new P.ExecutionResumedEvent
+                {
+                    Input = resumedEvent.Reason,
+                };
+                break;
+            default:
+                throw new NotSupportedException($"Found unsupported history event '{e.EventType}'.");
+        }
+
+        return payload;
+    }
+
+    /// <summary>
     /// Tracks state required for converting orchestration histories containing entity-related events.
     /// </summary>
     internal class EntityConversionState

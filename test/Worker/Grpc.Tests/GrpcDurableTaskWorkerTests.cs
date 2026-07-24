@@ -692,6 +692,93 @@ public class GrpcDurableTaskWorkerTests
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
+    [Fact]
+    public async Task BuildRuntimeStateAsync_ManySingleEventChunks_DoesNotExhibitQuadraticListGrowth()
+    {
+        // Arrange — regression test for a prior bug where the accumulating list's Capacity was forced to
+        // the exact running total on every chunk. That defeats List<T>'s own amortized (geometric)
+        // doubling growth strategy: with many single-event chunks, it reallocates and copies the entire
+        // list on *every* chunk, making history materialization quadratic again (the same class of bug
+        // issue #772 originally fixed, just reintroduced via a different mechanism).
+        //
+        // Wall-clock timing assertions are flaky across machines/CI load, so instead this asserts on
+        // bytes allocated, which cleanly separates the two regimes for a large enough event count:
+        // amortized doubling growth allocates O(n) total across all chunks, while forcing Capacity to the
+        // exact count per single-event chunk allocates O(n^2) (a sum-of-1..n series of full-list copies).
+        const int eventCount = 5_000;
+
+        P.HistoryEvent executionStarted = new()
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new P.ExecutionStartedEvent
+            {
+                Name = "TestOrchestration",
+                Version = "1.0",
+                OrchestrationInstance = new P.OrchestrationInstance
+                {
+                    InstanceId = "instance-1",
+                    ExecutionId = "execution-1",
+                },
+            },
+        };
+
+        List<P.HistoryChunk> chunks = new(eventCount + 1) { new() { Events = { executionStarted } } };
+        for (int i = 0; i < eventCount; i++)
+        {
+            // One event per chunk is the worst case for any strategy that resizes per chunk.
+            chunks.Add(new P.HistoryChunk { Events = { CreateGenericEvent(i, $"event-{i}") } });
+        }
+
+        GrpcDurableTaskWorker worker = CreateWorker(new GrpcDurableTaskWorkerOptions());
+
+        async Task<OrchestrationRuntimeState> RunAsync()
+        {
+            SequenceAsyncStreamReader<P.HistoryChunk> reader = new(chunks.ToArray());
+            HistoryStreamCallInvoker callInvoker = new(reader);
+            P.TaskHubSidecarService.TaskHubSidecarServiceClient client = new(callInvoker);
+            object processor = CreateProcessor(worker, client);
+
+            P.OrchestratorRequest request = new()
+            {
+                InstanceId = "instance-1",
+                ExecutionId = "execution-1",
+                RequiresHistoryStreaming = true,
+            };
+
+            return await InvokeBuildRuntimeStateAsync(
+                processor, request, entityConversionState: null, CancellationToken.None);
+        }
+
+        // Warm up once (JIT/type initialization) before measuring allocations for the real run.
+        await RunAsync();
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+
+        // Act
+        OrchestrationRuntimeState runtimeState = await RunAsync();
+
+        long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+
+        // Assert — functional correctness: all events materialized, in order.
+        runtimeState.PastEvents.Should().HaveCount(eventCount + 1);
+        runtimeState.PastEvents[0].Should().BeOfType<ExecutionStartedEvent>();
+        ((GenericEvent)runtimeState.PastEvents[eventCount]).Data.Should().Be($"event-{eventCount - 1}");
+
+        // Assert — performance: O(n) amortized list growth allocates on the order of a few hundred
+        // kilobytes to a few megabytes for this input size (list growth plus per-event object overhead).
+        // The prior per-chunk-exact-Capacity bug instead reallocates and copies the whole list on every
+        // single-event chunk, which allocates on the order of n^2 * pointer-size bytes (~100+ MB for
+        // n = 5,000) — orders of magnitude more. The threshold below is generous enough to avoid flakiness
+        // from ordinary object/collection overhead while remaining far below the quadratic regime.
+        allocatedBytes.Should().BeLessThan(
+            50 * 1024 * 1024,
+            "history materialization should not exhibit quadratic (O(n^2)) memory growth across many streamed chunks");
+    }
+
     static P.HistoryEvent CreateGenericEvent(int eventId, string data)
     {
         return new P.HistoryEvent

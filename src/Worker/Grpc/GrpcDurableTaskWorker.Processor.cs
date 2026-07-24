@@ -274,10 +274,15 @@ sealed partial class GrpcDurableTaskWorker
                 // rather than lazily chaining Concat/Select over the chunks. The lazy chain would be
                 // re-enumerated (and re-converted) from scratch every time it is chained onto, making
                 // history reconstruction quadratic in the number of chunks for long-running orchestrations.
+                //
+                // Note: intentionally do NOT set List<T>.Capacity to an exact per-chunk running total here.
+                // The Capacity setter reallocates to precisely the requested size, so with many small
+                // chunks (e.g. one event per chunk) that would reallocate and copy on every chunk, which is
+                // itself quadratic. List<T>.Add's built-in geometric (doubling) growth already gives
+                // amortized O(1) appends, so we let it manage capacity on its own.
                 pastEvents = new List<HistoryEvent>();
                 await foreach (P.HistoryChunk chunk in streamResponse.ResponseStream.ReadAllAsync(cancellation))
                 {
-                    pastEvents.Capacity = Math.Max(pastEvents.Capacity, pastEvents.Count + chunk.Events.Count);
                     foreach (P.HistoryEvent protoEvent in chunk.Events)
                     {
                         pastEvents.Add(converter(protoEvent));

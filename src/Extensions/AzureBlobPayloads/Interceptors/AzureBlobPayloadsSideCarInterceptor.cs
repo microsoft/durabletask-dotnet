@@ -489,6 +489,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
         if (operations.Count == 1)
         {
             // Fast path: avoid semaphore/list overhead for the overwhelmingly common single-field case.
+            cancellation.ThrowIfCancellationRequested();
             await operations[0]();
             return;
         }

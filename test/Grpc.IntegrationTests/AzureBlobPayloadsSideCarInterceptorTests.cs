@@ -397,6 +397,29 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
     }
 
     [Fact]
+    public async Task ExternalizeRequestPayloadsAsync_OrchestratorResponse_SingleOperationPreCancelledTokenDoesNotStartUploadOrConvertResponse()
+    {
+        // Arrange: CustomStatus is the only externalizable field, so it uses the one-operation
+        // fast path. The store's permanent failure is a sentinel: reaching it would cause the
+        // caller's permanent-failure conversion unless cancellation is observed first.
+        TrackingPayloadStore store = new(uploadAsync: (_, _) => throw new PayloadStorageException("Upload should not start."));
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, CreateOptions());
+        P.OrchestratorResponse response = new() { InstanceId = "instance-1", CustomStatus = "status" };
+        using CancellationTokenSource cts = new();
+        cts.Cancel();
+
+        // Act
+        Func<Task> act = () => ExternalizeAsync(interceptor, response, cts.Token);
+
+        // Assert: pre-cancellation prevents the upload and preserves the response rather than
+        // converting the sentinel permanent failure into a terminal failed completion.
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        store.UploadCount.Should().Be(0);
+        response.CustomStatus.Should().Be("status");
+        response.Actions.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task ResolveResponsePayloadsAsync_PreCancelledToken_ThrowsAndPerformsNoStoreCalls()
     {
         // Arrange
@@ -568,6 +591,8 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
             this.EnterCall();
             try
             {
+                Interlocked.Increment(ref this.uploadCount);
+
                 if (uploadAsync != null)
                 {
                     return await uploadAsync(payLoad, cancellationToken);
@@ -578,7 +603,6 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
                     await Task.Delay(delay, cancellationToken);
                 }
 
-                Interlocked.Increment(ref this.uploadCount);
                 string token = TokenPrefix + Guid.NewGuid().ToString("N");
                 lock (this.gate)
                 {

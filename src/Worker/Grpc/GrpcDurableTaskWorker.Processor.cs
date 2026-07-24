@@ -256,7 +256,7 @@ sealed partial class GrpcDurableTaskWorker
                 ? ProtoUtils.ConvertHistoryEvent
                 : entityConversionState.ConvertFromProto;
 
-            IEnumerable<HistoryEvent> pastEvents = [];
+            List<HistoryEvent> pastEvents;
             if (orchestratorRequest.RequiresHistoryStreaming)
             {
                 // Stream the remaining events from the remote service
@@ -270,25 +270,36 @@ sealed partial class GrpcDurableTaskWorker
                 using AsyncServerStreamingCall<P.HistoryChunk> streamResponse =
                     this.client.StreamInstanceHistory(streamRequest, cancellationToken: cancellation);
 
+                // Materialize each chunk's events directly into the accumulating list as they arrive,
+                // rather than lazily chaining Concat/Select over the chunks. The lazy chain would be
+                // re-enumerated (and re-converted) from scratch every time it is chained onto, making
+                // history reconstruction quadratic in the number of chunks for long-running orchestrations.
+                pastEvents = new List<HistoryEvent>();
                 await foreach (P.HistoryChunk chunk in streamResponse.ResponseStream.ReadAllAsync(cancellation))
                 {
-                    pastEvents = pastEvents.Concat(chunk.Events.Select(converter));
+                    pastEvents.Capacity = Math.Max(pastEvents.Capacity, pastEvents.Count + chunk.Events.Count);
+                    foreach (P.HistoryEvent protoEvent in chunk.Events)
+                    {
+                        pastEvents.Add(converter(protoEvent));
+                    }
                 }
             }
             else
             {
                 // The history was already provided in the work item request
-                pastEvents = orchestratorRequest.PastEvents.Select(converter);
+                pastEvents = new List<HistoryEvent>(orchestratorRequest.PastEvents.Count);
+                foreach (P.HistoryEvent protoEvent in orchestratorRequest.PastEvents)
+                {
+                    pastEvents.Add(converter(protoEvent));
+                }
             }
 
-            IEnumerable<HistoryEvent> newEvents = orchestratorRequest.NewEvents.Select(converter);
-
             // Reconstruct the orchestration state in a way that correctly distinguishes new events from past events
-            var runtimeState = new OrchestrationRuntimeState(pastEvents.ToList());
-            foreach (HistoryEvent e in newEvents)
+            var runtimeState = new OrchestrationRuntimeState(pastEvents);
+            foreach (P.HistoryEvent protoEvent in orchestratorRequest.NewEvents)
             {
                 // AddEvent() puts events into the NewEvents list.
-                runtimeState.AddEvent(e);
+                runtimeState.AddEvent(converter(protoEvent));
             }
 
             if (runtimeState.ExecutionStartedEvent == null)

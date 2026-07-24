@@ -26,6 +26,11 @@ public sealed class BlobPayloadStore : PayloadStore
     readonly BlobContainerClient containerClient;
     readonly LargePayloadStorageOptions options;
 
+    // Caches the single in-flight (or completed) container-initialization task so that
+    // concurrent/subsequent uploads don't each issue their own CreateIfNotExistsAsync request.
+    // Null means "not yet attempted" or "needs to be retried"; see EnsureContainerExistsAsync.
+    Task? containerInitializationTask;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="BlobPayloadStore"/> class.
     /// </summary>
@@ -67,6 +72,18 @@ public sealed class BlobPayloadStore : PayloadStore
         this.containerClient = serviceClient.GetBlobContainerClient(options.ContainerName);
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BlobPayloadStore"/> class using an existing
+    /// container client. Intended for unit testing only.
+    /// </summary>
+    /// <param name="options">The options for the blob payload store.</param>
+    /// <param name="containerClient">The blob container client to use.</param>
+    internal BlobPayloadStore(LargePayloadStorageOptions options, BlobContainerClient containerClient)
+    {
+        this.options = options ?? throw new ArgumentNullException(nameof(options));
+        this.containerClient = containerClient ?? throw new ArgumentNullException(nameof(containerClient));
+    }
+
     /// <inheritdoc/>
     public override async Task<string> UploadAsync(string payLoad, CancellationToken cancellationToken)
     {
@@ -76,33 +93,45 @@ public sealed class BlobPayloadStore : PayloadStore
 
         byte[] payloadBuffer = Encoding.UTF8.GetBytes(payLoad);
 
-        // Ensure container exists (idempotent)
-        await this.containerClient.CreateIfNotExistsAsync(PublicAccessType.None, default, default, cancellationToken);
+        // Ensure container exists. Cached/single-flight after the first successful call so we
+        // don't pay for an extra CreateIfNotExistsAsync request/transaction on every upload.
+        await this.EnsureContainerExistsAsync(cancellationToken).ConfigureAwait(false);
 
-        if (this.options.CompressionEnabled)
+        try
         {
-            BlobOpenWriteOptions writeOptions = new()
+            if (this.options.CompressionEnabled)
             {
-                HttpHeaders = new BlobHttpHeaders { ContentEncoding = ContentEncodingGzip },
-            };
-            using Stream blobStream = await blob.OpenWriteAsync(true, writeOptions, cancellationToken);
-            using GZipStream compressedBlobStream = new(blobStream, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true);
+                BlobOpenWriteOptions writeOptions = new()
+                {
+                    HttpHeaders = new BlobHttpHeaders { ContentEncoding = ContentEncodingGzip },
+                };
+                using Stream blobStream = await blob.OpenWriteAsync(true, writeOptions, cancellationToken);
+                using GZipStream compressedBlobStream = new(blobStream, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true);
 
-            // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
+                // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
 
-            // await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
-            await WritePayloadAsync(payloadBuffer, compressedBlobStream, cancellationToken);
-            await compressedBlobStream.FlushAsync(cancellationToken);
-            await blobStream.FlushAsync(cancellationToken);
+                // await payloadStream.CopyToAsync(compressedBlobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
+                await WritePayloadAsync(payloadBuffer, compressedBlobStream, cancellationToken);
+                await compressedBlobStream.FlushAsync(cancellationToken);
+                await blobStream.FlushAsync(cancellationToken);
+            }
+            else
+            {
+                using Stream blobStream = await blob.OpenWriteAsync(true, default, cancellationToken);
+
+                // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
+                // await payloadStream.CopyToAsync(blobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
+                await WritePayloadAsync(payloadBuffer, blobStream, cancellationToken);
+                await blobStream.FlushAsync(cancellationToken);
+            }
         }
-        else
+        catch (RequestFailedException ex) when (ex.ErrorCode == BlobErrorCode.ContainerNotFound)
         {
-            using Stream blobStream = await blob.OpenWriteAsync(true, default, cancellationToken);
-
-            // using MemoryStream payloadStream = new(payloadBuffer, writable: false);
-            // await payloadStream.CopyToAsync(blobStream, bufferSize: DefaultCopyBufferSize, cancellationToken);
-            await WritePayloadAsync(payloadBuffer, blobStream, cancellationToken);
-            await blobStream.FlushAsync(cancellationToken);
+            // The container existed when we last verified/created it but has since been deleted
+            // (e.g. by an operator). Clear the cached initialization state so the next upload
+            // attempts to recreate the container, keeping deliberate deletion recoverable.
+            Volatile.Write(ref this.containerInitializationTask, null);
+            throw;
         }
 
         return EncodeToken(this.containerClient.Name, blobName);
@@ -156,6 +185,35 @@ public sealed class BlobPayloadStore : PayloadStore
         return value.StartsWith(TokenPrefix, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Awaits a shared initialization task while still honoring the caller's own cancellation
+    /// token, without cancelling the shared task itself.
+    /// </summary>
+    static async Task WaitForInitializationAsync(Task initializationTask, CancellationToken cancellationToken)
+    {
+#if NETSTANDARD2_0
+        if (!cancellationToken.CanBeCanceled || initializationTask.IsCompleted)
+        {
+            await initializationTask.ConfigureAwait(false);
+            return;
+        }
+
+        TaskCompletionSource<bool> cancellationTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        using (cancellationToken.Register(static state => ((TaskCompletionSource<bool>)state!).TrySetResult(true), cancellationTcs))
+        {
+            Task completed = await Task.WhenAny(initializationTask, cancellationTcs.Task).ConfigureAwait(false);
+            if (completed == cancellationTcs.Task)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+        }
+
+        await initializationTask.ConfigureAwait(false);
+#else
+        await initializationTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+#endif
+    }
+
     static async Task WritePayloadAsync(byte[] payloadBuffer, Stream target, CancellationToken cancellationToken)
     {
 #if NETSTANDARD2_0
@@ -194,5 +252,57 @@ public sealed class BlobPayloadStore : PayloadStore
         }
 
         return (rest.Substring(0, sep), rest.Substring(sep + 1));
+    }
+
+    /// <summary>
+    /// Ensures the container exists, issuing at most one <c>CreateIfNotExistsAsync</c> request
+    /// across all concurrent/subsequent callers. The result is cached for the lifetime of this
+    /// instance once it completes successfully; a failed attempt is not cached, so the next
+    /// caller retries.
+    /// </summary>
+    async Task EnsureContainerExistsAsync(CancellationToken cancellationToken)
+    {
+        Task initializationTask = Volatile.Read(ref this.containerInitializationTask)
+            ?? this.BeginContainerInitialization();
+
+        try
+        {
+            await WaitForInitializationAsync(initializationTask, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (initializationTask.IsFaulted || initializationTask.IsCanceled)
+            {
+                // Don't cache a failed attempt (e.g. a transient/throttled storage error): allow
+                // the next caller to retry initialization instead of failing forever. Use
+                // CompareExchange so we don't clobber a newer task set by a racing caller.
+                _ = Interlocked.CompareExchange(ref this.containerInitializationTask, null, initializationTask);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Starts container initialization if it hasn't already started, in a single-flight manner:
+    /// only the first caller's task is stored and returned to all callers, including ones racing
+    /// concurrently on other threads.
+    /// </summary>
+    Task BeginContainerInitialization()
+    {
+        Task newInitializationTask = this.CreateContainerIfNotExistsAsync();
+        return Interlocked.CompareExchange(ref this.containerInitializationTask, newInitializationTask, null)
+            ?? newInitializationTask;
+    }
+
+    /// <summary>
+    /// Creates the container if it doesn't already exist. This task may be shared by many
+    /// concurrent callers, each with its own independently-cancellable <see cref="CancellationToken"/>;
+    /// it intentionally does not use any single caller's token (see
+    /// <see cref="WaitForInitializationAsync(Task, CancellationToken)"/>, which lets individual
+    /// callers stop waiting without cancelling the shared operation for everyone else).
+    /// </summary>
+    async Task CreateContainerIfNotExistsAsync()
+    {
+        await this.containerClient.CreateIfNotExistsAsync(PublicAccessType.None, cancellationToken: CancellationToken.None)
+            .ConfigureAwait(false);
     }
 }

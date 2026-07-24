@@ -35,15 +35,18 @@ public abstract class PayloadInterceptor<TRequestNamespace, TResponseNamespace>(
         ClientInterceptorContext<TRequest, TResponse> context,
         AsyncUnaryCallContinuation<TRequest, TResponse> continuation)
     {
-        // Build the underlying call lazily after async externalization
-        Task<AsyncUnaryCall<TResponse>> startCallTask = Task.Run(async () =>
+        // Build the underlying call lazily after async externalization. This runs inline (no
+        // thread-pool hop); the continuation typically starts synchronously anyway once invoked.
+        Task<AsyncUnaryCall<TResponse>> startCallTask = StartCallAsync();
+
+        async Task<AsyncUnaryCall<TResponse>> StartCallAsync()
         {
             // Externalize first; if this fails, do not proceed to send the gRPC call
             await this.ExternalizeRequestPayloadsAsync(request, context.Options.CancellationToken);
 
             // Only if externalization succeeds, proceed with the continuation
             return continuation(request, context);
-        });
+        }
 
         async Task<TResponse> ResponseAsync()
         {

@@ -1,0 +1,249 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+using System.Text;
+using Grpc.Core;
+using Grpc.Core.Interceptors;
+
+namespace Microsoft.DurableTask.Worker.Grpc.Tests;
+
+public class PayloadInterceptorTests
+{
+    static readonly Marshaller<string> StringMarshaller = Marshallers.Create(
+        value => Encoding.UTF8.GetBytes(value),
+        bytes => Encoding.UTF8.GetString(bytes));
+    static readonly Method<string, string> TestMethod = new(
+        MethodType.Unary,
+        "TestService",
+        "TestMethod",
+        StringMarshaller,
+        StringMarshaller);
+
+    [Fact]
+    public void AsyncUnaryCall_SynchronousExternalization_RunsInlineWithoutThreadHop()
+    {
+        // Arrange: externalization completes synchronously (no real async work), so there is no
+        // await point for the state machine to yield on. Capture the managed thread ID that both
+        // callbacks observe and compare it to the calling thread's ID. This is deterministic
+        // (unlike checking "was it invoked yet", which races against thread-pool scheduling): the
+        // calling thread is busy executing this synchronous test method the whole time, so it is
+        // physically impossible for a Task.Run-dispatched worker item to run on this same managed
+        // thread while we're still inside the call. If the Task.Run thread-pool hop were still
+        // present, the observed thread ID would either be null (not yet run) or a different thread.
+        int callingThreadId = Environment.CurrentManagedThreadId;
+        int? externalizeThreadId = null;
+        int? continuationThreadId = null;
+        TestPayloadInterceptor interceptor = CreateInterceptor(
+            onExternalize: (_, _) =>
+            {
+                externalizeThreadId = Environment.CurrentManagedThreadId;
+                return Task.CompletedTask;
+            });
+        ClientInterceptorContext<string, string> context = CreateContext();
+
+        // Act
+        using AsyncUnaryCall<string> call = interceptor.AsyncUnaryCall(
+            "request",
+            context,
+            (req, ctx) =>
+            {
+                continuationThreadId = Environment.CurrentManagedThreadId;
+                return CreateFakeCall("response");
+            });
+
+        // Assert: both callbacks already ran, synchronously, on the calling thread.
+        externalizeThreadId.Should().Be(callingThreadId);
+        continuationThreadId.Should().Be(callingThreadId);
+    }
+
+    [Fact]
+    public async Task AsyncUnaryCall_Success_ExternalizesThenInvokesContinuationThenResolves()
+    {
+        // Arrange
+        List<string> order = [];
+        bool disposeInvoked = false;
+        TestPayloadInterceptor interceptor = CreateInterceptor(
+            onExternalize: (_, _) =>
+            {
+                order.Add("externalize");
+                return Task.CompletedTask;
+            },
+            onResolve: (_, _) =>
+            {
+                order.Add("resolve");
+                return Task.CompletedTask;
+            });
+        ClientInterceptorContext<string, string> context = CreateContext();
+
+        // Act
+        using AsyncUnaryCall<string> call = interceptor.AsyncUnaryCall(
+            "request",
+            context,
+            (req, ctx) =>
+            {
+                order.Add("continuation");
+                return CreateFakeCall("response", disposeAction: () => disposeInvoked = true);
+            });
+        string response = await call.ResponseAsync;
+        Metadata headers = await call.ResponseHeadersAsync;
+
+        // Assert: ordering, response payload, and pass-through metadata are all preserved.
+        order.Should().Equal("externalize", "continuation", "resolve");
+        response.Should().Be("response");
+        headers.Should().NotBeNull();
+        call.GetStatus().StatusCode.Should().Be(StatusCode.OK);
+        call.GetTrailers().Should().NotBeNull();
+
+        call.Dispose();
+        disposeInvoked.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AsyncUnaryCall_ExternalizeFails_PropagatesFailureAndSkipsContinuation()
+    {
+        // Arrange
+        InvalidOperationException failure = new("externalization failed");
+        bool continuationInvoked = false;
+        TestPayloadInterceptor interceptor = CreateInterceptor(
+            onExternalize: (_, _) => throw failure);
+        ClientInterceptorContext<string, string> context = CreateContext();
+
+        // Act
+        using AsyncUnaryCall<string> call = interceptor.AsyncUnaryCall(
+            "request",
+            context,
+            (req, ctx) =>
+            {
+                continuationInvoked = true;
+                return CreateFakeCall("response");
+            });
+        Func<Task> act = async () => await call.ResponseAsync;
+
+        // Assert: the gRPC call is never sent, and the original exception surfaces to the caller.
+        continuationInvoked.Should().BeFalse();
+        (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Should().Be(failure);
+        call.GetStatus().StatusCode.Should().Be(StatusCode.Internal);
+    }
+
+    [Fact]
+    public async Task AsyncUnaryCall_CancellationRequested_PropagatesCancellationAndSkipsContinuation()
+    {
+        // Arrange
+        using CancellationTokenSource cts = new();
+        cts.Cancel();
+        bool continuationInvoked = false;
+        TestPayloadInterceptor interceptor = CreateInterceptor(
+            onExternalize: (_, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                return Task.CompletedTask;
+            });
+        ClientInterceptorContext<string, string> context = CreateContext(cts.Token);
+
+        // Act
+        using AsyncUnaryCall<string> call = interceptor.AsyncUnaryCall(
+            "request",
+            context,
+            (req, ctx) =>
+            {
+                continuationInvoked = true;
+                return CreateFakeCall("response");
+            });
+        Func<Task> act = async () => await call.ResponseAsync;
+
+        // Assert
+        continuationInvoked.Should().BeFalse();
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        call.GetStatus().StatusCode.Should().Be(StatusCode.Cancelled);
+    }
+
+    [Fact]
+    public async Task AsyncUnaryCall_DisposeBeforeCompletion_DisposesInnerCallOnceStarted()
+    {
+        // Arrange: hold externalization open so Dispose() races ahead of call construction.
+        TaskCompletionSource externalizeGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        bool disposeInvoked = false;
+        TestPayloadInterceptor interceptor = CreateInterceptor(
+            onExternalize: async (_, _) => await externalizeGate.Task);
+        ClientInterceptorContext<string, string> context = CreateContext();
+
+        // Act
+        AsyncUnaryCall<string> call = interceptor.AsyncUnaryCall(
+            "request",
+            context,
+            (req, ctx) => CreateFakeCall("response", disposeAction: () => disposeInvoked = true));
+        call.Dispose();
+
+        // Assert: not disposed yet because the inner call has not been created.
+        disposeInvoked.Should().BeFalse();
+
+        externalizeGate.SetResult();
+        await call.ResponseAsync;
+
+        // Assert: once the inner call exists, disposal is applied to it.
+        disposeInvoked.Should().BeTrue();
+    }
+
+    [Fact]
+    public void AsyncUnaryCall_DisposeAfterExternalizeFailure_DoesNotThrowOrDisposeMissingCall()
+    {
+        // Arrange
+        bool disposeInvoked = false;
+        TestPayloadInterceptor interceptor = CreateInterceptor(
+            onExternalize: (_, _) => throw new InvalidOperationException("boom"));
+        ClientInterceptorContext<string, string> context = CreateContext();
+
+        // Act
+        AsyncUnaryCall<string> call = interceptor.AsyncUnaryCall(
+            "request",
+            context,
+            (req, ctx) => CreateFakeCall("response", disposeAction: () => disposeInvoked = true));
+        Action act = call.Dispose;
+
+        // Assert: no inner call was ever created, so Dispose is a safe no-op.
+        act.Should().NotThrow();
+        disposeInvoked.Should().BeFalse();
+    }
+
+    static TestPayloadInterceptor CreateInterceptor(
+        Func<object?, CancellationToken, Task>? onExternalize = null,
+        Func<object?, CancellationToken, Task>? onResolve = null)
+    {
+        Mock<PayloadStore> payloadStore = new();
+        return new TestPayloadInterceptor(payloadStore.Object, new LargePayloadStorageOptions())
+        {
+            OnExternalize = onExternalize,
+            OnResolve = onResolve,
+        };
+    }
+
+    static ClientInterceptorContext<string, string> CreateContext(CancellationToken cancellationToken = default)
+    {
+        CallOptions options = new(cancellationToken: cancellationToken);
+        return new ClientInterceptorContext<string, string>(TestMethod, null, options);
+    }
+
+    static AsyncUnaryCall<string> CreateFakeCall(string response, Action? disposeAction = null)
+    {
+        return new AsyncUnaryCall<string>(
+            Task.FromResult(response),
+            Task.FromResult(new Metadata()),
+            () => new Status(StatusCode.OK, string.Empty),
+            () => new Metadata(),
+            disposeAction ?? (() => { }));
+    }
+
+    sealed class TestPayloadInterceptor(PayloadStore payloadStore, LargePayloadStorageOptions options)
+        : PayloadInterceptor<object, object>(payloadStore, options)
+    {
+        public Func<object?, CancellationToken, Task>? OnExternalize { get; set; }
+
+        public Func<object?, CancellationToken, Task>? OnResolve { get; set; }
+
+        protected override Task ExternalizeRequestPayloadsAsync<TRequest>(TRequest request, CancellationToken cancellation)
+            => this.OnExternalize?.Invoke(request, cancellation) ?? Task.CompletedTask;
+
+        protected override Task ResolveResponsePayloadsAsync<TResponse>(TResponse response, CancellationToken cancellation)
+            => this.OnResolve?.Invoke(response, cancellation) ?? Task.CompletedTask;
+    }
+}

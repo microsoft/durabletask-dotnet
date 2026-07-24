@@ -1098,69 +1098,15 @@ sealed partial class GrpcDurableTaskWorker
             int maxChunkBytes,
             CancellationToken cancellationToken)
         {
-            // Validate that no single action exceeds the maximum chunk size
-            static P.TaskFailureDetails? ValidateActionsSize(IEnumerable<P.OrchestratorAction> actions, int maxChunkBytes)
-            {
-                foreach (P.OrchestratorAction action in actions)
-                {
-                    int actionSize = action.CalculateSize();
-                    if (actionSize > maxChunkBytes)
-                    {
-                        // TODO: large payload doc is not available yet on aka.ms, add doc link to below error message
-                        string errorMessage = $"A single orchestrator action of type {action.OrchestratorActionTypeCase} with id {action.Id} " +
-                            $"exceeds the {maxChunkBytes / 1024.0 / 1024.0:F2}MB limit: {actionSize / 1024.0 / 1024.0:F2}MB. " +
-                            "Enable large-payload externalization to Azure Blob Storage to support oversized actions.";
-                        return new P.TaskFailureDetails
-                        {
-                            ErrorType = typeof(InvalidOperationException).FullName,
-                            ErrorMessage = errorMessage,
-                            IsNonRetriable = true,
-                        };
-                    }
-                }
-
-                return null;
-            }
-
-            P.TaskFailureDetails? validationFailure = this.worker.grpcOptions.Capabilities.Contains(P.WorkerCapability.LargePayloads)
-                ? null
-                : ValidateActionsSize(response.Actions, maxChunkBytes);
-            if (validationFailure != null)
-            {
-                // Complete the orchestration with a failed status and failure details
-                P.OrchestratorResponse failureResponse = new()
-                {
-                    InstanceId = response.InstanceId,
-                    CompletionToken = response.CompletionToken,
-                    OrchestrationTraceContext = response.OrchestrationTraceContext,
-                    Actions =
-                    {
-                        new P.OrchestratorAction
-                        {
-                            CompleteOrchestration = new P.CompleteOrchestrationAction
-                            {
-                                OrchestrationStatus = P.OrchestrationStatus.Failed,
-                                FailureDetails = validationFailure,
-                            },
-                        },
-                    },
-                };
-
-                await this.ExecuteWithRetryAsync(
-                    async () => await this.client.CompleteOrchestratorTaskAsync(failureResponse, cancellationToken: cancellationToken),
-                    nameof(this.client.CompleteOrchestratorTaskAsync),
-                    cancellationToken);
-                return;
-            }
-
-            // Helper to add an action to the current chunk if it fits
+            // Helper to add an action to the current chunk if it fits, using a precomputed action size
+            // so we never need to call CalculateSize() on the same action more than once.
             static bool TryAddAction(
                 Google.Protobuf.Collections.RepeatedField<P.OrchestratorAction> dest,
                 P.OrchestratorAction action,
+                int actionSize,
                 ref int currentSize,
                 int maxChunkBytes)
             {
-                int actionSize = action.CalculateSize();
                 if (currentSize + actionSize > maxChunkBytes && currentSize > 0)
                 {
                     return false;
@@ -1171,7 +1117,10 @@ sealed partial class GrpcDurableTaskWorker
                 return true;
             }
 
-            // Check if the entire response fits in one chunk
+            // Calculate the whole response size exactly once. If it fits in a single chunk, no
+            // individual action can exceed that same limit (every field, including each action,
+            // contributes a non-negative amount to the total), so we can send it directly without
+            // any additional per-action validation or sizing pass.
             int totalSize = response.CalculateSize();
             if (totalSize <= maxChunkBytes)
             {
@@ -1183,9 +1132,66 @@ sealed partial class GrpcDurableTaskWorker
                 return;
             }
 
+            // Response is too large to fit in a single chunk. Compute each action's serialized size
+            // exactly once here, and reuse the cached values below for both oversized-action
+            // validation and chunk packing.
+            List<P.OrchestratorAction> allActions = response.Actions.ToList();
+            int[] actionSizes = new int[allActions.Count];
+            for (int i = 0; i < allActions.Count; i++)
+            {
+                actionSizes[i] = allActions[i].CalculateSize();
+            }
+
+            if (!this.worker.grpcOptions.Capabilities.Contains(P.WorkerCapability.LargePayloads))
+            {
+                // Validate that no single action exceeds the maximum chunk size, using the cached sizes.
+                for (int i = 0; i < allActions.Count; i++)
+                {
+                    if (actionSizes[i] > maxChunkBytes)
+                    {
+                        P.OrchestratorAction action = allActions[i];
+
+                        // TODO: large payload doc is not available yet on aka.ms, add doc link to below error message
+                        string errorMessage = $"A single orchestrator action of type {action.OrchestratorActionTypeCase} with id {action.Id} " +
+                            $"exceeds the {maxChunkBytes / 1024.0 / 1024.0:F2}MB limit: {actionSizes[i] / 1024.0 / 1024.0:F2}MB. " +
+                            "Enable large-payload externalization to Azure Blob Storage to support oversized actions.";
+                        P.TaskFailureDetails validationFailure = new()
+                        {
+                            ErrorType = typeof(InvalidOperationException).FullName,
+                            ErrorMessage = errorMessage,
+                            IsNonRetriable = true,
+                        };
+
+                        // Complete the orchestration with a failed status and failure details
+                        P.OrchestratorResponse failureResponse = new()
+                        {
+                            InstanceId = response.InstanceId,
+                            CompletionToken = response.CompletionToken,
+                            OrchestrationTraceContext = response.OrchestrationTraceContext,
+                            Actions =
+                            {
+                                new P.OrchestratorAction
+                                {
+                                    CompleteOrchestration = new P.CompleteOrchestrationAction
+                                    {
+                                        OrchestrationStatus = P.OrchestrationStatus.Failed,
+                                        FailureDetails = validationFailure,
+                                    },
+                                },
+                            },
+                        };
+
+                        await this.ExecuteWithRetryAsync(
+                            async () => await this.client.CompleteOrchestratorTaskAsync(failureResponse, cancellationToken: cancellationToken),
+                            nameof(this.client.CompleteOrchestratorTaskAsync),
+                            cancellationToken);
+                        return;
+                    }
+                }
+            }
+
             // Response is too large, split into multiple chunks
             int actionsCompletedSoFar = 0, chunkIndex = 0;
-            List<P.OrchestratorAction> allActions = response.Actions.ToList();
             bool isPartial = true;
             bool isChunkedMode = false;
 
@@ -1204,7 +1210,7 @@ sealed partial class GrpcDurableTaskWorker
 
                 // Fill the chunk with actions until we reach the size limit
                 while (actionsCompletedSoFar < allActions.Count &&
-                       TryAddAction(chunkedResponse.Actions, allActions[actionsCompletedSoFar], ref chunkPayloadSize, maxChunkBytes))
+                       TryAddAction(chunkedResponse.Actions, allActions[actionsCompletedSoFar], actionSizes[actionsCompletedSoFar], ref chunkPayloadSize, maxChunkBytes))
                 {
                     actionsCompletedSoFar++;
                 }

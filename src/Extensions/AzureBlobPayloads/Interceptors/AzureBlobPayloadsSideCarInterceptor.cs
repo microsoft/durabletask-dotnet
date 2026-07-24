@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Runtime.ExceptionServices;
 using Azure;
 using Grpc.Core.Interceptors;
 
@@ -467,10 +468,17 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     /// way it would have from a sequential await chain, preserving the existing first-failure
     /// handling performed by callers (e.g. converting the failure into a
     /// <see cref="P.TaskFailureDetails"/> completion).
+    /// <para>
+    /// Every started operation is always drained (fully awaited) before this method returns or
+    /// throws -- including when stopping early due to cancellation or a prior failure -- so that
+    /// (a) the bounding <see cref="SemaphoreSlim"/> is only disposed once nothing can call
+    /// <see cref="SemaphoreSlim.Release()"/> on it, and (b) no operation can mutate its target
+    /// protobuf field after control has already passed back to the caller.
+    /// </para>
     /// </remarks>
     /// <param name="operations">The independent operations to run.</param>
     /// <param name="cancellation">Cancellation token.</param>
-    static async Task RunWithBoundedConcurrencyAsync(IReadOnlyList<Func<Task>> operations, CancellationToken cancellation)
+    static async Task RunWithBoundedConcurrencyAsync(List<Func<Task>> operations, CancellationToken cancellation)
     {
         if (operations.Count == 0)
         {
@@ -484,29 +492,69 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             return;
         }
 
-        using SemaphoreSlim throttle = new(MaxConcurrentPayloadOperations, MaxConcurrentPayloadOperations);
+        SemaphoreSlim throttle = new(MaxConcurrentPayloadOperations, MaxConcurrentPayloadOperations);
         List<Task> inFlight = new(operations.Count);
         Exception? firstFailure = null;
 
         foreach (Func<Task> operation in operations)
         {
-            cancellation.ThrowIfCancellationRequested();
-
-            // Once an earlier operation has failed permanently, stop issuing new Azure Storage
-            // requests. Operations already started are left to drain below rather than
-            // cancelled, since they may already have side effects (e.g. an in-flight upload).
-            if (Volatile.Read(ref firstFailure) != null)
+            // Stop dispatching new Azure Storage requests once an earlier operation has failed
+            // permanently, or cancellation has been requested. Operations already started are
+            // *not* abandoned here -- they are drained below -- since they may already have side
+            // effects (e.g. an in-flight upload) and must not touch the semaphore, or mutate
+            // their target field, after this method has returned control to the caller.
+            if (Volatile.Read(ref firstFailure) != null || cancellation.IsCancellationRequested)
             {
                 break;
             }
 
-            await throttle.WaitAsync(cancellation);
+            // Deliberately passing CancellationToken.None (not `cancellation`) to WaitAsync: every
+            // dispatched operation is itself cancellation-aware (it receives the same token), so a
+            // slot reliably frees up as soon as an in-flight operation observes cancellation --
+            // without risking a WaitAsync-triggered unwind that would abandon an already-tracked
+            // operation.
+            await throttle.WaitAsync(CancellationToken.None);
+
+            // Re-check immediately after acquiring the slot: cancellation or a failure may have
+            // occurred while this operation was queued waiting for a slot to free up. If so,
+            // release the slot back (this operation never started, so there is nothing to drain
+            // for it) and stop dispatching -- otherwise a newly-freed slot could let a new
+            // operation start after cancellation/failure was already observed.
+            if (Volatile.Read(ref firstFailure) != null || cancellation.IsCancellationRequested)
+            {
+                throttle.Release();
+                break;
+            }
+
             inFlight.Add(TrackAsync(operation));
         }
 
-        // Await propagates the first exception encountered (matching the prior sequential
-        // await-per-field behavior), after allowing every started operation to complete.
-        await Task.WhenAll(inFlight);
+        try
+        {
+            // Wait for every started operation to finish -- regardless of outcome -- before this
+            // method returns or throws. TrackAsync below never lets an exception fault this
+            // Task.WhenAll; it only records it in `firstFailure`, so draining always completes.
+            await Task.WhenAll(inFlight);
+        }
+        finally
+        {
+            // Safe only because every TrackAsync call above (including its own `finally`, which
+            // releases a semaphore slot) has already run to completion by the time
+            // Task.WhenAll(inFlight) returns.
+            throttle.Dispose();
+        }
+
+        if (firstFailure != null)
+        {
+            // Rethrow the first operation failure with its original stack trace preserved,
+            // matching the prior sequential await-per-field behavior (and never masked by e.g.
+            // a later cancellation or a disposed-resource exception).
+            ExceptionDispatchInfo.Capture(firstFailure).Throw();
+        }
+
+        // No operation failed, but cancellation may still have cut dispatch short before every
+        // operation was started; surface that the same way a sequential await chain would have.
+        cancellation.ThrowIfCancellationRequested();
 
         async Task TrackAsync(Func<Task> operation)
         {
@@ -516,8 +564,12 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             }
             catch (Exception ex)
             {
+                // Preserve first-failure semantics (only the first exception is surfaced,
+                // matching the prior sequential behavior). The exception is captured -- not
+                // rethrown -- so Task.WhenAll above never faults, guaranteeing every operation,
+                // including this finally block, runs to completion before the semaphore is
+                // disposed.
                 Interlocked.CompareExchange(ref firstFailure, ex, null);
-                throw;
             }
             finally
             {

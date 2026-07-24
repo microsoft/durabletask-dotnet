@@ -23,6 +23,9 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
     static readonly MethodInfo ResolveMethodDefinition = typeof(AzureBlobPayloadsSideCarInterceptor)
         .GetMethod("ResolveResponsePayloadsAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
+    static readonly MethodInfo RunWithBoundedConcurrencyMethodDefinition = typeof(AzureBlobPayloadsSideCarInterceptor)
+        .GetMethod("RunWithBoundedConcurrencyAsync", BindingFlags.Static | BindingFlags.NonPublic)!;
+
     [Fact]
     public async Task ResolveResponsePayloadsAsync_HistoryChunk_ResolvesEventsInOrderWithBoundedConcurrency()
     {
@@ -367,6 +370,90 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
         store.DownloadCount.Should().Be(0);
     }
 
+    [Fact]
+    public async Task RunWithBoundedConcurrencyAsync_CancelledWhileOperationsInFlight_DrainsBeforeReturningAndDoesNotMaskFailure()
+    {
+        // Arrange: 9 operations -- one more than MaxConcurrentPayloadOperations (8) -- so the
+        // dispatch loop fills all 8 concurrency slots with genuinely in-flight operations before
+        // the 9th operation's semaphore wait forces the loop to observe real contention. This is
+        // the exact race window in which the original bug -- disposing the bounding SemaphoreSlim
+        // on cancellation before every in-flight operation had released it -- could surface an
+        // unobserved ObjectDisposedException, mask a genuine (non-cancellation) failure from an
+        // already-in-flight operation, and let that operation's continuation run after the caller
+        // had already received a response.
+        //
+        // Operation 0 simulates an upload/download that has already committed and is in the
+        // process of failing for a real, unrelated reason (e.g. a permanent PayloadStorageException)
+        // -- it does not observe the cancellation token at all, so it only completes once the test
+        // explicitly releases it, well after cancellation has been requested. Operations 1-6
+        // likewise ignore cancellation and simply succeed once released. Operation 7 (the 9th, index
+        // 8) must never be dispatched at all, since cancellation is requested before a 9th slot ever
+        // frees up.
+        TaskCompletionSource<bool> releaseGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int dispatchedBeforeCancel = 0;
+        bool ninthOperationDispatched = false;
+
+        List<Func<Task>> operations = [];
+        operations.Add(async () =>
+        {
+            Interlocked.Increment(ref dispatchedBeforeCancel);
+            await releaseGate.Task;
+            throw new InvalidOperationException("Simulated permanent storage failure, unrelated to cancellation.");
+        });
+        for (int i = 1; i < 8; i++)
+        {
+            operations.Add(async () =>
+            {
+                Interlocked.Increment(ref dispatchedBeforeCancel);
+                await releaseGate.Task;
+            });
+        }
+
+        operations.Add(() =>
+        {
+            // Should never run: cancellation must stop the dispatch loop before this 9th
+            // operation's semaphore wait can ever be satisfied.
+            ninthOperationDispatched = true;
+            return Task.CompletedTask;
+        });
+
+        using CancellationTokenSource cts = new();
+
+        // Act: start the call without awaiting it yet. The first 8 operations dispatch and block
+        // on `releaseGate` synchronously (no artificial delay is needed since none of them observe
+        // cancellation), so by the time this line completes, the 9th operation's semaphore wait is
+        // already the sole blocking point.
+        Task runTask = RunWithBoundedConcurrencyAsync(operations, cts.Token);
+        dispatchedBeforeCancel.Should().Be(8, "the first 8 operations should dispatch synchronously before the 9th blocks on the semaphore");
+
+        cts.Cancel();
+
+        // Small buffer so that, under the old (buggy) implementation, the cancellation-triggered
+        // unwind and premature semaphore disposal have already fully happened before the
+        // already-in-flight operations are released below -- making the demonstration
+        // unambiguous rather than a race between this test and that unwind.
+        await Task.Delay(50);
+
+        // Now let the 8 already-in-flight operations complete: operation 0 fails for a genuine,
+        // cancellation-unrelated reason; operations 1-6 succeed.
+        releaseGate.SetResult(true);
+
+        // Assert: the overall call surfaces the genuine InvalidOperationException -- not
+        // OperationCanceledException (which the old implementation would incorrectly surface
+        // immediately upon cancellation, before operation 0 ever got a chance to fail) and not
+        // ObjectDisposedException (which the old implementation could surface from an orphaned,
+        // unobserved background task once operation 0's `finally` tried to release an
+        // already-disposed semaphore). A bounded wait guards against a deadlock regression.
+        Func<Task> act = () => runTask.WaitAsync(TimeSpan.FromSeconds(10));
+        (await act.Should().ThrowExactlyAsync<InvalidOperationException>(
+            "a genuine failure from an already-in-flight operation must never be masked by a concurrent cancellation or disposal race"))
+            .WithMessage("Simulated permanent storage failure*");
+
+        // Assert: the 9th operation was never dispatched -- cancellation correctly stopped the
+        // dispatch loop from starting new operations, without abandoning the 8 already in flight.
+        ninthOperationDispatched.Should().BeFalse();
+    }
+
     static LargePayloadStorageOptions CreateOptions() => new() { ThresholdBytes = 1 };
 
     static Task ExternalizeAsync<TRequest>(AzureBlobPayloadsSideCarInterceptor interceptor, TRequest request, CancellationToken cancellation)
@@ -374,6 +461,9 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
 
     static Task ResolveAsync<TResponse>(AzureBlobPayloadsSideCarInterceptor interceptor, TResponse response, CancellationToken cancellation)
         => (Task)ResolveMethodDefinition.MakeGenericMethod(typeof(TResponse)).Invoke(interceptor, [response, cancellation])!;
+
+    static Task RunWithBoundedConcurrencyAsync(IReadOnlyList<Func<Task>> operations, CancellationToken cancellation)
+        => (Task)RunWithBoundedConcurrencyMethodDefinition.Invoke(null, [operations, cancellation])!;
 
     /// <summary>
     /// In-memory <see cref="PayloadStore"/> test double that tracks upload/download counts and the

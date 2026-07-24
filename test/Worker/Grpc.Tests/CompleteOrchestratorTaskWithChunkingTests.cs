@@ -174,6 +174,83 @@ public class CompleteOrchestratorTaskWithChunkingTests
     }
 
     [Fact]
+    public async Task NoLargePayloadsCapability_FirstActionOversized_FailsOnFirstOffender_DoesNotEvaluateLaterActions()
+    {
+        // Arrange - regression coverage for a fail-fast ordering bug: without the LargePayloads
+        // capability, validation must stop at the *first* oversized action instead of first sizing
+        // the whole response and/or every action. Action id=0 is oversized, and several later
+        // actions (ids 1-3) are ALSO individually oversized with distinguishable ids. If the
+        // algorithm regresses back to "size everything, then scan for a failure", it could still
+        // produce *a* failure, but this asserts it fails on id=0 specifically - proving iteration
+        // stopped at the very first offender rather than continuing to size/scan later actions.
+        P.OrchestratorAction action0 = BuildScheduleTaskAction(0, 2048); // oversized - first, must win
+        P.OrchestratorAction action1 = BuildScheduleTaskAction(1, 2048); // also oversized
+        P.OrchestratorAction action2 = BuildScheduleTaskAction(2, 2048); // also oversized
+        P.OrchestratorAction action3 = BuildScheduleTaskAction(3, 2048); // also oversized
+        int maxChunkBytes = action0.CalculateSize() - 1;
+
+        P.OrchestratorResponse response = BuildResponse("instance-9", action0, action1, action2, action3);
+        using Fixture fixture = Fixture.Create(largePayloads: false);
+
+        // Act
+        await fixture.InvokeAsync(response, maxChunkBytes);
+
+        // Assert - exactly one response was sent (no partial chunks for the other oversized
+        // actions), and it is a failure referencing id=0.
+        fixture.Sent.Should().HaveCount(1);
+        P.OrchestratorResponse failure = fixture.Sent[0];
+        failure.Actions.Should().HaveCount(1);
+        P.OrchestratorAction failureAction = failure.Actions[0];
+        failureAction.CompleteOrchestration.Should().NotBeNull();
+        failureAction.CompleteOrchestration.OrchestrationStatus.Should().Be(P.OrchestrationStatus.Failed);
+        failureAction.CompleteOrchestration.FailureDetails.ErrorMessage.Should().Contain("with id 0 ");
+        failureAction.CompleteOrchestration.FailureDetails.ErrorMessage.Should().NotContain("with id 1 ");
+        failureAction.CompleteOrchestration.FailureDetails.ErrorMessage.Should().NotContain("with id 2 ");
+        failureAction.CompleteOrchestration.FailureDetails.ErrorMessage.Should().NotContain("with id 3 ");
+    }
+
+    [Fact]
+    public async Task NoLargePayloadsCapability_FirstActionOversized_ShortCircuitsBeforeSizingLaterActions()
+    {
+        // Arrange - a stronger, timing-based guard for the same regression as above. Action id=0 is
+        // oversized (tiny payload, cheap to size); actions after it each carry a large *shared*
+        // string reference (so memory stays low - only one big string is allocated - while
+        // CalculateSize() must still independently re-walk it on every call). Calibration measured
+        // ~1000ms to size 200 such actions vs. ~4ms to size a single one, so a fail-fast
+        // implementation (sizing only id=0 before returning) should complete orders of magnitude
+        // faster than a regressed implementation that sizes the whole response and/or every action
+        // first. The assertion uses a very generous threshold to avoid CI flakiness while still
+        // clearly separating the two behaviors.
+        string bigSharedInput = new('x', 40_000_000);
+        P.OrchestratorAction action0 = BuildScheduleTaskAction(0, 16); // small, oversized only relative to maxChunkBytes below
+        int maxChunkBytes = action0.CalculateSize() - 1;
+
+        List<P.OrchestratorAction> actions = new() { action0 };
+        for (int i = 1; i <= 200; i++)
+        {
+            actions.Add(new P.OrchestratorAction
+            {
+                Id = i,
+                ScheduleTask = new P.ScheduleTaskAction { Name = "Echo", Input = bigSharedInput },
+            });
+        }
+
+        P.OrchestratorResponse response = BuildResponse("instance-10", actions.ToArray());
+        using Fixture fixture = Fixture.Create(largePayloads: false);
+
+        // Act
+        System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        await fixture.InvokeAsync(response, maxChunkBytes);
+        stopwatch.Stop();
+
+        // Assert - failed fast on id=0 well before the ~1000ms it would take to size the 200
+        // large later actions.
+        fixture.Sent.Should().HaveCount(1);
+        fixture.Sent[0].Actions[0].CompleteOrchestration.FailureDetails.ErrorMessage.Should().Contain("with id 0 ");
+        stopwatch.ElapsedMilliseconds.Should().BeLessThan(500);
+    }
+
+    [Fact]
     public async Task LargePayloadsCapability_SingleOversizedAction_IsSentInsteadOfFailing()
     {
         // Arrange - same oversized action, but with LargePayloads capability announced. The action

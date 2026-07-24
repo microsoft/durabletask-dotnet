@@ -33,6 +33,13 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     bool preserveUnprocessedEventsOnContinueAsNew;
     TaskOrchestrationEntityContext? entityFeature;
 
+    // Cached and reused across NewGuid() calls (instead of creating and disposing a new SHA1 instance
+    // per call) to reduce per-call allocation overhead. A single TaskOrchestrationContextWrapper is used
+    // for the duration of a single orchestration execution, and orchestrator code executes sequentially
+    // (never concurrently) within that execution, so reusing this instance is safe. HashAlgorithm.Initialize()
+    // resets all internal state before each use, so the computed hash is identical to using a fresh instance.
+    SHA1? cachedHashAlgorithm;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskOrchestrationContextWrapper"/> class.
     /// </summary>
@@ -434,16 +441,18 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         byte[] namespaceValueByteArray = namespaceValueGuid.ToByteArray();
         SwapByteArrayValues(namespaceValueByteArray);
 
-        byte[] hashByteArray;
 #pragma warning disable CA5350 // Do Not Use Weak Cryptographic Algorithms -- not for cryptography
-        using (HashAlgorithm hashAlgorithm = SHA1.Create()) /* CodeQL [SM02196] Suppressed: SHA1 is not used for cryptographic purposes here. The information being hashed is not sensitive,
+        SHA1 hashAlgorithm = this.cachedHashAlgorithm ??= SHA1.Create(); /* CodeQL [SM02196] Suppressed: SHA1 is not used for cryptographic purposes here. The information being hashed is not sensitive,
                                                                and the goal is to generate a deterministic Guid. We cannot update to SHA2-based algorithms without breaking
                                                                customers' inflight orchestrations. */
-        {
-            hashAlgorithm.TransformBlock(namespaceValueByteArray, 0, namespaceValueByteArray.Length, null, 0);
-            hashAlgorithm.TransformFinalBlock(nameByteArray, 0, nameByteArray.Length);
-            hashByteArray = hashAlgorithm.Hash;
-        }
+
+        // Reset internal state before each use since this instance is cached and reused across calls
+        // rather than being created and disposed per call. This produces byte-for-byte identical hashes
+        // to constructing a new SHA1 instance for every call.
+        hashAlgorithm.Initialize();
+        hashAlgorithm.TransformBlock(namespaceValueByteArray, 0, namespaceValueByteArray.Length, null, 0);
+        hashAlgorithm.TransformFinalBlock(nameByteArray, 0, nameByteArray.Length);
+        byte[] hashByteArray = hashAlgorithm.Hash;
 #pragma warning restore CA5350 // Do Not Use Weak Cryptographic Algorithms -- not for cryptography
 
         byte[] newGuidByteArray = new byte[16];

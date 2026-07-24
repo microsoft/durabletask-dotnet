@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Security.Cryptography;
 using DurableTask.Core;
 using DurableTask.Core.Exceptions;
 using DurableTask.Core.History;
@@ -27,6 +28,15 @@ namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
 /// <param name="options">The client options.</param>
 class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) : DurableTaskClient(name)
 {
+    // Polling parameters for WaitForInstanceStartAsync. The minimum interval matches the historical
+    // fixed 1-second polling cadence so quick-starting orchestrations are still observed promptly. The
+    // interval then grows (bounded by the maximum) for instances that remain pending longer, reducing
+    // sustained polling load; jitter is applied on top to desynchronize concurrent callers.
+    const double PollingBackoffMultiplier = 1.5;
+    const double PollingJitterFactor = 0.2;
+    static readonly TimeSpan MinPollingInterval = TimeSpan.FromSeconds(1);
+    static readonly TimeSpan MaxPollingInterval = TimeSpan.FromSeconds(5);
+
     readonly ShimDurableTaskClientOptions options = Check.NotNull(options);
     ShimDurableEntityClient? entities;
 
@@ -270,7 +280,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     {
         Check.NotNullOrEmpty(instanceId);
 
-        while (true)
+        for (int attempt = 0; ; attempt++)
         {
             OrchestrationMetadata? metadata = await this.GetInstancesAsync(
                 instanceId, getInputsAndOutputs, cancellation);
@@ -285,7 +295,13 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                 return metadata;
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(1), cancellation);
+            // Poll with a jittered, gradually-increasing delay. This keeps the first few retries close to
+            // the historical 1-second cadence -- preserving prompt observation of quick-starting
+            // orchestrations -- while desynchronizing concurrent waiters (avoiding synchronized polling
+            // bursts) and reducing steady-state load against the backend for instances that stay
+            // pending longer.
+            TimeSpan delay = ComputeNextPollingDelay(attempt);
+            await Task.Delay(delay, cancellation);
         }
     }
 
@@ -342,6 +358,28 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
 
         await this.Client.CreateTaskOrchestrationAsync(message, dedupeStatuses: null);
         return newInstanceId;
+    }
+
+    /// <summary>
+    /// Computes the delay to wait before the next <see cref="WaitForInstanceStartAsync"/> polling attempt.
+    /// </summary>
+    /// <param name="attempt">The zero-based index of the poll attempt that just completed.</param>
+    /// <returns>A jittered delay, growing from <see cref="MinPollingInterval"/> up to <see cref="MaxPollingInterval"/>.</returns>
+    static TimeSpan ComputeNextPollingDelay(int attempt)
+    {
+        int safeAttempt = Math.Max(attempt, 0);
+
+        // Cap the exponent so this never overflows for pathological attempt counts.
+        double growth = Math.Pow(PollingBackoffMultiplier, Math.Min(safeAttempt, 8));
+        double targetMs = Math.Min(
+            MinPollingInterval.TotalMilliseconds * growth,
+            MaxPollingInterval.TotalMilliseconds);
+
+        // Apply +/- 20% jitter so concurrent callers waiting on the same or different instances don't
+        // converge on synchronized polling bursts against the backend.
+        double jitterRangeMs = targetMs * PollingJitterFactor;
+        double jitteredMs = targetMs + (((PollingJitter.NextDouble() * 2.0) - 1.0) * jitterRangeMs);
+        return TimeSpan.FromMilliseconds(Math.Max(jitteredMs, 0));
     }
 
     [return: NotNullIfNotNull("state")]
@@ -447,6 +485,39 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                     await this.WaitForInstanceCompletionAsync(instanceId, cancellation: cancellation);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// A minimal thread-safe random source used to jitter <see cref="WaitForInstanceStartAsync"/> polling
+    /// delays across concurrent callers. <see cref="System.Random"/> is not thread-safe, and its
+    /// parameterless constructor can produce correlated sequences when many instances are created around
+    /// the same tick -- which is exactly the kind of synchronized behavior this jitter is meant to avoid.
+    /// A single, securely-seeded instance guarded by a lock avoids both issues.
+    /// </summary>
+    static class PollingJitter
+    {
+        static readonly object SyncRoot = new();
+        static readonly Random Shared = CreateSeededRandom();
+
+        /// <summary>
+        /// Returns a thread-safe random double in the range [0.0, 1.0).
+        /// </summary>
+        /// <returns>A random double in the range [0.0, 1.0).</returns>
+        public static double NextDouble()
+        {
+            lock (SyncRoot)
+            {
+                return Shared.NextDouble();
+            }
+        }
+
+        static Random CreateSeededRandom()
+        {
+            byte[] seedBytes = new byte[sizeof(int)];
+            using RandomNumberGenerator rng = RandomNumberGenerator.Create();
+            rng.GetBytes(seedBytes);
+            return new Random(BitConverter.ToInt32(seedBytes, 0));
         }
     }
 }

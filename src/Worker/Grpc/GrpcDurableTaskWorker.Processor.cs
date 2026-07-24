@@ -32,6 +32,17 @@ sealed partial class GrpcDurableTaskWorker
     {
         static readonly Google.Protobuf.WellKnownTypes.Empty EmptyMessage = new();
 
+        /// <summary>
+        /// Test-only hook invoked immediately after an individual action's size is computed during the
+        /// fail-fast validation pass in <see cref="CompleteOrchestratorTaskWithChunkingAsync"/>. Always
+        /// <see langword="null"/> in production (adds no overhead beyond a null check); used exclusively
+        /// by unit tests (accessed via reflection) to deterministically verify that validation stops at
+        /// the first oversized action instead of computing the size of every action.
+        /// </summary>
+#pragma warning disable CS0649 // Field is never assigned to in production code - it is set via reflection by tests.
+        static Action<int>? testActionSizedHook;
+#pragma warning restore CS0649
+
         readonly GrpcDurableTaskWorker worker;
         readonly TaskHubSidecarServiceClient client;
         readonly DurableTaskShimFactory shimFactory;
@@ -1133,6 +1144,7 @@ sealed partial class GrpcDurableTaskWorker
                 {
                     P.OrchestratorAction action = response.Actions[i];
                     int actionSize = action.CalculateSize();
+                    testActionSizedHook?.Invoke(action.Id);
                     if (actionSize > maxChunkBytes)
                     {
                         // TODO: large payload doc is not available yet on aka.ms, add doc link to below error message

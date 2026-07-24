@@ -210,44 +210,40 @@ public class CompleteOrchestratorTaskWithChunkingTests
     }
 
     [Fact]
-    public async Task NoLargePayloadsCapability_FirstActionOversized_ShortCircuitsBeforeSizingLaterActions()
+    public async Task NoLargePayloadsCapability_FirstActionOversized_DoesNotSizeLaterActions()
     {
-        // Arrange - a stronger, timing-based guard for the same regression as above. Action id=0 is
-        // oversized (tiny payload, cheap to size); actions after it each carry a large *shared*
-        // string reference (so memory stays low - only one big string is allocated - while
-        // CalculateSize() must still independently re-walk it on every call). Calibration measured
-        // ~1000ms to size 200 such actions vs. ~4ms to size a single one, so a fail-fast
-        // implementation (sizing only id=0 before returning) should complete orders of magnitude
-        // faster than a regressed implementation that sizes the whole response and/or every action
-        // first. The assertion uses a very generous threshold to avoid CI flakiness while still
-        // clearly separating the two behaviors.
-        string bigSharedInput = new('x', 40_000_000);
-        P.OrchestratorAction action0 = BuildScheduleTaskAction(0, 16); // small, oversized only relative to maxChunkBytes below
+        // Arrange - deterministic (non-timing) proof of the same regression covered above: a
+        // test-only instrumentation hook (Processor.testActionSizedHook) records the id of every
+        // action whose size is actually computed during fail-fast validation. Action id=0 is
+        // oversized; ids 1-3 are ALSO individually oversized, so a regressed implementation that
+        // sizes every action up front (or continues scanning after finding one offender) would
+        // still record ids 1-3 here even though it happens to fail on id=0 first. Asserting the
+        // hook recorded *only* id=0 proves validation returned before ever sizing later actions.
+        P.OrchestratorAction action0 = BuildScheduleTaskAction(0, 2048); // oversized - first, must win
+        P.OrchestratorAction action1 = BuildScheduleTaskAction(1, 2048); // also oversized
+        P.OrchestratorAction action2 = BuildScheduleTaskAction(2, 2048); // also oversized
+        P.OrchestratorAction action3 = BuildScheduleTaskAction(3, 2048); // also oversized
         int maxChunkBytes = action0.CalculateSize() - 1;
 
-        List<P.OrchestratorAction> actions = new() { action0 };
-        for (int i = 1; i <= 200; i++)
-        {
-            actions.Add(new P.OrchestratorAction
-            {
-                Id = i,
-                ScheduleTask = new P.ScheduleTaskAction { Name = "Echo", Input = bigSharedInput },
-            });
-        }
-
-        P.OrchestratorResponse response = BuildResponse("instance-10", actions.ToArray());
+        P.OrchestratorResponse response = BuildResponse("instance-10", action0, action1, action2, action3);
         using Fixture fixture = Fixture.Create(largePayloads: false);
 
-        // Act
-        System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        await fixture.InvokeAsync(response, maxChunkBytes);
-        stopwatch.Stop();
+        List<int> sizedActionIds = new();
+        Fixture.SetActionSizedHook(sizedActionIds.Add);
+        try
+        {
+            // Act
+            await fixture.InvokeAsync(response, maxChunkBytes);
+        }
+        finally
+        {
+            Fixture.SetActionSizedHook(null);
+        }
 
-        // Assert - failed fast on id=0 well before the ~1000ms it would take to size the 200
-        // large later actions.
+        // Assert - only the first action's size was ever computed; ids 1-3 were never touched.
+        sizedActionIds.Should().Equal(0);
         fixture.Sent.Should().HaveCount(1);
         fixture.Sent[0].Actions[0].CompleteOrchestration.FailureDetails.ErrorMessage.Should().Contain("with id 0 ");
-        stopwatch.ElapsedMilliseconds.Should().BeLessThan(500);
     }
 
     [Fact]
@@ -380,6 +376,7 @@ public class CompleteOrchestratorTaskWithChunkingTests
     sealed class Fixture : IDisposable
     {
         static readonly MethodInfo Method = FindMethod();
+        static readonly FieldInfo ActionSizedHookField = FindActionSizedHookField();
 
         readonly object processor;
         readonly object gate = new();
@@ -396,6 +393,17 @@ public class CompleteOrchestratorTaskWithChunkingTests
         public List<P.OrchestratorResponse> Sent { get; } = new();
 
         public int AttemptCount { get; private set; }
+
+        /// <summary>
+        /// Sets (or clears, when passed <see langword="null"/>) the test-only static hook that
+        /// <c>Processor.CompleteOrchestratorTaskWithChunkingAsync</c> invokes immediately after
+        /// computing each action's size during fail-fast validation. Always reset to
+        /// <see langword="null"/> after use to avoid leaking state into other tests.
+        /// </summary>
+        public static void SetActionSizedHook(Action<int>? hook)
+        {
+            ActionSizedHookField.SetValue(null, hook);
+        }
 
         public static Fixture Create(
             bool largePayloads = false,
@@ -499,6 +507,12 @@ public class CompleteOrchestratorTaskWithChunkingTests
         {
             Type processorType = typeof(GrpcDurableTaskWorker).GetNestedType("Processor", BindingFlags.NonPublic)!;
             return processorType.GetMethod("CompleteOrchestratorTaskWithChunkingAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        }
+
+        static FieldInfo FindActionSizedHookField()
+        {
+            Type processorType = typeof(GrpcDurableTaskWorker).GetNestedType("Processor", BindingFlags.NonPublic)!;
+            return processorType.GetField("testActionSizedHook", BindingFlags.Static | BindingFlags.NonPublic)!;
         }
 
         static AsyncUnaryCall<T> CompletedAsyncUnaryCall<T>(T response)

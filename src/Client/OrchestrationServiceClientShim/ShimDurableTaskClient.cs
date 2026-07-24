@@ -28,14 +28,13 @@ namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
 /// <param name="options">The client options.</param>
 class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) : DurableTaskClient(name)
 {
-    // Polling parameters for WaitForInstanceStartAsync. The minimum interval matches the historical
-    // fixed 1-second polling cadence so quick-starting orchestrations are still observed promptly. The
-    // interval then grows (bounded by the maximum) for instances that remain pending longer, reducing
-    // sustained polling load; jitter is applied on top to desynchronize concurrent callers.
-    const double PollingBackoffMultiplier = 1.5;
+    // Polling parameters for WaitForInstanceStartAsync. PollingInterval matches the historical fixed
+    // 1-second polling cadence. Callers rely on prompt (<= 1 second) observation of a status
+    // transition, so jitter is only ever applied *downward* from this value -- never grown beyond it
+    // -- to desynchronize concurrent callers (avoiding synchronized polling bursts against the
+    // backend) without regressing the historical worst-case detection latency.
     const double PollingJitterFactor = 0.2;
-    static readonly TimeSpan MinPollingInterval = TimeSpan.FromSeconds(1);
-    static readonly TimeSpan MaxPollingInterval = TimeSpan.FromSeconds(5);
+    static readonly TimeSpan PollingInterval = TimeSpan.FromSeconds(1);
 
     readonly ShimDurableTaskClientOptions options = Check.NotNull(options);
     ShimDurableEntityClient? entities;
@@ -280,7 +279,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     {
         Check.NotNullOrEmpty(instanceId);
 
-        for (int attempt = 0; ; attempt++)
+        while (true)
         {
             OrchestrationMetadata? metadata = await this.GetInstancesAsync(
                 instanceId, getInputsAndOutputs, cancellation);
@@ -295,12 +294,11 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                 return metadata;
             }
 
-            // Poll with a jittered, gradually-increasing delay. This keeps the first few retries close to
-            // the historical 1-second cadence -- preserving prompt observation of quick-starting
-            // orchestrations -- while desynchronizing concurrent waiters (avoiding synchronized polling
-            // bursts) and reducing steady-state load against the backend for instances that stay
-            // pending longer.
-            TimeSpan delay = ComputeNextPollingDelay(attempt);
+            // Poll with a delay that is jittered *downward* from the historical 1-second cadence.
+            // This desynchronizes concurrent waiters (avoiding synchronized polling bursts against the
+            // backend) while guaranteeing the worst-case detection latency for a status transition
+            // never exceeds the historical 1-second cadence -- preserving prompt-start observation.
+            TimeSpan delay = ComputeNextPollingDelay();
             await Task.Delay(delay, cancellation);
         }
     }
@@ -363,23 +361,17 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     /// <summary>
     /// Computes the delay to wait before the next <see cref="WaitForInstanceStartAsync"/> polling attempt.
     /// </summary>
-    /// <param name="attempt">The zero-based index of the poll attempt that just completed.</param>
-    /// <returns>A jittered delay, growing from <see cref="MinPollingInterval"/> up to <see cref="MaxPollingInterval"/>.</returns>
-    static TimeSpan ComputeNextPollingDelay(int attempt)
+    /// <returns>
+    /// A delay in the range [<see cref="PollingInterval"/> * (1 - <see cref="PollingJitterFactor"/>),
+    /// <see cref="PollingInterval"/>]. Jitter only ever reduces the delay, so the returned value never
+    /// exceeds <see cref="PollingInterval"/> -- preserving the historical worst-case detection latency
+    /// for <see cref="WaitForInstanceStartAsync"/> -- while still desynchronizing concurrent callers.
+    /// </returns>
+    internal static TimeSpan ComputeNextPollingDelay()
     {
-        int safeAttempt = Math.Max(attempt, 0);
-
-        // Cap the exponent so this never overflows for pathological attempt counts.
-        double growth = Math.Pow(PollingBackoffMultiplier, Math.Min(safeAttempt, 8));
-        double targetMs = Math.Min(
-            MinPollingInterval.TotalMilliseconds * growth,
-            MaxPollingInterval.TotalMilliseconds);
-
-        // Apply +/- 20% jitter so concurrent callers waiting on the same or different instances don't
-        // converge on synchronized polling bursts against the backend.
-        double jitterRangeMs = targetMs * PollingJitterFactor;
-        double jitteredMs = targetMs + (((PollingJitter.NextDouble() * 2.0) - 1.0) * jitterRangeMs);
-        return TimeSpan.FromMilliseconds(Math.Max(jitteredMs, 0));
+        double reduction = PollingJitterFactor * PollingJitter.NextDouble();
+        double delayMs = PollingInterval.TotalMilliseconds * (1.0 - reduction);
+        return TimeSpan.FromMilliseconds(delayMs);
     }
 
     [return: NotNullIfNotNull("state")]

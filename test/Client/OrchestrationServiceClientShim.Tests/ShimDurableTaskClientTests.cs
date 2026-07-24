@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
 using DurableTask.Core;
 using DurableTask.Core.Entities;
 using DurableTask.Core.Exceptions;
@@ -329,11 +330,67 @@ public class ShimDurableTaskClientTests
         OrchestrationMetadata metadata = await this.client.WaitForInstanceStartAsync(
             instance.InstanceId, false, default);
 
-        // assert -- multiple polling iterations (exercising the jittered backoff loop) still converge
+        // assert -- multiple polling iterations (exercising the jittered polling loop) still converge
         // on the terminal state once observed.
         this.orchestrationClient.Verify(
             m => m.GetOrchestrationStateAsync(instance.InstanceId, false), Times.Exactly(3));
         Validate(metadata, terminal, false);
+    }
+
+    [Fact]
+    public async Task WaitForInstanceStart_RepeatedPendingObservations_HonorsMaxDetectionLatencyContract()
+    {
+        // arrange
+        DateTimeOffset start = DateTimeOffset.UtcNow;
+        OrchestrationInstance instance = new()
+        {
+            InstanceId = Guid.NewGuid().ToString(),
+            ExecutionId = Guid.NewGuid().ToString(),
+        };
+
+        Core.OrchestrationState pending1 = CreateState("input", start: start);
+        pending1.OrchestrationInstance = instance;
+        pending1.OrchestrationStatus = Core.OrchestrationStatus.Pending;
+        Core.OrchestrationState pending2 = CreateState("input", start: start);
+        pending2.OrchestrationInstance = instance;
+        pending2.OrchestrationStatus = Core.OrchestrationStatus.Pending;
+        Core.OrchestrationState terminal = CreateState("input", start: start);
+        terminal.OrchestrationInstance = instance;
+
+        this.orchestrationClient.SetupSequence(m => m.GetOrchestrationStateAsync(instance.InstanceId, false))
+            .ReturnsAsync([pending1])
+            .ReturnsAsync([pending2])
+            .ReturnsAsync([terminal]);
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+
+        // act
+        OrchestrationMetadata metadata = await this.client.WaitForInstanceStartAsync(
+            instance.InstanceId, false, default);
+
+        stopwatch.Stop();
+
+        // assert -- two "still pending" observations occur before the terminal state is returned, so
+        // exactly two polling delays are incurred. Each delay is bounded by the historical 1-second
+        // detection cadence (jitter only ever reduces it), so the worst-case total wait here is ~2
+        // seconds. This guards against a regression -- like unconstrained backoff growth -- that would
+        // push per-poll delays past the historical cadence and violate prompt-start observation.
+        stopwatch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(2.5));
+        Validate(metadata, terminal, false);
+    }
+
+    [Fact]
+    public void ComputeNextPollingDelay_NeverExceedsHistoricalOneSecondCadence()
+    {
+        // assert -- across many samples, the jittered delay must never exceed the historical 1-second
+        // polling cadence (jitter only ever reduces the delay), enforcing the max detection-latency
+        // contract for WaitForInstanceStartAsync, and must always be a non-negative, finite delay.
+        for (int i = 0; i < 1000; i++)
+        {
+            TimeSpan delay = ShimDurableTaskClient.ComputeNextPollingDelay();
+            delay.Should().BeGreaterThan(TimeSpan.Zero);
+            delay.Should().BeLessThanOrEqualTo(TimeSpan.FromSeconds(1));
+        }
     }
 
     [Fact]
@@ -347,7 +404,7 @@ public class ShimDurableTaskClientTests
         // act
         Func<Task> act = () => this.client.WaitForInstanceStartAsync(instanceId, false, default);
 
-        // assert -- not-found behavior is preserved: no retry/backoff delay before throwing.
+        // assert -- not-found behavior is preserved: no retry/polling delay before throwing.
         await act.Should().ThrowExactlyAsync<InvalidOperationException>()
             .WithMessage($"Orchestration with instanceId '{instanceId}' does not exist");
         this.orchestrationClient.Verify(
@@ -355,7 +412,7 @@ public class ShimDurableTaskClientTests
     }
 
     [Fact]
-    public async Task WaitForInstanceStart_CancelledDuringBackoffDelay_ThrowsTaskCanceledException()
+    public async Task WaitForInstanceStart_CancelledDuringPollingDelay_ThrowsTaskCanceledException()
     {
         // arrange
         DateTimeOffset start = DateTimeOffset.UtcNow;
@@ -375,7 +432,7 @@ public class ShimDurableTaskClientTests
         using CancellationTokenSource cts = new();
 
         // act -- cancel shortly after the first (immediate) poll so cancellation fires while the loop is
-        // awaiting the jittered backoff delay rather than before any polling occurs.
+        // awaiting the jittered polling delay rather than before any polling occurs.
         cts.CancelAfter(TimeSpan.FromMilliseconds(50));
         Func<Task> act = () => this.client.WaitForInstanceStartAsync(instance.InstanceId, false, cts.Token);
 

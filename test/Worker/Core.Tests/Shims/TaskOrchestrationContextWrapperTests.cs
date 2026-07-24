@@ -4,6 +4,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
+using System.Security.Cryptography;
 using DurableTask.Core;
 using DurableTask.Core.Serializing.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -503,6 +504,90 @@ public class TaskOrchestrationContextWrapperTests
         // Assert — the same underlying instance is reused rather than a new one being allocated.
         afterFirstCall.Should().NotBeNull();
         afterSecondCall.Should().BeSameAs(afterFirstCall);
+    }
+
+    [Fact]
+    public void Dispose_ReleasesCachedHashAlgorithm()
+    {
+        // Arrange
+        TestOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+        FieldInfo cachedHashAlgorithmField = typeof(TaskOrchestrationContextWrapper)
+            .GetField("cachedHashAlgorithm", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        wrapper.NewGuid();
+        SHA1 cachedInstance = (SHA1)cachedHashAlgorithmField.GetValue(wrapper)!;
+
+        // Act
+        wrapper.Dispose();
+
+        // Assert — the field is cleared, and the underlying instance was actually disposed (not merely
+        // dereferenced), confirmed by it throwing when used afterwards.
+        cachedHashAlgorithmField.GetValue(wrapper).Should().BeNull();
+        Action useAfterDispose = () => cachedInstance.ComputeHash([1, 2, 3]);
+        useAfterDispose.Should().Throw<ObjectDisposedException>();
+    }
+
+    [Fact]
+    public void Dispose_CalledMultipleTimes_DoesNotThrow()
+    {
+        // Arrange
+        TestOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+        wrapper.NewGuid();
+
+        // Act
+        Action dispose = () =>
+        {
+            wrapper.Dispose();
+            wrapper.Dispose();
+        };
+
+        // Assert — disposing an already-disposed (or never-used) wrapper is safe.
+        dispose.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Dispose_WithoutPriorNewGuidCall_DoesNotThrow()
+    {
+        // Arrange — the cached SHA1 instance is lazily created, so Dispose() must tolerate the case
+        // where NewGuid() was never called.
+        TestOrchestrationContext innerContext = new();
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        Action dispose = () => wrapper.Dispose();
+
+        // Assert
+        dispose.Should().NotThrow();
+    }
+
+    [Fact]
+    public void NewGuid_AfterDispose_StillProducesStableDeterministicValue()
+    {
+        // Arrange — Dispose() releases the cached SHA1 instance, but the wrapper lazily creates a new
+        // one on the next NewGuid() call (via the `??=` pattern). This must still produce byte-identical
+        // GUIDs to the ones computed with a fresh instance, proving disposal does not affect correctness.
+        TestOrchestrationContext innerContext = new(
+            "fixed-instance-id",
+            DateTime.Parse("2023-05-06T07:08:09.1234567Z", null, DateTimeStyles.RoundtripKind));
+        OrchestrationInvocationContext invocationContext = new("Test", new(), NullLoggerFactory.Instance, null);
+        TaskOrchestrationContextWrapper wrapper = new(innerContext, invocationContext, "input");
+
+        // Act
+        wrapper.Dispose(); // dispose before any use is allowed (no-op, since nothing was cached yet)
+        Guid first = wrapper.NewGuid();
+        wrapper.Dispose(); // dispose the now-cached instance mid-sequence
+        Guid second = wrapper.NewGuid(); // should transparently create a new instance and continue correctly
+        Guid third = wrapper.NewGuid();
+
+        // Assert — identical to the golden values in NewGuid_FixedInputs_ProducesStableDeterministicValue.
+        first.Should().Be(Guid.Parse("0f353f85-75d2-56f8-89b5-a7773ace7605"));
+        second.Should().Be(Guid.Parse("b0fd1465-f3d8-5a7e-98b1-f34137b15060"));
+        third.Should().Be(Guid.Parse("12bec829-d5e1-563c-ac70-9806cad148c1"));
     }
 
     static IReadOnlyDictionary<string, string> GetLastScheduledTaskTags(TrackingOrchestrationContext innerContext)

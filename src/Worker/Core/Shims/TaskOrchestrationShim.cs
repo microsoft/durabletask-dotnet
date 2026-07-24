@@ -14,6 +14,12 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// This class is intended for use with alternate .NET-based durable task runtimes. It's not intended for use
 /// in application code.
 /// </remarks>
+#pragma warning disable CA1001 // Types that own disposable fields should be disposable -- the base
+                               // TaskOrchestration type (defined in DurableTask.Core) has no disposal
+                               // hook, so this type cannot implement IDisposable in a way that would ever
+                               // be invoked. Instead, wrapperContext is disposed explicitly before each
+                               // replacement in Execute(); only the final instance for a given orchestration
+                               // execution's lifetime is left for the garbage collector/finalizer to reclaim.
 partial class TaskOrchestrationShim : TaskOrchestration
 {
     readonly ITaskOrchestrator implementation;
@@ -64,6 +70,13 @@ partial class TaskOrchestrationShim : TaskOrchestration
         innerContext.ErrorDataConverter = converterShim;
 
         object? input = this.DataConverter.Deserialize(rawInput, this.implementation.InputType);
+
+        // Dispose the previous execution's wrapper (if any) before replacing it. Each call to Execute
+        // represents a new replay/decision task with a fresh wrapper; orchestrator code always runs
+        // synchronously within a single Execute call, so the previous wrapper is guaranteed to no longer
+        // be in use once we reach this point, and releasing its cached resources (e.g. the SHA1 instance
+        // used by NewGuid) here avoids accumulating undisposed instances across replays.
+        this.wrapperContext?.Dispose();
         this.wrapperContext = new(innerContext, this.invocationContext, input, this.properties);
 
         string instanceId = innerContext.OrchestrationInstance.InstanceId;
@@ -119,3 +132,4 @@ partial class TaskOrchestrationShim : TaskOrchestration
         this.wrapperContext?.CompleteExternalEvent(name, input);
     }
 }
+#pragma warning restore CA1001 // Types that own disposable fields should be disposable

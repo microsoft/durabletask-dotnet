@@ -16,7 +16,7 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// <summary>
 /// A wrapper to go from <see cref="OrchestrationContext" /> to <see cref="TaskOrchestrationContext "/>.
 /// </summary>
-sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
+sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext, IDisposable
 {
     // We use a stack (a custom implementation using a single-linked list) to make it easier for users
     // to abandon external events that they no longer care about. The common case is a Task.WhenAny in a loop.
@@ -38,6 +38,15 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
     // for the duration of a single orchestration execution, and orchestrator code executes sequentially
     // (never concurrently) within that execution, so reusing this instance is safe. HashAlgorithm.Initialize()
     // resets all internal state before each use, so the computed hash is identical to using a fresh instance.
+    // This instance is disposed via Dispose() (see TaskOrchestrationShim, which disposes the previous
+    // wrapper before replacing it with a new one on the next replay/decision task).
+    //
+    // Note: on .NET Framework, the underlying SHA1CryptoServiceProvider.Initialize() disposes and
+    // recreates its native CAPI hash handle on every call, so the native-handle churn is not eliminated
+    // there -- only the managed-side allocation (the HashAlgorithm object itself and SHA1.Create()'s
+    // provider lookup) is avoided. On modern .NET (net5.0+) running on Windows, the CNG-based
+    // implementation can use a reusable hash handle (BCRYPT_HASH_REUSABLE_FLAG) and reset it in place,
+    // so this caching also avoids native-handle churn on those runtimes.
     SHA1? cachedHashAlgorithm;
 
     /// <summary>
@@ -465,6 +474,17 @@ sealed partial class TaskOrchestrationContextWrapper : TaskOrchestrationContext
         SwapByteArrayValues(newGuidByteArray);
 
         return new Guid(newGuidByteArray);
+    }
+
+    /// <summary>
+    /// Releases the resources cached by this instance, including the <see cref="SHA1"/> instance used by
+    /// <see cref="NewGuid"/>. This should be called once this wrapper is no longer needed, i.e. once the
+    /// orchestration execution that owns it has completed and it is being replaced or discarded.
+    /// </summary>
+    public void Dispose()
+    {
+        this.cachedHashAlgorithm?.Dispose();
+        this.cachedHashAlgorithm = null;
     }
 
     /// <summary>

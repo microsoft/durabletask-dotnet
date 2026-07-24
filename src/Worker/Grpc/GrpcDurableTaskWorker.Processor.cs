@@ -894,11 +894,14 @@ sealed partial class GrpcDurableTaskWorker
                 traceActivity?.Dispose();
             }
 
-            this.Logger.SendingOrchestratorResponse(
-                name,
-                response.InstanceId,
-                response.Actions.Count,
-                GetActionsListForLogging(response.Actions));
+            if (this.Logger.IsEnabled(LogLevel.Debug))
+            {
+                this.Logger.SendingOrchestratorResponse(
+                    name,
+                    response.InstanceId,
+                    response.Actions.Count,
+                    GetActionsListForLogging(response.Actions));
+            }
 
             await this.CompleteOrchestratorTaskWithChunkingAsync(
                 response,
@@ -911,9 +914,12 @@ sealed partial class GrpcDurableTaskWorker
             using Activity? traceActivity = TraceHelper.StartTraceActivityForTaskExecution(request);
 
             OrchestrationInstance instance = request.OrchestrationInstance.ToCore();
-            string rawInput = request.Input;
-            int inputSize = rawInput != null ? Encoding.UTF8.GetByteCount(rawInput) : 0;
-            this.Logger.ReceivedActivityRequest(request.Name, request.TaskId, instance.InstanceId, inputSize);
+            if (this.Logger.IsEnabled(LogLevel.Debug))
+            {
+                string rawInput = request.Input;
+                int inputSize = rawInput != null ? Encoding.UTF8.GetByteCount(rawInput) : 0;
+                this.Logger.ReceivedActivityRequest(request.Name, request.TaskId, instance.InstanceId, inputSize);
+            }
 
             P.TaskFailureDetails? failureDetails = null;
             TaskName name = new(request.Name);
@@ -984,21 +990,31 @@ sealed partial class GrpcDurableTaskWorker
                 return;
             }
 
-            int outputSizeInBytes = 0;
             if (failureDetails != null)
             {
                 traceActivity?.SetStatus(ActivityStatusCode.Error, failureDetails.ErrorMessage);
-
-                outputSizeInBytes = failureDetails.GetApproximateByteCount();
             }
-            else if (output != null)
+
+            if (this.Logger.IsEnabled(LogLevel.Debug))
             {
-                outputSizeInBytes = Encoding.UTF8.GetByteCount(output);
-            }
+                int outputSizeInBytes;
+                if (failureDetails != null)
+                {
+                    outputSizeInBytes = failureDetails.GetApproximateByteCount();
+                }
+                else if (output != null)
+                {
+                    outputSizeInBytes = Encoding.UTF8.GetByteCount(output);
+                }
+                else
+                {
+                    outputSizeInBytes = 0;
+                }
 
-            string successOrFailure = failureDetails != null ? "failure" : "success";
-            this.Logger.SendingActivityResponse(
-                successOrFailure, name, request.TaskId, instance.InstanceId, outputSizeInBytes);
+                string successOrFailure = failureDetails != null ? "failure" : "success";
+                this.Logger.SendingActivityResponse(
+                    successOrFailure, name, request.TaskId, instance.InstanceId, outputSizeInBytes);
+            }
 
             P.ActivityResponse response = new()
             {

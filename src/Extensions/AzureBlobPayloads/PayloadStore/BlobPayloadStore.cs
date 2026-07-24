@@ -26,10 +26,14 @@ public sealed class BlobPayloadStore : PayloadStore
     readonly BlobContainerClient containerClient;
     readonly LargePayloadStorageOptions options;
 
-    // Caches the single in-flight (or completed) container-initialization task so that
+    // Caches the single in-flight (or completed) container-initialization gate so that
     // concurrent/subsequent uploads don't each issue their own CreateIfNotExistsAsync request.
-    // Null means "not yet attempted" or "needs to be retried"; see EnsureContainerExistsAsync.
-    Task? containerInitializationTask;
+    // Null means "not yet attempted" or "needs to be retried". The Lazy<Task> wrapper makes
+    // initialization truly single-flight: publishing the gate (a cheap CompareExchange) always
+    // happens before any real work starts, and Lazy<T> guarantees the factory (which starts the
+    // real CreateIfNotExistsAsync call) runs exactly once even if multiple callers race to
+    // access Value concurrently. See PublishNewInitializer and CreateContainerIfNotExistsAsync.
+    Lazy<Task>? containerInitializer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BlobPayloadStore"/> class.
@@ -95,7 +99,9 @@ public sealed class BlobPayloadStore : PayloadStore
 
         // Ensure container exists. Cached/single-flight after the first successful call so we
         // don't pay for an extra CreateIfNotExistsAsync request/transaction on every upload.
-        await this.EnsureContainerExistsAsync(cancellationToken).ConfigureAwait(false);
+        // Keep the specific initializer instance this upload used so the ContainerNotFound
+        // recovery below can invalidate it precisely (see the catch block).
+        Lazy<Task> containerInitializer = await this.EnsureContainerExistsAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -128,9 +134,12 @@ public sealed class BlobPayloadStore : PayloadStore
         catch (RequestFailedException ex) when (ex.ErrorCode == BlobErrorCode.ContainerNotFound)
         {
             // The container existed when we last verified/created it but has since been deleted
-            // (e.g. by an operator). Clear the cached initialization state so the next upload
-            // attempts to recreate the container, keeping deliberate deletion recoverable.
-            Volatile.Write(ref this.containerInitializationTask, null);
+            // (e.g. by an operator). Clear the cached initializer so the next upload attempts to
+            // recreate the container, keeping deliberate deletion recoverable. CompareExchange
+            // against the specific initializer this upload used ensures a stale failure can
+            // never clobber a newer initializer already published by another, faster-recovering
+            // concurrent upload that detected and recovered from the same deletion.
+            _ = Interlocked.CompareExchange(ref this.containerInitializer, null, containerInitializer);
             throw;
         }
 
@@ -256,41 +265,38 @@ public sealed class BlobPayloadStore : PayloadStore
 
     /// <summary>
     /// Ensures the container exists, issuing at most one <c>CreateIfNotExistsAsync</c> request
-    /// across all concurrent/subsequent callers. The result is cached for the lifetime of this
-    /// instance once it completes successfully; a failed attempt is not cached, so the next
-    /// caller retries.
+    /// across all concurrent/subsequent callers, and returns the specific initializer gate that
+    /// was used. The result is cached for the lifetime of this instance once it completes
+    /// successfully; a failed attempt self-heals (see <see cref="CreateContainerIfNotExistsAsync(Lazy{Task})"/>)
+    /// so the next caller retries instead of observing a stale failure forever.
     /// </summary>
-    async Task EnsureContainerExistsAsync(CancellationToken cancellationToken)
+    async Task<Lazy<Task>> EnsureContainerExistsAsync(CancellationToken cancellationToken)
     {
-        Task initializationTask = Volatile.Read(ref this.containerInitializationTask)
-            ?? this.BeginContainerInitialization();
+        Lazy<Task> initializer = Volatile.Read(ref this.containerInitializer)
+            ?? this.PublishNewInitializer();
 
-        try
-        {
-            await WaitForInitializationAsync(initializationTask, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            if (initializationTask.IsFaulted || initializationTask.IsCanceled)
-            {
-                // Don't cache a failed attempt (e.g. a transient/throttled storage error): allow
-                // the next caller to retry initialization instead of failing forever. Use
-                // CompareExchange so we don't clobber a newer task set by a racing caller.
-                _ = Interlocked.CompareExchange(ref this.containerInitializationTask, null, initializationTask);
-            }
-        }
+        await WaitForInitializationAsync(initializer.Value, cancellationToken).ConfigureAwait(false);
+        return initializer;
     }
 
     /// <summary>
-    /// Starts container initialization if it hasn't already started, in a single-flight manner:
-    /// only the first caller's task is stored and returned to all callers, including ones racing
-    /// concurrently on other threads.
+    /// Atomically publishes a not-yet-started initialization gate, in a true single-flight
+    /// manner: publishing the gate (a cheap <see cref="Interlocked"/> compare-exchange)
+    /// always completes before any real work starts, so racing first-time callers can never
+    /// each independently trigger their own <c>CreateIfNotExistsAsync</c> request. Only the
+    /// single winning gate is stored, and <see cref="Lazy{T}"/> (with
+    /// <see cref="LazyThreadSafetyMode.ExecutionAndPublication"/>) guarantees its factory -
+    /// which starts the real container-creation call - is invoked exactly once even when
+    /// multiple callers race to access <see cref="Lazy{T}.Value"/> concurrently.
     /// </summary>
-    Task BeginContainerInitialization()
+    Lazy<Task> PublishNewInitializer()
     {
-        Task newInitializationTask = this.CreateContainerIfNotExistsAsync();
-        return Interlocked.CompareExchange(ref this.containerInitializationTask, newInitializationTask, null)
-            ?? newInitializationTask;
+        Lazy<Task>? initializer = null;
+        initializer = new Lazy<Task>(
+            () => this.CreateContainerIfNotExistsAsync(initializer!),
+            LazyThreadSafetyMode.ExecutionAndPublication);
+
+        return Interlocked.CompareExchange(ref this.containerInitializer, initializer, null) ?? initializer;
     }
 
     /// <summary>
@@ -299,10 +305,25 @@ public sealed class BlobPayloadStore : PayloadStore
     /// it intentionally does not use any single caller's token (see
     /// <see cref="WaitForInitializationAsync(Task, CancellationToken)"/>, which lets individual
     /// callers stop waiting without cancelling the shared operation for everyone else).
+    /// If the underlying call fails, this method self-heals the cache by clearing it as part of
+    /// its own completion - independent of whether any particular caller is still around to
+    /// observe the failure - so the next upload gets a fresh initialization attempt instead of a
+    /// stale error. The CompareExchange only clears the cache if it still points at this same
+    /// gate (<paramref name="self"/>), so this can never erase a newer initializer already
+    /// published by a racing caller (e.g. one that recovered from a concurrently-deleted
+    /// container) after this attempt started.
     /// </summary>
-    async Task CreateContainerIfNotExistsAsync()
+    async Task CreateContainerIfNotExistsAsync(Lazy<Task> self)
     {
-        await this.containerClient.CreateIfNotExistsAsync(PublicAccessType.None, cancellationToken: CancellationToken.None)
-            .ConfigureAwait(false);
+        try
+        {
+            await this.containerClient.CreateIfNotExistsAsync(PublicAccessType.None, cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            _ = Interlocked.CompareExchange(ref this.containerInitializer, null, self);
+            throw;
+        }
     }
 }

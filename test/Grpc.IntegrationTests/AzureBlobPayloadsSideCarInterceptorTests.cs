@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Reflection;
+using Azure;
 using FluentAssertions;
 using P = Microsoft.DurableTask.Protobuf;
 
@@ -343,6 +344,59 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
     }
 
     [Fact]
+    public async Task ExternalizeRequestPayloadsAsync_OrchestratorResponse_EarlierRetriableFailureWinsOverLaterPermanentFailure()
+    {
+        // Arrange: custom status is the first operation and blocks before failing with a retriable
+        // Blob error. The action input is a later operation that fails immediately with a permanent
+        // PayloadStorageException. Sequential behavior surfaces the earlier retriable failure, so
+        // the response must not be converted to a terminal Failed completion.
+        TaskCompletionSource<bool> firstUploadStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<bool> laterPermanentFailureObserved = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<bool> releaseFirstUpload = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TrackingPayloadStore store = new(uploadAsync: async (payload, cancellationToken) =>
+        {
+            if (payload == "retriable")
+            {
+                firstUploadStarted.SetResult(true);
+                await releaseFirstUpload.Task.WaitAsync(cancellationToken);
+                throw new RequestFailedException(500, "Simulated retriable Blob failure.", "ServerError", null);
+            }
+
+            if (payload == "permanent")
+            {
+                laterPermanentFailureObserved.SetResult(true);
+                throw new PayloadStorageException("Simulated permanent payload failure.");
+            }
+
+            throw new InvalidOperationException($"Unexpected payload: {payload}");
+        });
+        AzureBlobPayloadsSideCarInterceptor interceptor = new(store, CreateOptions());
+        P.OrchestratorResponse response = new() { InstanceId = "instance-1", CustomStatus = "retriable" };
+        response.Actions.Add(new P.OrchestratorAction
+        {
+            Id = 1,
+            ScheduleTask = new P.ScheduleTaskAction { Name = "activity", Input = "permanent" },
+        });
+
+        // Act: wait until both operations have failed or are pending, then release the earlier
+        // operation so its lower-ordinal retriable failure completes after the permanent one.
+        Task externalizeTask = ExternalizeAsync(interceptor, response, CancellationToken.None);
+        await firstUploadStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await laterPermanentFailureObserved.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        releaseFirstUpload.SetResult(true);
+
+        // Assert: message order, rather than completion timing, chooses the failure. The retriable
+        // Blob error propagates and the permanent later failure does not replace the response with
+        // a terminal Failed completion.
+        Func<Task> act = () => externalizeTask;
+        (await act.Should().ThrowExactlyAsync<RequestFailedException>())
+            .WithMessage("Simulated retriable Blob failure.");
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].ScheduleTask.Should().NotBeNull();
+        response.CustomStatus.Should().Be("retriable");
+    }
+
+    [Fact]
     public async Task ResolveResponsePayloadsAsync_PreCancelledToken_ThrowsAndPerformsNoStoreCalls()
     {
         // Arrange
@@ -371,7 +425,7 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
     }
 
     [Fact]
-    public async Task RunWithBoundedConcurrencyAsync_CancelledWhileOperationsInFlight_DrainsBeforeReturningAndDoesNotMaskFailure()
+    public async Task RunWithBoundedConcurrencyAsync_InFlightRealFailureTakesPrecedenceOverCancellation()
     {
         // Arrange: 9 operations -- one more than MaxConcurrentPayloadOperations (8) -- so the
         // dispatch loop fills all 8 concurrency slots with genuinely in-flight operations before
@@ -468,9 +522,11 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
     /// <summary>
     /// In-memory <see cref="PayloadStore"/> test double that tracks upload/download counts and the
     /// high-water mark of concurrently in-flight calls, and optionally introduces an artificial
-    /// delay to force overlapping calls so bounded concurrency can be observed deterministically.
+    /// delay or a test-controlled upload operation.
     /// </summary>
-    sealed class TrackingPayloadStore(TimeSpan delay = default) : PayloadStore
+    sealed class TrackingPayloadStore(
+        TimeSpan delay = default,
+        Func<string, CancellationToken, Task<string>>? uploadAsync = null) : PayloadStore
     {
         const string TokenPrefix = "test-blob://";
 
@@ -512,6 +568,11 @@ public sealed class AzureBlobPayloadsSideCarInterceptorTests
             this.EnterCall();
             try
             {
+                if (uploadAsync != null)
+                {
+                    return await uploadAsync(payLoad, cancellationToken);
+                }
+
                 if (delay > TimeSpan.Zero)
                 {
                     await Task.Delay(delay, cancellationToken);

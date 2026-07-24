@@ -464,9 +464,10 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
     /// <remarks>
     /// Cancellation is honored before starting any operation not already in flight. If any
     /// operation throws (e.g. <see cref="PayloadStorageException"/> for an oversized payload, or
-    /// a non-retriable <see cref="RequestFailedException"/>), that exception propagates the same
-    /// way it would have from a sequential await chain, preserving the existing first-failure
-    /// handling performed by callers (e.g. converting the failure into a
+    /// a non-retriable <see cref="RequestFailedException"/>), the lowest-ordinal failed operation
+    /// propagates after all started operations have drained. This matches a sequential await
+    /// chain's message-order failure semantics and takes precedence over a concurrent cancellation,
+    /// preserving the existing caller behavior (e.g. converting permanent failures into a
     /// <see cref="P.TaskFailureDetails"/> completion).
     /// <para>
     /// Every started operation is always drained (fully awaited) before this method returns or
@@ -494,16 +495,20 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
 
         SemaphoreSlim throttle = new(MaxConcurrentPayloadOperations, MaxConcurrentPayloadOperations);
         List<Task> inFlight = new(operations.Count);
-        Exception? firstFailure = null;
+        object failureLock = new();
+        Exception? lowestOrdinalFailure = null;
+        int lowestFailureOrdinal = int.MaxValue;
 
-        foreach (Func<Task> operation in operations)
+        for (int operationOrdinal = 0; operationOrdinal < operations.Count; operationOrdinal++)
         {
-            // Stop dispatching new Azure Storage requests once an earlier operation has failed
-            // permanently, or cancellation has been requested. Operations already started are
-            // *not* abandoned here -- they are drained below -- since they may already have side
-            // effects (e.g. an in-flight upload) and must not touch the semaphore, or mutate
-            // their target field, after this method has returned control to the caller.
-            if (Volatile.Read(ref firstFailure) != null || cancellation.IsCancellationRequested)
+            Func<Task> operation = operations[operationOrdinal];
+
+            // Stop dispatching new Azure Storage requests once an earlier operation has failed or
+            // cancellation has been requested. Operations already started are *not* abandoned here
+            // -- they are drained below -- since they may already have side effects (e.g. an
+            // in-flight upload) and must not touch the semaphore, or mutate their target field,
+            // after this method has returned control to the caller.
+            if (HasFailure() || cancellation.IsCancellationRequested)
             {
                 break;
             }
@@ -520,13 +525,13 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             // release the slot back (this operation never started, so there is nothing to drain
             // for it) and stop dispatching -- otherwise a newly-freed slot could let a new
             // operation start after cancellation/failure was already observed.
-            if (Volatile.Read(ref firstFailure) != null || cancellation.IsCancellationRequested)
+            if (HasFailure() || cancellation.IsCancellationRequested)
             {
                 throttle.Release();
                 break;
             }
 
-            inFlight.Add(TrackAsync(operation));
+            inFlight.Add(TrackAsync(operation, operationOrdinal));
         }
 
         try
@@ -544,19 +549,33 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             throttle.Dispose();
         }
 
-        if (firstFailure != null)
+        Exception? failureToThrow;
+        lock (failureLock)
         {
-            // Rethrow the first operation failure with its original stack trace preserved,
+            failureToThrow = lowestOrdinalFailure;
+        }
+
+        if (failureToThrow != null)
+        {
+            // Rethrow the first failure in message order with its original stack trace preserved,
             // matching the prior sequential await-per-field behavior (and never masked by e.g.
             // a later cancellation or a disposed-resource exception).
-            ExceptionDispatchInfo.Capture(firstFailure).Throw();
+            ExceptionDispatchInfo.Capture(failureToThrow).Throw();
         }
 
         // No operation failed, but cancellation may still have cut dispatch short before every
         // operation was started; surface that the same way a sequential await chain would have.
         cancellation.ThrowIfCancellationRequested();
 
-        async Task TrackAsync(Func<Task> operation)
+        bool HasFailure()
+        {
+            lock (failureLock)
+            {
+                return lowestOrdinalFailure != null;
+            }
+        }
+
+        async Task TrackAsync(Func<Task> operation, int operationOrdinal)
         {
             try
             {
@@ -564,12 +583,18 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             }
             catch (Exception ex)
             {
-                // Preserve first-failure semantics (only the first exception is surfaced,
-                // matching the prior sequential behavior). The exception is captured -- not
-                // rethrown -- so Task.WhenAll above never faults, guaranteeing every operation,
-                // including this finally block, runs to completion before the semaphore is
-                // disposed.
-                Interlocked.CompareExchange(ref firstFailure, ex, null);
+                // Preserve the lowest-ordinal failure, rather than whichever concurrently running
+                // operation happened to finish first. The exception is captured -- not rethrown --
+                // so Task.WhenAll above never faults, guaranteeing every operation, including
+                // this finally block, runs to completion before the semaphore is disposed.
+                lock (failureLock)
+                {
+                    if (operationOrdinal < lowestFailureOrdinal)
+                    {
+                        lowestFailureOrdinal = operationOrdinal;
+                        lowestOrdinalFailure = ex;
+                    }
+                }
             }
             finally
             {

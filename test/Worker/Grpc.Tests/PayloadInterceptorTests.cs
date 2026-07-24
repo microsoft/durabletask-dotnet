@@ -163,6 +163,13 @@ public class PayloadInterceptorTests
         // Arrange: hold externalization open so Dispose() races ahead of call construction.
         TaskCompletionSource externalizeGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
         bool disposeInvoked = false;
+
+        // Dispose() schedules its inner-call disposal via a ContinueWith on startCallTask, which is
+        // a separate continuation from the one driving ResponseAsync(); the two are not ordered
+        // relative to each other. Signal a TCS from the disposal callback and await it (with a
+        // bounded timeout) instead of asserting immediately after ResponseAsync completes, so the
+        // test doesn't race against Dispose's continuation.
+        TaskCompletionSource disposeSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
         TestPayloadInterceptor interceptor = CreateInterceptor(
             onExternalize: async (_, _) => await externalizeGate.Task);
         ClientInterceptorContext<string, string> context = CreateContext();
@@ -171,7 +178,13 @@ public class PayloadInterceptorTests
         AsyncUnaryCall<string> call = interceptor.AsyncUnaryCall(
             "request",
             context,
-            (req, ctx) => CreateFakeCall("response", disposeAction: () => disposeInvoked = true));
+            (req, ctx) => CreateFakeCall(
+                "response",
+                disposeAction: () =>
+                {
+                    disposeInvoked = true;
+                    disposeSignal.TrySetResult();
+                }));
         call.Dispose();
 
         // Assert: not disposed yet because the inner call has not been created.
@@ -179,6 +192,9 @@ public class PayloadInterceptorTests
 
         externalizeGate.SetResult();
         await call.ResponseAsync;
+
+        Task completed = await Task.WhenAny(disposeSignal.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+        completed.Should().Be(disposeSignal.Task, "the inner call's dispose action should be invoked once it exists");
 
         // Assert: once the inner call exists, disposal is applied to it.
         disposeInvoked.Should().BeTrue();

@@ -248,7 +248,12 @@ public class GrpcDurableTaskClientChannelRecreationTests
     {
         // Arrange/Act: the outcome-observation delegate must be created exactly once per invoker
         // instance (in the constructor) and reused for every call, rather than allocated per RPC.
-        GrpcChannel channel = GrpcChannel.ForAddress("http://cached-delegate.client.test");
+        // Use the deterministic fake-handler pattern (as in the other tests in this file) instead of
+        // a real address, so the test never depends on DNS/proxy/network and cannot hang in CI.
+        CallbackHttpMessageHandler handler = new((request, cancellationToken) =>
+            Task.FromResult(CreateFailureResponse(StatusCode.Unavailable, "deterministic failure")));
+
+        GrpcChannel channel = CreateChannel("http://cached-delegate.client.test", handler);
         GrpcDurableTaskClientOptions options = new() { Channel = channel };
         options.SetChannelRecreator((existingChannel, ct) => Task.FromResult(existingChannel));
 
@@ -265,13 +270,16 @@ public class GrpcDurableTaskClientChannelRecreationTests
                     try
                     {
                         using AsyncUnaryCall<string> call = callInvoker.AsyncUnaryCall(
-                            TestMethod, host: null, new CallOptions(), request: "ping");
+                            TestMethod,
+                            host: null,
+                            new CallOptions(deadline: DateTime.UtcNow.AddSeconds(1)),
+                            request: "ping");
                         await call.ResponseAsync;
                     }
-                    catch
+                    catch (RpcException)
                     {
-                        // The call itself fails fast against a fake address; only the delegate identity
-                        // across calls is under test here.
+                        // Each call deterministically fails via the fake handler above; only the
+                        // delegate identity across calls is under test here.
                     }
                 }
 

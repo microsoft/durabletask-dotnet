@@ -586,107 +586,110 @@ sealed partial class GrpcDurableTaskWorker
             string completionToken,
             CancellationToken cancellationToken)
         {
-            var executionStartedEvent =
-                request
-                    .NewEvents
-                    .Concat(request.PastEvents)
-                    .Where(e => e.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionStarted)
-                    .Select(e => e.ExecutionStarted)
-                    .FirstOrDefault();
-
-            Activity? traceActivity = TraceHelper.StartTraceActivityForOrchestrationExecution(
-                executionStartedEvent,
-                request.OrchestrationTraceContext);
-
-            if (executionStartedEvent is not null)
+            // Avoid the cost of scanning orchestration history for tracing purposes (potentially O(new events x
+            // past events) for work items with many new events) when no listener is registered for the Durable
+            // Task ActivitySource. In that case any Activity created below would be discarded anyway.
+            Activity? traceActivity = null;
+            if (TraceHelper.HasListeners)
             {
-                P.HistoryEvent? GetSuborchestrationInstanceCreatedEvent(int eventId)
+                P.ExecutionStartedEvent? executionStartedEvent = FindExecutionStartedEvent(request);
+
+                traceActivity = TraceHelper.StartTraceActivityForOrchestrationExecution(
+                    executionStartedEvent,
+                    request.OrchestrationTraceContext);
+
+                if (executionStartedEvent is not null)
                 {
-                    var subOrchestrationEvent =
-                        request
-                            .PastEvents
-                            .Where(x => x.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCreated)
-                            .FirstOrDefault(x => x.EventId == eventId);
+                    // Build lookups once per work item instead of rescanning PastEvents for every new event.
+                    TraceHistoryEventLookup historyLookup = new(request.PastEvents);
 
-                    return subOrchestrationEvent;
-                }
-
-                P.HistoryEvent? GetTaskScheduledEvent(int eventId)
-                {
-                    var taskScheduledEvent =
-                        request
-                            .PastEvents
-                            .Where(x => x.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.TaskScheduled)
-                            .LastOrDefault(x => x.EventId == eventId);
-
-                    return taskScheduledEvent;
-                }
-
-                foreach (var newEvent in request.NewEvents)
-                {
-                    switch (newEvent.EventTypeCase)
+                    foreach (var newEvent in request.NewEvents)
                     {
-                        case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted:
-                            {
-                                P.HistoryEvent? subOrchestrationInstanceCreatedEvent =
-                                    GetSuborchestrationInstanceCreatedEvent(
-                                        newEvent.SubOrchestrationInstanceCompleted.TaskScheduledId);
+                        switch (newEvent.EventTypeCase)
+                        {
+                            case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceCompleted:
+                                {
+                                    P.HistoryEvent? subOrchestrationInstanceCreatedEvent =
+                                        historyLookup.GetSubOrchestrationInstanceCreatedEvent(
+                                            newEvent.SubOrchestrationInstanceCompleted.TaskScheduledId);
 
-                                TraceHelper.EmitTraceActivityForSubOrchestrationCompleted(
+                                    TraceHelper.EmitTraceActivityForSubOrchestrationCompleted(
+                                        request.InstanceId,
+                                        subOrchestrationInstanceCreatedEvent,
+                                        subOrchestrationInstanceCreatedEvent?.SubOrchestrationInstanceCreated);
+                                    break;
+                                }
+
+                            case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceFailed:
+                                {
+                                    P.HistoryEvent? subOrchestrationInstanceCreatedEvent =
+                                        historyLookup.GetSubOrchestrationInstanceCreatedEvent(
+                                            newEvent.SubOrchestrationInstanceFailed.TaskScheduledId);
+
+                                    TraceHelper.EmitTraceActivityForSubOrchestrationFailed(
+                                        request.InstanceId,
+                                        subOrchestrationInstanceCreatedEvent,
+                                        subOrchestrationInstanceCreatedEvent?.SubOrchestrationInstanceCreated,
+                                        newEvent.SubOrchestrationInstanceFailed);
+                                    break;
+                                }
+
+                            case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
+                                {
+                                    P.HistoryEvent? taskScheduledEvent =
+                                        historyLookup.GetTaskScheduledEvent(newEvent.TaskCompleted.TaskScheduledId);
+
+                                    TraceHelper.EmitTraceActivityForTaskCompleted(
+                                        request.InstanceId,
+                                        taskScheduledEvent,
+                                        taskScheduledEvent?.TaskScheduled);
+                                    break;
+                                }
+
+                            case P.HistoryEvent.EventTypeOneofCase.TaskFailed:
+                                {
+                                    P.HistoryEvent? taskScheduledEvent =
+                                        historyLookup.GetTaskScheduledEvent(newEvent.TaskFailed.TaskScheduledId);
+
+                                    TraceHelper.EmitTraceActivityForTaskFailed(
+                                        request.InstanceId,
+                                        taskScheduledEvent,
+                                        taskScheduledEvent?.TaskScheduled,
+                                        newEvent.TaskFailed);
+                                    break;
+                                }
+
+                            case P.HistoryEvent.EventTypeOneofCase.TimerFired:
+                                TraceHelper.EmitTraceActivityForTimer(
                                     request.InstanceId,
-                                    subOrchestrationInstanceCreatedEvent,
-                                    subOrchestrationInstanceCreatedEvent?.SubOrchestrationInstanceCreated);
+                                    executionStartedEvent.Name,
+                                    newEvent.Timestamp.ToDateTime(),
+                                    newEvent.TimerFired);
                                 break;
-                            }
-
-                        case P.HistoryEvent.EventTypeOneofCase.SubOrchestrationInstanceFailed:
-                            {
-                                P.HistoryEvent? subOrchestrationInstanceCreatedEvent =
-                                    GetSuborchestrationInstanceCreatedEvent(
-                                        newEvent.SubOrchestrationInstanceFailed.TaskScheduledId);
-
-                                TraceHelper.EmitTraceActivityForSubOrchestrationFailed(
-                                    request.InstanceId,
-                                    subOrchestrationInstanceCreatedEvent,
-                                    subOrchestrationInstanceCreatedEvent?.SubOrchestrationInstanceCreated,
-                                    newEvent.SubOrchestrationInstanceFailed);
-                                break;
-                            }
-
-                        case P.HistoryEvent.EventTypeOneofCase.TaskCompleted:
-                            {
-                                P.HistoryEvent? taskScheduledEvent =
-                                    GetTaskScheduledEvent(newEvent.TaskCompleted.TaskScheduledId);
-
-                                TraceHelper.EmitTraceActivityForTaskCompleted(
-                                    request.InstanceId,
-                                    taskScheduledEvent,
-                                    taskScheduledEvent?.TaskScheduled);
-                                break;
-                            }
-
-                        case P.HistoryEvent.EventTypeOneofCase.TaskFailed:
-                            {
-                                P.HistoryEvent? taskScheduledEvent =
-                                    GetTaskScheduledEvent(newEvent.TaskFailed.TaskScheduledId);
-
-                                TraceHelper.EmitTraceActivityForTaskFailed(
-                                    request.InstanceId,
-                                    taskScheduledEvent,
-                                    taskScheduledEvent?.TaskScheduled,
-                                    newEvent.TaskFailed);
-                                break;
-                            }
-
-                        case P.HistoryEvent.EventTypeOneofCase.TimerFired:
-                            TraceHelper.EmitTraceActivityForTimer(
-                                request.InstanceId,
-                                executionStartedEvent.Name,
-                                newEvent.Timestamp.ToDateTime(),
-                                newEvent.TimerFired);
-                            break;
+                        }
                     }
                 }
+            }
+
+            static P.ExecutionStartedEvent? FindExecutionStartedEvent(P.OrchestratorRequest request)
+            {
+                foreach (P.HistoryEvent newEvent in request.NewEvents)
+                {
+                    if (newEvent.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionStarted)
+                    {
+                        return newEvent.ExecutionStarted;
+                    }
+                }
+
+                foreach (P.HistoryEvent pastEvent in request.PastEvents)
+                {
+                    if (pastEvent.EventTypeCase == P.HistoryEvent.EventTypeOneofCase.ExecutionStarted)
+                    {
+                        return pastEvent.ExecutionStarted;
+                    }
+                }
+
+                return null;
             }
 
             OrchestratorExecutionResult? result = null;

@@ -213,6 +213,19 @@ public sealed class BlobPayloadStore : PayloadStore
             Task completed = await Task.WhenAny(initializationTask, cancellationTcs.Task).ConfigureAwait(false);
             if (completed == cancellationTcs.Task)
             {
+                // This caller is abandoning the shared initializationTask without ever awaiting
+                // it below. If every other caller does the same and the task later faults, no
+                // one would ever observe its exception, which the runtime reports (on
+                // finalization) via TaskScheduler.UnobservedTaskException. Attach a
+                // fire-and-forget continuation that touches the exception on fault so it's
+                // always observed, without awaiting/blocking on it here - that would delay or
+                // change this caller's own cancellation semantics - and without affecting the
+                // separate cache self-healing logic in CreateContainerIfNotExistsAsync.
+                _ = initializationTask.ContinueWith(
+                    static t => _ = t.Exception,
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
                 cancellationToken.ThrowIfCancellationRequested();
             }
         }

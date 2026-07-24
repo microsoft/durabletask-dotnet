@@ -15,6 +15,13 @@ namespace Microsoft.DurableTask;
 public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStore, LargePayloadStorageOptions options)
     : PayloadInterceptor<object, object>(payloadStore, options)
 {
+    // Conservative cap on simultaneous Azure Blob uploads/downloads for a single message (e.g. a
+    // fan-out orchestrator response, a history chunk, or a batch of entity operations). Bounding
+    // concurrency lets independent payload operations overlap -- avoiding additive per-field
+    // latency -- without issuing an unbounded burst of requests that could trip Azure Storage
+    // account-level throttling (see https://aka.ms/azure-storage-scalability-targets).
+    const int MaxConcurrentPayloadOperations = 8;
+
     /// <inheritdoc/>
     protected override async Task ExternalizeRequestPayloadsAsync<TRequest>(TRequest request, CancellationToken cancellation)
     {
@@ -112,23 +119,37 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
         switch (response)
         {
             case P.GetInstanceResponse r when r.OrchestrationState is { } s:
-                s.Input = await this.MaybeResolveAsync(s.Input, cancellation);
-                s.Output = await this.MaybeResolveAsync(s.Output, cancellation);
-                s.CustomStatus = await this.MaybeResolveAsync(s.CustomStatus, cancellation);
+                await RunWithBoundedConcurrencyAsync(
+                    [
+                        async () => s.Input = await this.MaybeResolveAsync(s.Input, cancellation),
+                        async () => s.Output = await this.MaybeResolveAsync(s.Output, cancellation),
+                        async () => s.CustomStatus = await this.MaybeResolveAsync(s.CustomStatus, cancellation),
+                    ],
+                    cancellation);
                 break;
             case P.HistoryChunk c when c.Events != null:
-                foreach (P.HistoryEvent e in c.Events)
                 {
-                    await this.ResolveEventPayloadsAsync(e, cancellation);
+                    List<Func<Task>> operations = [];
+                    foreach (P.HistoryEvent e in c.Events)
+                    {
+                        operations.Add(() => this.ResolveEventPayloadsAsync(e, cancellation));
+                    }
+
+                    await RunWithBoundedConcurrencyAsync(operations, cancellation);
                 }
 
                 break;
             case P.QueryInstancesResponse r:
-                foreach (P.OrchestrationState s in r.OrchestrationState)
                 {
-                    s.Input = await this.MaybeResolveAsync(s.Input, cancellation);
-                    s.Output = await this.MaybeResolveAsync(s.Output, cancellation);
-                    s.CustomStatus = await this.MaybeResolveAsync(s.CustomStatus, cancellation);
+                    List<Func<Task>> operations = [];
+                    foreach (P.OrchestrationState s in r.OrchestrationState)
+                    {
+                        operations.Add(async () => s.Input = await this.MaybeResolveAsync(s.Input, cancellation));
+                        operations.Add(async () => s.Output = await this.MaybeResolveAsync(s.Output, cancellation));
+                        operations.Add(async () => s.CustomStatus = await this.MaybeResolveAsync(s.CustomStatus, cancellation));
+                    }
+
+                    await RunWithBoundedConcurrencyAsync(operations, cancellation);
                 }
 
                 break;
@@ -136,57 +157,68 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                 em.SerializedState = await this.MaybeResolveAsync(em.SerializedState, cancellation);
                 break;
             case P.QueryEntitiesResponse r:
-                foreach (P.EntityMetadata em in r.Entities)
                 {
-                    em.SerializedState = await this.MaybeResolveAsync(em.SerializedState, cancellation);
+                    List<Func<Task>> operations = [];
+                    foreach (P.EntityMetadata em in r.Entities)
+                    {
+                        operations.Add(async () => em.SerializedState = await this.MaybeResolveAsync(em.SerializedState, cancellation));
+                    }
+
+                    await RunWithBoundedConcurrencyAsync(operations, cancellation);
                 }
 
                 break;
             case P.WorkItem wi:
-                // Resolve activity input
-                if (wi.ActivityRequest is { } ar)
                 {
-                    ar.Input = await this.MaybeResolveAsync(ar.Input, cancellation);
-                }
+                    List<Func<Task>> operations = [];
 
-                // Resolve orchestration input embedded in ExecutionStarted event and external events
-                if (wi.OrchestratorRequest is { } or)
-                {
-                    foreach (P.HistoryEvent? e in or.PastEvents)
+                    // Resolve activity input
+                    if (wi.ActivityRequest is { } ar)
                     {
-                        await this.ResolveEventPayloadsAsync(e, cancellation);
+                        operations.Add(async () => ar.Input = await this.MaybeResolveAsync(ar.Input, cancellation));
                     }
 
-                    foreach (P.HistoryEvent? e in or.NewEvents)
+                    // Resolve orchestration input embedded in ExecutionStarted event and external events
+                    if (wi.OrchestratorRequest is { } or)
                     {
-                        await this.ResolveEventPayloadsAsync(e, cancellation);
-                    }
-                }
-
-                // Resolve entity V1 batch request (OperationRequest inputs and entity state)
-                if (wi.EntityRequest is { } er1)
-                {
-                    er1.EntityState = await this.MaybeResolveAsync(er1.EntityState, cancellation);
-                    if (er1.Operations != null)
-                    {
-                        foreach (P.OperationRequest op in er1.Operations)
+                        foreach (P.HistoryEvent? e in or.PastEvents)
                         {
-                            op.Input = await this.MaybeResolveAsync(op.Input, cancellation);
+                            operations.Add(() => this.ResolveEventPayloadsAsync(e, cancellation));
+                        }
+
+                        foreach (P.HistoryEvent? e in or.NewEvents)
+                        {
+                            operations.Add(() => this.ResolveEventPayloadsAsync(e, cancellation));
                         }
                     }
-                }
 
-                // Resolve entity V2 request (history-based operation requests and entity state)
-                if (wi.EntityRequestV2 is { } er2)
-                {
-                    er2.EntityState = await this.MaybeResolveAsync(er2.EntityState, cancellation);
-                    if (er2.OperationRequests != null)
+                    // Resolve entity V1 batch request (OperationRequest inputs and entity state)
+                    if (wi.EntityRequest is { } er1)
                     {
-                        foreach (P.HistoryEvent opEvt in er2.OperationRequests)
+                        operations.Add(async () => er1.EntityState = await this.MaybeResolveAsync(er1.EntityState, cancellation));
+                        if (er1.Operations != null)
                         {
-                            await this.ResolveEventPayloadsAsync(opEvt, cancellation);
+                            foreach (P.OperationRequest op in er1.Operations)
+                            {
+                                operations.Add(async () => op.Input = await this.MaybeResolveAsync(op.Input, cancellation));
+                            }
                         }
                     }
+
+                    // Resolve entity V2 request (history-based operation requests and entity state)
+                    if (wi.EntityRequestV2 is { } er2)
+                    {
+                        operations.Add(async () => er2.EntityState = await this.MaybeResolveAsync(er2.EntityState, cancellation));
+                        if (er2.OperationRequests != null)
+                        {
+                            foreach (P.HistoryEvent opEvt in er2.OperationRequests)
+                            {
+                                operations.Add(() => this.ResolveEventPayloadsAsync(opEvt, cancellation));
+                            }
+                        }
+                    }
+
+                    await RunWithBoundedConcurrencyAsync(operations, cancellation);
                 }
 
                 break;
@@ -195,60 +227,64 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
 
     async Task ExternalizeOrchestratorResponseAsync(P.OrchestratorResponse r, CancellationToken cancellation)
     {
-        r.CustomStatus = await this.MaybeExternalizeAsync(r.CustomStatus, cancellation);
+        List<Func<Task>> operations = [async () => r.CustomStatus = await this.MaybeExternalizeAsync(r.CustomStatus, cancellation)];
+
         foreach (P.OrchestratorAction a in r.Actions)
         {
             if (a.CompleteOrchestration is { } complete)
             {
-                complete.Result = await this.MaybeExternalizeAsync(complete.Result, cancellation);
-                complete.Details = await this.MaybeExternalizeAsync(complete.Details, cancellation);
+                operations.Add(async () => complete.Result = await this.MaybeExternalizeAsync(complete.Result, cancellation));
+                operations.Add(async () => complete.Details = await this.MaybeExternalizeAsync(complete.Details, cancellation));
             }
 
             if (a.TerminateOrchestration is { } term)
             {
-                term.Reason = await this.MaybeExternalizeAsync(term.Reason, cancellation);
+                operations.Add(async () => term.Reason = await this.MaybeExternalizeAsync(term.Reason, cancellation));
             }
 
             if (a.ScheduleTask is { } schedule)
             {
-                schedule.Input = await this.MaybeExternalizeAsync(schedule.Input, cancellation);
+                operations.Add(async () => schedule.Input = await this.MaybeExternalizeAsync(schedule.Input, cancellation));
             }
 
             if (a.CreateSubOrchestration is { } sub)
             {
-                sub.Input = await this.MaybeExternalizeAsync(sub.Input, cancellation);
+                operations.Add(async () => sub.Input = await this.MaybeExternalizeAsync(sub.Input, cancellation));
             }
 
             if (a.SendEvent is { } sendEvt)
             {
-                sendEvt.Data = await this.MaybeExternalizeAsync(sendEvt.Data, cancellation);
+                operations.Add(async () => sendEvt.Data = await this.MaybeExternalizeAsync(sendEvt.Data, cancellation));
             }
 
             if (a.SendEntityMessage is { } entityMsg)
             {
                 if (entityMsg.EntityOperationSignaled is { } sig)
                 {
-                    sig.Input = await this.MaybeExternalizeAsync(sig.Input, cancellation);
+                    operations.Add(async () => sig.Input = await this.MaybeExternalizeAsync(sig.Input, cancellation));
                 }
 
                 if (entityMsg.EntityOperationCalled is { } called)
                 {
-                    called.Input = await this.MaybeExternalizeAsync(called.Input, cancellation);
+                    operations.Add(async () => called.Input = await this.MaybeExternalizeAsync(called.Input, cancellation));
                 }
             }
         }
+
+        await RunWithBoundedConcurrencyAsync(operations, cancellation);
     }
 
     async Task ExternalizeEntityBatchResultAsync(P.EntityBatchResult r, CancellationToken cancellation)
     {
-        r.EntityState = await this.MaybeExternalizeAsync(r.EntityState, cancellation);
+        List<Func<Task>> operations = [async () => r.EntityState = await this.MaybeExternalizeAsync(r.EntityState, cancellation)];
+
         if (r.Results != null)
         {
             foreach (P.OperationResult result in r.Results)
             {
                 if (result.Success is { } success)
                 {
-                    success.Result = await this.MaybeExternalizeAsync(success.Result, cancellation);
+                    operations.Add(async () => success.Result = await this.MaybeExternalizeAsync(success.Result, cancellation));
                 }
             }
         }
@@ -259,27 +295,32 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
             {
                 if (action.SendSignal is { } sendSig)
                 {
-                    sendSig.Input = await this.MaybeExternalizeAsync(sendSig.Input, cancellation);
+                    operations.Add(async () => sendSig.Input = await this.MaybeExternalizeAsync(sendSig.Input, cancellation));
                 }
 
                 if (action.StartNewOrchestration is { } start)
                 {
-                    start.Input = await this.MaybeExternalizeAsync(start.Input, cancellation);
+                    operations.Add(async () => start.Input = await this.MaybeExternalizeAsync(start.Input, cancellation));
                 }
             }
         }
+
+        await RunWithBoundedConcurrencyAsync(operations, cancellation);
     }
 
     async Task ExternalizeEntityBatchRequestAsync(P.EntityBatchRequest r, CancellationToken cancellation)
     {
-        r.EntityState = await this.MaybeExternalizeAsync(r.EntityState, cancellation);
+        List<Func<Task>> operations = [async () => r.EntityState = await this.MaybeExternalizeAsync(r.EntityState, cancellation)];
+
         if (r.Operations != null)
         {
             foreach (P.OperationRequest op in r.Operations)
             {
-                op.Input = await this.MaybeExternalizeAsync(op.Input, cancellation);
+                operations.Add(async () => op.Input = await this.MaybeExternalizeAsync(op.Input, cancellation));
             }
         }
+
+        await RunWithBoundedConcurrencyAsync(operations, cancellation);
     }
 
     async Task ResolveEventPayloadsAsync(P.HistoryEvent e, CancellationToken cancellation)
@@ -407,6 +448,81 @@ public sealed class AzureBlobPayloadsSideCarInterceptor(PayloadStore payloadStor
                 }
 
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Runs a set of independent Azure Blob payload externalization/resolution operations with
+    /// bounded concurrency, instead of either awaiting them one at a time (additive latency) or
+    /// firing them all at once via an unbounded <see cref="Task.WhenAll(IEnumerable{Task})"/>
+    /// (risking Azure Storage throttling for messages with many payloads). Each delegate is
+    /// expected to assign its result to a distinct protobuf field/element, so the relative
+    /// completion order between operations does not affect correctness -- only the resulting
+    /// number of simultaneously in-flight requests is bounded.
+    /// </summary>
+    /// <remarks>
+    /// Cancellation is honored before starting any operation not already in flight. If any
+    /// operation throws (e.g. <see cref="PayloadStorageException"/> for an oversized payload, or
+    /// a non-retriable <see cref="RequestFailedException"/>), that exception propagates the same
+    /// way it would have from a sequential await chain, preserving the existing first-failure
+    /// handling performed by callers (e.g. converting the failure into a
+    /// <see cref="P.TaskFailureDetails"/> completion).
+    /// </remarks>
+    /// <param name="operations">The independent operations to run.</param>
+    /// <param name="cancellation">Cancellation token.</param>
+    static async Task RunWithBoundedConcurrencyAsync(IReadOnlyList<Func<Task>> operations, CancellationToken cancellation)
+    {
+        if (operations.Count == 0)
+        {
+            return;
+        }
+
+        if (operations.Count == 1)
+        {
+            // Fast path: avoid semaphore/list overhead for the overwhelmingly common single-field case.
+            await operations[0]();
+            return;
+        }
+
+        using SemaphoreSlim throttle = new(MaxConcurrentPayloadOperations, MaxConcurrentPayloadOperations);
+        List<Task> inFlight = new(operations.Count);
+        Exception? firstFailure = null;
+
+        foreach (Func<Task> operation in operations)
+        {
+            cancellation.ThrowIfCancellationRequested();
+
+            // Once an earlier operation has failed permanently, stop issuing new Azure Storage
+            // requests. Operations already started are left to drain below rather than
+            // cancelled, since they may already have side effects (e.g. an in-flight upload).
+            if (Volatile.Read(ref firstFailure) != null)
+            {
+                break;
+            }
+
+            await throttle.WaitAsync(cancellation);
+            inFlight.Add(TrackAsync(operation));
+        }
+
+        // Await propagates the first exception encountered (matching the prior sequential
+        // await-per-field behavior), after allowing every started operation to complete.
+        await Task.WhenAll(inFlight);
+
+        async Task TrackAsync(Func<Task> operation)
+        {
+            try
+            {
+                await operation();
+            }
+            catch (Exception ex)
+            {
+                Interlocked.CompareExchange(ref firstFailure, ex, null);
+                throw;
+            }
+            finally
+            {
+                throttle.Release();
+            }
         }
     }
 

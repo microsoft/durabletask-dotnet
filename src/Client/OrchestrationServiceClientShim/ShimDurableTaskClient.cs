@@ -29,11 +29,13 @@ namespace Microsoft.DurableTask.Client.OrchestrationServiceClientShim;
 class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) : DurableTaskClient(name)
 {
     // Polling parameters for WaitForInstanceStartAsync. PollingInterval matches the historical fixed
-    // 1-second polling cadence. Callers rely on prompt (<= 1 second) observation of a status
-    // transition, so jitter is only ever applied *downward* from this value -- never grown beyond it
-    // -- to desynchronize concurrent callers (avoiding synchronized polling bursts against the
-    // backend) without regressing the historical worst-case detection latency.
-    const double PollingJitterFactor = 0.2;
+    // 1-second polling cadence and is used, unjittered, for every steady-state delay -- so long-run
+    // polling volume never exceeds the historical rate. To desynchronize concurrent callers (avoiding
+    // synchronized polling bursts against the backend) without inflating that steady-state volume, a
+    // randomized *initial phase offset* -- uniformly distributed in [0, PollingInterval) -- is applied
+    // exactly once, before the first delay of a given WaitForInstanceStartAsync call. This is a one-time
+    // cost per call (not repeated per iteration), so it does not change the long-run polling rate, and
+    // it still never exceeds the historical 1-second worst-case detection latency.
     static readonly TimeSpan PollingInterval = TimeSpan.FromSeconds(1);
 
     readonly ShimDurableTaskClientOptions options = Check.NotNull(options);
@@ -279,6 +281,10 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     {
         Check.NotNullOrEmpty(instanceId);
 
+        // A one-time randomized phase offset (see ComputeNextPollingDelay) is applied only to the first
+        // delay of this call so concurrent waiters desynchronize without increasing steady-state
+        // polling volume beyond the historical fixed 1-second cadence.
+        bool isInitialDelay = true;
         while (true)
         {
             OrchestrationMetadata? metadata = await this.GetInstancesAsync(
@@ -294,11 +300,13 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
                 return metadata;
             }
 
-            // Poll with a delay that is jittered *downward* from the historical 1-second cadence.
-            // This desynchronizes concurrent waiters (avoiding synchronized polling bursts against the
-            // backend) while guaranteeing the worst-case detection latency for a status transition
-            // never exceeds the historical 1-second cadence -- preserving prompt-start observation.
-            TimeSpan delay = ComputeNextPollingDelay();
+            // The first delay is a randomized phase offset (bounded by the historical 1-second
+            // cadence) that desynchronizes concurrent waiters; every delay after that is the fixed
+            // historical 1-second interval, unjittered, so steady-state polling volume never exceeds
+            // the historical rate. Either way, the delay never exceeds 1 second, preserving prompt-start
+            // observation.
+            TimeSpan delay = ComputeNextPollingDelay(isInitialDelay);
+            isInitialDelay = false;
             await Task.Delay(delay, cancellation);
         }
     }
@@ -361,17 +369,27 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
     /// <summary>
     /// Computes the delay to wait before the next <see cref="WaitForInstanceStartAsync"/> polling attempt.
     /// </summary>
+    /// <param name="isInitialDelay">
+    /// <see langword="true"/> if this is the first delay computed for a given <see
+    /// cref="WaitForInstanceStartAsync"/> call; <see langword="false"/> for every subsequent delay in
+    /// that call.
+    /// </param>
     /// <returns>
-    /// A delay in the range [<see cref="PollingInterval"/> * (1 - <see cref="PollingJitterFactor"/>),
-    /// <see cref="PollingInterval"/>]. Jitter only ever reduces the delay, so the returned value never
-    /// exceeds <see cref="PollingInterval"/> -- preserving the historical worst-case detection latency
-    /// for <see cref="WaitForInstanceStartAsync"/> -- while still desynchronizing concurrent callers.
+    /// When <paramref name="isInitialDelay"/> is <see langword="true"/>, a one-time randomized phase
+    /// offset uniformly distributed in [<see cref="TimeSpan.Zero"/>, <see cref="PollingInterval"/>) that
+    /// desynchronizes concurrent callers. Otherwise, the fixed <see cref="PollingInterval"/> (1 second),
+    /// unjittered, so steady-state polling volume never exceeds the historical rate. In both cases the
+    /// returned delay never exceeds <see cref="PollingInterval"/>, preserving the historical worst-case
+    /// detection latency for <see cref="WaitForInstanceStartAsync"/>.
     /// </returns>
-    internal static TimeSpan ComputeNextPollingDelay()
+    internal static TimeSpan ComputeNextPollingDelay(bool isInitialDelay)
     {
-        double reduction = PollingJitterFactor * PollingJitter.NextDouble();
-        double delayMs = PollingInterval.TotalMilliseconds * (1.0 - reduction);
-        return TimeSpan.FromMilliseconds(delayMs);
+        if (isInitialDelay)
+        {
+            return TimeSpan.FromMilliseconds(PollingInterval.TotalMilliseconds * PollingJitter.NextDouble());
+        }
+
+        return PollingInterval;
     }
 
     [return: NotNullIfNotNull("state")]

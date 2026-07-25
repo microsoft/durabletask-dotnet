@@ -23,6 +23,15 @@ public sealed class BlobPayloadStore : PayloadStore
     const int BaseDelayMs = 250;
     const int MaxDelayMs = 10_000;
     const int NetworkTimeoutMinutes = 2;
+
+    /// <summary>
+    /// A no-op fault-observer used as the default value of <see cref="OnInitializationFaultObserved"/>,
+    /// so that field is never <see langword="null"/> and <see cref="ObserveFaultWithoutAwaiting(Task)"/>
+    /// can invoke it unconditionally - see the remarks on <see cref="OnInitializationFaultObserved"/>
+    /// for why this matters.
+    /// </summary>
+    static readonly Action<Exception> NoOpFaultObserver = static _ => { };
+
     readonly BlobContainerClient containerClient;
     readonly LargePayloadStorageOptions options;
 
@@ -34,6 +43,12 @@ public sealed class BlobPayloadStore : PayloadStore
     // real CreateIfNotExistsAsync call) runs exactly once even if multiple callers race to
     // access Value concurrently. See PublishNewInitializer and CreateContainerIfNotExistsAsync.
     Lazy<Task>? containerInitializer;
+
+    /// <summary>
+    /// Backing field for <see cref="OnInitializationFaultObserved"/>. Never <see langword="null"/>;
+    /// defaults to, and is reset back to, <see cref="NoOpFaultObserver"/>.
+    /// </summary>
+    Action<Exception> onInitializationFaultObserved = NoOpFaultObserver;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BlobPayloadStore"/> class.
@@ -89,20 +104,41 @@ public sealed class BlobPayloadStore : PayloadStore
     }
 
     /// <summary>
-    /// Gets or sets a test-only hook, invoked at most once per initialization attempt,
-    /// immediately after the fault-observing continuation attached in
+    /// Gets or sets a test-only hook, invoked exactly once per initialization attempt that
+    /// ultimately faults, immediately after the fault-observing continuation attached in
     /// <see cref="PublishNewInitializer"/> reads the shared initializer's
     /// <see cref="Task.Exception"/> (see <see cref="ObserveFaultWithoutAwaiting(Task)"/>). This
     /// lets unit tests deterministically verify the continuation actually ran and observed the
     /// fault, instead of relying on <see cref="TaskScheduler.UnobservedTaskException"/> plus
     /// forced garbage collection - which is sensitive to GC/finalization timing, debugger
     /// attachment, and JIT optimizations, and so cannot reliably distinguish "the fix ran" from
-    /// "the CLR just hasn't collected the task yet". Left <see langword="null"/> (the default)
-    /// in production, where invoking it is a no-op; each test uses its own
-    /// <see cref="BlobPayloadStore"/> instance, so no reset between tests is needed. Callers of
-    /// this hook must not assume any particular thread.
+    /// "the CLR just hasn't collected the task yet".
+    /// <para>
+    /// This property is never <see langword="null"/>: it defaults to a no-op delegate, and
+    /// setting it to <see langword="null"/> resets it back to that no-op rather than making the
+    /// backing field nullable. This is deliberate, not just a convenience - it lets
+    /// <see cref="ObserveFaultWithoutAwaiting(Task)"/> invoke this hook directly, with no
+    /// null-conditional operator, which in turn means the same statement runs whether a test has
+    /// overridden this hook or not. That eliminates - by construction, not merely by test
+    /// coverage - the historical bug where the continuation used
+    /// <c>this.OnInitializationFaultObserved?.Invoke(t.Exception!)</c>: because <c>?.Invoke(...)</c>
+    /// short-circuits and skips evaluating its argument when the target is <see langword="null"/>,
+    /// that pattern silently never read <see cref="Task.Exception"/> in production (where the hook
+    /// was <see langword="null"/> by default), even though every test that exercised it happened to
+    /// set a non-null hook first and so could never observe the regression. With this hook
+    /// guaranteed non-null, that class of bug cannot recur regardless of how the invocation is
+    /// written at the call site, and a test that overrides this hook is exercising the exact same
+    /// code as the unmodified production default - just substituting a different delegate
+    /// instance for <see cref="NoOpFaultObserver"/>.
+    /// </para>
+    /// Each test uses its own <see cref="BlobPayloadStore"/> instance, so no reset between tests
+    /// is needed. Callers of this hook must not assume any particular thread.
     /// </summary>
-    internal Action<Exception>? OnInitializationFaultObserved { get; set; }
+    internal Action<Exception> OnInitializationFaultObserved
+    {
+        get => this.onInitializationFaultObserved;
+        set => this.onInitializationFaultObserved = value ?? NoOpFaultObserver;
+    }
 
     /// <inheritdoc/>
     public override async Task<string> UploadAsync(string payLoad, CancellationToken cancellationToken)
@@ -335,20 +371,15 @@ public sealed class BlobPayloadStore : PayloadStore
     /// caller's own <see cref="CancellationToken"/> fired first) - otherwise the runtime would
     /// report it via <see cref="TaskScheduler.UnobservedTaskException"/> once the task is
     /// garbage-collected. Also invokes <see cref="OnInitializationFaultObserved"/> (a no-op in
-    /// production) so tests can deterministically confirm this continuation ran.
+    /// production) so tests can deterministically confirm this continuation ran - it is invoked
+    /// directly, with no null-conditional operator, because it is guaranteed non-null (see its
+    /// remarks); this is what makes reading <see cref="Task.Exception"/> here unconditional in
+    /// every configuration, not merely in the current source form of this method.
     /// </summary>
     void ObserveFaultWithoutAwaiting(Task task)
     {
         _ = task.ContinueWith(
-            t =>
-            {
-                // Read Task.Exception unconditionally so the fault is always marked "observed",
-                // even in production where OnInitializationFaultObserved is null. Using
-                // "?.Invoke(t.Exception!)" here would short-circuit and never evaluate
-                // t.Exception when the hook is null, defeating the entire point of this method.
-                Exception exception = t.Exception!;
-                this.OnInitializationFaultObserved?.Invoke(exception);
-            },
+            t => this.OnInitializationFaultObserved(t.Exception!),
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);

@@ -277,6 +277,36 @@ public class BlobPayloadStoreTests
     }
 
     [Fact]
+    public void OnInitializationFaultObserved_DefaultsToNonNullNoOpAndRejectsNull()
+    {
+        // Arrange: construct a store exactly as production code does, without touching the hook.
+        BlobPayloadStore store = new(new LargePayloadStorageOptions(), CreateContainerClientMock().Object);
+
+        // Assert: the hook is never null - neither by default nor after explicitly assigning
+        // null - and invoking the untouched default does nothing (it's a no-op), not throw.
+        //
+        // This is what actually proves the production-default path is safe, independent of any
+        // test that overrides the hook. UploadAsync_AllWaitersCancelThenInitializerFaults_ExceptionIsObserved
+        // (below) proves the fault-observing continuation runs and reads Task.Exception when a
+        // custom hook is installed, but that alone can't distinguish "the continuation
+        // unconditionally reads Task.Exception" from "it only does so because a hook happens to
+        // be set" - which is exactly how the historical
+        // `this.OnInitializationFaultObserved?.Invoke(t.Exception!)` regression passed every
+        // existing test while silently never observing faults in production, where the hook was
+        // null by default. This test closes that gap directly: because the hook can never be
+        // null - by construction of this property, not by convention - the continuation's direct,
+        // unconditional invocation of it (see ObserveFaultWithoutAwaiting) always evaluates
+        // Task.Exception, whether or not any test has overridden the hook.
+        store.OnInitializationFaultObserved.Should().NotBeNull();
+
+        Action invokeDefault = () => store.OnInitializationFaultObserved(new InvalidOperationException("boom"));
+        invokeDefault.Should().NotThrow();
+
+        store.OnInitializationFaultObserved = null!;
+        store.OnInitializationFaultObserved.Should().NotBeNull();
+    }
+
+    [Fact]
     public async Task UploadAsync_AllWaitersCancelThenInitializerFaults_ExceptionIsObserved()
     {
         // Arrange: control exactly when the shared initialization completes/fails, and use the
@@ -287,6 +317,13 @@ public class BlobPayloadStoreTests
         // hasn't collected the task yet" (e.g. because the async state machine still roots it).
         // The continuation is attached once, up front, when the initializer is published, so this
         // applies uniformly regardless of which cancellation code path any given caller takes.
+        //
+        // Overriding the hook here with a custom delegate exercises the exact same statement -
+        // "this.OnInitializationFaultObserved(t.Exception!)", no null-conditional - that runs
+        // against the untouched, no-op default in production (see
+        // OnInitializationFaultObserved_DefaultsToNonNullNoOpAndRejectsNull, which proves that
+        // default can never be null): the only difference is which Action<Exception> instance
+        // gets invoked, not whether it does.
         TaskCompletionSource<Response<BlobContainerInfo>> initTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         Mock<BlobContainerClient> containerClientMock = CreateContainerClientMock();
         containerClientMock

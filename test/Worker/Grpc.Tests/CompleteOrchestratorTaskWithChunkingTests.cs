@@ -34,10 +34,23 @@ public class CompleteOrchestratorTaskWithChunkingTests
 
         using Fixture fixture = Fixture.Create();
 
-        // Act
-        await fixture.InvokeAsync(response, maxChunkBytes);
+        // Sanity-check the whole-response-sizing hook itself: it must fire exactly once for a
+        // normal (non-fail-fast) request, so that asserting "never invoked" in the fail-fast test
+        // below is meaningful rather than a false positive caused by broken hook wiring.
+        int responseSizedCount = 0;
+        Fixture.SetResponseSizedHook(() => responseSizedCount++);
+        try
+        {
+            // Act
+            await fixture.InvokeAsync(response, maxChunkBytes);
+        }
+        finally
+        {
+            Fixture.SetResponseSizedHook(null);
+        }
 
         // Assert - the exact same response instance is sent, unmodified, in a single call.
+        responseSizedCount.Should().Be(1);
         fixture.Sent.Should().HaveCount(1);
         fixture.Sent[0].Should().BeSameAs(response);
 #pragma warning disable CS0612 // IsPartial/ChunkIndex are deprecated but still part of the wire contract.
@@ -212,13 +225,20 @@ public class CompleteOrchestratorTaskWithChunkingTests
     [Fact]
     public async Task NoLargePayloadsCapability_FirstActionOversized_DoesNotSizeLaterActions()
     {
-        // Arrange - deterministic (non-timing) proof of the same regression covered above: a
-        // test-only instrumentation hook (Processor.testActionSizedHook) records the id of every
-        // action whose size is actually computed during fail-fast validation. Action id=0 is
-        // oversized; ids 1-3 are ALSO individually oversized, so a regressed implementation that
-        // sizes every action up front (or continues scanning after finding one offender) would
-        // still record ids 1-3 here even though it happens to fail on id=0 first. Asserting the
-        // hook recorded *only* id=0 proves validation returned before ever sizing later actions.
+        // Arrange - deterministic (non-timing) proof of the same regression covered above, using two
+        // complementary test-only instrumentation hooks:
+        //  1. Processor.testActionSizedHook records the id of every action whose size is actually
+        //     computed during fail-fast validation. Action id=0 is oversized; ids 1-3 are ALSO
+        //     individually oversized, so a regressed implementation that sizes every action up front
+        //     (or continues scanning after finding one offender) would still record ids 1-3 here even
+        //     though it happens to fail on id=0 first. Asserting the hook recorded *only* id=0 proves
+        //     validation returned before ever sizing later actions via the per-action path.
+        //  2. Processor.testResponseSizedHook fires when the *whole response* is sized via
+        //     response.CalculateSize(). Protobuf's whole-response sizing recursively sizes every
+        //     action internally, bypassing hook (1) entirely - so a regression that reintroduces
+        //     whole-response sizing *before* validation (instead of only after validation succeeds)
+        //     would go undetected by hook (1) alone. Asserting hook (2) is never invoked proves
+        //     whole-response sizing is not reached when validation fails fast.
         P.OrchestratorAction action0 = BuildScheduleTaskAction(0, 2048); // oversized - first, must win
         P.OrchestratorAction action1 = BuildScheduleTaskAction(1, 2048); // also oversized
         P.OrchestratorAction action2 = BuildScheduleTaskAction(2, 2048); // also oversized
@@ -229,7 +249,9 @@ public class CompleteOrchestratorTaskWithChunkingTests
         using Fixture fixture = Fixture.Create(largePayloads: false);
 
         List<int> sizedActionIds = new();
+        int responseSizedCount = 0;
         Fixture.SetActionSizedHook(sizedActionIds.Add);
+        Fixture.SetResponseSizedHook(() => responseSizedCount++);
         try
         {
             // Act
@@ -238,10 +260,13 @@ public class CompleteOrchestratorTaskWithChunkingTests
         finally
         {
             Fixture.SetActionSizedHook(null);
+            Fixture.SetResponseSizedHook(null);
         }
 
-        // Assert - only the first action's size was ever computed; ids 1-3 were never touched.
+        // Assert - only the first action's size was ever computed; ids 1-3 were never touched, and
+        // whole-response sizing was never reached (the fail-fast return happens before it).
         sizedActionIds.Should().Equal(0);
+        responseSizedCount.Should().Be(0);
         fixture.Sent.Should().HaveCount(1);
         fixture.Sent[0].Actions[0].CompleteOrchestration.FailureDetails.ErrorMessage.Should().Contain("with id 0 ");
     }
@@ -377,6 +402,7 @@ public class CompleteOrchestratorTaskWithChunkingTests
     {
         static readonly MethodInfo Method = FindMethod();
         static readonly FieldInfo ActionSizedHookField = FindActionSizedHookField();
+        static readonly FieldInfo ResponseSizedHookField = FindResponseSizedHookField();
 
         readonly object processor;
         readonly object gate = new();
@@ -403,6 +429,17 @@ public class CompleteOrchestratorTaskWithChunkingTests
         public static void SetActionSizedHook(Action<int>? hook)
         {
             ActionSizedHookField.SetValue(null, hook);
+        }
+
+        /// <summary>
+        /// Sets (or clears, when passed <see langword="null"/>) the test-only static hook that
+        /// <c>Processor.CompleteOrchestratorTaskWithChunkingAsync</c> invokes immediately after
+        /// sizing the *whole response* via <c>response.CalculateSize()</c>. Always reset to
+        /// <see langword="null"/> after use to avoid leaking state into other tests.
+        /// </summary>
+        public static void SetResponseSizedHook(Action? hook)
+        {
+            ResponseSizedHookField.SetValue(null, hook);
         }
 
         public static Fixture Create(
@@ -513,6 +550,12 @@ public class CompleteOrchestratorTaskWithChunkingTests
         {
             Type processorType = typeof(GrpcDurableTaskWorker).GetNestedType("Processor", BindingFlags.NonPublic)!;
             return processorType.GetField("testActionSizedHook", BindingFlags.Static | BindingFlags.NonPublic)!;
+        }
+
+        static FieldInfo FindResponseSizedHookField()
+        {
+            Type processorType = typeof(GrpcDurableTaskWorker).GetNestedType("Processor", BindingFlags.NonPublic)!;
+            return processorType.GetField("testResponseSizedHook", BindingFlags.Static | BindingFlags.NonPublic)!;
         }
 
         static AsyncUnaryCall<T> CompletedAsyncUnaryCall<T>(T response)

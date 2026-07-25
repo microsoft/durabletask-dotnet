@@ -41,6 +41,18 @@ sealed partial class GrpcDurableTaskWorker
         /// </summary>
 #pragma warning disable CS0649 // Field is never assigned to in production code - it is set via reflection by tests.
         static Action<int>? testActionSizedHook;
+
+        /// <summary>
+        /// Test-only hook invoked immediately after the *whole response* is sized (via
+        /// <c>response.CalculateSize()</c>) in <see cref="CompleteOrchestratorTaskWithChunkingAsync"/>.
+        /// Always <see langword="null"/> in production (adds no overhead beyond a null check). Protobuf's
+        /// whole-response sizing recursively sizes every action internally without going through
+        /// <see cref="testActionSizedHook"/>, so this separate hook exists to let unit tests prove that
+        /// whole-response sizing is never reached when fail-fast validation rejects an oversized action -
+        /// a regression that reintroduces whole-response sizing *before* validation would otherwise go
+        /// undetected by <see cref="testActionSizedHook"/> alone.
+        /// </summary>
+        static Action? testResponseSizedHook;
 #pragma warning restore CS0649
 
         readonly GrpcDurableTaskWorker worker;
@@ -1191,6 +1203,7 @@ sealed partial class GrpcDurableTaskWorker
             // Calculate the whole response size exactly once. If it fits in a single chunk, send
             // it directly without any further per-action work.
             int totalSize = response.CalculateSize();
+            testResponseSizedHook?.Invoke();
             if (totalSize <= maxChunkBytes)
             {
                 // Response fits in one chunk, send it directly (isPartial defaults to false)

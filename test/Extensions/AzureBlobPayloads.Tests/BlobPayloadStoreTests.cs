@@ -277,6 +277,86 @@ public class BlobPayloadStoreTests
     }
 
     [Fact]
+    public async Task UploadAsync_AllWaitersCancelThenInitializerFaults_ExceptionIsObserved()
+    {
+        // Arrange: control exactly when the shared initialization completes/fails, and observe
+        // whether the runtime ever reports its eventual exception as unobserved. This exercises
+        // the WaitAsync-based cancellation path used by WaitForInitializationAsync on this
+        // (non-netstandard2.0) target framework - the fault-observing continuation is attached
+        // once, up front, when the initializer is published (see PublishNewInitializer), so it
+        // applies uniformly regardless of which cancellation code path any given caller takes.
+        TaskCompletionSource<Response<BlobContainerInfo>> initTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Mock<BlobContainerClient> containerClientMock = CreateContainerClientMock();
+        containerClientMock
+            .Setup(c => c.CreateIfNotExistsAsync(
+                It.IsAny<PublicAccessType>(),
+                It.IsAny<IDictionary<string, string>>(),
+                It.IsAny<BlobContainerEncryptionScopeOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(initTcs.Task);
+
+        BlobPayloadStore? store = new(new LargePayloadStorageOptions(), containerClientMock.Object);
+
+        bool unobserved = false;
+        void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e)
+        {
+            unobserved = true;
+            e.SetObserved();
+        }
+
+        TaskScheduler.UnobservedTaskException += OnUnobserved;
+        try
+        {
+            using CancellationTokenSource cts1 = new();
+            using CancellationTokenSource cts2 = new();
+
+            // Act: every caller of the still-pending shared initialization cancels its own
+            // token before that shared initialization later faults, so no caller is left
+            // waiting on it when the failure occurs.
+            Task<string>? upload1 = store.UploadAsync("payload", cts1.Token);
+            Task<string>? upload2 = store.UploadAsync("payload", cts2.Token);
+
+            cts1.Cancel();
+            cts2.Cancel();
+            Func<Task> awaitUpload1 = () => upload1;
+            Func<Task> awaitUpload2 = () => upload2;
+            await awaitUpload1.Should().ThrowAsync<OperationCanceledException>();
+            await awaitUpload2.Should().ThrowAsync<OperationCanceledException>();
+
+            initTcs.SetException(new RequestFailedException(503, "Service unavailable"));
+
+            // Give the fault-observing continuation attached when the initializer was published
+            // a chance to run.
+            await Task.Delay(100);
+
+            containerClientMock.Verify(
+                c => c.CreateIfNotExistsAsync(
+                    It.IsAny<PublicAccessType>(),
+                    It.IsAny<IDictionary<string, string>>(),
+                    It.IsAny<BlobContainerEncryptionScopeOptions>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
+
+            // Drop every reference to the store (and thus, transitively, to the shared
+            // initializer task) and force a full GC + finalization pass - the point at which the
+            // runtime reports any still-unobserved task exceptions.
+            upload1 = null;
+            upload2 = null;
+            store = null;
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= OnUnobserved;
+        }
+
+        // Assert: the shared initializer's fault was observed, so it was never reported.
+        unobserved.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task UploadAsync_StaleContainerNotFoundFailure_DoesNotOverwriteNewerInitializer()
     {
         // Arrange: container creation always succeeds when invoked.

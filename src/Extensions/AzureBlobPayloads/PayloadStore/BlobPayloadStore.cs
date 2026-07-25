@@ -213,19 +213,6 @@ public sealed class BlobPayloadStore : PayloadStore
             Task completed = await Task.WhenAny(initializationTask, cancellationTcs.Task).ConfigureAwait(false);
             if (completed == cancellationTcs.Task)
             {
-                // This caller is abandoning the shared initializationTask without ever awaiting
-                // it below. If every other caller does the same and the task later faults, no
-                // one would ever observe its exception, which the runtime reports (on
-                // finalization) via TaskScheduler.UnobservedTaskException. Attach a
-                // fire-and-forget continuation that touches the exception on fault so it's
-                // always observed, without awaiting/blocking on it here - that would delay or
-                // change this caller's own cancellation semantics - and without affecting the
-                // separate cache self-healing logic in CreateContainerIfNotExistsAsync.
-                _ = initializationTask.ContinueWith(
-                    static t => _ = t.Exception,
-                    CancellationToken.None,
-                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                    TaskScheduler.Default);
                 cancellationToken.ThrowIfCancellationRequested();
             }
         }
@@ -277,6 +264,24 @@ public sealed class BlobPayloadStore : PayloadStore
     }
 
     /// <summary>
+    /// Attaches a fire-and-forget continuation that touches <see cref="Task.Exception"/> if
+    /// <paramref name="task"/> ultimately faults, marking that fault as "observed" without
+    /// awaiting or blocking on the task. Used so a shared task's eventual failure is always
+    /// observed even if every caller that was waiting on it stops doing so (e.g. because each
+    /// caller's own <see cref="CancellationToken"/> fired first) - otherwise the runtime would
+    /// report it via <see cref="TaskScheduler.UnobservedTaskException"/> once the task is
+    /// garbage-collected.
+    /// </summary>
+    static void ObserveFaultWithoutAwaiting(Task task)
+    {
+        _ = task.ContinueWith(
+            static t => _ = t.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
+    /// <summary>
     /// Ensures the container exists, issuing at most one <c>CreateIfNotExistsAsync</c> request
     /// across all concurrent/subsequent callers, and returns the specific initializer gate that
     /// was used. The result is cached for the lifetime of this instance once it completes
@@ -300,7 +305,13 @@ public sealed class BlobPayloadStore : PayloadStore
     /// single winning gate is stored, and <see cref="Lazy{T}"/> (with
     /// <see cref="LazyThreadSafetyMode.ExecutionAndPublication"/>) guarantees its factory -
     /// which starts the real container-creation call - is invoked exactly once even when
-    /// multiple callers race to access <see cref="Lazy{T}.Value"/> concurrently.
+    /// multiple callers race to access <see cref="Lazy{T}.Value"/> concurrently. The winning
+    /// publisher also attaches a single fault-observer (see
+    /// <see cref="ObserveFaultWithoutAwaiting(Task)"/>) to the shared task, once, up front -
+    /// rather than leaving each individual caller responsible for observing failures on its own
+    /// cancellation path - so a shared initialization failure is always observed regardless of
+    /// how many (if any) callers are still waiting on it when it faults, on every target
+    /// framework this library supports.
     /// </summary>
     Lazy<Task> PublishNewInitializer()
     {
@@ -309,7 +320,13 @@ public sealed class BlobPayloadStore : PayloadStore
             () => this.CreateContainerIfNotExistsAsync(initializer!),
             LazyThreadSafetyMode.ExecutionAndPublication);
 
-        return Interlocked.CompareExchange(ref this.containerInitializer, initializer, null) ?? initializer;
+        Lazy<Task> published = Interlocked.CompareExchange(ref this.containerInitializer, initializer, null) ?? initializer;
+        if (ReferenceEquals(published, initializer))
+        {
+            ObserveFaultWithoutAwaiting(published.Value);
+        }
+
+        return published;
     }
 
     /// <summary>

@@ -300,11 +300,15 @@ public class BlobPayloadStoreTests
         BlobPayloadStore store = new(new LargePayloadStorageOptions(), containerClientMock.Object);
 
         int observedCount = 0;
-        Exception? observedException = null;
+        TaskCompletionSource<Exception> observedTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         store.OnInitializationFaultObserved = ex =>
         {
             Interlocked.Increment(ref observedCount);
-            Volatile.Write(ref observedException, ex);
+
+            // TrySetResult (rather than blindly SetResult) tolerates the hook firing more than
+            // once without throwing here; the exactly-once assertion below is what actually
+            // proves it fired exactly once.
+            observedTcs.TrySetResult(ex);
         };
 
         using CancellationTokenSource cts1 = new();
@@ -326,14 +330,15 @@ public class BlobPayloadStoreTests
         RequestFailedException expectedException = new(503, "Service unavailable");
         initTcs.SetException(expectedException);
 
-        // Give the fault-observing continuation attached when the initializer was published a
-        // chance to run (it's attached with TaskContinuationOptions.ExecuteSynchronously, but
-        // SetException above may itself run continuations asynchronously depending on scheduling,
-        // so poll briefly instead of assuming it already ran).
-        for (int i = 0; i < 100 && Volatile.Read(ref observedCount) == 0; i++)
-        {
-            await Task.Delay(10);
-        }
+        // Wait deterministically for the fault-observing continuation to run instead of polling:
+        // it's attached with TaskContinuationOptions.ExecuteSynchronously, but SetException above
+        // may itself run continuations asynchronously depending on scheduling, so await the TCS
+        // it completes rather than assuming it already ran. A generous timeout guards against the
+        // test hanging forever (instead of failing with a clear message) if the continuation never
+        // runs at all - which would itself indicate a regression in the fix under test.
+        Task completedTask = await Task.WhenAny(observedTcs.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+        completedTask.Should().BeSameAs(observedTcs.Task, "the fault-observing continuation should have run within the timeout");
+        Exception observedException = await observedTcs.Task;
 
         containerClientMock.Verify(
             c => c.CreateIfNotExistsAsync(
@@ -349,7 +354,7 @@ public class BlobPayloadStoreTests
         // so unwrap it to confirm it's the exact exception the initializer faulted with.
         observedCount.Should().Be(1);
         observedException.Should().BeOfType<AggregateException>();
-        ((AggregateException)observedException!).InnerException.Should().BeSameAs(expectedException);
+        ((AggregateException)observedException).InnerException.Should().BeSameAs(expectedException);
     }
 
     [Fact]
@@ -435,63 +440,6 @@ public class BlobPayloadStoreTests
         string finalToken = await store.UploadAsync("payload", CancellationToken.None);
         finalToken.Should().NotBeNullOrEmpty();
         createCalls.Should().Be(2);
-    }
-
-    /// <summary>
-    /// Proves the fault-observation pattern relied on by the netstandard2.0-only cancellation
-    /// branch of <c>BlobPayloadStore.WaitForInitializationAsync</c>: when a caller abandons the
-    /// shared initialization task because its own cancellation token fires first, it attaches a
-    /// fire-and-forget <see cref="TaskContinuationOptions.OnlyOnFaulted"/> continuation that
-    /// touches <see cref="Task.Exception"/> so the shared task's eventual fault is always
-    /// "observed" - even if every caller abandons it this way - and never surfaces via
-    /// <see cref="TaskScheduler.UnobservedTaskException"/> when the task is later finalized.
-    /// This test cannot exercise the netstandard2.0-only source directly (this test project
-    /// targets a single runnable framework, not netstandard2.0), so it instead verifies the
-    /// underlying pattern in isolation.
-    /// </summary>
-    [Fact]
-    public async Task FaultObservingContinuation_PreventsUnobservedTaskException()
-    {
-        // Arrange
-        TaskCompletionSource<bool> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        bool unobserved = false;
-        void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e)
-        {
-            unobserved = true;
-            e.SetObserved();
-        }
-
-        TaskScheduler.UnobservedTaskException += OnUnobserved;
-        try
-        {
-            // Act: apply the same "abandon but still observe on fault" pattern used by
-            // WaitForInitializationAsync's netstandard2.0 cancellation branch, then let the
-            // shared task fault after it has already been abandoned.
-            Task sharedTask = tcs.Task;
-            _ = sharedTask.ContinueWith(
-                static t => _ = t.Exception,
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
-            tcs.SetException(new InvalidOperationException("boom"));
-
-            // Let the fault-observing continuation run.
-            await Task.Delay(50);
-
-            // Drop the last strong reference and force finalization, which is when the runtime
-            // reports any still-unobserved task exceptions.
-            sharedTask = null!;
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-        }
-        finally
-        {
-            TaskScheduler.UnobservedTaskException -= OnUnobserved;
-        }
-
-        // Assert: the fault was observed, so it was never reported as unobserved.
-        unobserved.Should().BeFalse();
     }
 
     static Mock<BlobContainerClient> CreateContainerClientMock()

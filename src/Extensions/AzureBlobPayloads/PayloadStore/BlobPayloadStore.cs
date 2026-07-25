@@ -340,7 +340,15 @@ public sealed class BlobPayloadStore : PayloadStore
     void ObserveFaultWithoutAwaiting(Task task)
     {
         _ = task.ContinueWith(
-            t => this.OnInitializationFaultObserved?.Invoke(t.Exception!),
+            t =>
+            {
+                // Read Task.Exception unconditionally so the fault is always marked "observed",
+                // even in production where OnInitializationFaultObserved is null. Using
+                // "?.Invoke(t.Exception!)" here would short-circuit and never evaluate
+                // t.Exception when the hook is null, defeating the entire point of this method.
+                Exception exception = t.Exception!;
+                this.OnInitializationFaultObserved?.Invoke(exception);
+            },
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);

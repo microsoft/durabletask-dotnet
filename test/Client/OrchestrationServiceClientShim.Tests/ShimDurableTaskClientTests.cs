@@ -406,9 +406,11 @@ public class ShimDurableTaskClientTests
             "test", new ShimDurableTaskClientOptions { Client = this.orchestrationClient.Object });
 
         // act -- deterministically coordinate cancellation with the polling delay itself (no wall-clock
-        // guess): wait until the delay seam confirms the real Task.Delay(delay, cancellation) call has
-        // been made for this loop iteration, THEN cancel. This proves the delay -- not some other code
-        // path such as a later poll observing an already-cancelled token -- is what ends the wait.
+        // guess, no real timer): wait until the fake delay seam confirms it has been entered for this
+        // loop iteration, THEN cancel. The fake delay never completes on its own -- it only completes
+        // when the *exact* cancellation token passed by production code is cancelled -- so this proves
+        // that token, and not some other code path (e.g. a later poll's own cancellation check), is what
+        // ends the wait.
         Task waitTask = client.WaitForInstanceStartAsync(instance.InstanceId, false, cts.Token);
         await client.DelayEntered.WaitAsync(TimeSpan.FromSeconds(10));
         cts.Cancel();
@@ -416,9 +418,9 @@ public class ShimDurableTaskClientTests
         Task completedTask = await Task.WhenAny(waitTask, Task.Delay(TimeSpan.FromSeconds(10)));
 
         // assert -- the wait must end (via cancellation) promptly, without ever performing a second poll.
-        // If cancellation were ignored by the delay, the loop would instead complete the full delay and
-        // poll again (and again, since the mock always returns "pending"), so this also guards against
-        // that regression by bounding how long the assertion waits before failing.
+        // Because the fake delay never completes unless the supplied token is cancelled, a regression that
+        // passes the wrong (or no) token into the delay would leave the delay -- and thus the wait --
+        // pending forever, causing this assertion to time out and fail instead of passing vacuously.
         completedTask.Should().Be(waitTask, "the wait should be cancelled during the polling delay, not time out");
         Func<Task> act = () => waitTask;
         await act.Should().ThrowAsync<OperationCanceledException>();
@@ -427,10 +429,14 @@ public class ShimDurableTaskClientTests
     }
 
     /// <summary>
-    /// A <see cref="ShimDurableTaskClient"/> test double that signals <see cref="DelayEntered"/> once the
-    /// real polling delay (<see cref="ShimDurableTaskClient.DelayAsync"/>) has actually been invoked with
-    /// the caller's cancellation token, so tests can deterministically coordinate cancellation without
-    /// relying on wall-clock timing. The underlying delay/cancellation behavior is otherwise unchanged.
+    /// A <see cref="ShimDurableTaskClient"/> test double whose <see cref="DelayAsync"/> override replaces
+    /// the real polling delay with a fully controlled fake: it signals <see cref="DelayEntered"/> as soon
+    /// as it is called, then returns a task that never completes on its own (no real timer) and completes
+    /// -- via cancellation -- only when the *exact* <see cref="CancellationToken"/> supplied by the caller
+    /// is cancelled. This lets tests deterministically coordinate cancellation with the delay without any
+    /// wall-clock timing, and proves that cancelling the caller's token is what actually interrupts the
+    /// pending wait, rather than some unrelated code path (such as a subsequent poll's own cancellation
+    /// check) coincidentally producing the same observable outcome.
     /// </summary>
     sealed class DelayObservingShimDurableTaskClient(string name, ShimDurableTaskClientOptions options)
         : ShimDurableTaskClient(name, options)
@@ -442,9 +448,10 @@ public class ShimDurableTaskClientTests
 
         internal override Task DelayAsync(TimeSpan delay, CancellationToken cancellation)
         {
-            Task delayTask = base.DelayAsync(delay, cancellation);
+            TaskCompletionSource pending = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            cancellation.Register(() => pending.TrySetCanceled(cancellation));
             this.delayEntered.TrySetResult();
-            return delayTask;
+            return pending.Task;
         }
     }
 

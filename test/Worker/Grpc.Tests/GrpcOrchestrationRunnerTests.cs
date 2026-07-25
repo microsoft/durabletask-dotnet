@@ -732,11 +732,19 @@ public class GrpcOrchestrationRunnerTests
         //
         // A Barrier coordinates the two competing threads to start racing at (approximately) the
         // same instant on every iteration -- without it, Task.Run scheduling order alone tends to
-        // let whichever task was queued first win essentially every time, which would mean the test
-        // never actually exercises the "Dispose() wins" code path. After the race, this test asserts
-        // both orderings were actually observed at least once across the iterations below, so the
-        // test itself is proven to have genuinely stressed both branches rather than trivially
-        // passing on one alone.
+        // let whichever task was queued first win essentially every time. This is used only to
+        // encourage genuine contention on the shared lock; it does not (and cannot) guarantee that
+        // both the "GetOrInitializeCache() wins" and "Dispose() wins" orderings occur across the
+        // iterations below -- a Barrier release is not a scheduling guarantee, and correct,
+        // race-free code may legitimately let the same side win every single iteration depending on
+        // thread-pool scheduling. Asserting that both orderings must occur would therefore make this
+        // test's pass/fail outcome probabilistic (and CI-flaky) rather than a genuine correctness
+        // check. Instead, this test asserts only outcomes that must hold under *every* possible
+        // interleaving: whichever side wins, no cache is ever leaked or double-disposed.
+        //
+        // Each SignalAndWait() call uses a bounded timeout rather than waiting indefinitely, so a
+        // hung/stalled participant surfaces as a test failure (via TimeoutException) instead of the
+        // test run hanging.
         //
         // Exact-once disposal of cached *content* tied to eviction is verified separately and
         // deterministically by ExtendedSessionsCache_Dispose_DisposesCachedEntryExactlyOnce below --
@@ -744,8 +752,7 @@ public class GrpcOrchestrationRunnerTests
         // a spurious window (between Dispose()'s internal Clear() and its subsequent Dispose() call)
         // where an entry added in between would never be evicted-and-disposed by *this* cache
         // instance, which is a test-harness artifact rather than anything a real caller does.
-        int getOrInitWonCount = 0;
-        int disposeWonCount = 0;
+        TimeSpan barrierTimeout = TimeSpan.FromSeconds(10);
 
         for (int iteration = 0; iteration < 50; iteration++)
         {
@@ -754,7 +761,12 @@ public class GrpcOrchestrationRunnerTests
 
             Task<MemoryCache?> getOrInitTask = Task.Run(() =>
             {
-                barrier.SignalAndWait();
+                if (!barrier.SignalAndWait(barrierTimeout))
+                {
+                    throw new TimeoutException(
+                        "Barrier synchronization timed out waiting for both racing tasks to start.");
+                }
+
                 try
                 {
                     return extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds);
@@ -767,7 +779,12 @@ public class GrpcOrchestrationRunnerTests
             });
             Task disposeTask = Task.Run(() =>
             {
-                barrier.SignalAndWait();
+                if (!barrier.SignalAndWait(barrierTimeout))
+                {
+                    throw new TimeoutException(
+                        "Barrier synchronization timed out waiting for both racing tasks to start.");
+                }
+
                 extendedSessions.Dispose();
             });
 
@@ -776,8 +793,6 @@ public class GrpcOrchestrationRunnerTests
 
             if (cache is not null)
             {
-                getOrInitWonCount++;
-
                 // GetOrInitializeCache() won the race and returned a cache. Because both methods are
                 // mutually exclusive under the shared lock, and Task.WhenAll has already awaited the
                 // Dispose() call to completion, Dispose() must have run strictly after
@@ -786,10 +801,6 @@ public class GrpcOrchestrationRunnerTests
                 // reach) by asserting further use throws ObjectDisposedException.
                 Assert.Throws<ObjectDisposedException>(() => cache.TryGetValue("any-key", out _));
             }
-            else
-            {
-                disposeWonCount++;
-            }
 
             // Regardless of which call won the race, a repeated Dispose() call must remain a safe,
             // idempotent no-op -- proving the cache reached a single, well-defined disposed state
@@ -797,15 +808,6 @@ public class GrpcOrchestrationRunnerTests
             Exception? repeatDisposeException = Record.Exception(() => extendedSessions.Dispose());
             Assert.Null(repeatDisposeException);
         }
-
-        Assert.True(
-            getOrInitWonCount > 0,
-            "Expected at least one iteration where GetOrInitializeCache() won the race against Dispose(); " +
-            "the coordinated race did not actually exercise this ordering.");
-        Assert.True(
-            disposeWonCount > 0,
-            "Expected at least one iteration where Dispose() won the race against GetOrInitializeCache(); " +
-            "the coordinated race did not actually exercise this ordering.");
     }
 
     [Fact]

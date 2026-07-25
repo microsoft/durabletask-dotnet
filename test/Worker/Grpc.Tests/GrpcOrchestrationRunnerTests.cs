@@ -680,6 +680,38 @@ public class GrpcOrchestrationRunnerTests
     }
 
     [Fact]
+    public void GetOrInitializeCache_AfterDisposeWithoutPriorInitialization_ThrowsObjectDisposedException()
+    {
+        // Deterministic (non-racy) regression test for the exact bug scenario that motivated the
+        // shared-lock fix: Dispose() runs while the cache has never been lazily initialized (the
+        // `extendedSessions` field is still null). Without the fix, Dispose() would simply mark
+        // itself disposed and return, and a *subsequent* GetOrInitializeCache() call would happily
+        // construct a brand-new MemoryCache that nothing would ever dispose again (since `disposed`
+        // is now permanently true). GetOrInitializeCache() must instead throw immediately.
+        var extendedSessions = new ExtendedSessionsCache();
+
+        extendedSessions.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(
+            () => extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds));
+    }
+
+    [Fact]
+    public void GetOrInitializeCache_AfterDisposeOfInitializedCache_ThrowsObjectDisposedException()
+    {
+        // Deterministic (non-racy) regression test for the same post-dispose contract, but covering
+        // the case where the cache *was* already lazily initialized (and thus disposed/torn down by
+        // Dispose()) before the later GetOrInitializeCache() call is made.
+        var extendedSessions = new ExtendedSessionsCache();
+        extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds);
+
+        extendedSessions.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(
+            () => extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds));
+    }
+
+    [Fact]
     public async Task ExtendedSessionsCache_DisposeRaceWithGetOrInitializeCache_NeverLeaksCache()
     {
         // Regression test: guards against a race between Dispose() and GetOrInitializeCache() where
@@ -697,14 +729,32 @@ public class GrpcOrchestrationRunnerTests
         //    cache.
         //  * If Dispose() completes strictly first, GetOrInitializeCache() must throw
         //    ObjectDisposedException instead of creating a now-unreachable cache.
-        // Run many iterations, racing the two calls from separate threads, to exercise both
-        // orderings rather than relying on a single attempt.
+        //
+        // A Barrier coordinates the two competing threads to start racing at (approximately) the
+        // same instant on every iteration -- without it, Task.Run scheduling order alone tends to
+        // let whichever task was queued first win essentially every time, which would mean the test
+        // never actually exercises the "Dispose() wins" code path. After the race, this test asserts
+        // both orderings were actually observed at least once across the iterations below, so the
+        // test itself is proven to have genuinely stressed both branches rather than trivially
+        // passing on one alone.
+        //
+        // Exact-once disposal of cached *content* tied to eviction is verified separately and
+        // deterministically by ExtendedSessionsCache_Dispose_DisposesCachedEntryExactlyOnce below --
+        // racing an entry Set() call concurrently against this same Dispose() would itself introduce
+        // a spurious window (between Dispose()'s internal Clear() and its subsequent Dispose() call)
+        // where an entry added in between would never be evicted-and-disposed by *this* cache
+        // instance, which is a test-harness artifact rather than anything a real caller does.
+        int getOrInitWonCount = 0;
+        int disposeWonCount = 0;
+
         for (int iteration = 0; iteration < 50; iteration++)
         {
             var extendedSessions = new ExtendedSessionsCache();
+            using var barrier = new Barrier(2);
 
             Task<MemoryCache?> getOrInitTask = Task.Run(() =>
             {
+                barrier.SignalAndWait();
                 try
                 {
                     return extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds);
@@ -715,13 +765,19 @@ public class GrpcOrchestrationRunnerTests
                     return null;
                 }
             });
-            Task disposeTask = Task.Run(() => extendedSessions.Dispose());
+            Task disposeTask = Task.Run(() =>
+            {
+                barrier.SignalAndWait();
+                extendedSessions.Dispose();
+            });
 
             await Task.WhenAll(getOrInitTask, disposeTask);
             MemoryCache? cache = await getOrInitTask;
 
             if (cache is not null)
             {
+                getOrInitWonCount++;
+
                 // GetOrInitializeCache() won the race and returned a cache. Because both methods are
                 // mutually exclusive under the shared lock, and Task.WhenAll has already awaited the
                 // Dispose() call to completion, Dispose() must have run strictly after
@@ -730,6 +786,10 @@ public class GrpcOrchestrationRunnerTests
                 // reach) by asserting further use throws ObjectDisposedException.
                 Assert.Throws<ObjectDisposedException>(() => cache.TryGetValue("any-key", out _));
             }
+            else
+            {
+                disposeWonCount++;
+            }
 
             // Regardless of which call won the race, a repeated Dispose() call must remain a safe,
             // idempotent no-op -- proving the cache reached a single, well-defined disposed state
@@ -737,6 +797,44 @@ public class GrpcOrchestrationRunnerTests
             Exception? repeatDisposeException = Record.Exception(() => extendedSessions.Dispose());
             Assert.Null(repeatDisposeException);
         }
+
+        Assert.True(
+            getOrInitWonCount > 0,
+            "Expected at least one iteration where GetOrInitializeCache() won the race against Dispose(); " +
+            "the coordinated race did not actually exercise this ordering.");
+        Assert.True(
+            disposeWonCount > 0,
+            "Expected at least one iteration where Dispose() won the race against GetOrInitializeCache(); " +
+            "the coordinated race did not actually exercise this ordering.");
+    }
+
+    [Fact]
+    public async Task ExtendedSessionsCache_Dispose_DisposesCachedEntryExactlyOnce()
+    {
+        // Deterministic (non-racing) regression test proving that Dispose() drives exact-once
+        // disposal of *cached content* via the eviction-callback path, not merely that the owning
+        // MemoryCache object itself becomes unusable afterwards. A CountingDisposable spy is
+        // registered with a post-eviction callback wired up exactly like GrpcOrchestrationRunner
+        // does for real cached shims, so the assertion reflects genuine production disposal wiring.
+        var extendedSessions = new ExtendedSessionsCache();
+        MemoryCache cache = extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds);
+
+        var spy = new CountingDisposable();
+        var options = new MemoryCacheEntryOptions();
+        options.RegisterPostEvictionCallback(
+            (key, value, reason, state) => ((CountingDisposable)value!).Dispose());
+        cache.Set("spy", spy, options);
+
+        Assert.Equal(0, spy.DisposeCount);
+
+        extendedSessions.Dispose();
+
+        await WaitUntilDisposedAsync(spy, TimeSpan.FromSeconds(10));
+        Assert.Equal(1, spy.DisposeCount);
+
+        // A repeated Dispose() call must not trigger a second eviction/disposal of the same entry.
+        extendedSessions.Dispose();
+        Assert.Equal(1, spy.DisposeCount);
     }
 
     [Fact]
@@ -838,6 +936,24 @@ public class GrpcOrchestrationRunnerTests
         }
     }
 
+    // Same bounded-polling shape as the SHA1 overload above, but for the CountingDisposable spy used
+    // by the Dispose()/GetOrInitializeCache() race test, since MemoryCache eviction callbacks (and
+    // thus disposal of a cache entry's content) are likewise dispatched asynchronously.
+    static async Task WaitUntilDisposedAsync(CountingDisposable spy, TimeSpan timeout)
+    {
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        while (spy.DisposeCount == 0)
+        {
+            if (stopwatch.Elapsed >= timeout)
+            {
+                throw new TimeoutException(
+                    $"CountingDisposable spy was not disposed within {timeout} of the triggering eviction/disposal.");
+            }
+
+            await Task.Delay(20);
+        }
+    }
+
     static Protobuf.OrchestratorRequest CreateOrchestratorRequest(IEnumerable<Protobuf.HistoryEvent> newEvents)
     {
         var orchestratorRequest = new Protobuf.OrchestratorRequest()
@@ -881,5 +997,17 @@ public class GrpcOrchestrationRunnerTests
             await context.CallSubOrchestratorAsync(nameof(SimpleOrchestrator));
             return input;
         }
+    }
+
+    // Minimal disposable spy used by the Dispose()/GetOrInitializeCache() race test to verify
+    // exact-once disposal semantics precisely -- via a real, observable Dispose() call count -- rather
+    // than only inferring disposal indirectly through the owning MemoryCache object becoming unusable.
+    sealed class CountingDisposable : IDisposable
+    {
+        int disposeCount;
+
+        public int DisposeCount => Volatile.Read(ref this.disposeCount);
+
+        public void Dispose() => Interlocked.Increment(ref this.disposeCount);
     }
 }

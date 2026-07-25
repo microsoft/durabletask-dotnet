@@ -593,6 +593,91 @@ public class GrpcOrchestrationRunnerTests
     }
 
     [Fact]
+    public async Task ExtendedSessionsCache_Dispose_CalledMultipleTimes_DoesNotThrow()
+    {
+        // Regression test: ExtendedSessionsCache.Dispose() calls MemoryCache.Clear() before
+        // MemoryCache.Dispose() (see above). MemoryCache.Clear() throws ObjectDisposedException if
+        // the cache was already disposed, so without an idempotency guard, a second Dispose() call
+        // (e.g. from a duplicate shutdown-hook invocation) would throw instead of being a safe no-op.
+        var extendedSessions = new ExtendedSessionsCache();
+        var historyEvent = new Protobuf.HistoryEvent
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new Protobuf.ExecutionStartedEvent()
+            {
+                OrchestrationInstance = new Protobuf.OrchestrationInstance
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+            }
+        };
+        Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludeState", Value.ForBool(true) },
+            { "IsExtendedSession", Value.ForBool(true) },
+            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
+        byte[] requestBytes = orchestratorRequest.ToByteArray();
+        string requestString = Convert.ToBase64String(requestBytes);
+        GrpcOrchestrationRunner.LoadAndRun(requestString, new NewGuidThenCallSubOrchestrationOrchestrator(), extendedSessions);
+        Assert.True(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out object? extendedSession));
+        SHA1 cachedHashAlgorithm = GetCachedHashAlgorithm(extendedSession!);
+
+        // Act: dispose the cache twice in a row.
+        Exception? firstDisposeException = Record.Exception(() => extendedSessions.Dispose());
+        Exception? secondDisposeException = Record.Exception(() => extendedSessions.Dispose());
+
+        // Assert: neither call throws, and the cached shim resources are still disposed exactly once.
+        Assert.Null(firstDisposeException);
+        Assert.Null(secondDisposeException);
+        await WaitUntilDisposedAsync(cachedHashAlgorithm, TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task ExtendedSessionsCache_Dispose_CalledConcurrently_DoesNotThrow()
+    {
+        // Regression test: guards the Dispose() idempotency fix above against a race between two
+        // threads calling Dispose() at (approximately) the same time -- e.g. overlapping shutdown
+        // paths -- rather than only the simpler sequential double-dispose case above.
+        var extendedSessions = new ExtendedSessionsCache();
+        var historyEvent = new Protobuf.HistoryEvent
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new Protobuf.ExecutionStartedEvent()
+            {
+                OrchestrationInstance = new Protobuf.OrchestrationInstance
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+            }
+        };
+        Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludeState", Value.ForBool(true) },
+            { "IsExtendedSession", Value.ForBool(true) },
+            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
+        byte[] requestBytes = orchestratorRequest.ToByteArray();
+        string requestString = Convert.ToBase64String(requestBytes);
+        GrpcOrchestrationRunner.LoadAndRun(requestString, new NewGuidThenCallSubOrchestrationOrchestrator(), extendedSessions);
+        Assert.True(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out object? extendedSession));
+        SHA1 cachedHashAlgorithm = GetCachedHashAlgorithm(extendedSession!);
+
+        // Act: dispose the cache concurrently from several threads.
+        Task[] disposeTasks = Enumerable.Range(0, 8)
+            .Select(_ => Task.Run(() => extendedSessions.Dispose()))
+            .ToArray();
+        Exception? concurrentDisposeException = await Record.ExceptionAsync(() => Task.WhenAll(disposeTasks));
+
+        // Assert: none of the concurrent calls throw, and the cached shim resources are still
+        // disposed exactly once.
+        Assert.Null(concurrentDisposeException);
+        await WaitUntilDisposedAsync(cachedHashAlgorithm, TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
     public void Null_ExtendedSessionsCache_IsOkay()
     {
         var historyEvent = new Protobuf.HistoryEvent

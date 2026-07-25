@@ -12,6 +12,7 @@ namespace Microsoft.DurableTask.Worker;
 public class ExtendedSessionsCache : IDisposable
 {
     MemoryCache? extendedSessions;
+    int disposed;
 
     /// <summary>
     /// Gets a value indicating whether returns whether or not the cache has been initialized.
@@ -24,13 +25,24 @@ public class ExtendedSessionsCache : IDisposable
     /// </summary>
     public void Dispose()
     {
+        if (System.Threading.Interlocked.Exchange(ref this.disposed, 1) != 0)
+        {
+            // Already disposed (or a concurrent Dispose() call won the race). MemoryCache.Clear()
+            // and MemoryCache.Dispose() are not safe to call more than once -- Clear() throws
+            // ObjectDisposedException if the cache has already been disposed -- so this guard makes
+            // Dispose() idempotent and safe under concurrent callers.
+            return;
+        }
+
         // MemoryCache.Dispose() does NOT invoke post-eviction callbacks for entries that are still
         // present in the cache -- it merely tears down the cache's internal state. Any entries
         // (e.g. cached extended-session state holding an IDisposable shim) that are still cached at
         // shutdown would therefore never be disposed. Calling Clear() first forces every remaining
-        // entry to be removed via the normal removal path, which does invoke eviction callbacks
-        // synchronously-scheduled (via Task.Factory.StartNew) for each entry, ensuring deterministic
-        // cleanup of any cached shim/SHA1 resources before the cache itself is torn down.
+        // entry to be removed via the normal removal path, which does invoke eviction callbacks for
+        // each entry, ensuring they are triggered instead of silently skipped. Note that eviction
+        // callbacks are queued asynchronously (via Task.Factory.StartNew), so Clear() does not
+        // guarantee those callbacks have completed by the time Dispose() returns -- it only
+        // guarantees they are scheduled before the cache itself is torn down.
         this.extendedSessions?.Clear();
         this.extendedSessions?.Dispose();
         GC.SuppressFinalize(this);

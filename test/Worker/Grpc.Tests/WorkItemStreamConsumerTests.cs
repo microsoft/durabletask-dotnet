@@ -139,34 +139,50 @@ public class WorkItemStreamConsumerTests
     [Fact]
     public async Task PerItem_HeartbeatReset_KeepsTimerAlive()
     {
-        // Feed one item, wait long enough that the original timer would have expired, then complete.
-        // Synchronize on the first item actually being processed so the second delay is measured from
-        // the consumer's timer reset instead of from the test thread's write timing.
+        // Proves the per-item timer reset -- not just a single arm at loop start -- is what keeps the
+        // stream alive. Several items are sent in sequence: each gap between consecutive items is
+        // comfortably shorter than the silent-disconnect timeout (so a correct per-item reset never lets
+        // the timer expire), but the gaps' sum comfortably exceeds the timeout (so a regression that only
+        // arms the timer once at loop start, and never re-arms it per item, would already have cancelled
+        // the stream well before the last item is sent).
+        //
+        // Every gap is measured starting from the previous item's actual onItem invocation -- signalled
+        // via a semaphore -- rather than from an a-priori sleep before the very first item. That avoids a
+        // CI flake where scheduling pressure before the read loop has even started could delay the first
+        // write past the timeout and spuriously trip a SilentDisconnect that has nothing to do with the
+        // per-item reset behavior under test.
         Channel<P.WorkItem> channel = Channel.CreateUnbounded<P.WorkItem>();
         TimeSpan timeout = TimeSpan.FromMilliseconds(500);
-        TaskCompletionSource firstItemProcessed = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        int itemCount = 0;
+        TimeSpan perItemGap = TimeSpan.FromMilliseconds(150);
+        const int itemCount = 5; // 4 gaps * 150ms = 600ms > 500ms timeout: proves reset is required.
+
+        SemaphoreSlim itemProcessed = new(0);
 
         Task<WorkItemStreamResult> consumeTask = WorkItemStreamConsumer.ConsumeAsync(
             openStream: ct => channel.Reader.ReadAllAsync(ct),
             silentDisconnectTimeout: timeout,
-            onItem: _ =>
-            {
-                if (Interlocked.Increment(ref itemCount) == 1)
-                {
-                    firstItemProcessed.TrySetResult();
-                }
-            },
+            onItem: _ => itemProcessed.Release(),
             onFirstMessage: null,
             cancellation: CancellationToken.None);
 
-        await Task.Delay(TimeSpan.FromMilliseconds(150));
-        await channel.Writer.WriteAsync(new P.WorkItem { HealthPing = new P.HealthPing() });
-        await firstItemProcessed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        for (int i = 0; i < itemCount; i++)
+        {
+            if (i > 0)
+            {
+                bool signaled = await itemProcessed.WaitAsync(TimeSpan.FromSeconds(5));
+                signaled.Should().BeTrue("item {0} should have been processed (re-arming the timer) within the bounded wait", i);
 
-        // Without the per-item reset, the original timer would fire before this second item arrives.
-        await Task.Delay(TimeSpan.FromMilliseconds(400));
-        await channel.Writer.WriteAsync(new P.WorkItem { HealthPing = new P.HealthPing() });
+                await Task.Delay(perItemGap);
+            }
+
+            await channel.Writer.WriteAsync(new P.WorkItem { HealthPing = new P.HealthPing() });
+        }
+
+        // Wait for the final item to be processed before completing the channel, so the last per-item
+        // reset has actually happened prior to the graceful drain.
+        bool finalItemSignaled = await itemProcessed.WaitAsync(TimeSpan.FromSeconds(5));
+        finalItemSignaled.Should().BeTrue("the final item should have been processed before the stream completes");
+
         channel.Writer.Complete();
 
         WorkItemStreamResult result = await consumeTask;

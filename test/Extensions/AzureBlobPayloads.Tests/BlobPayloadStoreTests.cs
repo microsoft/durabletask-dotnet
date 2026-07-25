@@ -241,6 +241,15 @@ public class BlobPayloadStoreTests
 
         BlobPayloadStore store = new(new LargePayloadStorageOptions(), containerClientMock.Object);
 
+        // CreateContainerIfNotExistsAsync clears the cache (Interlocked.CompareExchange) in its
+        // catch block strictly before re-throwing, and OnInitializationFaultObserved is invoked
+        // from a continuation that only runs once that re-thrown exception has faulted the
+        // shared task - so by the time this hook fires, self-healing has already happened. Using
+        // it to synchronize here (rather than a fixed Task.Delay) is exactly as deterministic as
+        // the timing it stands in for, with no arbitrary sleep to tune or risk racing under load.
+        TaskCompletionSource<Exception> observedTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        store.OnInitializationFaultObserved = ex => observedTcs.TrySetResult(ex);
+
         using CancellationTokenSource cts1 = new();
         using CancellationTokenSource cts2 = new();
         Task<string> upload1 = store.UploadAsync("payload", cts1.Token);
@@ -259,9 +268,13 @@ public class BlobPayloadStoreTests
 
         initTcs.SetException(new RequestFailedException(503, "Service unavailable"));
 
-        // Give the shared initialization task's own continuation a chance to run and self-heal
-        // the cache, even though no caller is left waiting on it.
-        await Task.Delay(100);
+        // Wait deterministically for the shared initialization task's own fault-observing
+        // continuation to run (and, with it, self-heal the cache) instead of a fixed delay: a
+        // generous timeout guards against the test hanging forever (instead of failing with a
+        // clear message) if that continuation never runs at all - which would itself indicate a
+        // regression in self-healing.
+        Task completedTask = await Task.WhenAny(observedTcs.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+        completedTask.Should().BeSameAs(observedTcs.Task, "the shared initializer's fault-observing continuation (and self-heal) should have run within the timeout");
 
         // Assert: a brand-new upload gets a fresh initialization attempt instead of reusing the
         // now-stale failed one.

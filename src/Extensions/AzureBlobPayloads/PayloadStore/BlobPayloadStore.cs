@@ -88,6 +88,22 @@ public sealed class BlobPayloadStore : PayloadStore
         this.containerClient = containerClient ?? throw new ArgumentNullException(nameof(containerClient));
     }
 
+    /// <summary>
+    /// Gets or sets a test-only hook, invoked at most once per initialization attempt,
+    /// immediately after the fault-observing continuation attached in
+    /// <see cref="PublishNewInitializer"/> reads the shared initializer's
+    /// <see cref="Task.Exception"/> (see <see cref="ObserveFaultWithoutAwaiting(Task)"/>). This
+    /// lets unit tests deterministically verify the continuation actually ran and observed the
+    /// fault, instead of relying on <see cref="TaskScheduler.UnobservedTaskException"/> plus
+    /// forced garbage collection - which is sensitive to GC/finalization timing, debugger
+    /// attachment, and JIT optimizations, and so cannot reliably distinguish "the fix ran" from
+    /// "the CLR just hasn't collected the task yet". Left <see langword="null"/> (the default)
+    /// in production, where invoking it is a no-op; each test uses its own
+    /// <see cref="BlobPayloadStore"/> instance, so no reset between tests is needed. Callers of
+    /// this hook must not assume any particular thread.
+    /// </summary>
+    internal Action<Exception>? OnInitializationFaultObserved { get; set; }
+
     /// <inheritdoc/>
     public override async Task<string> UploadAsync(string payLoad, CancellationToken cancellationToken)
     {
@@ -264,24 +280,6 @@ public sealed class BlobPayloadStore : PayloadStore
     }
 
     /// <summary>
-    /// Attaches a fire-and-forget continuation that touches <see cref="Task.Exception"/> if
-    /// <paramref name="task"/> ultimately faults, marking that fault as "observed" without
-    /// awaiting or blocking on the task. Used so a shared task's eventual failure is always
-    /// observed even if every caller that was waiting on it stops doing so (e.g. because each
-    /// caller's own <see cref="CancellationToken"/> fired first) - otherwise the runtime would
-    /// report it via <see cref="TaskScheduler.UnobservedTaskException"/> once the task is
-    /// garbage-collected.
-    /// </summary>
-    static void ObserveFaultWithoutAwaiting(Task task)
-    {
-        _ = task.ContinueWith(
-            static t => _ = t.Exception,
-            CancellationToken.None,
-            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default);
-    }
-
-    /// <summary>
     /// Ensures the container exists, issuing at most one <c>CreateIfNotExistsAsync</c> request
     /// across all concurrent/subsequent callers, and returns the specific initializer gate that
     /// was used. The result is cached for the lifetime of this instance once it completes
@@ -323,10 +321,29 @@ public sealed class BlobPayloadStore : PayloadStore
         Lazy<Task> published = Interlocked.CompareExchange(ref this.containerInitializer, initializer, null) ?? initializer;
         if (ReferenceEquals(published, initializer))
         {
-            ObserveFaultWithoutAwaiting(published.Value);
+            this.ObserveFaultWithoutAwaiting(published.Value);
         }
 
         return published;
+    }
+
+    /// <summary>
+    /// Attaches a fire-and-forget continuation that reads <see cref="Task.Exception"/> if
+    /// <paramref name="task"/> ultimately faults, marking that fault as "observed" without
+    /// awaiting or blocking on the task. Used so a shared task's eventual failure is always
+    /// observed even if every caller that was waiting on it stops doing so (e.g. because each
+    /// caller's own <see cref="CancellationToken"/> fired first) - otherwise the runtime would
+    /// report it via <see cref="TaskScheduler.UnobservedTaskException"/> once the task is
+    /// garbage-collected. Also invokes <see cref="OnInitializationFaultObserved"/> (a no-op in
+    /// production) so tests can deterministically confirm this continuation ran.
+    /// </summary>
+    void ObserveFaultWithoutAwaiting(Task task)
+    {
+        _ = task.ContinueWith(
+            t => this.OnInitializationFaultObserved?.Invoke(t.Exception!),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     /// <summary>

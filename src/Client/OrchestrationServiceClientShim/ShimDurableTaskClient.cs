@@ -307,7 +307,7 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
             // observation.
             TimeSpan delay = ComputeNextPollingDelay(isInitialDelay);
             isInitialDelay = false;
-            await Task.Delay(delay, cancellation);
+            await this.DelayAsync(delay, cancellation);
         }
     }
 
@@ -391,6 +391,20 @@ class ShimDurableTaskClient(string name, ShimDurableTaskClientOptions options) :
 
         return PollingInterval;
     }
+
+    /// <summary>
+    /// Awaits the delay between <see cref="WaitForInstanceStartAsync"/> polling attempts.
+    /// </summary>
+    /// <remarks>
+    /// This is factored out from a direct <see cref="Task.Delay(TimeSpan, CancellationToken)"/> call
+    /// purely as an internal seam: it lets tests deterministically observe (and coordinate around) the
+    /// moment a polling delay begins -- e.g. to cancel only once the delay is genuinely in progress --
+    /// without relying on wall-clock timing assumptions. It does not change production behavior.
+    /// </remarks>
+    /// <param name="delay">The delay to await.</param>
+    /// <param name="cancellation">The cancellation token to honor while awaiting the delay.</param>
+    /// <returns>A task that completes after the delay elapses, or is cancelled via <paramref name="cancellation"/>.</returns>
+    internal virtual Task DelayAsync(TimeSpan delay, CancellationToken cancellation) => Task.Delay(delay, cancellation);
 
     [return: NotNullIfNotNull("state")]
     OrchestrationMetadata? ToMetadata(Core.OrchestrationState? state, bool getInputsAndOutputs)

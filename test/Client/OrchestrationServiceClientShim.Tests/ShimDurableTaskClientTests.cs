@@ -402,14 +402,50 @@ public class ShimDurableTaskClientTests
             .ReturnsAsync([pending]);
 
         using CancellationTokenSource cts = new();
+        DelayObservingShimDurableTaskClient client = new(
+            "test", new ShimDurableTaskClientOptions { Client = this.orchestrationClient.Object });
 
-        // act -- cancel shortly after the first (immediate) poll so cancellation fires while the loop is
-        // awaiting the polling delay rather than before any polling occurs.
-        cts.CancelAfter(TimeSpan.FromMilliseconds(50));
-        Func<Task> act = () => this.client.WaitForInstanceStartAsync(instance.InstanceId, false, cts.Token);
+        // act -- deterministically coordinate cancellation with the polling delay itself (no wall-clock
+        // guess): wait until the delay seam confirms the real Task.Delay(delay, cancellation) call has
+        // been made for this loop iteration, THEN cancel. This proves the delay -- not some other code
+        // path such as a later poll observing an already-cancelled token -- is what ends the wait.
+        Task waitTask = client.WaitForInstanceStartAsync(instance.InstanceId, false, cts.Token);
+        await client.DelayEntered.WaitAsync(TimeSpan.FromSeconds(10));
+        cts.Cancel();
 
-        // assert
+        Task completedTask = await Task.WhenAny(waitTask, Task.Delay(TimeSpan.FromSeconds(10)));
+
+        // assert -- the wait must end (via cancellation) promptly, without ever performing a second poll.
+        // If cancellation were ignored by the delay, the loop would instead complete the full delay and
+        // poll again (and again, since the mock always returns "pending"), so this also guards against
+        // that regression by bounding how long the assertion waits before failing.
+        completedTask.Should().Be(waitTask, "the wait should be cancelled during the polling delay, not time out");
+        Func<Task> act = () => waitTask;
         await act.Should().ThrowAsync<OperationCanceledException>();
+        this.orchestrationClient.Verify(
+            m => m.GetOrchestrationStateAsync(instance.InstanceId, false), Times.Once);
+    }
+
+    /// <summary>
+    /// A <see cref="ShimDurableTaskClient"/> test double that signals <see cref="DelayEntered"/> once the
+    /// real polling delay (<see cref="ShimDurableTaskClient.DelayAsync"/>) has actually been invoked with
+    /// the caller's cancellation token, so tests can deterministically coordinate cancellation without
+    /// relying on wall-clock timing. The underlying delay/cancellation behavior is otherwise unchanged.
+    /// </summary>
+    sealed class DelayObservingShimDurableTaskClient(string name, ShimDurableTaskClientOptions options)
+        : ShimDurableTaskClient(name, options)
+    {
+        readonly TaskCompletionSource delayEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Gets a task that completes once <see cref="DelayAsync"/> has been called.</summary>
+        public Task DelayEntered => this.delayEntered.Task;
+
+        internal override Task DelayAsync(TimeSpan delay, CancellationToken cancellation)
+        {
+            Task delayTask = base.DelayAsync(delay, cancellation);
+            this.delayEntered.TrySetResult();
+            return delayTask;
+        }
     }
 
     [Fact]

@@ -13,14 +13,16 @@ namespace Microsoft.DurableTask.Worker.Shims;
 /// <remarks>
 /// This class is intended for use with alternate .NET-based durable task runtimes. It's not intended for use
 /// in application code.
+/// <para>
+/// The base <see cref="TaskOrchestration"/> type (defined in DurableTask.Core) has no disposal hook of its
+/// own, so the framework will never call <see cref="Dispose"/> automatically. Callers that construct a
+/// <see cref="TaskOrchestrationShim"/> directly (e.g. the gRPC worker processor and the orchestration
+/// runner) own its lifetime and are responsible for disposing it once they are done with it -- typically
+/// immediately after the single <see cref="Execute"/> call completes, or (for extended sessions) when the
+/// cached shim is evicted/removed.
+/// </para>
 /// </remarks>
-#pragma warning disable CA1001 // Types that own disposable fields should be disposable -- the base
-                               // TaskOrchestration type (defined in DurableTask.Core) has no disposal
-                               // hook, so this type cannot implement IDisposable in a way that would ever
-                               // be invoked. Instead, wrapperContext is disposed explicitly before each
-                               // replacement in Execute(); only the final instance for a given orchestration
-                               // execution's lifetime is left for the garbage collector/finalizer to reclaim.
-partial class TaskOrchestrationShim : TaskOrchestration
+partial class TaskOrchestrationShim : TaskOrchestration, IDisposable
 {
     readonly ITaskOrchestrator implementation;
     readonly OrchestrationInvocationContext invocationContext;
@@ -71,11 +73,12 @@ partial class TaskOrchestrationShim : TaskOrchestration
 
         object? input = this.DataConverter.Deserialize(rawInput, this.implementation.InputType);
 
-        // Dispose the previous execution's wrapper (if any) before replacing it. Each call to Execute
-        // represents a new replay/decision task with a fresh wrapper; orchestrator code always runs
-        // synchronously within a single Execute call, so the previous wrapper is guaranteed to no longer
-        // be in use once we reach this point, and releasing its cached resources (e.g. the SHA1 instance
-        // used by NewGuid) here avoids accumulating undisposed instances across replays.
+        // Defensively dispose any previous wrapper before replacing it, in case this shim instance is
+        // ever reused across more than one Execute call. Current callers construct a fresh shim per
+        // execution and call Execute exactly once, so the actual resource cleanup for this shim's wrapper
+        // happens via Dispose() (see the class remarks); this is still safe to do if it ever runs, since
+        // orchestrator code always runs synchronously within a single Execute call, so a previous wrapper
+        // is guaranteed to no longer be in use once we reach this point.
         this.wrapperContext?.Dispose();
         this.wrapperContext = new(innerContext, this.invocationContext, input, this.properties);
 
@@ -131,5 +134,15 @@ partial class TaskOrchestrationShim : TaskOrchestration
     {
         this.wrapperContext?.CompleteExternalEvent(name, input);
     }
+
+    /// <summary>
+    /// Releases the resources (e.g. the cached <see cref="System.Security.Cryptography.SHA1"/> instance
+    /// backing <see cref="TaskOrchestrationContext.NewGuid"/>) held by this shim's current wrapper. Callers
+    /// that construct this shim directly are responsible for calling this once they are finished with it,
+    /// since the base <see cref="TaskOrchestration"/> type provides no framework-invoked disposal hook.
+    /// </summary>
+    public void Dispose()
+    {
+        this.wrapperContext?.Dispose();
+    }
 }
-#pragma warning restore CA1001 // Types that own disposable fields should be disposable

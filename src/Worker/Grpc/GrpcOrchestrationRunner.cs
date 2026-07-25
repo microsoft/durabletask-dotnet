@@ -207,15 +207,31 @@ public static class GrpcOrchestrationRunner
 
                 if (addToExtendedSessions && !executor.IsCompleted)
                 {
-                    // addToExtendedSessions can only be set to true if extendedSessions is not null
+                    // addToExtendedSessions can only be set to true if extendedSessions is not null.
+                    // The shim is now owned by the cache; it must not be disposed here since the
+                    // orchestration may resume via ExecuteNewEvents() on a future call. Instead, register
+                    // an eviction callback so it's disposed exactly once, whenever this entry is removed
+                    // for any reason (explicit Remove, sliding-expiration timeout, capacity eviction, or
+                    // cache disposal).
+                    MemoryCacheEntryOptions cacheEntryOptions = new()
+                    {
+                        SlidingExpiration = TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds),
+                    };
+                    cacheEntryOptions.RegisterPostEvictionCallback(DisposeEvictedExtendedSession);
                     extendedSessions!.Set<ExtendedSessionState>(
                         request.InstanceId,
                         new(runtimeState, shim, executor),
-                        new MemoryCacheEntryOptions { SlidingExpiration = TimeSpan.FromSeconds(extendedSessionIdleTimeoutInSeconds) });
+                        cacheEntryOptions);
                 }
                 else
                 {
                     extendedSessions?.Remove(request.InstanceId);
+
+                    // This execution either isn't part of an extended session, or it completed on its
+                    // first execution, so the shim was never handed off to the cache above. Nothing else
+                    // will ever use it again, so it must be disposed here to release its resources (e.g.
+                    // the SHA1 instance cached by NewGuid).
+                    (shim as IDisposable)?.Dispose();
                 }
             }
         }
@@ -231,5 +247,17 @@ public static class GrpcOrchestrationRunner
             requiresHistory: requiresHistory);
         byte[] responseBytes = response.ToByteArray();
         return Convert.ToBase64String(responseBytes);
+    }
+
+    // Invoked by the extended-sessions MemoryCache whenever a cached ExtendedSessionState entry is
+    // evicted, for any reason (explicit Remove, sliding-expiration timeout, capacity eviction, or the
+    // cache itself being disposed). Disposes the cached shim's resources (e.g. the SHA1 instance used by
+    // NewGuid) exactly once, at the point where the orchestration can no longer resume via this entry.
+    static void DisposeEvictedExtendedSession(object key, object? value, EvictionReason reason, object? state)
+    {
+        if (value is ExtendedSessionState sessionState && sessionState.TaskOrchestration is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
     }
 }

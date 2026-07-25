@@ -1,6 +1,8 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Reflection;
+using System.Security.Cryptography;
 using Google.Protobuf;
 using Google.Protobuf.Collections;
 using Google.Protobuf.WellKnownTypes;
@@ -456,6 +458,92 @@ public class GrpcOrchestrationRunnerTests
     }
 
     [Fact]
+    public void ExternallyEndedExtendedSession_Evicted_DisposesCachedShimResources()
+    {
+        // Regression test for the round-3 lifecycle fix: the extended-session MemoryCache must dispose
+        // the cached shim (and, transitively, its wrapper's cached SHA1 backing NewGuid()) whenever an
+        // entry is evicted -- not just when the shim is replaced within a single Execute() call.
+        using var extendedSessions = new ExtendedSessionsCache();
+        var historyEvent = new Protobuf.HistoryEvent
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new Protobuf.ExecutionStartedEvent()
+            {
+                OrchestrationInstance = new Protobuf.OrchestrationInstance
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+            }
+        };
+        Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludeState", Value.ForBool(true) },
+            { "IsExtendedSession", Value.ForBool(true) },
+            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
+        byte[] requestBytes = orchestratorRequest.ToByteArray();
+        string requestString = Convert.ToBase64String(requestBytes);
+        GrpcOrchestrationRunner.LoadAndRun(requestString, new NewGuidThenCallSubOrchestrationOrchestrator(), extendedSessions);
+        Assert.True(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out object? extendedSession));
+        SHA1 cachedHashAlgorithm = GetCachedHashAlgorithm(extendedSession!);
+
+        // Now set the extended session flag to false for this instance, which removes/evicts the cache
+        // entry and should synchronously invoke the eviction callback that disposes the cached shim.
+        orchestratorRequest.Properties.Clear();
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludeState", Value.ForBool(true) },
+            { "IsExtendedSession", Value.ForBool(false) },
+            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(DefaultExtendedSessionIdleTimeoutInSeconds) } });
+        requestBytes = orchestratorRequest.ToByteArray();
+        requestString = Convert.ToBase64String(requestBytes);
+        GrpcOrchestrationRunner.LoadAndRun(requestString, new NewGuidThenCallSubOrchestrationOrchestrator(), extendedSessions);
+        Assert.False(extendedSessions.GetOrInitializeCache(DefaultExtendedSessionIdleTimeoutInSeconds).TryGetValue(TestInstanceId, out _));
+
+        Action useAfterDispose = () => cachedHashAlgorithm.ComputeHash(new byte[] { 1, 2, 3 });
+        useAfterDispose.Should().Throw<ObjectDisposedException>();
+    }
+
+    [Fact]
+    public async Task Stale_ExtendedSession_Evicted_DisposesCachedShimResources_Async()
+    {
+        // Regression test for the round-3 lifecycle fix: sliding-expiration eviction of a stale
+        // extended session must also dispose the cached shim's resources.
+        using var extendedSessions = new ExtendedSessionsCache();
+        int extendedSessionIdleTimeout = 5;
+        var historyEvent = new Protobuf.HistoryEvent
+        {
+            EventId = -1,
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExecutionStarted = new Protobuf.ExecutionStartedEvent()
+            {
+                OrchestrationInstance = new Protobuf.OrchestrationInstance
+                {
+                    InstanceId = TestInstanceId,
+                    ExecutionId = TestExecutionId,
+                },
+            }
+        };
+        Protobuf.OrchestratorRequest orchestratorRequest = CreateOrchestratorRequest([historyEvent]);
+        orchestratorRequest.Properties.Add(new MapField<string, Value>() {
+            { "IncludeState", Value.ForBool(true) },
+            { "IsExtendedSession", Value.ForBool(true) },
+            { "ExtendedSessionIdleTimeoutInSeconds", Value.ForNumber(extendedSessionIdleTimeout) } });
+        byte[] requestBytes = orchestratorRequest.ToByteArray();
+        string requestString = Convert.ToBase64String(requestBytes);
+        GrpcOrchestrationRunner.LoadAndRun(requestString, new NewGuidThenCallSubOrchestrationOrchestrator(), extendedSessions);
+        Assert.True(extendedSessions.GetOrInitializeCache(extendedSessionIdleTimeout).TryGetValue(TestInstanceId, out object? extendedSession));
+        SHA1 cachedHashAlgorithm = GetCachedHashAlgorithm(extendedSession!);
+
+        // Wait for longer than the timeout to account for finite cache scan for stale items frequency
+        await Task.Delay(extendedSessionIdleTimeout * 1000 * 2);
+        Assert.False(extendedSessions.GetOrInitializeCache(extendedSessionIdleTimeout).TryGetValue(TestInstanceId, out _));
+
+        Action useAfterDispose = () => cachedHashAlgorithm.ComputeHash(new byte[] { 1, 2, 3 });
+        useAfterDispose.Should().Throw<ObjectDisposedException>();
+    }
+
+    [Fact]
     public void Null_ExtendedSessionsCache_IsOkay()
     {
         var historyEvent = new Protobuf.HistoryEvent
@@ -498,6 +586,32 @@ public class GrpcOrchestrationRunnerTests
         Assert.Equal(Protobuf.OrchestrationStatus.Completed, response.Actions[0].CompleteOrchestration.OrchestrationStatus);
     }
 
+    // TaskOrchestrationShim and TaskOrchestrationContextWrapper are internal to the Worker.Core assembly
+    // and not visible to this test assembly via InternalsVisibleTo, so reflection is used to reach into
+    // the cached shim (exposed only as the public ExtendedSessionState.TaskOrchestration property, typed
+    // as the public base class TaskOrchestration) and pull out its wrapper's cached SHA1 instance.
+    static SHA1 GetCachedHashAlgorithm(object extendedSessionState)
+    {
+        PropertyInfo taskOrchestrationProperty = extendedSessionState.GetType()
+            .GetProperty("TaskOrchestration", BindingFlags.Instance | BindingFlags.Public)
+            ?? throw new InvalidOperationException("ExtendedSessionState.TaskOrchestration was not found.");
+        object shim = taskOrchestrationProperty.GetValue(extendedSessionState)
+            ?? throw new InvalidOperationException("ExtendedSessionState.TaskOrchestration was null.");
+
+        FieldInfo wrapperContextField = shim.GetType()
+            .GetField("wrapperContext", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("TaskOrchestrationShim.wrapperContext was not found.");
+        object wrapperContext = wrapperContextField.GetValue(shim)
+            ?? throw new InvalidOperationException("TaskOrchestrationShim.wrapperContext was null.");
+
+        FieldInfo cachedHashAlgorithmField = wrapperContext.GetType()
+            .GetField("cachedHashAlgorithm", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException(
+                "TaskOrchestrationContextWrapper.cachedHashAlgorithm was not found.");
+        return (SHA1)(cachedHashAlgorithmField.GetValue(wrapperContext)
+            ?? throw new InvalidOperationException("cachedHashAlgorithm was null; NewGuid() may not have run."));
+    }
+
     static Protobuf.OrchestratorRequest CreateOrchestratorRequest(IEnumerable<Protobuf.HistoryEvent> newEvents)
     {
         var orchestratorRequest = new Protobuf.OrchestratorRequest()
@@ -525,6 +639,19 @@ public class GrpcOrchestrationRunnerTests
     {
         public override async Task<string> RunAsync(TaskOrchestrationContext context, string input)
         {
+            await context.CallSubOrchestratorAsync(nameof(SimpleOrchestrator));
+            return input;
+        }
+    }
+
+    // Same shape as CallSubOrchestrationOrchestrator (so the orchestration is left pending in the
+    // extended-session cache) but also calls NewGuid() before awaiting, so the cached shim's wrapper
+    // has a live SHA1 instance whose disposal we can observe once the extended session is evicted.
+    class NewGuidThenCallSubOrchestrationOrchestrator : TaskOrchestrator<string, string>
+    {
+        public override async Task<string> RunAsync(TaskOrchestrationContext context, string input)
+        {
+            context.NewGuid();
             await context.CallSubOrchestratorAsync(nameof(SimpleOrchestrator));
             return input;
         }
